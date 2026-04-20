@@ -672,7 +672,8 @@ export default function ImportPage() {
 
                   if (sheetEmployeeCode) {
                     const byCodeMatch = employeeLookup.byCode.get(sheetEmployeeCode.toUpperCase())
-                    row.employee_code = sheetEmployeeCode
+                    // Never insert an unknown employee_code because FK requires it to exist in employee_master.
+                    row.employee_code = byCodeMatch ? byCodeMatch.employee_code : null
                     // If SA code is valid, prefer employee location-derived branch.
                     row.branch = byCodeMatch ? normalizeEmployeeBranch(byCodeMatch.location) ?? branch : branch
 
