@@ -7,7 +7,7 @@ drop table if exists job_card_closed_data;
 create table job_card_closed_data (
   -- System columns
   id bigint primary key generated always as identity,
-  branch text not null check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text not null check (branch in ('Ajmer Road', 'Sitapura PV', 'Sitapura EV')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 

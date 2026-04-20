@@ -199,7 +199,7 @@ export function mapVasHeaders(excelHeaders: string[]): Record<string, string> {
 /**
  * Build a single insert row with parsing and error collection
  * @param excelRow - Raw row object from Excel
- * @param branch - Branch name (AJ, JG PV, JG EV)
+ * @param branch - Branch name (Ajmer Road, Sitapura PV, Sitapura EV)
  * @param headerMapping - Header mapping from mapVasHeaders
  * @param rowNumber - Row number (1-indexed) for error reporting
  * @returns Parsed row object and any errors

@@ -46,7 +46,7 @@ alter table job_card_closed_data
 create table if not exists import_employee_mapping_issues (
   id bigint primary key generated always as identity,
   source_table text not null check (source_table in ('service_vas_jc_data', 'job_card_closed_data')),
-  branch text not null check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text not null check (branch in ('Ajmer Road', 'Sitapura PV', 'Sitapura EV')),
   row_number integer,
   job_card_number text,
   sr_assigned_to text,

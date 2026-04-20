@@ -16,7 +16,7 @@ create table service_invoice_data (
   sr_number text,
   chassis_number text,
   vrn text,
-  branch text check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text check (branch in ('Ajmer Road', 'Sitapura PV', 'Sitapura EV')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

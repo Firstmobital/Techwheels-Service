@@ -29,7 +29,7 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Branch = 'AJ' | 'JG PV' | 'JG EV'
+type Branch = 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
 type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
 
 interface SlotState {
@@ -62,7 +62,7 @@ interface MappingIssueInsert {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const BRANCHES: Branch[] = ['AJ', 'JG PV', 'JG EV']
+const BRANCHES: Branch[] = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV']
 
 const CARDS: CardConfig[] = [
   {
@@ -97,7 +97,7 @@ function emptySlot(): SlotState {
 
 function emptyCard(): CardState {
   return {
-    slots: { AJ: emptySlot(), 'JG PV': emptySlot(), 'JG EV': emptySlot() },
+    slots: { 'Ajmer Road': emptySlot(), 'Sitapura PV': emptySlot(), 'Sitapura EV': emptySlot() },
     status: 'idle',
     uploadError: null,
     insertedCount: 0,

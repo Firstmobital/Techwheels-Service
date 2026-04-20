@@ -3,7 +3,7 @@ create table if not exists job_card_closed_data (
   id bigint primary key generated always as identity,
   jc_number text,
   service_record text,
-  branch text check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text check (branch in ('Ajmer Road', 'Sitapura PV', 'Sitapura EV')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -13,7 +13,7 @@ create table if not exists service_invoice_data (
   id bigint primary key generated always as identity,
   jc_number text,
   service_record text,
-  branch text check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text check (branch in ('Ajmer Road', 'Sitapura PV', 'Sitapura EV')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -23,7 +23,7 @@ drop table if exists service_vas_jc_data;
 create table service_vas_jc_data (
   -- System columns
   id bigint primary key generated always as identity,
-  branch text not null check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text not null check (branch in ('Ajmer Road', 'Sitapura PV', 'Sitapura EV')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   
@@ -59,7 +59,7 @@ create table if not exists service_jc_parts_data (
   id bigint primary key generated always as identity,
   jc_number text,
   service_record text,
-  branch text check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text check (branch in ('Ajmer Road', 'Sitapura PV', 'Sitapura EV')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

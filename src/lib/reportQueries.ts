@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-export type BranchFilter = 'ALL' | 'AJ' | 'JG PV' | 'JG EV'
+export type BranchFilter = 'ALL' | 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
 export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'custom'
 
 export interface DateRangeFilter {

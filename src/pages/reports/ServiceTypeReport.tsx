@@ -9,9 +9,9 @@ import {
 
 const BRANCH_OPTIONS: { label: string; value: BranchFilter }[] = [
   { label: 'All Branches', value: 'ALL' },
-  { label: 'AJ', value: 'AJ' },
-  { label: 'JG PV', value: 'JG PV' },
-  { label: 'JG EV', value: 'JG EV' },
+  { label: 'Ajmer Road', value: 'Ajmer Road' },
+  { label: 'Sitapura PV', value: 'Sitapura PV' },
+  { label: 'Sitapura EV', value: 'Sitapura EV' },
 ]
 
 type SortKey = 'serviceType' | 'count'

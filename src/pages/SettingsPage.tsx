@@ -13,7 +13,7 @@ interface EmployeeRow {
 interface MappingIssueRow {
   id: number
   source_table: 'service_vas_jc_data' | 'job_card_closed_data'
-  branch: 'AJ' | 'JG PV' | 'JG EV'
+  branch: 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
   row_number: number | null
   job_card_number: string | null
   sr_assigned_to: string | null

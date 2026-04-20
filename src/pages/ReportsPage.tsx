@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import ServiceTypeReport from './reports/ServiceTypeReport'
 
-type BranchFilter = '' | 'AJ' | 'JG PV' | 'JG EV'
+type BranchFilter = '' | 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
 type SourceTable = 'service_vas_jc_data' | 'job_card_closed_data'
 type ReportSubPage = 'advisor-performance' | 'service-type'
 
@@ -194,9 +194,9 @@ export default function ReportsPage() {
                     className="rounded border border-gray-300 px-2 py-2 text-sm"
                   >
                     <option value="">All branches</option>
-                    <option value="AJ">AJ</option>
-                    <option value="JG PV">JG PV</option>
-                    <option value="JG EV">JG EV</option>
+                    <option value="Ajmer Road">Ajmer Road</option>
+                    <option value="Sitapura PV">Sitapura PV</option>
+                    <option value="Sitapura EV">Sitapura EV</option>
                   </select>
                 </div>
 
