@@ -14,6 +14,12 @@ import {
   formatInvoiceParseErrors,
   type InvoiceParseError,
 } from '../lib/invoiceColumnMapper'
+import {
+  mapJcClosedHeaders,
+  buildJcClosedInsertRow,
+  formatJcClosedParseErrors,
+  type JcClosedParseError,
+} from '../lib/jcClosedColumnMapper'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,7 +53,7 @@ const CARDS: CardConfig[] = [
   {
     tableName: 'job_card_closed_data',
     title: 'Job Card Closed Data',
-    description: 'Closed job card records across all branches.',
+    description: 'Closed job card records (strict mapped fields only; extra columns are ignored).',
   },
   {
     tableName: 'service_invoice_data',
@@ -120,7 +126,28 @@ async function getTableColumns(tableName: string): Promise<string[]> {
   if (sample && sample.length > 0) return Object.keys(sample[0])
 
   // Final fallback: known migration schema
-  return ['id', 'jc_number', 'service_record', 'branch', 'created_at', 'updated_at']
+  return [
+    'id',
+    'branch',
+    'created_at',
+    'updated_at',
+    'job_card_number',
+    'sr_type',
+    'chassis_number',
+    'final_labour_amount',
+    'final_spares_amount',
+    'total_invoice_amount',
+    'parent_product_line',
+    'product_line',
+    'created_date_time',
+    'closed_date_time',
+    'first_name',
+    'last_name',
+    'sr_assigned_to',
+    'vehicle_registration_number',
+    'vehicle_sale_date',
+    'account_phone_number',
+  ]
 }
 
 function buildInsertRows(
@@ -460,8 +487,9 @@ export default function ImportPage() {
       try {
         const isVasTable = tableName === 'service_vas_jc_data'
         const isInvoiceTable = tableName === 'service_invoice_data'
+        const isJcClosedTable = tableName === 'job_card_closed_data'
         const tableColumns =
-          isVasTable || isInvoiceTable ? [] : await getTableColumns(tableName)
+          isVasTable || isInvoiceTable || isJcClosedTable ? [] : await getTableColumns(tableName)
         const CHUNK = 500
         let totalInserted = 0
         const allParseErrors: VasParseError[] = []
@@ -492,6 +520,35 @@ export default function ImportPage() {
           } catch (err) {
             throw new Error(
               `VAS Data: ${err instanceof Error ? err.message : String(err)}`
+            )
+          }
+        }
+
+        // For JC Closed table, prepare strict header mapping upfront
+        let jcClosedHeaderMapping: Record<string, string> | null = null
+        if (isJcClosedTable) {
+          try {
+            let excelHeaders: string[] = []
+
+            for (const branch of BRANCHES) {
+              const slot = cardState.slots[branch]
+              if (slot.file && !slot.parseError && slot.rowCount !== null) {
+                const rows = await parseWorkbook(slot.file)
+                if (rows.length > 0) {
+                  excelHeaders = Object.keys(rows[0])
+                  break
+                }
+              }
+            }
+
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+
+            jcClosedHeaderMapping = mapJcClosedHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(
+              `Job Card Closed Data: ${err instanceof Error ? err.message : String(err)}`,
             )
           }
         }
@@ -569,6 +626,38 @@ export default function ImportPage() {
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
             }
+          } else if (isJcClosedTable && jcClosedHeaderMapping) {
+            const jcClosedParseErrors: JcClosedParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildJcClosedInsertRow(
+                rawRows[rowIdx],
+                branch,
+                jcClosedHeaderMapping,
+                rowIdx + 2,
+              )
+
+              if (errors.length > 0) {
+                jcClosedParseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (jcClosedParseErrors.length > 0) {
+              throw new Error(
+                `Job Card Closed parse errors found:\n${formatJcClosedParseErrors(jcClosedParseErrors.slice(0, 10))}`,
+              )
+            }
+
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase
+                .from(tableName)
+                .upsert(insertRows.slice(i, i + CHUNK), { onConflict: 'job_card_number,branch' })
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
           } else {
             // Other tables: use original logic
             const insertRows = buildInsertRows(rawRows, tableColumns, branch)
@@ -604,8 +693,8 @@ export default function ImportPage() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Import Data</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Upload .xlsx or .csv files for each branch. Column names are matched
-            case-insensitively to the target table.
+            Upload .xlsx or .csv files for each branch. Some datasets use strict mapped
+            columns and automatically ignore extra spreadsheet fields.
           </p>
         </div>
 
