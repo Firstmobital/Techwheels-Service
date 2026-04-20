@@ -88,6 +88,64 @@ function normalizeParentProductLine(raw: unknown): string {
   return String(raw).trim().replace(/\s+/g, ' ')
 }
 
+const QUERY_PAGE_SIZE = 1000
+
+interface JobCardClosedFetchFilters {
+  branch: BranchFilter
+  dateFilter: DateRangeFilter
+  serviceType?: 'ALL' | string
+  parentProductLine?: 'ALL' | string
+}
+
+async function fetchAllJobCardClosedRows(
+  selectColumns: string,
+  filters: JobCardClosedFetchFilters,
+): Promise<Record<string, unknown>[]> {
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+
+  while (true) {
+    let query = supabase
+      .from('job_card_closed_data')
+      .select(selectColumns)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (filters.branch !== 'ALL') {
+      query = query.eq('branch', filters.branch)
+    }
+
+    if (filters.serviceType && filters.serviceType !== 'ALL') {
+      query = query.eq('sr_type', filters.serviceType)
+    }
+
+    if (filters.parentProductLine && filters.parentProductLine !== 'ALL') {
+      query = query.eq('parent_product_line', filters.parentProductLine)
+    }
+
+    const bounds = getDateRangeBounds(filters.dateFilter)
+    if (bounds) {
+      query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  return allRows
+}
+
 function startOfDay(date: Date): Date {
   const value = new Date(date)
   value.setHours(0, 0, 0, 0)
@@ -113,21 +171,21 @@ function getStartOfMonth(date: Date): Date {
 
 export function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string; toExclusive: string } | null {
   const now = new Date()
+  const todayStart = startOfDay(now)
+  const tomorrowStart = addDays(todayStart, 1)
 
   if (dateFilter.preset === 'today') {
-    const from = startOfDay(now)
-    return { from: from.toISOString(), toExclusive: addDays(from, 1).toISOString() }
+    return { from: todayStart.toISOString(), toExclusive: tomorrowStart.toISOString() }
   }
 
   if (dateFilter.preset === 'this-week') {
     const from = getStartOfWeek(now)
-    return { from: from.toISOString(), toExclusive: addDays(from, 7).toISOString() }
+    return { from: from.toISOString(), toExclusive: tomorrowStart.toISOString() }
   }
 
   if (dateFilter.preset === 'this-month') {
     const from = getStartOfMonth(now)
-    const toExclusive = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-    return { from: from.toISOString(), toExclusive: toExclusive.toISOString() }
+    return { from: from.toISOString(), toExclusive: tomorrowStart.toISOString() }
   }
 
   if (!dateFilter.customFrom || !dateFilter.customTo) return null
@@ -172,22 +230,10 @@ export async function getServiceTypeCounts(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<ServiceTypeCount[]> {
-  let query = supabase.from('job_card_closed_data').select('sr_type')
-
-  if (branch !== 'ALL') {
-    query = query.eq('branch', branch)
-  }
-
-  const bounds = getDateRangeBounds(dateFilter)
-  if (bounds) {
-    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
+  const data = await fetchAllJobCardClosedRows('sr_type', {
+    branch,
+    dateFilter,
+  })
 
   const grouped = new Map<string, ServiceTypeCount>()
 
@@ -214,22 +260,10 @@ export async function getServiceTypeLabourRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<ServiceTypeLabourRevenue[]> {
-  let query = supabase.from('job_card_closed_data').select('sr_type, final_labour_amount')
-
-  if (branch !== 'ALL') {
-    query = query.eq('branch', branch)
-  }
-
-  const bounds = getDateRangeBounds(dateFilter)
-  if (bounds) {
-    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
+  const data = await fetchAllJobCardClosedRows('sr_type, final_labour_amount', {
+    branch,
+    dateFilter,
+  })
 
   const grouped = new Map<string, ServiceTypeLabourRevenue>()
 
@@ -281,32 +315,15 @@ export async function getManpowerWiseLabourRevenue(
   dateFilter: DateRangeFilter,
   filters: ManpowerWiseFilters = { serviceType: 'ALL', parentProductLine: 'ALL' },
 ): Promise<ManpowerLabourRevenue[]> {
-  let query = supabase
-    .from('job_card_closed_data')
-    .select('employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount')
-
-  if (branch !== 'ALL') {
-    query = query.eq('branch', branch)
-  }
-
-  if (filters.serviceType !== 'ALL') {
-    query = query.eq('sr_type', filters.serviceType)
-  }
-
-  if (filters.parentProductLine !== 'ALL') {
-    query = query.eq('parent_product_line', filters.parentProductLine)
-  }
-
-  const bounds = getDateRangeBounds(dateFilter)
-  if (bounds) {
-    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
+  const data = await fetchAllJobCardClosedRows(
+    'employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount',
+    {
+      branch,
+      dateFilter,
+      serviceType: filters.serviceType,
+      parentProductLine: filters.parentProductLine,
+    },
+  )
 
   const employeeCodes = new Set<string>()
 
@@ -447,22 +464,10 @@ export async function getManpowerWiseFilterOptions(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<ManpowerWiseFilterOptions> {
-  let query = supabase.from('job_card_closed_data').select('sr_type, parent_product_line')
-
-  if (branch !== 'ALL') {
-    query = query.eq('branch', branch)
-  }
-
-  const bounds = getDateRangeBounds(dateFilter)
-  if (bounds) {
-    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    throw new Error(error.message)
-  }
+  const data = await fetchAllJobCardClosedRows('sr_type, parent_product_line', {
+    branch,
+    dateFilter,
+  })
 
   const serviceTypes = new Set<string>()
   const parentProductLines = new Set<string>()
@@ -538,35 +543,45 @@ export async function getBranchLabourRevenueComparison(
     return []
   }
 
-  let selectedQuery = supabase
-    .from('job_card_closed_data')
-    .select('branch, final_labour_amount')
-    .gte('closed_date_time', selectedBounds.from)
-    .lt('closed_date_time', selectedBounds.toExclusive)
+  const fetchWindowRows = async (bounds: { from: string; toExclusive: string }): Promise<Record<string, unknown>[]> => {
+    let from = 0
+    const allRows: Record<string, unknown>[] = []
 
-  let previousQuery = supabase
-    .from('job_card_closed_data')
-    .select('branch, final_labour_amount')
-    .gte('closed_date_time', previousBounds.from)
-    .lt('closed_date_time', previousBounds.toExclusive)
+    while (true) {
+      let query = supabase
+        .from('job_card_closed_data')
+        .select('branch, final_labour_amount')
+        .gte('closed_date_time', bounds.from)
+        .lt('closed_date_time', bounds.toExclusive)
+        .range(from, from + QUERY_PAGE_SIZE - 1)
 
-  if (branch !== 'ALL') {
-    selectedQuery = selectedQuery.eq('branch', branch)
-    previousQuery = previousQuery.eq('branch', branch)
+      if (branch !== 'ALL') {
+        query = query.eq('branch', branch)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+      allRows.push(...batch)
+
+      if (batch.length < QUERY_PAGE_SIZE) {
+        break
+      }
+
+      from += QUERY_PAGE_SIZE
+    }
+
+    return allRows
   }
 
-  const [{ data: selectedData, error: selectedError }, { data: previousData, error: previousError }] = await Promise.all([
-    selectedQuery,
-    previousQuery,
+  const [selectedData, previousData] = await Promise.all([
+    fetchWindowRows(selectedBounds),
+    fetchWindowRows(previousBounds),
   ])
-
-  if (selectedError) {
-    throw new Error(selectedError.message)
-  }
-
-  if (previousError) {
-    throw new Error(previousError.message)
-  }
 
   const selectedByBranch = new Map<string, number>()
   const previousByBranch = new Map<string, number>()
