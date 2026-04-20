@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
@@ -209,15 +210,64 @@ function normalizeTextValue(value: unknown): string | null {
   return text === '' ? null : text
 }
 
+function detectTextEncoding(data: Uint8Array): 'utf-8' | 'utf-16le' | 'utf-16be' {
+  if (data.length >= 2) {
+    if (data[0] === 0xff && data[1] === 0xfe) return 'utf-16le'
+    if (data[0] === 0xfe && data[1] === 0xff) return 'utf-16be'
+  }
+  if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
+    return 'utf-8'
+  }
+  return 'utf-8'
+}
+
+function parseDelimitedText(text: string): Record<string, unknown>[] {
+  const firstLine = text.split(/\r?\n/)[0] ?? ''
+  const delimiter = firstLine.includes('\t') ? '\t' : ','
+
+  const parsed = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    delimiter,
+    transformHeader: (header) => header.trim(),
+  })
+
+  if (parsed.errors.length > 0) {
+    throw new Error(parsed.errors[0].message)
+  }
+
+  const rows = parsed.data.map((row) => {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(row)) {
+      out[k] = v == null ? '' : String(v)
+    }
+    return out
+  })
+
+  if (rows.length === 0) throw new Error('The file is empty.')
+  return rows
+}
+
 function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+        const ext = file.name.split('.').pop()?.toLowerCase()
+
+        let rows: Record<string, unknown>[] = []
+
+        if (ext === 'xlsx' || ext === 'xls') {
+          const wb = XLSX.read(data, { type: 'array' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+        } else {
+          const encoding = detectTextEncoding(data)
+          const text = new TextDecoder(encoding).decode(data)
+          rows = parseDelimitedText(text)
+        }
+
         if (rows.length === 0) reject(new Error('The file is empty.'))
         else resolve(rows)
       } catch {
