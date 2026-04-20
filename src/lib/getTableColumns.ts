@@ -16,7 +16,7 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
     'last_name',
     'sr_assigned_to',
     'vehicle_registration_number',
-    'vehicle_sale_date_dealer',
+    'vehicle_sale_date',
     'account_phone_number',
     'branch',
   ],

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
+import {
+  validateJCHeaders,
+  transformJCClosedRow,
+} from '../lib/jcClosedMapping'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,51 +59,6 @@ const CARDS: CardConfig[] = [
 ]
 
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
-const JC_CLOSED_TABLE = 'job_card_closed_data'
-
-const JC_CLOSED_HEADER_TO_COLUMN: Record<string, string> = {
-  'Job Card #': 'job_card_number',
-  'SR Type': 'sr_type',
-  'Chassis No': 'chassis_no',
-  'Final Labour Amount': 'final_labour_amount',
-  'Final Spares Amount': 'final_spares_amount',
-  'Total Invoice Amount': 'total_invoice_amount',
-  'Parent Product Line': 'parent_product_line',
-  'Product Line': 'product_line',
-  'Created Date Time': 'created_date_time',
-  'Closed Date Time': 'closed_date_time',
-  'First Name': 'first_name',
-  'Last Name': 'last_name',
-  'SR Assigned To': 'sr_assigned_to',
-  'Vehicle Registration Number': 'vehicle_registration_number',
-  'Vehicle Sale Date (Dealer)': 'vehicle_sale_date_dealer',
-  'Account Phone #': 'account_phone_number',
-}
-
-const JC_REQUIRED_HEADERS = Object.keys(JC_CLOSED_HEADER_TO_COLUMN)
-
-const JC_FALLBACK_COLUMNS = [
-  'id',
-  'job_card_number',
-  'sr_type',
-  'chassis_no',
-  'final_labour_amount',
-  'final_spares_amount',
-  'total_invoice_amount',
-  'parent_product_line',
-  'product_line',
-  'created_date_time',
-  'closed_date_time',
-  'first_name',
-  'last_name',
-  'sr_assigned_to',
-  'vehicle_registration_number',
-  'vehicle_sale_date_dealer',
-  'account_phone_number',
-  'branch',
-  'created_at',
-  'updated_at',
-]
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,161 +75,15 @@ function emptyCard(): CardState {
   }
 }
 
-function normalizeHeader(value: string): string {
-  return value.trim().toLowerCase()
-}
-
-function findMissingHeaders(excelHeaders: string[], expectedHeaders: string[]): string[] {
-  const incoming = new Set(excelHeaders.map(normalizeHeader))
-  return expectedHeaders.filter((header) => !incoming.has(normalizeHeader(header)))
-}
-
-function parseExcelSerialDate(value: number): Date | null {
-  const parsed = XLSX.SSF.parse_date_code(value)
-  if (!parsed) return null
-  return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H, parsed.M, Math.floor(parsed.S)))
-}
-
-function parseDateString(value: string): Date | null {
-  const pattern = value.match(
-    /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
-  )
-  if (pattern) {
-    const day = Number(pattern[1])
-    const month = Number(pattern[2])
-    const year = Number(pattern[3].length === 2 ? `20${pattern[3]}` : pattern[3])
-    const hour = Number(pattern[4] ?? '0')
-    const minute = Number(pattern[5] ?? '0')
-    const second = Number(pattern[6] ?? '0')
-
-    const parsed = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
-    if (Number.isNaN(parsed.getTime())) return null
-    return parsed
-  }
-
-  const direct = new Date(value)
-  if (!Number.isNaN(direct.getTime())) return direct
-  return null
-}
-
-function parseDateValue(
-  value: unknown,
-  label: string,
-  rowNumber: number,
-  mode: 'datetime' | 'date',
-): string | null {
-  if (value == null) return null
-  if (typeof value === 'string' && value.trim() === '') return null
-
-  let parsed: Date | null = null
-
-  if (typeof value === 'number') {
-    parsed = parseExcelSerialDate(value)
-  } else {
-    parsed = parseDateString(String(value).trim())
-  }
-
-  if (!parsed) {
-    throw new Error(`Row ${rowNumber}: invalid ${label} "${String(value)}".`)
-  }
-
-  if (mode === 'datetime') return parsed.toISOString()
-
-  const y = parsed.getUTCFullYear()
-  const m = String(parsed.getUTCMonth() + 1).padStart(2, '0')
-  const d = String(parsed.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function parseNumericValue(value: unknown, label: string, rowNumber: number): number | null {
-  if (value == null) return null
-  if (typeof value === 'string' && value.trim() === '') return null
-
-  if (typeof value === 'number') {
-    if (Number.isFinite(value)) return value
-    throw new Error(`Row ${rowNumber}: invalid ${label} "${String(value)}".`)
-  }
-
-  const text = String(value).trim().replace(/,/g, '')
-  const numericParts = text.match(/-?\d*\.?\d+/g)
-  if (!numericParts || numericParts.length === 0) {
-    throw new Error(`Row ${rowNumber}: invalid ${label} "${String(value)}".`)
-  }
-
-  // Choose the longest numeric token to handle currency prefixes like "Rs.1,115.10".
-  const best = numericParts.reduce((prev, curr) => (curr.length > prev.length ? curr : prev))
-  const parsed = Number(best)
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Row ${rowNumber}: invalid ${label} "${String(value)}".`)
-  }
-
-  return parsed
-}
-
-function normalizeTextValue(value: unknown): string | null {
-  if (value == null) return null
-  const text = String(value).trim()
-  return text === '' ? null : text
-}
-
-function detectTextEncoding(data: Uint8Array): 'utf-8' | 'utf-16le' | 'utf-16be' {
-  if (data.length >= 2) {
-    if (data[0] === 0xff && data[1] === 0xfe) return 'utf-16le'
-    if (data[0] === 0xfe && data[1] === 0xff) return 'utf-16be'
-  }
-  if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
-    return 'utf-8'
-  }
-  return 'utf-8'
-}
-
-function parseDelimitedText(text: string): Record<string, unknown>[] {
-  const firstLine = text.split(/\r?\n/)[0] ?? ''
-  const delimiter = firstLine.includes('\t') ? '\t' : ','
-
-  const parsed = Papa.parse<Record<string, string>>(text, {
-    header: true,
-    skipEmptyLines: 'greedy',
-    delimiter,
-    transformHeader: (header) => header.trim(),
-  })
-
-  if (parsed.errors.length > 0) {
-    throw new Error(parsed.errors[0].message)
-  }
-
-  const rows = parsed.data.map((row) => {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(row)) {
-      out[k] = v == null ? '' : String(v)
-    }
-    return out
-  })
-
-  if (rows.length === 0) throw new Error('The file is empty.')
-  return rows
-}
-
 function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer)
-        const ext = file.name.split('.').pop()?.toLowerCase()
-
-        let rows: Record<string, unknown>[] = []
-
-        if (ext === 'xlsx' || ext === 'xls') {
-          const wb = XLSX.read(data, { type: 'array' })
-          const ws = wb.Sheets[wb.SheetNames[0]]
-          rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
-        } else {
-          const encoding = detectTextEncoding(data)
-          const text = new TextDecoder(encoding).decode(data)
-          rows = parseDelimitedText(text)
-        }
-
+        const wb = XLSX.read(data, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
         if (rows.length === 0) reject(new Error('The file is empty.'))
         else resolve(rows)
       } catch {
@@ -300,7 +112,6 @@ async function getTableColumns(tableName: string): Promise<string[]> {
   if (sample && sample.length > 0) return Object.keys(sample[0])
 
   // Final fallback: known migration schema
-  if (tableName === JC_CLOSED_TABLE) return JC_FALLBACK_COLUMNS
   return ['id', 'jc_number', 'service_record', 'branch', 'created_at', 'updated_at']
 }
 
@@ -310,46 +121,13 @@ function buildInsertRows(
   branch: Branch,
   tableName: string,
 ): Record<string, unknown>[] {
-  if (tableName === JC_CLOSED_TABLE) {
-    return rawRows.map((row, index) => {
-      const excelHeaderLookup = new Map<string, string>()
-      for (const header of Object.keys(row)) {
-        excelHeaderLookup.set(normalizeHeader(header), header)
-      }
-
-      const obj: Record<string, unknown> = { branch }
-
-      for (const [excelHeader, dbColumn] of Object.entries(JC_CLOSED_HEADER_TO_COLUMN)) {
-        const matchingHeader = excelHeaderLookup.get(normalizeHeader(excelHeader))
-        const rawValue = matchingHeader ? row[matchingHeader] : null
-        const rowNumber = index + 2
-
-        if (
-          dbColumn === 'final_labour_amount' ||
-          dbColumn === 'final_spares_amount' ||
-          dbColumn === 'total_invoice_amount'
-        ) {
-          obj[dbColumn] = parseNumericValue(rawValue, excelHeader, rowNumber)
-          continue
-        }
-
-        if (dbColumn === 'created_date_time' || dbColumn === 'closed_date_time') {
-          obj[dbColumn] = parseDateValue(rawValue, excelHeader, rowNumber, 'datetime')
-          continue
-        }
-
-        if (dbColumn === 'vehicle_sale_date_dealer') {
-          obj[dbColumn] = parseDateValue(rawValue, excelHeader, rowNumber, 'date')
-          continue
-        }
-
-        obj[dbColumn] = normalizeTextValue(rawValue)
-      }
-
-      return obj
-    })
+  // For JC Closed data, use specialized mapping and validation
+  if (tableName === 'job_card_closed_data') {
+    const excelHeaders = Object.keys(rawRows[0] || {})
+    return rawRows.map((row, idx) => transformJCClosedRow(row, excelHeaders, branch, idx + 1))
   }
 
+  // For other tables, use generic matching (existing logic)
   const insertableCols = tableColumns.filter((c) => !SYSTEM_COLS.has(c))
   return rawRows.map((row) => {
     const excelHeaders = Object.keys(row)
@@ -681,18 +459,6 @@ export default function ImportPage() {
 
       try {
         const tableColumns = await getTableColumns(tableName)
-        if (tableName === JC_CLOSED_TABLE) {
-          const existing = new Set(tableColumns.map((col) => col.toLowerCase()))
-          const missingDbColumns = Object.values(JC_CLOSED_HEADER_TO_COLUMN).filter(
-            (col) => !existing.has(col.toLowerCase()),
-          )
-
-          if (missingDbColumns.length > 0) {
-            throw new Error(
-              `JC Closed table is missing expected database columns: ${missingDbColumns.join(', ')}. Apply latest migration and retry.`,
-            )
-          }
-        }
         const CHUNK = 500
         let totalInserted = 0
 
@@ -701,16 +467,16 @@ export default function ImportPage() {
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
 
           const rawRows = await parseWorkbook(slot.file)
-
-          if (tableName === JC_CLOSED_TABLE && rawRows.length > 0) {
-            const missingHeaders = findMissingHeaders(Object.keys(rawRows[0]), JC_REQUIRED_HEADERS)
+          
+          // Validate headers for JC Closed before processing
+          if (tableName === 'job_card_closed_data') {
+            const excelHeaders = Object.keys(rawRows[0] || {})
+            const missingHeaders = validateJCHeaders(excelHeaders)
             if (missingHeaders.length > 0) {
-              throw new Error(
-                `Missing required columns for Job Card Closed Data: ${missingHeaders.join(', ')}`,
-              )
+              throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`)
             }
           }
-
+          
           const insertRows = buildInsertRows(rawRows, tableColumns, branch, tableName)
 
           for (let i = 0; i < insertRows.length; i += CHUNK) {
