@@ -258,19 +258,25 @@ export function buildJcClosedInsertRow(
   const row: Record<string, unknown> = { branch }
   const errors: JcClosedParseError[] = []
 
+  // Handle name field specially: both first_name and last_name map to the same "Name" column
   const nameHeader = headerMapping.first_name
-  const mappedFullName = nameHeader ? excelRow[nameHeader] : undefined
-  const parsedName = parseName(mappedFullName == null ? '' : String(mappedFullName))
+  if (nameHeader) {
+    const mappedFullName = excelRow[nameHeader]
+    const parsedName = parseName(mappedFullName == null ? '' : String(mappedFullName))
+    row.first_name = parsedName.firstName
+    row.last_name = parsedName.lastName
+  }
 
   for (const [dbCol, excelColName] of Object.entries(headerMapping)) {
+    // Skip name fields as we already handled them
+    if (dbCol === 'first_name' || dbCol === 'last_name') {
+      continue
+    }
+
     const value = excelRow[excelColName]
 
     try {
-      if (dbCol === 'first_name') {
-        row[dbCol] = excelColName === headerMapping.last_name ? parsedName.firstName : String(value ?? '').trim() || null
-      } else if (dbCol === 'last_name') {
-        row[dbCol] = excelColName === headerMapping.first_name ? parsedName.lastName : String(value ?? '').trim() || null
-      } else if (NUMERIC_COLUMNS.has(dbCol)) {
+      if (NUMERIC_COLUMNS.has(dbCol)) {
         row[dbCol] = parseNumericValue(value, excelColName)
       } else if (TIMESTAMP_COLUMNS.has(dbCol)) {
         row[dbCol] = parseTimestampValue(value, excelColName)
