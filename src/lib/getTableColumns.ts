@@ -1,7 +1,33 @@
 import { supabase } from './supabase'
 
 const FALLBACK_COLUMNS: Record<string, string[]> = {
-  job_card_closed_data: ['jc_number', 'service_record', 'branch'],
+  job_card_closed_data: [
+    // System columns
+    'id',
+    'branch',
+    'created_at',
+    'updated_at',
+    // Text columns
+    'job_card_number',
+    'sr_type',
+    'chassis_number',
+    'parent_product_line',
+    'product_line',
+    'first_name',
+    'last_name',
+    'sr_assigned_to',
+    'vehicle_registration_number',
+    'account_phone_number',
+    'employee_code',
+    // Numeric columns
+    'final_labour_amount',
+    'final_spares_amount',
+    'total_invoice_amount',
+    // Datetime/date columns
+    'created_date_time',
+    'closed_date_time',
+    'vehicle_sale_date',
+  ],
   service_invoice_data: [
     'invoice_number',
     'invoice_date',

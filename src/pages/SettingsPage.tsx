@@ -41,6 +41,12 @@ function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+function normalizeBranch(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
 function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -342,19 +348,28 @@ export default function SettingsPage() {
 
     try {
       const issuesToResolve = issues.filter((issue) => selectedIds.includes(issue.id))
+      const selectedEmployee = employees.find((employee) => employee.employee_code === bulkEmployeeCode)
+      const employeeBranch = normalizeBranch(selectedEmployee?.location)
+      const updatePayload = employeeBranch
+        ? { employee_code: bulkEmployeeCode, branch: employeeBranch }
+        : { employee_code: bulkEmployeeCode }
 
       for (const issue of issuesToResolve) {
-        const sourceQuery = supabase.from(issue.source_table)
+        let scopedQuery = supabase
+          .from(issue.source_table)
+          .update(updatePayload)
+          .eq('branch', issue.branch)
 
-        if (issue.source_table === 'service_vas_jc_data') {
-          await sourceQuery
-            .update({ employee_code: bulkEmployeeCode })
-            .eq('job_card_number', issue.job_card_number)
-            .eq('sr_assigned_to', issue.sr_assigned_to)
-        } else if (issue.source_table === 'job_card_closed_data') {
-          await sourceQuery
-            .update({ employee_code: bulkEmployeeCode })
-            .eq('job_card_number', issue.job_card_number)
+        if (issue.job_card_number) {
+          scopedQuery = scopedQuery.eq('job_card_number', issue.job_card_number)
+        }
+        if (issue.sr_assigned_to) {
+          scopedQuery = scopedQuery.eq('sr_assigned_to', issue.sr_assigned_to)
+        }
+
+        const { error: sourceError } = await scopedQuery.is('employee_code', null)
+        if (sourceError) {
+          throw new Error(sourceError.message)
         }
       }
 
@@ -374,7 +389,7 @@ export default function SettingsPage() {
     } finally {
       setBulkResolving(false)
     }
-  }, [selectedIssueIds, bulkEmployeeCode, issues, fetchIssues])
+  }, [selectedIssueIds, bulkEmployeeCode, issues, fetchIssues, employees])
 
   const handleResolveIssue = useCallback(async (issue: MappingIssueRow) => {
     const selectedCode = issueCodeSelections[issue.id]
@@ -387,9 +402,15 @@ export default function SettingsPage() {
     setMessage(null)
     setError(null)
 
+    const selectedEmployee = employees.find((employee) => employee.employee_code === selectedCode)
+    const employeeBranch = normalizeBranch(selectedEmployee?.location)
+    const updatePayload = employeeBranch
+      ? { employee_code: selectedCode, branch: employeeBranch }
+      : { employee_code: selectedCode }
+
     const sourceQuery = supabase
       .from(issue.source_table)
-      .update({ employee_code: selectedCode })
+      .update(updatePayload)
       .eq('branch', issue.branch)
 
     let scopedQuery = sourceQuery
@@ -425,7 +446,7 @@ export default function SettingsPage() {
     setMessage(`Resolved mapping issue #${issue.id}.`)
     await fetchIssues()
     setResolvingIssueId(null)
-  }, [fetchIssues, issueCodeSelections])
+  }, [fetchIssues, issueCodeSelections, employees])
 
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
