@@ -1,6 +1,13 @@
 import { supabase } from './supabase'
 
 export type BranchFilter = 'ALL' | 'AJ' | 'JG PV' | 'JG EV'
+export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'custom'
+
+export interface DateRangeFilter {
+  preset: DateRangePreset
+  customFrom?: string
+  customTo?: string
+}
 
 export interface ServiceTypeCount {
   serviceType: string
@@ -18,11 +25,75 @@ function serviceTypeGroupKey(serviceType: string): string {
   return serviceType.toLowerCase()
 }
 
-export async function getServiceTypeCounts(branch: BranchFilter): Promise<ServiceTypeCount[]> {
+function startOfDay(date: Date): Date {
+  const value = new Date(date)
+  value.setHours(0, 0, 0, 0)
+  return value
+}
+
+function addDays(date: Date, days: number): Date {
+  const value = new Date(date)
+  value.setDate(value.getDate() + days)
+  return value
+}
+
+function getStartOfWeek(date: Date): Date {
+  const value = startOfDay(date)
+  const day = value.getDay() // 0: Sunday
+  const offset = day === 0 ? -6 : 1 - day
+  return addDays(value, offset)
+}
+
+function getStartOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string; toExclusive: string } | null {
+  const now = new Date()
+
+  if (dateFilter.preset === 'today') {
+    const from = startOfDay(now)
+    return { from: from.toISOString(), toExclusive: addDays(from, 1).toISOString() }
+  }
+
+  if (dateFilter.preset === 'this-week') {
+    const from = getStartOfWeek(now)
+    return { from: from.toISOString(), toExclusive: addDays(from, 7).toISOString() }
+  }
+
+  if (dateFilter.preset === 'this-month') {
+    const from = getStartOfMonth(now)
+    const toExclusive = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    return { from: from.toISOString(), toExclusive: toExclusive.toISOString() }
+  }
+
+  if (!dateFilter.customFrom || !dateFilter.customTo) return null
+
+  const from = new Date(`${dateFilter.customFrom}T00:00:00`)
+  const toInclusive = new Date(`${dateFilter.customTo}T00:00:00`)
+
+  if (Number.isNaN(from.getTime()) || Number.isNaN(toInclusive.getTime())) return null
+  if (toInclusive < from) return null
+
+  return {
+    from: from.toISOString(),
+    toExclusive: addDays(toInclusive, 1).toISOString(),
+  }
+}
+
+export async function getServiceTypeCounts(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<ServiceTypeCount[]> {
   let query = supabase.from('job_card_closed_data').select('sr_type')
 
   if (branch !== 'ALL') {
     query = query.eq('branch', branch)
+  }
+
+  const bounds = getDateRangeBounds(dateFilter)
+  if (bounds) {
+    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
   }
 
   const { data, error } = await query

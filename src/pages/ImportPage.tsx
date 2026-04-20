@@ -593,6 +593,8 @@ export default function ImportPage() {
                   const srAssignedTo = row.sr_assigned_to
                   const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
                   row.employee_code = matched.employeeCode
+                  // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
+                  row.branch = matched.employeeBranch ?? branch
 
                   if (matched.reason === 'no_employee_match') {
                     mappingIssues.push({
@@ -642,6 +644,8 @@ export default function ImportPage() {
                   const srAssignedTo = row.sr_assigned_to
                   const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
                   row.employee_code = matched.employeeCode
+                  // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
+                  row.branch = matched.employeeBranch ?? branch
 
                   if (matched.reason === 'no_employee_match') {
                     mappingIssues.push({

@@ -10,8 +10,11 @@ export interface EmployeeLookupIndex {
   byName: Map<string, EmployeeRecord>
 }
 
+export type EmployeeBranch = 'AJ' | 'JG PV' | 'JG EV'
+
 export interface EmployeeMatchResult {
   employeeCode: string | null
+  employeeBranch: EmployeeBranch | null
   reason: 'matched_by_code' | 'matched_by_name' | 'sr_assigned_to_empty' | 'no_employee_match'
 }
 
@@ -24,6 +27,21 @@ export function normalizeEmployeeName(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ')
+}
+
+export function normalizeEmployeeBranch(value: string | null | undefined): EmployeeBranch | null {
+  if (!value) return null
+
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+
+  if (normalized === 'AJ') return 'AJ'
+  if (normalized === 'JGPV') return 'JG PV'
+  if (normalized === 'JGEV') return 'JG EV'
+
+  return null
 }
 
 export function buildEmployeeLookupIndex(employees: EmployeeRecord[]): EmployeeLookupIndex {
@@ -60,12 +78,12 @@ export function resolveEmployeeForSr(
   employeeIndex: EmployeeLookupIndex,
 ): EmployeeMatchResult {
   if (srAssignedTo === null || srAssignedTo === undefined) {
-    return { employeeCode: null, reason: 'sr_assigned_to_empty' }
+    return { employeeCode: null, employeeBranch: null, reason: 'sr_assigned_to_empty' }
   }
 
   const raw = String(srAssignedTo).trim()
   if (!raw) {
-    return { employeeCode: null, reason: 'sr_assigned_to_empty' }
+    return { employeeCode: null, employeeBranch: null, reason: 'sr_assigned_to_empty' }
   }
 
   for (const candidateCode of extractCodeCandidates(raw)) {
@@ -73,6 +91,7 @@ export function resolveEmployeeForSr(
     if (byCodeMatch) {
       return {
         employeeCode: byCodeMatch.employee_code,
+        employeeBranch: normalizeEmployeeBranch(byCodeMatch.location),
         reason: 'matched_by_code',
       }
     }
@@ -84,12 +103,14 @@ export function resolveEmployeeForSr(
   if (byNameMatch) {
     return {
       employeeCode: byNameMatch.employee_code,
+      employeeBranch: normalizeEmployeeBranch(byNameMatch.location),
       reason: 'matched_by_name',
     }
   }
 
   return {
     employeeCode: null,
+    employeeBranch: null,
     reason: 'no_employee_match',
   }
 }

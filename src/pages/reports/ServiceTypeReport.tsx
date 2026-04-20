@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { type BranchFilter, getServiceTypeCounts, type ServiceTypeCount } from '../../lib/reportQueries'
+import {
+  type BranchFilter,
+  type DateRangeFilter,
+  type DateRangePreset,
+  getServiceTypeCounts,
+  type ServiceTypeCount,
+} from '../../lib/reportQueries'
 
 const BRANCH_OPTIONS: { label: string; value: BranchFilter }[] = [
   { label: 'All Branches', value: 'ALL' },
@@ -10,13 +16,47 @@ const BRANCH_OPTIONS: { label: string; value: BranchFilter }[] = [
 
 type SortKey = 'serviceType' | 'count'
 
+const DATE_PRESET_OPTIONS: { label: string; value: DateRangePreset }[] = [
+  { label: 'Today', value: 'today' },
+  { label: 'This Week', value: 'this-week' },
+  { label: 'This Month', value: 'this-month' },
+  { label: 'Custom', value: 'custom' },
+]
+
+function getTodayDateInputValue(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function ServiceTypeReport() {
   const [branch, setBranch] = useState<BranchFilter>('ALL')
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('this-month')
+  const [customFrom, setCustomFrom] = useState(getTodayDateInputValue)
+  const [customTo, setCustomTo] = useState(getTodayDateInputValue)
   const [rows, setRows] = useState<ServiceTypeCount[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('count')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+
+  const dateFilter = useMemo<DateRangeFilter>(
+    () => ({
+      preset: datePreset,
+      customFrom,
+      customTo,
+    }),
+    [customFrom, customTo, datePreset],
+  )
+
+  const customDateError = useMemo(() => {
+    if (datePreset !== 'custom') return null
+    if (!customFrom || !customTo) return 'Select both From and To date.'
+    if (customTo < customFrom) return 'To date cannot be earlier than From date.'
+    return null
+  }, [customFrom, customTo, datePreset])
 
   useEffect(() => {
     let active = true
@@ -24,7 +64,15 @@ export default function ServiceTypeReport() {
     setIsLoading(true)
     setError(null)
 
-    getServiceTypeCounts(branch)
+    if (customDateError) {
+      setRows([])
+      setIsLoading(false)
+      return () => {
+        active = false
+      }
+    }
+
+    getServiceTypeCounts(branch, dateFilter)
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -41,7 +89,7 @@ export default function ServiceTypeReport() {
     return () => {
       active = false
     }
-  }, [branch])
+  }, [branch, customDateError, dateFilter])
 
   const sortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -80,25 +128,71 @@ export default function ServiceTypeReport() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Service Type Report</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Count of records by service type from job card closed data.
+              Count of records by service type from job card closed data using closed_date_time.
             </p>
           </div>
 
-          <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
-            Branch
-            <select
-              value={branch}
-              onChange={(e) => setBranch(e.target.value as BranchFilter)}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-            >
-              {BRANCH_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+              Branch
+              <select
+                value={branch}
+                onChange={(e) => setBranch(e.target.value as BranchFilter)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              >
+                {BRANCH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+              Date Range
+              <select
+                value={datePreset}
+                onChange={(e) => setDatePreset(e.target.value as DateRangePreset)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              >
+                {DATE_PRESET_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
+
+        {datePreset === 'custom' && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+              From
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-500">
+              To
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              />
+            </label>
+          </div>
+        )}
+
+        {customDateError && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            {customDateError}
+          </p>
+        )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
