@@ -192,11 +192,15 @@ function parseNumericValue(value: unknown, label: string, rowNumber: number): nu
     throw new Error(`Row ${rowNumber}: invalid ${label} "${String(value)}".`)
   }
 
-  const cleaned = String(value).trim().replace(/,/g, '').replace(/[^\d.-]/g, '')
-  if (cleaned === '' || cleaned === '-' || cleaned === '.' || cleaned === '-.') {
+  const text = String(value).trim().replace(/,/g, '')
+  const numericParts = text.match(/-?\d*\.?\d+/g)
+  if (!numericParts || numericParts.length === 0) {
     throw new Error(`Row ${rowNumber}: invalid ${label} "${String(value)}".`)
   }
-  const parsed = Number(cleaned)
+
+  // Choose the longest numeric token to handle currency prefixes like "Rs.1,115.10".
+  const best = numericParts.reduce((prev, curr) => (curr.length > prev.length ? curr : prev))
+  const parsed = Number(best)
   if (!Number.isFinite(parsed)) {
     throw new Error(`Row ${rowNumber}: invalid ${label} "${String(value)}".`)
   }
