@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import ImportPage from './pages/ImportPage'
-import ReportsPage from './pages/ReportsPage'
+import ReportsPage from './pages/ReportsPage.tsx'
 import SettingsPage from './pages/SettingsPage'
 
 const NAV_ITEMS = [
@@ -127,7 +127,7 @@ export default function App() {
                     ].join(' ')
                   }
                 >
-                  Labour Revenue Reports
+                  1. Labour Revenue Reports
                 </NavLink>
                 <NavLink
                   to="/reports/performance"
@@ -140,7 +140,7 @@ export default function App() {
                     ].join(' ')
                   }
                 >
-                  Performance Reports
+                  2. Performance Reports
                 </NavLink>
               </div>
             )}
