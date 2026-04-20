@@ -93,8 +93,8 @@ export function parseNumericValue(
 }
 
 /**
- * Parse timestamp: converts "DD/MM/YY HH:MM" format to ISO 8601 string
- * @param value - The value to parse (e.g., "01/04/26 18:49")
+ * Parse timestamp: converts "DD/MM/YY HH:MM" format or Excel serial numbers to ISO 8601 string
+ * @param value - The value to parse (e.g., "01/04/26 18:49" or Excel serial like 46026.78414351852)
  * @param fieldName - Display name for errors
  * @returns ISO 8601 timestamp string or null if empty, throws error with details
  */
@@ -108,6 +108,19 @@ export function parseDatetime(
 
   try {
     const trimmed = value.trim();
+
+    // Try to parse as Excel serial number first
+    const asNumber = parseFloat(trimmed);
+    if (!isNaN(asNumber) && asNumber > 0 && asNumber < 100000) {
+      // Excel date serial: days since 1900-01-01 (with adjustment for leap year bug)
+      // Excel's magic number: 25569 = days between 1900-01-01 and 1970-01-01
+      const msPerDay = 86400000;
+      const date = new Date((asNumber - 25569) * msPerDay);
+      
+      if (!isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+    }
 
     // Match DD/MM/YY HH:MM format
     const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})$/);
