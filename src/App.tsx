@@ -1,4 +1,5 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import ImportPage from './pages/ImportPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
@@ -35,6 +36,17 @@ const NAV_ITEMS = [
 ]
 
 export default function App() {
+  const location = useLocation()
+  const [isReportsOpen, setIsReportsOpen] = useState(false)
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/reports')) {
+      setIsReportsOpen(true)
+    }
+  }, [location.pathname])
+
+  const isReportsRoute = location.pathname.startsWith('/reports')
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100 text-gray-900">
       {/* Sidebar */}
@@ -52,27 +64,106 @@ export default function App() {
         {/* Nav */}
         <nav className="flex-1 space-y-0.5 px-3 py-4">
           <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">Menu</p>
-          {NAV_ITEMS.map(({ to, label, icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                [
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                ].join(' ')
-              }
+
+          <NavLink
+            to="/import"
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+              ].join(' ')
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span className={isActive ? 'text-blue-600' : 'text-gray-400'}>{NAV_ITEMS[0].icon}</span>
+                {NAV_ITEMS[0].label}
+              </>
+            )}
+          </NavLink>
+
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => setIsReportsOpen((prev) => !prev)}
+              className={[
+                'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                isReportsRoute
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+              ].join(' ')}
             >
-              {({ isActive }) => (
-                <>
-                  <span className={isActive ? 'text-blue-600' : 'text-gray-400'}>{icon}</span>
-                  {label}
-                </>
-              )}
-            </NavLink>
-          ))}
+              <span className="flex items-center gap-3">
+                <span className={isReportsRoute ? 'text-blue-600' : 'text-gray-400'}>{NAV_ITEMS[1].icon}</span>
+                {NAV_ITEMS[1].label}
+              </span>
+              <svg
+                className={[
+                  'h-4 w-4 transition-transform',
+                  isReportsOpen ? 'rotate-180' : '',
+                  isReportsRoute ? 'text-blue-600' : 'text-gray-400',
+                ].join(' ')}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+
+            {isReportsOpen && (
+              <div className="space-y-1 pl-11">
+                <NavLink
+                  to="/reports/labour-revenue"
+                  className={({ isActive }) =>
+                    [
+                      'block rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                      isActive
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                    ].join(' ')
+                  }
+                >
+                  1. Labour Revenue Reports
+                </NavLink>
+                <NavLink
+                  to="/reports/performance"
+                  className={({ isActive }) =>
+                    [
+                      'block rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                      isActive
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                    ].join(' ')
+                  }
+                >
+                  2. Performance Reports
+                </NavLink>
+              </div>
+            )}
+          </div>
+
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+              ].join(' ')
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span className={isActive ? 'text-blue-600' : 'text-gray-400'}>{NAV_ITEMS[2].icon}</span>
+                {NAV_ITEMS[2].label}
+              </>
+            )}
+          </NavLink>
         </nav>
 
         {/* Footer */}
