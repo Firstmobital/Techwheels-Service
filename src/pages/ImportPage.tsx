@@ -651,12 +651,20 @@ export default function ImportPage() {
               )
             }
 
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
+            // Deduplicate rows by (job_card_number, branch) — keep last occurrence only
+            const dedupeMap = new Map<string, Record<string, unknown>>()
+            for (const row of insertRows) {
+              const key = `${row.job_card_number}|${row.branch}`
+              dedupeMap.set(key, row)
+            }
+            const deduplicatedRows = Array.from(dedupeMap.values())
+
+            for (let i = 0; i < deduplicatedRows.length; i += CHUNK) {
               const { error } = await supabase
                 .from(tableName)
-                .upsert(insertRows.slice(i, i + CHUNK), { onConflict: 'job_card_number,branch' })
+                .upsert(deduplicatedRows.slice(i, i + CHUNK), { onConflict: 'job_card_number,branch' })
               if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
+              totalInserted += Math.min(CHUNK, deduplicatedRows.length - i)
             }
           } else {
             // Other tables: use original logic
