@@ -4,7 +4,7 @@ import {
   type BranchLabourRevenueComparison,
   type DateRangeFilter,
   getBranchLabourRevenueComparison,
-} from '../../lib/reportQueries'
+} from '../../../lib/reportQueries'
 
 interface BranchLabourRevenueReportProps {
   branch: BranchFilter

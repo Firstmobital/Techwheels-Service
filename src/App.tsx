@@ -95,7 +95,9 @@ export default function App() {
           <Routes>
             <Route index element={<Navigate to="/import" replace />} />
             <Route path="/import" element={<ImportPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/reports" element={<Navigate to="/reports/labour-revenue" replace />} />
+            <Route path="/reports/:categoryId" element={<ReportsPage />} />
+            <Route path="/reports/:categoryId/:reportId" element={<ReportsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/import" replace />} />
           </Routes>

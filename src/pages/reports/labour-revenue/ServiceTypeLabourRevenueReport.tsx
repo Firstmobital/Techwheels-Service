@@ -4,7 +4,7 @@ import {
   type DateRangeFilter,
   getServiceTypeLabourRevenue,
   type ServiceTypeLabourRevenue,
-} from '../../lib/reportQueries'
+} from '../../../lib/reportQueries'
 
 interface ServiceTypeReportProps {
   branch: BranchFilter
@@ -13,7 +13,7 @@ interface ServiceTypeReportProps {
 
 type SortKey = 'serviceType' | 'totalLabourRevenue' | 'jobCardCount' | 'avgLabourRevenue'
 
-export default function ServiceTypeReport({ branch, dateFilter }: ServiceTypeReportProps) {
+export default function ServiceTypeLabourRevenueReport({ branch, dateFilter }: ServiceTypeReportProps) {
   const [rows, setRows] = useState<ServiceTypeLabourRevenue[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
