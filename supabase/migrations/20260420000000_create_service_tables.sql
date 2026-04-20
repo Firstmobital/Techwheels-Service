@@ -18,14 +18,43 @@ create table if not exists service_invoice_data (
   updated_at timestamptz not null default now()
 );
 
--- Create service_vas_jc_data table
-create table if not exists service_vas_jc_data (
+-- Create service_vas_jc_data table (NEW SCHEMA: 20 business columns + 4 system)
+drop table if exists service_vas_jc_data;
+create table service_vas_jc_data (
+  -- System columns
   id bigint primary key generated always as identity,
-  jc_number text,
-  service_record text,
-  branch text check (branch in ('AJ', 'JG PV', 'JG EV')),
+  branch text not null check (branch in ('AJ', 'JG PV', 'JG EV')),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  
+  -- Text columns (15)
+  job_card_number text,
+  vrn text,
+  complaint_code text,
+  job_code text,
+  job_description text,
+  job_status text,
+  chassis_number text,
+  model text,
+  product_line text,
+  billing_type text,
+  sr_assigned_to text,
+  rate_type text,
+  sr_type text,
+  performed_by text,
+  sr_number text,
+  
+  -- Numeric columns (4)
+  net_price numeric,
+  job_value numeric,
+  discount numeric,
+  billing_hours numeric,
+  
+  -- Timestamp column (1)
+  jc_closed_date_time timestamptz,
+  
+  -- Unique constraint for deduplication/upsert
+  unique (job_card_number, branch)
 );
 
 -- Create service_jc_parts_data table

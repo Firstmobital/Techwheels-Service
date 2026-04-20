@@ -3,9 +3,17 @@ import * as XLSX from 'xlsx'
 import { useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
 import {
-  validateJCHeaders,
-  transformJCClosedRow,
-} from '../lib/jcClosedMapping'
+  mapVasHeaders,
+  buildVasInsertRow,
+  formatParseErrors,
+  type ParseError as VasParseError,
+} from '../lib/vasColumnMapper'
+import {
+  mapInvoiceHeaders,
+  buildInvoiceInsertRow,
+  formatInvoiceParseErrors,
+  type InvoiceParseError,
+} from '../lib/invoiceColumnMapper'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -119,15 +127,7 @@ function buildInsertRows(
   rawRows: Record<string, unknown>[],
   tableColumns: string[],
   branch: Branch,
-  tableName: string,
 ): Record<string, unknown>[] {
-  // For JC Closed data, use specialized mapping and validation
-  if (tableName === 'job_card_closed_data') {
-    const excelHeaders = Object.keys(rawRows[0] || {})
-    return rawRows.map((row, idx) => transformJCClosedRow(row, excelHeaders, branch, idx + 1))
-  }
-
-  // For other tables, use generic matching (existing logic)
   const insertableCols = tableColumns.filter((c) => !SYSTEM_COLS.has(c))
   return rawRows.map((row) => {
     const excelHeaders = Object.keys(row)
@@ -458,31 +458,125 @@ export default function ImportPage() {
       updateCard(tableName, { status: 'uploading', uploadError: null })
 
       try {
-        const tableColumns = await getTableColumns(tableName)
+        const isVasTable = tableName === 'service_vas_jc_data'
+        const isInvoiceTable = tableName === 'service_invoice_data'
+        const tableColumns =
+          isVasTable || isInvoiceTable ? [] : await getTableColumns(tableName)
         const CHUNK = 500
         let totalInserted = 0
+        const allParseErrors: VasParseError[] = []
+
+        // For VAS table, prepare header mapping upfront (extract from first available file)
+        let vasHeaderMapping: Record<string, string> | null = null
+        if (isVasTable) {
+          try {
+            let excelHeaders: string[] = []
+            
+            // Get headers from first available file
+            for (const branch of BRANCHES) {
+              const slot = cardState.slots[branch]
+              if (slot.file && !slot.parseError && slot.rowCount !== null) {
+                const rows = await parseWorkbook(slot.file)
+                if (rows.length > 0) {
+                  excelHeaders = Object.keys(rows[0])
+                  break
+                }
+              }
+            }
+            
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+            
+            vasHeaderMapping = mapVasHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(
+              `VAS Data: ${err instanceof Error ? err.message : String(err)}`
+            )
+          }
+        }
 
         for (const branch of BRANCHES) {
           const slot = cardState.slots[branch]
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
 
           const rawRows = await parseWorkbook(slot.file)
-          
-          // Validate headers for JC Closed before processing
-          if (tableName === 'job_card_closed_data') {
-            const excelHeaders = Object.keys(rawRows[0] || {})
-            const missingHeaders = validateJCHeaders(excelHeaders)
-            if (missingHeaders.length > 0) {
-              throw new Error(`Missing required columns: ${missingHeaders.join(', ')}`)
-            }
-          }
-          
-          const insertRows = buildInsertRows(rawRows, tableColumns, branch, tableName)
 
-          for (let i = 0; i < insertRows.length; i += CHUNK) {
-            const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
-            if (error) throw new Error(error.message)
-            totalInserted += Math.min(CHUNK, insertRows.length - i)
+          if (isVasTable && vasHeaderMapping) {
+            // VAS table: use special parsing with numeric and date conversion
+            const insertRows: Record<string, unknown>[] = []
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildVasInsertRow(rawRows[rowIdx], branch, vasHeaderMapping, rowIdx + 2) // +2 because row 1 is header
+              if (errors.length > 0) {
+                allParseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            // If there were any parse errors, throw before inserting
+            if (allParseErrors.length > 0) {
+              throw new Error(
+                `Parse errors found:\n${formatParseErrors(allParseErrors.slice(0, 10))}`
+              )
+            }
+
+            // Use upsert for VAS table (handles deduplication)
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase
+                .from(tableName)
+                .upsert(insertRows.slice(i, i + CHUNK), { onConflict: 'job_card_number,branch' })
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
+          } else if (isInvoiceTable) {
+            // Invoice table: map only required headers and parse date/amount fields
+            const excelHeaders = Object.keys(rawRows[0] ?? {})
+            let invoiceHeaderMapping: Record<string, string>
+            try {
+              invoiceHeaderMapping = mapInvoiceHeaders(excelHeaders)
+            } catch (err) {
+              throw new Error(
+                `Invoice Data (${branch}, ${slot.file.name}): ${err instanceof Error ? err.message : String(err)}`,
+              )
+            }
+
+            const invoiceParseErrors: InvoiceParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildInvoiceInsertRow(
+                rawRows[rowIdx],
+                branch,
+                invoiceHeaderMapping,
+                rowIdx + 2,
+              ) // +2 because row 1 is header
+
+              if (errors.length > 0) {
+                invoiceParseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (invoiceParseErrors.length > 0) {
+              throw new Error(
+                `Invoice Data parse errors found:\n${formatInvoiceParseErrors(invoiceParseErrors.slice(0, 10))}`,
+              )
+            }
+
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
+          } else {
+            // Other tables: use original logic
+            const insertRows = buildInsertRows(rawRows, tableColumns, branch)
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
           }
         }
 
