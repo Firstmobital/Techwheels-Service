@@ -1,19 +1,77 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import { useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
 
-interface ParsedRow {
-  service_type: string
-  chassis_number: string
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+type Branch = 'AJ' | 'JG PV' | 'JG EV'
+type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
+
+interface SlotState {
+  file: File | null
+  rowCount: number | null
+  parseError: string | null
 }
 
-type UploadState = 'idle' | 'uploading' | 'success' | 'error'
-
-function findHeader(headers: string[], target: string): string | undefined {
-  return headers.find((h) => h.trim().toLowerCase() === target.toLowerCase())
+interface CardState {
+  slots: Record<Branch, SlotState>
+  status: CardStatus
+  uploadError: string | null
+  insertedCount: number
 }
 
-function parseWorkbook(file: File): Promise<ParsedRow[]> {
+interface CardConfig {
+  tableName: string
+  title: string
+  description: string
+}
+
+// ─── Constants ─────────────────────────────────────────────────────────────────
+
+const BRANCHES: Branch[] = ['AJ', 'JG PV', 'JG EV']
+
+const CARDS: CardConfig[] = [
+  {
+    tableName: 'job_card_closed_data',
+    title: 'Job Card Closed Data',
+    description: 'Closed job card records across all branches.',
+  },
+  {
+    tableName: 'service_invoice_data',
+    title: 'Invoice Data',
+    description: 'Service invoice records across all branches.',
+  },
+  {
+    tableName: 'service_vas_jc_data',
+    title: 'VAS Data',
+    description: 'Value-added service job card data across all branches.',
+  },
+  {
+    tableName: 'service_jc_parts_data',
+    title: 'Parts Data',
+    description: 'Parts used in job cards across all branches.',
+  },
+]
+
+const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function emptySlot(): SlotState {
+  return { file: null, rowCount: null, parseError: null }
+}
+
+function emptyCard(): CardState {
+  return {
+    slots: { AJ: emptySlot(), 'JG PV': emptySlot(), 'JG EV': emptySlot() },
+    status: 'idle',
+    uploadError: null,
+    insertedCount: 0,
+  }
+}
+
+function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -21,30 +79,9 @@ function parseWorkbook(file: File): Promise<ParsedRow[]> {
         const data = new Uint8Array(e.target!.result as ArrayBuffer)
         const wb = XLSX.read(data, { type: 'array' })
         const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
-          defval: '',
-        })
-
-        if (rows.length === 0) {
-          reject(new Error('The file is empty.'))
-          return
-        }
-
-        const headers = Object.keys(rows[0])
-        const serviceTypeKey = findHeader(headers, 'Service Type')
-        const chassisKey = findHeader(headers, 'Chassis Number')
-
-        if (!serviceTypeKey)
-          reject(new Error('Missing required column: "Service Type"'))
-        else if (!chassisKey)
-          reject(new Error('Missing required column: "Chassis Number"'))
-        else
-          resolve(
-            rows.map((r) => ({
-              service_type: String(r[serviceTypeKey] ?? '').trim(),
-              chassis_number: String(r[chassisKey] ?? '').trim(),
-            })),
-          )
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+        if (rows.length === 0) reject(new Error('The file is empty.'))
+        else resolve(rows)
       } catch {
         reject(new Error('Failed to parse the file. Make sure it is a valid .xlsx or .csv file.'))
       }
@@ -54,245 +91,419 @@ function parseWorkbook(file: File): Promise<ParsedRow[]> {
   })
 }
 
-export default function ImportPage() {
-  const [rows, setRows] = useState<ParsedRow[]>([])
-  const [parseError, setParseError] = useState<string | null>(null)
-  const [fileName, setFileName] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [uploadState, setUploadState] = useState<UploadState>('idle')
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [insertedCount, setInsertedCount] = useState<number>(0)
-  const inputRef = useRef<HTMLInputElement>(null)
+async function getTableColumns(tableName: string): Promise<string[]> {
+  // Try information_schema — works even when the table is empty
+  const { data: colData } = await supabase
+    .from('information_schema.columns' as never)
+    .select('column_name')
+    .eq('table_schema', 'public')
+    .eq('table_name', tableName)
 
-  const reset = () => {
-    setRows([])
-    setParseError(null)
-    setFileName(null)
-    setUploadState('idle')
-    setUploadError(null)
-    setInsertedCount(0)
+  if (colData && (colData as { column_name: string }[]).length > 0) {
+    return (colData as { column_name: string }[]).map((r) => r.column_name)
   }
 
-  const handleFile = useCallback(async (file: File) => {
-    const ext = file.name.split('.').pop()?.toLowerCase()
-    if (ext !== 'xlsx' && ext !== 'csv') {
-      setParseError('Only .xlsx and .csv files are accepted.')
-      setRows([])
-      setFileName(null)
-      return
-    }
-    reset()
-    setFileName(file.name)
-    try {
-      const parsed = await parseWorkbook(file)
-      setRows(parsed)
-    } catch (err) {
-      setParseError((err as Error).message)
-    }
-  }, [])
+  // Fallback: sample row
+  const { data: sample } = await supabase.from(tableName).select('*').limit(1)
+  if (sample && sample.length > 0) return Object.keys(sample[0])
 
-  const onDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-      setIsDragging(false)
-      const file = e.dataTransfer.files[0]
-      if (file) handleFile(file)
+  // Final fallback: known migration schema
+  return ['id', 'jc_number', 'service_record', 'branch', 'created_at', 'updated_at']
+}
+
+function buildInsertRows(
+  rawRows: Record<string, unknown>[],
+  tableColumns: string[],
+  branch: Branch,
+): Record<string, unknown>[] {
+  const insertableCols = tableColumns.filter((c) => !SYSTEM_COLS.has(c))
+  return rawRows.map((row) => {
+    const excelHeaders = Object.keys(row)
+    const obj: Record<string, unknown> = { branch }
+    for (const tableCol of insertableCols) {
+      const match = excelHeaders.find((h) => h.trim().toLowerCase() === tableCol.toLowerCase())
+      if (match !== undefined) {
+        obj[tableCol] = row[match] != null ? String(row[match]).trim() : ''
+      }
+    }
+    return obj
+  })
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// ─── SlotDropzone ──────────────────────────────────────────────────────────────
+
+interface SlotDropzoneProps {
+  branch: Branch
+  slot: SlotState
+  onFile: (branch: Branch, file: File) => void
+  onClear: (branch: Branch) => void
+}
+
+function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleFile = useCallback(
+    (file: File) => {
+      const ext = file.name.split('.').pop()?.toLowerCase()
+      if (ext !== 'xlsx' && ext !== 'csv') return
+      onFile(branch, file)
     },
-    [handleFile],
+    [branch, onFile],
   )
 
-  const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleFile(file)
-    e.target.value = ''
-  }
-
-  const uploadToSupabase = async () => {
-    if (rows.length === 0) return
-    setUploadState('uploading')
-    setUploadError(null)
-
-    const CHUNK = 500
-    let inserted = 0
-    try {
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const chunk = rows.slice(i, i + CHUNK)
-        const { error } = await supabase
-          .from('job_card_closed_data')
-          .insert(chunk)
-        if (error) throw new Error(error.message)
-        inserted += chunk.length
-      }
-      setInsertedCount(inserted)
-      setUploadState('success')
-    } catch (err) {
-      setUploadError((err as Error).message)
-      setUploadState('error')
-    }
-  }
-
-  const preview = rows.slice(0, 10)
-  const hasData = rows.length > 0 && !parseError
-
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{branch}</span>
+        {slot.file && (
+          <button
+            onClick={() => onClear(branch)}
+            className="text-[10px] text-gray-400 transition-colors hover:text-red-500"
+          >
+            Remove
+          </button>
+        )}
+      </div>
 
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Import Job Card Data</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Upload an .xlsx or .csv file with <span className="font-medium">Service Type</span> and{' '}
-            <span className="font-medium">Chassis Number</span> columns.
-          </p>
-        </div>
-
-        {/* Drop zone */}
+      {slot.file ? (
         <div
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={onDrop}
           className={[
-            'relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-14 cursor-pointer transition-colors',
-            isDragging
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/40',
+            'rounded-lg border px-3 py-2 text-xs leading-snug',
+            slot.parseError
+              ? 'border-red-200 bg-red-50 text-red-600'
+              : slot.rowCount === null
+              ? 'border-gray-200 bg-gray-50 text-gray-400'
+              : 'border-green-200 bg-green-50 text-green-700',
           ].join(' ')}
         >
-          <svg className="h-10 w-10 text-gray-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          {slot.parseError ? (
+            <span>{slot.parseError}</span>
+          ) : slot.rowCount === null ? (
+            <span>Parsing…</span>
+          ) : (
+            <>
+              <span className="truncate font-medium">{slot.file.name}</span>
+              <span className="ml-2 text-green-500">· {slot.rowCount.toLocaleString()} rows</span>
+            </>
+          )}
+        </div>
+      ) : (
+        <div
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setIsDragging(true)
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setIsDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) handleFile(file)
+          }}
+          className={[
+            'flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-3 py-3 text-xs transition-colors',
+            isDragging
+              ? 'border-blue-400 bg-blue-50 text-blue-600'
+              : 'border-gray-200 text-gray-400 hover:border-blue-300 hover:bg-blue-50/40 hover:text-blue-500',
+          ].join(' ')}
+        >
+          <svg
+            className="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+            />
           </svg>
-          <p className="text-sm font-medium text-gray-700">
-            {isDragging ? 'Drop it here' : 'Drag & drop your file, or click to browse'}
-          </p>
-          <p className="text-xs text-gray-400">.xlsx and .csv supported</p>
+          Drop or click to browse
           <input
             ref={inputRef}
             type="file"
             accept=".xlsx,.csv"
             className="sr-only"
-            onChange={onInputChange}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleFile(file)
+              e.target.value = ''
+            }}
           />
         </div>
+      )}
+    </div>
+  )
+}
 
-        {/* Parse error */}
-        {parseError && (
-          <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <svg className="h-5 w-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            <span>{parseError}</span>
+// ─── ImportCard ────────────────────────────────────────────────────────────────
+
+interface ImportCardProps {
+  config: CardConfig
+  state: CardState
+  onSlotFile: (branch: Branch, file: File) => void
+  onSlotClear: (branch: Branch) => void
+  onUpload: () => void
+  onReset: () => void
+}
+
+function ImportCard({ config, state, onSlotFile, onSlotClear, onUpload, onReset }: ImportCardProps) {
+  const hasValidFile = BRANCHES.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
+  const totalRows = BRANCHES.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
+
+  const { lastUpdated, refresh } = useLastUpdated(config.tableName)
+  const prevStatus = useRef(state.status)
+  useEffect(() => {
+    if (prevStatus.current !== 'success' && state.status === 'success') refresh()
+    prevStatus.current = state.status
+  }, [state.status, refresh])
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      {/* Header */}
+      <div className="border-b border-gray-100 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">{config.title}</h2>
+            <p className="mt-0.5 text-xs text-gray-500">{config.description}</p>
           </div>
-        )}
+          <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] text-gray-400">
+            {config.tableName}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Last updated:{' '}
+          <span className="font-medium text-gray-600">
+            {lastUpdated ? formatDate(lastUpdated) : 'Never'}
+          </span>
+        </p>
+      </div>
 
-        {/* File info + preview */}
-        {hasData && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <svg className="h-4 w-4 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="font-medium text-gray-800">{fileName}</span>
-                <span className="text-gray-400">·</span>
-                <span>{rows.length.toLocaleString()} rows detected</span>
-              </div>
-              <button
-                onClick={reset}
-                className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
-              >
-                Clear
-              </button>
-            </div>
+      {/* Slot grid */}
+      <div className="grid grid-cols-3 gap-3 px-5 py-4">
+        {BRANCHES.map((branch) => (
+          <SlotDropzone
+            key={branch}
+            branch={branch}
+            slot={state.slots[branch]}
+            onFile={onSlotFile}
+            onClear={onSlotClear}
+          />
+        ))}
+      </div>
 
-            {/* Preview table */}
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                    <th className="px-4 py-3">#</th>
-                    <th className="px-4 py-3">Service Type</th>
-                    <th className="px-4 py-3">Chassis Number</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {preview.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5 text-gray-400">{i + 1}</td>
-                      <td className="px-4 py-2.5 text-gray-700">{row.service_type || <span className="text-gray-300 italic">empty</span>}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-700">{row.chassis_number || <span className="text-gray-300 italic">empty</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {rows.length > 10 && (
-                <p className="border-t border-gray-100 px-4 py-2 text-xs text-gray-400">
-                  Showing 10 of {rows.length.toLocaleString()} rows
-                </p>
-              )}
-            </div>
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-5 py-3">
+        <span className="text-xs text-gray-400">
+          {hasValidFile && totalRows > 0 ? `${totalRows.toLocaleString()} rows ready` : ''}
+        </span>
 
-            {/* Upload button */}
-            <div className="flex items-center gap-4">
-              <button
-                onClick={uploadToSupabase}
-                disabled={uploadState === 'uploading' || uploadState === 'success'}
-                className={[
-                  'inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
-                  uploadState === 'uploading'
-                    ? 'cursor-not-allowed bg-blue-400 text-white'
-                    : uploadState === 'success'
-                    ? 'cursor-not-allowed bg-green-500 text-white'
-                    : 'bg-blue-600 text-white hover:bg-blue-700',
-                ].join(' ')}
-              >
-                {uploadState === 'uploading' && (
-                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                )}
-                {uploadState === 'success' ? 'Uploaded!' : uploadState === 'uploading' ? 'Uploading…' : `Upload ${rows.length.toLocaleString()} rows to Supabase`}
-              </button>
+        <div className="flex items-center gap-3">
+          {state.status === 'success' && (
+            <button
+              onClick={onReset}
+              className="text-xs text-gray-500 underline underline-offset-2 hover:text-gray-700"
+            >
+              Import more
+            </button>
+          )}
 
-              {uploadState === 'success' && (
-                <button
-                  onClick={reset}
-                  className="text-sm text-gray-500 underline underline-offset-2 hover:text-gray-700"
-                >
-                  Import another file
-                </button>
-              )}
-            </div>
-
-            {/* Upload error */}
-            {uploadState === 'error' && uploadError && (
-              <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                <svg className="h-5 w-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                <div>
-                  <p className="font-medium">Upload failed</p>
-                  <p className="mt-0.5 text-red-600">{uploadError}</p>
-                </div>
-              </div>
+          <button
+            onClick={onUpload}
+            disabled={!hasValidFile || state.status === 'uploading' || state.status === 'success'}
+            className={[
+              'inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+              state.status === 'success'
+                ? 'bg-green-500 text-white'
+                : state.status === 'uploading'
+                ? 'cursor-not-allowed bg-blue-400 text-white'
+                : 'bg-blue-600 text-white hover:bg-blue-700',
+            ].join(' ')}
+          >
+            {state.status === 'uploading' && (
+              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
             )}
-          </div>
-        )}
+            {state.status === 'success'
+              ? `Uploaded ${state.insertedCount.toLocaleString()} rows`
+              : state.status === 'uploading'
+              ? 'Uploading…'
+              : 'Upload All'}
+          </button>
+        </div>
+      </div>
 
-        {/* Success toast */}
-        {uploadState === 'success' && (
-          <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-            <svg className="h-5 w-5 shrink-0 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>
-              Successfully inserted <span className="font-semibold">{insertedCount.toLocaleString()} rows</span> into{' '}
-              <code className="rounded bg-green-100 px-1 font-mono text-xs">job_card_closed_data</code>.
-            </span>
+      {/* Error banner */}
+      {state.status === 'error' && state.uploadError && (
+        <div className="mx-5 mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+          <svg
+            className="mt-0.5 h-4 w-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+            />
+          </svg>
+          <div>
+            <p className="font-medium">Upload failed</p>
+            <p className="mt-0.5 text-red-600">{state.uploadError}</p>
           </div>
-        )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ImportPage ────────────────────────────────────────────────────────────────
+
+export default function ImportPage() {
+  const [cards, setCards] = useState<Record<string, CardState>>(() =>
+    Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard()])),
+  )
+
+  const updateCard = useCallback(
+    (tableName: string, update: Partial<CardState> | ((prev: CardState) => CardState)) => {
+      setCards((prev) => ({
+        ...prev,
+        [tableName]:
+          typeof update === 'function'
+            ? update(prev[tableName])
+            : { ...prev[tableName], ...update },
+      }))
+    },
+    [],
+  )
+
+  const handleSlotFile = useCallback(
+    (tableName: string, branch: Branch, file: File) => {
+      const ext = file.name.split('.').pop()?.toLowerCase()
+      const parseError = ext !== 'xlsx' && ext !== 'csv' ? 'Only .xlsx and .csv files are accepted.' : null
+
+      updateCard(tableName, (prev) => ({
+        ...prev,
+        status: 'idle',
+        uploadError: null,
+        slots: { ...prev.slots, [branch]: { file, rowCount: null, parseError } },
+      }))
+
+      if (parseError) return
+
+      parseWorkbook(file)
+        .then((rows) =>
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            slots: { ...prev.slots, [branch]: { file, rowCount: rows.length, parseError: null } },
+          })),
+        )
+        .catch((err: Error) =>
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            slots: { ...prev.slots, [branch]: { file, rowCount: null, parseError: err.message } },
+          })),
+        )
+    },
+    [updateCard],
+  )
+
+  const handleSlotClear = useCallback(
+    (tableName: string, branch: Branch) => {
+      updateCard(tableName, (prev) => ({
+        ...prev,
+        status: 'idle',
+        uploadError: null,
+        slots: { ...prev.slots, [branch]: emptySlot() },
+      }))
+    },
+    [updateCard],
+  )
+
+  const handleUpload = useCallback(
+    async (config: CardConfig) => {
+      const { tableName } = config
+      const cardState = cards[tableName]
+
+      updateCard(tableName, { status: 'uploading', uploadError: null })
+
+      try {
+        const tableColumns = await getTableColumns(tableName)
+        const CHUNK = 500
+        let totalInserted = 0
+
+        for (const branch of BRANCHES) {
+          const slot = cardState.slots[branch]
+          if (!slot.file || slot.parseError || slot.rowCount === null) continue
+
+          const rawRows = await parseWorkbook(slot.file)
+          const insertRows = buildInsertRows(rawRows, tableColumns, branch)
+
+          for (let i = 0; i < insertRows.length; i += CHUNK) {
+            const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
+            if (error) throw new Error(error.message)
+            totalInserted += Math.min(CHUNK, insertRows.length - i)
+          }
+        }
+
+        // Upsert import_metadata
+        const now = new Date().toISOString()
+        await supabase
+          .from('import_metadata')
+          .upsert({ table_name: tableName, last_updated_at: now }, { onConflict: 'table_name' })
+
+        updateCard(tableName, { status: 'success', insertedCount: totalInserted })
+      } catch (err) {
+        updateCard(tableName, { status: 'error', uploadError: (err as Error).message })
+      }
+    },
+    [cards, updateCard],
+  )
+
+  const handleReset = useCallback((tableName: string) => {
+    setCards((prev) => ({ ...prev, [tableName]: emptyCard() }))
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-gray-50 px-6 py-8">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Import Data</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Upload .xlsx or .csv files for each branch. Column names are matched
+            case-insensitively to the target table.
+          </p>
+        </div>
+
+        {CARDS.map((config) => (
+          <ImportCard
+            key={config.tableName}
+            config={config}
+            state={cards[config.tableName]}
+            onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
+            onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
+            onUpload={() => handleUpload(config)}
+            onReset={() => handleReset(config.tableName)}
+          />
+        ))}
       </div>
     </div>
   )
