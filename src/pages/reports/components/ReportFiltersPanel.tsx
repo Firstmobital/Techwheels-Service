@@ -5,6 +5,13 @@ interface ReportFiltersPanelProps {
   onBranchChange: (value: BranchFilter) => void
   branchOptions: string[]
   branchError: string | null
+  showManpowerFilters?: boolean
+  serviceTypeFilter?: 'ALL' | string
+  onServiceTypeFilterChange?: (value: 'ALL' | string) => void
+  serviceTypeOptions?: string[]
+  parentProductLineFilter?: 'ALL' | string
+  onParentProductLineFilterChange?: (value: 'ALL' | string) => void
+  parentProductLineOptions?: string[]
   datePreset: DateRangePreset
   onDatePresetChange: (value: DateRangePreset) => void
   customFrom: string
@@ -26,6 +33,13 @@ export default function ReportFiltersPanel({
   onBranchChange,
   branchOptions,
   branchError,
+  showManpowerFilters = false,
+  serviceTypeFilter = 'ALL',
+  onServiceTypeFilterChange,
+  serviceTypeOptions = [],
+  parentProductLineFilter = 'ALL',
+  onParentProductLineFilterChange,
+  parentProductLineOptions = [],
   datePreset,
   onDatePresetChange,
   customFrom,
@@ -34,9 +48,11 @@ export default function ReportFiltersPanel({
   onCustomToChange,
   customDateError,
 }: ReportFiltersPanelProps) {
+  const topGridClass = showManpowerFilters ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4' : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={topGridClass}>
         <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
           Branch
           <select
@@ -67,6 +83,42 @@ export default function ReportFiltersPanel({
             ))}
           </select>
         </label>
+
+        {showManpowerFilters && onServiceTypeFilterChange && onParentProductLineFilterChange ? (
+          <>
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+              Service Type
+              <select
+                value={serviceTypeFilter}
+                onChange={(event) => onServiceTypeFilterChange(event.target.value)}
+                className="rounded border border-gray-300 px-2 py-2 text-sm"
+              >
+                <option value="ALL">All Service Types</option>
+                {serviceTypeOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+              Parent Product Line
+              <select
+                value={parentProductLineFilter}
+                onChange={(event) => onParentProductLineFilterChange(event.target.value)}
+                className="rounded border border-gray-300 px-2 py-2 text-sm"
+              >
+                <option value="ALL">All Parent Product Lines</option>
+                {parentProductLineOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
 
         {datePreset === 'custom' && (
           <>

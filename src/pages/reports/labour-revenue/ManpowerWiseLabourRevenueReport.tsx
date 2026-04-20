@@ -1,15 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
-  type BranchFilter,
-  type DateRangeFilter,
   getManpowerWiseLabourRevenue,
   type ManpowerLabourRevenue,
 } from '../../../lib/reportQueries'
-
-interface ManpowerWiseReportProps {
-  branch: BranchFilter
-  dateFilter: DateRangeFilter
-}
+import type { ReportViewProps } from '../types'
 
 type SortKey = 'manpower' | 'totalLabourRevenue' | 'jobCardCount' | 'avgLabourRevenue'
 
@@ -17,7 +11,12 @@ function formatCurrency(value: number): string {
   return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
-export default function ManpowerWiseLabourRevenueReport({ branch, dateFilter }: ManpowerWiseReportProps) {
+export default function ManpowerWiseLabourRevenueReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<ManpowerLabourRevenue[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -31,10 +30,14 @@ export default function ManpowerWiseLabourRevenueReport({ branch, dateFilter }: 
     setIsLoading(true)
     setError(null)
 
-    getManpowerWiseLabourRevenue(branch, dateFilter)
+    getManpowerWiseLabourRevenue(branch, dateFilter, {
+      serviceType: serviceTypeFilter,
+      parentProductLine: parentProductLineFilter,
+    })
       .then((data) => {
         if (!active) return
         setRows(data)
+        setExpandedKeys(new Set())
       })
       .catch((err: Error) => {
         if (!active) return
@@ -48,7 +51,7 @@ export default function ManpowerWiseLabourRevenueReport({ branch, dateFilter }: 
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { type BranchFilter, type DateRangeFilter, type DateRangePreset, getBranchOptions } from '../lib/reportQueries'
+import {
+  type BranchFilter,
+  type DateRangeFilter,
+  type DateRangePreset,
+  getBranchOptions,
+  getManpowerWiseFilterOptions,
+} from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
 import {
   getReportById,
@@ -31,6 +37,10 @@ export default function ReportsPage() {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('this-month')
   const [customFrom, setCustomFrom] = useState(getTodayDateInputValue)
   const [customTo, setCustomTo] = useState(getTodayDateInputValue)
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<'ALL' | string>('ALL')
+  const [parentProductLineFilter, setParentProductLineFilter] = useState<'ALL' | string>('ALL')
+  const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>([])
+  const [parentProductLineOptions, setParentProductLineOptions] = useState<string[]>([])
 
   const resolvedCategoryId = useMemo<ReportCategoryId>(() => {
     return isCategoryId(params.categoryId) ? params.categoryId : DEFAULT_CATEGORY_ID
@@ -47,6 +57,8 @@ export default function ReportsPage() {
     if (!report || report.categoryId !== resolvedCategoryId) return null
     return report
   }, [params.reportId, resolvedCategoryId])
+
+  const isManpowerReportSelected = selectedReport?.id === 'manpower-wise-labour-revenue'
 
   const dateFilter = useMemo<DateRangeFilter>(
     () => ({
@@ -120,6 +132,40 @@ export default function ReportsPage() {
     setBranch('ALL')
   }, [branch, branchOptions])
 
+  useEffect(() => {
+    if (!isManpowerReportSelected) {
+      setServiceTypeOptions([])
+      setParentProductLineOptions([])
+      setServiceTypeFilter('ALL')
+      setParentProductLineFilter('ALL')
+      return
+    }
+
+    let active = true
+
+    getManpowerWiseFilterOptions(branch, dateFilter)
+      .then((options) => {
+        if (!active) return
+        setServiceTypeOptions(options.serviceTypes)
+        setParentProductLineOptions(options.parentProductLines)
+        setServiceTypeFilter((prev) => (prev === 'ALL' || options.serviceTypes.includes(prev) ? prev : 'ALL'))
+        setParentProductLineFilter((prev) =>
+          prev === 'ALL' || options.parentProductLines.includes(prev) ? prev : 'ALL',
+        )
+      })
+      .catch(() => {
+        if (!active) return
+        setServiceTypeOptions([])
+        setParentProductLineOptions([])
+        setServiceTypeFilter('ALL')
+        setParentProductLineFilter('ALL')
+      })
+
+    return () => {
+      active = false
+    }
+  }, [branch, dateFilter, isManpowerReportSelected])
+
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -155,6 +201,13 @@ export default function ReportsPage() {
           onBranchChange={setBranch}
           branchOptions={branchOptions}
           branchError={branchError}
+          showManpowerFilters={isManpowerReportSelected}
+          serviceTypeFilter={serviceTypeFilter}
+          onServiceTypeFilterChange={setServiceTypeFilter}
+          serviceTypeOptions={serviceTypeOptions}
+          parentProductLineFilter={parentProductLineFilter}
+          onParentProductLineFilterChange={setParentProductLineFilter}
+          parentProductLineOptions={parentProductLineOptions}
           datePreset={datePreset}
           onDatePresetChange={setDatePreset}
           customFrom={customFrom}
@@ -169,7 +222,12 @@ export default function ReportsPage() {
             Fix the date range validation to view the selected report.
           </div>
         ) : selectedReport ? (
-          <selectedReport.Component branch={branch} dateFilter={dateFilter} />
+          <selectedReport.Component
+            branch={branch}
+            dateFilter={dateFilter}
+            serviceTypeFilter={serviceTypeFilter}
+            parentProductLineFilter={parentProductLineFilter}
+          />
         ) : (
           <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
             <p className="text-sm font-semibold text-gray-800">No reports configured for this category.</p>

@@ -38,6 +38,16 @@ export interface ManpowerLabourRevenue {
   serviceTypeBreakup: ManpowerServiceTypeLabourRevenue[]
 }
 
+export interface ManpowerWiseFilters {
+  serviceType: 'ALL' | string
+  parentProductLine: 'ALL' | string
+}
+
+export interface ManpowerWiseFilterOptions {
+  serviceTypes: string[]
+  parentProductLines: string[]
+}
+
 export interface BranchLabourRevenueComparison {
   branch: string
   selectedRevenue: number
@@ -71,6 +81,11 @@ function normalizeManpowerName(raw: unknown): string {
   if (raw === null || raw === undefined) return 'Unknown Manpower'
   const normalized = String(raw).trim().replace(/\s+/g, ' ')
   return normalized === '' ? 'Unknown Manpower' : normalized
+}
+
+function normalizeParentProductLine(raw: unknown): string {
+  if (raw === null || raw === undefined) return ''
+  return String(raw).trim().replace(/\s+/g, ' ')
 }
 
 function startOfDay(date: Date): Date {
@@ -264,11 +279,22 @@ export async function getServiceTypeLabourRevenue(
 export async function getManpowerWiseLabourRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: ManpowerWiseFilters = { serviceType: 'ALL', parentProductLine: 'ALL' },
 ): Promise<ManpowerLabourRevenue[]> {
-  let query = supabase.from('job_card_closed_data').select('employee_code, sr_assigned_to, sr_type, final_labour_amount')
+  let query = supabase
+    .from('job_card_closed_data')
+    .select('employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount')
 
   if (branch !== 'ALL') {
     query = query.eq('branch', branch)
+  }
+
+  if (filters.serviceType !== 'ALL') {
+    query = query.eq('sr_type', filters.serviceType)
+  }
+
+  if (filters.parentProductLine !== 'ALL') {
+    query = query.eq('parent_product_line', filters.parentProductLine)
   }
 
   const bounds = getDateRangeBounds(dateFilter)
@@ -415,6 +441,50 @@ export async function getManpowerWiseLabourRevenue(
     }
     return a.manpowerLabel.localeCompare(b.manpowerLabel)
   })
+}
+
+export async function getManpowerWiseFilterOptions(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<ManpowerWiseFilterOptions> {
+  let query = supabase.from('job_card_closed_data').select('sr_type, parent_product_line')
+
+  if (branch !== 'ALL') {
+    query = query.eq('branch', branch)
+  }
+
+  const bounds = getDateRangeBounds(dateFilter)
+  if (bounds) {
+    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const serviceTypes = new Set<string>()
+  const parentProductLines = new Set<string>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as { sr_type?: unknown; parent_product_line?: unknown }
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const parentProductLine = normalizeParentProductLine(typedRow.parent_product_line)
+
+    if (serviceType !== 'Unknown') {
+      serviceTypes.add(serviceType)
+    }
+
+    if (parentProductLine) {
+      parentProductLines.add(parentProductLine)
+    }
+  }
+
+  return {
+    serviceTypes: [...serviceTypes].sort((a, b) => a.localeCompare(b)),
+    parentProductLines: [...parentProductLines].sort((a, b) => a.localeCompare(b)),
+  }
 }
 
 function getPreviousRange(bounds: { from: string; toExclusive: string }): { from: string; toExclusive: string } | null {
