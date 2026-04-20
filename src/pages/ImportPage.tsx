@@ -188,6 +188,23 @@ function buildInsertRows(
   })
 }
 
+function dedupeJcClosedRowsByConflictKey(
+  rows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const byConflictKey = new Map<string, Record<string, unknown>>()
+
+  for (const row of rows) {
+    const jobCardNumber = row.job_card_number == null ? '' : String(row.job_card_number).trim()
+    const rowBranch = row.branch == null ? '' : String(row.branch).trim()
+    const key = `${jobCardNumber}::${rowBranch}`
+
+    // Keep the latest occurrence so repeated rows in a file resolve deterministically.
+    byConflictKey.set(key, row)
+  }
+
+  return Array.from(byConflictKey.values())
+}
+
 function formatDate(date: Date): string {
   return date.toLocaleString('en-IN', {
     day: '2-digit',
@@ -669,12 +686,14 @@ export default function ImportPage() {
               )
             }
 
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
+            const dedupedRows = dedupeJcClosedRowsByConflictKey(insertRows)
+
+            for (let i = 0; i < dedupedRows.length; i += CHUNK) {
+              const { error } = await supabase.from(tableName).upsert(dedupedRows.slice(i, i + CHUNK), {
                 onConflict: 'job_card_number,branch',
               })
               if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
+              totalInserted += Math.min(CHUNK, dedupedRows.length - i)
             }
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
