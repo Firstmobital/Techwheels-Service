@@ -30,7 +30,9 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Branch = string
+const PORTAL_BRANCHES = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV'] as const
+
+type Branch = (typeof PORTAL_BRANCHES)[number]
 type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
 
 interface SlotState {
@@ -90,29 +92,12 @@ const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-async function getAvailableBranches(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('employee_master')
-    .select('location')
-    .order('location')
-
-  if (error || !data) return []
-
-  const branches = new Set<string>()
-  for (const row of data as { location: string | null }[]) {
-    if (row.location && row.location.trim()) {
-      branches.add(row.location.trim())
-    }
-  }
-  return Array.from(branches).sort()
-}
-
 function emptySlot(): SlotState {
   return { file: null, rowCount: null, parseError: null }
 }
 
-function emptyCard(branches: string[]): CardState {
-  const slots: Record<Branch, SlotState> = {}
+function emptyCard(branches: readonly Branch[]): CardState {
+  const slots = {} as Record<Branch, SlotState>
   for (const branch of branches) {
     slots[branch] = emptySlot()
   }
@@ -260,7 +245,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{branch}</span>
+        <span className="text-xs font-semibold tracking-wide text-gray-500">{branch}</span>
         {slot.file && (
           <button
             onClick={() => onClear(branch)}
@@ -350,7 +335,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
 interface ImportCardProps {
   config: CardConfig
   state: CardState
-  branches: string[]
+  branches: readonly Branch[]
   onSlotFile: (branch: Branch, file: File) => void
   onSlotClear: (branch: Branch) => void
   onUpload: () => void
@@ -474,27 +459,9 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
 // ─── ImportPage ────────────────────────────────────────────────────────────────
 
 export default function ImportPage() {
-  const [branches, setBranches] = useState<string[]>([])
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
-    Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard([])])),
+    Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(PORTAL_BRANCHES)])),
   )
-
-  // Load available branches from employee_master
-  useEffect(() => {
-    getAvailableBranches()
-      .then((availableBranches) => {
-        setBranches(availableBranches)
-        // Initialize cards with loaded branches
-        setCards(
-          Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(availableBranches)])),
-        )
-      })
-      .catch((err) => {
-        console.error('Failed to load branches:', err)
-        // Fallback to empty branches
-        setBranches([])
-      })
-  }, [])
 
   const updateCard = useCallback(
     (tableName: string, update: Partial<CardState> | ((prev: CardState) => CardState)) => {
@@ -579,7 +546,7 @@ export default function ImportPage() {
             let excelHeaders: string[] = []
             
             // Get headers from first available file
-            for (const branch of branches) {
+            for (const branch of PORTAL_BRANCHES) {
               const slot = cardState.slots[branch]
               if (slot.file && !slot.parseError && slot.rowCount !== null) {
                 const rows = await parseWorkbook(slot.file)
@@ -608,7 +575,7 @@ export default function ImportPage() {
           try {
             let excelHeaders: string[] = []
 
-            for (const branch of branches) {
+            for (const branch of PORTAL_BRANCHES) {
               const slot = cardState.slots[branch]
               if (slot.file && !slot.parseError && slot.rowCount !== null) {
                 const rows = await parseWorkbook(slot.file)
@@ -631,7 +598,7 @@ export default function ImportPage() {
           }
         }
 
-        for (const branch of branches) {
+        for (const branch of PORTAL_BRANCHES) {
           const slot = cardState.slots[branch]
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
 
@@ -825,12 +792,12 @@ export default function ImportPage() {
         updateCard(tableName, { status: 'error', uploadError: (err as Error).message })
       }
     },
-    [cards, updateCard, branches],
+    [cards, updateCard],
   )
 
   const handleReset = useCallback((tableName: string) => {
-    setCards((prev) => ({ ...prev, [tableName]: emptyCard(branches) }))
-  }, [branches])
+    setCards((prev) => ({ ...prev, [tableName]: emptyCard(PORTAL_BRANCHES) }))
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
@@ -838,7 +805,7 @@ export default function ImportPage() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Import Data</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Upload .xlsx or .csv files for each branch. Column names are matched
+            Upload .xlsx or .csv files for each portal ID. Column names are matched
             case-insensitively to the target table.
           </p>
         </div>
@@ -848,7 +815,7 @@ export default function ImportPage() {
             key={config.tableName}
             config={config}
             state={cards[config.tableName]}
-            branches={branches}
+            branches={PORTAL_BRANCHES}
             onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
             onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
             onUpload={() => handleUpload(config)}
