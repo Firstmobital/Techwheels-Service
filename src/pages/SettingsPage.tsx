@@ -13,7 +13,7 @@ interface EmployeeRow {
 interface MappingIssueRow {
   id: number
   source_table: 'service_vas_jc_data' | 'job_card_closed_data'
-  branch: 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
+  branch: string
   row_number: number | null
   job_card_number: string | null
   sr_assigned_to: string | null
@@ -144,10 +144,56 @@ export default function SettingsPage() {
     department: '',
   })
 
+  // Filter state for Unmapped SR Entries
+  const [filterJobCard, setFilterJobCard] = useState('')
+  const [filterSrName, setFilterSrName] = useState('')
+  const [filterBranch, setFilterBranch] = useState('')
+  const [selectedIssueIds, setSelectedIssueIds] = useState<Record<number, boolean>>({})
+  const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
+  const [bulkResolving, setBulkResolving] = useState(false)
+
   const employeeOptions = useMemo(
     () => employees.map((employee) => ({ code: employee.employee_code, name: employee.employee_name })),
     [employees],
   )
+
+  // Filter issues based on search criteria
+  const filteredIssues = useMemo(() => {
+    return issues.filter((issue) => {
+      const matchJobCard =
+        !filterJobCard || (issue.job_card_number?.toLowerCase().includes(filterJobCard.toLowerCase()) ?? false)
+      const matchSrName =
+        !filterSrName || (issue.sr_assigned_to?.toLowerCase().includes(filterSrName.toLowerCase()) ?? false)
+      const matchBranch = !filterBranch || issue.branch === filterBranch
+      return matchJobCard && matchSrName && matchBranch
+    })
+  }, [issues, filterJobCard, filterSrName, filterBranch])
+
+  // Get unique branches from current issues
+  const uniqueBranches = useMemo(() => {
+    const branches = new Set(issues.map((issue) => issue.branch))
+    return Array.from(branches).sort()
+  }, [issues])
+
+  // Calculate mapping statistics
+  const mappingStats = useMemo(() => {
+    const total = issues.length
+    const byBranch = new Map<string, { total: number; unmapped: number }>()
+
+    issues.forEach((issue) => {
+      const key = issue.branch
+      if (!byBranch.has(key)) {
+        byBranch.set(key, { total: 0, unmapped: 0 })
+      }
+      const stats = byBranch.get(key)!
+      stats.total += 1
+      if (issue.status === 'open') {
+        stats.unmapped += 1
+      }
+    })
+
+    return { total, byBranch }
+  }, [issues])
 
   const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true)
@@ -274,6 +320,61 @@ export default function SettingsPage() {
     setMessage(`Added ${payload.employee_code}.`)
     await fetchEmployees()
   }, [fetchEmployees, newEmployee])
+
+  const handleBulkResolve = useCallback(async () => {
+    const selectedIds = Object.entries(selectedIssueIds)
+      .filter(([, selected]) => selected)
+      .map(([id]) => Number(id))
+
+    if (selectedIds.length === 0) {
+      setError('Select at least one issue to resolve.')
+      return
+    }
+
+    if (!bulkEmployeeCode) {
+      setError('Select an employee code to assign to all selected issues.')
+      return
+    }
+
+    setBulkResolving(true)
+    setMessage(null)
+    setError(null)
+
+    try {
+      const issuesToResolve = issues.filter((issue) => selectedIds.includes(issue.id))
+
+      for (const issue of issuesToResolve) {
+        const sourceQuery = supabase.from(issue.source_table)
+
+        if (issue.source_table === 'service_vas_jc_data') {
+          await sourceQuery
+            .update({ employee_code: bulkEmployeeCode })
+            .eq('job_card_number', issue.job_card_number)
+            .eq('sr_assigned_to', issue.sr_assigned_to)
+        } else if (issue.source_table === 'job_card_closed_data') {
+          await sourceQuery
+            .update({ employee_code: bulkEmployeeCode })
+            .eq('job_card_number', issue.job_card_number)
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('import_employee_mapping_issues')
+        .update({ status: 'resolved', resolved_employee_code: bulkEmployeeCode })
+        .in('id', selectedIds)
+
+      if (updateError) throw new Error(updateError.message)
+
+      setMessage(`Resolved ${selectedIds.length} mapping issue(s).`)
+      setSelectedIssueIds({})
+      setBulkEmployeeCode('')
+      await fetchIssues()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to bulk resolve issues.')
+    } finally {
+      setBulkResolving(false)
+    }
+  }, [selectedIssueIds, bulkEmployeeCode, issues, fetchIssues])
 
   const handleResolveIssue = useCallback(async (issue: MappingIssueRow) => {
     const selectedCode = issueCodeSelections[issue.id]
@@ -519,10 +620,124 @@ export default function SettingsPage() {
             <p className="mt-0.5 text-xs text-gray-500">Open issues captured while importing VAS and JC closed data.</p>
           </div>
 
+          {/* Mapping Stats */}
+          {!loadingIssues && issues.length > 0 && (
+            <div className="border-b border-gray-100 px-5 py-3">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="rounded-lg bg-blue-50 p-3">
+                  <div className="text-xs font-semibold text-blue-900">Total Issues</div>
+                  <div className="mt-1 text-lg font-bold text-blue-600">{mappingStats.total}</div>
+                </div>
+                {Array.from(mappingStats.byBranch.entries()).map(([branch, stats]) => (
+                  <div key={branch} className="rounded-lg bg-orange-50 p-3">
+                    <div className="text-xs font-semibold text-orange-900">{branch}</div>
+                    <div className="mt-1 text-lg font-bold text-orange-600">
+                      {stats.unmapped}/{stats.total}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Search Filters */}
+          <div className="border-b border-gray-100 px-5 py-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">Search Job Card</label>
+                <input
+                  type="text"
+                  placeholder="Filter by job card number..."
+                  value={filterJobCard}
+                  onChange={(event) => setFilterJobCard(event.target.value)}
+                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">Search SR Name</label>
+                <input
+                  type="text"
+                  placeholder="Filter by SR assigned to..."
+                  value={filterSrName}
+                  onChange={(event) => setFilterSrName(event.target.value)}
+                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">Filter Branch</label>
+                <select
+                  value={filterBranch}
+                  onChange={(event) => setFilterBranch(event.target.value)}
+                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                >
+                  <option value="">All branches</option>
+                  {uniqueBranches.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Bulk Resolve Controls */}
+          {!loadingIssues && filteredIssues.length > 0 && (
+            <div className="border-b border-gray-100 px-5 py-3 bg-blue-50">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <select
+                    value={bulkEmployeeCode}
+                    onChange={(event) => setBulkEmployeeCode(event.target.value)}
+                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                  >
+                    <option value="">Select employee for bulk assignment</option>
+                    {employeeOptions.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.code} - {option.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleBulkResolve()}
+                  disabled={
+                    bulkResolving ||
+                    !bulkEmployeeCode ||
+                    Object.values(selectedIssueIds).filter(Boolean).length === 0
+                  }
+                  className="rounded bg-emerald-600 px-4 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkResolving
+                    ? 'Resolving...'
+                    : `Bulk Resolve (${Object.values(selectedIssueIds).filter(Boolean).length})`}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto px-5 py-4">
             <table className="min-w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                  <th className="px-3 py-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredIssues.length > 0 &&
+                        filteredIssues.every((issue) => selectedIssueIds[issue.id])
+                      }
+                      onChange={(event) => {
+                        const newSelection: Record<number, boolean> = {}
+                        filteredIssues.forEach((issue) => {
+                          newSelection[issue.id] = event.target.checked
+                        })
+                        setSelectedIssueIds(newSelection)
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                  </th>
                   <th className="px-3 py-2 font-semibold">When</th>
                   <th className="px-3 py-2 font-semibold">Source</th>
                   <th className="px-3 py-2 font-semibold">Branch</th>
@@ -536,20 +751,37 @@ export default function SettingsPage() {
               <tbody>
                 {loadingIssues ? (
                   <tr>
-                    <td className="px-3 py-3 text-gray-400" colSpan={8}>Loading issues...</td>
+                    <td className="px-3 py-3 text-gray-400" colSpan={9}>Loading issues...</td>
                   </tr>
                 ) : issues.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-3 text-gray-400" colSpan={8}>No open mapping issues.</td>
+                    <td className="px-3 py-3 text-gray-400" colSpan={9}>No open mapping issues.</td>
+                  </tr>
+                ) : filteredIssues.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-3 text-gray-400" colSpan={9}>No issues match the applied filters.</td>
                   </tr>
                 ) : (
-                  issues.map((issue) => (
-                    <tr key={issue.id} className="border-b border-gray-100">
+                  filteredIssues.map((issue) => (
+                    <tr key={issue.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIssueIds[issue.id] ?? false}
+                          onChange={(event) =>
+                            setSelectedIssueIds((prev) => ({
+                              ...prev,
+                              [issue.id]: event.target.checked,
+                            }))
+                          }
+                          className="rounded border-gray-300"
+                        />
+                      </td>
                       <td className="px-3 py-2 text-gray-500">{new Date(issue.created_at).toLocaleString('en-IN')}</td>
                       <td className="px-3 py-2">{issue.source_table}</td>
                       <td className="px-3 py-2">{issue.branch}</td>
                       <td className="px-3 py-2">{issue.row_number ?? '-'}</td>
-                      <td className="px-3 py-2">{issue.job_card_number ?? '-'}</td>
+                      <td className="px-3 py-2 font-mono">{issue.job_card_number ?? '-'}</td>
                       <td className="px-3 py-2">{issue.sr_assigned_to ?? '-'}</td>
                       <td className="px-3 py-2">
                         <select
@@ -560,7 +792,7 @@ export default function SettingsPage() {
                               [issue.id]: event.target.value,
                             }))
                           }
-                          className="w-56 rounded border border-gray-300 px-2 py-1"
+                          className="rounded border border-gray-300 px-2 py-1"
                         >
                           <option value="">Select employee</option>
                           {employeeOptions.map((option) => (
@@ -575,7 +807,7 @@ export default function SettingsPage() {
                           type="button"
                           onClick={() => void handleResolveIssue(issue)}
                           disabled={resolvingIssueId === issue.id}
-                          className="rounded bg-emerald-600 px-3 py-1 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {resolvingIssueId === issue.id ? 'Applying...' : 'Apply'}
                         </button>
