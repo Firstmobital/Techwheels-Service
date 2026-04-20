@@ -51,10 +51,7 @@ create table service_vas_jc_data (
   billing_hours numeric,
   
   -- Timestamp column (1)
-  jc_closed_date_time timestamptz,
-  
-  -- Unique constraint for deduplication/upsert
-  unique (job_card_number, branch)
+  jc_closed_date_time timestamptz
 );
 
 -- Create service_jc_parts_data table

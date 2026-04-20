@@ -521,11 +521,9 @@ export default function ImportPage() {
               )
             }
 
-            // Use upsert for VAS table (handles deduplication)
+            // Use insert for VAS table (line items, multiple rows per job card allowed)
             for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase
-                .from(tableName)
-                .upsert(insertRows.slice(i, i + CHUNK), { onConflict: 'job_card_number,branch' })
+              const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
             }
