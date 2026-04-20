@@ -127,7 +127,7 @@ export default function App() {
                     ].join(' ')
                   }
                 >
-                  1. Labour Revenue Reports
+                  Labour Revenue Reports
                 </NavLink>
                 <NavLink
                   to="/reports/performance"
@@ -140,7 +140,7 @@ export default function App() {
                     ].join(' ')
                   }
                 >
-                  2. Performance Reports
+                  Performance Reports
                 </NavLink>
               </div>
             )}
