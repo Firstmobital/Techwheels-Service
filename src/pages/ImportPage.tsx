@@ -14,6 +14,18 @@ import {
   formatInvoiceParseErrors,
   type InvoiceParseError,
 } from '../lib/invoiceColumnMapper'
+import {
+  mapJcClosedHeaders,
+  buildJcClosedInsertRow,
+  formatJcClosedParseErrors,
+  type JcClosedParseError,
+} from '../lib/jcClosedColumnMapper'
+import {
+  buildEmployeeLookupIndex,
+  resolveEmployeeForSr,
+  type EmployeeLookupIndex,
+  type EmployeeRecord,
+} from '../lib/employeeMatcher'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +49,15 @@ interface CardConfig {
   tableName: string
   title: string
   description: string
+}
+
+interface MappingIssueInsert {
+  source_table: 'service_vas_jc_data' | 'job_card_closed_data'
+  branch: Branch
+  row_number: number
+  job_card_number: string | null
+  sr_assigned_to: string | null
+  reason: string
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -121,6 +142,31 @@ async function getTableColumns(tableName: string): Promise<string[]> {
 
   // Final fallback: known migration schema
   return ['id', 'jc_number', 'service_record', 'branch', 'created_at', 'updated_at']
+}
+
+async function getEmployeeLookupIndex(): Promise<EmployeeLookupIndex> {
+  const { data, error } = await supabase
+    .from('employee_master')
+    .select('employee_code, employee_name, location, department')
+
+  if (error) throw new Error(error.message)
+
+  return buildEmployeeLookupIndex((data as EmployeeRecord[] | null) ?? [])
+}
+
+async function insertMappingIssues(issues: MappingIssueInsert[]): Promise<void> {
+  if (issues.length === 0) return
+
+  const CHUNK = 500
+  for (let i = 0; i < issues.length; i += CHUNK) {
+    const { error } = await supabase
+      .from('import_employee_mapping_issues')
+      .insert(issues.slice(i, i + CHUNK))
+
+    if (error) {
+      throw new Error(`Failed to log mapping issues: ${error.message}`)
+    }
+  }
 }
 
 function buildInsertRows(
@@ -460,11 +506,15 @@ export default function ImportPage() {
       try {
         const isVasTable = tableName === 'service_vas_jc_data'
         const isInvoiceTable = tableName === 'service_invoice_data'
+        const isJcClosedTable = tableName === 'job_card_closed_data'
         const tableColumns =
-          isVasTable || isInvoiceTable ? [] : await getTableColumns(tableName)
+          isVasTable || isInvoiceTable || isJcClosedTable ? [] : await getTableColumns(tableName)
         const CHUNK = 500
         let totalInserted = 0
         const allParseErrors: VasParseError[] = []
+        const mappingIssues: MappingIssueInsert[] = []
+        const requiresEmployeeLookup = isVasTable || isJcClosedTable
+        const employeeLookup = requiresEmployeeLookup ? await getEmployeeLookupIndex() : null
 
         // For VAS table, prepare header mapping upfront (extract from first available file)
         let vasHeaderMapping: Record<string, string> | null = null
@@ -496,6 +546,35 @@ export default function ImportPage() {
           }
         }
 
+        // For JC Closed table, prepare header mapping upfront (extract from first available file)
+        let jcHeaderMapping: Record<string, string> | null = null
+        if (isJcClosedTable) {
+          try {
+            let excelHeaders: string[] = []
+
+            for (const branch of BRANCHES) {
+              const slot = cardState.slots[branch]
+              if (slot.file && !slot.parseError && slot.rowCount !== null) {
+                const rows = await parseWorkbook(slot.file)
+                if (rows.length > 0) {
+                  excelHeaders = Object.keys(rows[0])
+                  break
+                }
+              }
+            }
+
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+
+            jcHeaderMapping = mapJcClosedHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(
+              `Job Card Closed Data: ${err instanceof Error ? err.message : String(err)}`,
+            )
+          }
+        }
+
         for (const branch of BRANCHES) {
           const slot = cardState.slots[branch]
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
@@ -510,6 +589,23 @@ export default function ImportPage() {
               if (errors.length > 0) {
                 allParseErrors.push(...errors)
               } else if (row) {
+                if (employeeLookup) {
+                  const srAssignedTo = row.sr_assigned_to
+                  const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
+                  row.employee_code = matched.employeeCode
+
+                  if (matched.reason === 'no_employee_match') {
+                    mappingIssues.push({
+                      source_table: 'service_vas_jc_data',
+                      branch,
+                      row_number: rowIdx + 2,
+                      job_card_number:
+                        row.job_card_number == null ? null : String(row.job_card_number),
+                      sr_assigned_to: srAssignedTo == null ? null : String(srAssignedTo),
+                      reason: matched.reason,
+                    })
+                  }
+                }
                 insertRows.push(row)
               }
             }
@@ -524,6 +620,55 @@ export default function ImportPage() {
             // Use insert for VAS table (line items, multiple rows per job card allowed)
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
+          } else if (isJcClosedTable && jcHeaderMapping) {
+            const jcParseErrors: JcClosedParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildJcClosedInsertRow(
+                rawRows[rowIdx],
+                branch,
+                jcHeaderMapping,
+                rowIdx + 2,
+              )
+
+              if (errors.length > 0) {
+                jcParseErrors.push(...errors)
+              } else if (row) {
+                if (employeeLookup) {
+                  const srAssignedTo = row.sr_assigned_to
+                  const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
+                  row.employee_code = matched.employeeCode
+
+                  if (matched.reason === 'no_employee_match') {
+                    mappingIssues.push({
+                      source_table: 'job_card_closed_data',
+                      branch,
+                      row_number: rowIdx + 2,
+                      job_card_number:
+                        row.job_card_number == null ? null : String(row.job_card_number),
+                      sr_assigned_to: srAssignedTo == null ? null : String(srAssignedTo),
+                      reason: matched.reason,
+                    })
+                  }
+                }
+                insertRows.push(row)
+              }
+            }
+
+            if (jcParseErrors.length > 0) {
+              throw new Error(
+                `Job Card Closed Data parse errors found:\n${formatJcClosedParseErrors(jcParseErrors.slice(0, 10))}`,
+              )
+            }
+
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
+                onConflict: 'job_card_number,branch',
+              })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
             }
@@ -577,6 +722,8 @@ export default function ImportPage() {
             }
           }
         }
+
+        await insertMappingIssues(mappingIssues)
 
         // Upsert import_metadata
         const now = new Date().toISOString()
