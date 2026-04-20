@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-export type BranchFilter = 'ALL' | 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
+export type BranchFilter = 'ALL' | string
 export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'custom'
 
 export interface DateRangeFilter {
@@ -12,6 +12,13 @@ export interface DateRangeFilter {
 export interface ServiceTypeCount {
   serviceType: string
   count: number
+}
+
+export interface ServiceTypeLabourRevenue {
+  serviceType: string
+  totalLabourRevenue: number
+  jobCardCount: number
+  avgLabourRevenue: number
 }
 
 function normalizeServiceType(raw: unknown): string {
@@ -48,7 +55,7 @@ function getStartOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)
 }
 
-function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string; toExclusive: string } | null {
+export function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string; toExclusive: string } | null {
   const now = new Date()
 
   if (dateFilter.preset === 'today') {
@@ -79,6 +86,30 @@ function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string; toExcl
     from: from.toISOString(),
     toExclusive: addDays(toInclusive, 1).toISOString(),
   }
+}
+
+export async function getBranchOptions(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('employee_master')
+    .select('location')
+    .not('location', 'is', null)
+    .order('location', { ascending: true })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const unique = new Set<string>()
+
+  for (const row of data ?? []) {
+    const raw = (row as { location?: unknown }).location
+    if (raw === null || raw === undefined) continue
+    const normalized = String(raw).trim().replace(/\s+/g, ' ')
+    if (!normalized) continue
+    unique.add(normalized)
+  }
+
+  return [...unique].sort((a, b) => a.localeCompare(b))
 }
 
 export async function getServiceTypeCounts(
@@ -119,6 +150,72 @@ export async function getServiceTypeCounts(
 
   return [...grouped.values()].sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count
+    return a.serviceType.localeCompare(b.serviceType)
+  })
+}
+
+export async function getServiceTypeLabourRevenue(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<ServiceTypeLabourRevenue[]> {
+  let query = supabase.from('job_card_closed_data').select('sr_type, final_labour_amount')
+
+  if (branch !== 'ALL') {
+    query = query.eq('branch', branch)
+  }
+
+  const bounds = getDateRangeBounds(dateFilter)
+  if (bounds) {
+    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const grouped = new Map<string, ServiceTypeLabourRevenue>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as { sr_type?: unknown; final_labour_amount?: unknown }
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const key = serviceTypeGroupKey(serviceType)
+    const labourValueRaw = typedRow.final_labour_amount
+    const labourValue =
+      typeof labourValueRaw === 'number'
+        ? labourValueRaw
+        : labourValueRaw == null
+        ? 0
+        : Number(labourValueRaw)
+
+    const safeLabourValue = Number.isFinite(labourValue) ? labourValue : 0
+    const existing = grouped.get(key)
+
+    if (existing) {
+      existing.totalLabourRevenue += safeLabourValue
+      existing.jobCardCount += 1
+      continue
+    }
+
+    grouped.set(key, {
+      serviceType,
+      totalLabourRevenue: safeLabourValue,
+      jobCardCount: 1,
+      avgLabourRevenue: 0,
+    })
+  }
+
+  const rows = [...grouped.values()]
+
+  for (const row of rows) {
+    row.avgLabourRevenue = row.jobCardCount > 0 ? row.totalLabourRevenue / row.jobCardCount : 0
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalLabourRevenue !== a.totalLabourRevenue) {
+      return b.totalLabourRevenue - a.totalLabourRevenue
+    }
     return a.serviceType.localeCompare(b.serviceType)
   })
 }
