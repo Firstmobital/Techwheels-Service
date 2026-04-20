@@ -1,4 +1,5 @@
 import BranchLabourRevenueReport from './BranchLabourRevenueReport'
+import ManpowerWiseLabourRevenueReport from './ManpowerWiseLabourRevenueReport'
 import ServiceTypeLabourRevenueReport from './ServiceTypeLabourRevenueReport'
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -24,5 +25,13 @@ export const LABOUR_REVENUE_REPORTS: ReportDefinition[] = [
     description: 'Selected period vs previous period labour revenue comparison by branch.',
     cardHint: 'Best for branch growth tracking and month-over-month review.',
     Component: BranchLabourRevenueReport,
+  },
+  {
+    id: 'manpower-wise-labour-revenue',
+    categoryId: 'labour-revenue',
+    label: 'Manpower Wise Labour Revenue',
+    description: 'Labour revenue and job count by manpower with service-type breakup.',
+    cardHint: 'Best for advisor-level revenue contribution with category breakdown.',
+    Component: ManpowerWiseLabourRevenueReport,
   },
 ]

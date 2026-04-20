@@ -21,6 +21,23 @@ export interface ServiceTypeLabourRevenue {
   avgLabourRevenue: number
 }
 
+export interface ManpowerServiceTypeLabourRevenue {
+  serviceType: string
+  totalLabourRevenue: number
+  jobCardCount: number
+  avgLabourRevenue: number
+}
+
+export interface ManpowerLabourRevenue {
+  employeeCode: string
+  employeeName: string
+  manpowerLabel: string
+  totalLabourRevenue: number
+  jobCardCount: number
+  avgLabourRevenue: number
+  serviceTypeBreakup: ManpowerServiceTypeLabourRevenue[]
+}
+
 export interface BranchLabourRevenueComparison {
   branch: string
   selectedRevenue: number
@@ -38,6 +55,22 @@ function normalizeServiceType(raw: unknown): string {
 
 function serviceTypeGroupKey(serviceType: string): string {
   return serviceType.toLowerCase()
+}
+
+function normalizeEmployeeCode(raw: unknown): string {
+  if (raw === null || raw === undefined) return 'Unknown'
+  const normalized = String(raw).trim().replace(/\s+/g, ' ')
+  return normalized === '' ? 'Unknown' : normalized
+}
+
+function employeeCodeGroupKey(employeeCode: string): string {
+  return employeeCode.toLowerCase()
+}
+
+function normalizeManpowerName(raw: unknown): string {
+  if (raw === null || raw === undefined) return 'Unknown Manpower'
+  const normalized = String(raw).trim().replace(/\s+/g, ' ')
+  return normalized === '' ? 'Unknown Manpower' : normalized
 }
 
 function startOfDay(date: Date): Date {
@@ -225,6 +258,162 @@ export async function getServiceTypeLabourRevenue(
       return b.totalLabourRevenue - a.totalLabourRevenue
     }
     return a.serviceType.localeCompare(b.serviceType)
+  })
+}
+
+export async function getManpowerWiseLabourRevenue(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<ManpowerLabourRevenue[]> {
+  let query = supabase.from('job_card_closed_data').select('employee_code, sr_assigned_to, sr_type, final_labour_amount')
+
+  if (branch !== 'ALL') {
+    query = query.eq('branch', branch)
+  }
+
+  const bounds = getDateRangeBounds(dateFilter)
+  if (bounds) {
+    query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const employeeCodes = new Set<string>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as { employee_code?: unknown }
+    const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
+    if (employeeCode !== 'Unknown') {
+      employeeCodes.add(employeeCode)
+    }
+  }
+
+  const nameByEmployeeCode = new Map<string, string>()
+
+  if (employeeCodes.size > 0) {
+    const { data: employeeData, error: employeeError } = await supabase
+      .from('employee_master')
+      .select('employee_code, employee_name')
+      .in('employee_code', [...employeeCodes])
+
+    if (employeeError) {
+      throw new Error(employeeError.message)
+    }
+
+    for (const employee of employeeData ?? []) {
+      const typedEmployee = employee as { employee_code?: unknown; employee_name?: unknown }
+      const employeeCode = normalizeEmployeeCode(typedEmployee.employee_code)
+      const employeeName = normalizeManpowerName(typedEmployee.employee_name)
+      nameByEmployeeCode.set(employeeCodeGroupKey(employeeCode), employeeName)
+    }
+  }
+
+  interface WorkingManpowerRow {
+    employeeCode: string
+    fallbackName: string
+    totalLabourRevenue: number
+    jobCardCount: number
+    serviceTypeByKey: Map<string, ManpowerServiceTypeLabourRevenue>
+  }
+
+  const grouped = new Map<string, WorkingManpowerRow>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      employee_code?: unknown
+      sr_assigned_to?: unknown
+      sr_type?: unknown
+      final_labour_amount?: unknown
+    }
+
+    const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
+    const fallbackName = normalizeManpowerName(typedRow.sr_assigned_to)
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const manpowerKey = employeeCodeGroupKey(employeeCode)
+    const serviceTypeKey = serviceTypeGroupKey(serviceType)
+    const labourAmount = parseRevenue(typedRow.final_labour_amount)
+
+    const existingManpower = grouped.get(manpowerKey)
+
+    if (existingManpower) {
+      existingManpower.totalLabourRevenue += labourAmount
+      existingManpower.jobCardCount += 1
+
+      const existingServiceType = existingManpower.serviceTypeByKey.get(serviceTypeKey)
+
+      if (existingServiceType) {
+        existingServiceType.totalLabourRevenue += labourAmount
+        existingServiceType.jobCardCount += 1
+      } else {
+        existingManpower.serviceTypeByKey.set(serviceTypeKey, {
+          serviceType,
+          totalLabourRevenue: labourAmount,
+          jobCardCount: 1,
+          avgLabourRevenue: 0,
+        })
+      }
+
+      continue
+    }
+
+    const serviceTypeByKey = new Map<string, ManpowerServiceTypeLabourRevenue>()
+    serviceTypeByKey.set(serviceTypeKey, {
+      serviceType,
+      totalLabourRevenue: labourAmount,
+      jobCardCount: 1,
+      avgLabourRevenue: 0,
+    })
+
+    grouped.set(manpowerKey, {
+      employeeCode,
+      fallbackName,
+      totalLabourRevenue: labourAmount,
+      jobCardCount: 1,
+      serviceTypeByKey,
+    })
+  }
+
+  const rows: ManpowerLabourRevenue[] = []
+
+  for (const manpower of grouped.values()) {
+    const employeeName = nameByEmployeeCode.get(employeeCodeGroupKey(manpower.employeeCode)) ?? manpower.fallbackName
+    const serviceTypeBreakup = [...manpower.serviceTypeByKey.values()]
+
+    for (const serviceTypeRow of serviceTypeBreakup) {
+      serviceTypeRow.avgLabourRevenue =
+        serviceTypeRow.jobCardCount > 0 ? serviceTypeRow.totalLabourRevenue / serviceTypeRow.jobCardCount : 0
+    }
+
+    serviceTypeBreakup.sort((a, b) => {
+      if (b.totalLabourRevenue !== a.totalLabourRevenue) {
+        return b.totalLabourRevenue - a.totalLabourRevenue
+      }
+      return a.serviceType.localeCompare(b.serviceType)
+    })
+
+    const manpowerLabel =
+      manpower.employeeCode === 'Unknown' ? employeeName : `${manpower.employeeCode} - ${employeeName}`
+
+    rows.push({
+      employeeCode: manpower.employeeCode,
+      employeeName,
+      manpowerLabel,
+      totalLabourRevenue: manpower.totalLabourRevenue,
+      jobCardCount: manpower.jobCardCount,
+      avgLabourRevenue: manpower.jobCardCount > 0 ? manpower.totalLabourRevenue / manpower.jobCardCount : 0,
+      serviceTypeBreakup,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalLabourRevenue !== a.totalLabourRevenue) {
+      return b.totalLabourRevenue - a.totalLabourRevenue
+    }
+    return a.manpowerLabel.localeCompare(b.manpowerLabel)
   })
 }
 
