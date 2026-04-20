@@ -7,11 +7,12 @@ import {
   getDateRangeBounds,
 } from '../lib/reportQueries'
 import { supabase } from '../lib/supabase'
+import BranchLabourRevenueReport from './reports/BranchLabourRevenueReport'
 import ServiceTypeReport from './reports/ServiceTypeReport'
 
 type SourceTable = 'service_vas_jc_data' | 'job_card_closed_data'
 type ReportCategoryId = 'labour-revenue' | 'performance'
-type ReportId = 'service-type-labour-revenue' | 'advisor-performance'
+type ReportId = 'service-type-labour-revenue' | 'branch-labour-revenue' | 'advisor-performance'
 
 interface EmployeeOption {
   employee_code: string
@@ -66,6 +67,12 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
     categoryId: 'labour-revenue',
     label: 'Service Type Wise Labour Revenue',
     description: 'Labour revenue, job count, and average by service type.',
+  },
+  {
+    id: 'branch-labour-revenue',
+    categoryId: 'labour-revenue',
+    label: 'Branch Wise Labour Revenue (MoM)',
+    description: 'Selected period vs previous period labour revenue comparison by branch.',
   },
   {
     id: 'advisor-performance',
@@ -389,6 +396,8 @@ export default function ReportsPage() {
 
         {activeReport === 'service-type-labour-revenue' ? (
           <ServiceTypeReport branch={branch} dateFilter={dateFilter} />
+        ) : activeReport === 'branch-labour-revenue' ? (
+          <BranchLabourRevenueReport branch={branch} dateFilter={dateFilter} />
         ) : (
           <>
             {error && (

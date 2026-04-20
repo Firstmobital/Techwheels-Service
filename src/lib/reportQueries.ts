@@ -21,6 +21,14 @@ export interface ServiceTypeLabourRevenue {
   avgLabourRevenue: number
 }
 
+export interface BranchLabourRevenueComparison {
+  branch: string
+  selectedRevenue: number
+  previousRevenue: number
+  absoluteChange: number
+  percentageChange: number | null
+}
+
 function normalizeServiceType(raw: unknown): string {
   if (raw === null || raw === undefined) return 'Unknown'
 
@@ -217,5 +225,130 @@ export async function getServiceTypeLabourRevenue(
       return b.totalLabourRevenue - a.totalLabourRevenue
     }
     return a.serviceType.localeCompare(b.serviceType)
+  })
+}
+
+function getPreviousRange(bounds: { from: string; toExclusive: string }): { from: string; toExclusive: string } | null {
+  const selectedFrom = new Date(bounds.from)
+  const selectedToExclusive = new Date(bounds.toExclusive)
+
+  if (Number.isNaN(selectedFrom.getTime()) || Number.isNaN(selectedToExclusive.getTime())) {
+    return null
+  }
+
+  const durationMs = selectedToExclusive.getTime() - selectedFrom.getTime()
+  if (durationMs <= 0) return null
+
+  const previousToExclusive = new Date(selectedFrom)
+  const previousFrom = new Date(selectedFrom.getTime() - durationMs)
+
+  return {
+    from: previousFrom.toISOString(),
+    toExclusive: previousToExclusive.toISOString(),
+  }
+}
+
+function parseRevenue(value: unknown): number {
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : value == null
+      ? 0
+      : Number(value)
+
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+function normalizeBranch(raw: unknown): string {
+  if (raw === null || raw === undefined) return 'Unknown'
+  const normalized = String(raw).trim().replace(/\s+/g, ' ')
+  return normalized || 'Unknown'
+}
+
+export async function getBranchLabourRevenueComparison(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<BranchLabourRevenueComparison[]> {
+  const selectedBounds = getDateRangeBounds(dateFilter)
+  if (!selectedBounds) {
+    return []
+  }
+
+  const previousBounds = getPreviousRange(selectedBounds)
+  if (!previousBounds) {
+    return []
+  }
+
+  let selectedQuery = supabase
+    .from('job_card_closed_data')
+    .select('branch, final_labour_amount')
+    .gte('closed_date_time', selectedBounds.from)
+    .lt('closed_date_time', selectedBounds.toExclusive)
+
+  let previousQuery = supabase
+    .from('job_card_closed_data')
+    .select('branch, final_labour_amount')
+    .gte('closed_date_time', previousBounds.from)
+    .lt('closed_date_time', previousBounds.toExclusive)
+
+  if (branch !== 'ALL') {
+    selectedQuery = selectedQuery.eq('branch', branch)
+    previousQuery = previousQuery.eq('branch', branch)
+  }
+
+  const [{ data: selectedData, error: selectedError }, { data: previousData, error: previousError }] = await Promise.all([
+    selectedQuery,
+    previousQuery,
+  ])
+
+  if (selectedError) {
+    throw new Error(selectedError.message)
+  }
+
+  if (previousError) {
+    throw new Error(previousError.message)
+  }
+
+  const selectedByBranch = new Map<string, number>()
+  const previousByBranch = new Map<string, number>()
+
+  for (const row of selectedData ?? []) {
+    const typedRow = row as { branch?: unknown; final_labour_amount?: unknown }
+    const branchName = normalizeBranch(typedRow.branch)
+    const existing = selectedByBranch.get(branchName) ?? 0
+    selectedByBranch.set(branchName, existing + parseRevenue(typedRow.final_labour_amount))
+  }
+
+  for (const row of previousData ?? []) {
+    const typedRow = row as { branch?: unknown; final_labour_amount?: unknown }
+    const branchName = normalizeBranch(typedRow.branch)
+    const existing = previousByBranch.get(branchName) ?? 0
+    previousByBranch.set(branchName, existing + parseRevenue(typedRow.final_labour_amount))
+  }
+
+  const branchNames = new Set<string>([...selectedByBranch.keys(), ...previousByBranch.keys()])
+  const rows: BranchLabourRevenueComparison[] = []
+
+  for (const branchName of branchNames) {
+    const selectedRevenue = selectedByBranch.get(branchName) ?? 0
+    const previousRevenue = previousByBranch.get(branchName) ?? 0
+    const absoluteChange = selectedRevenue - previousRevenue
+    const percentageChange =
+      previousRevenue === 0 ? (selectedRevenue === 0 ? 0 : null) : (absoluteChange / previousRevenue) * 100
+
+    rows.push({
+      branch: branchName,
+      selectedRevenue,
+      previousRevenue,
+      absoluteChange,
+      percentageChange,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.selectedRevenue !== a.selectedRevenue) {
+      return b.selectedRevenue - a.selectedRevenue
+    }
+    return a.branch.localeCompare(b.branch)
   })
 }
