@@ -161,8 +161,8 @@ export function mapVasHeaders(excelHeaders: string[]): Record<string, string> {
   const mapping: Record<string, string> = {};
   const unmapped: string[] = [];
 
-  // Try to map each Excel header
-  for (const [dbCol, excelCol] of Object.entries(HEADER_MAPPING)) {
+  // Try to map each column (HEADER_MAPPING: key=excelCol, value=dbCol)
+  for (const [excelCol, dbCol] of Object.entries(HEADER_MAPPING)) {
     const normalizedExcelCol = normalizeHeader(excelCol);
     const foundIndex = normalized.findIndex(h => h === normalizedExcelCol);
 
