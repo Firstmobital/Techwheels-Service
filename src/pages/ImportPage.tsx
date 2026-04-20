@@ -22,6 +22,7 @@ import {
 } from '../lib/jcClosedColumnMapper'
 import {
   buildEmployeeLookupIndex,
+  normalizeEmployeeBranch,
   resolveEmployeeForSr,
   type EmployeeLookupIndex,
   type EmployeeRecord,
@@ -29,7 +30,7 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Branch = 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
+type Branch = string
 type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
 
 interface SlotState {
@@ -53,7 +54,7 @@ interface CardConfig {
 
 interface MappingIssueInsert {
   source_table: 'service_vas_jc_data' | 'job_card_closed_data'
-  branch: Branch
+  branch: string
   row_number: number
   job_card_number: string | null
   sr_assigned_to: string | null
@@ -61,8 +62,6 @@ interface MappingIssueInsert {
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-
-const BRANCHES: Branch[] = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV']
 
 const CARDS: CardConfig[] = [
   {
@@ -91,13 +90,34 @@ const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
+async function getAvailableBranches(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('employee_master')
+    .select('location')
+    .order('location')
+
+  if (error || !data) return []
+
+  const branches = new Set<string>()
+  for (const row of data as { location: string | null }[]) {
+    if (row.location && row.location.trim()) {
+      branches.add(row.location.trim())
+    }
+  }
+  return Array.from(branches).sort()
+}
+
 function emptySlot(): SlotState {
   return { file: null, rowCount: null, parseError: null }
 }
 
-function emptyCard(): CardState {
+function emptyCard(branches: string[]): CardState {
+  const slots: Record<Branch, SlotState> = {}
+  for (const branch of branches) {
+    slots[branch] = emptySlot()
+  }
   return {
-    slots: { 'Ajmer Road': emptySlot(), 'Sitapura PV': emptySlot(), 'Sitapura EV': emptySlot() },
+    slots,
     status: 'idle',
     uploadError: null,
     insertedCount: 0,
@@ -330,15 +350,16 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
 interface ImportCardProps {
   config: CardConfig
   state: CardState
+  branches: string[]
   onSlotFile: (branch: Branch, file: File) => void
   onSlotClear: (branch: Branch) => void
   onUpload: () => void
   onReset: () => void
 }
 
-function ImportCard({ config, state, onSlotFile, onSlotClear, onUpload, onReset }: ImportCardProps) {
-  const hasValidFile = BRANCHES.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
-  const totalRows = BRANCHES.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
+function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload, onReset }: ImportCardProps) {
+  const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
+  const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
 
   const { lastUpdated, refresh } = useLastUpdated(config.tableName)
   const prevStatus = useRef(state.status)
@@ -370,7 +391,7 @@ function ImportCard({ config, state, onSlotFile, onSlotClear, onUpload, onReset 
 
       {/* Slot grid */}
       <div className="grid grid-cols-3 gap-3 px-5 py-4">
-        {BRANCHES.map((branch) => (
+        {branches.map((branch) => (
           <SlotDropzone
             key={branch}
             branch={branch}
@@ -453,9 +474,27 @@ function ImportCard({ config, state, onSlotFile, onSlotClear, onUpload, onReset 
 // ─── ImportPage ────────────────────────────────────────────────────────────────
 
 export default function ImportPage() {
+  const [branches, setBranches] = useState<string[]>([])
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
-    Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard()])),
+    Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard([])])),
   )
+
+  // Load available branches from employee_master
+  useEffect(() => {
+    getAvailableBranches()
+      .then((availableBranches) => {
+        setBranches(availableBranches)
+        // Initialize cards with loaded branches
+        setCards(
+          Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(availableBranches)])),
+        )
+      })
+      .catch((err) => {
+        console.error('Failed to load branches:', err)
+        // Fallback to empty branches
+        setBranches([])
+      })
+  }, [])
 
   const updateCard = useCallback(
     (tableName: string, update: Partial<CardState> | ((prev: CardState) => CardState)) => {
@@ -540,7 +579,7 @@ export default function ImportPage() {
             let excelHeaders: string[] = []
             
             // Get headers from first available file
-            for (const branch of BRANCHES) {
+            for (const branch of branches) {
               const slot = cardState.slots[branch]
               if (slot.file && !slot.parseError && slot.rowCount !== null) {
                 const rows = await parseWorkbook(slot.file)
@@ -569,7 +608,7 @@ export default function ImportPage() {
           try {
             let excelHeaders: string[] = []
 
-            for (const branch of BRANCHES) {
+            for (const branch of branches) {
               const slot = cardState.slots[branch]
               if (slot.file && !slot.parseError && slot.rowCount !== null) {
                 const rows = await parseWorkbook(slot.file)
@@ -592,7 +631,7 @@ export default function ImportPage() {
           }
         }
 
-        for (const branch of BRANCHES) {
+        for (const branch of branches) {
           const slot = cardState.slots[branch]
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
 
@@ -625,6 +664,8 @@ export default function ImportPage() {
                     })
                   }
                 }
+                // Ensure branch is always set (fallback to selected branch if not set)
+                if (!row.branch) row.branch = branch
                 insertRows.push(row)
               }
             }
@@ -658,24 +699,49 @@ export default function ImportPage() {
                 jcParseErrors.push(...errors)
               } else if (row) {
                 if (employeeLookup) {
-                  const srAssignedTo = row.sr_assigned_to
-                  const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
-                  row.employee_code = matched.employeeCode
-                  // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
-                  row.branch = matched.employeeBranch ?? branch
+                  const sheetEmployeeCodeRaw = row.employee_code
+                  const sheetEmployeeCode =
+                    sheetEmployeeCodeRaw == null ? '' : String(sheetEmployeeCodeRaw).trim()
 
-                  if (matched.reason === 'no_employee_match') {
-                    mappingIssues.push({
-                      source_table: 'job_card_closed_data',
-                      branch,
-                      row_number: rowIdx + 2,
-                      job_card_number:
-                        row.job_card_number == null ? null : String(row.job_card_number),
-                      sr_assigned_to: srAssignedTo == null ? null : String(srAssignedTo),
-                      reason: matched.reason,
-                    })
+                  if (sheetEmployeeCode) {
+                    const byCodeMatch = employeeLookup.byCode.get(sheetEmployeeCode.toUpperCase())
+                    row.employee_code = sheetEmployeeCode
+                    // If SA code is valid, prefer employee location-derived branch.
+                    row.branch = byCodeMatch ? normalizeEmployeeBranch(byCodeMatch.location) ?? branch : branch
+
+                    if (!byCodeMatch) {
+                      mappingIssues.push({
+                        source_table: 'job_card_closed_data',
+                        branch,
+                        row_number: rowIdx + 2,
+                        job_card_number:
+                          row.job_card_number == null ? null : String(row.job_card_number),
+                        sr_assigned_to: row.sr_assigned_to == null ? null : String(row.sr_assigned_to),
+                        reason: 'no_employee_match',
+                      })
+                    }
+                  } else {
+                    const srAssignedTo = row.sr_assigned_to
+                    const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
+                    row.employee_code = matched.employeeCode
+                    // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
+                    row.branch = matched.employeeBranch ?? branch
+
+                    if (matched.reason === 'no_employee_match') {
+                      mappingIssues.push({
+                        source_table: 'job_card_closed_data',
+                        branch,
+                        row_number: rowIdx + 2,
+                        job_card_number:
+                          row.job_card_number == null ? null : String(row.job_card_number),
+                        sr_assigned_to: srAssignedTo == null ? null : String(srAssignedTo),
+                        reason: matched.reason,
+                      })
+                    }
                   }
                 }
+                // Ensure branch is always set (fallback to selected branch if not set)
+                if (!row.branch) row.branch = branch
                 insertRows.push(row)
               }
             }
@@ -759,12 +825,12 @@ export default function ImportPage() {
         updateCard(tableName, { status: 'error', uploadError: (err as Error).message })
       }
     },
-    [cards, updateCard],
+    [cards, updateCard, branches],
   )
 
   const handleReset = useCallback((tableName: string) => {
-    setCards((prev) => ({ ...prev, [tableName]: emptyCard() }))
-  }, [])
+    setCards((prev) => ({ ...prev, [tableName]: emptyCard(branches) }))
+  }, [branches])
 
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
@@ -782,6 +848,7 @@ export default function ImportPage() {
             key={config.tableName}
             config={config}
             state={cards[config.tableName]}
+            branches={branches}
             onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
             onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
             onUpload={() => handleUpload(config)}

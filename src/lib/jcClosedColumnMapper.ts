@@ -65,6 +65,11 @@ const JC_CLOSED_SPECS = [
     aliases: ['SR Assigned To', 'Assigned To'],
   },
   {
+    dbCol: 'employee_code',
+    required: false,
+    aliases: ['Service Advisor ID', 'SA Code', 'Service Advisor Code'],
+  },
+  {
     dbCol: 'vehicle_registration_number',
     required: true,
     aliases: ['Vehicle Registration Number', 'Registration No', 'VRN'],

@@ -10,11 +10,9 @@ export interface EmployeeLookupIndex {
   byName: Map<string, EmployeeRecord>
 }
 
-export type EmployeeBranch = 'Ajmer Road' | 'Sitapura PV' | 'Sitapura EV'
-
 export interface EmployeeMatchResult {
   employeeCode: string | null
-  employeeBranch: EmployeeBranch | null
+  employeeBranch: string | null
   reason: 'matched_by_code' | 'matched_by_name' | 'sr_assigned_to_empty' | 'no_employee_match'
 }
 
@@ -29,19 +27,9 @@ export function normalizeEmployeeName(value: string): string {
     .replace(/\s+/g, ' ')
 }
 
-export function normalizeEmployeeBranch(value: string | null | undefined): EmployeeBranch | null {
+export function normalizeEmployeeBranch(value: string | null | undefined): string | null {
   if (!value) return null
-
-  const normalized = value
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-
-  if (normalized === 'AJMERROAD') return 'Ajmer Road'
-  if (normalized === 'JGPV') return 'Sitapura PV'
-  if (normalized === 'JGEV') return 'Sitapura EV'
-
-  return null
+  return value.trim() || null
 }
 
 export function buildEmployeeLookupIndex(employees: EmployeeRecord[]): EmployeeLookupIndex {
