@@ -205,3 +205,4 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
     </div>
   )
 }
+
