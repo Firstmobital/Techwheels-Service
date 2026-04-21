@@ -82,6 +82,132 @@ export interface MonthlyTrendRevenue {
   totalRevenue: number
 }
 
+export type VasPerformanceGroupBy = 'complaint_code' | 'job_code' | 'performed_by' | 'sr_type'
+
+export interface VasJobPerformanceRow {
+  dimension: string
+  jobCount: number
+  closedCount: number
+  completionRate: number
+  totalJobValue: number
+  totalNetPrice: number
+  totalDiscount: number
+  avgBillingHours: number
+  avgRealizationPerJob: number
+}
+
+export interface VasJobPerformanceSummary {
+  totalJobs: number
+  closedJobs: number
+  completionRate: number
+  totalJobValue: number
+  totalNetPrice: number
+  totalDiscount: number
+  netPriceVsJobValueVariance: number
+  netPriceToJobValueRatio: number
+  discountImpactPercentage: number
+}
+
+export interface VasJobStatusMixRow {
+  status: string
+  count: number
+  percentage: number
+}
+
+export interface VasComplaintCodeRow {
+  complaintCode: string
+  count: number
+  percentage: number
+  totalJobValue: number
+  totalNetPrice: number
+  totalDiscount: number
+}
+
+export interface VasJobPerformanceDashboard {
+  summary: VasJobPerformanceSummary
+  jobStatusMix: VasJobStatusMixRow[]
+  topComplaintCodes: VasComplaintCodeRow[]
+}
+
+export type VasBillingHoursGroupBy = 'performed_by' | 'job_code' | 'rate_type'
+
+export interface VasBillingHoursEfficiencyRow {
+  dimension: string
+  jobCount: number
+  totalBillingHours: number
+  avgBillingHoursPerJob: number
+  totalJobValue: number
+  totalNetPrice: number
+  totalDiscount: number
+  avgJobValuePerHour: number
+  billingHoursSharePercentage: number
+}
+
+export interface LabourSparesMixRow {
+  serviceType: string
+  jobCardCount: number
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  labourSharePercentage: number
+  sparesSharePercentage: number
+}
+
+export interface ProductLinePerformanceRow {
+  parentProductLine: string
+  productLine: string
+  jobCardCount: number
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  avgRevenuePerJobCard: number
+}
+
+export interface TatDurationBucketRow {
+  bucketKey: 'under-1-day' | 'one-to-two-days' | 'two-to-three-days' | 'three-to-seven-days' | 'over-7-days'
+  bucketLabel: string
+  jobCardCount: number
+  percentage: number
+  avgTatHours: number
+  avgTatDays: number
+  totalRevenue: number
+}
+
+export interface TatDurationReport {
+  totalRecords: number
+  validTatCount: number
+  invalidTatCount: number
+  overallAvgTatHours: number
+  overallAvgTatDays: number
+  buckets: TatDurationBucketRow[]
+}
+
+export interface EmployeeUtilizationRow {
+  employeeCode: string
+  employeeName: string
+  advisorLabel: string
+  jobCardCount: number
+  activeDays: number
+  avgJobsPerActiveDay: number
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  avgRevenuePerJobCard: number
+  workloadSharePercentage: number
+}
+
+export interface VehicleWiseRevenueRow {
+  vehicleRegistrationNumber: string
+  visitCount: number
+  repeatVisitCount: number
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  avgRevenuePerVisit: number
+  firstVisitDate: string | null
+  lastVisitDate: string | null
+}
+
 function normalizeServiceType(raw: unknown): string {
   if (raw === null || raw === undefined) return 'Unknown'
 
@@ -112,6 +238,12 @@ function normalizeManpowerName(raw: unknown): string {
 function normalizeParentProductLine(raw: unknown): string {
   if (raw === null || raw === undefined) return ''
   return String(raw).trim().replace(/\s+/g, ' ')
+}
+
+function normalizeVehicleRegistration(raw: unknown): string {
+  if (raw === null || raw === undefined) return 'Unknown'
+  const normalized = String(raw).trim().replace(/\s+/g, ' ').toUpperCase()
+  return normalized || 'Unknown'
 }
 
 const QUERY_PAGE_SIZE = 1000
@@ -880,4 +1012,927 @@ export async function getMonthlyRevenuesTrend(
   }
 
   return rows.sort((a, b) => b.month.localeCompare(a.month))
+}
+
+export async function getVasJobPerformance(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  groupBy: VasPerformanceGroupBy,
+): Promise<VasJobPerformanceRow[]> {
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+  const bounds = getDateRangeBounds(dateFilter)
+
+  while (true) {
+    let query = supabase
+      .from('service_vas_jc_data')
+      .select(`${groupBy}, job_status, job_value, net_price, discount, billing_hours`)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  interface WorkingPerformanceRow {
+    dimension: string
+    jobCount: number
+    closedCount: number
+    totalJobValue: number
+    totalNetPrice: number
+    totalDiscount: number
+    totalBillingHours: number
+  }
+
+  const grouped = new Map<string, WorkingPerformanceRow>()
+
+  for (const row of allRows) {
+    const typedRow = row as {
+      job_status?: unknown
+      job_value?: unknown
+      net_price?: unknown
+      discount?: unknown
+      billing_hours?: unknown
+    } & Record<string, unknown>
+
+    const rawDimension = typedRow[groupBy]
+    const dimension = rawDimension == null ? 'Unknown' : String(rawDimension).trim() || 'Unknown'
+    const key = dimension.toLowerCase()
+    const jobStatus = typedRow.job_status == null ? '' : String(typedRow.job_status).trim().toLowerCase()
+    const isClosed = jobStatus.includes('close')
+
+    const existing = grouped.get(key)
+
+    if (existing) {
+      existing.jobCount += 1
+      if (isClosed) existing.closedCount += 1
+      existing.totalJobValue += parseRevenue(typedRow.job_value)
+      existing.totalNetPrice += parseRevenue(typedRow.net_price)
+      existing.totalDiscount += parseRevenue(typedRow.discount)
+      existing.totalBillingHours += parseRevenue(typedRow.billing_hours)
+      continue
+    }
+
+    grouped.set(key, {
+      dimension,
+      jobCount: 1,
+      closedCount: isClosed ? 1 : 0,
+      totalJobValue: parseRevenue(typedRow.job_value),
+      totalNetPrice: parseRevenue(typedRow.net_price),
+      totalDiscount: parseRevenue(typedRow.discount),
+      totalBillingHours: parseRevenue(typedRow.billing_hours),
+    })
+  }
+
+  const rows: VasJobPerformanceRow[] = []
+
+  for (const group of grouped.values()) {
+    rows.push({
+      dimension: group.dimension,
+      jobCount: group.jobCount,
+      closedCount: group.closedCount,
+      completionRate: group.jobCount > 0 ? (group.closedCount / group.jobCount) * 100 : 0,
+      totalJobValue: group.totalJobValue,
+      totalNetPrice: group.totalNetPrice,
+      totalDiscount: group.totalDiscount,
+      avgBillingHours: group.jobCount > 0 ? group.totalBillingHours / group.jobCount : 0,
+      avgRealizationPerJob: group.jobCount > 0 ? group.totalJobValue / group.jobCount : 0,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalJobValue !== a.totalJobValue) {
+      return b.totalJobValue - a.totalJobValue
+    }
+    return a.dimension.localeCompare(b.dimension)
+  })
+}
+
+export async function getVasJobPerformanceDashboard(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  topComplaintLimit = 10,
+): Promise<VasJobPerformanceDashboard> {
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+  const bounds = getDateRangeBounds(dateFilter)
+
+  while (true) {
+    let query = supabase
+      .from('service_vas_jc_data')
+      .select('job_status, complaint_code, job_value, net_price, discount')
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  interface ComplaintWorkingRow {
+    complaintCode: string
+    count: number
+    totalJobValue: number
+    totalNetPrice: number
+    totalDiscount: number
+  }
+
+  const statusCounts = new Map<string, number>()
+  const complaintCounts = new Map<string, ComplaintWorkingRow>()
+
+  let totalJobs = 0
+  let closedJobs = 0
+  let totalJobValue = 0
+  let totalNetPrice = 0
+  let totalDiscount = 0
+
+  for (const row of allRows) {
+    const typedRow = row as {
+      job_status?: unknown
+      complaint_code?: unknown
+      job_value?: unknown
+      net_price?: unknown
+      discount?: unknown
+    }
+
+    const status = typedRow.job_status == null ? 'Unknown' : String(typedRow.job_status).trim() || 'Unknown'
+    const statusKey = status.toLowerCase()
+    const complaintCode =
+      typedRow.complaint_code == null ? 'Unknown' : String(typedRow.complaint_code).trim() || 'Unknown'
+    const complaintKey = complaintCode.toLowerCase()
+    const jobValue = parseRevenue(typedRow.job_value)
+    const netPrice = parseRevenue(typedRow.net_price)
+    const discount = parseRevenue(typedRow.discount)
+
+    totalJobs += 1
+    totalJobValue += jobValue
+    totalNetPrice += netPrice
+    totalDiscount += discount
+
+    if (statusKey.includes('close')) {
+      closedJobs += 1
+    }
+
+    statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1)
+
+    const complaintRow = complaintCounts.get(complaintKey)
+    if (complaintRow) {
+      complaintRow.count += 1
+      complaintRow.totalJobValue += jobValue
+      complaintRow.totalNetPrice += netPrice
+      complaintRow.totalDiscount += discount
+    } else {
+      complaintCounts.set(complaintKey, {
+        complaintCode,
+        count: 1,
+        totalJobValue: jobValue,
+        totalNetPrice: netPrice,
+        totalDiscount: discount,
+      })
+    }
+  }
+
+  const jobStatusMix: VasJobStatusMixRow[] = [...statusCounts.entries()]
+    .map(([status, count]) => ({
+      status,
+      count,
+      percentage: totalJobs > 0 ? (count / totalJobs) * 100 : 0,
+    }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count
+      return a.status.localeCompare(b.status)
+    })
+
+  const topComplaintCodes: VasComplaintCodeRow[] = [...complaintCounts.values()]
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count
+      if (b.totalJobValue !== a.totalJobValue) return b.totalJobValue - a.totalJobValue
+      return a.complaintCode.localeCompare(b.complaintCode)
+    })
+    .slice(0, Math.max(1, topComplaintLimit))
+    .map((row) => ({
+      ...row,
+      percentage: totalJobs > 0 ? (row.count / totalJobs) * 100 : 0,
+    }))
+
+  const summary: VasJobPerformanceSummary = {
+    totalJobs,
+    closedJobs,
+    completionRate: totalJobs > 0 ? (closedJobs / totalJobs) * 100 : 0,
+    totalJobValue,
+    totalNetPrice,
+    totalDiscount,
+    netPriceVsJobValueVariance: totalJobValue - totalNetPrice,
+    netPriceToJobValueRatio: totalJobValue > 0 ? (totalNetPrice / totalJobValue) * 100 : 0,
+    discountImpactPercentage: totalNetPrice > 0 ? (totalDiscount / totalNetPrice) * 100 : 0,
+  }
+
+  return {
+    summary,
+    jobStatusMix,
+    topComplaintCodes,
+  }
+}
+
+export async function getVasBillingHoursEfficiency(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  groupBy: VasBillingHoursGroupBy,
+): Promise<VasBillingHoursEfficiencyRow[]> {
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+  const bounds = getDateRangeBounds(dateFilter)
+
+  while (true) {
+    let query = supabase
+      .from('service_vas_jc_data')
+      .select(`${groupBy}, billing_hours, job_value, net_price, discount`)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  interface WorkingBillingHoursRow {
+    dimension: string
+    jobCount: number
+    totalBillingHours: number
+    totalJobValue: number
+    totalNetPrice: number
+    totalDiscount: number
+  }
+
+  const grouped = new Map<string, WorkingBillingHoursRow>()
+  let grandTotalBillingHours = 0
+
+  for (const row of allRows) {
+    const typedRow = row as Record<string, unknown> & {
+      billing_hours?: unknown
+      job_value?: unknown
+      net_price?: unknown
+      discount?: unknown
+    }
+
+    const rawDimension = typedRow[groupBy]
+    const dimension = rawDimension == null ? 'Unknown' : String(rawDimension).trim() || 'Unknown'
+    const key = dimension.toLowerCase()
+    const billingHours = parseRevenue(typedRow.billing_hours)
+    const jobValue = parseRevenue(typedRow.job_value)
+    const netPrice = parseRevenue(typedRow.net_price)
+    const discount = parseRevenue(typedRow.discount)
+
+    grandTotalBillingHours += billingHours
+
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.jobCount += 1
+      existing.totalBillingHours += billingHours
+      existing.totalJobValue += jobValue
+      existing.totalNetPrice += netPrice
+      existing.totalDiscount += discount
+      continue
+    }
+
+    grouped.set(key, {
+      dimension,
+      jobCount: 1,
+      totalBillingHours: billingHours,
+      totalJobValue: jobValue,
+      totalNetPrice: netPrice,
+      totalDiscount: discount,
+    })
+  }
+
+  const rows: VasBillingHoursEfficiencyRow[] = []
+
+  for (const group of grouped.values()) {
+    rows.push({
+      dimension: group.dimension,
+      jobCount: group.jobCount,
+      totalBillingHours: group.totalBillingHours,
+      avgBillingHoursPerJob: group.jobCount > 0 ? group.totalBillingHours / group.jobCount : 0,
+      totalJobValue: group.totalJobValue,
+      totalNetPrice: group.totalNetPrice,
+      totalDiscount: group.totalDiscount,
+      avgJobValuePerHour: group.totalBillingHours > 0 ? group.totalJobValue / group.totalBillingHours : 0,
+      billingHoursSharePercentage:
+        grandTotalBillingHours > 0 ? (group.totalBillingHours / grandTotalBillingHours) * 100 : 0,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalBillingHours !== a.totalBillingHours) {
+      return b.totalBillingHours - a.totalBillingHours
+    }
+    if (b.jobCount !== a.jobCount) {
+      return b.jobCount - a.jobCount
+    }
+    return a.dimension.localeCompare(b.dimension)
+  })
+}
+
+export async function getLabourSparesMixByServiceType(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<LabourSparesMixRow[]> {
+  const data = await fetchAllJobCardClosedRows('sr_type, final_labour_amount, final_spares_amount, job_card_number', {
+    branch,
+    dateFilter,
+  })
+
+  interface WorkingMix {
+    serviceType: string
+    jobCards: Set<string>
+    labourRevenue: number
+    sparesRevenue: number
+  }
+
+  const grouped = new Map<string, WorkingMix>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      sr_type?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+      job_card_number?: unknown
+    }
+
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const serviceTypeKey = serviceTypeGroupKey(serviceType)
+    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+    const jobCardNumber =
+      typedRow.job_card_number == null ? null : String(typedRow.job_card_number).trim() || null
+
+    const existing = grouped.get(serviceTypeKey)
+
+    if (existing) {
+      if (jobCardNumber) existing.jobCards.add(jobCardNumber)
+      existing.labourRevenue += labourRevenue
+      existing.sparesRevenue += sparesRevenue
+      continue
+    }
+
+    const jobCards = new Set<string>()
+    if (jobCardNumber) jobCards.add(jobCardNumber)
+
+    grouped.set(serviceTypeKey, {
+      serviceType,
+      jobCards,
+      labourRevenue,
+      sparesRevenue,
+    })
+  }
+
+  const rows: LabourSparesMixRow[] = []
+
+  for (const group of grouped.values()) {
+    const totalRevenue = group.labourRevenue + group.sparesRevenue
+
+    rows.push({
+      serviceType: group.serviceType,
+      jobCardCount: group.jobCards.size,
+      labourRevenue: group.labourRevenue,
+      sparesRevenue: group.sparesRevenue,
+      totalRevenue,
+      labourSharePercentage: totalRevenue > 0 ? (group.labourRevenue / totalRevenue) * 100 : 0,
+      sparesSharePercentage: totalRevenue > 0 ? (group.sparesRevenue / totalRevenue) * 100 : 0,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalRevenue !== a.totalRevenue) {
+      return b.totalRevenue - a.totalRevenue
+    }
+    return a.serviceType.localeCompare(b.serviceType)
+  })
+}
+
+export async function getProductLinePerformance(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<ProductLinePerformanceRow[]> {
+  const data = await fetchAllJobCardClosedRows(
+    'parent_product_line, product_line, job_card_number, final_labour_amount, final_spares_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface WorkingProductLinePerformance {
+    parentProductLine: string
+    productLine: string
+    jobCards: Set<string>
+    labourRevenue: number
+    sparesRevenue: number
+  }
+
+  const grouped = new Map<string, WorkingProductLinePerformance>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      parent_product_line?: unknown
+      product_line?: unknown
+      job_card_number?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+    }
+
+    const parentProductLine = normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown'
+    const productLine = normalizeParentProductLine(typedRow.product_line) || 'Unknown'
+    const groupKey = `${parentProductLine.toLowerCase()}__${productLine.toLowerCase()}`
+    const jobCardNumber =
+      typedRow.job_card_number == null ? null : String(typedRow.job_card_number).trim() || null
+    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+
+    const existing = grouped.get(groupKey)
+
+    if (existing) {
+      if (jobCardNumber) existing.jobCards.add(jobCardNumber)
+      existing.labourRevenue += labourRevenue
+      existing.sparesRevenue += sparesRevenue
+      continue
+    }
+
+    const jobCards = new Set<string>()
+    if (jobCardNumber) jobCards.add(jobCardNumber)
+
+    grouped.set(groupKey, {
+      parentProductLine,
+      productLine,
+      jobCards,
+      labourRevenue,
+      sparesRevenue,
+    })
+  }
+
+  const rows: ProductLinePerformanceRow[] = []
+
+  for (const group of grouped.values()) {
+    const totalRevenue = group.labourRevenue + group.sparesRevenue
+    const jobCardCount = group.jobCards.size
+
+    rows.push({
+      parentProductLine: group.parentProductLine,
+      productLine: group.productLine,
+      jobCardCount,
+      labourRevenue: group.labourRevenue,
+      sparesRevenue: group.sparesRevenue,
+      totalRevenue,
+      avgRevenuePerJobCard: jobCardCount > 0 ? totalRevenue / jobCardCount : 0,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalRevenue !== a.totalRevenue) {
+      return b.totalRevenue - a.totalRevenue
+    }
+    if (a.parentProductLine !== b.parentProductLine) {
+      return a.parentProductLine.localeCompare(b.parentProductLine)
+    }
+    return a.productLine.localeCompare(b.productLine)
+  })
+}
+
+export async function getTatDurationReport(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<TatDurationReport> {
+  const data = await fetchAllJobCardClosedRows(
+    'created_date_time, closed_date_time, total_invoice_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  const bucketTemplate: Array<{ key: TatDurationBucketRow['bucketKey']; label: string }> = [
+    { key: 'under-1-day', label: 'Under 1 day' },
+    { key: 'one-to-two-days', label: '1 to <2 days' },
+    { key: 'two-to-three-days', label: '2 to <3 days' },
+    { key: 'three-to-seven-days', label: '3 to 7 days' },
+    { key: 'over-7-days', label: 'Over 7 days' },
+  ]
+
+  interface WorkingTatBucket {
+    bucketKey: TatDurationBucketRow['bucketKey']
+    bucketLabel: string
+    jobCardCount: number
+    totalTatHours: number
+    totalRevenue: number
+  }
+
+  const bucketMap = new Map<TatDurationBucketRow['bucketKey'], WorkingTatBucket>(
+    bucketTemplate.map((bucket) => [
+      bucket.key,
+      {
+        bucketKey: bucket.key,
+        bucketLabel: bucket.label,
+        jobCardCount: 0,
+        totalTatHours: 0,
+        totalRevenue: 0,
+      },
+    ]),
+  )
+
+  let invalidTatCount = 0
+  let validTatCount = 0
+  let totalTatHours = 0
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      created_date_time?: unknown
+      closed_date_time?: unknown
+      total_invoice_amount?: unknown
+    }
+
+    const createdRaw = typedRow.created_date_time
+    const closedRaw = typedRow.closed_date_time
+
+    if (!createdRaw || !closedRaw) {
+      invalidTatCount += 1
+      continue
+    }
+
+    const createdAt = new Date(String(createdRaw))
+    const closedAt = new Date(String(closedRaw))
+
+    if (Number.isNaN(createdAt.getTime()) || Number.isNaN(closedAt.getTime())) {
+      invalidTatCount += 1
+      continue
+    }
+
+    const tatHours = (closedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
+
+    if (!Number.isFinite(tatHours) || tatHours < 0) {
+      invalidTatCount += 1
+      continue
+    }
+
+    let bucketKey: TatDurationBucketRow['bucketKey']
+
+    if (tatHours < 24) {
+      bucketKey = 'under-1-day'
+    } else if (tatHours < 48) {
+      bucketKey = 'one-to-two-days'
+    } else if (tatHours < 72) {
+      bucketKey = 'two-to-three-days'
+    } else if (tatHours <= 168) {
+      bucketKey = 'three-to-seven-days'
+    } else {
+      bucketKey = 'over-7-days'
+    }
+
+    const bucket = bucketMap.get(bucketKey)
+    if (!bucket) continue
+
+    validTatCount += 1
+    totalTatHours += tatHours
+    bucket.jobCardCount += 1
+    bucket.totalTatHours += tatHours
+    bucket.totalRevenue += parseRevenue(typedRow.total_invoice_amount)
+  }
+
+  const buckets: TatDurationBucketRow[] = bucketTemplate.map((template) => {
+    const bucket = bucketMap.get(template.key)
+
+    if (!bucket) {
+      return {
+        bucketKey: template.key,
+        bucketLabel: template.label,
+        jobCardCount: 0,
+        percentage: 0,
+        avgTatHours: 0,
+        avgTatDays: 0,
+        totalRevenue: 0,
+      }
+    }
+
+    return {
+      bucketKey: bucket.bucketKey,
+      bucketLabel: bucket.bucketLabel,
+      jobCardCount: bucket.jobCardCount,
+      percentage: validTatCount > 0 ? (bucket.jobCardCount / validTatCount) * 100 : 0,
+      avgTatHours: bucket.jobCardCount > 0 ? bucket.totalTatHours / bucket.jobCardCount : 0,
+      avgTatDays: bucket.jobCardCount > 0 ? bucket.totalTatHours / bucket.jobCardCount / 24 : 0,
+      totalRevenue: bucket.totalRevenue,
+    }
+  })
+
+  return {
+    totalRecords: data.length,
+    validTatCount,
+    invalidTatCount,
+    overallAvgTatHours: validTatCount > 0 ? totalTatHours / validTatCount : 0,
+    overallAvgTatDays: validTatCount > 0 ? totalTatHours / validTatCount / 24 : 0,
+    buckets,
+  }
+}
+
+export async function getEmployeeUtilizationReport(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<EmployeeUtilizationRow[]> {
+  const data = await fetchAllJobCardClosedRows(
+    'employee_code, sr_assigned_to, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  const employeeCodes = new Set<string>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as { employee_code?: unknown }
+    const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
+    if (employeeCode !== 'Unknown') {
+      employeeCodes.add(employeeCode)
+    }
+  }
+
+  const nameByEmployeeCode = new Map<string, string>()
+
+  if (employeeCodes.size > 0) {
+    const { data: employeeData, error: employeeError } = await supabase
+      .from('employee_master')
+      .select('employee_code, employee_name')
+      .in('employee_code', [...employeeCodes])
+
+    if (employeeError) {
+      throw new Error(employeeError.message)
+    }
+
+    for (const employee of employeeData ?? []) {
+      const typedEmployee = employee as { employee_code?: unknown; employee_name?: unknown }
+      const employeeCode = normalizeEmployeeCode(typedEmployee.employee_code)
+      const employeeName = normalizeManpowerName(typedEmployee.employee_name)
+      nameByEmployeeCode.set(employeeCodeGroupKey(employeeCode), employeeName)
+    }
+  }
+
+  interface WorkingEmployeeUtilization {
+    employeeCode: string
+    fallbackName: string
+    jobCards: Set<string>
+    activeDays: Set<string>
+    labourRevenue: number
+    sparesRevenue: number
+  }
+
+  const grouped = new Map<string, WorkingEmployeeUtilization>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      employee_code?: unknown
+      sr_assigned_to?: unknown
+      job_card_number?: unknown
+      closed_date_time?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+    }
+
+    const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
+    const key = employeeCodeGroupKey(employeeCode)
+    const fallbackName = normalizeManpowerName(typedRow.sr_assigned_to)
+    const jobCardNumber =
+      typedRow.job_card_number == null ? null : String(typedRow.job_card_number).trim() || null
+    const closedDay =
+      typedRow.closed_date_time == null
+        ? null
+        : new Date(String(typedRow.closed_date_time)).toISOString().slice(0, 10)
+
+    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+
+    const existing = grouped.get(key)
+
+    if (existing) {
+      if (jobCardNumber) existing.jobCards.add(jobCardNumber)
+      if (closedDay) existing.activeDays.add(closedDay)
+      existing.labourRevenue += labourRevenue
+      existing.sparesRevenue += sparesRevenue
+      continue
+    }
+
+    const jobCards = new Set<string>()
+    if (jobCardNumber) jobCards.add(jobCardNumber)
+
+    const activeDays = new Set<string>()
+    if (closedDay) activeDays.add(closedDay)
+
+    grouped.set(key, {
+      employeeCode,
+      fallbackName,
+      jobCards,
+      activeDays,
+      labourRevenue,
+      sparesRevenue,
+    })
+  }
+
+  const totalJobCardsAcrossEmployees = [...grouped.values()].reduce((sum, row) => sum + row.jobCards.size, 0)
+
+  const rows: EmployeeUtilizationRow[] = []
+
+  for (const employee of grouped.values()) {
+    const employeeName = nameByEmployeeCode.get(employeeCodeGroupKey(employee.employeeCode)) ?? employee.fallbackName
+    const jobCardCount = employee.jobCards.size
+    const activeDays = employee.activeDays.size
+    const totalRevenue = employee.labourRevenue + employee.sparesRevenue
+    const advisorLabel =
+      employee.employeeCode === 'Unknown' ? employeeName : `${employee.employeeCode} - ${employeeName}`
+
+    rows.push({
+      employeeCode: employee.employeeCode,
+      employeeName,
+      advisorLabel,
+      jobCardCount,
+      activeDays,
+      avgJobsPerActiveDay: activeDays > 0 ? jobCardCount / activeDays : 0,
+      labourRevenue: employee.labourRevenue,
+      sparesRevenue: employee.sparesRevenue,
+      totalRevenue,
+      avgRevenuePerJobCard: jobCardCount > 0 ? totalRevenue / jobCardCount : 0,
+      workloadSharePercentage:
+        totalJobCardsAcrossEmployees > 0 ? (jobCardCount / totalJobCardsAcrossEmployees) * 100 : 0,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.jobCardCount !== a.jobCardCount) {
+      return b.jobCardCount - a.jobCardCount
+    }
+    if (b.totalRevenue !== a.totalRevenue) {
+      return b.totalRevenue - a.totalRevenue
+    }
+    return a.advisorLabel.localeCompare(b.advisorLabel)
+  })
+}
+
+export async function getVehicleWiseRevenue(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<VehicleWiseRevenueRow[]> {
+  const data = await fetchAllJobCardClosedRows(
+    'vehicle_registration_number, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface WorkingVehicleRevenue {
+    vehicleRegistrationNumber: string
+    visits: Set<string>
+    labourRevenue: number
+    sparesRevenue: number
+    firstVisitDate: string | null
+    lastVisitDate: string | null
+  }
+
+  const grouped = new Map<string, WorkingVehicleRevenue>()
+
+  for (const [rowIndex, row] of (data ?? []).entries()) {
+    const typedRow = row as {
+      vehicle_registration_number?: unknown
+      job_card_number?: unknown
+      closed_date_time?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+    }
+
+    const vehicleRegistrationNumber = normalizeVehicleRegistration(typedRow.vehicle_registration_number)
+    const vehicleKey = vehicleRegistrationNumber.toLowerCase()
+    const jobCardNumber =
+      typedRow.job_card_number == null ? null : String(typedRow.job_card_number).trim() || null
+    const visitKey = jobCardNumber ?? `${vehicleRegistrationNumber}__row_${rowIndex}`
+    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+
+    let closedDate: string | null = null
+    if (typedRow.closed_date_time != null) {
+      const parsed = new Date(String(typedRow.closed_date_time))
+      if (!Number.isNaN(parsed.getTime())) {
+        closedDate = parsed.toISOString().slice(0, 10)
+      }
+    }
+
+    const existing = grouped.get(vehicleKey)
+
+    if (existing) {
+      existing.visits.add(visitKey)
+      existing.labourRevenue += labourRevenue
+      existing.sparesRevenue += sparesRevenue
+      if (closedDate) {
+        if (!existing.firstVisitDate || closedDate < existing.firstVisitDate) {
+          existing.firstVisitDate = closedDate
+        }
+        if (!existing.lastVisitDate || closedDate > existing.lastVisitDate) {
+          existing.lastVisitDate = closedDate
+        }
+      }
+      continue
+    }
+
+    const visits = new Set<string>()
+    visits.add(visitKey)
+
+    grouped.set(vehicleKey, {
+      vehicleRegistrationNumber,
+      visits,
+      labourRevenue,
+      sparesRevenue,
+      firstVisitDate: closedDate,
+      lastVisitDate: closedDate,
+    })
+  }
+
+  const rows: VehicleWiseRevenueRow[] = []
+
+  for (const vehicle of grouped.values()) {
+    const visitCount = vehicle.visits.size
+    const totalRevenue = vehicle.labourRevenue + vehicle.sparesRevenue
+
+    rows.push({
+      vehicleRegistrationNumber: vehicle.vehicleRegistrationNumber,
+      visitCount,
+      repeatVisitCount: visitCount > 1 ? visitCount - 1 : 0,
+      labourRevenue: vehicle.labourRevenue,
+      sparesRevenue: vehicle.sparesRevenue,
+      totalRevenue,
+      avgRevenuePerVisit: visitCount > 0 ? totalRevenue / visitCount : 0,
+      firstVisitDate: vehicle.firstVisitDate,
+      lastVisitDate: vehicle.lastVisitDate,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalRevenue !== a.totalRevenue) {
+      return b.totalRevenue - a.totalRevenue
+    }
+    if (b.visitCount !== a.visitCount) {
+      return b.visitCount - a.visitCount
+    }
+    return a.vehicleRegistrationNumber.localeCompare(b.vehicleRegistrationNumber)
+  })
 }

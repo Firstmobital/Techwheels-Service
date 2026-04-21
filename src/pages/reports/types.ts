@@ -7,9 +7,16 @@ export type ReportId =
   | 'branch-labour-revenue'
   | 'manpower-wise-labour-revenue'
   | 'advisor-performance'
+  | 'vas-job-performance'
+  | 'vas-billing-hours-efficiency'
+  | 'tat-duration-buckets'
+  | 'employee-utilization'
   | 'daily-revenue'
   | 'category-wise-revenue'
   | 'monthly-trend-revenue'
+  | 'labour-spares-mix'
+  | 'product-line-performance'
+  | 'vehicle-wise-revenue'
 
 export interface ReportViewProps {
   branch: BranchFilter
