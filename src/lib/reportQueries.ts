@@ -56,6 +56,32 @@ export interface BranchLabourRevenueComparison {
   percentageChange: number | null
 }
 
+export interface DailyRevenueReport {
+  date: string
+  vehicleCount: number
+  invoiceCount: number
+  labourRevenue: number
+  partsRevenue: number
+  totalRevenue: number
+  avgBillingPerVehicle: number
+}
+
+export interface CategoryWiseRevenue {
+  category: string
+  vehicleCount: number
+  labourRevenue: number
+  partsRevenue: number
+  totalRevenue: number
+  contributionPercentage: number
+}
+
+export interface MonthlyTrendRevenue {
+  month: string
+  labourRevenue: number
+  partsRevenue: number
+  totalRevenue: number
+}
+
 function normalizeServiceType(raw: unknown): string {
   if (raw === null || raw === undefined) return 'Unknown'
 
@@ -625,4 +651,233 @@ export async function getBranchLabourRevenueComparison(
     }
     return a.branch.localeCompare(b.branch)
   })
+}
+
+export async function getDailyRevenueReport(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<DailyRevenueReport[]> {
+  const data = await fetchAllJobCardClosedRows(
+    'closed_date_time, vehicle_registration_number, job_card_number, final_labour_amount, final_spares_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface DailyGrouping {
+    vehicleNumbers: Set<string>
+    jobCardNumbers: Set<string>
+    labourRevenue: number
+    partsRevenue: number
+  }
+
+  const dailyByDate = new Map<string, DailyGrouping>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      closed_date_time?: unknown
+      vehicle_registration_number?: unknown
+      job_card_number?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+    }
+
+    const dateStr = typedRow.closed_date_time ? new Date(typedRow.closed_date_time as string).toISOString().split('T')[0] : 'Unknown'
+    const vehicleNum = typedRow.vehicle_registration_number ? String(typedRow.vehicle_registration_number).trim() : null
+    const jobCardNum = typedRow.job_card_number ? String(typedRow.job_card_number).trim() : null
+    const labourAmount = parseRevenue(typedRow.final_labour_amount)
+    const partsAmount = parseRevenue(typedRow.final_spares_amount)
+
+    const existing = dailyByDate.get(dateStr)
+
+    if (existing) {
+      if (vehicleNum) existing.vehicleNumbers.add(vehicleNum)
+      if (jobCardNum) existing.jobCardNumbers.add(jobCardNum)
+      existing.labourRevenue += labourAmount
+      existing.partsRevenue += partsAmount
+    } else {
+      const vehicleNumbers = new Set<string>()
+      const jobCardNumbers = new Set<string>()
+      if (vehicleNum) vehicleNumbers.add(vehicleNum)
+      if (jobCardNum) jobCardNumbers.add(jobCardNum)
+
+      dailyByDate.set(dateStr, {
+        vehicleNumbers,
+        jobCardNumbers,
+        labourRevenue: labourAmount,
+        partsRevenue: partsAmount,
+      })
+    }
+  }
+
+  const rows: DailyRevenueReport[] = []
+
+  for (const [date, grouping] of dailyByDate) {
+    const totalRevenue = grouping.labourRevenue + grouping.partsRevenue
+    const avgBillingPerVehicle = grouping.vehicleNumbers.size > 0 ? totalRevenue / grouping.vehicleNumbers.size : 0
+
+    rows.push({
+      date,
+      vehicleCount: grouping.vehicleNumbers.size,
+      invoiceCount: grouping.jobCardNumbers.size,
+      labourRevenue: grouping.labourRevenue,
+      partsRevenue: grouping.partsRevenue,
+      totalRevenue,
+      avgBillingPerVehicle,
+    })
+  }
+
+  return rows.sort((a, b) => b.date.localeCompare(a.date))
+}
+
+export async function getCategoryWiseRevenue(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<CategoryWiseRevenue[]> {
+  const data = await fetchAllJobCardClosedRows(
+    'sr_type, vehicle_registration_number, final_labour_amount, final_spares_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface CategoryGrouping {
+    vehicleNumbers: Set<string>
+    labourRevenue: number
+    partsRevenue: number
+  }
+
+  const categoryByType = new Map<string, CategoryGrouping>()
+  let totalPeriodRevenue = 0
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      sr_type?: unknown
+      vehicle_registration_number?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+    }
+
+    const category = normalizeServiceType(typedRow.sr_type)
+    const categoryKey = serviceTypeGroupKey(category)
+    const vehicleNum = typedRow.vehicle_registration_number ? String(typedRow.vehicle_registration_number).trim() : null
+    const labourAmount = parseRevenue(typedRow.final_labour_amount)
+    const partsAmount = parseRevenue(typedRow.final_spares_amount)
+    const rowTotal = labourAmount + partsAmount
+    totalPeriodRevenue += rowTotal
+
+    const existing = categoryByType.get(categoryKey)
+
+    if (existing) {
+      if (vehicleNum) existing.vehicleNumbers.add(vehicleNum)
+      existing.labourRevenue += labourAmount
+      existing.partsRevenue += partsAmount
+    } else {
+      const vehicleNumbers = new Set<string>()
+      if (vehicleNum) vehicleNumbers.add(vehicleNum)
+
+      categoryByType.set(categoryKey, {
+        vehicleNumbers,
+        labourRevenue: labourAmount,
+        partsRevenue: partsAmount,
+      })
+    }
+  }
+
+  const rows: CategoryWiseRevenue[] = []
+
+  for (const categoryKey of categoryByType.keys()) {
+    const grouping = categoryByType.get(categoryKey)
+    if (!grouping) continue
+
+    const totalRevenue = grouping.labourRevenue + grouping.partsRevenue
+    const contributionPercentage = totalPeriodRevenue > 0 ? (totalRevenue / totalPeriodRevenue) * 100 : 0
+
+    // Get the original category name from the map by finding any row with this key
+    let originalCategoryName = 'Unknown'
+    for (const row of data ?? []) {
+      const typedRow = row as { sr_type?: unknown }
+      if (serviceTypeGroupKey(normalizeServiceType(typedRow.sr_type)) === categoryKey) {
+        originalCategoryName = normalizeServiceType(typedRow.sr_type)
+        break
+      }
+    }
+
+    rows.push({
+      category: originalCategoryName,
+      vehicleCount: grouping.vehicleNumbers.size,
+      labourRevenue: grouping.labourRevenue,
+      partsRevenue: grouping.partsRevenue,
+      totalRevenue,
+      contributionPercentage,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalRevenue !== a.totalRevenue) {
+      return b.totalRevenue - a.totalRevenue
+    }
+    return a.category.localeCompare(b.category)
+  })
+}
+
+export async function getMonthlyRevenuesTrend(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<MonthlyTrendRevenue[]> {
+  const data = await fetchAllJobCardClosedRows(
+    'closed_date_time, final_labour_amount, final_spares_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface MonthlyGrouping {
+    labourRevenue: number
+    partsRevenue: number
+  }
+
+  const monthlyByMonth = new Map<string, MonthlyGrouping>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      closed_date_time?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+    }
+
+    const monthStr = typedRow.closed_date_time
+      ? new Date(typedRow.closed_date_time as string).toISOString().slice(0, 7)
+      : 'Unknown'
+    const labourAmount = parseRevenue(typedRow.final_labour_amount)
+    const partsAmount = parseRevenue(typedRow.final_spares_amount)
+
+    const existing = monthlyByMonth.get(monthStr)
+
+    if (existing) {
+      existing.labourRevenue += labourAmount
+      existing.partsRevenue += partsAmount
+    } else {
+      monthlyByMonth.set(monthStr, {
+        labourRevenue: labourAmount,
+        partsRevenue: partsAmount,
+      })
+    }
+  }
+
+  const rows: MonthlyTrendRevenue[] = []
+
+  for (const [month, grouping] of monthlyByMonth) {
+    rows.push({
+      month,
+      labourRevenue: grouping.labourRevenue,
+      partsRevenue: grouping.partsRevenue,
+      totalRevenue: grouping.labourRevenue + grouping.partsRevenue,
+    })
+  }
+
+  return rows.sort((a, b) => b.month.localeCompare(a.month))
 }
