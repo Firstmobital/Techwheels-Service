@@ -11,12 +11,17 @@ export type ReportId =
   | 'vas-billing-hours-efficiency'
   | 'tat-duration-buckets'
   | 'employee-utilization'
+  | 'jc-invoice-reconciliation'
+  | 'net-price-final-revenue-variance'
+  | 'end-to-end-job-lifecycle'
   | 'daily-revenue'
   | 'category-wise-revenue'
   | 'monthly-trend-revenue'
   | 'labour-spares-mix'
   | 'product-line-performance'
   | 'vehicle-wise-revenue'
+  | 'invoice-value-distribution'
+  | 'invoice-daily-trend'
 
 export interface ReportViewProps {
   branch: BranchFilter

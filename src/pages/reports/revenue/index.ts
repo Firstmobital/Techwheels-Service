@@ -4,6 +4,8 @@ import MonthlyTrendReport from './MonthlyTrendReport'
 import LabourSparesMixReport from './LabourSparesMixReport'
 import ProductLinePerformanceReport from './ProductLinePerformanceReport'
 import VehicleWiseRevenueReport from './VehicleWiseRevenueReport'
+import InvoiceValueDistributionReport from './InvoiceValueDistributionReport'
+import InvoiceDailyTrendReport from './InvoiceDailyTrendReport'
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
 export const REVENUE_CATEGORY: ReportCategoryDefinition = {
@@ -60,5 +62,21 @@ export const REVENUE_REPORTS: ReportDefinition[] = [
     description: 'Revenue contribution and revisit behavior grouped by vehicle registration number.',
     cardHint: 'Best for identifying high-value vehicles and repeat service patterns.',
     Component: VehicleWiseRevenueReport,
+  },
+  {
+    id: 'invoice-value-distribution',
+    categoryId: 'revenue',
+    label: 'Invoice Value Distribution Report',
+    description: 'Invoice value bands with average invoice and branch-wise spread.',
+    cardHint: 'Best for finance-level billing pattern and ticket-size monitoring.',
+    Component: InvoiceValueDistributionReport,
+  },
+  {
+    id: 'invoice-daily-trend',
+    categoryId: 'revenue',
+    label: 'Invoice Daily Trend Report',
+    description: 'Daily invoice count with labour, spares, and consolidated totals.',
+    cardHint: 'Best for tracking daily billing movement complementary to JC daily views.',
+    Component: InvoiceDailyTrendReport,
   },
 ]

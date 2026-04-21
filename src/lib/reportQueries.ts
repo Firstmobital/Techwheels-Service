@@ -208,6 +208,130 @@ export interface VehicleWiseRevenueRow {
   lastVisitDate: string | null
 }
 
+export interface InvoiceValueBandRow {
+  bandKey: 'under-1000' | '1000-2999' | '3000-4999' | '5000-9999' | '10000-19999' | '20000-plus'
+  bandLabel: string
+  invoiceCount: number
+  percentage: number
+  totalAmount: number
+  avgInvoiceValue: number
+}
+
+export interface BranchInvoiceSpreadRow {
+  branch: string
+  invoiceCount: number
+  percentage: number
+  totalAmount: number
+  avgInvoiceValue: number
+}
+
+export interface InvoiceValueDistributionReport {
+  totalInvoices: number
+  totalAmount: number
+  avgInvoiceValue: number
+  valueBands: InvoiceValueBandRow[]
+  branchSpread: BranchInvoiceSpreadRow[]
+}
+
+export interface InvoiceDailyTrendRow {
+  date: string
+  invoiceCount: number
+  labourTotal: number
+  sparesTotal: number
+  consolidatedTotal: number
+  avgInvoiceValue: number
+}
+
+export interface JcInvoiceReconciliationBranchRow {
+  branch: string
+  jobCards: number
+  matched: number
+  unmatchedJobCards: number
+  unmatchedInvoices: number
+  missingInvoiceRate: number
+  jcTotalAmount: number
+  invoiceMatchedAmount: number
+  netVariance: number
+  absoluteVariance: number
+}
+
+export interface JcInvoiceReconciliationReport {
+  totalJobCards: number
+  totalInvoices: number
+  matched: number
+  unmatchedJobCards: number
+  unmatchedInvoices: number
+  missingInvoiceRate: number
+  jcTotalAmount: number
+  invoiceMatchedAmount: number
+  netVariance: number
+  absoluteVariance: number
+  avgVariancePerMatchedRecord: number
+  branchBreakdown: JcInvoiceReconciliationBranchRow[]
+}
+
+export interface NetPriceFinalRevenueVarianceRow {
+  branch: string
+  jobCode: string
+  records: number
+  matched: number
+  unmatched: number
+  estimatedNetPrice: number
+  realizedRevenue: number
+  varianceAmount: number
+  variancePercentage: number
+  avgEstimatedPerRecord: number
+  avgRealizedPerMatched: number
+}
+
+export interface NetPriceFinalRevenueVarianceReport {
+  totalRecords: number
+  matched: number
+  unmatched: number
+  missingMatchRate: number
+  estimatedNetPrice: number
+  realizedRevenue: number
+  varianceAmount: number
+  variancePercentage: number
+  rows: NetPriceFinalRevenueVarianceRow[]
+}
+
+export interface EndToEndJobLifecycleBranchRow {
+  branch: string
+  totalJobs: number
+  withClose: number
+  withInvoice: number
+  completeLifecycle: number
+  lifecycleCompletionRate: number
+  avgCreateToCloseHours: number
+  avgCloseToInvoiceHours: number
+  avgCreateToInvoiceHours: number
+  estimatedValue: number
+  realizedValue: number
+  invoicedValue: number
+  realizedVsEstimateRate: number
+  invoicedVsRealizedRate: number
+  invoicedVsEstimateRate: number
+}
+
+export interface EndToEndJobLifecycleReport {
+  totalJobs: number
+  withClose: number
+  withInvoice: number
+  completeLifecycle: number
+  lifecycleCompletionRate: number
+  avgCreateToCloseHours: number
+  avgCloseToInvoiceHours: number
+  avgCreateToInvoiceHours: number
+  estimatedValue: number
+  realizedValue: number
+  invoicedValue: number
+  realizedVsEstimateRate: number
+  invoicedVsRealizedRate: number
+  invoicedVsEstimateRate: number
+  branchBreakdown: EndToEndJobLifecycleBranchRow[]
+}
+
 function normalizeServiceType(raw: unknown): string {
   if (raw === null || raw === undefined) return 'Unknown'
 
@@ -1935,4 +2059,958 @@ export async function getVehicleWiseRevenue(
     }
     return a.vehicleRegistrationNumber.localeCompare(b.vehicleRegistrationNumber)
   })
+}
+
+export async function getInvoiceValueDistribution(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<InvoiceValueDistributionReport> {
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+  const bounds = getDateRangeBounds(dateFilter)
+
+  while (true) {
+    let query = supabase
+      .from('service_invoice_data')
+      .select('branch, invoice_date, final_consolidated_invoice_amount')
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      const fromDate = bounds.from.slice(0, 10)
+      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
+      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  const bandTemplate: Array<{ key: InvoiceValueBandRow['bandKey']; label: string; min: number; maxExclusive: number | null }> = [
+    { key: 'under-1000', label: 'Under Rs. 1,000', min: 0, maxExclusive: 1000 },
+    { key: '1000-2999', label: 'Rs. 1,000 - Rs. 2,999', min: 1000, maxExclusive: 3000 },
+    { key: '3000-4999', label: 'Rs. 3,000 - Rs. 4,999', min: 3000, maxExclusive: 5000 },
+    { key: '5000-9999', label: 'Rs. 5,000 - Rs. 9,999', min: 5000, maxExclusive: 10000 },
+    { key: '10000-19999', label: 'Rs. 10,000 - Rs. 19,999', min: 10000, maxExclusive: 20000 },
+    { key: '20000-plus', label: 'Rs. 20,000+', min: 20000, maxExclusive: null },
+  ]
+
+  interface WorkingBandRow {
+    bandKey: InvoiceValueBandRow['bandKey']
+    bandLabel: string
+    invoiceCount: number
+    totalAmount: number
+  }
+
+  interface WorkingBranchRow {
+    branch: string
+    invoiceCount: number
+    totalAmount: number
+  }
+
+  const bandMap = new Map<InvoiceValueBandRow['bandKey'], WorkingBandRow>(
+    bandTemplate.map((band) => [
+      band.key,
+      {
+        bandKey: band.key,
+        bandLabel: band.label,
+        invoiceCount: 0,
+        totalAmount: 0,
+      },
+    ]),
+  )
+
+  const branchMap = new Map<string, WorkingBranchRow>()
+  let totalInvoices = 0
+  let totalAmount = 0
+
+  for (const row of allRows) {
+    const typedRow = row as {
+      branch?: unknown
+      final_consolidated_invoice_amount?: unknown
+    }
+
+    const amount = parseRevenue(typedRow.final_consolidated_invoice_amount)
+    const branchName = normalizeBranch(typedRow.branch)
+
+    totalInvoices += 1
+    totalAmount += amount
+
+    const band = bandTemplate.find((entry) => {
+      if (amount < entry.min) return false
+      if (entry.maxExclusive === null) return true
+      return amount < entry.maxExclusive
+    })
+
+    if (band) {
+      const existingBand = bandMap.get(band.key)
+      if (existingBand) {
+        existingBand.invoiceCount += 1
+        existingBand.totalAmount += amount
+      }
+    }
+
+    const existingBranch = branchMap.get(branchName)
+    if (existingBranch) {
+      existingBranch.invoiceCount += 1
+      existingBranch.totalAmount += amount
+    } else {
+      branchMap.set(branchName, {
+        branch: branchName,
+        invoiceCount: 1,
+        totalAmount: amount,
+      })
+    }
+  }
+
+  const valueBands: InvoiceValueBandRow[] = bandTemplate.map((band) => {
+    const row = bandMap.get(band.key)
+    const invoiceCount = row?.invoiceCount ?? 0
+    const bandTotalAmount = row?.totalAmount ?? 0
+
+    return {
+      bandKey: band.key,
+      bandLabel: band.label,
+      invoiceCount,
+      percentage: totalInvoices > 0 ? (invoiceCount / totalInvoices) * 100 : 0,
+      totalAmount: bandTotalAmount,
+      avgInvoiceValue: invoiceCount > 0 ? bandTotalAmount / invoiceCount : 0,
+    }
+  })
+
+  const branchSpread: BranchInvoiceSpreadRow[] = [...branchMap.values()]
+    .map((row) => ({
+      branch: row.branch,
+      invoiceCount: row.invoiceCount,
+      percentage: totalInvoices > 0 ? (row.invoiceCount / totalInvoices) * 100 : 0,
+      totalAmount: row.totalAmount,
+      avgInvoiceValue: row.invoiceCount > 0 ? row.totalAmount / row.invoiceCount : 0,
+    }))
+    .sort((a, b) => {
+      if (b.invoiceCount !== a.invoiceCount) {
+        return b.invoiceCount - a.invoiceCount
+      }
+      return a.branch.localeCompare(b.branch)
+    })
+
+  return {
+    totalInvoices,
+    totalAmount,
+    avgInvoiceValue: totalInvoices > 0 ? totalAmount / totalInvoices : 0,
+    valueBands,
+    branchSpread,
+  }
+}
+
+export async function getInvoiceDailyTrend(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<InvoiceDailyTrendRow[]> {
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+  const bounds = getDateRangeBounds(dateFilter)
+
+  while (true) {
+    let query = supabase
+      .from('service_invoice_data')
+      .select('invoice_date, invoice_number, final_labour_invoice_amount, final_spares_invoice_amount, final_consolidated_invoice_amount')
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      const fromDate = bounds.from.slice(0, 10)
+      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
+      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  interface WorkingInvoiceDailyRow {
+    date: string
+    invoiceKeys: Set<string>
+    labourTotal: number
+    sparesTotal: number
+    consolidatedTotal: number
+  }
+
+  const byDate = new Map<string, WorkingInvoiceDailyRow>()
+
+  for (const [rowIndex, row] of allRows.entries()) {
+    const typedRow = row as {
+      invoice_date?: unknown
+      invoice_number?: unknown
+      final_labour_invoice_amount?: unknown
+      final_spares_invoice_amount?: unknown
+      final_consolidated_invoice_amount?: unknown
+    }
+
+    const date = typedRow.invoice_date == null ? 'Unknown' : String(typedRow.invoice_date)
+    const invoiceKey =
+      typedRow.invoice_number == null
+        ? `${date}_row_${rowIndex}`
+        : String(typedRow.invoice_number).trim() || `${date}_row_${rowIndex}`
+
+    const labour = parseRevenue(typedRow.final_labour_invoice_amount)
+    const spares = parseRevenue(typedRow.final_spares_invoice_amount)
+    const consolidated = parseRevenue(typedRow.final_consolidated_invoice_amount)
+
+    const existing = byDate.get(date)
+    if (existing) {
+      existing.invoiceKeys.add(invoiceKey)
+      existing.labourTotal += labour
+      existing.sparesTotal += spares
+      existing.consolidatedTotal += consolidated
+      continue
+    }
+
+    const invoiceKeys = new Set<string>()
+    invoiceKeys.add(invoiceKey)
+
+    byDate.set(date, {
+      date,
+      invoiceKeys,
+      labourTotal: labour,
+      sparesTotal: spares,
+      consolidatedTotal: consolidated,
+    })
+  }
+
+  const rows: InvoiceDailyTrendRow[] = []
+
+  for (const day of byDate.values()) {
+    const invoiceCount = day.invoiceKeys.size
+    rows.push({
+      date: day.date,
+      invoiceCount,
+      labourTotal: day.labourTotal,
+      sparesTotal: day.sparesTotal,
+      consolidatedTotal: day.consolidatedTotal,
+      avgInvoiceValue: invoiceCount > 0 ? day.consolidatedTotal / invoiceCount : 0,
+    })
+  }
+
+  return rows.sort((a, b) => b.date.localeCompare(a.date))
+}
+
+export async function getJcInvoiceReconciliation(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<JcInvoiceReconciliationReport> {
+  const bounds = getDateRangeBounds(dateFilter)
+
+  const jcRows = await fetchAllJobCardClosedRows('job_card_number, total_invoice_amount, branch', {
+    branch,
+    dateFilter,
+  })
+
+  let invoiceFrom = 0
+  const invoiceRows: Record<string, unknown>[] = []
+
+  while (true) {
+    let query = supabase
+      .from('service_invoice_data')
+      .select('order_number, final_consolidated_invoice_amount, branch, invoice_date')
+      .range(invoiceFrom, invoiceFrom + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      const fromDate = bounds.from.slice(0, 10)
+      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
+      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    invoiceRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    invoiceFrom += QUERY_PAGE_SIZE
+  }
+
+  interface WorkingInvoiceRow {
+    amount: number
+    branch: string
+  }
+
+  interface WorkingBranchRow {
+    branch: string
+    jobCards: number
+    matched: number
+    unmatchedJobCards: number
+    unmatchedInvoices: number
+    jcTotalAmount: number
+    invoiceMatchedAmount: number
+    netVariance: number
+    absoluteVariance: number
+  }
+
+  const invoiceQueueByKey = new Map<string, WorkingInvoiceRow[]>()
+
+  for (const row of invoiceRows) {
+    const typedRow = row as {
+      order_number?: unknown
+      final_consolidated_invoice_amount?: unknown
+      branch?: unknown
+    }
+
+    const keyRaw = typedRow.order_number == null ? '' : String(typedRow.order_number).trim()
+    if (!keyRaw) continue
+
+    const key = keyRaw.toUpperCase()
+    const existing = invoiceQueueByKey.get(key) ?? []
+    existing.push({
+      amount: parseRevenue(typedRow.final_consolidated_invoice_amount),
+      branch: normalizeBranch(typedRow.branch),
+    })
+    invoiceQueueByKey.set(key, existing)
+  }
+
+  const branchMap = new Map<string, WorkingBranchRow>()
+
+  const getBranchRow = (branchName: string): WorkingBranchRow => {
+    const existing = branchMap.get(branchName)
+    if (existing) return existing
+
+    const created: WorkingBranchRow = {
+      branch: branchName,
+      jobCards: 0,
+      matched: 0,
+      unmatchedJobCards: 0,
+      unmatchedInvoices: 0,
+      jcTotalAmount: 0,
+      invoiceMatchedAmount: 0,
+      netVariance: 0,
+      absoluteVariance: 0,
+    }
+
+    branchMap.set(branchName, created)
+    return created
+  }
+
+  let totalJobCards = 0
+  let matched = 0
+  let unmatchedJobCards = 0
+  let jcTotalAmount = 0
+  let invoiceMatchedAmount = 0
+  let netVariance = 0
+  let absoluteVariance = 0
+
+  for (const row of jcRows) {
+    const typedRow = row as {
+      job_card_number?: unknown
+      total_invoice_amount?: unknown
+      branch?: unknown
+    }
+
+    const keyRaw = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    const key = keyRaw.toUpperCase()
+    const jcAmount = parseRevenue(typedRow.total_invoice_amount)
+    const branchName = normalizeBranch(typedRow.branch)
+    const branchRow = getBranchRow(branchName)
+
+    totalJobCards += 1
+    jcTotalAmount += jcAmount
+    branchRow.jobCards += 1
+    branchRow.jcTotalAmount += jcAmount
+
+    if (!key) {
+      unmatchedJobCards += 1
+      branchRow.unmatchedJobCards += 1
+      continue
+    }
+
+    const queue = invoiceQueueByKey.get(key)
+    const matchedInvoice = queue && queue.length > 0 ? queue.shift() : undefined
+
+    if (!matchedInvoice) {
+      unmatchedJobCards += 1
+      branchRow.unmatchedJobCards += 1
+      continue
+    }
+
+    matched += 1
+    branchRow.matched += 1
+
+    invoiceMatchedAmount += matchedInvoice.amount
+    branchRow.invoiceMatchedAmount += matchedInvoice.amount
+
+    const variance = jcAmount - matchedInvoice.amount
+    netVariance += variance
+    absoluteVariance += Math.abs(variance)
+    branchRow.netVariance += variance
+    branchRow.absoluteVariance += Math.abs(variance)
+  }
+
+  let unmatchedInvoices = 0
+
+  for (const queue of invoiceQueueByKey.values()) {
+    for (const remaining of queue) {
+      unmatchedInvoices += 1
+      const branchRow = getBranchRow(remaining.branch)
+      branchRow.unmatchedInvoices += 1
+    }
+  }
+
+  const totalInvoices = invoiceRows.length
+
+  const branchBreakdown: JcInvoiceReconciliationBranchRow[] = [...branchMap.values()]
+    .map((row) => ({
+      branch: row.branch,
+      jobCards: row.jobCards,
+      matched: row.matched,
+      unmatchedJobCards: row.unmatchedJobCards,
+      unmatchedInvoices: row.unmatchedInvoices,
+      missingInvoiceRate: row.jobCards > 0 ? (row.unmatchedJobCards / row.jobCards) * 100 : 0,
+      jcTotalAmount: row.jcTotalAmount,
+      invoiceMatchedAmount: row.invoiceMatchedAmount,
+      netVariance: row.netVariance,
+      absoluteVariance: row.absoluteVariance,
+    }))
+    .sort((a, b) => {
+      if (b.jobCards !== a.jobCards) return b.jobCards - a.jobCards
+      return a.branch.localeCompare(b.branch)
+    })
+
+  return {
+    totalJobCards,
+    totalInvoices,
+    matched,
+    unmatchedJobCards,
+    unmatchedInvoices,
+    missingInvoiceRate: totalJobCards > 0 ? (unmatchedJobCards / totalJobCards) * 100 : 0,
+    jcTotalAmount,
+    invoiceMatchedAmount,
+    netVariance,
+    absoluteVariance,
+    avgVariancePerMatchedRecord: matched > 0 ? netVariance / matched : 0,
+    branchBreakdown,
+  }
+}
+
+export async function getNetPriceFinalRevenueVariance(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<NetPriceFinalRevenueVarianceReport> {
+  let vasFrom = 0
+  const vasRows: Record<string, unknown>[] = []
+  const bounds = getDateRangeBounds(dateFilter)
+
+  while (true) {
+    let query = supabase
+      .from('service_vas_jc_data')
+      .select('branch, job_card_number, job_code, net_price, jc_closed_date_time')
+      .range(vasFrom, vasFrom + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    vasRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    vasFrom += QUERY_PAGE_SIZE
+  }
+
+  const jcRows = await fetchAllJobCardClosedRows('job_card_number, total_invoice_amount', {
+    branch,
+    dateFilter,
+  })
+
+  const jcQueueByJobCard = new Map<string, number[]>()
+
+  for (const row of jcRows) {
+    const typedRow = row as { job_card_number?: unknown; total_invoice_amount?: unknown }
+    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
+    if (!jobCard) continue
+
+    const existing = jcQueueByJobCard.get(jobCard) ?? []
+    existing.push(parseRevenue(typedRow.total_invoice_amount))
+    jcQueueByJobCard.set(jobCard, existing)
+  }
+
+  interface WorkingVarianceRow {
+    branch: string
+    jobCode: string
+    records: number
+    matched: number
+    unmatched: number
+    estimatedNetPrice: number
+    realizedRevenue: number
+  }
+
+  const grouped = new Map<string, WorkingVarianceRow>()
+
+  let totalRecords = 0
+  let matched = 0
+  let unmatched = 0
+  let estimatedNetPrice = 0
+  let realizedRevenue = 0
+
+  for (const row of vasRows) {
+    const typedRow = row as {
+      branch?: unknown
+      job_card_number?: unknown
+      job_code?: unknown
+      net_price?: unknown
+    }
+
+    const branchName = normalizeBranch(typedRow.branch)
+    const jobCode = typedRow.job_code == null ? 'Unknown' : String(typedRow.job_code).trim() || 'Unknown'
+    const groupKey = `${branchName.toLowerCase()}__${jobCode.toLowerCase()}`
+
+    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
+    const estimate = parseRevenue(typedRow.net_price)
+
+    totalRecords += 1
+    estimatedNetPrice += estimate
+
+    const queue = jobCard ? jcQueueByJobCard.get(jobCard) : undefined
+    const matchedRealized = queue && queue.length > 0 ? queue.shift() : undefined
+
+    if (matchedRealized == null) {
+      unmatched += 1
+    } else {
+      matched += 1
+      realizedRevenue += matchedRealized
+    }
+
+    const existing = grouped.get(groupKey)
+    if (existing) {
+      existing.records += 1
+      existing.estimatedNetPrice += estimate
+      if (matchedRealized == null) {
+        existing.unmatched += 1
+      } else {
+        existing.matched += 1
+        existing.realizedRevenue += matchedRealized
+      }
+      continue
+    }
+
+    grouped.set(groupKey, {
+      branch: branchName,
+      jobCode,
+      records: 1,
+      matched: matchedRealized == null ? 0 : 1,
+      unmatched: matchedRealized == null ? 1 : 0,
+      estimatedNetPrice: estimate,
+      realizedRevenue: matchedRealized ?? 0,
+    })
+  }
+
+  const rows: NetPriceFinalRevenueVarianceRow[] = [...grouped.values()]
+    .map((row) => {
+      const varianceAmount = row.estimatedNetPrice - row.realizedRevenue
+      return {
+        branch: row.branch,
+        jobCode: row.jobCode,
+        records: row.records,
+        matched: row.matched,
+        unmatched: row.unmatched,
+        estimatedNetPrice: row.estimatedNetPrice,
+        realizedRevenue: row.realizedRevenue,
+        varianceAmount,
+        variancePercentage: row.estimatedNetPrice > 0 ? (varianceAmount / row.estimatedNetPrice) * 100 : 0,
+        avgEstimatedPerRecord: row.records > 0 ? row.estimatedNetPrice / row.records : 0,
+        avgRealizedPerMatched: row.matched > 0 ? row.realizedRevenue / row.matched : 0,
+      }
+    })
+    .sort((a, b) => {
+      if (Math.abs(b.varianceAmount) !== Math.abs(a.varianceAmount)) {
+        return Math.abs(b.varianceAmount) - Math.abs(a.varianceAmount)
+      }
+      if (b.records !== a.records) {
+        return b.records - a.records
+      }
+      if (a.branch !== b.branch) {
+        return a.branch.localeCompare(b.branch)
+      }
+      return a.jobCode.localeCompare(b.jobCode)
+    })
+
+  const varianceAmount = estimatedNetPrice - realizedRevenue
+
+  return {
+    totalRecords,
+    matched,
+    unmatched,
+    missingMatchRate: totalRecords > 0 ? (unmatched / totalRecords) * 100 : 0,
+    estimatedNetPrice,
+    realizedRevenue,
+    varianceAmount,
+    variancePercentage: estimatedNetPrice > 0 ? (varianceAmount / estimatedNetPrice) * 100 : 0,
+    rows,
+  }
+}
+
+export async function getEndToEndJobLifecycleReport(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<EndToEndJobLifecycleReport> {
+  const jcRows = await fetchAllJobCardClosedRows(
+    'job_card_number, branch, created_date_time, closed_date_time, total_invoice_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  const uniqueKeys = new Set<string>()
+  const jobCardValues: string[] = []
+
+  for (const row of jcRows) {
+    const typedRow = row as { job_card_number?: unknown }
+    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    if (!jobCard) continue
+
+    const key = jobCard.toUpperCase()
+    if (uniqueKeys.has(key)) continue
+    uniqueKeys.add(key)
+    jobCardValues.push(jobCard)
+  }
+
+  const chunkSize = 200
+  const vasRows: Record<string, unknown>[] = []
+  const invoiceRows: Record<string, unknown>[] = []
+
+  for (let index = 0; index < jobCardValues.length; index += chunkSize) {
+    const chunk = jobCardValues.slice(index, index + chunkSize)
+
+    let vasQuery = supabase
+      .from('service_vas_jc_data')
+      .select('job_card_number, branch, net_price, job_value')
+      .in('job_card_number', chunk)
+
+    if (branch !== 'ALL') {
+      vasQuery = vasQuery.eq('branch', branch)
+    }
+
+    const { data: vasData, error: vasError } = await vasQuery
+    if (vasError) {
+      throw new Error(vasError.message)
+    }
+    vasRows.push(...((vasData as unknown as Record<string, unknown>[] | null) ?? []))
+
+    let invoiceQuery = supabase
+      .from('service_invoice_data')
+      .select('order_number, branch, invoice_date, final_consolidated_invoice_amount')
+      .in('order_number', chunk)
+
+    if (branch !== 'ALL') {
+      invoiceQuery = invoiceQuery.eq('branch', branch)
+    }
+
+    const { data: invoiceData, error: invoiceError } = await invoiceQuery
+    if (invoiceError) {
+      throw new Error(invoiceError.message)
+    }
+    invoiceRows.push(...((invoiceData as unknown as Record<string, unknown>[] | null) ?? []))
+  }
+
+  interface WorkingVas {
+    estimatedValue: number
+  }
+
+  interface WorkingInvoice {
+    invoicedValue: number
+    firstInvoiceDate: string | null
+  }
+
+  const buildCompositeKey = (branchName: string, jobCard: string): string =>
+    `${branchName.toLowerCase()}__${jobCard.trim().toUpperCase()}`
+
+  const vasByKey = new Map<string, WorkingVas>()
+
+  for (const row of vasRows) {
+    const typedRow = row as {
+      job_card_number?: unknown
+      branch?: unknown
+      net_price?: unknown
+    }
+
+    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    if (!jobCard) continue
+
+    const branchName = normalizeBranch(typedRow.branch)
+    const key = buildCompositeKey(branchName, jobCard)
+    const estimate = parseRevenue(typedRow.net_price)
+
+    const existing = vasByKey.get(key)
+    if (existing) {
+      existing.estimatedValue += estimate
+    } else {
+      vasByKey.set(key, { estimatedValue: estimate })
+    }
+  }
+
+  const invoiceByKey = new Map<string, WorkingInvoice>()
+
+  for (const row of invoiceRows) {
+    const typedRow = row as {
+      order_number?: unknown
+      branch?: unknown
+      invoice_date?: unknown
+      final_consolidated_invoice_amount?: unknown
+    }
+
+    const orderNumber = typedRow.order_number == null ? '' : String(typedRow.order_number).trim()
+    if (!orderNumber) continue
+
+    const branchName = normalizeBranch(typedRow.branch)
+    const key = buildCompositeKey(branchName, orderNumber)
+    const invoicedValue = parseRevenue(typedRow.final_consolidated_invoice_amount)
+    const invoiceDate = typedRow.invoice_date == null ? null : String(typedRow.invoice_date)
+
+    const existing = invoiceByKey.get(key)
+    if (existing) {
+      existing.invoicedValue += invoicedValue
+      if (invoiceDate && (!existing.firstInvoiceDate || invoiceDate < existing.firstInvoiceDate)) {
+        existing.firstInvoiceDate = invoiceDate
+      }
+    } else {
+      invoiceByKey.set(key, {
+        invoicedValue,
+        firstInvoiceDate: invoiceDate,
+      })
+    }
+  }
+
+  interface WorkingBranchRow {
+    branch: string
+    totalJobs: number
+    withClose: number
+    withInvoice: number
+    completeLifecycle: number
+    sumCreateToCloseHours: number
+    countCreateToClose: number
+    sumCloseToInvoiceHours: number
+    countCloseToInvoice: number
+    sumCreateToInvoiceHours: number
+    countCreateToInvoice: number
+    estimatedValue: number
+    realizedValue: number
+    invoicedValue: number
+  }
+
+  const branchMap = new Map<string, WorkingBranchRow>()
+
+  const getBranchRow = (branchName: string): WorkingBranchRow => {
+    const existing = branchMap.get(branchName)
+    if (existing) return existing
+
+    const created: WorkingBranchRow = {
+      branch: branchName,
+      totalJobs: 0,
+      withClose: 0,
+      withInvoice: 0,
+      completeLifecycle: 0,
+      sumCreateToCloseHours: 0,
+      countCreateToClose: 0,
+      sumCloseToInvoiceHours: 0,
+      countCloseToInvoice: 0,
+      sumCreateToInvoiceHours: 0,
+      countCreateToInvoice: 0,
+      estimatedValue: 0,
+      realizedValue: 0,
+      invoicedValue: 0,
+    }
+
+    branchMap.set(branchName, created)
+    return created
+  }
+
+  let totalJobs = 0
+  let withClose = 0
+  let withInvoice = 0
+  let completeLifecycle = 0
+  let sumCreateToCloseHours = 0
+  let countCreateToClose = 0
+  let sumCloseToInvoiceHours = 0
+  let countCloseToInvoice = 0
+  let sumCreateToInvoiceHours = 0
+  let countCreateToInvoice = 0
+  let estimatedValue = 0
+  let realizedValue = 0
+  let invoicedValue = 0
+
+  for (const row of jcRows) {
+    const typedRow = row as {
+      job_card_number?: unknown
+      branch?: unknown
+      created_date_time?: unknown
+      closed_date_time?: unknown
+      total_invoice_amount?: unknown
+    }
+
+    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    if (!jobCard) continue
+
+    const branchName = normalizeBranch(typedRow.branch)
+    const key = buildCompositeKey(branchName, jobCard)
+    const branchRow = getBranchRow(branchName)
+
+    const createdAt = typedRow.created_date_time ? new Date(String(typedRow.created_date_time)) : null
+    const closedAt = typedRow.closed_date_time ? new Date(String(typedRow.closed_date_time)) : null
+    const invoiceInfo = invoiceByKey.get(key)
+    const invoiceDate = invoiceInfo?.firstInvoiceDate ? new Date(`${invoiceInfo.firstInvoiceDate}T00:00:00`) : null
+    const hasValidCreated = createdAt != null && !Number.isNaN(createdAt.getTime())
+    const hasValidClosed = closedAt != null && !Number.isNaN(closedAt.getTime())
+    const hasValidInvoiceDate = invoiceDate != null && !Number.isNaN(invoiceDate.getTime())
+
+    const estimate = vasByKey.get(key)?.estimatedValue ?? 0
+    const realized = parseRevenue(typedRow.total_invoice_amount)
+    const invoiced = invoiceInfo?.invoicedValue ?? 0
+
+    totalJobs += 1
+    estimatedValue += estimate
+    realizedValue += realized
+    invoicedValue += invoiced
+
+    branchRow.totalJobs += 1
+    branchRow.estimatedValue += estimate
+    branchRow.realizedValue += realized
+    branchRow.invoicedValue += invoiced
+
+    if (hasValidClosed) {
+      withClose += 1
+      branchRow.withClose += 1
+    }
+
+    if (invoiceInfo) {
+      withInvoice += 1
+      branchRow.withInvoice += 1
+    }
+
+    if (hasValidCreated && hasValidClosed) {
+      const hours = (closedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
+      if (Number.isFinite(hours) && hours >= 0) {
+        sumCreateToCloseHours += hours
+        countCreateToClose += 1
+        branchRow.sumCreateToCloseHours += hours
+        branchRow.countCreateToClose += 1
+      }
+    }
+
+    if (hasValidClosed && hasValidInvoiceDate) {
+      const hours = (invoiceDate.getTime() - closedAt.getTime()) / (1000 * 60 * 60)
+      if (Number.isFinite(hours) && hours >= 0) {
+        sumCloseToInvoiceHours += hours
+        countCloseToInvoice += 1
+        branchRow.sumCloseToInvoiceHours += hours
+        branchRow.countCloseToInvoice += 1
+      }
+    }
+
+    if (hasValidCreated && hasValidInvoiceDate) {
+      const hours = (invoiceDate.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
+      if (Number.isFinite(hours) && hours >= 0) {
+        sumCreateToInvoiceHours += hours
+        countCreateToInvoice += 1
+        branchRow.sumCreateToInvoiceHours += hours
+        branchRow.countCreateToInvoice += 1
+      }
+    }
+
+    if (hasValidCreated && hasValidClosed && hasValidInvoiceDate) {
+      completeLifecycle += 1
+      branchRow.completeLifecycle += 1
+    }
+  }
+
+  const branchBreakdown: EndToEndJobLifecycleBranchRow[] = [...branchMap.values()]
+    .map((row) => ({
+      branch: row.branch,
+      totalJobs: row.totalJobs,
+      withClose: row.withClose,
+      withInvoice: row.withInvoice,
+      completeLifecycle: row.completeLifecycle,
+      lifecycleCompletionRate: row.totalJobs > 0 ? (row.completeLifecycle / row.totalJobs) * 100 : 0,
+      avgCreateToCloseHours: row.countCreateToClose > 0 ? row.sumCreateToCloseHours / row.countCreateToClose : 0,
+      avgCloseToInvoiceHours: row.countCloseToInvoice > 0 ? row.sumCloseToInvoiceHours / row.countCloseToInvoice : 0,
+      avgCreateToInvoiceHours: row.countCreateToInvoice > 0 ? row.sumCreateToInvoiceHours / row.countCreateToInvoice : 0,
+      estimatedValue: row.estimatedValue,
+      realizedValue: row.realizedValue,
+      invoicedValue: row.invoicedValue,
+      realizedVsEstimateRate: row.estimatedValue > 0 ? (row.realizedValue / row.estimatedValue) * 100 : 0,
+      invoicedVsRealizedRate: row.realizedValue > 0 ? (row.invoicedValue / row.realizedValue) * 100 : 0,
+      invoicedVsEstimateRate: row.estimatedValue > 0 ? (row.invoicedValue / row.estimatedValue) * 100 : 0,
+    }))
+    .sort((a, b) => {
+      if (b.totalJobs !== a.totalJobs) return b.totalJobs - a.totalJobs
+      return a.branch.localeCompare(b.branch)
+    })
+
+  return {
+    totalJobs,
+    withClose,
+    withInvoice,
+    completeLifecycle,
+    lifecycleCompletionRate: totalJobs > 0 ? (completeLifecycle / totalJobs) * 100 : 0,
+    avgCreateToCloseHours: countCreateToClose > 0 ? sumCreateToCloseHours / countCreateToClose : 0,
+    avgCloseToInvoiceHours: countCloseToInvoice > 0 ? sumCloseToInvoiceHours / countCloseToInvoice : 0,
+    avgCreateToInvoiceHours: countCreateToInvoice > 0 ? sumCreateToInvoiceHours / countCreateToInvoice : 0,
+    estimatedValue,
+    realizedValue,
+    invoicedValue,
+    realizedVsEstimateRate: estimatedValue > 0 ? (realizedValue / estimatedValue) * 100 : 0,
+    invoicedVsRealizedRate: realizedValue > 0 ? (invoicedValue / realizedValue) * 100 : 0,
+    invoicedVsEstimateRate: estimatedValue > 0 ? (invoicedValue / estimatedValue) * 100 : 0,
+    branchBreakdown,
+  }
 }
