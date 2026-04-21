@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import ImportPage from './pages/ImportPage'
 import ReportsPage from './pages/ReportsPage.tsx'
+import { REPORT_CATEGORIES } from './pages/reports'
 import SettingsPage from './pages/SettingsPage'
 
 const NAV_ITEMS = [
@@ -116,32 +117,22 @@ export default function App() {
 
             {isReportsOpen && (
               <div className="space-y-1 pl-11">
-                <NavLink
-                  to="/reports/labour-revenue"
-                  className={({ isActive }) =>
-                    [
-                      'block rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-                      isActive
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                    ].join(' ')
-                  }
-                >
-                  1. Labour Revenue Reports
-                </NavLink>
-                <NavLink
-                  to="/reports/performance"
-                  className={({ isActive }) =>
-                    [
-                      'block rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-                      isActive
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                    ].join(' ')
-                  }
-                >
-                  2. Performance Reports
-                </NavLink>
+                {REPORT_CATEGORIES.map((category, index) => (
+                  <NavLink
+                    key={category.id}
+                    to={`/reports/${category.id}`}
+                    className={({ isActive }) =>
+                      [
+                        'block rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                        isActive
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                      ].join(' ')
+                    }
+                  >
+                    {`${index + 1}. ${category.label}`}
+                  </NavLink>
+                ))}
               </div>
             )}
           </div>
