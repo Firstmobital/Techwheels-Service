@@ -171,13 +171,19 @@ export interface PartsFilterOptions {
 
 export async function getPartsFilterOptions(branch: string): Promise<PartsFilterOptions> {
   try {
+    let yearsQuery = supabase
+      .from('service_parts_consumption_data')
+      .select('fiscal_year')
+      .not('fiscal_year', 'is', null)
+
+    if (branch !== 'ALL') {
+      yearsQuery = yearsQuery.eq('branch', branch)
+    }
+
     const [vendorsRes, categoriesRes, yearsRes] = await Promise.all([
       supabase.from('part_master').select('vendor'),
       supabase.from('part_master').select('product_category'),
-      supabase.from('service_parts_consumption_data')
-        .select('fiscal_year')
-        .eq('branch', branch)
-        .not('fiscal_year', 'is', null),
+      yearsQuery,
     ])
 
     const vendors = (vendorsRes.data?.map((r: any) => r.vendor).filter(Boolean) as string[]) || []
@@ -203,8 +209,8 @@ export async function getMonthlyConsumptionTrend(
     let query = supabase
       .from('vw_parts_consumption_trend')
       .select('*')
-      .eq('branch', filters.branch)
 
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
     if (filters.portal) query = query.eq('portal', filters.portal)
     if (filters.vendor) query = query.eq('vendor', filters.vendor)
     if (filters.productCategory) query = query.eq('product_category', filters.productCategory)
@@ -233,25 +239,50 @@ export async function getMonthlyConsumptionTrend(
 // Part-wise Consumption Analysis
 export async function getPartWiseConsumption(filters: PartsReportFilters): Promise<PartWiseConsumption[]> {
   try {
-    const query = supabase.rpc('get_part_wise_consumption', {
-      p_branch: filters.branch,
-      p_portal: filters.portal || 'EV',
-      p_vendor: filters.vendor || null,
-      p_category: filters.productCategory || null,
-      p_fiscal_year: filters.fiscalYear || null,
-    })
+    let query = supabase
+      .from('vw_parts_consumption_trend')
+      .select('*')
 
-    const { data, error } = await query
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    if (filters.portal) query = query.eq('portal', filters.portal)
+    if (filters.vendor) query = query.eq('vendor', filters.vendor)
+    if (filters.productCategory) query = query.eq('product_category', filters.productCategory)
+    if (filters.fiscalYear) query = query.eq('fiscal_year', filters.fiscalYear)
+
+    const { data, error } = await query.order('part_number')
 
     if (error) throw error
-    return (data || []).map((row: any) => ({
+
+    // Aggregate consumption by part
+    const partMap = new Map<string, any>()
+    ;(data || []).forEach((row: any) => {
+      if (!partMap.has(row.part_number)) {
+        partMap.set(row.part_number, {
+          part_number: row.part_number,
+          part_description: row.part_description,
+          total_consumption: 0,
+          avg_monthly_consumption: 0,
+          vendor: row.vendor,
+          product_category: row.product_category,
+        })
+      }
+      const part = partMap.get(row.part_number)
+      part.total_consumption += row.total_consumption || 0
+    })
+
+    // Calculate averages
+    Array.from(partMap.values()).forEach((part: any) => {
+      part.avg_monthly_consumption = part.total_consumption / Math.max((data || []).filter((r: any) => r.part_number === part.part_number).length, 1)
+    })
+
+    return Array.from(partMap.values()).map((row: any) => ({
       partNumber: row.part_number,
       partDescription: row.part_description,
       totalConsumption: row.total_consumption,
       avgMonthlyConsumption: row.avg_monthly_consumption,
       vendor: row.vendor,
       productCategory: row.product_category,
-      consumptionTrend: row.consumption_trend,
+      consumptionTrend: 'stable' as const,
     }))
   } catch (err) {
     console.error('Error fetching part-wise consumption:', err)
@@ -262,10 +293,13 @@ export async function getPartWiseConsumption(filters: PartsReportFilters): Promi
 // Stock Planning Report
 export async function getStockPlanningData(filters: PartsReportFilters): Promise<StockPlanningData[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('vw_parts_stock_health')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+
+    const { data, error } = await query
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -310,10 +344,13 @@ export async function getStockPlanningData(filters: PartsReportFilters): Promise
 // Slow-Moving Parts
 export async function getSlowMovingParts(filters: PartsReportFilters): Promise<SlowMovingPart[]> {
   try {
-    const { data: stock, error: stockError } = await supabase
+    let stockQuery = supabase
       .from('vw_parts_latest_stock')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') stockQuery = stockQuery.eq('branch', filters.branch)
+
+    const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -327,12 +364,15 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
     if (stockError) throw stockError
 
     // Get last consumption date for each part (fetch all and process in JS)
-    const { data: consumption, error: consumptionError } = await supabase
+    let consumptionQuery = supabase
       .from('service_parts_consumption_data')
       .select('part_number, created_at')
-      .eq('branch', filters.branch)
       .gt('total_consumption', 0)
       .order('created_at', { ascending: false })
+
+    if (filters.branch !== 'ALL') consumptionQuery = consumptionQuery.eq('branch', filters.branch)
+
+    const { data: consumption, error: consumptionError } = await consumptionQuery
 
     if (consumptionError) throw consumptionError
 
@@ -371,10 +411,13 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
 // Fast-Moving Parts
 export async function getFastMovingParts(filters: PartsReportFilters): Promise<FastMovingPart[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('vw_parts_stock_health')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+
+    const { data, error } = await query
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -417,10 +460,13 @@ export async function getFastMovingParts(filters: PartsReportFilters): Promise<F
 // Order Status Report
 export async function getOrderStatusReport(filters: PartsReportFilters): Promise<OrderStatusData[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('vw_parts_active_orders')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+
+    const { data, error } = await query
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -455,11 +501,14 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
 // In-Transit Visibility
 export async function getInTransitVisibility(filters: PartsReportFilters): Promise<InTransitVisibility[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('vw_parts_active_orders')
       .select('*')
-      .eq('branch', filters.branch)
       .gt('intransit_qty', 0)
+
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+
+    const { data, error } = await query
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -501,11 +550,14 @@ export async function getDelayedOrders(filters: PartsReportFilters): Promise<Del
   try {
     const today = new Date().toISOString().slice(0, 10)
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('vw_parts_active_orders')
       .select('*')
-      .eq('branch', filters.branch)
       .lt('eta_1', today)
+
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+
+    const { data, error } = await query
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -544,10 +596,13 @@ export async function getDelayedOrders(filters: PartsReportFilters): Promise<Del
 // Dealer Performance
 export async function getDealerPerformance(filters: PartsReportFilters): Promise<DealerPerformance[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('service_parts_order_data')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+
+    const { data, error } = await query
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -646,10 +701,13 @@ export async function getVendorPerformance(filters: PartsReportFilters): Promise
 // Part Valuation
 export async function getPartValuationData(filters: PartsReportFilters): Promise<PartValuationData[]> {
   try {
-    const { data: stock, error: stockError } = await supabase
+    let stockQuery = supabase
       .from('vw_parts_latest_stock')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') stockQuery = stockQuery.eq('branch', filters.branch)
+
+    const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -663,10 +721,13 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
     if (stockError) throw stockError
 
     // Get avg consumption for each part
-    const { data: consumption, error: consumptionError } = await supabase
+    let consumptionQuery = supabase
       .from('vw_parts_avg_consumption')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') consumptionQuery = consumptionQuery.eq('branch', filters.branch)
+
+    const { data: consumption, error: consumptionError } = await consumptionQuery
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -757,10 +818,13 @@ export async function getAbcClassification(filters: PartsReportFilters): Promise
 // Inventory Turnover
 export async function getInventoryTurnover(filters: PartsReportFilters): Promise<InventoryTurnover[]> {
   try {
-    const { data: stock, error: stockError } = await supabase
+    let stockQuery = supabase
       .from('vw_parts_latest_stock')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') stockQuery = stockQuery.eq('branch', filters.branch)
+
+    const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
         if (filters.portal) {
           return {
@@ -774,10 +838,13 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
     if (stockError) throw stockError
 
     // Get avg consumption for each part
-    const { data: consumption, error: consumptionError } = await supabase
+    let consumptionQuery = supabase
       .from('vw_parts_avg_consumption')
       .select('*')
-      .eq('branch', filters.branch)
+
+    if (filters.branch !== 'ALL') consumptionQuery = consumptionQuery.eq('branch', filters.branch)
+
+    const { data: consumption, error: consumptionError } = await consumptionQuery
       .then((res: any) => {
         if (filters.portal) {
           return {
