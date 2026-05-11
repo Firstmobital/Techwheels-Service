@@ -1,12 +1,12 @@
 const PART_NUMBER_HEADERS = ['part #', 'part no', 'part number', 'part_number', 'part code']
-const DESCRIPTION_HEADERS = ['description', 'part description', 'material description']
+const DESCRIPTION_HEADERS = ['description', 'part description', 'material description', 'part desc']
 const ORDER_DATE_HEADERS = ['order date', 'po date', 'document date', 'date']
-const EXPECTED_DATE_HEADERS = ['expected date', 'eta', 'promised date', 'delivery date']
-const ORDER_QTY_HEADERS = ['order qty', 'ordered qty', 'quantity ordered', 'qty']
-const RECEIVED_QTY_HEADERS = ['received qty', 'quantity received', 'grn qty']
-const BACKORDER_QTY_HEADERS = ['backorder qty', 'back order qty', 'pending qty', 'open qty']
-const STATUS_HEADERS = ['status', 'line status', 'order status']
-const DOC_ID_HEADERS = ['invoice number', 'crm order number', 'sap order number', 'po number', 'order number']
+const EXPECTED_DATE_HEADERS = ['expected date', 'eta', 'eta1', 'eta 1', 'eta2', 'eta 2', 'eta3', 'eta 3', 'promised date', 'delivery date']
+const ORDER_QTY_HEADERS = ['order qty', 'ordered qty', 'quantity ordered', 'qty', 'net order qty', 'confirmation qty']
+const RECEIVED_QTY_HEADERS = ['received qty', 'quantity received', 'grn qty', 'invoice qty']
+const BACKORDER_QTY_HEADERS = ['backorder qty', 'back order qty', 'pending qty', 'open qty', 'intransit qty', 'in transit qty', 'challan qty']
+const STATUS_HEADERS = ['status', 'line status', 'order status', 'spares order type']
+const DOC_ID_HEADERS = ['invoice number', 'crm order number', 'sap order number', 'po number', 'order number', 'docket number', 'challan no']
 
 export interface PartsOrderParseError {
   rowNumber: number
@@ -39,15 +39,31 @@ function findHeader(excelHeaders: string[], aliases: string[]): string | undefin
 
 function parseDate(value: unknown, fieldName: string): string | null {
   if (value == null || value === '') return null
-  const direct = new Date(String(value))
-  if (!Number.isNaN(direct.getTime())) return direct.toISOString().slice(0, 10)
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10)
+  }
 
   if (typeof value === 'number') {
     const parsed = new Date(Math.round((value - 25569) * 86400 * 1000))
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
   }
 
-  throw new Error(`Invalid date for ${fieldName}: "${String(value)}"`)
+  const raw = String(value).trim()
+  if (!raw) return null
+
+  const direct = new Date(raw)
+  if (!Number.isNaN(direct.getTime())) return direct.toISOString().slice(0, 10)
+
+  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/)
+  if (dmy) {
+    const [, d, m, y] = dmy
+    const year = y.length === 2 ? 2000 + Number(y) : Number(y)
+    const parsed = new Date(Date.UTC(year, Number(m) - 1, Number(d)))
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
+  }
+
+  throw new Error(`Invalid date for ${fieldName}: "${raw}"`)
 }
 
 function parseNumber(value: unknown, fieldName: string): number | null {
