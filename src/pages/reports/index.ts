@@ -1,4 +1,5 @@
 import { LABOUR_REVENUE_CATEGORY, LABOUR_REVENUE_REPORTS } from './labour-revenue'
+import { PARTS_CATEGORY, PARTS_REPORTS } from './parts'
 import { PERFORMANCE_CATEGORY, PERFORMANCE_REPORTS } from './performance'
 import { REVENUE_CATEGORY, REVENUE_REPORTS } from './revenue'
 import type { ReportCategoryDefinition, ReportCategoryId, ReportDefinition, ReportId } from './types'
@@ -7,12 +8,14 @@ export const REPORT_CATEGORIES: ReportCategoryDefinition[] = [
   LABOUR_REVENUE_CATEGORY,
   PERFORMANCE_CATEGORY,
   REVENUE_CATEGORY,
+  PARTS_CATEGORY,
 ]
 
 export const REPORT_DEFINITIONS: ReportDefinition[] = [
   ...LABOUR_REVENUE_REPORTS,
   ...PERFORMANCE_REPORTS,
   ...REVENUE_REPORTS,
+  ...PARTS_REPORTS,
 ]
 
 export function isCategoryId(value: string | undefined): value is ReportCategoryId {

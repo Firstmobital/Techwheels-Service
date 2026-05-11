@@ -3014,3 +3014,443 @@ export async function getEndToEndJobLifecycleReport(
     branchBreakdown,
   }
 }
+export interface PartsConsumptionSummaryRow {
+  partNumber: string
+  partDescription: string
+  totalConsumed: number
+  avgDailyConsumption: number
+  transactionCount: number
+  lastConsumptionDate: string | null
+}
+
+export interface PartsBackorderSummaryRow {
+  partNumber: string
+  partDescription: string
+  orderedQuantity: number
+  receivedQuantity: number
+  backorderQuantity: number
+  openOrderQuantity: number
+  lastOrderDate: string | null
+}
+
+export interface PartsStockPlanningRow {
+  partNumber: string
+  partDescription: string
+  onHandQuantity: number
+  openOrderQuantity: number
+  backorderQuantity: number
+  avgDailyConsumption: number
+  projectedDemand: number
+  projectedAvailable: number
+  recommendedOrderQuantity: number
+  shortageQuantity: number
+  daysOfCover: number | null
+}
+
+export interface PartsOrderJustificationRow extends PartsStockPlanningRow {
+  actualOpenOrderQuantity: number
+  orderJustified: boolean
+  justificationReason: string
+}
+
+interface PartsConsumptionRecord {
+  part_number: unknown
+  part_description: unknown
+  transaction_date: unknown
+  quantity_consumed: unknown
+}
+
+interface PartsOrderRecord {
+  part_number: unknown
+  part_description: unknown
+  order_date: unknown
+  ordered_quantity: unknown
+  received_quantity: unknown
+  backorder_quantity: unknown
+}
+
+interface PartsStockRecord {
+  part_number: unknown
+  part_description: unknown
+  snapshot_date: unknown
+  on_hand_quantity: unknown
+}
+
+function normalizePartNumber(raw: unknown): string {
+  if (raw == null) return 'UNKNOWN'
+  const normalized = String(raw).trim().toUpperCase()
+  return normalized || 'UNKNOWN'
+}
+
+function normalizePartDescription(raw: unknown): string {
+  if (raw == null) return ''
+  return String(raw).trim().replace(/\s+/g, ' ')
+}
+
+function parseDateOnly(raw: unknown): string | null {
+  if (raw == null || raw === '') return null
+  const date = new Date(String(raw))
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString().slice(0, 10)
+}
+
+async function fetchAllPartsConsumptionRows(
+  selectColumns: string,
+  branch: BranchFilter,
+  dateFilter?: DateRangeFilter,
+): Promise<PartsConsumptionRecord[]> {
+  let from = 0
+  const allRows: PartsConsumptionRecord[] = []
+  const bounds = dateFilter ? getDateRangeBounds(dateFilter) : null
+
+  while (true) {
+    let query = supabase
+      .from('service_parts_consumption_data')
+      .select(selectColumns)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      query = query.gte('transaction_date', bounds.from.slice(0, 10)).lt('transaction_date', bounds.toExclusive.slice(0, 10))
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const batch = (data as unknown as PartsConsumptionRecord[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+    from += QUERY_PAGE_SIZE
+  }
+
+  return allRows
+}
+
+async function fetchAllPartsOrderRows(
+  selectColumns: string,
+  branch: BranchFilter,
+  dateFilter?: DateRangeFilter,
+): Promise<PartsOrderRecord[]> {
+  let from = 0
+  const allRows: PartsOrderRecord[] = []
+  const bounds = dateFilter ? getDateRangeBounds(dateFilter) : null
+
+  while (true) {
+    let query = supabase
+      .from('service_parts_order_data')
+      .select(selectColumns)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    if (bounds) {
+      query = query.gte('order_date', bounds.from.slice(0, 10)).lt('order_date', bounds.toExclusive.slice(0, 10))
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const batch = (data as unknown as PartsOrderRecord[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+    from += QUERY_PAGE_SIZE
+  }
+
+  return allRows
+}
+
+async function fetchLatestPartsStockByPart(branch: BranchFilter): Promise<Map<string, PartsStockRecord>> {
+  let from = 0
+  const rows: PartsStockRecord[] = []
+
+  while (true) {
+    let query = supabase
+      .from('service_parts_stock_snapshot_data')
+      .select('part_number, part_description, snapshot_date, on_hand_quantity')
+      .order('snapshot_date', { ascending: false })
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const batch = (data as PartsStockRecord[] | null) ?? []
+    rows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+    from += QUERY_PAGE_SIZE
+  }
+
+  const latestByPart = new Map<string, PartsStockRecord>()
+
+  for (const row of rows) {
+    const partNumber = normalizePartNumber(row.part_number)
+    const existing = latestByPart.get(partNumber)
+    if (!existing) {
+      latestByPart.set(partNumber, row)
+      continue
+    }
+
+    const currentDate = parseDateOnly(row.snapshot_date)
+    const existingDate = parseDateOnly(existing.snapshot_date)
+    if ((currentDate ?? '') > (existingDate ?? '')) {
+      latestByPart.set(partNumber, row)
+    }
+  }
+
+  return latestByPart
+}
+
+export async function getPartsConsumptionSummary(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<PartsConsumptionSummaryRow[]> {
+  const rows = await fetchAllPartsConsumptionRows(
+    'part_number, part_description, transaction_date, quantity_consumed',
+    branch,
+    dateFilter,
+  )
+
+  interface WorkingConsumption {
+    partNumber: string
+    partDescription: string
+    totalConsumed: number
+    transactionCount: number
+    lastConsumptionDate: string | null
+  }
+
+  const grouped = new Map<string, WorkingConsumption>()
+
+  for (const row of rows) {
+    const partNumber = normalizePartNumber(row.part_number)
+    const partDescription = normalizePartDescription(row.part_description)
+    const quantity = parseRevenue(row.quantity_consumed)
+    const txDate = parseDateOnly(row.transaction_date)
+    const existing = grouped.get(partNumber)
+
+    if (existing) {
+      existing.totalConsumed += quantity
+      existing.transactionCount += 1
+      if ((txDate ?? '') > (existing.lastConsumptionDate ?? '')) {
+        existing.lastConsumptionDate = txDate
+      }
+      if (!existing.partDescription && partDescription) {
+        existing.partDescription = partDescription
+      }
+      continue
+    }
+
+    grouped.set(partNumber, {
+      partNumber,
+      partDescription,
+      totalConsumed: quantity,
+      transactionCount: 1,
+      lastConsumptionDate: txDate,
+    })
+  }
+
+  const bounds = getDateRangeBounds(dateFilter)
+  const daysInRange = bounds
+    ? Math.max(
+        1,
+        Math.round((new Date(bounds.toExclusive).getTime() - new Date(bounds.from).getTime()) / (1000 * 60 * 60 * 24)),
+      )
+    : 1
+
+  return [...grouped.values()]
+    .map((row) => ({
+      ...row,
+      avgDailyConsumption: row.totalConsumed / daysInRange,
+    }))
+    .sort((a, b) => {
+      if (b.totalConsumed !== a.totalConsumed) return b.totalConsumed - a.totalConsumed
+      return a.partNumber.localeCompare(b.partNumber)
+    })
+}
+
+export async function getPartsBackorderSummary(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<PartsBackorderSummaryRow[]> {
+  const rows = await fetchAllPartsOrderRows(
+    'part_number, part_description, order_date, ordered_quantity, received_quantity, backorder_quantity',
+    branch,
+    dateFilter,
+  )
+
+  interface WorkingOrder {
+    partNumber: string
+    partDescription: string
+    orderedQuantity: number
+    receivedQuantity: number
+    backorderQuantity: number
+    lastOrderDate: string | null
+  }
+
+  const grouped = new Map<string, WorkingOrder>()
+
+  for (const row of rows) {
+    const partNumber = normalizePartNumber(row.part_number)
+    const partDescription = normalizePartDescription(row.part_description)
+    const ordered = parseRevenue(row.ordered_quantity)
+    const received = parseRevenue(row.received_quantity)
+    const explicitBackorder = parseRevenue(row.backorder_quantity)
+    const computedBackorder = Math.max(ordered - received, 0)
+    const backorder = explicitBackorder > 0 ? explicitBackorder : computedBackorder
+    const orderDate = parseDateOnly(row.order_date)
+    const existing = grouped.get(partNumber)
+
+    if (existing) {
+      existing.orderedQuantity += ordered
+      existing.receivedQuantity += received
+      existing.backorderQuantity += backorder
+      if ((orderDate ?? '') > (existing.lastOrderDate ?? '')) {
+        existing.lastOrderDate = orderDate
+      }
+      if (!existing.partDescription && partDescription) {
+        existing.partDescription = partDescription
+      }
+      continue
+    }
+
+    grouped.set(partNumber, {
+      partNumber,
+      partDescription,
+      orderedQuantity: ordered,
+      receivedQuantity: received,
+      backorderQuantity: backorder,
+      lastOrderDate: orderDate,
+    })
+  }
+
+  return [...grouped.values()]
+    .map((row) => ({
+      ...row,
+      openOrderQuantity: Math.max(row.orderedQuantity - row.receivedQuantity, row.backorderQuantity, 0),
+    }))
+    .sort((a, b) => {
+      if (b.backorderQuantity !== a.backorderQuantity) return b.backorderQuantity - a.backorderQuantity
+      return a.partNumber.localeCompare(b.partNumber)
+    })
+}
+
+export async function getPartsStockPlanning(
+  branch: BranchFilter,
+  horizonDays = 15,
+  historyWindowDays = 60,
+  leadTimeDays = 7,
+  safetyStockDays = 5,
+): Promise<PartsStockPlanningRow[]> {
+  const historyFrom = new Date()
+  historyFrom.setDate(historyFrom.getDate() - Math.max(1, historyWindowDays))
+  const historyFilter: DateRangeFilter = {
+    preset: 'custom',
+    customFrom: historyFrom.toISOString().slice(0, 10),
+    customTo: new Date().toISOString().slice(0, 10),
+  }
+
+  const [consumptionRows, backorderRows, latestStockByPart] = await Promise.all([
+    getPartsConsumptionSummary(branch, historyFilter),
+    getPartsBackorderSummary(branch, historyFilter),
+    fetchLatestPartsStockByPart(branch),
+  ])
+
+  const consumptionByPart = new Map(consumptionRows.map((row) => [row.partNumber, row]))
+  const backorderByPart = new Map(backorderRows.map((row) => [row.partNumber, row]))
+  const allParts = new Set<string>([
+    ...consumptionByPart.keys(),
+    ...backorderByPart.keys(),
+    ...latestStockByPart.keys(),
+  ])
+
+  const rows: PartsStockPlanningRow[] = []
+
+  for (const partNumber of allParts) {
+    const consumption = consumptionByPart.get(partNumber)
+    const backorder = backorderByPart.get(partNumber)
+    const stock = latestStockByPart.get(partNumber)
+
+    const partDescription =
+      normalizePartDescription(stock?.part_description) ||
+      backorder?.partDescription ||
+      consumption?.partDescription ||
+      ''
+
+    const onHandQuantity = parseRevenue(stock?.on_hand_quantity)
+    const openOrderQuantity = backorder?.openOrderQuantity ?? 0
+    const backorderQuantity = backorder?.backorderQuantity ?? 0
+    const avgDailyConsumption = consumption?.avgDailyConsumption ?? 0
+    const projectedDemand = avgDailyConsumption * (Math.max(1, leadTimeDays) + Math.max(1, horizonDays))
+    const projectedAvailable = onHandQuantity + openOrderQuantity - backorderQuantity
+    const safetyStock = avgDailyConsumption * Math.max(0, safetyStockDays)
+    const recommendedOrderQuantity = Math.max(0, projectedDemand + safetyStock - projectedAvailable)
+    const shortageQuantity = Math.max(0, projectedDemand - projectedAvailable)
+    const daysOfCover = avgDailyConsumption > 0 ? onHandQuantity / avgDailyConsumption : null
+
+    rows.push({
+      partNumber,
+      partDescription,
+      onHandQuantity,
+      openOrderQuantity,
+      backorderQuantity,
+      avgDailyConsumption,
+      projectedDemand,
+      projectedAvailable,
+      recommendedOrderQuantity,
+      shortageQuantity,
+      daysOfCover,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.shortageQuantity !== a.shortageQuantity) return b.shortageQuantity - a.shortageQuantity
+    return a.partNumber.localeCompare(b.partNumber)
+  })
+}
+
+export async function getPartsOrderJustification(
+  branch: BranchFilter,
+  horizonDays = 15,
+  historyWindowDays = 60,
+  leadTimeDays = 7,
+): Promise<PartsOrderJustificationRow[]> {
+  const planningRows = await getPartsStockPlanning(
+    branch,
+    horizonDays,
+    historyWindowDays,
+    leadTimeDays,
+  )
+
+  return planningRows
+    .map((row) => {
+      const tolerance = Math.max(1, row.recommendedOrderQuantity * 0.1)
+      const orderJustified = row.openOrderQuantity <= row.recommendedOrderQuantity + tolerance
+      const justificationReason = orderJustified
+        ? 'Open order is within recommended range.'
+        : 'Open order exceeds projected requirement.'
+
+      return {
+        ...row,
+        actualOpenOrderQuantity: row.openOrderQuantity,
+        orderJustified,
+        justificationReason,
+      }
+    })
+    .sort((a, b) => {
+      if (a.orderJustified !== b.orderJustified) {
+        return a.orderJustified ? 1 : -1
+      }
+      if (b.shortageQuantity !== a.shortageQuantity) return b.shortageQuantity - a.shortageQuantity
+      return a.partNumber.localeCompare(b.partNumber)
+    })
+}

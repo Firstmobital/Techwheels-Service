@@ -27,6 +27,24 @@ import {
   type EmployeeLookupIndex,
   type EmployeeRecord,
 } from '../lib/employeeMatcher'
+import {
+  mapPartsConsumptionHeaders,
+  buildPartsConsumptionInsertRow,
+  formatPartsConsumptionParseErrors,
+  type PartsConsumptionParseError,
+} from '../lib/partsConsumptionColumnMapper'
+import {
+  mapPartsOrderHeaders,
+  buildPartsOrderInsertRow,
+  formatPartsOrderParseErrors,
+  type PartsOrderParseError,
+} from '../lib/partsOrderColumnMapper'
+import {
+  mapPartsStockHeaders,
+  buildPartsStockInsertRow,
+  formatPartsStockParseErrors,
+  type PartsStockParseError,
+} from '../lib/partsStockColumnMapper'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,9 +100,19 @@ const CARDS: CardConfig[] = [
     description: 'Value-added service job card data across all branches.',
   },
   {
-    tableName: 'service_jc_parts_data',
-    title: 'Parts Data',
-    description: 'Parts used in job cards across all branches.',
+    tableName: 'service_parts_consumption_data',
+    title: 'Parts Consumption',
+    description: 'Parts consumption transactions across all branches.',
+  },
+  {
+    tableName: 'service_parts_order_data',
+    title: 'Parts Order',
+    description: 'Parts ordering, in-transit, and backorder lines across all branches.',
+  },
+  {
+    tableName: 'service_parts_stock_snapshot_data',
+    title: 'Parts In Stock',
+    description: 'On-hand inventory snapshot by part number across all branches.',
   },
 ]
 
@@ -146,7 +174,7 @@ async function getTableColumns(tableName: string): Promise<string[]> {
   if (sample && sample.length > 0) return Object.keys(sample[0])
 
   // Final fallback: known migration schema
-  return ['id', 'jc_number', 'service_record', 'branch', 'created_at', 'updated_at']
+  return ['id', 'part_number', 'part_description', 'branch', 'created_at', 'updated_at']
 }
 
 async function getEmployeeLookupIndex(): Promise<EmployeeLookupIndex> {
@@ -218,6 +246,30 @@ function formatDate(date: Date): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function buildPartsSourceRowHash(
+  tableName: string,
+  branch: Branch,
+  row: Record<string, unknown>,
+  rowNumber: number,
+): string {
+  const partNumber = row.part_number == null ? '' : String(row.part_number).trim().toUpperCase()
+  const dateKey =
+    tableName === 'service_parts_consumption_data'
+      ? row.transaction_date
+      : tableName === 'service_parts_order_data'
+      ? row.order_date
+      : row.snapshot_date
+  const qtyKey =
+    tableName === 'service_parts_consumption_data'
+      ? row.quantity_consumed
+      : tableName === 'service_parts_order_data'
+      ? row.ordered_quantity
+      : row.on_hand_quantity
+
+  const raw = `${tableName}|${branch}|${partNumber}|${String(dateKey ?? '')}|${String(qtyKey ?? '')}|${rowNumber}`
+  return raw.replace(/\s+/g, ' ').trim()
 }
 
 // ─── SlotDropzone ──────────────────────────────────────────────────────────────
@@ -530,8 +582,17 @@ export default function ImportPage() {
         const isVasTable = tableName === 'service_vas_jc_data'
         const isInvoiceTable = tableName === 'service_invoice_data'
         const isJcClosedTable = tableName === 'job_card_closed_data'
-        const tableColumns =
-          isVasTable || isInvoiceTable || isJcClosedTable ? [] : await getTableColumns(tableName)
+        const isPartsConsumptionTable = tableName === 'service_parts_consumption_data'
+        const isPartsOrderTable = tableName === 'service_parts_order_data'
+        const isPartsStockTable = tableName === 'service_parts_stock_snapshot_data'
+        const isSpecialMappedTable =
+          isVasTable ||
+          isInvoiceTable ||
+          isJcClosedTable ||
+          isPartsConsumptionTable ||
+          isPartsOrderTable ||
+          isPartsStockTable
+        const tableColumns = isSpecialMappedTable ? [] : await getTableColumns(tableName)
         const CHUNK = 500
         let totalInserted = 0
         const allParseErrors: VasParseError[] = []
@@ -539,28 +600,27 @@ export default function ImportPage() {
         const requiresEmployeeLookup = isVasTable || isJcClosedTable
         const employeeLookup = requiresEmployeeLookup ? await getEmployeeLookupIndex() : null
 
+        const getFirstAvailableHeaders = async (): Promise<string[]> => {
+          for (const branch of PORTAL_BRANCHES) {
+            const slot = cardState.slots[branch]
+            if (slot.file && !slot.parseError && slot.rowCount !== null) {
+              const rows = await parseWorkbook(slot.file)
+              if (rows.length > 0) {
+                return Object.keys(rows[0])
+              }
+            }
+          }
+          return []
+        }
+
         // For VAS table, prepare header mapping upfront (extract from first available file)
         let vasHeaderMapping: Record<string, string> | null = null
         if (isVasTable) {
           try {
-            let excelHeaders: string[] = []
-            
-            // Get headers from first available file
-            for (const branch of PORTAL_BRANCHES) {
-              const slot = cardState.slots[branch]
-              if (slot.file && !slot.parseError && slot.rowCount !== null) {
-                const rows = await parseWorkbook(slot.file)
-                if (rows.length > 0) {
-                  excelHeaders = Object.keys(rows[0])
-                  break
-                }
-              }
-            }
-            
+            const excelHeaders = await getFirstAvailableHeaders()
             if (excelHeaders.length === 0) {
               throw new Error('No valid data found in uploaded files')
             }
-            
             vasHeaderMapping = mapVasHeaders(excelHeaders)
           } catch (err) {
             throw new Error(
@@ -573,19 +633,7 @@ export default function ImportPage() {
         let jcHeaderMapping: Record<string, string> | null = null
         if (isJcClosedTable) {
           try {
-            let excelHeaders: string[] = []
-
-            for (const branch of PORTAL_BRANCHES) {
-              const slot = cardState.slots[branch]
-              if (slot.file && !slot.parseError && slot.rowCount !== null) {
-                const rows = await parseWorkbook(slot.file)
-                if (rows.length > 0) {
-                  excelHeaders = Object.keys(rows[0])
-                  break
-                }
-              }
-            }
-
+            const excelHeaders = await getFirstAvailableHeaders()
             if (excelHeaders.length === 0) {
               throw new Error('No valid data found in uploaded files')
             }
@@ -595,6 +643,47 @@ export default function ImportPage() {
             throw new Error(
               `Job Card Closed Data: ${err instanceof Error ? err.message : String(err)}`,
             )
+          }
+        }
+
+        let partsConsumptionHeaderMapping: ReturnType<typeof mapPartsConsumptionHeaders> | null = null
+        if (isPartsConsumptionTable) {
+          try {
+            const excelHeaders = await getFirstAvailableHeaders()
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+            partsConsumptionHeaderMapping = mapPartsConsumptionHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(
+              `Parts Consumption: ${err instanceof Error ? err.message : String(err)}`,
+            )
+          }
+        }
+
+        let partsOrderHeaderMapping: ReturnType<typeof mapPartsOrderHeaders> | null = null
+        if (isPartsOrderTable) {
+          try {
+            const excelHeaders = await getFirstAvailableHeaders()
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+            partsOrderHeaderMapping = mapPartsOrderHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(`Parts Order: ${err instanceof Error ? err.message : String(err)}`)
+          }
+        }
+
+        let partsStockHeaderMapping: ReturnType<typeof mapPartsStockHeaders> | null = null
+        if (isPartsStockTable) {
+          try {
+            const excelHeaders = await getFirstAvailableHeaders()
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+            partsStockHeaderMapping = mapPartsStockHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(`Parts In Stock: ${err instanceof Error ? err.message : String(err)}`)
           }
         }
 
@@ -766,6 +855,108 @@ export default function ImportPage() {
 
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
+          } else if (isPartsConsumptionTable && partsConsumptionHeaderMapping) {
+            const parseErrors: PartsConsumptionParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
+              const { row, errors } = buildPartsConsumptionInsertRow(
+                rawRows[rowIdx],
+                branch,
+                partsConsumptionHeaderMapping,
+                rowIdx + 2,
+                sourceRowHash,
+              )
+
+              if (errors.length > 0) {
+                parseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (parseErrors.length > 0) {
+              throw new Error(
+                `Parts Consumption parse errors found:\n${formatPartsConsumptionParseErrors(parseErrors.slice(0, 10))}`,
+              )
+            }
+
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
+                onConflict: 'part_number,branch,transaction_date,source_row_hash',
+              })
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
+          } else if (isPartsOrderTable && partsOrderHeaderMapping) {
+            const parseErrors: PartsOrderParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
+              const { row, errors } = buildPartsOrderInsertRow(
+                rawRows[rowIdx],
+                branch,
+                partsOrderHeaderMapping,
+                rowIdx + 2,
+                sourceRowHash,
+              )
+
+              if (errors.length > 0) {
+                parseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (parseErrors.length > 0) {
+              throw new Error(
+                `Parts Order parse errors found:\n${formatPartsOrderParseErrors(parseErrors.slice(0, 10))}`,
+              )
+            }
+
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
+                onConflict: 'part_number,branch,order_date,source_row_hash',
+              })
+              if (error) throw new Error(error.message)
+              totalInserted += Math.min(CHUNK, insertRows.length - i)
+            }
+          } else if (isPartsStockTable && partsStockHeaderMapping) {
+            const parseErrors: PartsStockParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
+              const { row, errors } = buildPartsStockInsertRow(
+                rawRows[rowIdx],
+                branch,
+                partsStockHeaderMapping,
+                rowIdx + 2,
+                sourceRowHash,
+              )
+
+              if (errors.length > 0) {
+                parseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (parseErrors.length > 0) {
+              throw new Error(
+                `Parts In Stock parse errors found:\n${formatPartsStockParseErrors(parseErrors.slice(0, 10))}`,
+              )
+            }
+
+            for (let i = 0; i < insertRows.length; i += CHUNK) {
+              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
+                onConflict: 'part_number,branch,snapshot_date,source_row_hash',
+              })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
             }

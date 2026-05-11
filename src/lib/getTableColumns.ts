@@ -72,10 +72,43 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
     // Timestamp column
     'jc_closed_date_time',
   ],
-  service_jc_parts_data: ['jc_number', 'service_record', 'branch'],
+  service_parts_consumption_data: [
+    'part_number',
+    'part_description',
+    'transaction_date',
+    'quantity_consumed',
+    'unit_cost',
+    'total_cost',
+    'source_reference',
+    'source_row_hash',
+    'branch',
+  ],
+  service_parts_order_data: [
+    'part_number',
+    'part_description',
+    'order_date',
+    'expected_date',
+    'ordered_quantity',
+    'received_quantity',
+    'backorder_quantity',
+    'status',
+    'source_document_id',
+    'source_row_hash',
+    'branch',
+  ],
+  service_parts_stock_snapshot_data: [
+    'part_number',
+    'part_description',
+    'snapshot_date',
+    'on_hand_quantity',
+    'weighted_cost',
+    'inventory_value',
+    'source_row_hash',
+    'branch',
+  ],
 }
 
-const DEFAULT_FALLBACK = ['jc_number', 'service_record', 'branch']
+const DEFAULT_FALLBACK = ['part_number', 'part_description', 'branch']
 
 export async function getTableColumns(tableName: string): Promise<string[]> {
   const { data, error } = await supabase.from(tableName).select('*').limit(1)
