@@ -1,10 +1,12 @@
 const PART_NUMBER_HEADERS = ['part #', 'part no', 'part number', 'part_number', 'part code']
-const DESCRIPTION_HEADERS = ['description', 'part description', 'material description']
+const DESCRIPTION_HEADERS = ['description', 'part description', 'material description', 'part desc']
 const DATE_HEADERS = ['consumption date', 'consumed date', 'issue date', 'transaction date', 'date']
-const QUANTITY_HEADERS = ['consumption qty', 'consumed qty', 'quantity consumed', 'issued qty', 'qty', 'quantity']
+const OTC_HEADERS = ['otc', 'counter', 'on the counter', 'on-the-counter', 'otc consumption', 'on counter']
+const WS_HEADERS = ['ws', 'workshop', 'workshop consumption', 'ws consumption']
+const QUANTITY_HEADERS = ['consumption qty', 'consumed qty', 'quantity consumed', 'issued qty', 'qty', 'quantity', 'total']
 const UNIT_COST_HEADERS = ['unit cost', 'rate', 'price', 'unit price']
 const TOTAL_COST_HEADERS = ['amount', 'total amount', 'value', 'line amount']
-const REFERENCE_HEADERS = ['jc number', 'job card', 'invoice number', 'reference', 'document number']
+const REFERENCE_HEADERS = ['jc number', 'job card', 'invoice number', 'reference', 'document number', 'dealer', 'division']
 
 export interface PartsConsumptionParseError {
   rowNumber: number
@@ -18,7 +20,9 @@ interface HeaderMapping {
   partNumber: string
   partDescription?: string
   transactionDate?: string
-  quantityConsumed: string
+  otcQuantity?: string
+  wsQuantity?: string
+  quantityConsumed?: string
   unitCost?: string
   totalCost?: string
   sourceReference?: string
@@ -89,18 +93,22 @@ function parseNumber(value: unknown, fieldName: string): number | null {
 
 export function mapPartsConsumptionHeaders(excelHeaders: string[]): HeaderMapping {
   const partNumber = findHeader(excelHeaders, PART_NUMBER_HEADERS)
+  const otcQuantity = findHeader(excelHeaders, OTC_HEADERS)
+  const wsQuantity = findHeader(excelHeaders, WS_HEADERS)
   const quantityConsumed = findHeader(excelHeaders, QUANTITY_HEADERS)
 
   const missing: string[] = []
   if (!partNumber) missing.push('Part Number')
-  if (!quantityConsumed) missing.push('Quantity Consumed')
+  if (!otcQuantity && !wsQuantity && !quantityConsumed) missing.push('OTC, WS, or Quantity Consumed')
   if (missing.length > 0) {
     throw new Error(`Missing required columns: ${missing.join(', ')}`)
   }
 
   return {
     partNumber: partNumber as string,
-    quantityConsumed: quantityConsumed as string,
+    otcQuantity,
+    wsQuantity,
+    quantityConsumed,
     partDescription: findHeader(excelHeaders, DESCRIPTION_HEADERS),
     transactionDate: findHeader(excelHeaders, DATE_HEADERS),
     unitCost: findHeader(excelHeaders, UNIT_COST_HEADERS),
@@ -122,7 +130,6 @@ export function buildPartsConsumptionInsertRow(
   const errors: PartsConsumptionParseError[] = []
 
   const partRaw = excelRow[headerMapping.partNumber]
-  const quantityRaw = excelRow[headerMapping.quantityConsumed]
   const partNumber = partRaw == null ? '' : String(partRaw).trim().toUpperCase()
 
   if (!partNumber) {
@@ -135,26 +142,62 @@ export function buildPartsConsumptionInsertRow(
     })
   }
 
+  let otcQuantity: number | null = null
+  let wsQuantity: number | null = null
   let quantityConsumed: number | null = null
-  try {
-    quantityConsumed = parseNumber(quantityRaw, headerMapping.quantityConsumed)
-  } catch (err) {
-    errors.push({
-      rowNumber,
-      fieldName: headerMapping.quantityConsumed,
-      columnName: 'quantity_consumed',
-      value: quantityRaw == null ? '' : String(quantityRaw),
-      error: err instanceof Error ? err.message : String(err),
-    })
+
+  if (headerMapping.otcQuantity) {
+    const raw = excelRow[headerMapping.otcQuantity]
+    try {
+      otcQuantity = parseNumber(raw, headerMapping.otcQuantity)
+    } catch (err) {
+      errors.push({
+        rowNumber,
+        fieldName: headerMapping.otcQuantity,
+        columnName: 'otc_quantity',
+        value: raw == null ? '' : String(raw),
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 
-  if (quantityConsumed == null) {
+  if (headerMapping.wsQuantity) {
+    const raw = excelRow[headerMapping.wsQuantity]
+    try {
+      wsQuantity = parseNumber(raw, headerMapping.wsQuantity)
+    } catch (err) {
+      errors.push({
+        rowNumber,
+        fieldName: headerMapping.wsQuantity,
+        columnName: 'ws_quantity',
+        value: raw == null ? '' : String(raw),
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  if (headerMapping.quantityConsumed) {
+    const raw = excelRow[headerMapping.quantityConsumed]
+    try {
+      quantityConsumed = parseNumber(raw, headerMapping.quantityConsumed)
+    } catch (err) {
+      errors.push({
+        rowNumber,
+        fieldName: headerMapping.quantityConsumed,
+        columnName: 'quantity_consumed',
+        value: raw == null ? '' : String(raw),
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  if (otcQuantity == null && wsQuantity == null && quantityConsumed == null) {
     errors.push({
       rowNumber,
-      fieldName: headerMapping.quantityConsumed,
-      columnName: 'quantity_consumed',
-      value: quantityRaw == null ? '' : String(quantityRaw),
-      error: 'Quantity consumed is required',
+      fieldName: 'OTC/WS/Quantity',
+      columnName: 'otc_quantity, ws_quantity, or quantity_consumed',
+      value: '',
+      error: 'At least one of OTC, WS, or Quantity Consumed is required',
     })
   }
 
@@ -198,7 +241,9 @@ export function buildPartsConsumptionInsertRow(
     part_number: partNumber,
     part_description: headerMapping.partDescription ? String(excelRow[headerMapping.partDescription] ?? '').trim() || null : null,
     transaction_date: transactionDate,
-    quantity_consumed: quantityConsumed ?? 0,
+    otc_quantity: otcQuantity ?? 0,
+    ws_quantity: wsQuantity ?? 0,
+    quantity_consumed: ((otcQuantity ?? 0) + (wsQuantity ?? 0)) || (quantityConsumed ?? 0),
     unit_cost: parseOptionalNumber(headerMapping.unitCost, 'unit_cost'),
     total_cost: parseOptionalNumber(headerMapping.totalCost, 'total_cost'),
     source_reference: headerMapping.sourceReference ? String(excelRow[headerMapping.sourceReference] ?? '').trim() || null : null,

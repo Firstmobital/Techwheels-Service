@@ -3057,6 +3057,8 @@ interface PartsConsumptionRecord {
   part_number: unknown
   part_description: unknown
   transaction_date: unknown
+  otc_quantity: unknown
+  ws_quantity: unknown
   quantity_consumed: unknown
 }
 
@@ -3216,7 +3218,7 @@ export async function getPartsConsumptionSummary(
   dateFilter: DateRangeFilter,
 ): Promise<PartsConsumptionSummaryRow[]> {
   const rows = await fetchAllPartsConsumptionRows(
-    'part_number, part_description, transaction_date, quantity_consumed',
+    'part_number, part_description, transaction_date, otc_quantity, ws_quantity, quantity_consumed',
     branch,
     dateFilter,
   )
@@ -3234,7 +3236,9 @@ export async function getPartsConsumptionSummary(
   for (const row of rows) {
     const partNumber = normalizePartNumber(row.part_number)
     const partDescription = normalizePartDescription(row.part_description)
-    const quantity = parseRevenue(row.quantity_consumed)
+    const otcQty = parseRevenue(row.otc_quantity) || 0
+    const wsQty = parseRevenue(row.ws_quantity) || 0
+    const quantity = otcQty + wsQty || parseRevenue(row.quantity_consumed)
     const txDate = parseDateOnly(row.transaction_date)
     const existing = grouped.get(partNumber)
 

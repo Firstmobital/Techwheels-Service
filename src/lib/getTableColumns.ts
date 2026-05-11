@@ -76,6 +76,8 @@ const FALLBACK_COLUMNS: Record<string, string[]> = {
     'part_number',
     'part_description',
     'transaction_date',
+    'otc_quantity',
+    'ws_quantity',
     'quantity_consumed',
     'unit_cost',
     'total_cost',
