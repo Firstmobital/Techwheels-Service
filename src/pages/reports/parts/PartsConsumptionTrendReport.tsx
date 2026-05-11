@@ -68,6 +68,10 @@ export default function PartsConsumptionTrendReport({ branch }: ReportViewProps)
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof PartWiseConsumption) => {
     setSortConfig({
       key,

@@ -54,6 +54,10 @@ export default function PartsOrderStatusReport({ branch }: ReportViewProps) {
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const getStatusColor = (status: string | null) => {
     switch (status) {
       case 'Received':

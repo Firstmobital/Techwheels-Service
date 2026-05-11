@@ -70,6 +70,10 @@ export default function PartsInventoryTurnoverReport({ branch }: ReportViewProps
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof InventoryTurnover) => {
     setSortConfig({
       key,

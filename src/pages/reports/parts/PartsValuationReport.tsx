@@ -71,6 +71,10 @@ export default function PartsValuationReport({ branch }: ReportViewProps) {
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof PartValuationData) => {
     setSortConfig({
       key,

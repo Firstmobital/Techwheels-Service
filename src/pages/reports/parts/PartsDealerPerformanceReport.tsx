@@ -71,6 +71,10 @@ export default function PartsDealerPerformanceReport({ branch }: ReportViewProps
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof DealerPerformance) => {
     setSortConfig({
       key,

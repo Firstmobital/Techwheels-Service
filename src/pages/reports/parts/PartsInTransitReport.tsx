@@ -70,6 +70,10 @@ export default function PartsInTransitReport({ branch }: ReportViewProps) {
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof InTransitVisibility) => {
     setSortConfig({
       key,

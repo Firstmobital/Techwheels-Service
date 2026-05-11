@@ -71,6 +71,10 @@ export default function PartsVendorPerformanceReport({ branch }: ReportViewProps
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof VendorPerformance) => {
     setSortConfig({
       key,

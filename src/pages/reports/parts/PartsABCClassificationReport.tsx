@@ -79,6 +79,10 @@ export default function PartsABCClassificationReport({ branch }: ReportViewProps
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof AbcClassification) => {
     setSortConfig({
       key,

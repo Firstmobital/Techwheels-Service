@@ -70,6 +70,10 @@ export default function PartsSlowMovingReport({ branch }: ReportViewProps) {
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof SlowMovingPart) => {
     setSortConfig({
       key,

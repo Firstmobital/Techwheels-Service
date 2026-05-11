@@ -71,6 +71,10 @@ export default function PartsDelayedOrdersReport({ branch }: ReportViewProps) {
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof DelayedOrder) => {
     setSortConfig({
       key,

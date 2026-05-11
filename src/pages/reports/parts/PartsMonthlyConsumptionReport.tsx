@@ -55,6 +55,10 @@ export default function PartsMonthlyConsumptionReport({ branch }: ReportViewProp
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   return (
     <div className="p-6 bg-white rounded-lg shadow-sm">
       <h2 className="text-2xl font-bold mb-6 text-gray-800">Monthly Parts Consumption Report</h2>

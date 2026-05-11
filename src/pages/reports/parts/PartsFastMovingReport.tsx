@@ -77,6 +77,10 @@ export default function PartsFastMovingReport({ branch }: ReportViewProps) {
     }
   }, [branch, filters])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   const handleSort = (key: keyof FastMovingPart) => {
     setSortConfig({
       key,
