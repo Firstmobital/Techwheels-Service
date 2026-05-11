@@ -171,13 +171,12 @@ export interface PartsFilterOptions {
 export async function getPartsFilterOptions(branch: string): Promise<PartsFilterOptions> {
   try {
     const [vendorsRes, categoriesRes, yearsRes] = await Promise.all([
-      supabase.from('part_master').select('vendor').eq('vendor', '*').distinct(),
-      supabase.from('part_master').select('product_category').eq('product_category', '*').distinct(),
+      supabase.from('part_master').select('vendor'),
+      supabase.from('part_master').select('product_category'),
       supabase.from('service_parts_consumption_data')
         .select('fiscal_year')
         .eq('branch', branch)
-        .not('fiscal_year', 'is', null)
-        .distinct(),
+        .not('fiscal_year', 'is', null),
     ])
 
     const vendors = (vendorsRes.data?.map((r: any) => r.vendor).filter(Boolean) as string[]) || []
@@ -326,25 +325,28 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
 
     if (stockError) throw stockError
 
-    // Get last consumption date for each part
+    // Get last consumption date for each part (fetch all and process in JS)
     const { data: consumption, error: consumptionError } = await supabase
       .from('service_parts_consumption_data')
-      .select('part_number,MAX(created_at) as last_consumption_date')
+      .select('part_number, created_at')
       .eq('branch', filters.branch)
       .gt('total_consumption', 0)
-      .group_by('part_number')
+      .order('created_at', { ascending: false })
 
     if (consumptionError) throw consumptionError
 
-    const consumptionMap = new Map(
-      (consumption || []).map((row: any) => [row.part_number, row.last_consumption_date]),
-    )
+    const consumptionMap = new Map()
+    ;(consumption || []).forEach((row: any) => {
+      if (!consumptionMap.has(row.part_number)) {
+        consumptionMap.set(row.part_number, row.created_at)
+      }
+    })
 
     return (stock || [])
       .map((row: any) => {
         const lastConsumptionDate = consumptionMap.get(row.part_number)
         const daysWithoutConsumption = lastConsumptionDate
-          ? Math.floor((Date.now() - new Date(lastConsumptionDate).getTime()) / (1000 * 60 * 60 * 24))
+          ? Math.floor((Date.now() - new Date(lastConsumptionDate as string).getTime()) / (1000 * 60 * 60 * 24))
           : 999
 
         return {
@@ -694,6 +696,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
         avgConsumption4Week: avgConsumption,
         valuePerUnitConsumed,
         productCategory: row.product_category,
+        vendor: row.vendor,
       }
     })
   } catch (err) {

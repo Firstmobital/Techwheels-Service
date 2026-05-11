@@ -10,18 +10,12 @@ interface FilterState {
   status?: string
 }
 
-interface SortConfig {
-  key: keyof OrderStatusData
-  direction: 'asc' | 'desc'
-}
-
 export default function PartsOrderStatusReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
   const [rows, setRows] = useState<OrderStatusData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<PartsFilterOptions>({ vendors: [], categories: [], fiscalYears: [] })
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'orderDate', direction: 'desc' })
 
   const statuses = ['Ordered', 'Confirmed', 'Invoiced', 'In-Transit', 'Received']
 
@@ -34,23 +28,6 @@ export default function PartsOrderStatusReport({ branch }: ReportViewProps) {
     const totalReceived = rows.reduce((sum, row) => sum + (row.receivedQty || 0), 0)
     return { total: rows.length, ...byStatus, totalOrdered, totalReceived }
   }, [rows])
-
-  const sortedRows = useMemo(() => {
-    const sorted = [...rows].sort((a, b) => {
-      let aVal: any = a[sortConfig.key]
-      let bVal: any = b[sortConfig.key]
-
-      if (aVal === null || aVal === undefined) aVal = Infinity
-      if (bVal === null || bVal === undefined) bVal = Infinity
-
-      if (typeof aVal === 'string') {
-        return sortConfig.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-      }
-
-      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal
-    })
-    return sorted
-  }, [rows, sortConfig])
 
   const loadFilters = useCallback(async () => {
     const options = await getPartsFilterOptions(branch)
@@ -76,13 +53,6 @@ export default function PartsOrderStatusReport({ branch }: ReportViewProps) {
       setLoading(false)
     }
   }, [branch, filters])
-
-  const handleSort = (key: keyof OrderStatusData) => {
-    setSortConfig({
-      key,
-      direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc',
-    })
-  }
 
   const getStatusColor = (status: string | null) => {
     switch (status) {
@@ -224,7 +194,7 @@ export default function PartsOrderStatusReport({ branch }: ReportViewProps) {
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row, idx) => (
+            {rows.map((row, idx) => (
               <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                 <td className="px-4 py-2 border text-gray-700 font-medium">{row.partNumber}</td>
                 <td className="px-4 py-2 border text-gray-700 text-xs">{row.partDescription}</td>

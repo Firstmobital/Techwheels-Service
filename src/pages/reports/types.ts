@@ -26,6 +26,18 @@ export type ReportId =
   | 'parts-backorder'
   | 'parts-stock-planning'
   | 'parts-order-justification'
+  | 'parts-monthly-consumption'
+  | 'parts-consumption-trend'
+  | 'parts-slow-moving'
+  | 'parts-fast-moving'
+  | 'parts-inventory-turnover'
+  | 'parts-order-status'
+  | 'parts-in-transit'
+  | 'parts-delayed-orders'
+  | 'parts-dealer-performance'
+  | 'parts-vendor-performance'
+  | 'parts-valuation'
+  | 'parts-abc-classification'
 
 export interface ReportViewProps {
   branch: BranchFilter

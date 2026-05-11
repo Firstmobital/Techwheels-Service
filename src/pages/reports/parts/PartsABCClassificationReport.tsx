@@ -99,19 +99,6 @@ export default function PartsABCClassificationReport({ branch }: ReportViewProps
     }
   }
 
-  const getClassDescription = (classification: 'A' | 'B' | 'C') => {
-    switch (classification) {
-      case 'A':
-        return '70% of Value'
-      case 'B':
-        return '20% of Value'
-      case 'C':
-        return '10% of Value'
-      default:
-        return '-'
-    }
-  }
-
   return (
     <div className="p-6 bg-white rounded-lg shadow-sm">
       <h2 className="text-2xl font-bold mb-6 text-gray-800">Parts ABC Classification Report</h2>
