@@ -1,9 +1,17 @@
-const PART_NUMBER_HEADERS = ['part #', 'part no', 'part number', 'part_number', 'part code']
-const DESCRIPTION_HEADERS = ['description', 'part description', 'material description']
+const PART_NUMBER_HEADERS = ['part #', 'part no', 'part number', 'part_number', 'part code', 'part']
+const DESCRIPTION_HEADERS = ['description', 'part description', 'material description', 'part desc']
 const SNAPSHOT_DATE_HEADERS = ['snapshot date', 'as on date', 'date']
-const ON_HAND_HEADERS = ['on hand qty', 'onhand qty', 'available qty', 'stock qty', 'quantity']
-const WEIGHTED_COST_HEADERS = ['weighted cost', 'avg cost', 'moving avg cost', 'rate']
-const INVENTORY_VALUE_HEADERS = ['inventory value', 'stock value', 'amount', 'value']
+const ON_HAND_HEADERS = [
+  'on hand qty',
+  'onhand qty',
+  'available qty',
+  'availability',
+  'stock qty',
+  'quantity',
+  'qty',
+]
+const WEIGHTED_COST_HEADERS = ['weighted cost', 'weighted average', 'avg cost', 'moving avg cost', 'rate']
+const INVENTORY_VALUE_HEADERS = ['inventory value', 'stock value', 'total price', 'amount', 'value']
 
 export interface PartsStockParseError {
   rowNumber: number
