@@ -123,6 +123,7 @@ export interface PartValuationData {
   avgConsumption4Week: number
   valuePerUnitConsumed: number | null
   productCategory: string | null
+  vendor: string | null
 }
 
 export interface AbcClassification {
@@ -265,7 +266,7 @@ export async function getStockPlanningData(filters: PartsReportFilters): Promise
       .from('vw_parts_stock_health')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -313,7 +314,7 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
       .from('vw_parts_latest_stock')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -359,8 +360,8 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
           vendor: row.vendor,
         }
       })
-      .filter((part) => part.daysWithoutConsumption > 30)
-      .sort((a, b) => b.daysWithoutConsumption - a.daysWithoutConsumption)
+      .filter((part: SlowMovingPart) => part.daysWithoutConsumption > 30)
+      .sort((a: SlowMovingPart, b: SlowMovingPart) => b.daysWithoutConsumption - a.daysWithoutConsumption)
   } catch (err) {
     console.error('Error fetching slow-moving parts:', err)
     return []
@@ -374,7 +375,7 @@ export async function getFastMovingParts(filters: PartsReportFilters): Promise<F
       .from('vw_parts_stock_health')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -405,8 +406,8 @@ export async function getFastMovingParts(filters: PartsReportFilters): Promise<F
           stockoutRisk,
         }
       })
-      .filter((part) => part.avgConsumption4Week > 0)
-      .sort((a, b) => b.avgConsumption4Week - a.avgConsumption4Week)
+      .filter((part: FastMovingPart) => part.avgConsumption4Week > 0)
+      .sort((a: FastMovingPart, b: FastMovingPart) => b.avgConsumption4Week - a.avgConsumption4Week)
   } catch (err) {
     console.error('Error fetching fast-moving parts:', err)
     return []
@@ -420,7 +421,7 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
       .from('vw_parts_active_orders')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -459,7 +460,7 @@ export async function getInTransitVisibility(filters: PartsReportFilters): Promi
       .select('*')
       .eq('branch', filters.branch)
       .gt('intransit_qty', 0)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -488,7 +489,7 @@ export async function getInTransitVisibility(filters: PartsReportFilters): Promi
           docketNumber: row.docket_number,
         }
       })
-      .sort((a, b) => (a.daysToEta || 999) - (b.daysToEta || 999))
+      .sort((a: InTransitVisibility, b: InTransitVisibility) => (a.daysToEta || 999) - (b.daysToEta || 999))
   } catch (err) {
     console.error('Error fetching in-transit visibility:', err)
     return []
@@ -505,7 +506,7 @@ export async function getDelayedOrders(filters: PartsReportFilters): Promise<Del
       .select('*')
       .eq('branch', filters.branch)
       .lt('eta_1', today)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -533,7 +534,7 @@ export async function getDelayedOrders(filters: PartsReportFilters): Promise<Del
           impact: `${row.intransit_qty || 0} units pending for ${daysOverdue} days`,
         }
       })
-      .sort((a, b) => b.daysOverdue - a.daysOverdue)
+      .sort((a: DelayedOrder, b: DelayedOrder) => b.daysOverdue - a.daysOverdue)
   } catch (err) {
     console.error('Error fetching delayed orders:', err)
     return []
@@ -547,7 +548,7 @@ export async function getDealerPerformance(filters: PartsReportFilters): Promise
       .from('service_parts_order_data')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -585,11 +586,11 @@ export async function getDealerPerformance(filters: PartsReportFilters): Promise
     }
 
     return Array.from(dealerMap.values())
-      .map((perf) => ({
+      .map((perf: DealerPerformance) => ({
         ...perf,
         fulfilmentRate: perf.totalOrders > 0 ? (perf.ordersReceived / perf.totalOrders) * 100 : 0,
       }))
-      .sort((a, b) => b.fulfilmentRate - a.fulfilmentRate)
+      .sort((a: DealerPerformance, b: DealerPerformance) => b.fulfilmentRate - a.fulfilmentRate)
   } catch (err) {
     console.error('Error fetching dealer performance:', err)
     return []
@@ -603,7 +604,7 @@ export async function getVendorPerformance(filters: PartsReportFilters): Promise
       .from('service_parts_order_data')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -635,7 +636,7 @@ export async function getVendorPerformance(filters: PartsReportFilters): Promise
       perf.totalOrders += 1
     }
 
-    return Array.from(vendorMap.values()).sort((a, b) => (b.totalOrders || 0) - (a.totalOrders || 0))
+    return Array.from(vendorMap.values()).sort((a: VendorPerformance, b: VendorPerformance) => (b.totalOrders || 0) - (a.totalOrders || 0))
   } catch (err) {
     console.error('Error fetching vendor performance:', err)
     return []
@@ -649,7 +650,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
       .from('vw_parts_latest_stock')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -666,7 +667,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
       .from('vw_parts_avg_consumption')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -683,7 +684,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
     )
 
     return (stock || []).map((row: any) => {
-      const avgConsumption = consumptionMap.get(row.part_number) || 0
+      const avgConsumption: number = (consumptionMap.get(row.part_number) as number) || 0
       const costPerUnit = row.on_hand_quantity > 0 ? (row.total_price_value || 0) / row.on_hand_quantity : 0
       const valuePerUnitConsumed = avgConsumption > 0 ? (row.total_price_value || 0) / (avgConsumption * 4) : 0
 
@@ -711,7 +712,7 @@ export async function getAbcClassification(filters: PartsReportFilters): Promise
     const valuation = await getPartValuationData(filters)
 
     // Sort by total value descending
-    const sorted = valuation.sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0))
+    const sorted = valuation.sort((a: PartValuationData, b: PartValuationData) => (b.totalValue || 0) - (a.totalValue || 0))
 
     const totalValue = sorted.reduce((sum, p) => sum + (p.totalValue || 0), 0)
     let cumulativeValue = 0
@@ -721,7 +722,7 @@ export async function getAbcClassification(filters: PartsReportFilters): Promise
     const aThreshold = totalValue * 0.7
     const bThreshold = totalValue * 0.9
 
-    return sorted.map((part) => {
+    return sorted.map((part: PartValuationData) => {
       cumulativeValue += part.totalValue || 0
       const percentageOfTotal = totalValue > 0 ? (cumulativeValue / totalValue) * 100 : 0
 
@@ -738,10 +739,13 @@ export async function getAbcClassification(filters: PartsReportFilters): Promise
       }
 
       return {
-        ...part,
+        partNumber: part.partNumber,
+        partDescription: part.partDescription,
+        totalValue: part.totalValue,
         cumulativeValue,
         percentageOfTotal,
         classification,
+        vendor: part.vendor || null,
       }
     })
   } catch (err) {
@@ -757,7 +761,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
       .from('vw_parts_latest_stock')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -774,7 +778,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
       .from('vw_parts_avg_consumption')
       .select('*')
       .eq('branch', filters.branch)
-      .then((res) => {
+      .then((res: any) => {
         if (filters.portal) {
           return {
             ...res,
@@ -792,7 +796,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
 
     return (stock || [])
       .map((row: any) => {
-        const avgMonthlyConsumption = (consumptionMap.get(row.part_number) || 0) / 4
+        const avgMonthlyConsumption: number = ((consumptionMap.get(row.part_number) as number) || 0) / 4
         const avgStock = row.on_hand_quantity // Simplified; could calculate rolling average
         const turnoverRatio = avgMonthlyConsumption > 0 && avgStock > 0 ? avgMonthlyConsumption / avgStock : 0
         const daysInventoryOutstanding = avgMonthlyConsumption > 0 ? Math.round((avgStock / avgMonthlyConsumption) * 30) : 0
@@ -807,7 +811,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
           vendor: row.vendor,
         }
       })
-      .sort((a, b) => b.turnoverRatio - a.turnoverRatio)
+      .sort((a: InventoryTurnover, b: InventoryTurnover) => b.turnoverRatio - a.turnoverRatio)
   } catch (err) {
     console.error('Error fetching inventory turnover:', err)
     return []
