@@ -170,6 +170,16 @@ function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
 
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer)
+        const isCsvFile = file.name.toLowerCase().endsWith('.csv')
+
+        if (isCsvFile) {
+          const csvRows = parseFromText(data)
+          if (csvRows && csvRows.length > 0) {
+            resolve(csvRows)
+            return
+          }
+        }
+
         const wb = XLSX.read(data, { type: 'array', raw: true, dense: true })
         const rows = toRows(wb)
         if (rows.length > 0) {
