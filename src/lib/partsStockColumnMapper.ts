@@ -12,6 +12,19 @@ const ON_HAND_HEADERS = [
 ]
 const WEIGHTED_COST_HEADERS = ['weighted cost', 'weighted average', 'avg cost', 'moving avg cost', 'rate']
 const INVENTORY_VALUE_HEADERS = ['inventory value', 'stock value', 'total price', 'amount', 'value']
+const LAST_ISSUE_DATE_HEADERS = ['last issue date', 'last issued date', 'last issue']
+const LAST_RECEIVED_DATE_HEADERS = ['last received date', 'last receipt date', 'last received']
+const AVAILABILITY_HEADERS = ['availability', 'availability status', 'status', 'part status']
+const LOCATION_1_HEADERS = ['location 1', 'location1', 'warehouse', 'building']
+const INVENTORY_LOCATION_HEADERS = ['inventory location', 'inventory loc', 'location']
+const LOCATION_2_HEADERS = ['location 2', 'location2', 'rack', 'shelf']
+const LOCATION_3_HEADERS = ['location 3', 'location3', 'bin', 'position']
+const TM_PART_INDICATOR_HEADERS = ['tm part indicator', 'tm indicator', 'tm part', 'indicator']
+const PRODUCT_LINE_HEADERS = ['product line', 'product line', 'line']
+const VENDOR_HEADERS = ['vendor', 'supplier', 'manufacturer']
+const DEALER_HEADERS = ['dealer name', 'dealer', 'dealer id', 'distributor']
+const PRODUCT_CATEGORY_HEADERS = ['product category', 'category', 'type', 'part type']
+const HSN_HEADERS = ['hsn', 'hsn code', 'hsn no', 'tax code']
 
 export interface PartsStockParseError {
   rowNumber: number
@@ -28,6 +41,19 @@ interface HeaderMapping {
   onHandQuantity: string
   weightedCost?: string
   inventoryValue?: string
+  lastIssueDate?: string
+  lastReceivedDate?: string
+  availability?: string
+  location1?: string
+  inventoryLocation?: string
+  location2?: string
+  location3?: string
+  tmPartIndicator?: string
+  productLine?: string
+  vendor?: string
+  dealer?: string
+  productCategory?: string
+  hsn?: string
 }
 
 function normalizeHeader(header: string): string {
@@ -89,12 +115,26 @@ export function mapPartsStockHeaders(excelHeaders: string[]): HeaderMapping {
     snapshotDate: findHeader(excelHeaders, SNAPSHOT_DATE_HEADERS),
     weightedCost: findHeader(excelHeaders, WEIGHTED_COST_HEADERS),
     inventoryValue: findHeader(excelHeaders, INVENTORY_VALUE_HEADERS),
+    lastIssueDate: findHeader(excelHeaders, LAST_ISSUE_DATE_HEADERS),
+    lastReceivedDate: findHeader(excelHeaders, LAST_RECEIVED_DATE_HEADERS),
+    availability: findHeader(excelHeaders, AVAILABILITY_HEADERS),
+    location1: findHeader(excelHeaders, LOCATION_1_HEADERS),
+    inventoryLocation: findHeader(excelHeaders, INVENTORY_LOCATION_HEADERS),
+    location2: findHeader(excelHeaders, LOCATION_2_HEADERS),
+    location3: findHeader(excelHeaders, LOCATION_3_HEADERS),
+    tmPartIndicator: findHeader(excelHeaders, TM_PART_INDICATOR_HEADERS),
+    productLine: findHeader(excelHeaders, PRODUCT_LINE_HEADERS),
+    vendor: findHeader(excelHeaders, VENDOR_HEADERS),
+    dealer: findHeader(excelHeaders, DEALER_HEADERS),
+    productCategory: findHeader(excelHeaders, PRODUCT_CATEGORY_HEADERS),
+    hsn: findHeader(excelHeaders, HSN_HEADERS),
   }
 }
 
 export function buildPartsStockInsertRow(
   excelRow: Record<string, unknown>,
   branch: string,
+  portal: string,
   headerMapping: HeaderMapping,
   rowNumber: number,
   sourceRowHash: string,
@@ -148,6 +188,30 @@ export function buildPartsStockInsertRow(
     }
   }
 
+  const parseOptionalDate = (header: string | undefined, columnName: string): string | null => {
+    if (!header) return null
+    const raw = excelRow[header]
+    if (raw == null || raw === '') return null
+    try {
+      return parseDate(raw, header)
+    } catch (err) {
+      errors.push({
+        rowNumber,
+        fieldName: header,
+        columnName,
+        value: raw == null ? '' : String(raw),
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return null
+    }
+  }
+
+  const parseOptionalString = (header: string | undefined): string | null => {
+    if (!header) return null
+    const raw = excelRow[header]
+    return raw == null ? null : String(raw).trim() || null
+  }
+
   let snapshotDate: string | null = null
   if (headerMapping.snapshotDate) {
     const raw = excelRow[headerMapping.snapshotDate]
@@ -171,8 +235,19 @@ export function buildPartsStockInsertRow(
     on_hand_quantity: onHandQuantity,
     weighted_cost: parseOptionalNumber(headerMapping.weightedCost, 'weighted_cost'),
     inventory_value: parseOptionalNumber(headerMapping.inventoryValue, 'inventory_value'),
+    weighted_avg_cost: parseOptionalNumber(headerMapping.weightedCost, 'weighted_avg_cost'),
+    total_price_value: parseOptionalNumber(headerMapping.inventoryValue, 'total_price_value'),
+    last_issue_date: parseOptionalDate(headerMapping.lastIssueDate, 'last_issue_date'),
+    last_received_date: parseOptionalDate(headerMapping.lastReceivedDate, 'last_received_date'),
+    availability_status: parseOptionalString(headerMapping.availability),
+    status: parseOptionalString(headerMapping.availability),
+    location_1: parseOptionalString(headerMapping.location1),
+    inventory_location: parseOptionalString(headerMapping.inventoryLocation),
+    location_2: parseOptionalString(headerMapping.location2),
+    location_3: parseOptionalString(headerMapping.location3),
     source_row_hash: sourceRowHash,
     branch,
+    portal,
   }
 
   if (errors.length > 0) {

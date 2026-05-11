@@ -1,39 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
-import { getPartsFilterOptions, getStockPlanningData } from '../../../lib/partsReportQueries'
-import type { StockPlanningData, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { getPartsFilterOptions, getFastMovingParts } from '../../../lib/partsReportQueries'
+import type { FastMovingPart, PartsFilterOptions } from '../../../lib/partsReportQueries'
 
 interface FilterState {
   portal: 'EV' | 'PV'
   vendor?: string
   productCategory?: string
-  recommendation?: string
+  stockoutRisk?: string
 }
 
 interface SortConfig {
-  key: keyof StockPlanningData
+  key: keyof FastMovingPart
   direction: 'asc' | 'desc'
 }
 
-export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
+export default function PartsFastMovingReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
-  const [rows, setRows] = useState<StockPlanningData[]>([])
+  const [rows, setRows] = useState<FastMovingPart[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<PartsFilterOptions>({ vendors: [], categories: [], fiscalYears: [] })
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'weeksOfSupply', direction: 'asc' })
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'daysOfSupply', direction: 'asc' })
 
-  const recommendations = ['urgent_reorder', 'reorder_soon', 'adequate', 'overstocked']
+  const riskLevels = ['critical', 'high', 'medium', 'low']
 
   const stats = useMemo(() => {
-    const byRec: Record<string, number> = {}
-    recommendations.forEach((r) => {
-      byRec[r] = rows.filter((row) => row.recommendation === r).length
+    const byRisk: Record<string, number> = {}
+    riskLevels.forEach((r) => {
+      byRisk[r] = rows.filter((row) => row.stockoutRisk === r).length
     })
-    return {
-      total: rows.length,
-      ...byRec,
-    }
+    const totalOnHand = rows.reduce((sum, row) => sum + row.onHandQty, 0)
+    const totalConsumption = rows.reduce((sum, row) => sum + row.avgConsumption4Week, 0)
+    return { total: rows.length, ...byRisk, totalOnHand, totalConsumption }
   }, [rows])
 
   const sortedRows = useMemo(() => {
@@ -66,7 +65,7 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
     setError(null)
     setLoading(true)
     try {
-      const data = await getStockPlanningData({
+      const data = await getFastMovingParts({
         branch,
         ...filters,
       })
@@ -78,23 +77,23 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
     }
   }, [branch, filters])
 
-  const handleSort = (key: keyof StockPlanningData) => {
+  const handleSort = (key: keyof FastMovingPart) => {
     setSortConfig({
       key,
       direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc',
     })
   }
 
-  const getRecommendationColor = (rec: string) => {
-    switch (rec) {
-      case 'urgent_reorder':
+  const getRiskColor = (risk: string) => {
+    switch (risk) {
+      case 'critical':
         return 'bg-red-100 text-red-800'
-      case 'reorder_soon':
+      case 'high':
         return 'bg-orange-100 text-orange-800'
-      case 'adequate':
-        return 'bg-green-100 text-green-800'
-      case 'overstocked':
+      case 'medium':
         return 'bg-yellow-100 text-yellow-800'
+      case 'low':
+        return 'bg-green-100 text-green-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -102,7 +101,7 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
 
   return (
     <div className="p-6 bg-white rounded-lg shadow-sm">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Parts Stock Planning Report</h2>
+      <h2 className="text-2xl font-bold mb-6 text-gray-800">Fast Moving Parts Report</h2>
 
       {error && (
         <div className="mb-6 p-4 bg-red-50 text-red-700 rounded border border-red-200">
@@ -156,16 +155,16 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Recommendation</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Stockout Risk</label>
           <select
-            value={filters.recommendation || ''}
-            onChange={(e) => setFilters({ ...filters, recommendation: e.target.value || undefined })}
+            value={filters.stockoutRisk || ''}
+            onChange={(e) => setFilters({ ...filters, stockoutRisk: e.target.value || undefined })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           >
             <option value="">All</option>
-            {recommendations.map((r) => (
+            {riskLevels.map((r) => (
               <option key={r} value={r}>
-                {r.replace(/_/g, ' ')}
+                {r}
               </option>
             ))}
           </select>
@@ -187,20 +186,20 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
             <p className="text-2xl font-bold">{stats.total}</p>
           </div>
           <div className="p-4 bg-red-50 rounded border border-red-200">
-            <p className="text-sm text-red-700">Urgent Reorder</p>
-            <p className="text-2xl font-bold text-red-700">{(stats as any).urgent_reorder}</p>
+            <p className="text-sm text-red-700">Critical Risk</p>
+            <p className="text-2xl font-bold text-red-700">{(stats as any).critical}</p>
           </div>
           <div className="p-4 bg-orange-50 rounded border border-orange-200">
-            <p className="text-sm text-orange-700">Reorder Soon</p>
-            <p className="text-2xl font-bold text-orange-700">{(stats as any).reorder_soon}</p>
-          </div>
-          <div className="p-4 bg-green-50 rounded border border-green-200">
-            <p className="text-sm text-green-700">Adequate</p>
-            <p className="text-2xl font-bold text-green-700">{(stats as any).adequate}</p>
+            <p className="text-sm text-orange-700">High Risk</p>
+            <p className="text-2xl font-bold text-orange-700">{(stats as any).high}</p>
           </div>
           <div className="p-4 bg-yellow-50 rounded border border-yellow-200">
-            <p className="text-sm text-yellow-700">Overstocked</p>
-            <p className="text-2xl font-bold text-yellow-700">{(stats as any).overstocked}</p>
+            <p className="text-sm text-yellow-700">Medium Risk</p>
+            <p className="text-2xl font-bold text-yellow-700">{(stats as any).medium}</p>
+          </div>
+          <div className="p-4 bg-green-50 rounded border border-green-200">
+            <p className="text-sm text-green-700">Low Risk</p>
+            <p className="text-2xl font-bold text-green-700">{(stats as any).low}</p>
           </div>
         </div>
       )}
@@ -225,15 +224,12 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
               </th>
               <th
                 className="px-4 py-2 text-right font-semibold text-gray-700 border cursor-pointer hover:bg-gray-200"
-                onClick={() => handleSort('weeksOfSupply')}
+                onClick={() => handleSort('avgConsumption4Week')}
               >
-                Weeks Supply {sortConfig.key === 'weeksOfSupply' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                Avg 4Wk Consumption {sortConfig.key === 'avgConsumption4Week' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
               </th>
-              <th className="px-4 py-2 text-right font-semibold text-gray-700 border">Avg 4Wk Consumption</th>
               <th className="px-4 py-2 text-right font-semibold text-gray-700 border">In-Transit</th>
-              <th className="px-4 py-2 text-left font-semibold text-gray-700 border">ETA</th>
-              <th className="px-4 py-2 text-center font-semibold text-gray-700 border">Recommendation</th>
-              <th className="px-4 py-2 text-right font-semibold text-gray-700 border">Value</th>
+              <th className="px-4 py-2 text-center font-semibold text-gray-700 border">Stockout Risk</th>
             </tr>
           </thead>
           <tbody>
@@ -242,59 +238,19 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
                 <td className="px-4 py-2 border text-gray-700 font-medium">{row.partNumber}</td>
                 <td className="px-4 py-2 border text-gray-700 text-xs">{row.partDescription}</td>
                 <td className="px-4 py-2 border text-right text-gray-700">{row.onHandQty.toLocaleString()}</td>
-                <td className="px-4 py-2 border text-right text-gray-700">{row.daysOfSupply.toFixed(1)}</td>
-                <td className="px-4 py-2 border text-right text-gray-700">{row.weeksOfSupply.toFixed(2)}</td>
+                <td className="px-4 py-2 border text-right text-gray-700">{row.daysOfSupply.toFixed(1)} days</td>
                 <td className="px-4 py-2 border text-right text-gray-700">{row.avgConsumption4Week.toFixed(2)}</td>
                 <td className="px-4 py-2 border text-right text-gray-700">{row.intransitQty || 0}</td>
-                <td className="px-4 py-2 border text-gray-700 text-xs">{row.nearestEta}</td>
                 <td className="px-4 py-2 border text-center">
-                  <span className={`px-2 py-1 rounded text-xs font-semibold ${getRecommendationColor(row.recommendation)}`}>
-                    {row.recommendation.replace(/_/g, ' ')}
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${getRiskColor(row.stockoutRisk)}`}>
+                    {row.stockoutRisk}
                   </span>
                 </td>
-                <td className="px-4 py-2 border text-right text-gray-700">{row.totalValue ? `₹${row.totalValue.toLocaleString()}` : '-'}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>
-  )
-        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700 shadow-sm">Failed to load report: {error}</div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">No stock planning records are available.</div>
-      ) : (
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Part Number</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">On Hand</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Open Order</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Backorder</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Projected Demand</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Shortage</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Recommended</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {rows.map((row) => (
-                  <tr key={row.partNumber} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.partNumber}</td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">{row.onHandQuantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">{row.openOrderQuantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-sm text-right text-red-700">{row.backorderQuantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">{row.projectedDemand.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-sm text-right text-orange-700 font-medium">{row.shortageQuantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-sm text-right text-blue-700 font-medium">{row.recommendedOrderQuantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

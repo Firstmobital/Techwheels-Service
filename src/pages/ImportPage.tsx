@@ -51,6 +51,7 @@ import {
 const PORTAL_BRANCHES = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV'] as const
 
 type Branch = (typeof PORTAL_BRANCHES)[number]
+type Portal = 'EV' | 'PV'
 type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
 
 interface SlotState {
@@ -64,6 +65,7 @@ interface CardState {
   status: CardStatus
   uploadError: string | null
   insertedCount: number
+  portal?: Portal
 }
 
 interface CardConfig {
@@ -134,6 +136,7 @@ function emptyCard(branches: readonly Branch[]): CardState {
     status: 'idle',
     uploadError: null,
     insertedCount: 0,
+    portal: 'EV',
   }
 }
 
@@ -448,11 +451,13 @@ interface ImportCardProps {
   onSlotClear: (branch: Branch) => void
   onUpload: () => void
   onReset: () => void
+  onPortalChange?: (portal: Portal) => void
 }
 
-function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload, onReset }: ImportCardProps) {
+function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload, onReset, onPortalChange }: ImportCardProps) {
   const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
   const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
+  const isPartsTable = ['service_parts_consumption_data', 'service_parts_order_data', 'service_parts_stock_snapshot_data'].includes(config.tableName)
 
   const { lastUpdated, refresh } = useLastUpdated(config.tableName)
   const prevStatus = useRef(state.status)
@@ -481,6 +486,29 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
           </span>
         </p>
       </div>
+
+      {/* Portal selector for parts tables */}
+      {isPartsTable && (
+        <div className="border-b border-gray-100 px-5 py-3">
+          <label className="text-xs font-semibold text-gray-700">Portal</label>
+          <div className="mt-2 flex gap-4">
+            {(['EV', 'PV'] as const).map((portal) => (
+              <label key={portal} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name={`portal-${config.tableName}`}
+                  value={portal}
+                  checked={state.portal === portal}
+                  onChange={() => onPortalChange?.(portal)}
+                  className="h-4 w-4 border-gray-300 text-blue-600"
+                  disabled={state.status === 'uploading'}
+                />
+                <span className="text-xs text-gray-700">{portal}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Slot grid */}
       <div className="grid grid-cols-3 gap-3 px-5 py-4">
@@ -917,12 +945,14 @@ export default function ImportPage() {
           } else if (isPartsConsumptionTable && partsConsumptionHeaderMapping) {
             const parseErrors: PartsConsumptionParseError[] = []
             const insertRows: Record<string, unknown>[] = []
+            const portal = cardState.portal ?? 'EV'
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
               const { row, errors } = buildPartsConsumptionInsertRow(
                 rawRows[rowIdx],
                 branch,
+                portal,
                 partsConsumptionHeaderMapping,
                 rowIdx + 2,
                 sourceRowHash,
@@ -943,7 +973,7 @@ export default function ImportPage() {
 
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,transaction_date,source_row_hash',
+                onConflict: 'part_number,branch,portal,transaction_date,source_row_hash',
               })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
@@ -951,12 +981,14 @@ export default function ImportPage() {
           } else if (isPartsOrderTable && partsOrderHeaderMapping) {
             const parseErrors: PartsOrderParseError[] = []
             const insertRows: Record<string, unknown>[] = []
+            const portal = cardState.portal ?? 'EV'
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
               const { row, errors } = buildPartsOrderInsertRow(
                 rawRows[rowIdx],
                 branch,
+                portal,
                 partsOrderHeaderMapping,
                 rowIdx + 2,
                 sourceRowHash,
@@ -977,7 +1009,7 @@ export default function ImportPage() {
 
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,order_date,source_row_hash',
+                onConflict: 'part_number,branch,portal,order_date,source_row_hash',
               })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
@@ -985,12 +1017,14 @@ export default function ImportPage() {
           } else if (isPartsStockTable && partsStockHeaderMapping) {
             const parseErrors: PartsStockParseError[] = []
             const insertRows: Record<string, unknown>[] = []
+            const portal = cardState.portal ?? 'EV'
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
               const { row, errors } = buildPartsStockInsertRow(
                 rawRows[rowIdx],
                 branch,
+                portal,
                 partsStockHeaderMapping,
                 rowIdx + 2,
                 sourceRowHash,
@@ -1011,7 +1045,7 @@ export default function ImportPage() {
 
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,snapshot_date,source_row_hash',
+                onConflict: 'part_number,branch,portal,snapshot_date,source_row_hash',
               })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
@@ -1078,6 +1112,15 @@ export default function ImportPage() {
             onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
             onUpload={() => handleUpload(config)}
             onReset={() => handleReset(config.tableName)}
+            onPortalChange={(portal) => {
+              setCards((prev) => ({
+                ...prev,
+                [config.tableName]: {
+                  ...prev[config.tableName],
+                  portal,
+                },
+              }))
+            }}
           />
         ))}
       </div>
