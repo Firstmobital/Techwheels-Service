@@ -141,14 +141,60 @@ function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
+      const toRows = (wb: XLSX.WorkBook): Record<string, unknown>[] => {
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        return XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+      }
+
+      const parseFromText = (data: Uint8Array): Record<string, unknown>[] | null => {
+        const decodeAttempts: Array<string | undefined> = [undefined, 'utf-8', 'utf-16le', 'utf-16be']
+        for (const encoding of decodeAttempts) {
+          try {
+            const text = new TextDecoder(encoding).decode(data).replace(/^\uFEFF/, '')
+            if (!text.trim()) continue
+
+            const workbook = XLSX.read(text, {
+              type: 'string',
+              raw: true,
+              dense: true,
+              FS: text.includes('\t') ? '\t' : ',',
+            })
+            const rows = toRows(workbook)
+            if (rows.length > 0) return rows
+          } catch {
+            // Continue trying other decodings.
+          }
+        }
+        return null
+      }
+
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
-        if (rows.length === 0) reject(new Error('The file is empty.'))
-        else resolve(rows)
+        const wb = XLSX.read(data, { type: 'array', raw: true, dense: true })
+        const rows = toRows(wb)
+        if (rows.length > 0) {
+          resolve(rows)
+          return
+        }
+
+        const fallbackRows = parseFromText(data)
+        if (fallbackRows && fallbackRows.length > 0) {
+          resolve(fallbackRows)
+          return
+        }
+
+        reject(new Error('The file is empty.'))
       } catch {
+        try {
+          const data = new Uint8Array(e.target!.result as ArrayBuffer)
+          const fallbackRows = parseFromText(data)
+          if (fallbackRows && fallbackRows.length > 0) {
+            resolve(fallbackRows)
+            return
+          }
+        } catch {
+          // Fall through to user-friendly parse error below.
+        }
         reject(new Error('Failed to parse the file. Make sure it is a valid .xlsx or .csv file.'))
       }
     }
