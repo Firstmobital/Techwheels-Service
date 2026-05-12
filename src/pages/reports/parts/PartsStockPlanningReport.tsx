@@ -6,7 +6,7 @@ import { ReportLoadingState } from '../components/ReportLoadingState'
 import { ReportErrorState } from '../components/ReportErrorState'
 
 interface FilterState {
-  portal: 'EV' | 'PV'
+  portal: 'ALL' | 'EV' | 'PV'
   vendor?: string
   productCategory?: string
   recommendation?: string
@@ -27,7 +27,7 @@ type EnrichedStockPlanningRow = StockPlanningData & {
 }
 
 export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
-  const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
+  const [filters, setFilters] = useState<FilterState>({ portal: 'ALL' })
   const [rows, setRows] = useState<StockPlanningData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -223,9 +223,10 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
           <label className="block text-sm font-medium text-gray-700 mb-2">Portal</label>
           <select
             value={filters.portal}
-            onChange={(e) => setFilters({ ...filters, portal: e.target.value as 'EV' | 'PV' })}
+            onChange={(e) => setFilters({ ...filters, portal: e.target.value as 'ALL' | 'EV' | 'PV' })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           >
+            <option value="ALL">All Portals</option>
             <option value="EV">EV</option>
             <option value="PV">PV</option>
           </select>

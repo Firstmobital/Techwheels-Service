@@ -4,7 +4,7 @@ import { getPartsFilterOptions, getSlowMovingParts } from '../../../lib/partsRep
 import type { SlowMovingPart, PartsFilterOptions } from '../../../lib/partsReportQueries'
 
 interface FilterState {
-  portal: 'EV' | 'PV'
+  portal: 'ALL' | 'EV' | 'PV'
   vendor?: string
   productCategory?: string
 }
@@ -15,7 +15,7 @@ interface SortConfig {
 }
 
 export default function PartsSlowMovingReport({ branch }: ReportViewProps) {
-  const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
+  const [filters, setFilters] = useState<FilterState>({ portal: 'ALL' })
   const [rows, setRows] = useState<SlowMovingPart[]>([])
   const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -96,9 +96,10 @@ export default function PartsSlowMovingReport({ branch }: ReportViewProps) {
           <label className="block text-sm font-medium text-gray-700 mb-2">Portal</label>
           <select
             value={filters.portal}
-            onChange={(e) => setFilters({ ...filters, portal: e.target.value as 'EV' | 'PV' })}
+            onChange={(e) => setFilters({ ...filters, portal: e.target.value as 'ALL' | 'EV' | 'PV' })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           >
+            <option value="ALL">All Portals</option>
             <option value="EV">EV</option>
             <option value="PV">PV</option>
           </select>

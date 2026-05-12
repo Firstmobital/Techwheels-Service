@@ -153,7 +153,7 @@ export interface InventoryTurnover {
 
 export interface PartsReportFilters {
   branch: string
-  portal?: 'EV' | 'PV'
+  portal?: 'ALL' | 'EV' | 'PV'
   vendor?: string
   productCategory?: string
   fiscalYear?: number
@@ -212,7 +212,7 @@ export async function getMonthlyConsumptionTrend(
       .select('*')
 
     if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
-    if (filters.portal) query = query.eq('portal', filters.portal)
+    if (filters.portal && filters.portal !== 'ALL') query = query.eq('portal', filters.portal)
     if (filters.vendor) query = query.eq('vendor', filters.vendor)
     if (filters.productCategory) query = query.eq('product_category', filters.productCategory)
     if (filters.fiscalYear) query = query.eq('fiscal_year', filters.fiscalYear)
@@ -245,7 +245,7 @@ export async function getPartWiseConsumption(filters: PartsReportFilters): Promi
       .select('*')
 
     if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
-    if (filters.portal) query = query.eq('portal', filters.portal)
+    if (filters.portal && filters.portal !== 'ALL') query = query.eq('portal', filters.portal)
     if (filters.vendor) query = query.eq('vendor', filters.vendor)
     if (filters.productCategory) query = query.eq('product_category', filters.productCategory)
     if (filters.fiscalYear) query = query.eq('fiscal_year', filters.fiscalYear)
@@ -302,7 +302,7 @@ export async function getStockPlanningData(filters: PartsReportFilters): Promise
 
     const { data, error } = await query
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -354,7 +354,7 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
 
     const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -421,7 +421,7 @@ export async function getFastMovingParts(filters: PartsReportFilters): Promise<F
 
     const { data, error } = await query
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -470,7 +470,7 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
 
     const { data, error } = await query
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -512,7 +512,7 @@ export async function getInTransitVisibility(filters: PartsReportFilters): Promi
 
     const { data, error } = await query
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -561,7 +561,7 @@ export async function getDelayedOrders(filters: PartsReportFilters): Promise<Del
 
     const { data, error } = await query
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -606,7 +606,7 @@ export async function getDealerPerformance(filters: PartsReportFilters): Promise
 
     const { data, error } = await query
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -657,12 +657,14 @@ export async function getDealerPerformance(filters: PartsReportFilters): Promise
 // Vendor Performance
 export async function getVendorPerformance(filters: PartsReportFilters): Promise<VendorPerformance[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('service_parts_order_data')
       .select('*')
-      .eq('branch', filters.branch)
-      .then((res: any) => {
-        if (filters.portal) {
+
+    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+
+    const { data, error } = await query.then((res: any) => {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -711,7 +713,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
 
     const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -731,7 +733,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
 
     const { data: consumption, error: consumptionError } = await consumptionQuery
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -828,7 +830,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
 
     const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
@@ -848,7 +850,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
 
     const { data: consumption, error: consumptionError } = await consumptionQuery
       .then((res: any) => {
-        if (filters.portal) {
+        if (filters.portal && filters.portal !== 'ALL') {
           return {
             ...res,
             data: res.data?.filter((row: any) => row.portal === filters.portal),
