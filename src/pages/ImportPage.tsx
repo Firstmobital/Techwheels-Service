@@ -150,11 +150,18 @@ function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
       }
 
       const parseFromText = (data: Uint8Array): Record<string, unknown>[] | null => {
-        const decodeAttempts: Array<string | undefined> = [undefined, 'utf-8', 'utf-16le', 'utf-16be']
+        const hasUtf16LeBom = data.length >= 2 && data[0] === 0xff && data[1] === 0xfe
+        const hasUtf16BeBom = data.length >= 2 && data[0] === 0xfe && data[1] === 0xff
+        const decodeAttempts: Array<string | undefined> = hasUtf16LeBom
+          ? ['utf-16le', 'utf-8', 'utf-16be', undefined]
+          : hasUtf16BeBom
+            ? ['utf-16be', 'utf-8', 'utf-16le', undefined]
+            : [undefined, 'utf-8', 'utf-16le', 'utf-16be']
         for (const encoding of decodeAttempts) {
           try {
             const text = new TextDecoder(encoding).decode(data).replace(/^\uFEFF/, '')
             if (!text.trim()) continue
+            if (text.includes('\u0000')) continue
 
             const workbook = XLSX.read(text, {
               type: 'string',

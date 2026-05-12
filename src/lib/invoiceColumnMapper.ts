@@ -29,7 +29,12 @@ export interface InvoiceParseError {
 }
 
 function normalizeHeader(header: string): string {
-  return header.trim().toLowerCase()
+  return header
+    .replace(/^\uFEFF/, '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
 function parseNumericInvoiceAmount(
