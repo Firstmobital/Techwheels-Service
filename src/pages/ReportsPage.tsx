@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import {
   type BranchFilter,
   type DateRangeFilter,
@@ -17,6 +18,20 @@ import {
 import type { ReportCategoryId } from './reports/types'
 
 const DEFAULT_CATEGORY_ID: ReportCategoryId = 'labour-revenue'
+
+const CATEGORY_TABS: Array<{ id: ReportCategoryId; label: string }> = [
+  { id: 'labour-revenue', label: 'Labour Revenue' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'revenue', label: 'Revenue' },
+  { id: 'parts', label: 'Parts' },
+]
+
+interface HeaderStats {
+  monthlyJobCards: number
+  monthlyRevenue: number
+  partsNeedingReorder: number
+  openTransitOrders: number
+}
 
 function getTodayDateInputValue(): string {
   const now = new Date()
@@ -41,6 +56,13 @@ export default function ReportsPage() {
   const [parentProductLineFilter, setParentProductLineFilter] = useState<'ALL' | string>('ALL')
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>([])
   const [parentProductLineOptions, setParentProductLineOptions] = useState<string[]>([])
+  const [headerStats, setHeaderStats] = useState<HeaderStats>({
+    monthlyJobCards: 0,
+    monthlyRevenue: 0,
+    partsNeedingReorder: 0,
+    openTransitOrders: 0,
+  })
+  const [headerStatsLoading, setHeaderStatsLoading] = useState(true)
 
   const resolvedCategoryId = useMemo<ReportCategoryId>(() => {
     return isCategoryId(params.categoryId) ? params.categoryId : DEFAULT_CATEGORY_ID
@@ -127,6 +149,72 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
+    let active = true
+
+    const loadHeaderStats = async () => {
+      setHeaderStatsLoading(true)
+
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
+      const results = await Promise.allSettled([
+        supabase
+          .from('job_card_closed_data')
+          .select('*', { count: 'exact', head: true })
+          .gte('closed_date_time', startOfMonth),
+        supabase
+          .from('job_card_closed_data')
+          .select('total_invoice_amount')
+          .gte('closed_date_time', startOfMonth),
+        supabase
+          .from('vw_parts_stock_health')
+          .select('*', { count: 'exact', head: true })
+          .lt('weeks_of_supply', 2),
+        supabase
+          .from('service_parts_order_data')
+          .select('*', { count: 'exact', head: true })
+          .gt('intransit_qty', 0),
+      ])
+
+      if (!active) return
+
+      const monthlyJobCards =
+        results[0].status === 'fulfilled' ? ((results[0].value.count as number | null) ?? 0) : 0
+
+      let monthlyRevenue = 0
+      if (results[1].status === 'fulfilled') {
+        const revenueRows = (results[1].value.data as Array<{ total_invoice_amount?: unknown }> | null) ?? []
+        monthlyRevenue = revenueRows.reduce((sum, row) => {
+          const raw = row.total_invoice_amount
+          if (typeof raw === 'number') return sum + raw
+          if (raw == null) return sum
+          const parsed = Number(raw)
+          return Number.isFinite(parsed) ? sum + parsed : sum
+        }, 0)
+      }
+
+      const partsNeedingReorder =
+        results[2].status === 'fulfilled' ? ((results[2].value.count as number | null) ?? 0) : 0
+      const openTransitOrders =
+        results[3].status === 'fulfilled' ? ((results[3].value.count as number | null) ?? 0) : 0
+
+      setHeaderStats({
+        monthlyJobCards,
+        monthlyRevenue,
+        partsNeedingReorder,
+        openTransitOrders,
+      })
+      setHeaderStatsLoading(false)
+    }
+
+    void loadHeaderStats()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (branch === 'ALL') return
     if (branchOptions.includes(branch)) return
     setBranch('ALL')
@@ -171,6 +259,64 @@ export default function ReportsPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
+        </div>
+
+        {headerStatsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="animate-pulse bg-gray-100 rounded h-24" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-gray-200 border-l-4 border-l-blue-500 bg-white p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Job Cards This Month</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900">
+                {headerStats.monthlyJobCards.toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 border-l-4 border-l-green-500 bg-white p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Revenue This Month</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900">
+                ₹{(headerStats.monthlyRevenue / 100000).toFixed(1)}L
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 border-l-4 border-l-red-500 bg-white p-4 shadow-sm">
+              <p className="text-sm text-gray-600">Parts to Reorder</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900">
+                {headerStats.partsNeedingReorder.toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 border-l-4 border-l-amber-500 bg-white p-4 shadow-sm">
+              <p className="text-sm text-gray-600">In-Transit Orders</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900">
+                {headerStats.openTransitOrders.toLocaleString('en-IN')}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex border-b border-gray-200 mb-4">
+          {CATEGORY_TABS.map((category) => {
+            const isActive = resolvedCategoryId === category.id
+            const count = getReportsByCategory(category.id).length
+
+            return (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => navigate(`/reports/${category.id}`)}
+                className={[
+                  'px-4 py-2 text-sm font-medium cursor-pointer transition-colors border-b-2',
+                  isActive
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+                ].join(' ')}
+              >
+                {`${category.label} (${count})`}
+              </button>
+            )
+          })}
         </div>
 
         <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">

@@ -34,6 +34,7 @@ export interface StockPlanningData {
   avgConsumption4Week: number
   intransitQty: number | null
   nearestEta: string | null
+  lastIssueDate?: string | null
   location: string | null
   totalValue: number | null
   productCategory: string | null
@@ -329,6 +330,7 @@ export async function getStockPlanningData(filters: PartsReportFilters): Promise
         avgConsumption4Week: row.avg_4week_consumption || 0,
         intransitQty: row.intransit_qty,
         nearestEta: row.nearest_eta,
+        lastIssueDate: row.last_issue_date || null,
         location: row.inventory_location,
         totalValue: row.total_price_value,
         productCategory: row.product_category,

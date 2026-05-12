@@ -3,22 +3,13 @@ const DESCRIPTION_HEADERS = ['description', 'part description', 'material descri
 const DATE_HEADERS = ['consumption date', 'consumed date', 'issue date', 'transaction date', 'date']
 const OTC_HEADERS = ['otc', 'counter', 'on the counter', 'on-the-counter', 'otc consumption', 'on counter']
 const WS_HEADERS = ['ws', 'workshop', 'workshop consumption', 'ws consumption']
-const QUANTITY_HEADERS = ['consumption qty', 'consumed qty', 'quantity consumed', 'issued qty', 'qty', 'quantity', 'total']
+const TOTAL_CONSUMPTION_HEADERS = ['total', 'consumption qty', 'consumed qty', 'quantity consumed', 'issued qty', 'qty', 'quantity']
 const UNIT_COST_HEADERS = ['unit cost', 'rate', 'price', 'unit price']
 const TOTAL_COST_HEADERS = ['amount', 'total amount', 'value', 'line amount']
 const REFERENCE_HEADERS = ['jc number', 'job card', 'invoice number', 'reference', 'document number', 'dealer', 'division']
 const FISCAL_YEAR_HEADERS = ['tm fiscal year', 'fiscal year', 'fy', 'year']
-const MONTH_HEADERS = ['month name', 'month', 'period']
-
-// Standard month name mappings
-const MONTH_NAME_MAP: Record<string, string> = {
-  january: 'January', february: 'February', march: 'March', april: 'April', may: 'May', june: 'June',
-  july: 'July', august: 'August', september: 'September', october: 'October', november: 'November', december: 'December',
-  jan: 'January', feb: 'February', mar: 'March', apr: 'April', jun: 'June', jul: 'July', aug: 'August',
-  sep: 'September', oct: 'October', nov: 'November', dec: 'December',
-  '1': 'January', '2': 'February', '3': 'March', '4': 'April', '5': 'May', '6': 'June',
-  '7': 'July', '8': 'August', '9': 'September', '10': 'October', '11': 'November', '12': 'December',
-}
+const FISCAL_MONTH_HEADERS = ['fiscal month', 'fiscal_month', 'month no', 'month number', 'period']
+const MONTH_NAME_HEADERS = ['month name', 'month_name']
 
 export interface PartsConsumptionParseError {
   rowNumber: number
@@ -34,12 +25,13 @@ interface HeaderMapping {
   transactionDate?: string
   otcQuantity?: string
   wsQuantity?: string
-  quantityConsumed?: string
+  totalConsumption?: string
   unitCost?: string
   totalCost?: string
   sourceReference?: string
   fiscalYear?: string
-  month?: string
+  fiscalMonth?: string
+  monthName?: string
 }
 
 function normalizeHeader(header: string): string {
@@ -105,30 +97,45 @@ function parseNumber(value: unknown, fieldName: string): number | null {
   return num
 }
 
-function parseMonthName(value: unknown): string | null {
+function parseOptionalString(value: unknown): string | null {
   if (value == null || value === '') return null
-  const raw = String(value).trim().toLowerCase()
-  return MONTH_NAME_MAP[raw] ?? null
+  const raw = String(value).trim()
+  return raw || null
 }
 
-function parseFiscalYear(value: unknown): number | null {
+function parseFiscalYear(value: unknown): string | null {
   if (value == null || value === '') return null
-  const num = parseNumber(value, 'fiscal_year')
-  if (num && num >= 2000 && num <= 2100) {
-    return num
+  const raw = String(value).trim()
+  if (!raw) return null
+  return raw
+}
+
+function parseInteger(value: unknown, fieldName: string): number | null {
+  if (value == null || value === '') return null
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) return value
+    throw new Error(`Invalid integer for ${fieldName}`)
   }
-  throw new Error(`Invalid fiscal year: "${String(value)}"`)
+
+  const raw = String(value).trim()
+  if (!raw) return null
+  const cleaned = raw.replace(/,/g, '')
+  const num = Number.parseInt(cleaned, 10)
+  if (!Number.isFinite(num)) {
+    throw new Error(`Invalid integer for ${fieldName}: "${raw}"`)
+  }
+  return num
 }
 
 export function mapPartsConsumptionHeaders(excelHeaders: string[]): HeaderMapping {
   const partNumber = findHeader(excelHeaders, PART_NUMBER_HEADERS)
   const otcQuantity = findHeader(excelHeaders, OTC_HEADERS)
   const wsQuantity = findHeader(excelHeaders, WS_HEADERS)
-  const quantityConsumed = findHeader(excelHeaders, QUANTITY_HEADERS)
+  const totalConsumption = findHeader(excelHeaders, TOTAL_CONSUMPTION_HEADERS)
 
   const missing: string[] = []
   if (!partNumber) missing.push('Part Number')
-  if (!otcQuantity && !wsQuantity && !quantityConsumed) missing.push('OTC, WS, or Quantity Consumed')
+  if (!otcQuantity && !wsQuantity && !totalConsumption) missing.push('OTC, WS, or Total')
   if (missing.length > 0) {
     throw new Error(`Missing required columns: ${missing.join(', ')}`)
   }
@@ -137,14 +144,15 @@ export function mapPartsConsumptionHeaders(excelHeaders: string[]): HeaderMappin
     partNumber: partNumber as string,
     otcQuantity,
     wsQuantity,
-    quantityConsumed,
+    totalConsumption,
     partDescription: findHeader(excelHeaders, DESCRIPTION_HEADERS),
     transactionDate: findHeader(excelHeaders, DATE_HEADERS),
     unitCost: findHeader(excelHeaders, UNIT_COST_HEADERS),
     totalCost: findHeader(excelHeaders, TOTAL_COST_HEADERS),
     sourceReference: findHeader(excelHeaders, REFERENCE_HEADERS),
     fiscalYear: findHeader(excelHeaders, FISCAL_YEAR_HEADERS),
-    month: findHeader(excelHeaders, MONTH_HEADERS),
+    fiscalMonth: findHeader(excelHeaders, FISCAL_MONTH_HEADERS),
+    monthName: findHeader(excelHeaders, MONTH_NAME_HEADERS),
   }
 }
 
@@ -176,7 +184,7 @@ export function buildPartsConsumptionInsertRow(
 
   let otcQuantity: number | null = null
   let wsQuantity: number | null = null
-  let quantityConsumed: number | null = null
+  let totalConsumptionFromFile: number | null = null
 
   if (headerMapping.otcQuantity) {
     const raw = excelRow[headerMapping.otcQuantity]
@@ -208,28 +216,28 @@ export function buildPartsConsumptionInsertRow(
     }
   }
 
-  if (headerMapping.quantityConsumed) {
-    const raw = excelRow[headerMapping.quantityConsumed]
+  if (headerMapping.totalConsumption) {
+    const raw = excelRow[headerMapping.totalConsumption]
     try {
-      quantityConsumed = parseNumber(raw, headerMapping.quantityConsumed)
+      totalConsumptionFromFile = parseNumber(raw, headerMapping.totalConsumption)
     } catch (err) {
       errors.push({
         rowNumber,
-        fieldName: headerMapping.quantityConsumed,
-        columnName: 'quantity_consumed',
+        fieldName: headerMapping.totalConsumption,
+        columnName: 'total_consumption',
         value: raw == null ? '' : String(raw),
         error: err instanceof Error ? err.message : String(err),
       })
     }
   }
 
-  if (otcQuantity == null && wsQuantity == null && quantityConsumed == null) {
+  if (otcQuantity == null && wsQuantity == null && totalConsumptionFromFile == null) {
     errors.push({
       rowNumber,
-      fieldName: 'OTC/WS/Quantity',
-      columnName: 'otc_quantity, ws_quantity, or quantity_consumed',
+      fieldName: 'OTC/WS/Total',
+      columnName: 'otc_quantity, ws_quantity, or total_consumption',
       value: '',
-      error: 'At least one of OTC, WS, or Quantity Consumed is required',
+      error: 'At least one of OTC, WS, or Total is required',
     })
   }
 
@@ -273,11 +281,7 @@ export function buildPartsConsumptionInsertRow(
     if (!header) return null
     const raw = excelRow[header]
     try {
-      const parsed = parseMonthName(raw)
-      if (!parsed) {
-        throw new Error(`Invalid month name: "${String(raw)}"`)
-      }
-      return parsed
+      return parseOptionalString(raw)
     } catch (err) {
       errors.push({
         rowNumber,
@@ -290,7 +294,7 @@ export function buildPartsConsumptionInsertRow(
     }
   }
 
-  const parseOptionalFiscalYear = (header: string | undefined, columnName: string): number | null => {
+  const parseOptionalFiscalYear = (header: string | undefined, columnName: string): string | null => {
     if (!header) return null
     const raw = excelRow[header]
     try {
@@ -307,7 +311,25 @@ export function buildPartsConsumptionInsertRow(
     }
   }
 
-  const totalConsumption = ((otcQuantity ?? 0) + (wsQuantity ?? 0)) || (quantityConsumed ?? 0)
+  const parseOptionalFiscalMonth = (header: string | undefined, columnName: string): number | null => {
+    if (!header) return null
+    const raw = excelRow[header]
+    try {
+      return parseInteger(raw, header)
+    } catch (err) {
+      errors.push({
+        rowNumber,
+        fieldName: header,
+        columnName,
+        value: raw == null ? '' : String(raw),
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return null
+    }
+  }
+
+  const computedQuantityConsumed = (otcQuantity ?? 0) + (wsQuantity ?? 0)
+  const totalConsumption = totalConsumptionFromFile ?? computedQuantityConsumed
 
   const row: Record<string, unknown> = {
     part_number: partNumber,
@@ -318,7 +340,8 @@ export function buildPartsConsumptionInsertRow(
     quantity_consumed: totalConsumption,
     total_consumption: totalConsumption,
     fiscal_year: parseOptionalFiscalYear(headerMapping.fiscalYear, 'fiscal_year'),
-    month_name: parseOptionalMonthName(headerMapping.month, 'month_name'),
+    fiscal_month: parseOptionalFiscalMonth(headerMapping.fiscalMonth, 'fiscal_month'),
+    month_name: parseOptionalMonthName(headerMapping.monthName, 'month_name'),
     unit_cost: parseOptionalNumber(headerMapping.unitCost, 'unit_cost'),
     total_cost: parseOptionalNumber(headerMapping.totalCost, 'total_cost'),
     source_reference: headerMapping.sourceReference ? String(excelRow[headerMapping.sourceReference] ?? '').trim() || null : null,

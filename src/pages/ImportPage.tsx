@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
@@ -140,13 +141,29 @@ function emptyCard(branches: readonly Branch[]): CardState {
   }
 }
 
-function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
+function parseWorkbook(file: File, tableName?: string): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       const toRows = (wb: XLSX.WorkBook): Record<string, unknown>[] => {
         const ws = wb.Sheets[wb.SheetNames[0]]
         return XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+      }
+
+      const parseTsvWithPapa = (text: string): Record<string, unknown>[] => {
+        const parsed = Papa.parse<Record<string, unknown>>(text, {
+          header: true,
+          delimiter: '\t',
+          skipEmptyLines: 'greedy',
+          transformHeader: (header) => header.replace(/^\uFEFF/, '').trim(),
+          transform: (value) => value.trim(),
+        })
+
+        if (parsed.errors.length > 0) {
+          throw new Error(parsed.errors[0]?.message || 'Failed to parse tab-delimited file')
+        }
+
+        return parsed.data
       }
 
       const parseFromText = (data: Uint8Array): Record<string, unknown>[] | null => {
@@ -181,6 +198,21 @@ function parseWorkbook(file: File): Promise<Record<string, unknown>[]> {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer)
         const isCsvFile = file.name.toLowerCase().endsWith('.csv')
+        const shouldUsePartsTabParser =
+          tableName === 'service_parts_order_data' ||
+          tableName === 'service_parts_stock_snapshot_data'
+
+        if (isCsvFile && shouldUsePartsTabParser) {
+          const isUtf16LeBom = data.length >= 2 && data[0] === 0xff && data[1] === 0xfe
+          if (isUtf16LeBom) {
+            const text = new TextDecoder('utf-16le').decode(data.slice(2)).replace(/^\uFEFF/, '')
+            const rows = parseTsvWithPapa(text)
+            if (rows.length > 0) {
+              resolve(rows)
+              return
+            }
+          }
+        }
 
         if (isCsvFile) {
           const csvRows = parseFromText(data)
@@ -633,7 +665,7 @@ export default function ImportPage() {
 
       if (parseError) return
 
-      parseWorkbook(file)
+      parseWorkbook(file, tableName)
         .then((rows) =>
           updateCard(tableName, (prev) => ({
             ...prev,
@@ -695,7 +727,7 @@ export default function ImportPage() {
           for (const branch of PORTAL_BRANCHES) {
             const slot = cardState.slots[branch]
             if (slot.file && !slot.parseError && slot.rowCount !== null) {
-              const rows = await parseWorkbook(slot.file)
+              const rows = await parseWorkbook(slot.file, tableName)
               if (rows.length > 0) {
                 return Object.keys(rows[0])
               }
@@ -782,7 +814,7 @@ export default function ImportPage() {
           const slot = cardState.slots[branch]
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
 
-          const rawRows = await parseWorkbook(slot.file)
+          const rawRows = await parseWorkbook(slot.file, tableName)
 
           if (isVasTable && vasHeaderMapping) {
             // VAS table: use special parsing with numeric and date conversion

@@ -1,8 +1,10 @@
 import AdvisorPerformanceReport from './AdvisorPerformanceReport'
+import CustomerRetentionReport from './CustomerRetentionReport'
 import EndToEndJobLifecycleReport from './EndToEndJobLifecycleReport'
 import EmployeeUtilizationReport from './EmployeeUtilizationReport'
 import JcInvoiceReconciliationReport from './JcInvoiceReconciliationReport'
 import NetPriceFinalRevenueVarianceReport from './NetPriceFinalRevenueVarianceReport'
+import ServiceDueReport from './ServiceDueReport'
 import TatDurationReport from './TatDurationReport'
 import VasBillingHoursEfficiencyReport from './VasBillingHoursEfficiencyReport'
 import VasJobPerformanceReport from './VasJobPerformanceReport'
@@ -15,6 +17,22 @@ export const PERFORMANCE_CATEGORY: ReportCategoryDefinition = {
 }
 
 export const PERFORMANCE_REPORTS: ReportDefinition[] = [
+  {
+    id: 'customer-retention',
+    categoryId: 'performance',
+    label: 'Customer Retention Report',
+    description: 'Vehicle-level repeat-visit retention metrics and lapsed customer outreach list.',
+    cardHint: 'Best for proactive customer follow-up and service retention tracking.',
+    Component: CustomerRetentionReport,
+  },
+  {
+    id: 'service-due',
+    categoryId: 'performance',
+    label: 'Service Due Report',
+    description: 'Current kilometre-based due status with urgency segmentation and outreach list.',
+    cardHint: 'Best for proactive service reminder campaigns from latest odometer data.',
+    Component: ServiceDueReport,
+  },
   {
     id: 'advisor-performance',
     categoryId: 'performance',

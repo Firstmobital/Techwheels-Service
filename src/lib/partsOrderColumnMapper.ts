@@ -8,7 +8,7 @@ const BACKORDER_QTY_HEADERS = ['backorder qty', 'back order qty', 'pending qty',
 const STATUS_HEADERS = ['status', 'line status', 'order status', 'spares order type']
 const DOC_ID_HEADERS = ['invoice number', 'crm order number', 'sap order number', 'po number', 'order number', 'docket number', 'challan no']
 const DIV_ID_HEADERS = ['div id', 'division id', 'div', 'division']
-const DEALER_NAME_HEADERS = ['dealer name', 'dealer', 'supplier', 'vendor']
+const DEALER_CODE_HEADERS = ['dealer name', 'dealer', 'supplier', 'vendor']
 const INVOICE_NUMBER_HEADERS = ['invoice number', 'invoice no']
 const CRM_ORDER_HEADERS = ['crm order number', 'crm order no', 'crm order id']
 const SAP_ORDER_HEADERS = ['sap order number', 'sap order no', 'sap order id']
@@ -47,7 +47,7 @@ interface HeaderMapping {
   status?: string
   sourceDocumentId?: string
   divId?: string
-  dealerName?: string
+  dealerCode?: string
   invoiceNumber?: string
   crmOrderNumber?: string
   sapOrderNumber?: string
@@ -92,16 +92,24 @@ function parseDate(value: unknown, fieldName: string): string | null {
   const raw = String(value).trim()
   if (!raw) return null
 
-  const direct = new Date(raw)
-  if (!Number.isNaN(direct.getTime())) return direct.toISOString().slice(0, 10)
-
   const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/)
   if (dmy) {
     const [, d, m, y] = dmy
     const year = y.length === 2 ? 2000 + Number(y) : Number(y)
-    const parsed = new Date(Date.UTC(year, Number(m) - 1, Number(d)))
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
+    const day = Number(d)
+    const month = Number(m)
+    const parsed = new Date(Date.UTC(year, month - 1, day))
+    if (
+      parsed.getUTCFullYear() === year &&
+      parsed.getUTCMonth() === month - 1 &&
+      parsed.getUTCDate() === day
+    ) {
+      return parsed.toISOString().slice(0, 10)
+    }
   }
+
+  const direct = new Date(raw)
+  if (!Number.isNaN(direct.getTime())) return direct.toISOString().slice(0, 10)
 
   throw new Error(`Invalid date for ${fieldName}: "${raw}"`)
 }
@@ -116,7 +124,7 @@ function parseNumber(value: unknown, fieldName: string): number | null {
   const raw = String(value).trim()
   if (!raw) return null
   const cleaned = raw.replace(/,/g, '')
-  const num = Number(cleaned)
+  const num = Number.parseFloat(cleaned)
   if (!Number.isFinite(num)) {
     throw new Error(`Invalid number for ${fieldName}: "${raw}"`)
   }
@@ -140,7 +148,7 @@ export function mapPartsOrderHeaders(excelHeaders: string[]): HeaderMapping {
     status: findHeader(excelHeaders, STATUS_HEADERS),
     sourceDocumentId: findHeader(excelHeaders, DOC_ID_HEADERS),
     divId: findHeader(excelHeaders, DIV_ID_HEADERS),
-    dealerName: findHeader(excelHeaders, DEALER_NAME_HEADERS),
+    dealerCode: findHeader(excelHeaders, DEALER_CODE_HEADERS),
     invoiceNumber: findHeader(excelHeaders, INVOICE_NUMBER_HEADERS),
     crmOrderNumber: findHeader(excelHeaders, CRM_ORDER_HEADERS),
     sapOrderNumber: findHeader(excelHeaders, SAP_ORDER_HEADERS),
@@ -260,12 +268,13 @@ export function buildPartsOrderInsertRow(
     status: headerMapping.status ? String(excelRow[headerMapping.status] ?? '').trim() || null : null,
     source_document_id: headerMapping.sourceDocumentId ? String(excelRow[headerMapping.sourceDocumentId] ?? '').trim() || null : null,
     div_id: parseOptionalString(headerMapping.divId),
-    dealer_name: parseOptionalString(headerMapping.dealerName),
+    dealer_code: parseOptionalString(headerMapping.dealerCode),
     invoice_number: parseOptionalString(headerMapping.invoiceNumber),
     crm_order_number: parseOptionalString(headerMapping.crmOrderNumber),
     sap_order_number: parseOptionalString(headerMapping.sapOrderNumber),
     sap_order_line_item: parseOptionalString(headerMapping.sapLineItem),
     spares_order_type: parseOptionalString(headerMapping.sparesOrderType),
+    net_order_qty: parseOptionalNumberOrNull(headerMapping.netOrderQty, 'net_order_qty'),
     confirmation_date: parseOptionalDate(headerMapping.confirmationDate, 'confirmation_date'),
     confirmation_qty: parseOptionalNumberOrNull(headerMapping.confirmationQty, 'confirmation_qty'),
     challan_no: parseOptionalString(headerMapping.challanNo),

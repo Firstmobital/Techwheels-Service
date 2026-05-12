@@ -6,6 +6,11 @@ const INVOICE_HEADER_MAPPING: Record<string, string> = {
   final_labour_invoice_amount: 'Final Labour Invoice Amount',
   final_spares_invoice_amount: 'Final Spares Invoice Amount',
   final_consolidated_invoice_amount: 'Final Consolidated Invoice Amount',
+  discounts_labour: 'Discounts (Labour)',
+  other_charges_labour: 'Other Charges (Labour)',
+  discounts_parts: 'Discounts (Parts)',
+  other_charges_parts: 'Other Charges (Parts)',
+  final_tcs_amount: 'Final TCS Amount',
   order_number: 'Order #',
   sr_number: 'SR #',
   chassis_number: 'Chassis #',
@@ -16,6 +21,11 @@ const AMOUNT_COLUMNS = new Set([
   'final_labour_invoice_amount',
   'final_spares_invoice_amount',
   'final_consolidated_invoice_amount',
+  'discounts_labour',
+  'other_charges_labour',
+  'discounts_parts',
+  'other_charges_parts',
+  'final_tcs_amount',
 ])
 
 const DATE_COLUMNS = new Set(['invoice_date'])
@@ -37,28 +47,23 @@ function normalizeHeader(header: string): string {
     .toLowerCase()
 }
 
-function parseNumericInvoiceAmount(
-  value: unknown,
-  fieldName: string,
-): number | null {
-  if (value === null || value === undefined || value === '') return null
+function parseRupeeAmount(raw: unknown): number {
+  if (raw === null || raw === undefined || raw === '') return 0
 
-  if (typeof value === 'number') {
-    if (Number.isNaN(value)) {
-      throw new Error(`Invalid numeric value for ${fieldName}: "${String(value)}"`)
-    }
-    return value
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? raw : 0
   }
 
-  const raw = String(value).trim()
-  if (!raw) return null
+  const cleaned = String(raw)
+    .trim()
+    .replace(/^rs\.?\s*/i, '')
+    .replace(/,/g, '')
+    .trim()
 
-  const cleaned = raw.replace(/Rs\.?\s*/gi, '').replace(/,/g, '').trim()
+  if (!cleaned) return 0
+
   const parsed = Number.parseFloat(cleaned)
-  if (Number.isNaN(parsed)) {
-    throw new Error(`Invalid numeric value for ${fieldName}: "${raw}"`)
-  }
-  return parsed
+  return Number.isNaN(parsed) ? 0 : parsed
 }
 
 function parseInvoiceDate(value: unknown, fieldName: string): string | null {
@@ -132,7 +137,7 @@ export function buildInvoiceInsertRow(
 
     try {
       if (AMOUNT_COLUMNS.has(dbCol)) {
-        row[dbCol] = parseNumericInvoiceAmount(value, excelColName)
+        row[dbCol] = parseRupeeAmount(value)
       } else if (DATE_COLUMNS.has(dbCol)) {
         row[dbCol] = parseInvoiceDate(value, excelColName)
       } else if (value === null || value === undefined || value === '') {

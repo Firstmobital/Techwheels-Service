@@ -73,7 +73,28 @@ function parseDate(value: unknown, fieldName: string): string | null {
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
   }
 
-  const direct = new Date(String(value))
+  const raw = String(value).trim()
+  const dmyWithOptionalTime = raw.match(
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/,
+  )
+  if (dmyWithOptionalTime) {
+    const [, dayStr, monthStr, yearStr] = dmyWithOptionalTime
+    const day = Number.parseInt(dayStr, 10)
+    const month = Number.parseInt(monthStr, 10)
+    const parsedYear = Number.parseInt(yearStr, 10)
+    const year = parsedYear < 100 ? parsedYear + 2000 : parsedYear
+
+    const candidate = new Date(Date.UTC(year, month - 1, day))
+    if (
+      candidate.getUTCFullYear() === year &&
+      candidate.getUTCMonth() === month - 1 &&
+      candidate.getUTCDate() === day
+    ) {
+      return candidate.toISOString().slice(0, 10)
+    }
+  }
+
+  const direct = new Date(raw)
   if (!Number.isNaN(direct.getTime())) return direct.toISOString().slice(0, 10)
 
   throw new Error(`Invalid date for ${fieldName}: "${String(value)}"`)
@@ -228,15 +249,20 @@ export function buildPartsStockInsertRow(
     }
   }
 
+  const weightedCost = parseOptionalNumber(headerMapping.weightedCost, 'weighted_cost')
+  const inventoryValue = parseOptionalNumber(headerMapping.inventoryValue, 'inventory_value')
+  const totalPriceValue =
+    onHandQuantity && weightedCost ? onHandQuantity * weightedCost : null
+
   const row: Record<string, unknown> = {
     part_number: partNumber,
     part_description: headerMapping.partDescription ? String(excelRow[headerMapping.partDescription] ?? '').trim() || null : null,
     snapshot_date: snapshotDate ?? new Date().toISOString().slice(0, 10),
     on_hand_quantity: onHandQuantity,
-    weighted_cost: parseOptionalNumber(headerMapping.weightedCost, 'weighted_cost'),
-    inventory_value: parseOptionalNumber(headerMapping.inventoryValue, 'inventory_value'),
-    weighted_avg_cost: parseOptionalNumber(headerMapping.weightedCost, 'weighted_avg_cost'),
-    total_price_value: parseOptionalNumber(headerMapping.inventoryValue, 'total_price_value'),
+    weighted_cost: weightedCost,
+    inventory_value: inventoryValue,
+    weighted_avg_cost: weightedCost,
+    total_price_value: totalPriceValue,
     last_issue_date: parseOptionalDate(headerMapping.lastIssueDate, 'last_issue_date'),
     last_received_date: parseOptionalDate(headerMapping.lastReceivedDate, 'last_received_date'),
     availability_status: parseOptionalString(headerMapping.availability),

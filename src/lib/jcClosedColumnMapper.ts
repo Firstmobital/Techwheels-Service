@@ -55,11 +55,6 @@ const JC_CLOSED_SPECS = [
     aliases: ['First Name', 'Name'],
   },
   {
-    dbCol: 'last_name',
-    required: true,
-    aliases: ['Last Name', 'Name'],
-  },
-  {
     dbCol: 'sr_assigned_to',
     required: true,
     aliases: ['SR Assigned To', 'Assigned To'],
@@ -84,17 +79,40 @@ const JC_CLOSED_SPECS = [
     required: true,
     aliases: ['Account Phone #', 'Phone No-Cell', 'Phone No', 'Phone Number'],
   },
+  {
+    dbCol: 'lubs_revenue',
+    required: false,
+    aliases: ['Lubs Revenue', 'Lubricants Revenue'],
+  },
+  {
+    dbCol: 'kms_run',
+    required: false,
+    aliases: ['KMs Run', 'KM Run', 'Odometer'],
+  },
+  {
+    dbCol: 'last_service_km',
+    required: false,
+    aliases: ['Last Service KM', 'Last Service KMs'],
+  },
+  {
+    dbCol: 'last_service_date',
+    required: false,
+    aliases: ['Last Service Date'],
+  },
 ] as const
 
 const NUMERIC_COLUMNS = new Set([
   'final_labour_amount',
   'final_spares_amount',
   'total_invoice_amount',
+  'lubs_revenue',
+  'kms_run',
+  'last_service_km',
 ])
 
 const TIMESTAMP_COLUMNS = new Set(['created_date_time', 'closed_date_time'])
 
-const DATE_COLUMNS = new Set(['vehicle_sale_date'])
+const DATE_COLUMNS = new Set(['vehicle_sale_date', 'last_service_date'])
 
 export interface JcClosedParseError {
   rowNumber: number
@@ -204,20 +222,6 @@ function parseDateValue(value: unknown, fieldName: string): string | null {
   throw new Error(`Invalid date value for ${fieldName}: "${raw}"`)
 }
 
-function parseName(fullName: string): { firstName: string | null; lastName: string | null } {
-  const clean = fullName.trim()
-  if (!clean) return { firstName: null, lastName: null }
-
-  const commaIdx = clean.indexOf(',')
-  if (commaIdx >= 0) {
-    const lastName = clean.slice(0, commaIdx).trim() || null
-    const firstName = clean.slice(commaIdx + 1).trim() || null
-    return { firstName, lastName }
-  }
-
-  return { firstName: clean, lastName: null }
-}
-
 export function mapJcClosedHeaders(excelHeaders: string[]): Record<string, string> {
   const normalizedMap = new Map<string, string>()
   for (const header of excelHeaders) {
@@ -263,21 +267,10 @@ export function buildJcClosedInsertRow(
   const row: Record<string, unknown> = { branch }
   const errors: JcClosedParseError[] = []
 
-  // Handle name field specially: both first_name and last_name map to the same "Name" column
-  const nameHeader = headerMapping.first_name
-  if (nameHeader) {
-    const mappedFullName = excelRow[nameHeader]
-    const parsedName = parseName(mappedFullName == null ? '' : String(mappedFullName))
-    row.first_name = parsedName.firstName
-    row.last_name = parsedName.lastName
-  }
+  // Source file provides a single name column; store its full value in first_name.
+  row.last_name = null
 
   for (const [dbCol, excelColName] of Object.entries(headerMapping)) {
-    // Skip name fields as we already handled them
-    if (dbCol === 'first_name' || dbCol === 'last_name') {
-      continue
-    }
-
     const value = excelRow[excelColName]
 
     try {

@@ -146,13 +146,6 @@ export default function PartsMonthlyConsumptionReport({ branch }: ReportViewProp
           </select>
         </div>
 
-        <button
-          onClick={runReport}
-          disabled={loading}
-          className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-        >
-          {loading ? 'Loading...' : 'Run Report'}
-        </button>
       </div>
 
       {rows.length > 0 && (

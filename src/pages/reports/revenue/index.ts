@@ -3,6 +3,7 @@ import CategoryWiseRevenueReport from './CategoryWiseRevenueReport'
 import MonthlyTrendReport from './MonthlyTrendReport'
 import LabourSparesMixReport from './LabourSparesMixReport'
 import ProductLinePerformanceReport from './ProductLinePerformanceReport'
+import ModelWiseRevenueReport from './ModelWiseRevenueReport'
 import VehicleWiseRevenueReport from './VehicleWiseRevenueReport'
 import InvoiceValueDistributionReport from './InvoiceValueDistributionReport'
 import InvoiceDailyTrendReport from './InvoiceDailyTrendReport'
@@ -54,6 +55,14 @@ export const REVENUE_REPORTS: ReportDefinition[] = [
     description: 'Revenue and volume performance across parent and child product lines.',
     cardHint: 'Best for portfolio-level performance tracking by product lines.',
     Component: ProductLinePerformanceReport,
+  },
+  {
+    id: 'model-wise-revenue',
+    categoryId: 'revenue',
+    label: 'Model-wise Revenue Report',
+    description: 'Model-level job-card, labour, and spares revenue with top service type signal.',
+    cardHint: 'Best for tracking EV model contribution and service mix patterns.',
+    Component: ModelWiseRevenueReport,
   },
   {
     id: 'vehicle-wise-revenue',

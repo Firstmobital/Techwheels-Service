@@ -129,6 +129,10 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
     }
   }, [branch, dateFilter, employeeCode, sourceTable])
 
+  useEffect(() => {
+    void runReport()
+  }, [runReport])
+
   return (
     <div className="space-y-5">
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -165,15 +169,6 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
         </div>
 
         <div className="mt-4 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void runReport()}
-            disabled={loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? 'Generating...' : 'Generate Report'}
-          </button>
-
           <span className="text-xs text-gray-500">
             {selectedEmployee
               ? `Selected: ${selectedEmployee.employee_code} - ${selectedEmployee.employee_name}`

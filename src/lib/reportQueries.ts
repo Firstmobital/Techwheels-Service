@@ -163,6 +163,16 @@ export interface ProductLinePerformanceRow {
   avgRevenuePerJobCard: number
 }
 
+export interface ModelWiseRevenueRow {
+  model: string
+  jobCardCount: number
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  avgRevenuePerJC: number
+  topServiceType: string
+}
+
 export interface TatDurationBucketRow {
   bucketKey: 'under-1-day' | 'one-to-two-days' | 'two-to-three-days' | 'three-to-seven-days' | 'over-7-days'
   bucketLabel: string
@@ -194,6 +204,39 @@ export interface EmployeeUtilizationRow {
   totalRevenue: number
   avgRevenuePerJobCard: number
   workloadSharePercentage: number
+}
+
+export interface CustomerRetentionSummary {
+  totalUniqueVehicles: number
+  vehiclesWithRepeatVisits: number
+  retentionRate: number
+  avgVisitsPerVehicle: number
+  lapsedOver90Days: number
+  lapsedOver180Days: number
+}
+
+export interface LapsedVehicleRow {
+  vrn: string
+  model: string
+  lastVisitDate: string
+  daysSinceLastVisit: number
+  totalVisits: number
+  phone: string
+}
+
+export type ServiceDueUrgency = 'overdue' | 'due_soon' | 'upcoming' | 'ok'
+
+export interface ServiceDueRow {
+  vrn: string
+  chassisNumber: string
+  model: string
+  phone: string
+  lastServiceDate: string | null
+  lastServiceKm: number
+  currentKm: number
+  kmSinceLastService: number
+  kmToNextService: number
+  urgency: ServiceDueUrgency
 }
 
 export interface VehicleWiseRevenueRow {
@@ -1677,6 +1720,113 @@ export async function getProductLinePerformance(
   })
 }
 
+export async function getModelWiseRevenue(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<ModelWiseRevenueRow[]> {
+  const data = await fetchAllJobCardClosedRows(
+    'parent_product_line, final_labour_amount, final_spares_amount, total_invoice_amount, sr_type, job_card_number',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface WorkingModelRevenue {
+    model: string
+    jobCards: Set<string>
+    labourRevenue: number
+    sparesRevenue: number
+    totalRevenue: number
+    serviceTypeCount: Map<string, number>
+  }
+
+  const grouped = new Map<string, WorkingModelRevenue>()
+
+  for (const [rowIndex, row] of (data ?? []).entries()) {
+    const typedRow = row as {
+      parent_product_line?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+      total_invoice_amount?: unknown
+      sr_type?: unknown
+      job_card_number?: unknown
+    }
+
+    const model = normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown'
+    const modelKey = model.toLowerCase()
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+    const hasInvoiceAmount =
+      typedRow.total_invoice_amount != null && String(typedRow.total_invoice_amount).trim() !== ''
+    const totalRevenue = hasInvoiceAmount
+      ? parseRevenue(typedRow.total_invoice_amount)
+      : labourRevenue + sparesRevenue
+    const jobCardNumber =
+      typedRow.job_card_number == null
+        ? null
+        : String(typedRow.job_card_number).trim() || null
+    const jobCardKey = jobCardNumber ?? `${modelKey}__row_${rowIndex}`
+
+    const existing = grouped.get(modelKey)
+
+    if (existing) {
+      existing.jobCards.add(jobCardKey)
+      existing.labourRevenue += labourRevenue
+      existing.sparesRevenue += sparesRevenue
+      existing.totalRevenue += totalRevenue
+      existing.serviceTypeCount.set(serviceType, (existing.serviceTypeCount.get(serviceType) ?? 0) + 1)
+      continue
+    }
+
+    const serviceTypeCount = new Map<string, number>()
+    serviceTypeCount.set(serviceType, 1)
+
+    grouped.set(modelKey, {
+      model,
+      jobCards: new Set([jobCardKey]),
+      labourRevenue,
+      sparesRevenue,
+      totalRevenue,
+      serviceTypeCount,
+    })
+  }
+
+  const rows: ModelWiseRevenueRow[] = []
+
+  for (const group of grouped.values()) {
+    let topServiceType = 'Unknown'
+    let topCount = -1
+
+    for (const [serviceType, count] of group.serviceTypeCount.entries()) {
+      if (count > topCount || (count === topCount && serviceType.localeCompare(topServiceType) < 0)) {
+        topCount = count
+        topServiceType = serviceType
+      }
+    }
+
+    const jobCardCount = group.jobCards.size
+
+    rows.push({
+      model: group.model,
+      jobCardCount,
+      labourRevenue: group.labourRevenue,
+      sparesRevenue: group.sparesRevenue,
+      totalRevenue: group.totalRevenue,
+      avgRevenuePerJC: jobCardCount > 0 ? group.totalRevenue / jobCardCount : 0,
+      topServiceType,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.totalRevenue !== a.totalRevenue) {
+      return b.totalRevenue - a.totalRevenue
+    }
+    return a.model.localeCompare(b.model)
+  })
+}
+
 export async function getTatDurationReport(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
@@ -1950,6 +2100,278 @@ export async function getEmployeeUtilizationReport(
       return b.totalRevenue - a.totalRevenue
     }
     return a.advisorLabel.localeCompare(b.advisorLabel)
+  })
+}
+
+export async function getCustomerRetention(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<{ summary: CustomerRetentionSummary; lapsedVehicles: LapsedVehicleRow[] }> {
+  const data = await fetchAllJobCardClosedRows(
+    'vehicle_registration_number, closed_date_time, parent_product_line, account_phone_number',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface WorkingVehicleRetention {
+    vrn: string
+    model: string
+    lastVisitDate: string | null
+    lastVisitMillis: number | null
+    totalVisits: number
+    phone: string
+  }
+
+  const grouped = new Map<string, WorkingVehicleRetention>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      vehicle_registration_number?: unknown
+      closed_date_time?: unknown
+      parent_product_line?: unknown
+      account_phone_number?: unknown
+    }
+
+    const vrn = normalizeVehicleRegistration(typedRow.vehicle_registration_number)
+    if (vrn === 'Unknown') continue
+
+    const model = normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown'
+    const phone = typedRow.account_phone_number == null ? '' : String(typedRow.account_phone_number).trim()
+
+    let visitDate: string | null = null
+    let visitMillis: number | null = null
+    if (typedRow.closed_date_time != null) {
+      const parsed = new Date(String(typedRow.closed_date_time))
+      if (!Number.isNaN(parsed.getTime())) {
+        visitDate = parsed.toISOString().slice(0, 10)
+        visitMillis = parsed.getTime()
+      }
+    }
+
+    const key = vrn.toLowerCase()
+    const existing = grouped.get(key)
+
+    if (existing) {
+      existing.totalVisits += 1
+      if (visitMillis != null && (existing.lastVisitMillis == null || visitMillis > existing.lastVisitMillis)) {
+        existing.lastVisitMillis = visitMillis
+        existing.lastVisitDate = visitDate
+        existing.model = model
+        if (phone) existing.phone = phone
+      } else if (!existing.phone && phone) {
+        existing.phone = phone
+      }
+      continue
+    }
+
+    grouped.set(key, {
+      vrn,
+      model,
+      lastVisitDate: visitDate,
+      lastVisitMillis: visitMillis,
+      totalVisits: 1,
+      phone,
+    })
+  }
+
+  const now = Date.now()
+  const millisPerDay = 24 * 60 * 60 * 1000
+  const lapsedVehicles: LapsedVehicleRow[] = []
+  let vehiclesWithRepeatVisits = 0
+  let totalVisitsAcrossVehicles = 0
+  let lapsedOver90Days = 0
+  let lapsedOver180Days = 0
+
+  for (const vehicle of grouped.values()) {
+    totalVisitsAcrossVehicles += vehicle.totalVisits
+
+    if (vehicle.totalVisits >= 2) {
+      vehiclesWithRepeatVisits += 1
+    }
+
+    if (vehicle.totalVisits < 2 || vehicle.lastVisitMillis == null || !vehicle.lastVisitDate) {
+      continue
+    }
+
+    const daysSinceLastVisit = Math.floor((now - vehicle.lastVisitMillis) / millisPerDay)
+    if (daysSinceLastVisit > 90) {
+      lapsedOver90Days += 1
+      if (daysSinceLastVisit > 180) {
+        lapsedOver180Days += 1
+      }
+
+      lapsedVehicles.push({
+        vrn: vehicle.vrn,
+        model: vehicle.model,
+        lastVisitDate: vehicle.lastVisitDate,
+        daysSinceLastVisit,
+        totalVisits: vehicle.totalVisits,
+        phone: vehicle.phone,
+      })
+    }
+  }
+
+  lapsedVehicles.sort((a, b) => {
+    if (b.daysSinceLastVisit !== a.daysSinceLastVisit) {
+      return b.daysSinceLastVisit - a.daysSinceLastVisit
+    }
+    return a.vrn.localeCompare(b.vrn)
+  })
+
+  const totalUniqueVehicles = grouped.size
+  const summary: CustomerRetentionSummary = {
+    totalUniqueVehicles,
+    vehiclesWithRepeatVisits,
+    retentionRate: totalUniqueVehicles > 0 ? (vehiclesWithRepeatVisits / totalUniqueVehicles) * 100 : 0,
+    avgVisitsPerVehicle: totalUniqueVehicles > 0 ? totalVisitsAcrossVehicles / totalUniqueVehicles : 0,
+    lapsedOver90Days,
+    lapsedOver180Days,
+  }
+
+  return {
+    summary,
+    lapsedVehicles: lapsedVehicles.slice(0, 200),
+  }
+}
+
+export async function getServiceDueList(
+  branch: BranchFilter,
+): Promise<ServiceDueRow[]> {
+  const parseKm = (value: unknown): number | null => {
+    if (value == null || value === '') return null
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+
+    const raw = String(value).trim()
+    if (!raw) return null
+    const cleaned = raw.replace(/,/g, '').replace(/Rs\.?\s*/gi, '')
+    const parsed = Number.parseFloat(cleaned)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+
+  while (true) {
+    let query = supabase
+      .from('job_card_closed_data')
+      .select(
+        'vehicle_registration_number, chassis_number, parent_product_line, account_phone_number, kms_run, last_service_km, last_service_date, closed_date_time',
+      )
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (branch !== 'ALL') {
+      query = query.eq('branch', branch)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const batch = (data as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+    from += QUERY_PAGE_SIZE
+  }
+
+  interface WorkingDueRow {
+    vrn: string
+    chassisNumber: string
+    model: string
+    phone: string
+    currentKm: number
+    lastServiceKm: number
+    lastServiceDate: string | null
+    closedDateMillis: number
+  }
+
+  const latestByVehicle = new Map<string, WorkingDueRow>()
+
+  for (const row of allRows) {
+    const typedRow = row as {
+      vehicle_registration_number?: unknown
+      chassis_number?: unknown
+      parent_product_line?: unknown
+      account_phone_number?: unknown
+      kms_run?: unknown
+      last_service_km?: unknown
+      last_service_date?: unknown
+      closed_date_time?: unknown
+    }
+
+    const vrn = normalizeVehicleRegistration(typedRow.vehicle_registration_number)
+    if (vrn === 'Unknown') continue
+
+    const closedDate = new Date(String(typedRow.closed_date_time ?? ''))
+    if (Number.isNaN(closedDate.getTime())) continue
+
+    const currentKm = parseKm(typedRow.kms_run)
+    const lastServiceKm = parseKm(typedRow.last_service_km)
+    if (currentKm == null || lastServiceKm == null) continue
+
+    const lastServiceDateRaw = typedRow.last_service_date == null ? '' : String(typedRow.last_service_date).trim()
+    let lastServiceDate: string | null = null
+    if (lastServiceDateRaw) {
+      const parsed = new Date(lastServiceDateRaw)
+      if (!Number.isNaN(parsed.getTime())) {
+        lastServiceDate = parsed.toISOString().slice(0, 10)
+      }
+    }
+
+    const nextRow: WorkingDueRow = {
+      vrn,
+      chassisNumber: typedRow.chassis_number == null ? '' : String(typedRow.chassis_number).trim(),
+      model: normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown',
+      phone: typedRow.account_phone_number == null ? '' : String(typedRow.account_phone_number).trim(),
+      currentKm,
+      lastServiceKm,
+      lastServiceDate,
+      closedDateMillis: closedDate.getTime(),
+    }
+
+    const key = vrn.toLowerCase()
+    const existing = latestByVehicle.get(key)
+    if (!existing || nextRow.closedDateMillis > existing.closedDateMillis) {
+      latestByVehicle.set(key, nextRow)
+    }
+  }
+
+  const rows: ServiceDueRow[] = []
+
+  for (const row of latestByVehicle.values()) {
+    const kmSinceLastService = row.currentKm - row.lastServiceKm
+    if (kmSinceLastService <= 0) continue
+
+    const kmToNextService = 10000 - kmSinceLastService
+    let urgency: ServiceDueUrgency = 'ok'
+    if (kmSinceLastService >= 10000) {
+      urgency = 'overdue'
+    } else if (kmSinceLastService >= 8000) {
+      urgency = 'due_soon'
+    } else if (kmSinceLastService >= 6000) {
+      urgency = 'upcoming'
+    }
+
+    rows.push({
+      vrn: row.vrn,
+      chassisNumber: row.chassisNumber,
+      model: row.model,
+      phone: row.phone,
+      lastServiceDate: row.lastServiceDate,
+      lastServiceKm: row.lastServiceKm,
+      currentKm: row.currentKm,
+      kmSinceLastService,
+      kmToNextService,
+      urgency,
+    })
+  }
+
+  return rows.sort((a, b) => {
+    if (b.kmSinceLastService !== a.kmSinceLastService) {
+      return b.kmSinceLastService - a.kmSinceLastService
+    }
+    return a.vrn.localeCompare(b.vrn)
   })
 }
 
@@ -3238,7 +3660,7 @@ export async function getPartsConsumptionSummary(
     const partDescription = normalizePartDescription(row.part_description)
     const otcQty = parseRevenue(row.otc_quantity) || 0
     const wsQty = parseRevenue(row.ws_quantity) || 0
-    const quantity = otcQty + wsQty || parseRevenue(row.quantity_consumed)
+    const quantity = (otcQty || 0) + (wsQty || 0)
     const txDate = parseDateOnly(row.transaction_date)
     const existing = grouped.get(partNumber)
 

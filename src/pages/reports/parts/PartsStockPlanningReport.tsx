@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getStockPlanningData } from '../../../lib/partsReportQueries'
 import type { StockPlanningData, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { ReportLoadingState } from '../components/ReportLoadingState'
+import { ReportErrorState } from '../components/ReportErrorState'
 
 interface FilterState {
   portal: 'EV' | 'PV'
@@ -15,6 +17,15 @@ interface SortConfig {
   direction: 'asc' | 'desc'
 }
 
+type AbcClass = 'A' | 'B' | 'C'
+
+type EnrichedStockPlanningRow = StockPlanningData & {
+  rowKey: string
+  mosMonths: number | null
+  deadStock: boolean
+  abcClass: AbcClass
+}
+
 export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
   const [rows, setRows] = useState<StockPlanningData[]>([])
@@ -25,19 +36,78 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
 
   const recommendations = ['urgent_reorder', 'reorder_soon', 'adequate', 'overstocked']
 
+  const enrichedRows = useMemo<EnrichedStockPlanningRow[]>(() => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 90)
+
+    const baseRows = rows.map((row, idx) => {
+      const consumption = row.avgConsumption4Week * 4.33
+      const mosMonths = consumption > 0 ? row.onHandQty / consumption : null
+      const issueDateRaw = row.lastIssueDate ? String(row.lastIssueDate).trim() : ''
+      const issueDate = issueDateRaw ? new Date(issueDateRaw) : null
+      const deadStock =
+        !issueDate || Number.isNaN(issueDate.getTime()) || issueDate.getTime() < cutoff.getTime()
+
+      return {
+        ...row,
+        rowKey: `${row.partNumber}__${idx}`,
+        mosMonths,
+        deadStock,
+        abcClass: 'C' as AbcClass,
+      }
+    })
+
+    const totalValue = baseRows.reduce((sum, row) => sum + Math.max(0, row.totalValue || 0), 0)
+    const sortedByValue = [...baseRows].sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0))
+    const abcByKey = new Map<string, AbcClass>()
+    let cumulative = 0
+
+    for (const row of sortedByValue) {
+      const prevPct = totalValue > 0 ? (cumulative / totalValue) * 100 : 100
+      const value = Math.max(0, row.totalValue || 0)
+      cumulative += value
+
+      let abcClass: AbcClass = 'C'
+      if (totalValue <= 0) {
+        abcClass = 'C'
+      } else if (prevPct < 70) {
+        abcClass = 'A'
+      } else if (prevPct < 90) {
+        abcClass = 'B'
+      }
+
+      abcByKey.set(row.rowKey, abcClass)
+    }
+
+    return baseRows.map((row) => ({
+      ...row,
+      abcClass: abcByKey.get(row.rowKey) ?? 'C',
+    }))
+  }, [rows])
+
   const stats = useMemo(() => {
     const byRec: Record<string, number> = {}
     recommendations.forEach((r) => {
-      byRec[r] = rows.filter((row) => row.recommendation === r).length
+      byRec[r] = enrichedRows.filter((row) => row.recommendation === r).length
     })
+
+    const deadStockCount = enrichedRows.filter((row) => row.deadStock).length
+    const zeroStockCount = enrichedRows.filter((row) => row.onHandQty === 0).length
+    const mosBelowTwoCount = enrichedRows.filter(
+      (row) => row.mosMonths !== null && row.mosMonths < 2,
+    ).length
+
     return {
-      total: rows.length,
+      total: enrichedRows.length,
       ...byRec,
+      deadStockCount,
+      zeroStockCount,
+      mosBelowTwoCount,
     }
-  }, [rows])
+  }, [enrichedRows])
 
   const sortedRows = useMemo(() => {
-    const sorted = [...rows].sort((a, b) => {
+    const sorted = [...enrichedRows].sort((a, b) => {
       let aVal: any = a[sortConfig.key]
       let bVal: any = b[sortConfig.key]
 
@@ -51,7 +121,7 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
       return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal
     })
     return sorted
-  }, [rows, sortConfig])
+  }, [enrichedRows, sortConfig])
 
   const loadFilters = useCallback(async () => {
     const options = await getPartsFilterOptions(branch)
@@ -104,15 +174,49 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
     }
   }
 
+  const getAbcClassColor = (abcClass: AbcClass) => {
+    if (abcClass === 'A') return 'bg-green-100 text-green-800'
+    if (abcClass === 'B') return 'bg-amber-100 text-amber-800'
+    return 'bg-gray-100 text-gray-800'
+  }
+
+  function downloadCsv(rowsToExport: StockPlanningData[], filename: string) {
+    const headers = ['Part Number','Description','On Hand','Days Supply',
+                     'Weeks Supply','Avg 4Wk Consumption','In-Transit','ETA',
+                     'MOS','Dead Stock','ABC Class','Recommendation','Value']
+    const csv = [headers.join(','), ...rowsToExport.map((r) => {
+      const row = r as EnrichedStockPlanningRow
+      const mosText = row.mosMonths === null ? '—' : `${row.mosMonths.toFixed(1)} months`
+      const deadText = row.deadStock ? 'DEAD' : 'ACTIVE'
+      const abcText = row.abcClass
+
+      return [
+        row.partNumber,
+        `"${row.partDescription || ''}"`,
+        row.onHandQty,
+        row.daysOfSupply.toFixed(1),
+        row.weeksOfSupply.toFixed(2),
+        row.avgConsumption4Week.toFixed(2),
+        row.intransitQty || 0,
+        row.nearestEta || '',
+        mosText,
+        deadText,
+        abcText,
+        row.recommendation,
+        row.totalValue || '',
+      ].join(',')
+    })].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = filename
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="p-6 bg-white rounded-lg shadow-sm">
       <h2 className="text-2xl font-bold mb-6 text-gray-800">Parts Stock Planning Report</h2>
 
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 text-red-700 rounded border border-red-200">
-          {error}
-        </div>
-      )}
+      {error && <ReportErrorState message={error} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div>
@@ -175,17 +279,12 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
           </select>
         </div>
 
-        <button
-          onClick={runReport}
-          disabled={loading}
-          className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 col-span-1 md:col-span-2 lg:col-span-1"
-        >
-          {loading ? 'Loading...' : 'Run Report'}
-        </button>
       </div>
 
+      {loading && <ReportLoadingState />}
+
       {stats.total > 0 && (
-        <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="mb-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
           <div className="p-4 bg-gray-50 rounded border">
             <p className="text-sm text-gray-600">Total Parts</p>
             <p className="text-2xl font-bold">{stats.total}</p>
@@ -205,6 +304,27 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
           <div className="p-4 bg-yellow-50 rounded border border-yellow-200">
             <p className="text-sm text-yellow-700">Overstocked</p>
             <p className="text-2xl font-bold text-yellow-700">{(stats as any).overstocked}</p>
+          </div>
+          <div className="p-4 bg-red-50 rounded border border-red-200">
+            <p className="text-sm text-red-700">Dead Stock</p>
+            <p className="text-2xl font-bold text-red-700">{(stats as any).deadStockCount}</p>
+          </div>
+          <div className="p-4 bg-slate-50 rounded border border-slate-200">
+            <p className="text-sm text-slate-700">Zero Stock</p>
+            <p className="text-2xl font-bold text-slate-700">{(stats as any).zeroStockCount}</p>
+          </div>
+          <div className="p-4 bg-indigo-50 rounded border border-indigo-200">
+            <p className="text-sm text-indigo-700">MOS &lt; 2</p>
+            <p className="text-2xl font-bold text-indigo-700">{(stats as any).mosBelowTwoCount}</p>
+          </div>
+          <div className="p-4 bg-blue-50 rounded border border-blue-200 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => downloadCsv(sortedRows, `parts-stock-planning-${new Date().toISOString().slice(0, 10)}.csv`)}
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+            >
+              Export CSV
+            </button>
           </div>
         </div>
       )}
@@ -236,13 +356,16 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
               <th className="px-4 py-2 text-right font-semibold text-gray-700 border">Avg 4Wk Consumption</th>
               <th className="px-4 py-2 text-right font-semibold text-gray-700 border">In-Transit</th>
               <th className="px-4 py-2 text-left font-semibold text-gray-700 border">ETA</th>
+              <th className="px-4 py-2 text-right font-semibold text-gray-700 border">MOS</th>
+              <th className="px-4 py-2 text-center font-semibold text-gray-700 border">Dead Stock</th>
+              <th className="px-4 py-2 text-center font-semibold text-gray-700 border">ABC Class</th>
               <th className="px-4 py-2 text-center font-semibold text-gray-700 border">Recommendation</th>
               <th className="px-4 py-2 text-right font-semibold text-gray-700 border">Value</th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.map((row, idx) => (
-              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <tr key={row.rowKey} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                 <td className="px-4 py-2 border text-gray-700 font-medium">{row.partNumber}</td>
                 <td className="px-4 py-2 border text-gray-700 text-xs">{row.partDescription}</td>
                 <td className="px-4 py-2 border text-right text-gray-700">{row.onHandQty.toLocaleString()}</td>
@@ -251,6 +374,19 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
                 <td className="px-4 py-2 border text-right text-gray-700">{row.avgConsumption4Week.toFixed(2)}</td>
                 <td className="px-4 py-2 border text-right text-gray-700">{row.intransitQty || 0}</td>
                 <td className="px-4 py-2 border text-gray-700 text-xs">{row.nearestEta}</td>
+                <td className="px-4 py-2 border text-right text-gray-700">
+                  {row.mosMonths === null ? '—' : `${row.mosMonths.toFixed(1)} months`}
+                </td>
+                <td className="px-4 py-2 border text-center">
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${row.deadStock ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                    {row.deadStock ? 'DEAD' : 'ACTIVE'}
+                  </span>
+                </td>
+                <td className="px-4 py-2 border text-center">
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${getAbcClassColor(row.abcClass)}`}>
+                    {row.abcClass}
+                  </span>
+                </td>
                 <td className="px-4 py-2 border text-center">
                   <span className={`px-2 py-1 rounded text-xs font-semibold ${getRecommendationColor(row.recommendation)}`}>
                     {row.recommendation.replace(/_/g, ' ')}
