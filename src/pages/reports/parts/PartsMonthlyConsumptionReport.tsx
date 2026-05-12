@@ -14,7 +14,7 @@ interface FilterState {
 export default function PartsMonthlyConsumptionReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
   const [rows, setRows] = useState<PartConsumptionTrend[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<PartsFilterOptions>({ vendors: [], categories: [], fiscalYears: [] })
 

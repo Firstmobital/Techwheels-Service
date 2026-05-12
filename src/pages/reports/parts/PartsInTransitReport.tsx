@@ -17,7 +17,7 @@ interface SortConfig {
 export default function PartsInTransitReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
   const [rows, setRows] = useState<InTransitVisibility[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<PartsFilterOptions>({ vendors: [], categories: [], fiscalYears: [] })
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'daysToEta', direction: 'asc' })

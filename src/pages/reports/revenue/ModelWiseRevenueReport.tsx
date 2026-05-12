@@ -142,7 +142,7 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
                   />
                   <YAxis dataKey="model" type="category" width={180} />
                   <Tooltip
-                    formatter={(value: number) => formatCurrency(Number(value))}
+                    formatter={(value) => formatCurrency(typeof value === 'number' ? value : Number(value ?? 0))}
                     labelFormatter={(label) => `Model: ${label}`}
                   />
                   <Legend />

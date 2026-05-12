@@ -26,7 +26,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
 
   const [employees, setEmployees] = useState<EmployeeOption[]>([])
   const [rows, setRows] = useState<ReportRow[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const selectedEmployee = useMemo(

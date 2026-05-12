@@ -18,7 +18,7 @@ interface SortConfig {
 export default function PartsFastMovingReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
   const [rows, setRows] = useState<FastMovingPart[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<PartsFilterOptions>({ vendors: [], categories: [], fiscalYears: [] })
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'daysOfSupply', direction: 'asc' })

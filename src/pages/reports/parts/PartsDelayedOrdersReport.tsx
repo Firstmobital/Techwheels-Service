@@ -17,7 +17,7 @@ interface SortConfig {
 export default function PartsDelayedOrdersReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
   const [rows, setRows] = useState<DelayedOrder[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<PartsFilterOptions>({ vendors: [], categories: [], fiscalYears: [] })
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'daysOverdue', direction: 'desc' })

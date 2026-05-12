@@ -16,7 +16,7 @@ interface SortConfig {
 export default function PartsDealerPerformanceReport({ branch }: ReportViewProps) {
   const [filters, setFilters] = useState<FilterState>({ portal: 'EV' })
   const [rows, setRows] = useState<DealerPerformance[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterOptions, setFilterOptions] = useState<PartsFilterOptions>({ vendors: [], categories: [], fiscalYears: [] })
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'fulfilmentRate', direction: 'desc' })
