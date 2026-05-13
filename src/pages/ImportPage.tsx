@@ -784,7 +784,7 @@ export default function ImportPage() {
               'part_number,branch,order_date',
             ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
           : []
-        const CHUNK = 500
+        const CHUNK = 2000
         let totalInserted = 0
         const allParseErrors: VasParseError[] = []
         const mappingIssues: MappingIssueInsert[] = []
@@ -810,34 +810,36 @@ export default function ImportPage() {
         }
 
         const insertRowsWithDuplicateSkip = async (rows: Record<string, unknown>[]): Promise<number> => {
-          let inserted = 0
+          const insertChunk = async (chunkRows: Record<string, unknown>[]): Promise<number> => {
+            if (chunkRows.length === 0) return 0
 
-          for (let i = 0; i < rows.length; i += CHUNK) {
-            const chunkRows = rows.slice(i, i + CHUNK)
             const { error: insertError } = await supabase.from(tableName).insert(chunkRows)
 
-            if (!insertError) {
-              inserted += chunkRows.length
-              continue
-            }
+            if (!insertError) return chunkRows.length
 
             if (!isDuplicateViolation(insertError)) {
               throw new Error(insertError.message ?? 'Insert failed')
             }
 
-            for (const row of chunkRows) {
-              const { error: rowInsertError } = await supabase.from(tableName).insert(row)
-              if (!rowInsertError) {
-                inserted += 1
-                continue
-              }
-
-              if (isDuplicateViolation(rowInsertError)) continue
-
-              throw new Error(rowInsertError.message ?? 'Insert failed')
+            // Duplicate exists in this chunk.
+            // Split recursively to avoid slow row-by-row insertion for large files.
+            if (chunkRows.length === 1) {
+              return 0
             }
+
+            const mid = Math.floor(chunkRows.length / 2)
+            const left = chunkRows.slice(0, mid)
+            const right = chunkRows.slice(mid)
+
+            const leftInserted = await insertChunk(left)
+            const rightInserted = await insertChunk(right)
+            return leftInserted + rightInserted
           }
 
+          let inserted = 0
+          for (let i = 0; i < rows.length; i += CHUNK) {
+            inserted += await insertChunk(rows.slice(i, i + CHUNK))
+          }
           return inserted
         }
 
