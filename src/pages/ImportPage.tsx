@@ -711,7 +711,44 @@ export default function ImportPage() {
           return []
         }
 
-        const upsertOrInsertPartsRows = async (
+        const isDuplicateViolation = (error: { code?: string; message?: string }): boolean => {
+          const message = (error.message ?? '').toLowerCase()
+          return error.code === '23505' || message.includes('duplicate key value violates unique constraint')
+        }
+
+        const insertRowsWithDuplicateSkip = async (rows: Record<string, unknown>[]): Promise<number> => {
+          let inserted = 0
+
+          for (let i = 0; i < rows.length; i += CHUNK) {
+            const chunkRows = rows.slice(i, i + CHUNK)
+            const { error: insertError } = await supabase.from(tableName).insert(chunkRows)
+
+            if (!insertError) {
+              inserted += chunkRows.length
+              continue
+            }
+
+            if (!isDuplicateViolation(insertError)) {
+              throw new Error(insertError.message ?? 'Insert failed')
+            }
+
+            for (const row of chunkRows) {
+              const { error: rowInsertError } = await supabase.from(tableName).insert(row)
+              if (!rowInsertError) {
+                inserted += 1
+                continue
+              }
+
+              if (isDuplicateViolation(rowInsertError)) continue
+
+              throw new Error(rowInsertError.message ?? 'Insert failed')
+            }
+          }
+
+          return inserted
+        }
+
+        const upsertOrInsertRows = async (
           rows: Record<string, unknown>[],
           onConflictCandidates: string[],
         ): Promise<number> => {
@@ -750,37 +787,14 @@ export default function ImportPage() {
 
             if (upsertHandled) continue
 
-            const { error: insertError } = await supabase.from(tableName).insert(chunkRows)
-            if (!insertError) {
-              inserted += chunkRows.length
-              continue
-            }
-
-            const insertMessage = insertError.message ?? ''
-            const duplicateViolation =
-              insertError.code === '23505' ||
-              insertMessage.toLowerCase().includes('duplicate key value violates unique constraint')
-
-            if (!duplicateViolation) {
-              throw new Error(lastMissingConstraintError ?? insertMessage)
-            }
-
-            // Fallback for environments with legacy unique keys: insert row-by-row and skip duplicates.
-            for (const row of chunkRows) {
-              const { error: rowInsertError } = await supabase.from(tableName).insert(row)
-              if (!rowInsertError) {
-                inserted += 1
-                continue
-              }
-
-              const rowMessage = rowInsertError.message ?? ''
-              const rowDuplicate =
-                rowInsertError.code === '23505' ||
-                rowMessage.toLowerCase().includes('duplicate key value violates unique constraint')
-
-              if (rowDuplicate) continue
-
-              throw new Error(rowMessage)
+            try {
+              inserted += await insertRowsWithDuplicateSkip(chunkRows)
+            } catch (insertFallbackError) {
+              const fallbackMessage =
+                insertFallbackError instanceof Error
+                  ? insertFallbackError.message
+                  : String(insertFallbackError)
+              throw new Error(lastMissingConstraintError ?? fallbackMessage)
             }
           }
 
@@ -908,11 +922,7 @@ export default function ImportPage() {
             }
 
             // Use insert for VAS table (line items, multiple rows per job card allowed)
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
-              if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
-            }
+            totalInserted += await insertRowsWithDuplicateSkip(insertRows)
           } else if (isJcClosedTable && jcHeaderMapping) {
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
@@ -985,13 +995,10 @@ export default function ImportPage() {
 
             const dedupedRows = dedupeJcClosedRowsByConflictKey(insertRows)
 
-            for (let i = 0; i < dedupedRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).upsert(dedupedRows.slice(i, i + CHUNK), {
-                onConflict: 'job_card_number,branch',
-              })
-              if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, dedupedRows.length - i)
-            }
+            totalInserted += await upsertOrInsertRows(dedupedRows, [
+              'job_card_number,branch',
+              'job_card_number',
+            ])
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
@@ -1027,11 +1034,7 @@ export default function ImportPage() {
               )
             }
 
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
-              if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
-            }
+            totalInserted += await insertRowsWithDuplicateSkip(insertRows)
           } else if (isPartsConsumptionTable && partsConsumptionHeaderMapping) {
             const parseErrors: PartsConsumptionParseError[] = []
             const insertRows: Record<string, unknown>[] = []
@@ -1061,7 +1064,7 @@ export default function ImportPage() {
               )
             }
 
-            totalInserted += await upsertOrInsertPartsRows(
+            totalInserted += await upsertOrInsertRows(
               insertRows,
               [
                 'part_number,branch,transaction_date,source_row_hash',
@@ -1099,7 +1102,7 @@ export default function ImportPage() {
               )
             }
 
-            totalInserted += await upsertOrInsertPartsRows(
+            totalInserted += await upsertOrInsertRows(
               insertRows,
               [
                 'part_number,branch,order_date,source_row_hash',
@@ -1136,7 +1139,7 @@ export default function ImportPage() {
               )
             }
 
-            totalInserted += await upsertOrInsertPartsRows(
+            totalInserted += await upsertOrInsertRows(
               insertRows,
               [
                 'part_number,branch,snapshot_date,source_row_hash',
@@ -1147,11 +1150,7 @@ export default function ImportPage() {
           } else {
             // Other tables: use original logic
             const insertRows = buildInsertRows(rawRows, tableColumns, branch)
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).insert(insertRows.slice(i, i + CHUNK))
-              if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
-            }
+            totalInserted += await insertRowsWithDuplicateSkip(insertRows)
           }
         }
 
