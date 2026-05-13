@@ -88,6 +88,22 @@ export default function EmployeeUtilizationReport({ branch, dateFilter }: Report
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      advisor: row.advisorLabel,
+      jobCards: row.jobCardCount,
+      activeDays: row.activeDays,
+      avgJobsPerDay: row.avgJobsPerActiveDay,
+      labourRevenue: row.labourRevenue,
+      sparesRevenue: row.sparesRevenue,
+      totalRevenue: row.totalRevenue,
+      avgRevenuePerJobCard: row.avgRevenuePerJobCard,
+      workloadShare: row.workloadSharePercentage,
+    }))
+    exportToCSV(exportData, 'employee-utilization-report')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

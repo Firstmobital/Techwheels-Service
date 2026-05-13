@@ -54,6 +54,20 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
   const labourShare = grandTotal > 0 ? (totals.labourRevenue / grandTotal) * 100 : 0
   const sparesShare = grandTotal > 0 ? (totals.sparesRevenue / grandTotal) * 100 : 0
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      serviceType: row.serviceType,
+      jobCardCount: row.jobCardCount,
+      labourRevenue: row.labourRevenue,
+      sparesRevenue: row.sparesRevenue,
+      totalRevenue: row.totalRevenue,
+      labourSharePercentage: row.labourSharePercentage,
+      sparesSharePercentage: row.sparesSharePercentage,
+    }))
+    exportToCSV(exportData, 'labour-spares-mix-report')
+  }
+
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div>

@@ -47,6 +47,19 @@ export default function TatDurationReport({ branch, dateFilter }: ReportViewProp
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (!report || report.buckets.length === 0) return
+    const exportData = report.buckets.map((row) => ({
+      durationBucket: row.bucketLabel,
+      jobCards: row.jobCardCount,
+      sharePercentage: row.percentage,
+      avgTatHours: row.avgTatHours,
+      avgTatDays: row.avgTatDays,
+      totalRevenue: row.totalRevenue,
+    }))
+    exportToCSV(exportData, 'tat-duration-report')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

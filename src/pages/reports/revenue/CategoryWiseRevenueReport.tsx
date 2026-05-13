@@ -109,6 +109,19 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
     return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
   }
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      category: row.category,
+      vehicleCount: row.vehicleCount,
+      labourRevenue: row.labourRevenue,
+      partsRevenue: row.partsRevenue,
+      totalRevenue: row.totalRevenue,
+      contributionPercentage: row.contributionPercentage,
+    }))
+    exportToCSV(exportData, 'category-wise-revenue-report')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

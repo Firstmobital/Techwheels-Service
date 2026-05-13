@@ -101,6 +101,22 @@ export default function VehicleWiseRevenueReport({ branch, dateFilter }: ReportV
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      vehicleRegistrationNumber: row.vehicleRegistrationNumber,
+      visitCount: row.visitCount,
+      repeatVisitCount: row.repeatVisitCount,
+      labourRevenue: row.labourRevenue,
+      sparesRevenue: row.sparesRevenue,
+      totalRevenue: row.totalRevenue,
+      avgRevenuePerVisit: row.avgRevenuePerVisit,
+      firstVisitDate: row.firstVisitDate ?? '',
+      lastVisitDate: row.lastVisitDate ?? '',
+    }))
+    exportToCSV(exportData, 'vehicle-wise-revenue-report')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

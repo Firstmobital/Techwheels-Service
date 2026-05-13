@@ -39,6 +39,23 @@ export default function JcInvoiceReconciliationReport({ branch, dateFilter }: Re
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (!report || report.branchBreakdown.length === 0) return
+    const exportData = report.branchBreakdown.map((row) => ({
+      branch: row.branch,
+      jobCards: row.jobCards,
+      matched: row.matched,
+      unmatchedJobCards: row.unmatchedJobCards,
+      unmatchedInvoices: row.unmatchedInvoices,
+      missingInvoiceRate: row.missingInvoiceRate,
+      jcTotalAmount: row.jcTotalAmount,
+      invoiceMatchedAmount: row.invoiceMatchedAmount,
+      netVariance: row.netVariance,
+      absoluteVariance: row.absoluteVariance,
+    }))
+    exportToCSV(exportData, 'jc-invoice-reconciliation-report')
+  }
+
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div>

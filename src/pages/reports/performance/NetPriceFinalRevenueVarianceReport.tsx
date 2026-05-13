@@ -85,6 +85,24 @@ export default function NetPriceFinalRevenueVarianceReport({ branch, dateFilter 
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (!report || report.rows.length === 0) return
+    const exportData = report.rows.map((row) => ({
+      branch: row.branch,
+      jobCode: row.jobCode,
+      records: row.records,
+      matched: row.matched,
+      unmatched: row.unmatched,
+      estimatedNetPrice: row.estimatedNetPrice,
+      realizedRevenue: row.realizedRevenue,
+      varianceAmount: row.varianceAmount,
+      variancePercentage: row.variancePercentage,
+      avgEstimatedPerRecord: row.avgEstimatedPerRecord,
+      avgRealizedPerMatched: row.avgRealizedPerMatched,
+    }))
+    exportToCSV(exportData, 'net-price-final-revenue-variance-report')
+  }
+
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div>

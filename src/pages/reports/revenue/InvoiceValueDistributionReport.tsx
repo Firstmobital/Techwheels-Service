@@ -124,6 +124,26 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (!report) return
+    const bandData = report.valueBands.map((row) => ({
+      bandLabel: row.bandLabel,
+      invoiceCount: row.invoiceCount,
+      percentage: row.percentage,
+      totalAmount: row.totalAmount,
+      avgInvoiceValue: row.avgInvoiceValue,
+    }))
+    const branchData = report.branchSpread.map((row) => ({
+      branch: row.branch,
+      invoiceCount: row.invoiceCount,
+      percentage: row.percentage,
+      totalAmount: row.totalAmount,
+      avgInvoiceValue: row.avgInvoiceValue,
+    }))
+    exportToCSV(bandData, 'invoice-value-bands')
+    exportToCSV(branchData, 'invoice-branch-spread')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

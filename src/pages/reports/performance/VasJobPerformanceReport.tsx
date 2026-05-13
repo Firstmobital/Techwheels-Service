@@ -45,6 +45,24 @@ export default function VasJobPerformanceReport({ branch, dateFilter }: ReportVi
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (!dashboard) return
+    const statusData = dashboard.jobStatusMix.map((row) => ({
+      status: row.status,
+      count: row.count,
+      percentage: row.percentage,
+    }))
+    const complaintData = dashboard.topComplaintCodes.map((row) => ({
+      complaintCode: row.complaintCode,
+      count: row.count,
+      percentage: row.percentage,
+      totalJobValue: row.totalJobValue,
+      totalDiscount: row.totalDiscount,
+    }))
+    exportToCSV(statusData, 'vas-job-status-mix')
+    exportToCSV(complaintData, 'vas-top-complaints')
+  }
+
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div>

@@ -134,6 +134,19 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
     void runReport()
   }, [runReport])
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      branch: row.branch ?? '',
+      jobCardNumber: row.job_card_number ?? '',
+      advisorAssigned: row.sr_assigned_to ?? '',
+      employeeCode: row.employee_code ?? '',
+      eventTime: row.event_time ?? '',
+      amount: row.amount ?? 0,
+    }))
+    exportToCSV(exportData, 'advisor-performance-report')
+  }
+
   return (
     <div className="space-y-5">
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}

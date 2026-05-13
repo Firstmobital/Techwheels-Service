@@ -108,6 +108,22 @@ export default function VasBillingHoursEfficiencyReport({ branch, dateFilter }: 
   const avgHoursPerJob = totals.jobCount > 0 ? totals.totalBillingHours / totals.jobCount : 0
   const avgValuePerHour = totals.totalBillingHours > 0 ? totals.totalJobValue / totals.totalBillingHours : 0
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      dimension: row.dimension,
+      jobCount: row.jobCount,
+      totalBillingHours: row.totalBillingHours,
+      avgBillingHoursPerJob: row.avgBillingHoursPerJob,
+      totalJobValue: row.totalJobValue,
+      totalNetPrice: row.totalNetPrice,
+      totalDiscount: row.totalDiscount,
+      avgJobValuePerHour: row.avgJobValuePerHour,
+      billingHoursSharePercentage: row.billingHoursSharePercentage,
+    }))
+    exportToCSV(exportData, 'vas-billing-hours-efficiency-report')
+  }
+
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

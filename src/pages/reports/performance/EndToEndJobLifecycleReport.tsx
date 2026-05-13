@@ -39,6 +39,26 @@ export default function EndToEndJobLifecycleReport({ branch, dateFilter }: Repor
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (!report || report.branchBreakdown.length === 0) return
+    const exportData = report.branchBreakdown.map((row) => ({
+      branch: row.branch,
+      totalJobs: row.totalJobs,
+      completeLifecycle: row.completeLifecycle,
+      completionRate: row.lifecycleCompletionRate,
+      avgCreateToCloseHours: row.avgCreateToCloseHours,
+      avgCloseToInvoiceHours: row.avgCloseToInvoiceHours,
+      avgCreateToInvoiceHours: row.avgCreateToInvoiceHours,
+      estimatedValue: row.estimatedValue,
+      realizedValue: row.realizedValue,
+      invoicedValue: row.invoicedValue,
+      realizedVsEstimate: row.realizedVsEstimateRate,
+      invoicedVsRealized: row.invoicedVsRealizedRate,
+      invoicedVsEstimate: row.invoicedVsEstimateRate,
+    }))
+    exportToCSV(exportData, 'end-to-end-job-lifecycle-report')
+  }
+
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div>

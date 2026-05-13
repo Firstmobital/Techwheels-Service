@@ -112,6 +112,17 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
     }
   }
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      month: row.month,
+      labourRevenue: row.labourRevenue,
+      partsRevenue: row.partsRevenue,
+      totalRevenue: row.totalRevenue,
+    }))
+    exportToCSV(exportData, 'monthly-trend-report')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

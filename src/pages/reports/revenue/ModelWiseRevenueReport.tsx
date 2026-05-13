@@ -96,6 +96,20 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
 
   const formatCurrency = (value: number) => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      model: row.model,
+      jobCardCount: row.jobCardCount,
+      labourRevenue: row.labourRevenue,
+      sparesRevenue: row.sparesRevenue,
+      totalRevenue: row.totalRevenue,
+      avgRevenuePerJC: row.avgRevenuePerJC,
+      topServiceType: row.topServiceType,
+    }))
+    exportToCSV(exportData, 'model-wise-revenue-report')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

@@ -81,6 +81,19 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
 
   const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      date: row.date,
+      invoiceCount: row.invoiceCount,
+      labourTotal: row.labourTotal,
+      sparesTotal: row.sparesTotal,
+      consolidatedTotal: row.consolidatedTotal,
+      avgInvoiceValue: row.avgInvoiceValue,
+    }))
+    exportToCSV(exportData, 'invoice-daily-trend-report')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
