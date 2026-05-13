@@ -85,12 +85,45 @@ function parseDate(value: unknown, fieldName: string): string | null {
   }
 
   if (typeof value === 'number') {
+    // Support numeric compact dates like 20260217 (YYYYMMDD)
+    if (Number.isInteger(value) && value >= 19000101 && value <= 29991231) {
+      const raw = String(value)
+      const year = Number(raw.slice(0, 4))
+      const month = Number(raw.slice(4, 6))
+      const day = Number(raw.slice(6, 8))
+      const parsedCompact = new Date(Date.UTC(year, month - 1, day))
+      if (
+        parsedCompact.getUTCFullYear() === year &&
+        parsedCompact.getUTCMonth() === month - 1 &&
+        parsedCompact.getUTCDate() === day
+      ) {
+        return parsedCompact.toISOString().slice(0, 10)
+      }
+    }
+
     const parsed = new Date(Math.round((value - 25569) * 86400 * 1000))
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
   }
 
   const raw = String(value).trim()
   if (!raw) return null
+
+  // Support compact ERP-style dates like 20260217 (YYYYMMDD)
+  const compactYmd = raw.match(/^(\d{4})(\d{2})(\d{2})$/)
+  if (compactYmd) {
+    const [, y, m, d] = compactYmd
+    const year = Number(y)
+    const month = Number(m)
+    const day = Number(d)
+    const parsed = new Date(Date.UTC(year, month - 1, day))
+    if (
+      parsed.getUTCFullYear() === year &&
+      parsed.getUTCMonth() === month - 1 &&
+      parsed.getUTCDate() === day
+    ) {
+      return parsed.toISOString().slice(0, 10)
+    }
+  }
 
   const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/)
   if (dmy) {
