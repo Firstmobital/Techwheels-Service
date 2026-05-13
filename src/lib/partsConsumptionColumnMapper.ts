@@ -103,28 +103,80 @@ function parseOptionalString(value: unknown): string | null {
   return raw || null
 }
 
-function parseFiscalYear(value: unknown): string | null {
-  if (value == null || value === '') return null
-  const raw = String(value).trim()
-  if (!raw) return null
-  return raw
-}
-
-function parseInteger(value: unknown, fieldName: string): number | null {
+function parseFiscalYear(value: unknown): number | null {
   if (value == null || value === '') return null
   if (typeof value === 'number') {
-    if (Number.isInteger(value)) return value
-    throw new Error(`Invalid integer for ${fieldName}`)
+    if (!Number.isFinite(value)) return null
+    const normalized = Math.trunc(value)
+    return normalized >= 1900 && normalized <= 2999 ? normalized : null
   }
 
   const raw = String(value).trim()
   if (!raw) return null
-  const cleaned = raw.replace(/,/g, '')
-  const num = Number.parseInt(cleaned, 10)
-  if (!Number.isFinite(num)) {
-    throw new Error(`Invalid integer for ${fieldName}: "${raw}"`)
+
+  const exactYear = raw.match(/^\d{4}$/)
+  if (exactYear) return Number(raw)
+
+  const fyRange = raw.match(/(\d{2,4})\s*[-/]\s*(\d{2,4})/)
+  if (fyRange) {
+    const first = fyRange[1]
+    const firstYear = first.length === 2 ? 2000 + Number(first) : Number(first)
+    return Number.isFinite(firstYear) ? firstYear : null
   }
-  return num
+
+  const yearInText = raw.match(/(19\d{2}|20\d{2}|21\d{2})/)
+  if (yearInText) return Number(yearInText[1])
+
+  return null
+}
+
+function parseFiscalMonth(value: unknown): number | null {
+  if (value == null || value === '') return null
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null
+    const month = Math.trunc(value)
+    return month >= 1 && month <= 12 ? month : null
+  }
+
+  const raw = String(value).trim().toLowerCase()
+  if (!raw) return null
+
+  const monthMap: Record<string, number> = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12,
+  }
+
+  if (raw in monthMap) return monthMap[raw]
+
+  if (/^\d{1,2}$/.test(raw)) {
+    const month = Number(raw)
+    return month >= 1 && month <= 12 ? month : null
+  }
+
+  return null
 }
 
 export function mapPartsConsumptionHeaders(excelHeaders: string[]): HeaderMapping {
@@ -294,7 +346,7 @@ export function buildPartsConsumptionInsertRow(
     }
   }
 
-  const parseOptionalFiscalYear = (header: string | undefined, columnName: string): string | null => {
+  const parseOptionalFiscalYear = (header: string | undefined, columnName: string): number | null => {
     if (!header) return null
     const raw = excelRow[header]
     try {
@@ -315,7 +367,7 @@ export function buildPartsConsumptionInsertRow(
     if (!header) return null
     const raw = excelRow[header]
     try {
-      return parseInteger(raw, header)
+      return parseFiscalMonth(raw)
     } catch (err) {
       errors.push({
         rowNumber,
