@@ -1111,8 +1111,7 @@ export default function ImportPage() {
         const message = (err as Error).message
         const isSchemaCacheIssue =
           message.includes('schema cache') ||
-          message.includes("Could not find the table 'public.") ||
-          message.includes('relation')
+          message.includes("Could not find the table 'public.")
 
         const uploadError = isSchemaCacheIssue
           ? `Database schema is not in sync for table ${tableName}. Please run the latest Supabase migrations on the same project used by this app and retry. Original error: ${message}`

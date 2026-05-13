@@ -380,22 +380,33 @@ export function buildPartsConsumptionInsertRow(
     }
   }
 
-  const computedQuantityConsumed = (otcQuantity ?? 0) + (wsQuantity ?? 0)
-  const totalConsumption = totalConsumptionFromFile ?? computedQuantityConsumed
+  const normalizeNonNegative = (value: number | null): number | null => {
+    if (value == null) return null
+    return value < 0 ? Math.abs(value) : value
+  }
+
+  const safeOtcQuantity = normalizeNonNegative(otcQuantity)
+  const safeWsQuantity = normalizeNonNegative(wsQuantity)
+  const safeTotalFromFile = normalizeNonNegative(totalConsumptionFromFile)
+  const safeUnitCost = normalizeNonNegative(parseOptionalNumber(headerMapping.unitCost, 'unit_cost'))
+  const safeTotalCost = normalizeNonNegative(parseOptionalNumber(headerMapping.totalCost, 'total_cost'))
+
+  const computedQuantityConsumed = (safeOtcQuantity ?? 0) + (safeWsQuantity ?? 0)
+  const totalConsumption = safeTotalFromFile ?? computedQuantityConsumed
 
   const row: Record<string, unknown> = {
     part_number: partNumber,
     part_description: headerMapping.partDescription ? String(excelRow[headerMapping.partDescription] ?? '').trim() || null : null,
     transaction_date: transactionDate,
-    otc_quantity: otcQuantity ?? 0,
-    ws_quantity: wsQuantity ?? 0,
+    otc_quantity: safeOtcQuantity ?? 0,
+    ws_quantity: safeWsQuantity ?? 0,
     quantity_consumed: totalConsumption,
     total_consumption: totalConsumption,
     fiscal_year: parseOptionalFiscalYear(headerMapping.fiscalYear, 'fiscal_year'),
     fiscal_month: parseOptionalFiscalMonth(headerMapping.fiscalMonth, 'fiscal_month'),
     month_name: parseOptionalMonthName(headerMapping.monthName, 'month_name'),
-    unit_cost: parseOptionalNumber(headerMapping.unitCost, 'unit_cost'),
-    total_cost: parseOptionalNumber(headerMapping.totalCost, 'total_cost'),
+    unit_cost: safeUnitCost,
+    total_cost: safeTotalCost,
     source_reference: headerMapping.sourceReference ? String(excelRow[headerMapping.sourceReference] ?? '').trim() || null : null,
     source_row_hash: sourceRowHash,
     branch,
