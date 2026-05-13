@@ -713,31 +713,75 @@ export default function ImportPage() {
 
         const upsertOrInsertPartsRows = async (
           rows: Record<string, unknown>[],
-          onConflict: string,
+          onConflictCandidates: string[],
         ): Promise<number> => {
           let inserted = 0
 
           for (let i = 0; i < rows.length; i += CHUNK) {
             const chunkRows = rows.slice(i, i + CHUNK)
 
-            const { error: upsertError } = await supabase.from(tableName).upsert(chunkRows, {
-              onConflict,
-            })
+            let upsertHandled = false
+            let lastMissingConstraintError: string | null = null
 
-            if (upsertError) {
-              const message = upsertError.message ?? ''
-              const missingConflictConstraint =
-                message.includes('no unique or exclusion constraint matching the ON CONFLICT specification')
+            for (const onConflict of onConflictCandidates) {
+              const { error: upsertError } = await supabase.from(tableName).upsert(chunkRows, {
+                onConflict,
+              })
 
-              if (!missingConflictConstraint) {
-                throw new Error(message)
+              if (!upsertError) {
+                upsertHandled = true
+                inserted += chunkRows.length
+                break
               }
 
-              const { error: insertError } = await supabase.from(tableName).insert(chunkRows)
-              if (insertError) throw new Error(insertError.message)
+              const message = upsertError.message ?? ''
+              const lower = message.toLowerCase()
+              const missingConflictConstraint = lower.includes(
+                'no unique or exclusion constraint matching the on conflict specification',
+              )
+
+              if (missingConflictConstraint) {
+                lastMissingConstraintError = message
+                continue
+              }
+
+              throw new Error(message)
             }
 
-            inserted += chunkRows.length
+            if (upsertHandled) continue
+
+            const { error: insertError } = await supabase.from(tableName).insert(chunkRows)
+            if (!insertError) {
+              inserted += chunkRows.length
+              continue
+            }
+
+            const insertMessage = insertError.message ?? ''
+            const duplicateViolation =
+              insertError.code === '23505' ||
+              insertMessage.toLowerCase().includes('duplicate key value violates unique constraint')
+
+            if (!duplicateViolation) {
+              throw new Error(lastMissingConstraintError ?? insertMessage)
+            }
+
+            // Fallback for environments with legacy unique keys: insert row-by-row and skip duplicates.
+            for (const row of chunkRows) {
+              const { error: rowInsertError } = await supabase.from(tableName).insert(row)
+              if (!rowInsertError) {
+                inserted += 1
+                continue
+              }
+
+              const rowMessage = rowInsertError.message ?? ''
+              const rowDuplicate =
+                rowInsertError.code === '23505' ||
+                rowMessage.toLowerCase().includes('duplicate key value violates unique constraint')
+
+              if (rowDuplicate) continue
+
+              throw new Error(rowMessage)
+            }
           }
 
           return inserted
@@ -1019,7 +1063,12 @@ export default function ImportPage() {
 
             totalInserted += await upsertOrInsertPartsRows(
               insertRows,
-              'part_number,branch,transaction_date,source_row_hash',
+              [
+                'part_number,branch,transaction_date,source_row_hash',
+                'part_number,branch,portal,transaction_date,source_row_hash',
+                'part_number,branch,portal,fiscal_year,month_name,source_row_hash',
+                'part_number,branch,portal,fiscal_year,month_name',
+              ],
             )
           } else if (isPartsOrderTable && partsOrderHeaderMapping) {
             const parseErrors: PartsOrderParseError[] = []
@@ -1052,7 +1101,11 @@ export default function ImportPage() {
 
             totalInserted += await upsertOrInsertPartsRows(
               insertRows,
-              'part_number,branch,order_date,source_row_hash',
+              [
+                'part_number,branch,order_date,source_row_hash',
+                'part_number,branch,portal,order_date,source_row_hash',
+                'part_number,branch,portal,order_date',
+              ],
             )
           } else if (isPartsStockTable && partsStockHeaderMapping) {
             const parseErrors: PartsStockParseError[] = []
@@ -1085,7 +1138,11 @@ export default function ImportPage() {
 
             totalInserted += await upsertOrInsertPartsRows(
               insertRows,
-              'part_number,branch,snapshot_date,source_row_hash',
+              [
+                'part_number,branch,snapshot_date,source_row_hash',
+                'part_number,branch,portal,snapshot_date,source_row_hash',
+                'part_number,branch,portal,snapshot_date',
+              ],
             )
           } else {
             // Other tables: use original logic
