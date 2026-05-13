@@ -61,9 +61,23 @@ export default function EndToEndJobLifecycleReport({ branch, dateFilter }: Repor
 
   return (
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div>
-        <h3 className="text-base font-semibold text-gray-900">End-to-End Job Lifecycle Report</h3>
-        <p className="text-xs text-gray-500">Create to close to invoice timeline with value chain conversion across all three sheets.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">End-to-End Job Lifecycle Report</h3>
+          <p className="text-xs text-gray-500">Create to close to invoice timeline with value chain conversion across all three sheets.</p>
+        </div>
+        {report && report.branchBreakdown.length > 0 && (
+          <button
+            onClick={handleExport}
+            className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+            title="Export data to CSV"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
+          </button>
+        )}
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}

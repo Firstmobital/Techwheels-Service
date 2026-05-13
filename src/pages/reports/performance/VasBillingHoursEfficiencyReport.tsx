@@ -132,19 +132,33 @@ export default function VasBillingHoursEfficiencyReport({ branch, dateFilter }: 
           <p className="text-xs text-gray-500">Billing hours efficiency by performed by, job code, or rate type.</p>
         </div>
 
-        <div className="w-full sm:w-64">
-          <label className="mb-1 block text-xs font-medium text-gray-600">Group By</label>
-          <select
-            value={groupBy}
-            onChange={(event) => setGroupBy(event.target.value as VasBillingHoursGroupBy)}
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-          >
-            {GROUP_BY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        <div className="flex w-full sm:w-auto items-end gap-3">
+          <div className="w-full sm:w-64">
+            <label className="mb-1 block text-xs font-medium text-gray-600">Group By</label>
+            <select
+              value={groupBy}
+              onChange={(event) => setGroupBy(event.target.value as VasBillingHoursGroupBy)}
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+            >
+              {GROUP_BY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {rows.length > 0 && (
+            <button
+              onClick={handleExport}
+              className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+              title="Export data to CSV"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+            </button>
+          )}
         </div>
       </div>
 

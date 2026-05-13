@@ -194,9 +194,23 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
       <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <p className="text-sm font-semibold text-gray-900">Result</p>
-          <div className="text-xs text-gray-500">
-            <span className="mr-4">Rows: {totals.rowCount.toLocaleString()}</span>
-            <span>Total Amount: Rs. {totals.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+          <div className="flex items-center">
+            <div className="text-xs text-gray-500">
+              <span className="mr-4">Rows: {totals.rowCount.toLocaleString()}</span>
+              <span>Total Amount: Rs. {totals.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+            </div>
+            {rows.length > 0 && (
+              <button
+                onClick={handleExport}
+                className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                title="Export data to CSV"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Export
+              </button>
+            )}
           </div>
         </div>
 
