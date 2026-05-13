@@ -2,10 +2,10 @@ const PART_NUMBER_HEADERS = ['part #', 'part no', 'part number', 'part_number', 
 const DESCRIPTION_HEADERS = ['description', 'part description', 'material description', 'part desc']
 const SNAPSHOT_DATE_HEADERS = ['snapshot date', 'as on date', 'date']
 const ON_HAND_HEADERS = [
+  'on hand',
   'on hand qty',
   'onhand qty',
   'available qty',
-  'availability',
   'stock qty',
   'quantity',
   'qty',
@@ -75,7 +75,7 @@ function parseDate(value: unknown, fieldName: string): string | null {
 
   const raw = String(value).trim()
   const dmyWithOptionalTime = raw.match(
-    /^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/,
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?)?$/i,
   )
   if (dmyWithOptionalTime) {
     const [, dayStr, monthStr, yearStr] = dmyWithOptionalTime
@@ -168,6 +168,22 @@ export function buildPartsStockInsertRow(
   const partRaw = excelRow[headerMapping.partNumber]
   const quantityRaw = excelRow[headerMapping.onHandQuantity]
   const partNumber = partRaw == null ? '' : String(partRaw).trim().toUpperCase()
+
+  const normalizedPartValue = partRaw == null ? '' : normalizeHeader(String(partRaw))
+  const normalizedPartHeader = normalizeHeader(headerMapping.partNumber)
+  const normalizedQtyValue = quantityRaw == null ? '' : normalizeHeader(String(quantityRaw))
+  const normalizedQtyHeader = normalizeHeader(headerMapping.onHandQuantity)
+
+  // Some supplier exports repeat column headers as the first data row.
+  // Skip such rows silently instead of treating them as parse errors.
+  if (
+    normalizedPartValue &&
+    normalizedPartValue === normalizedPartHeader &&
+    normalizedQtyValue &&
+    normalizedQtyValue === normalizedQtyHeader
+  ) {
+    return { row: null, errors: [] }
+  }
 
   if (!partNumber) {
     errors.push({
