@@ -692,8 +692,20 @@ export default function ImportPage() {
           isPartsStockTable
         const tableColumns = isSpecialMappedTable ? [] : await getTableColumns(tableName)
         const partsOrderColumns = isPartsOrderTable ? await getTableColumns(tableName) : []
+        const partsOrderColumnSet = new Set(partsOrderColumns)
         const partsOrderHasDealerCode = partsOrderColumns.includes('dealer_code')
         const partsOrderHasDealerName = partsOrderColumns.includes('dealer_name')
+        const partsOrderHas = (columnName: string): boolean => partsOrderColumnSet.has(columnName)
+        const partsOrderIncludesAll = (columns: string[]): boolean =>
+          columns.every((columnName) => partsOrderHas(columnName))
+        const partsOrderOnConflictCandidates = isPartsOrderTable
+          ? [
+              'part_number,branch,order_date,source_row_hash',
+              'part_number,branch,portal,order_date,source_row_hash',
+              'part_number,branch,portal,order_date',
+              'part_number,branch,order_date',
+            ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
+          : []
         const CHUNK = 500
         let totalInserted = 0
         const allParseErrors: VasParseError[] = []
@@ -1102,6 +1114,22 @@ export default function ImportPage() {
               if (errors.length > 0) {
                 parseErrors.push(...errors)
               } else if (row) {
+                if (partsOrderColumns.length > 0) {
+                  for (const key of Object.keys(row)) {
+                    if (!partsOrderColumnSet.has(key)) {
+                      delete row[key]
+                    }
+                  }
+
+                  if (!partsOrderHasDealerCode) {
+                    const dealerCode = row.dealer_code
+                    if (partsOrderHasDealerName && row.dealer_name == null && dealerCode != null) {
+                      row.dealer_name = dealerCode
+                    }
+                    delete row.dealer_code
+                  }
+                }
+
                 insertRows.push(row)
               }
             }
@@ -1114,11 +1142,9 @@ export default function ImportPage() {
 
             totalInserted += await upsertOrInsertRows(
               insertRows,
-              [
-                'part_number,branch,order_date,source_row_hash',
-                'part_number,branch,portal,order_date,source_row_hash',
-                'part_number,branch,portal,order_date',
-              ],
+              partsOrderOnConflictCandidates.length > 0
+                ? partsOrderOnConflictCandidates
+                : ['part_number,branch,order_date'],
             )
           } else if (isPartsStockTable && partsStockHeaderMapping) {
             const parseErrors: PartsStockParseError[] = []
