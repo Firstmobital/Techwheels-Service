@@ -767,13 +767,16 @@ export default function ImportPage() {
           rows: Record<string, unknown>[],
           onConflictCandidates: string[],
         ): Promise<number> => {
+          if (onConflictCandidates.length === 0) {
+            return insertRowsWithDuplicateSkip(rows)
+          }
+
           let inserted = 0
 
           for (let i = 0; i < rows.length; i += CHUNK) {
             const chunkRows = rows.slice(i, i + CHUNK)
 
             let upsertHandled = false
-            let lastMissingConstraintError: string | null = null
 
             for (const onConflict of onConflictCandidates) {
               const { error: upsertError } = await supabase.from(tableName).upsert(chunkRows, {
@@ -793,7 +796,6 @@ export default function ImportPage() {
               )
 
               if (missingConflictConstraint) {
-                lastMissingConstraintError = message
                 continue
               }
 
@@ -809,7 +811,9 @@ export default function ImportPage() {
                 insertFallbackError instanceof Error
                   ? insertFallbackError.message
                   : String(insertFallbackError)
-              throw new Error(lastMissingConstraintError ?? fallbackMessage)
+              // If fallback insert also fails, surface the actual insert failure,
+              // not the previous ON CONFLICT mismatch message.
+              throw new Error(fallbackMessage)
             }
           }
 
