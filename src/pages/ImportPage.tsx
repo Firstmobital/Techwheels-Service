@@ -987,7 +987,7 @@ export default function ImportPage() {
 
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,portal,transaction_date,source_row_hash',
+                onConflict: 'part_number,branch,transaction_date,source_row_hash',
               })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
@@ -1023,7 +1023,7 @@ export default function ImportPage() {
 
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,portal,order_date,source_row_hash',
+                onConflict: 'part_number,branch,order_date,source_row_hash',
               })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
@@ -1059,7 +1059,7 @@ export default function ImportPage() {
 
             for (let i = 0; i < insertRows.length; i += CHUNK) {
               const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,portal,snapshot_date,source_row_hash',
+                onConflict: 'part_number,branch,snapshot_date,source_row_hash',
               })
               if (error) throw new Error(error.message)
               totalInserted += Math.min(CHUNK, insertRows.length - i)
