@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getInTransitVisibility } from '../../../lib/partsReportQueries'
 import type { InTransitVisibility, PartsFilterOptions } from '../../../lib/partsReportQueries'
-import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -74,21 +73,6 @@ export default function PartsInTransitReport({ branch }: ReportViewProps) {
   useEffect(() => {
     void runReport()
   }, [runReport])
-
-  const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
-      'Part Number': row.partNumber,
-      'Description': row.partDescription,
-      'In Transit Qty': row.intransitQty,
-      'Order Date': row.orderDate,
-      'Days to ETA': row.daysToEta,
-      'ETA Date': row.etaDate,
-      'Vendor': row.vendor,
-      'Category': row.productCategory,
-    }))
-    exportToCSV(exportData, 'Parts-In-Transit')
-  }
 
   const handleSort = (key: keyof InTransitVisibility) => {
     setSortConfig({

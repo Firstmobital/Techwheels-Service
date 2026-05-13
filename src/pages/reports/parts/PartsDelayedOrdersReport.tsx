@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getDelayedOrders } from '../../../lib/partsReportQueries'
 import type { DelayedOrder, PartsFilterOptions } from '../../../lib/partsReportQueries'
-import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -75,21 +74,6 @@ export default function PartsDelayedOrdersReport({ branch }: ReportViewProps) {
   useEffect(() => {
     void runReport()
   }, [runReport])
-
-  const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
-      'Part Number': row.partNumber,
-      'Order Number': row.orderNumber,
-      'Expected Date': row.expectedDeliveryDate,
-      'Days Overdue': row.daysOverdue,
-      'In Transit Qty': row.intransitQty,
-      'Order Date': row.orderDate,
-      'Vendor': row.vendor,
-      'Category': row.productCategory,
-    }))
-    exportToCSV(exportData, 'Parts-Delayed-Orders')
-  }
 
   const handleSort = (key: keyof DelayedOrder) => {
     setSortConfig({

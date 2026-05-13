@@ -4,7 +4,6 @@ import { getPartsFilterOptions, getStockPlanningData } from '../../../lib/partsR
 import type { StockPlanningData, PartsFilterOptions } from '../../../lib/partsReportQueries'
 import { ReportLoadingState } from '../components/ReportLoadingState'
 import { ReportErrorState } from '../components/ReportErrorState'
-import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -148,23 +147,6 @@ export default function PartsStockPlanningReport({ branch }: ReportViewProps) {
       setLoading(false)
     }
   }, [branch, filters])
-
-  const handleExport = () => {
-    if (enrichedRows.length === 0) return
-    const exportData = enrichedRows.map((row) => ({
-      'Part Number': row.partNumber,
-      'Description': row.partDescription,
-      'On Hand Qty': row.onHandQty,
-      'Weeks of Supply': row.weeksOfSupply,
-      'MOS Months': row.mosMonths,
-      'Dead Stock': row.deadStock ? 'Yes' : 'No',
-      'ABC Class': row.abcClass,
-      'Recommendation': row.recommendation,
-      'Vendor': row.vendor,
-      'Category': row.productCategory,
-    }))
-    exportToCSV(exportData, 'Parts-Stock-Planning')
-  }
 
   useEffect(() => {
     void runReport()

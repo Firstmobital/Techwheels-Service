@@ -3,7 +3,7 @@ import {
   getManpowerWiseLabourRevenue,
   type ManpowerLabourRevenue,
 } from '../../../lib/reportQueries'
-import { exportToCSV, generateExportFilename, formatCurrencyForExport, formatPercentageForExport } from '../../../lib/exportUtils'
+import { exportToCSV, generateExportFilename, formatCurrencyForExport } from '../../../lib/exportUtils'
 import type { ReportViewProps } from '../types'
 
 type SortKey = 'manpower' | 'totalLabourRevenue' | 'jobCardCount' | 'avgLabourRevenue'
