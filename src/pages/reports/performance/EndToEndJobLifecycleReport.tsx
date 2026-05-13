@@ -4,6 +4,7 @@ import {
   type EndToEndJobLifecycleReport as EndToEndJobLifecycleReportData,
 } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 export default function EndToEndJobLifecycleReport({ branch, dateFilter }: ReportViewProps) {
   const [report, setReport] = useState<EndToEndJobLifecycleReportData | null>(null)

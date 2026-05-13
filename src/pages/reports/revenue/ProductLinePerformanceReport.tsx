@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ProductLinePerformanceRow } from '../../../lib/reportQueries'
 import { getProductLinePerformance } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey =
   | 'parentProductLine'

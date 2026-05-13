@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getTatDurationReport, type TatDurationReport as TatDurationReportData } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 export default function TatDurationReport({ branch, dateFilter }: ReportViewProps) {
   const [report, setReport] = useState<TatDurationReportData | null>(null)

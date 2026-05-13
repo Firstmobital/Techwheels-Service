@@ -4,6 +4,7 @@ import {
   type JcInvoiceReconciliationReport as JcInvoiceReconciliationReportData,
 } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 export default function JcInvoiceReconciliationReport({ branch, dateFilter }: ReportViewProps) {
   const [report, setReport] = useState<JcInvoiceReconciliationReportData | null>(null)

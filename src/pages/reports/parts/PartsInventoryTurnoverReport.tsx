@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getInventoryTurnover } from '../../../lib/partsReportQueries'
 import type { InventoryTurnover, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -73,6 +74,21 @@ export default function PartsInventoryTurnoverReport({ branch }: ReportViewProps
   useEffect(() => {
     void runReport()
   }, [runReport])
+
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      'Description': row.partDescription,
+      'Turnover Ratio': row.turnoverRatio,
+      'DIO': row.daysInventoryOutstanding,
+      'Annual Consumption': row.annualConsumption,
+      'Avg Inventory': row.avgInventory,
+      'Vendor': row.vendor,
+      'Category': row.productCategory,
+    }))
+    exportToCSV(exportData, 'Parts-Inventory-Turnover')
+  }
 
   const handleSort = (key: keyof InventoryTurnover) => {
     setSortConfig({

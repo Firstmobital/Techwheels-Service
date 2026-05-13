@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getFastMovingParts } from '../../../lib/partsReportQueries'
 import type { FastMovingPart, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -80,6 +81,21 @@ export default function PartsFastMovingReport({ branch }: ReportViewProps) {
   useEffect(() => {
     void runReport()
   }, [runReport])
+
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      'Description': row.partDescription,
+      'On Hand': row.onHandQty,
+      'Avg 4-Week': row.avgConsumption4Week,
+      'Days of Supply': row.daysOfSupply,
+      'Stockout Risk': row.stockoutRisk,
+      'Vendor': row.vendor,
+      'Category': row.productCategory,
+    }))
+    exportToCSV(exportData, 'Parts-Fast-Moving')
+  }
 
   const handleSort = (key: keyof FastMovingPart) => {
     setSortConfig({

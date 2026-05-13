@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getPartWiseConsumption } from '../../../lib/partsReportQueries'
 import type { PartWiseConsumption, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -67,6 +68,20 @@ export default function PartsConsumptionTrendReport({ branch }: ReportViewProps)
       setLoading(false)
     }
   }, [branch, filters])
+
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      'Description': row.partDescription,
+      'Total Consumption': row.totalConsumption,
+      'Avg Monthly': row.avgMonthlyConsumption,
+      'Trend': row.consumptionTrend,
+      'Vendor': row.vendor,
+      'Category': row.productCategory,
+    }))
+    exportToCSV(exportData, 'Parts-Consumption-Trend')
+  }
 
   useEffect(() => {
     void runReport()
@@ -160,8 +175,8 @@ export default function PartsConsumptionTrendReport({ branch }: ReportViewProps)
       </div>
 
       {rows.length > 0 && (
-        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm flex-1">
             <div>
               <p className="text-gray-600">Total Parts</p>
               <p className="text-xl font-bold">{totals.rowCount}</p>
@@ -175,6 +190,16 @@ export default function PartsConsumptionTrendReport({ branch }: ReportViewProps)
               <p className="text-xl font-bold">{totals.avgMonthly.toLocaleString()}</p>
             </div>
           </div>
+          <button
+            onClick={handleExport}
+            className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-200 transition-colors flex-shrink-0"
+            title="Export data to CSV"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
+          </button>
         </div>
       )}
 

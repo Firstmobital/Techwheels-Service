@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { MonthlyTrendRevenue } from '../../../lib/reportQueries'
 import { getMonthlyRevenuesTrend } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey = 'month' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue'
 

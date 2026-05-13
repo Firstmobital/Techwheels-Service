@@ -13,6 +13,7 @@ import { getModelWiseRevenue } from '../../../lib/reportQueries'
 import { ReportErrorState } from '../components/ReportErrorState'
 import { ReportLoadingState } from '../components/ReportLoadingState'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey =
   | 'model'

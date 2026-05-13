@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getAbcClassification } from '../../../lib/partsReportQueries'
 import type { AbcClassification, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -82,6 +83,21 @@ export default function PartsABCClassificationReport({ branch }: ReportViewProps
   useEffect(() => {
     void runReport()
   }, [runReport])
+
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      'Description': row.partDescription,
+      'Classification': row.classification,
+      'Total Value': row.totalValue,
+      'Percentage of Total': (row.percentageOfTotal * 100).toFixed(2) + '%',
+      'Annual Consumption': row.annualConsumption,
+      'Vendor': row.vendor,
+      'Category': row.productCategory,
+    }))
+    exportToCSV(exportData, 'Parts-ABC-Classification')
+  }
 
   const handleSort = (key: keyof AbcClassification) => {
     setSortConfig({

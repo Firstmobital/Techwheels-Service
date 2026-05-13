@@ -4,6 +4,7 @@ import {
   type VasJobPerformanceDashboard,
 } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 export default function VasJobPerformanceReport({ branch, dateFilter }: ReportViewProps) {
   const [dashboard, setDashboard] = useState<VasJobPerformanceDashboard | null>(null)

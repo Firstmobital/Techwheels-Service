@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CategoryWiseRevenue } from '../../../lib/reportQueries'
 import { getCategoryWiseRevenue } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey = 'category' | 'vehicleCount' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue' | 'contributionPercentage'
 

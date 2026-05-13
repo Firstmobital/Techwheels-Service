@@ -3,6 +3,7 @@ import type { BranchFilter } from '../../../lib/reportQueries'
 import { getDateRangeBounds } from '../../../lib/reportQueries'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SourceTable = 'service_vas_jc_data' | 'job_card_closed_data'
 

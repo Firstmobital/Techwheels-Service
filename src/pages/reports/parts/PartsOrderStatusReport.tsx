@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getOrderStatusReport } from '../../../lib/partsReportQueries'
 import type { OrderStatusData, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -57,6 +58,21 @@ export default function PartsOrderStatusReport({ branch }: ReportViewProps) {
   useEffect(() => {
     void runReport()
   }, [runReport])
+
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      'Order Number': row.orderNumber,
+      'Status': row.status,
+      'Order Date': row.orderDate,
+      'Expected Date': row.expectedDeliveryDate,
+      'Ordered Qty': row.orderQty,
+      'Received Qty': row.receivedQty,
+      'Vendor': row.vendor,
+    }))
+    exportToCSV(exportData, 'Parts-Order-Status')
+  }
 
   const getStatusColor = (status: string | null) => {
     switch (status) {

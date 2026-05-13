@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getVendorPerformance } from '../../../lib/partsReportQueries'
 import type { VendorPerformance, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -74,6 +75,20 @@ export default function PartsVendorPerformanceReport({ branch }: ReportViewProps
   useEffect(() => {
     void runReport()
   }, [runReport])
+
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Vendor': row.vendor,
+      'Total Orders': row.totalOrders,
+      'Part Numbers': row.partNumbersOrdered,
+      'Avg Lead Time': row.avgLeadTimeDays,
+      'Avg Order Qty': row.avgOrderQty.toFixed(2),
+      'Quality Score': row.qualityScore,
+      'Compliance': row.compliance,
+    }))
+    exportToCSV(exportData, 'Parts-Vendor-Performance')
+  }
 
   const handleSort = (key: keyof VendorPerformance) => {
     setSortConfig({

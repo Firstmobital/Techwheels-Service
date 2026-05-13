@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getEmployeeUtilizationReport, type EmployeeUtilizationRow } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey =
   | 'advisorLabel'

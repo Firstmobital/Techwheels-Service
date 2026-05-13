@@ -5,6 +5,7 @@ import {
   type VasBillingHoursGroupBy,
 } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 const GROUP_BY_OPTIONS: Array<{ value: VasBillingHoursGroupBy; label: string }> = [
   { value: 'performed_by', label: 'Performed By' },

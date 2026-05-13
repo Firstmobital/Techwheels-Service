@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getLabourSparesMixByServiceType, type LabourSparesMixRow } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 export default function LabourSparesMixReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<LabourSparesMixRow[]>([])

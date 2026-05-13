@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReportViewProps } from '../types'
 import { getPartsFilterOptions, getSlowMovingParts } from '../../../lib/partsReportQueries'
 import type { SlowMovingPart, PartsFilterOptions } from '../../../lib/partsReportQueries'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 interface FilterState {
   portal: 'ALL' | 'EV' | 'PV'
@@ -73,6 +74,20 @@ export default function PartsSlowMovingReport({ branch }: ReportViewProps) {
   useEffect(() => {
     void runReport()
   }, [runReport])
+
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      'Description': row.partDescription,
+      'On Hand': row.onHandQty,
+      'Stock Value': row.totalValue,
+      'Days Idle': row.daysWithoutConsumption,
+      'Vendor': row.vendor,
+      'Category': row.productCategory,
+    }))
+    exportToCSV(exportData, 'Parts-Slow-Moving')
+  }
 
   const handleSort = (key: keyof SlowMovingPart) => {
     setSortConfig({

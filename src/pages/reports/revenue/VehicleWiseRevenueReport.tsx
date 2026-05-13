@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { VehicleWiseRevenueRow } from '../../../lib/reportQueries'
 import { getVehicleWiseRevenue } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey =
   | 'vehicleRegistrationNumber'

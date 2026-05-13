@@ -6,6 +6,7 @@ import {
   type InvoiceValueDistributionReport as InvoiceValueDistributionReportData,
 } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type BandSortKey = 'bandLabel' | 'invoiceCount' | 'percentage' | 'totalAmount' | 'avgInvoiceValue'
 type BranchSortKey = 'branch' | 'invoiceCount' | 'percentage' | 'totalAmount' | 'avgInvoiceValue'

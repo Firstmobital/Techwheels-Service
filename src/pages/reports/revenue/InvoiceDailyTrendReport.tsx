@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getInvoiceDailyTrend, type InvoiceDailyTrendRow } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey =
   | 'date'

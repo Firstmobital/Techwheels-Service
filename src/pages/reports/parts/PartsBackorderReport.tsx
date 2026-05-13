@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getPartsBackorderSummary, type PartsBackorderSummaryRow } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV } from '../../../lib/exportUtils'
 
 export default function PartsBackorderReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<PartsBackorderSummaryRow[]>([])
@@ -33,12 +34,41 @@ export default function PartsBackorderReport({ branch, dateFilter }: ReportViewP
 
   const totalBackorder = rows.reduce((sum, row) => sum + row.backorderQuantity, 0)
 
+  const handleExport = () => {
+    if (rows.length === 0) return
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      'Description': row.partDescription || '-',
+      'Ordered Qty': row.orderedQuantity,
+      'Received Qty': row.receivedQuantity,
+      'Backorder Qty': row.backorderQuantity,
+      'Open Order Qty': row.openOrderQuantity,
+    }))
+    exportToCSV(exportData, 'Parts-Backorder')
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Parts Backorder Report</h2>
-        <p className="mt-1 text-sm text-gray-500">Open and backordered quantity from parts order data.</p>
-        <p className="mt-3 text-sm text-gray-600">Total backorder quantity: <span className="font-semibold text-gray-900">{totalBackorder.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></p>
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold text-gray-900">Parts Backorder Report</h2>
+            <p className="mt-1 text-sm text-gray-500">Open and backordered quantity from parts order data.</p>
+            <p className="mt-3 text-sm text-gray-600">Total backorder quantity: <span className="font-semibold text-gray-900">{totalBackorder.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></p>
+          </div>
+          {rows.length > 0 && (
+            <button
+              onClick={handleExport}
+              className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+              title="Export data to CSV"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
