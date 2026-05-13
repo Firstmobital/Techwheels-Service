@@ -691,6 +691,9 @@ export default function ImportPage() {
           isPartsOrderTable ||
           isPartsStockTable
         const tableColumns = isSpecialMappedTable ? [] : await getTableColumns(tableName)
+        const partsOrderColumns = isPartsOrderTable ? await getTableColumns(tableName) : []
+        const partsOrderHasDealerCode = partsOrderColumns.includes('dealer_code')
+        const partsOrderHasDealerName = partsOrderColumns.includes('dealer_name')
         const CHUNK = 500
         let totalInserted = 0
         const allParseErrors: VasParseError[] = []
@@ -1054,6 +1057,13 @@ export default function ImportPage() {
               if (errors.length > 0) {
                 parseErrors.push(...errors)
               } else if (row) {
+                if (!partsOrderHasDealerCode) {
+                  const dealerCode = row.dealer_code
+                  if (partsOrderHasDealerName && row.dealer_name == null && dealerCode != null) {
+                    row.dealer_name = dealerCode
+                  }
+                  delete row.dealer_code
+                }
                 insertRows.push(row)
               }
             }
