@@ -1196,6 +1196,10 @@ export default function ImportPage() {
               if (errors.length > 0) {
                 parseErrors.push(...errors)
               } else if (row) {
+                // Compatibility: some deployed DBs do not have this optional column.
+                // Avoid schema-cache failures by never sending it from the app payload.
+                delete row.net_order_qty
+
                 if (partsOrderColumns.length > 0) {
                   for (const key of Object.keys(row)) {
                     if (key === 'source_row_hash') continue
