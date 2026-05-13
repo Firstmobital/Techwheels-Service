@@ -1198,6 +1198,7 @@ export default function ImportPage() {
               } else if (row) {
                 if (partsOrderColumns.length > 0) {
                   for (const key of Object.keys(row)) {
+                    if (key === 'source_row_hash') continue
                     if (!partsOrderColumnSet.has(key)) {
                       delete row[key]
                     }
@@ -1210,6 +1211,19 @@ export default function ImportPage() {
                     }
                     delete row.dealer_code
                   }
+                }
+
+                const rowSourceHash =
+                  row.source_row_hash == null ? '' : String(row.source_row_hash).trim()
+                if (!rowSourceHash) {
+                  const fallbackSourceHash = `${tableName}|${branch}|${String(
+                    row.part_number ?? '',
+                  )
+                    .trim()
+                    .toUpperCase()}|${String(row.order_date ?? '')}|${String(
+                    row.ordered_quantity ?? '',
+                  )}|${rowIdx + 2}`
+                  row.source_row_hash = fallbackSourceHash.replace(/\s+/g, ' ').trim()
                 }
 
                 insertRows.push(row)
