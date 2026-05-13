@@ -711,6 +711,38 @@ export default function ImportPage() {
           return []
         }
 
+        const upsertOrInsertPartsRows = async (
+          rows: Record<string, unknown>[],
+          onConflict: string,
+        ): Promise<number> => {
+          let inserted = 0
+
+          for (let i = 0; i < rows.length; i += CHUNK) {
+            const chunkRows = rows.slice(i, i + CHUNK)
+
+            const { error: upsertError } = await supabase.from(tableName).upsert(chunkRows, {
+              onConflict,
+            })
+
+            if (upsertError) {
+              const message = upsertError.message ?? ''
+              const missingConflictConstraint =
+                message.includes('no unique or exclusion constraint matching the ON CONFLICT specification')
+
+              if (!missingConflictConstraint) {
+                throw new Error(message)
+              }
+
+              const { error: insertError } = await supabase.from(tableName).insert(chunkRows)
+              if (insertError) throw new Error(insertError.message)
+            }
+
+            inserted += chunkRows.length
+          }
+
+          return inserted
+        }
+
         // For VAS table, prepare header mapping upfront (extract from first available file)
         let vasHeaderMapping: Record<string, string> | null = null
         if (isVasTable) {
@@ -985,13 +1017,10 @@ export default function ImportPage() {
               )
             }
 
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,transaction_date,source_row_hash',
-              })
-              if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
-            }
+            totalInserted += await upsertOrInsertPartsRows(
+              insertRows,
+              'part_number,branch,transaction_date,source_row_hash',
+            )
           } else if (isPartsOrderTable && partsOrderHeaderMapping) {
             const parseErrors: PartsOrderParseError[] = []
             const insertRows: Record<string, unknown>[] = []
@@ -1021,13 +1050,10 @@ export default function ImportPage() {
               )
             }
 
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,order_date,source_row_hash',
-              })
-              if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
-            }
+            totalInserted += await upsertOrInsertPartsRows(
+              insertRows,
+              'part_number,branch,order_date,source_row_hash',
+            )
           } else if (isPartsStockTable && partsStockHeaderMapping) {
             const parseErrors: PartsStockParseError[] = []
             const insertRows: Record<string, unknown>[] = []
@@ -1057,13 +1083,10 @@ export default function ImportPage() {
               )
             }
 
-            for (let i = 0; i < insertRows.length; i += CHUNK) {
-              const { error } = await supabase.from(tableName).upsert(insertRows.slice(i, i + CHUNK), {
-                onConflict: 'part_number,branch,snapshot_date,source_row_hash',
-              })
-              if (error) throw new Error(error.message)
-              totalInserted += Math.min(CHUNK, insertRows.length - i)
-            }
+            totalInserted += await upsertOrInsertPartsRows(
+              insertRows,
+              'part_number,branch,snapshot_date,source_row_hash',
+            )
           } else {
             // Other tables: use original logic
             const insertRows = buildInsertRows(rawRows, tableColumns, branch)
