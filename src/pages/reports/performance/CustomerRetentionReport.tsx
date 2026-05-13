@@ -4,6 +4,7 @@ import {
   type CustomerRetentionSummary,
   type LapsedVehicleRow,
 } from '../../../lib/reportQueries'
+import { exportToCSV, generateExportFilename } from '../../../lib/exportUtils'
 import { ReportErrorState } from '../components/ReportErrorState'
 import { ReportLoadingState } from '../components/ReportLoadingState'
 import type { ReportViewProps } from '../types'
@@ -50,34 +51,17 @@ export default function CustomerRetentionReport({ branch, dateFilter }: ReportVi
   }, [branch, dateFilter])
 
   const downloadCsv = () => {
-    const header = ['VRN', 'Model', 'Last Visit', 'Days Since', 'Visits', 'Phone']
-    const rows = lapsedVehicles.map((row) => [
-      row.vrn,
-      row.model,
-      row.lastVisitDate,
-      String(row.daysSinceLastVisit),
-      String(row.totalVisits),
-      row.phone,
-    ])
+    const exportData = lapsedVehicles.map((row) => ({
+      VRN: row.vrn,
+      Model: row.model,
+      'Last Visit': row.lastVisitDate,
+      'Days Since': row.daysSinceLastVisit.toString(),
+      'Total Visits': row.totalVisits.toString(),
+      Phone: row.phone || '',
+    }))
 
-    const escapeCell = (value: string) => {
-      const escaped = value.replace(/"/g, '""')
-      return `"${escaped}"`
-    }
-
-    const csv = [header, ...rows]
-      .map((line) => line.map((cell) => escapeCell(cell)).join(','))
-      .join('\n')
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `customer-retention-lapsed-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const filename = generateExportFilename('customer-retention-lapsed')
+    exportToCSV(exportData, filename)
   }
 
   return (

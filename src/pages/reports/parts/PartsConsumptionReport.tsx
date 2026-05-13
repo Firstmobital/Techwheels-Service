@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getPartsConsumptionSummary, type PartsConsumptionSummaryRow } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import { exportToCSV, generateExportFilename } from '../../../lib/exportUtils'
 
 export default function PartsConsumptionReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<PartsConsumptionSummaryRow[]>([])
@@ -33,12 +34,37 @@ export default function PartsConsumptionReport({ branch, dateFilter }: ReportVie
 
   const totalConsumed = rows.reduce((sum, row) => sum + row.totalConsumed, 0)
 
+  const handleExport = () => {
+    const exportData = rows.map((row) => ({
+      'Part Number': row.partNumber,
+      Description: row.partDescription || '-',
+      'Total Consumed': row.totalConsumed.toLocaleString('en-IN', { maximumFractionDigits: 2 }),
+      'Avg Daily': row.avgDailyConsumption.toLocaleString('en-IN', { maximumFractionDigits: 2 }),
+      Transactions: row.transactionCount.toLocaleString(),
+    }))
+
+    const filename = generateExportFilename('parts-consumption')
+    exportToCSV(exportData, filename)
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Parts Consumption Report</h2>
         <p className="mt-1 text-sm text-gray-500">Part-wise consumption for the selected branch and date range.</p>
         <p className="mt-3 text-sm text-gray-600">Total consumed quantity: <span className="font-semibold text-gray-900">{totalConsumed.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></p>
+        
+        {rows.length > 0 && (
+          <button
+            onClick={handleExport}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export to CSV
+          </button>
+        )}
       </div>
 
       {isLoading ? (
