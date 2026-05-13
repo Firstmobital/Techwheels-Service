@@ -4,6 +4,7 @@ import ImportPage from './pages/ImportPage'
 import ReportsPage from './pages/ReportsPage.tsx'
 import { REPORT_CATEGORIES } from './pages/reports'
 import SettingsPage from './pages/SettingsPage'
+import { hasSupabaseEnv } from './lib/supabase'
 
 const NAV_ITEMS = [
   {
@@ -39,6 +40,24 @@ const NAV_ITEMS = [
 export default function App() {
   const location = useLocation()
   const [isReportsOpen, setIsReportsOpen] = useState(false)
+
+  if (!hasSupabaseEnv) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-100 px-6 py-10">
+        <div className="w-full max-w-2xl rounded-xl border border-amber-200 bg-white p-6 shadow-sm">
+          <h1 className="text-lg font-semibold text-gray-900">Supabase config missing</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Create a <span className="font-mono">.env.local</span> file in the project root with:
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100">
+{`VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key`}
+          </pre>
+          <p className="mt-3 text-xs text-gray-500">After saving, restart the dev server.</p>
+        </div>
+      </div>
+    )
+  }
 
   useEffect(() => {
     if (location.pathname.startsWith('/reports')) {

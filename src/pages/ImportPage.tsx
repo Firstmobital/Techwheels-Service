@@ -526,29 +526,6 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
         </p>
       </div>
 
-      {/* Portal selector for parts tables */}
-      {isPartsTable && (
-        <div className="border-b border-gray-100 px-5 py-3">
-          <label className="text-xs font-semibold text-gray-700">Portal</label>
-          <div className="mt-2 flex gap-4">
-            {(['EV', 'PV'] as const).map((portal) => (
-              <label key={portal} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name={`portal-${config.tableName}`}
-                  value={portal}
-                  checked={state.portal === portal}
-                  onChange={() => onPortalChange?.(portal)}
-                  className="h-4 w-4 border-gray-300 text-blue-600"
-                  disabled={state.status === 'uploading'}
-                />
-                <span className="text-xs text-gray-700">{portal}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Slot grid */}
       <div className="grid grid-cols-3 gap-3 px-5 py-4">
         {branches.map((branch) => (
