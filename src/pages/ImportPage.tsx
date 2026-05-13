@@ -271,7 +271,85 @@ async function getTableColumns(tableName: string): Promise<string[]> {
   const { data: sample } = await supabase.from(tableName).select('*').limit(1)
   if (sample && sample.length > 0) return Object.keys(sample[0])
 
-  // Final fallback: known migration schema
+  // Final fallback: known schemas (used when schema cache/introspection is unavailable)
+  if (tableName === 'service_parts_order_data') {
+    return [
+      'id',
+      'part_number',
+      'part_description',
+      'order_date',
+      'expected_date',
+      'ordered_quantity',
+      'received_quantity',
+      'backorder_quantity',
+      'status',
+      'source_document_id',
+      'div_id',
+      'dealer_code',
+      'dealer_name',
+      'invoice_number',
+      'crm_order_number',
+      'sap_order_number',
+      'sap_order_line_item',
+      'spares_order_type',
+      'net_order_qty',
+      'confirmation_date',
+      'confirmation_qty',
+      'challan_no',
+      'challan_date',
+      'challan_qty',
+      'invoice_date',
+      'invoice_qty',
+      'intransit_qty',
+      'docket_number',
+      'eta_1',
+      'eta_2',
+      'eta_3',
+      'source_row_hash',
+      'branch',
+      'portal',
+      'created_at',
+      'updated_at',
+    ]
+  }
+
+  if (tableName === 'service_parts_consumption_data') {
+    return [
+      'id',
+      'part_number',
+      'part_description',
+      'transaction_date',
+      'otc_quantity',
+      'ws_quantity',
+      'quantity_consumed',
+      'unit_cost',
+      'total_cost',
+      'source_reference',
+      'source_row_hash',
+      'branch',
+      'portal',
+      'created_at',
+      'updated_at',
+    ]
+  }
+
+  if (tableName === 'service_parts_stock_snapshot_data') {
+    return [
+      'id',
+      'part_number',
+      'part_description',
+      'snapshot_date',
+      'on_hand_quantity',
+      'weighted_cost',
+      'inventory_value',
+      'source_row_hash',
+      'branch',
+      'portal',
+      'created_at',
+      'updated_at',
+    ]
+  }
+
   return ['id', 'part_number', 'part_description', 'branch', 'created_at', 'updated_at']
 }
 
