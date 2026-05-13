@@ -3452,7 +3452,8 @@ CREATE TABLE public.service_parts_consumption_data (
     portal text DEFAULT 'EV'::text,
     fiscal_year integer,
     month_name text,
-    total_consumption numeric
+    total_consumption numeric,
+    fiscal_month integer
 );
 
 
@@ -3511,7 +3512,8 @@ CREATE TABLE public.service_parts_order_data (
     eta_2 date,
     eta_3 date,
     intransit_qty numeric,
-    order_status text
+    order_status text,
+    fiscal_month integer
 );
 
 
@@ -3557,7 +3559,8 @@ CREATE TABLE public.service_parts_stock_snapshot_data (
     location_2 text,
     location_3 text,
     weighted_avg_cost numeric,
-    total_price_value numeric
+    total_price_value numeric,
+    fiscal_month integer
 );
 
 

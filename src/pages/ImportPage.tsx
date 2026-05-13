@@ -490,13 +490,11 @@ interface ImportCardProps {
   onSlotClear: (branch: Branch) => void
   onUpload: () => void
   onReset: () => void
-  onPortalChange?: (portal: Portal) => void
 }
 
-function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload, onReset, onPortalChange }: ImportCardProps) {
+function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload, onReset }: ImportCardProps) {
   const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
   const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
-  const isPartsTable = ['service_parts_consumption_data', 'service_parts_order_data', 'service_parts_stock_snapshot_data'].includes(config.tableName)
 
   const { lastUpdated, refresh } = useLastUpdated(config.tableName)
   const prevStatus = useRef(state.status)
@@ -1128,15 +1126,6 @@ export default function ImportPage() {
             onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
             onUpload={() => handleUpload(config)}
             onReset={() => handleReset(config.tableName)}
-            onPortalChange={(portal) => {
-              setCards((prev) => ({
-                ...prev,
-                [config.tableName]: {
-                  ...prev[config.tableName],
-                  portal,
-                },
-              }))
-            }}
           />
         ))}
       </div>
