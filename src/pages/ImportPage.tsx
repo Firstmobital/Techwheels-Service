@@ -349,6 +349,31 @@ async function getTableColumns(tableName: string): Promise<string[]> {
     ]
   }
 
+  if (tableName === 'service_invoice_data') {
+    return [
+      'id',
+      'invoice_number',
+      'invoice_date',
+      'bill_to_first_name',
+      'bill_to_last_name',
+      'final_labour_invoice_amount',
+      'final_spares_invoice_amount',
+      'final_consolidated_invoice_amount',
+      'discounts_labour',
+      'other_charges_labour',
+      'discounts_parts',
+      'other_charges_parts',
+      'final_tcs_amount',
+      'order_number',
+      'sr_number',
+      'chassis_number',
+      'vrn',
+      'branch',
+      'created_at',
+      'updated_at',
+    ]
+  }
+
   return ['id', 'part_number', 'part_description', 'branch', 'created_at', 'updated_at']
 }
 
@@ -1100,6 +1125,8 @@ export default function ImportPage() {
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
+            const invoiceTableColumns = await getTableColumns(tableName)
+            const invoiceColumnSet = new Set(invoiceTableColumns)
             let invoiceHeaderMapping: Record<string, string>
             try {
               invoiceHeaderMapping = mapInvoiceHeaders(excelHeaders)
@@ -1108,6 +1135,12 @@ export default function ImportPage() {
                 `Invoice Data (${branch}, ${slot.file.name}): ${err instanceof Error ? err.message : String(err)}`,
               )
             }
+
+            // Compatibility: only map columns that exist in the deployed DB schema.
+            // This avoids schema-cache failures when optional invoice columns are missing.
+            invoiceHeaderMapping = Object.fromEntries(
+              Object.entries(invoiceHeaderMapping).filter(([dbColumn]) => invoiceColumnSet.has(dbColumn)),
+            )
 
             const invoiceParseErrors: InvoiceParseError[] = []
             const insertRows: Record<string, unknown>[] = []
