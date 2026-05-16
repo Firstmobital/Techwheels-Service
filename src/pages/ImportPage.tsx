@@ -1132,7 +1132,38 @@ export default function ImportPage() {
               )
             }
 
-            totalInserted += await insertRowsWithDuplicateSkip(insertRows)
+            // Compatibility: some deployed DB schemas can lag behind app payload columns
+            // (for example `discounts_labour`). If PostgREST rejects an unknown column,
+            // remove it from payload and retry.
+            const rowsForInsert = insertRows.map((row) => ({ ...row }))
+            const removedColumns = new Set<string>()
+
+            while (true) {
+              try {
+                totalInserted += await insertRowsWithDuplicateSkip(rowsForInsert)
+                break
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err)
+                const missingColumnMatch = message.match(
+                  /Could not find the '([^']+)' column of 'service_invoice_data' in the schema cache/i,
+                )
+
+                if (!missingColumnMatch) {
+                  throw err
+                }
+
+                const missingColumn = missingColumnMatch[1]
+                if (!missingColumn || removedColumns.has(missingColumn)) {
+                  throw err
+                }
+
+                removedColumns.add(missingColumn)
+
+                for (const row of rowsForInsert) {
+                  delete row[missingColumn]
+                }
+              }
+            }
           } else if (isPartsConsumptionTable && partsConsumptionHeaderMapping) {
             const parseErrors: PartsConsumptionParseError[] = []
             const insertRows: Record<string, unknown>[] = []
