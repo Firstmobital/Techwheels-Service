@@ -137,7 +137,7 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Daily Revenue Report</h2>
-            <p className="mt-1 text-sm text-gray-500">Daily revenue breakdown by date from job card closed data.</p>
+            <p className="mt-1 text-sm text-gray-500">Daily revenue breakdown by date from PSF Revenue Report data.</p>
           </div>
           {rows.length > 0 && (
             <button

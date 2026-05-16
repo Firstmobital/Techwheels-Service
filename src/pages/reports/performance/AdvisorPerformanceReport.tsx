@@ -161,7 +161,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
               className="rounded border border-gray-300 px-2 py-2 text-sm"
             >
               <option value="service_vas_jc_data">VAS Data</option>
-              <option value="job_card_closed_data">Job Card Closed Data</option>
+              <option value="job_card_closed_data">PSF Revenue Report</option>
             </select>
           </div>
 

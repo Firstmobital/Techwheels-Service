@@ -152,7 +152,7 @@ export default function BranchLabourRevenueReport({ branch, dateFilter }: Branch
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Branch Wise Labour Revenue (MoM)</h2>
           <p className="mt-1 text-sm text-gray-500">
-            {periodLabel} from job card closed data using closed_date_time.
+            {periodLabel} from PSF Revenue Report data using closed_date_time.
           </p>
         </div>
 

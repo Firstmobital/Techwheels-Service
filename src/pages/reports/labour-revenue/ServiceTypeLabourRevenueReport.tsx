@@ -116,7 +116,7 @@ export default function ServiceTypeLabourRevenueReport({ branch, dateFilter }: S
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Service Type Wise Labour Revenue</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Labour revenue by service type from job card closed data using closed_date_time.
+            Labour revenue by service type from PSF Revenue Report data using closed_date_time.
           </p>
         </div>
 

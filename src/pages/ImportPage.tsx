@@ -89,7 +89,7 @@ interface MappingIssueInsert {
 const CARDS: CardConfig[] = [
   {
     tableName: 'job_card_closed_data',
-    title: 'Job Card Closed Data',
+    title: 'PSF Revenue Report',
     description: 'Closed job card records across all branches.',
   },
   {
@@ -928,7 +928,7 @@ export default function ImportPage() {
             jcHeaderMapping = mapJcClosedHeaders(excelHeaders)
           } catch (err) {
             throw new Error(
-              `Job Card Closed Data: ${err instanceof Error ? err.message : String(err)}`,
+              `PSF Revenue Report: ${err instanceof Error ? err.message : String(err)}`,
             )
           }
         }
@@ -1088,7 +1088,7 @@ export default function ImportPage() {
 
             if (jcParseErrors.length > 0) {
               throw new Error(
-                `Job Card Closed Data parse errors found:\n${formatJcClosedParseErrors(jcParseErrors.slice(0, 10))}`,
+                `PSF Revenue Report parse errors found:\n${formatJcClosedParseErrors(jcParseErrors.slice(0, 10))}`,
               )
             }
 
