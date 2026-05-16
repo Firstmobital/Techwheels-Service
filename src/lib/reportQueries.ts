@@ -567,6 +567,8 @@ async function fetchDistinctTextValues(tableName: string, columnName: string): P
   return [...uniqueByKey.values()]
 }
 
+const DEFAULT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV']
+
 export async function getBranchOptions(): Promise<string[]> {
   const [employeeLocations, jcBranches] = await Promise.allSettled([
     fetchDistinctTextValues('employee_master', 'location'),
@@ -594,6 +596,9 @@ export async function getBranchOptions(): Promise<string[]> {
     addAll(jcBranches.value)
   }
 
+  // Always include known portal branches as a safe fallback.
+  addAll(DEFAULT_BRANCH_OPTIONS)
+
   if (uniqueByKey.size > 0) {
     return [...uniqueByKey.values()].sort((a, b) => a.localeCompare(b))
   }
@@ -607,10 +612,10 @@ export async function getBranchOptions(): Promise<string[]> {
   }
 
   if (errors.length > 0) {
-    throw new Error(errors.join(' | '))
+    return [...DEFAULT_BRANCH_OPTIONS]
   }
 
-  return []
+  return [...DEFAULT_BRANCH_OPTIONS]
 }
 
 export async function getServiceTypeCounts(
