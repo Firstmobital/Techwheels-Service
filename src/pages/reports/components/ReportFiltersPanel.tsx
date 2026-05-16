@@ -1,6 +1,6 @@
 import type { BranchFilter, DateRangePreset } from '../../../lib/reportQueries'
 
-const FIXED_REPORT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura', 'Tonk', 'Shahpura'] as const
+const FIXED_REPORT_BRANCH_OPTIONS: string[] = []
 
 interface ReportFiltersPanelProps {
   branch: BranchFilter
@@ -51,10 +51,7 @@ export default function ReportFiltersPanel({
   customDateError,
 }: ReportFiltersPanelProps) {
   const topGridClass = showManpowerFilters ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4' : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
-  const normalizedBranch =
-    branch === 'Sitapura PV' || branch === 'Sitapura EV' || branch === 'Sitapura'
-      ? 'Sitapura'
-      : branch
+  const normalizedBranch = 'ALL'
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
