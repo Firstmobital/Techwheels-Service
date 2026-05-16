@@ -1,4 +1,5 @@
 import type { BranchFilter, DateRangePreset } from '../../../lib/reportQueries'
+import { REPORT_BRANCH_OPTIONS, normalizeBranchLabel } from '../../../lib/branches'
 
 interface ReportFiltersPanelProps {
   branch: BranchFilter
@@ -49,6 +50,26 @@ export default function ReportFiltersPanel({
   customDateError,
 }: ReportFiltersPanelProps) {
   const topGridClass = showManpowerFilters ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4' : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
+  const branchOptionSet = new Set<string>()
+
+  for (const branchOption of REPORT_BRANCH_OPTIONS) {
+    branchOptionSet.add(branchOption)
+  }
+
+  for (const branchOption of branchOptions) {
+    const normalized = normalizeBranchLabel(branchOption)
+    if (!normalized) continue
+
+    const lower = normalized.toLowerCase()
+    if (lower === 'sitapura pv' || lower === 'sitapura ev' || lower === 'sitapura') {
+      branchOptionSet.add('Sitapura (PV+EV)')
+      continue
+    }
+
+    branchOptionSet.add(normalized)
+  }
+
+  const finalBranchOptions = [...branchOptionSet]
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
@@ -61,7 +82,7 @@ export default function ReportFiltersPanel({
             className="rounded border border-gray-300 px-2 py-2 text-sm"
           >
             <option value="ALL">All Branches</option>
-            {branchOptions.map((value) => (
+            {finalBranchOptions.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
