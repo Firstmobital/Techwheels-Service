@@ -46,12 +46,11 @@ import {
   formatPartsStockParseErrors,
   type PartsStockParseError,
 } from '../lib/partsStockColumnMapper'
+import { PORTAL_BRANCHES, type PortalBranch } from '../lib/branches'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-const PORTAL_BRANCHES = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV'] as const
-
-type Branch = (typeof PORTAL_BRANCHES)[number]
+type Branch = PortalBranch
 type Portal = 'EV' | 'PV'
 type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
 

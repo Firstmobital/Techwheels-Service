@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { PORTAL_BRANCHES } from './branches'
 
 export type BranchFilter = 'ALL' | string
 export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'custom'
@@ -527,107 +528,8 @@ export function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string;
   }
 }
 
-async function fetchDistinctTextValues(tableName: string, columnName: string): Promise<string[]> {
-  let from = 0
-  const uniqueByKey = new Map<string, string>()
-
-  while (true) {
-    const { data, error } = await supabase
-      .from(tableName)
-      .select(columnName)
-      .not(columnName, 'is', null)
-      .range(from, from + QUERY_PAGE_SIZE - 1)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    const rows = (data as Array<Record<string, unknown>> | null) ?? []
-
-    for (const row of rows) {
-      const raw = row[columnName]
-      const normalized = normalizeBranchOption(raw)
-      if (!normalized) continue
-
-      const key = normalized.toLowerCase()
-      if (!uniqueByKey.has(key)) {
-        uniqueByKey.set(key, normalized)
-      }
-    }
-
-    if (rows.length < QUERY_PAGE_SIZE) {
-      break
-    }
-
-    from += QUERY_PAGE_SIZE
-  }
-
-  return [...uniqueByKey.values()]
-}
-
-const DEFAULT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV']
-
-function normalizeBranchOption(raw: unknown): string | null {
-  if (raw === null || raw === undefined) return null
-
-  const normalized = String(raw)
-    // Remove invisible/zero-width characters that can render as blank options.
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    // Remove other non-printable control characters.
-    .replace(/[\u0000-\u001F\u007F]/g, '')
-    .trim()
-    .replace(/\s+/g, ' ')
-
-  return normalized ? normalized : null
-}
-
 export async function getBranchOptions(): Promise<string[]> {
-  const [employeeLocations, jcBranches] = await Promise.allSettled([
-    fetchDistinctTextValues('employee_master', 'location'),
-    fetchDistinctTextValues('job_card_closed_data', 'branch'),
-  ])
-
-  const uniqueByKey = new Map<string, string>()
-
-  const addAll = (values: string[]) => {
-    for (const value of values) {
-      const normalized = normalizeBranchOption(value)
-      if (!normalized) continue
-      const key = normalized.toLowerCase()
-      if (!uniqueByKey.has(key)) {
-        uniqueByKey.set(key, normalized)
-      }
-    }
-  }
-
-  if (employeeLocations.status === 'fulfilled') {
-    addAll(employeeLocations.value)
-  }
-
-  if (jcBranches.status === 'fulfilled') {
-    addAll(jcBranches.value)
-  }
-
-  // Always include known portal branches as a safe fallback.
-  addAll(DEFAULT_BRANCH_OPTIONS)
-
-  if (uniqueByKey.size > 0) {
-    return [...uniqueByKey.values()].sort((a, b) => a.localeCompare(b))
-  }
-
-  const errors: string[] = []
-  if (employeeLocations.status === 'rejected') {
-    errors.push(employeeLocations.reason instanceof Error ? employeeLocations.reason.message : String(employeeLocations.reason))
-  }
-  if (jcBranches.status === 'rejected') {
-    errors.push(jcBranches.reason instanceof Error ? jcBranches.reason.message : String(jcBranches.reason))
-  }
-
-  if (errors.length > 0) {
-    return [...DEFAULT_BRANCH_OPTIONS]
-  }
-
-  return [...DEFAULT_BRANCH_OPTIONS]
+  return [...PORTAL_BRANCHES]
 }
 
 export async function getServiceTypeCounts(
