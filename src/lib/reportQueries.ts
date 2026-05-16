@@ -527,28 +527,90 @@ export function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string;
   }
 }
 
+async function fetchDistinctTextValues(tableName: string, columnName: string): Promise<string[]> {
+  let from = 0
+  const uniqueByKey = new Map<string, string>()
+
+  while (true) {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select(columnName)
+      .not(columnName, 'is', null)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const rows = (data as Array<Record<string, unknown>> | null) ?? []
+
+    for (const row of rows) {
+      const raw = row[columnName]
+      if (raw === null || raw === undefined) continue
+
+      const normalized = String(raw).trim().replace(/\s+/g, ' ')
+      if (!normalized) continue
+
+      const key = normalized.toLowerCase()
+      if (!uniqueByKey.has(key)) {
+        uniqueByKey.set(key, normalized)
+      }
+    }
+
+    if (rows.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  return [...uniqueByKey.values()]
+}
+
 export async function getBranchOptions(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('employee_master')
-    .select('location')
-    .not('location', 'is', null)
-    .order('location', { ascending: true })
+  const [employeeLocations, jcBranches] = await Promise.allSettled([
+    fetchDistinctTextValues('employee_master', 'location'),
+    fetchDistinctTextValues('job_card_closed_data', 'branch'),
+  ])
 
-  if (error) {
-    throw new Error(error.message)
+  const uniqueByKey = new Map<string, string>()
+
+  const addAll = (values: string[]) => {
+    for (const value of values) {
+      const normalized = value.trim().replace(/\s+/g, ' ')
+      if (!normalized) continue
+      const key = normalized.toLowerCase()
+      if (!uniqueByKey.has(key)) {
+        uniqueByKey.set(key, normalized)
+      }
+    }
   }
 
-  const unique = new Set<string>()
-
-  for (const row of data ?? []) {
-    const raw = (row as { location?: unknown }).location
-    if (raw === null || raw === undefined) continue
-    const normalized = String(raw).trim().replace(/\s+/g, ' ')
-    if (!normalized) continue
-    unique.add(normalized)
+  if (employeeLocations.status === 'fulfilled') {
+    addAll(employeeLocations.value)
   }
 
-  return [...unique].sort((a, b) => a.localeCompare(b))
+  if (jcBranches.status === 'fulfilled') {
+    addAll(jcBranches.value)
+  }
+
+  if (uniqueByKey.size > 0) {
+    return [...uniqueByKey.values()].sort((a, b) => a.localeCompare(b))
+  }
+
+  const errors: string[] = []
+  if (employeeLocations.status === 'rejected') {
+    errors.push(employeeLocations.reason instanceof Error ? employeeLocations.reason.message : String(employeeLocations.reason))
+  }
+  if (jcBranches.status === 'rejected') {
+    errors.push(jcBranches.reason instanceof Error ? jcBranches.reason.message : String(jcBranches.reason))
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join(' | '))
+  }
+
+  return []
 }
 
 export async function getServiceTypeCounts(
