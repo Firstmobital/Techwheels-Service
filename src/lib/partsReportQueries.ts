@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { applyBranchFilterToQuery } from './branches'
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -177,9 +178,7 @@ export async function getPartsFilterOptions(branch: string): Promise<PartsFilter
       .select('fiscal_year')
       .not('fiscal_year', 'is', null)
 
-    if (branch !== 'ALL') {
-      yearsQuery = yearsQuery.eq('branch', branch)
-    }
+    yearsQuery = applyBranchFilterToQuery(yearsQuery, branch)
 
     const [vendorsRes, categoriesRes, yearsRes] = await Promise.all([
       supabase.from('part_master').select('vendor'),
@@ -211,7 +210,7 @@ export async function getMonthlyConsumptionTrend(
       .from('vw_parts_consumption_trend')
       .select('*')
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
     if (filters.portal && filters.portal !== 'ALL') query = query.eq('portal', filters.portal)
     if (filters.vendor) query = query.eq('vendor', filters.vendor)
     if (filters.productCategory) query = query.eq('product_category', filters.productCategory)
@@ -244,7 +243,7 @@ export async function getPartWiseConsumption(filters: PartsReportFilters): Promi
       .from('vw_parts_consumption_trend')
       .select('*')
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
     if (filters.portal && filters.portal !== 'ALL') query = query.eq('portal', filters.portal)
     if (filters.vendor) query = query.eq('vendor', filters.vendor)
     if (filters.productCategory) query = query.eq('product_category', filters.productCategory)
@@ -298,7 +297,7 @@ export async function getStockPlanningData(filters: PartsReportFilters): Promise
       .from('vw_parts_stock_health')
       .select('*')
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     const { data, error } = await query
       .then((res: any) => {
@@ -350,7 +349,7 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
       .from('vw_parts_latest_stock')
       .select('*')
 
-    if (filters.branch !== 'ALL') stockQuery = stockQuery.eq('branch', filters.branch)
+    stockQuery = applyBranchFilterToQuery(stockQuery, filters.branch)
 
     const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
@@ -372,7 +371,7 @@ export async function getSlowMovingParts(filters: PartsReportFilters): Promise<S
       .gt('total_consumption', 0)
       .order('created_at', { ascending: false })
 
-    if (filters.branch !== 'ALL') consumptionQuery = consumptionQuery.eq('branch', filters.branch)
+    consumptionQuery = applyBranchFilterToQuery(consumptionQuery, filters.branch)
 
     const { data: consumption, error: consumptionError } = await consumptionQuery
 
@@ -417,7 +416,7 @@ export async function getFastMovingParts(filters: PartsReportFilters): Promise<F
       .from('vw_parts_stock_health')
       .select('*')
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     const { data, error } = await query
       .then((res: any) => {
@@ -466,7 +465,7 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
       .from('vw_parts_active_orders')
       .select('*')
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     const { data, error } = await query
       .then((res: any) => {
@@ -508,7 +507,7 @@ export async function getInTransitVisibility(filters: PartsReportFilters): Promi
       .select('*')
       .gt('intransit_qty', 0)
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     const { data, error } = await query
       .then((res: any) => {
@@ -557,7 +556,7 @@ export async function getDelayedOrders(filters: PartsReportFilters): Promise<Del
       .select('*')
       .lt('eta_1', today)
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     const { data, error } = await query
       .then((res: any) => {
@@ -602,7 +601,7 @@ export async function getDealerPerformance(filters: PartsReportFilters): Promise
       .from('service_parts_order_data')
       .select('*')
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     const { data, error } = await query
       .then((res: any) => {
@@ -661,7 +660,7 @@ export async function getVendorPerformance(filters: PartsReportFilters): Promise
       .from('service_parts_order_data')
       .select('*')
 
-    if (filters.branch !== 'ALL') query = query.eq('branch', filters.branch)
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     const { data, error } = await query.then((res: any) => {
         if (filters.portal && filters.portal !== 'ALL') {
@@ -709,7 +708,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
       .from('vw_parts_latest_stock')
       .select('*')
 
-    if (filters.branch !== 'ALL') stockQuery = stockQuery.eq('branch', filters.branch)
+    stockQuery = applyBranchFilterToQuery(stockQuery, filters.branch)
 
     const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
@@ -729,7 +728,7 @@ export async function getPartValuationData(filters: PartsReportFilters): Promise
       .from('vw_parts_avg_consumption')
       .select('*')
 
-    if (filters.branch !== 'ALL') consumptionQuery = consumptionQuery.eq('branch', filters.branch)
+    consumptionQuery = applyBranchFilterToQuery(consumptionQuery, filters.branch)
 
     const { data: consumption, error: consumptionError } = await consumptionQuery
       .then((res: any) => {
@@ -826,7 +825,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
       .from('vw_parts_latest_stock')
       .select('*')
 
-    if (filters.branch !== 'ALL') stockQuery = stockQuery.eq('branch', filters.branch)
+    stockQuery = applyBranchFilterToQuery(stockQuery, filters.branch)
 
     const { data: stock, error: stockError } = await stockQuery
       .then((res: any) => {
@@ -846,7 +845,7 @@ export async function getInventoryTurnover(filters: PartsReportFilters): Promise
       .from('vw_parts_avg_consumption')
       .select('*')
 
-    if (filters.branch !== 'ALL') consumptionQuery = consumptionQuery.eq('branch', filters.branch)
+    consumptionQuery = applyBranchFilterToQuery(consumptionQuery, filters.branch)
 
     const { data: consumption, error: consumptionError } = await consumptionQuery
       .then((res: any) => {

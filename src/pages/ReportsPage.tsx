@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { REPORT_BRANCH_OPTIONS, matchesBranchSelection } from '../lib/branches'
 import { supabase } from '../lib/supabase'
 import {
   type BranchFilter,
@@ -34,17 +35,6 @@ interface HeaderStats {
 }
 
 const QUERY_PAGE_SIZE = 1000
-
-function normalizeBranchValue(raw: unknown): string {
-  if (raw === null || raw === undefined) return ''
-
-  return String(raw)
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/[\u0000-\u001F\u007F]/g, '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase()
-}
 
 function getTodayDateInputValue(): string {
   const now = new Date()
@@ -152,7 +142,7 @@ export default function ReportsPage() {
       })
       .catch((err: Error) => {
         if (!active) return
-        setBranchOptions([])
+        setBranchOptions([...REPORT_BRANCH_OPTIONS])
         setBranchError(err.message)
       })
 
@@ -196,9 +186,7 @@ export default function ReportsPage() {
         return rows
       }
 
-      const selectedBranchKey = normalizeBranchValue(branch)
-      const includeBranch = (rawBranch: unknown) =>
-        branch === 'ALL' || normalizeBranchValue(rawBranch) === selectedBranchKey
+      const includeBranch = (rawBranch: unknown) => matchesBranchSelection(rawBranch, branch)
 
       const results = await Promise.allSettled([
         fetchAllRows((from, to) =>

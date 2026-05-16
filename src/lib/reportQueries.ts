@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { PORTAL_BRANCHES } from './branches'
+import { REPORT_BRANCH_OPTIONS, applyBranchFilterToQuery } from './branches'
 
 export type BranchFilter = 'ALL' | string
 export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'custom'
@@ -436,9 +436,7 @@ async function fetchAllJobCardClosedRows(
       .select(selectColumns)
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (filters.branch !== 'ALL') {
-      query = query.eq('branch', filters.branch)
-    }
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     if (filters.serviceType && filters.serviceType !== 'ALL') {
       query = query.eq('sr_type', filters.serviceType)
@@ -529,7 +527,7 @@ export function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string;
 }
 
 export async function getBranchOptions(): Promise<string[]> {
-  return [...PORTAL_BRANCHES]
+  return [...REPORT_BRANCH_OPTIONS]
 }
 
 export async function getServiceTypeCounts(
@@ -861,9 +859,7 @@ export async function getBranchLabourRevenueComparison(
         .lt('closed_date_time', bounds.toExclusive)
         .range(from, from + QUERY_PAGE_SIZE - 1)
 
-      if (branch !== 'ALL') {
-        query = query.eq('branch', branch)
-      }
+      query = applyBranchFilterToQuery(query, branch)
 
       const { data, error } = await query
 
@@ -1177,9 +1173,7 @@ export async function getVasJobPerformance(
       .select(`${groupBy}, job_status, job_value, net_price, discount, billing_hours`)
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
@@ -1290,9 +1284,7 @@ export async function getVasJobPerformanceDashboard(
       .select('job_status, complaint_code, job_value, net_price, discount')
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
@@ -1434,9 +1426,7 @@ export async function getVasBillingHoursEfficiency(
       .select(`${groupBy}, billing_hours, job_value, net_price, discount`)
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
@@ -2242,9 +2232,7 @@ export async function getServiceDueList(
       )
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     const { data, error } = await query
     if (error) throw new Error(error.message)
@@ -2478,9 +2466,7 @@ export async function getInvoiceValueDistribution(
       .select('branch, invoice_date, final_consolidated_invoice_amount')
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       const fromDate = bounds.from.slice(0, 10)
@@ -2634,9 +2620,7 @@ export async function getInvoiceDailyTrend(
       .select('invoice_date, invoice_number, final_labour_invoice_amount, final_spares_invoice_amount, final_consolidated_invoice_amount')
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       const fromDate = bounds.from.slice(0, 10)
@@ -2747,9 +2731,7 @@ export async function getJcInvoiceReconciliation(
       .select('order_number, final_consolidated_invoice_amount, branch, invoice_date')
       .range(invoiceFrom, invoiceFrom + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       const fromDate = bounds.from.slice(0, 10)
@@ -2947,9 +2929,7 @@ export async function getNetPriceFinalRevenueVariance(
       .select('branch, job_card_number, job_code, net_price, jc_closed_date_time')
       .range(vasFrom, vasFrom + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
@@ -3140,9 +3120,7 @@ export async function getEndToEndJobLifecycleReport(
       .select('job_card_number, branch, net_price, job_value')
       .in('job_card_number', chunk)
 
-    if (branch !== 'ALL') {
-      vasQuery = vasQuery.eq('branch', branch)
-    }
+    vasQuery = applyBranchFilterToQuery(vasQuery, branch)
 
     const { data: vasData, error: vasError } = await vasQuery
     if (vasError) {
@@ -3155,9 +3133,7 @@ export async function getEndToEndJobLifecycleReport(
       .select('order_number, branch, invoice_date, final_consolidated_invoice_amount')
       .in('order_number', chunk)
 
-    if (branch !== 'ALL') {
-      invoiceQuery = invoiceQuery.eq('branch', branch)
-    }
+    invoiceQuery = applyBranchFilterToQuery(invoiceQuery, branch)
 
     const { data: invoiceData, error: invoiceError } = await invoiceQuery
     if (invoiceError) {
@@ -3514,9 +3490,7 @@ async function fetchAllPartsConsumptionRows(
       .select(selectColumns)
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       query = query.gte('transaction_date', bounds.from.slice(0, 10)).lt('transaction_date', bounds.toExclusive.slice(0, 10))
@@ -3550,9 +3524,7 @@ async function fetchAllPartsOrderRows(
       .select(selectColumns)
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       query = query.gte('order_date', bounds.from.slice(0, 10)).lt('order_date', bounds.toExclusive.slice(0, 10))
@@ -3582,9 +3554,7 @@ async function fetchLatestPartsStockByPart(branch: BranchFilter): Promise<Map<st
       .order('snapshot_date', { ascending: false })
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    if (branch !== 'ALL') {
-      query = query.eq('branch', branch)
-    }
+    query = applyBranchFilterToQuery(query, branch)
 
     const { data, error } = await query
     if (error) throw new Error(error.message)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { BranchFilter } from '../../../lib/reportQueries'
 import { getDateRangeBounds } from '../../../lib/reportQueries'
+import { applyBranchFilterToQuery } from '../../../lib/branches'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
 import { exportToCSV } from '../../../lib/exportUtils'
@@ -75,7 +76,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
           .order('jc_closed_date_time', { ascending: false })
           .limit(1000)
 
-        if (branch !== 'ALL') query = query.eq('branch', branch as BranchFilter)
+        query = applyBranchFilterToQuery(query, branch as BranchFilter)
         if (employeeCode) query = query.eq('employee_code', employeeCode)
         if (bounds) query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
 
@@ -101,7 +102,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
         .order('closed_date_time', { ascending: false })
         .limit(1000)
 
-      if (branch !== 'ALL') query = query.eq('branch', branch as BranchFilter)
+      query = applyBranchFilterToQuery(query, branch as BranchFilter)
       if (employeeCode) query = query.eq('employee_code', employeeCode)
       if (bounds) query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
 
