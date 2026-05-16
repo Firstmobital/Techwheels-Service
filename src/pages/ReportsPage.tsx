@@ -157,23 +157,38 @@ export default function ReportsPage() {
       const now = new Date()
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
+      let jobCardsQuery = supabase
+        .from('job_card_closed_data')
+        .select('*', { count: 'exact', head: true })
+        .gte('closed_date_time', startOfMonth)
+
+      let revenueQuery = supabase
+        .from('job_card_closed_data')
+        .select('total_invoice_amount')
+        .gte('closed_date_time', startOfMonth)
+
+      let partsReorderQuery = supabase
+        .from('vw_parts_stock_health')
+        .select('*', { count: 'exact', head: true })
+        .lt('weeks_of_supply', 2)
+
+      let inTransitOrdersQuery = supabase
+        .from('service_parts_order_data')
+        .select('*', { count: 'exact', head: true })
+        .gt('intransit_qty', 0)
+
+      if (branch !== 'ALL') {
+        jobCardsQuery = jobCardsQuery.eq('branch', branch)
+        revenueQuery = revenueQuery.eq('branch', branch)
+        partsReorderQuery = partsReorderQuery.eq('branch', branch)
+        inTransitOrdersQuery = inTransitOrdersQuery.eq('branch', branch)
+      }
+
       const results = await Promise.allSettled([
-        supabase
-          .from('job_card_closed_data')
-          .select('*', { count: 'exact', head: true })
-          .gte('closed_date_time', startOfMonth),
-        supabase
-          .from('job_card_closed_data')
-          .select('total_invoice_amount')
-          .gte('closed_date_time', startOfMonth),
-        supabase
-          .from('vw_parts_stock_health')
-          .select('*', { count: 'exact', head: true })
-          .lt('weeks_of_supply', 2),
-        supabase
-          .from('service_parts_order_data')
-          .select('*', { count: 'exact', head: true })
-          .gt('intransit_qty', 0),
+        jobCardsQuery,
+        revenueQuery,
+        partsReorderQuery,
+        inTransitOrdersQuery,
       ])
 
       if (!active) return
@@ -212,7 +227,7 @@ export default function ReportsPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [branch])
 
   useEffect(() => {
     if (branch === 'ALL') return
