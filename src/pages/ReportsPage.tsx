@@ -49,7 +49,7 @@ export default function ReportsPage() {
   const params = useParams<{ categoryId?: string; reportId?: string }>()
 
   const [branch, setBranch] = useState<BranchFilter>('ALL')
-  const [branchOptions, setBranchOptions] = useState<string[]>([])
+  const [branchOptions, setBranchOptions] = useState<string[]>([...REPORT_BRANCH_OPTIONS])
   const [branchError, setBranchError] = useState<string | null>(null)
 
   const [datePreset, setDatePreset] = useState<DateRangePreset>('this-month')
@@ -138,7 +138,8 @@ export default function ReportsPage() {
       .then((options) => {
         if (!active) return
         setBranchError(null)
-        setBranchOptions(options)
+        const merged = Array.from(new Set([...REPORT_BRANCH_OPTIONS, ...options]))
+        setBranchOptions(merged)
       })
       .catch((err: Error) => {
         if (!active) return
