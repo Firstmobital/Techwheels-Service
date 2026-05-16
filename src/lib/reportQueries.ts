@@ -546,9 +546,7 @@ async function fetchDistinctTextValues(tableName: string, columnName: string): P
 
     for (const row of rows) {
       const raw = row[columnName]
-      if (raw === null || raw === undefined) continue
-
-      const normalized = String(raw).trim().replace(/\s+/g, ' ')
+      const normalized = normalizeBranchOption(raw)
       if (!normalized) continue
 
       const key = normalized.toLowerCase()
@@ -569,6 +567,20 @@ async function fetchDistinctTextValues(tableName: string, columnName: string): P
 
 const DEFAULT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV']
 
+function normalizeBranchOption(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null
+
+  const normalized = String(raw)
+    // Remove invisible/zero-width characters that can render as blank options.
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    // Remove other non-printable control characters.
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+
+  return normalized ? normalized : null
+}
+
 export async function getBranchOptions(): Promise<string[]> {
   const [employeeLocations, jcBranches] = await Promise.allSettled([
     fetchDistinctTextValues('employee_master', 'location'),
@@ -579,7 +591,7 @@ export async function getBranchOptions(): Promise<string[]> {
 
   const addAll = (values: string[]) => {
     for (const value of values) {
-      const normalized = value.trim().replace(/\s+/g, ' ')
+      const normalized = normalizeBranchOption(value)
       if (!normalized) continue
       const key = normalized.toLowerCase()
       if (!uniqueByKey.has(key)) {
