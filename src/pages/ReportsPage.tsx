@@ -33,6 +33,19 @@ interface HeaderStats {
   openTransitOrders: number
 }
 
+const QUERY_PAGE_SIZE = 1000
+
+function normalizeBranchValue(raw: unknown): string {
+  if (raw === null || raw === undefined) return ''
+
+  return String(raw)
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+}
+
 function getTodayDateInputValue(): string {
   const now = new Date()
   const year = now.getFullYear()
@@ -157,50 +170,71 @@ export default function ReportsPage() {
       const now = new Date()
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-      let jobCardsQuery = supabase
-        .from('job_card_closed_data')
-        .select('*', { count: 'exact', head: true })
-        .gte('closed_date_time', startOfMonth)
+      const fetchAllRows = async (
+        buildQuery: (from: number, to: number) => ReturnType<typeof supabase.from>,
+      ): Promise<Record<string, unknown>[]> => {
+        let from = 0
+        const rows: Record<string, unknown>[] = []
 
-      let revenueQuery = supabase
-        .from('job_card_closed_data')
-        .select('total_invoice_amount')
-        .gte('closed_date_time', startOfMonth)
+        while (true) {
+          const { data, error } = await buildQuery(from, from + QUERY_PAGE_SIZE - 1)
 
-      let partsReorderQuery = supabase
-        .from('vw_parts_stock_health')
-        .select('*', { count: 'exact', head: true })
-        .lt('weeks_of_supply', 2)
+          if (error) {
+            throw new Error(error.message)
+          }
 
-      let inTransitOrdersQuery = supabase
-        .from('service_parts_order_data')
-        .select('*', { count: 'exact', head: true })
-        .gt('intransit_qty', 0)
+          const batch = (data as Record<string, unknown>[] | null) ?? []
+          rows.push(...batch)
 
-      if (branch !== 'ALL') {
-        jobCardsQuery = jobCardsQuery.eq('branch', branch)
-        revenueQuery = revenueQuery.eq('branch', branch)
-        partsReorderQuery = partsReorderQuery.eq('branch', branch)
-        inTransitOrdersQuery = inTransitOrdersQuery.eq('branch', branch)
+          if (batch.length < QUERY_PAGE_SIZE) {
+            break
+          }
+
+          from += QUERY_PAGE_SIZE
+        }
+
+        return rows
       }
 
+      const selectedBranchKey = normalizeBranchValue(branch)
+      const includeBranch = (rawBranch: unknown) =>
+        branch === 'ALL' || normalizeBranchValue(rawBranch) === selectedBranchKey
+
       const results = await Promise.allSettled([
-        jobCardsQuery,
-        revenueQuery,
-        partsReorderQuery,
-        inTransitOrdersQuery,
+        fetchAllRows((from, to) =>
+          supabase
+            .from('job_card_closed_data')
+            .select('branch, total_invoice_amount')
+            .gte('closed_date_time', startOfMonth)
+            .range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase
+            .from('vw_parts_stock_health')
+            .select('branch')
+            .lt('weeks_of_supply', 2)
+            .range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase
+            .from('service_parts_order_data')
+            .select('branch')
+            .gt('intransit_qty', 0)
+            .range(from, to),
+        ),
       ])
 
       if (!active) return
 
-      const monthlyJobCards =
-        results[0].status === 'fulfilled' ? ((results[0].value.count as number | null) ?? 0) : 0
+      const jcRows = results[0].status === 'fulfilled' ? results[0].value : []
+      const filteredJcRows = jcRows.filter((row) => includeBranch((row as { branch?: unknown }).branch))
+      const monthlyJobCards = filteredJcRows.length
 
       let monthlyRevenue = 0
-      if (results[1].status === 'fulfilled') {
-        const revenueRows = (results[1].value.data as Array<{ total_invoice_amount?: unknown }> | null) ?? []
-        monthlyRevenue = revenueRows.reduce((sum, row) => {
-          const raw = row.total_invoice_amount
+      if (filteredJcRows.length > 0) {
+        monthlyRevenue = filteredJcRows.reduce((sum, row) => {
+          const typedRow = row as { total_invoice_amount?: unknown }
+          const raw = typedRow.total_invoice_amount
           if (typeof raw === 'number') return sum + raw
           if (raw == null) return sum
           const parsed = Number(raw)
@@ -208,10 +242,28 @@ export default function ReportsPage() {
         }, 0)
       }
 
-      const partsNeedingReorder =
-        results[2].status === 'fulfilled' ? ((results[2].value.count as number | null) ?? 0) : 0
-      const openTransitOrders =
-        results[3].status === 'fulfilled' ? ((results[3].value.count as number | null) ?? 0) : 0
+      const partsRows = results[1].status === 'fulfilled' ? results[1].value : []
+      const partsNeedingReorder = partsRows.reduce((count, row) => {
+        const typedRow = row as { branch?: unknown }
+        return includeBranch(typedRow.branch) ? count + 1 : count
+      }, 0)
+
+      const inTransitRows = results[2].status === 'fulfilled' ? results[2].value : []
+      const openTransitOrders = inTransitRows.reduce((count, row) => {
+        const typedRow = row as { branch?: unknown }
+        return includeBranch(typedRow.branch) ? count + 1 : count
+      }, 0)
+
+      if (results[0].status !== 'fulfilled' && results[1].status !== 'fulfilled' && results[2].status !== 'fulfilled') {
+        setHeaderStats({
+          monthlyJobCards: 0,
+          monthlyRevenue: 0,
+          partsNeedingReorder: 0,
+          openTransitOrders: 0,
+        })
+        setHeaderStatsLoading(false)
+        return
+      }
 
       setHeaderStats({
         monthlyJobCards,
