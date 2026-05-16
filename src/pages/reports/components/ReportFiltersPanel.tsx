@@ -1,5 +1,6 @@
 import type { BranchFilter, DateRangePreset } from '../../../lib/reportQueries'
-import { REPORT_BRANCH_OPTIONS, normalizeBranchLabel } from '../../../lib/branches'
+
+const FIXED_REPORT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura (PV+EV)', 'Tonk', 'Shahpura'] as const
 
 interface ReportFiltersPanelProps {
   branch: BranchFilter
@@ -50,26 +51,10 @@ export default function ReportFiltersPanel({
   customDateError,
 }: ReportFiltersPanelProps) {
   const topGridClass = showManpowerFilters ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4' : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
-  const branchOptionSet = new Set<string>()
-
-  for (const branchOption of REPORT_BRANCH_OPTIONS) {
-    branchOptionSet.add(branchOption)
-  }
-
-  for (const branchOption of branchOptions) {
-    const normalized = normalizeBranchLabel(branchOption)
-    if (!normalized) continue
-
-    const lower = normalized.toLowerCase()
-    if (lower === 'sitapura pv' || lower === 'sitapura ev' || lower === 'sitapura') {
-      branchOptionSet.add('Sitapura (PV+EV)')
-      continue
-    }
-
-    branchOptionSet.add(normalized)
-  }
-
-  const finalBranchOptions = [...branchOptionSet]
+  const normalizedBranch =
+    branch === 'Sitapura PV' || branch === 'Sitapura EV' || branch === 'Sitapura'
+      ? 'Sitapura (PV+EV)'
+      : branch
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
@@ -77,12 +62,12 @@ export default function ReportFiltersPanel({
         <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
           Branch
           <select
-            value={branch}
+            value={normalizedBranch}
             onChange={(event) => onBranchChange(event.target.value)}
             className="rounded border border-gray-300 px-2 py-2 text-sm"
           >
             <option value="ALL">All Branches</option>
-            {finalBranchOptions.map((value) => (
+            {FIXED_REPORT_BRANCH_OPTIONS.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
