@@ -6,7 +6,6 @@ import {
   type BranchFilter,
   type DateRangeFilter,
   type DateRangePreset,
-  getBranchOptions,
   getManpowerWiseFilterOptions,
 } from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
@@ -49,8 +48,7 @@ export default function ReportsPage() {
   const params = useParams<{ categoryId?: string; reportId?: string }>()
 
   const [branch, setBranch] = useState<BranchFilter>('ALL')
-  const [branchOptions, setBranchOptions] = useState<string[]>([...REPORT_BRANCH_OPTIONS])
-  const [branchError, setBranchError] = useState<string | null>(null)
+  const branchOptions = [...REPORT_BRANCH_OPTIONS]
 
   const [datePreset, setDatePreset] = useState<DateRangePreset>('this-month')
   const [customFrom, setCustomFrom] = useState(getTodayDateInputValue)
@@ -130,27 +128,6 @@ export default function ReportsPage() {
       }
     }
   }, [navigate, params.categoryId, params.reportId, reportsInCategory])
-
-  useEffect(() => {
-    let active = true
-
-    getBranchOptions()
-      .then((options) => {
-        if (!active) return
-        setBranchError(null)
-        const merged = Array.from(new Set([...REPORT_BRANCH_OPTIONS, ...options]))
-        setBranchOptions(merged)
-      })
-      .catch((err: Error) => {
-        if (!active) return
-        setBranchOptions([...REPORT_BRANCH_OPTIONS])
-        setBranchError(err.message)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
 
   useEffect(() => {
     let active = true
@@ -402,7 +379,7 @@ export default function ReportsPage() {
           branch={branch}
           onBranchChange={setBranch}
           branchOptions={branchOptions}
-          branchError={branchError}
+          branchError={null}
           showManpowerFilters={isManpowerReportSelected}
           serviceTypeFilter={serviceTypeFilter}
           onServiceTypeFilterChange={setServiceTypeFilter}

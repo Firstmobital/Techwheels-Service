@@ -2,7 +2,7 @@ export const PORTAL_BRANCHES = ['Ajmer Road', 'Sitapura PV', 'Sitapura EV'] as c
 
 export type PortalBranch = (typeof PORTAL_BRANCHES)[number]
 
-export const REPORT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura', 'Tonk', 'Shahpura'] as const
+export const REPORT_BRANCH_OPTIONS = ['Ajmer Road', 'Sitapura (PV+EV)', 'Tonk', 'Shahpura'] as const
 
 const SITAPURA_BRANCH_ALIASES = ['Sitapura', 'Sitapura PV', 'Sitapura EV'] as const
 
@@ -20,7 +20,9 @@ export function branchAliases(branch: string): string[] {
 	const normalized = normalizeBranchLabel(branch)
 	if (!normalized) return []
 
-	if (normalized.toLowerCase() === 'sitapura') {
+	const lower = normalized.toLowerCase()
+
+	if (lower === 'sitapura' || lower === 'sitapura (pv+ev)') {
 		return [...SITAPURA_BRANCH_ALIASES]
 	}
 
