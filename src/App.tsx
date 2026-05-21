@@ -203,24 +203,6 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
               </>
             )}
           </NavLink>
-          <NavLink
-            to="/admin"
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-              ].join(' ')
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span className={isActive ? 'text-blue-600' : 'text-gray-400'}>{NAV_ITEMS[3].icon}</span>
-                {NAV_ITEMS[3].label}
-              </>
-            )}
-          </NavLink>
         </nav>
 
         {/* Footer */}
@@ -247,7 +229,6 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
             <Route path="/reports/:categoryId" element={<ReportsPage />} />
             <Route path="/reports/:categoryId/:reportId" element={<ReportsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/import" replace />} />
           </Routes>
