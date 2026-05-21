@@ -7,6 +7,7 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
 import SignUpPage from './pages/SignUpPage'
+import AuthCallback from './pages/AuthCallback'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -126,6 +127,11 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
+  }
+
+  // Public route — handle before AuthGate
+  if (window.location.pathname === '/auth/callback') {
+    return <AuthCallback />
   }
 
   return (
