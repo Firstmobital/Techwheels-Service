@@ -5,7 +5,6 @@ import ReportsPage from './pages/ReportsPage.tsx'
 import { REPORT_CATEGORIES } from './pages/reports'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
-import AdminPage from './pages/AdminPage'
 import { hasSupabaseEnv } from './lib/supabase'
 
 const NAV_ITEMS = [
