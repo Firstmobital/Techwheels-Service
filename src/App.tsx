@@ -35,7 +35,6 @@ const NAV_ITEMS = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9.75v4.5m2.25-2.25h-4.5" />
       </svg>
     ),
-,
   {
     to: '/admin',
     label: 'Admin',
