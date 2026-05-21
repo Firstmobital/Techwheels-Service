@@ -31,9 +31,9 @@ const DATE_PRESET_OPTIONS: { label: string; value: DateRangePreset }[] = [
 ]
 
 export default function ReportFiltersPanel({
-  branch,
+  branch: _branch,
   onBranchChange,
-  branchOptions,
+  branchOptions: _branchOptions,
   branchError,
   showManpowerFilters = false,
   serviceTypeFilter = 'ALL',
