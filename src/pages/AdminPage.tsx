@@ -92,10 +92,33 @@ export default function AdminPage() {
   )
 
   async function toggleUserActive(u: AppUser) {
-    const { error } = await supabase.from('users').update({ is_active: !u.is_active }).eq('id', u.id)
+    const activating = !u.is_active
+    const { error } = await supabase.from('users').update({ is_active: activating }).eq('id', u.id)
     if (error) { showToast(error.message, 'error'); return }
+
+    // When activating, also confirm email in auth so user can log in immediately
+    if (activating) {
+      try {
+        const serviceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+        if (serviceKey && supabaseUrl) {
+          await fetch(`${supabaseUrl}/auth/v1/admin/users/${u.id}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${serviceKey}`,
+              'apikey': serviceKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email_confirm: true }),
+          })
+        }
+      } catch (_e) {
+        // Non-fatal — trigger in DB handles this too
+      }
+    }
+
     await loadUsers()
-    showToast(u.is_active ? 'User deactivated' : 'User activated')
+    showToast(activating ? 'User activated — can now log in' : 'User deactivated')
   }
 
   async function createUser() {
@@ -452,3 +475,5 @@ export default function AdminPage() {
     </div>
   )
 }
+
+
