@@ -139,7 +139,7 @@ export default function ReportsPage() {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
       const fetchAllRows = async (
-        buildQuery: (from: number, to: number) => ReturnType<typeof supabase.from>,
+        buildQuery: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
       ): Promise<Record<string, unknown>[]> => {
         let from = 0
         const rows: Record<string, unknown>[] = []
@@ -249,7 +249,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (branch === 'ALL') return
-    if (branchOptions.includes(branch)) return
+    if ((branchOptions as string[]).includes(branch)) return
     setBranch('ALL')
   }, [branch, branchOptions])
 
