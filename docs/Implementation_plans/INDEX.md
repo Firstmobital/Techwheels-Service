@@ -10,7 +10,7 @@
 | Plan ID | Title | Priority | Status | Owner | Start | ETA | Progress |
 |---------|-------|----------|--------|-------|-------|-----|----------|
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | 🔴 PENDING | Dev Team | 2026-05-22 | 2026-05-23 | 0% |
-| AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 95% |
+| AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
 
 ---
 
@@ -28,7 +28,7 @@
 - **Risk Level:** 🟡 MEDIUM (schema deployed; dump sync and app parity pending)
 - **Status:** Audit complete, implementation partially complete
 - **Latest Update:** 2026-05-22 - Reports export controls wired and scripted E2E checklist passed (10/10)
-- **Next Step:** Manual E2E walkthrough and strict PPT/Excel format parity validation
+- **Next Step:** Owner decision on contract scope (in-scope implementation track vs documented exception)
 
 ---
 
