@@ -1,7 +1,5 @@
 import type { BranchFilter, DateRangePreset } from '../../../lib/reportQueries'
 
-const FIXED_REPORT_BRANCH_OPTIONS: string[] = []
-
 interface ReportFiltersPanelProps {
   branch: BranchFilter
   onBranchChange: (value: BranchFilter) => void
@@ -31,9 +29,9 @@ const DATE_PRESET_OPTIONS: { label: string; value: DateRangePreset }[] = [
 ]
 
 export default function ReportFiltersPanel({
-  branch: _branch,
+  branch,
   onBranchChange,
-  branchOptions: _branchOptions,
+  branchOptions,
   branchError,
   showManpowerFilters = false,
   serviceTypeFilter = 'ALL',
@@ -51,7 +49,6 @@ export default function ReportFiltersPanel({
   customDateError,
 }: ReportFiltersPanelProps) {
   const topGridClass = showManpowerFilters ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4' : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
-  const normalizedBranch = 'ALL'
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
@@ -59,12 +56,12 @@ export default function ReportFiltersPanel({
         <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
           Branch
           <select
-            value={normalizedBranch}
+            value={branch}
             onChange={(event) => onBranchChange(event.target.value)}
             className="rounded border border-gray-300 px-2 py-2 text-sm"
           >
             <option value="ALL">All Branches</option>
-            {FIXED_REPORT_BRANCH_OPTIONS.map((value) => (
+            {branchOptions.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
