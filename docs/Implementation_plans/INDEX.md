@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
 **Last Updated:** 2026-05-22  
-**Total Active Plans:** 2
+**Total Active Plans:** 3
 
 ---
 
@@ -11,10 +11,18 @@
 |---------|-------|----------|--------|-------|-------|-----|----------|
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | ✅ COMPLETED | Dev Team | 2026-05-22 | 2026-05-22 | 100% |
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
+| AUTH-001 | Auth Email Recovery and User Access Continuity | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-22 | 2026-05-23 | 0% |
 
 ---
 
 ## Active Plans
+
+### AUTH-001: Auth Email Recovery and User Access Continuity
+- **File:** [AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md)
+- **Risk Level:** 🟡 MEDIUM (temporary credential handling + SMTP/rate-limit dependency)
+- **Status:** Pending kickoff
+- **Latest Update:** 2026-05-22 - Plan created to unblock existing user access without email dependency and harden SMTP delivery
+- **Next Step:** Execute Phase 1 (set one-time password via Admin API for existing Vinod user and validate login)
 
 ### AUTODOC-STATUS-001: AutoDoc Prompt Execution Status Audit
 - **File:** [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md)
@@ -85,6 +93,7 @@ Next: Complete edge function, then move to frontend refactor
 
 - 📄 [SECURITY_REFACTOR_SERVICE_KEY.md](SECURITY_REFACTOR_SERVICE_KEY.md) - Full plan with activity tracker
 - 📄 [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md) - AutoDoc done/pending audit vs authoritative schema
+- 📄 [AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md) - Auth email throttle recovery and access continuity plan
 - 📄 COMPLETED_PLANS.md (Coming soon)
 
 ---

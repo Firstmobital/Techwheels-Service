@@ -177,6 +177,7 @@ export default function AdminPage() {
           dealer_code: dealerCode,  // Set in JWT
           dealer_name: dealerName,
         },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
     if (error) { showToastMsg(error.message, 'error'); setSaving(false); return }
