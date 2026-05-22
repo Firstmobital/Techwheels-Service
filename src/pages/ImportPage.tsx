@@ -16,6 +16,18 @@ import {
   type CancelJobCardParseError,
 } from '../lib/cancelJobCardColumnMapper'
 import {
+  mapClosedButNotInvoicedHeaders,
+  buildClosedButNotInvoicedInsertRow,
+  formatClosedButNotInvoicedParseErrors,
+  type ClosedButNotInvoicedParseError,
+} from '../lib/closedButNotInvoicedColumnMapper'
+import {
+  mapOpenJobCardsHeaders,
+  buildOpenJobCardsInsertRow,
+  formatOpenJobCardsParseErrors,
+  type OpenJobCardsParseError,
+} from '../lib/openJobCardsColumnMapper'
+import {
   mapJcClosedHeaders,
   buildJcClosedInsertRow,
   formatJcClosedParseErrors,
@@ -95,6 +107,16 @@ const CARDS: CardConfig[] = [
     tableName: 'cancel_job_card',
     title: 'Cancel Job Cards Data',
     description: 'cancel job card records across all branches.',
+  },
+  {
+    tableName: 'closed_but_not_invoiced',
+    title: 'Closed but not Invoiced Data',
+    description: 'closed but not invoiced job card records across all branches.',
+  },
+  {
+    tableName: 'open_job_cards',
+    title: 'Open Job Cards Data',
+    description: 'open job card records across all branches.',
   },
   {
     tableName: 'service_vas_jc_data',
@@ -349,7 +371,11 @@ async function getTableColumns(tableName: string): Promise<string[]> {
     ]
   }
 
-  if (tableName === 'cancel_job_card') {
+  if (
+    tableName === 'cancel_job_card' ||
+    tableName === 'closed_but_not_invoiced' ||
+    tableName === 'open_job_cards'
+  ) {
     return [
       'id',
       'job_card_number',
@@ -820,6 +846,8 @@ export default function ImportPage() {
       try {
         const isVasTable = tableName === 'service_vas_jc_data'
         const isCancelJobCardTable = tableName === 'cancel_job_card'
+        const isClosedButNotInvoicedTable = tableName === 'closed_but_not_invoiced'
+        const isOpenJobCardsTable = tableName === 'open_job_cards'
         const isJcClosedTable = tableName === 'job_card_closed_data'
         const isPartsConsumptionTable = tableName === 'service_parts_consumption_data'
         const isPartsOrderTable = tableName === 'service_parts_order_data'
@@ -827,6 +855,8 @@ export default function ImportPage() {
         const isSpecialMappedTable =
           isVasTable ||
           isCancelJobCardTable ||
+          isClosedButNotInvoicedTable ||
+          isOpenJobCardsTable ||
           isJcClosedTable ||
           isPartsConsumptionTable ||
           isPartsOrderTable ||
@@ -1200,6 +1230,96 @@ export default function ImportPage() {
             if (cancelJobCardParseErrors.length > 0) {
               throw new Error(
                 `Cancel Job Cards Data parse errors found:\n${formatCancelJobCardParseErrors(cancelJobCardParseErrors.slice(0, 10))}`,
+              )
+            }
+
+            const dedupedRows = dedupeRowsByJobCardBranch(insertRows)
+            totalInserted += await upsertOrInsertRows(dedupedRows, [
+              'job_card_number,branch',
+              'job_card_number',
+            ])
+          } else if (isClosedButNotInvoicedTable) {
+            const excelHeaders = Object.keys(rawRows[0] ?? {})
+            const tableCols = await getTableColumns(tableName)
+            const columnSet = new Set(tableCols)
+            let headerMapping: Record<string, string>
+            try {
+              headerMapping = mapClosedButNotInvoicedHeaders(excelHeaders)
+            } catch (err) {
+              throw new Error(
+                `Closed but not Invoiced Data (${branch}, ${slot.file.name}): ${err instanceof Error ? err.message : String(err)}`,
+              )
+            }
+
+            headerMapping = Object.fromEntries(
+              Object.entries(headerMapping).filter(([dbColumn]) => columnSet.has(dbColumn)),
+            )
+
+            const parseErrors: ClosedButNotInvoicedParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildClosedButNotInvoicedInsertRow(
+                rawRows[rowIdx],
+                branch,
+                headerMapping,
+                rowIdx + 2,
+              )
+
+              if (errors.length > 0) {
+                parseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (parseErrors.length > 0) {
+              throw new Error(
+                `Closed but not Invoiced Data parse errors found:\n${formatClosedButNotInvoicedParseErrors(parseErrors.slice(0, 10))}`,
+              )
+            }
+
+            const dedupedRows = dedupeRowsByJobCardBranch(insertRows)
+            totalInserted += await upsertOrInsertRows(dedupedRows, [
+              'job_card_number,branch',
+              'job_card_number',
+            ])
+          } else if (isOpenJobCardsTable) {
+            const excelHeaders = Object.keys(rawRows[0] ?? {})
+            const tableCols = await getTableColumns(tableName)
+            const columnSet = new Set(tableCols)
+            let headerMapping: Record<string, string>
+            try {
+              headerMapping = mapOpenJobCardsHeaders(excelHeaders)
+            } catch (err) {
+              throw new Error(
+                `Open Job Cards Data (${branch}, ${slot.file.name}): ${err instanceof Error ? err.message : String(err)}`,
+              )
+            }
+
+            headerMapping = Object.fromEntries(
+              Object.entries(headerMapping).filter(([dbColumn]) => columnSet.has(dbColumn)),
+            )
+
+            const parseErrors: OpenJobCardsParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildOpenJobCardsInsertRow(
+                rawRows[rowIdx],
+                branch,
+                headerMapping,
+                rowIdx + 2,
+              )
+
+              if (errors.length > 0) {
+                parseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (parseErrors.length > 0) {
+              throw new Error(
+                `Open Job Cards Data parse errors found:\n${formatOpenJobCardsParseErrors(parseErrors.slice(0, 10))}`,
               )
             }
 
