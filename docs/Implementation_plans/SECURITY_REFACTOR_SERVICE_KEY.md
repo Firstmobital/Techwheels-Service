@@ -56,10 +56,27 @@ This plan refactors the entire admin identity model and eliminates frontend expo
 - **Auth.users schema** (line 5314): Carries `raw_user_meta_data` with `full_name, email_verified, phone_verified`.
   - JWT user_metadata populated on login carries `dealer_code` and `dealer_name`.
 
-### RLS Policy Foundation
+### RLS Policy Foundation (Single Dealership Today, Multi-Dealer Ready for Tomorrow)
+
+**Current State (Single Dealership):**
+- All employees have identical `dealer_code = "TN123456"` in JWT
+- RLS check: `dealer_code = public.my_dealer_code()` → evaluates to `dealer_code = "TN123456"`
+- **Result:** Check is always TRUE for all users (no isolation between employees)
+- **Purpose:** Audit trail, query partitioning, data organization
+
+**Future State (Multiple Dealerships):**
+- Employee at Dealership A has `dealer_code = "TN123456"` in JWT
+- Employee at Dealership B has `dealer_code = "TS789012"` in JWT
+- RLS check: `dealer_code = public.my_dealer_code()` → filters by that employee's dealer code
+- **Result:** Employees can only see records from their own dealership (true isolation)
+- **No schema changes needed:** Design already supports this evolution
+
+**How It Works:**
 - **my_dealer_code() function** (line 1123): Reads JWT user_metadata.dealer_code for row filtering.
 - **All dealership-scoped policies** (vehicles, job_cards, panels, etc.) check: `dealer_code = public.my_dealer_code()`.
 - **is_admin() function** (line 1106): Reads public.users WHERE id = auth.uid() AND role = 'admin' AND is_active = true.
+  - Admins can only see/modify users (RLS on users table, not data tables)
+  - Data access still filtered by dealer_code for non-admins
 
 ### Current Vulnerability Chain
 1. AdminPage imports `import.meta.env.VITE_SUPABASE_SERVICE_KEY` (exposed in DevTools).
@@ -68,10 +85,28 @@ This plan refactors the entire admin identity model and eliminates frontend expo
 4. No server-side validation: any attacker with the key can modify any user.
 
 ### Target Dealer Model
-- **One dealership, many employees:** All employees should have identical dealer_code in JWT.
-- **Default dealership setting** (new): Admin sets a default dealer code once, auto-filled for all new employees.
-- **Employee identity:** Stored in public.users (role, branch, is_active); NO dealer duplication.
-- **Dealer enforcement:** Carried via JWT on every request; RLS policies check it.
+
+**MVP (Current, Single Dealership):**
+- One dealership (Techwheels) with dealer_code = "TN123456"
+- All employees share identical dealer_code in JWT
+- RLS check always passes (no isolation needed between employees yet)
+- Employee identity: role, branch, is_active (stored in public.users)
+- Dealer identity: dealer_code in JWT (source of truth)
+
+**Future State (Multiple Dealerships - No Code Changes Required):**
+- Multiple dealerships can be added (e.g., "TS789012", "UP456789")
+- When onboarding to a dealership, employee gets that dealer_code in JWT
+- Employees at different dealerships get different dealer_codes
+- RLS check now provides true isolation: each employee only sees their dealership's data
+- No schema changes, no code refactoring—design already supports this
+
+**Why This Architecture:**
+1. **Scales naturally** from single to multi-dealer without redesign
+2. **Audit compliance** - dealer_code on every record for compliance reporting
+3. **Query performance** - can index/partition by dealer_code for faster queries
+4. **JWT-driven isolation** - dealer identity is cryptographically signed, can't be forged
+
+**Key Point:** Dealer identity is NOT duplicated in public.users table. It lives in JWT (auth.users.user_metadata), and RLS policies read it from there. This keeps data normalized and prevents sync bugs.
 
 ---
 
