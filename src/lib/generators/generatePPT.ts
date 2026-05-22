@@ -12,6 +12,7 @@
 
 import PptxGenJS from 'pptxgenjs'
 import { supabase } from '../supabase'
+import { AUTODOC_BUCKET } from '../autodocStorage'
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ function inr(n: number): string {
 async function toDataURL(storagePath: string): Promise<string | null> {
   try {
     const { data, error } = await supabase.storage
-      .from('autodoc')
+      .from(AUTODOC_BUCKET)
       .download(storagePath)
     if (error || !data) return null
     return new Promise<string | null>((resolve) => {

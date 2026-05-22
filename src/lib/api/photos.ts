@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { AUTODOC_BUCKET } from '../autodocStorage'
 import { fail, ok, type ApiResult, type PanelPhotoInsert, type PanelPhotoRow, type PhotoType } from './types'
 
 export async function listPanelPhotos(jobCardId: string): Promise<ApiResult<PanelPhotoRow[]>> {
@@ -37,7 +38,7 @@ export async function createPanelPhoto(input: {
 export async function createAutodocSignedUrlMap(paths: string[]): Promise<ApiResult<Record<string, string>>> {
   if (paths.length === 0) return ok({})
 
-  const { data, error } = await supabase.storage.from('autodoc').createSignedUrls(paths, 3600)
+  const { data, error } = await supabase.storage.from(AUTODOC_BUCKET).createSignedUrls(paths, 3600)
   if (error) return fail(error)
 
   const urls: Record<string, string> = {}

@@ -41,28 +41,34 @@ export async function resolveRegNumberFromReference(reference: string): Promise<
   if (!needle) return ok(null)
 
   const normalizedReg = normalizeRegNumber(needle)
+  const rawUpper = needle.toUpperCase()
+  const candidates = Array.from(new Set([normalizedReg, rawUpper, needle])).filter(Boolean)
 
-  // Try direct reg-number match first.
-  const regMatch = await supabase
-    .from('job_card_summary')
-    .select('reg_number')
-    .eq('reg_number', normalizedReg)
-    .limit(1)
-    .maybeSingle<{ reg_number: string | null }>()
+  for (const candidate of candidates) {
+    const regMatch = await supabase
+      .from('job_card_summary')
+      .select('reg_number')
+      .eq('reg_number', candidate)
+      .limit(1)
+      .maybeSingle<{ reg_number: string | null }>()
 
-  if (regMatch.error) return fail(regMatch.error)
-  if (regMatch.data?.reg_number) return ok(regMatch.data.reg_number)
+    if (regMatch.error) return fail(regMatch.error)
+    if (regMatch.data?.reg_number) return ok(regMatch.data.reg_number)
+  }
 
-  // Fallback: treat input as JC number.
-  const jcMatch = await supabase
-    .from('job_card_summary')
-    .select('reg_number')
-    .eq('jc_number', needle.toUpperCase())
-    .limit(1)
-    .maybeSingle<{ reg_number: string | null }>()
+  for (const candidate of candidates) {
+    const jcMatch = await supabase
+      .from('job_card_summary')
+      .select('reg_number')
+      .eq('jc_number', candidate)
+      .limit(1)
+      .maybeSingle<{ reg_number: string | null }>()
 
-  if (jcMatch.error) return fail(jcMatch.error)
-  return ok(jcMatch.data?.reg_number ?? null)
+    if (jcMatch.error) return fail(jcMatch.error)
+    if (jcMatch.data?.reg_number) return ok(jcMatch.data.reg_number)
+  }
+
+  return ok(null)
 }
 
 export async function createJobCard(input: CreateJobCardInput): Promise<ApiResult<JobCardRow>> {

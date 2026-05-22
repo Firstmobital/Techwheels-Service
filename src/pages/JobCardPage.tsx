@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { useDirty } from '../context/DirtyContext'
 import {
   addDocument,
@@ -105,11 +106,16 @@ async function xhrUpload(
       if (xhr.status >= 200 && xhr.status < 300) { resolve({ error: null }); return }
       try {
         const r = JSON.parse(xhr.responseText) as { message?: string }
-        resolve({ error: r.message ?? `Upload failed (${xhr.status})` })
+        const msg = r.message ?? `Upload failed (${xhr.status})`
+        if (msg.toLowerCase().includes('bucket not found')) {
+          resolve({ error: `Storage bucket '${AUTODOC_BUCKET}' not found. Create it in Supabase Storage or set VITE_SUPABASE_AUTODOC_BUCKET correctly.` })
+          return
+        }
+        resolve({ error: msg })
       } catch { resolve({ error: `Upload failed (${xhr.status})` }) }
     })
     xhr.addEventListener('error', () => resolve({ error: 'Network error during upload' }))
-    xhr.open('POST', `${base}/storage/v1/object/autodoc/${path}`)
+    xhr.open('POST', `${base}/storage/v1/object/${AUTODOC_BUCKET}/${path}`)
     xhr.setRequestHeader('authorization', `Bearer ${token}`)
     xhr.setRequestHeader('apikey', anonKey)
     xhr.setRequestHeader('content-type', file.type || 'application/octet-stream')

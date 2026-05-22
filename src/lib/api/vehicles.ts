@@ -19,6 +19,7 @@ export type VehicleUpsertInput = {
 export async function fetchVehicleByReg(regNumber: string): Promise<ApiResult<VehicleRow | null>> {
   const normalized = normalizeRegNumber(regNumber)
   if (!normalized) return fail('Registration number is required')
+  const rawUpper = regNumber.trim().toUpperCase()
 
   const { data, error } = await supabase
     .from('vehicles')
@@ -27,7 +28,20 @@ export async function fetchVehicleByReg(regNumber: string): Promise<ApiResult<Ve
     .maybeSingle<VehicleRow>()
 
   if (error) return fail(error)
-  return ok(data ?? null)
+  if (data) return ok(data)
+
+  if (rawUpper && rawUpper !== normalized) {
+    const fallback = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('reg_number', rawUpper)
+      .maybeSingle<VehicleRow>()
+
+    if (fallback.error) return fail(fallback.error)
+    return ok(fallback.data ?? null)
+  }
+
+  return ok(null)
 }
 
 export async function upsertVehicle(input: VehicleUpsertInput): Promise<ApiResult<VehicleRow>> {
