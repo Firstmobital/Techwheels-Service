@@ -1,41 +1,41 @@
 // src/pages/AdminPage.tsx
-// Drop this file into: src/pages/AdminPage.tsx
-
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-// ── Types ──────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 type UserRole = 'admin' | 'manager' | 'staff' | 'viewer'
 
 interface AppUser {
-  id: string
-  email: string
-  full_name: string | null
-  role: UserRole
-  branch: string | null
-  is_active: boolean
-  created_at: string
+  id:          string
+  email:       string
+  full_name:   string | null
+  role:        UserRole
+  branch:      string | null
+  dealer_code: string | null
+  dealer_name: string | null
+  is_active:   boolean
+  created_at:  string
 }
 
 interface Module {
-  id: number
-  name: string
-  label: string
+  id:          number
+  name:        string
+  label:       string
   description: string | null
-  icon: string | null
-  route: string | null
-  sort_order: number
-  is_active: boolean
+  icon:        string | null
+  route:       string | null
+  sort_order:  number
+  is_active:   boolean
 }
 
 interface Permission {
-  module_id: number
-  can_view: boolean
+  module_id:  number
+  can_view:   boolean
   can_modify: boolean
   can_delete: boolean
 }
 
-// ── Role badge colors ─────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 const roleBadge: Record<UserRole, string> = {
   admin:   'bg-blue-100 text-blue-700',
   manager: 'bg-purple-100 text-purple-700',
@@ -43,111 +43,190 @@ const roleBadge: Record<UserRole, string> = {
   viewer:  'bg-gray-100 text-gray-600',
 }
 
-// ── Component ─────────────────────────────────────────────────
+/** Call Supabase Auth Admin API to sync dealer fields into user_metadata / JWT. */
+async function syncDealerToAuthMeta(
+  userId:      string,
+  dealerCode:  string | null,
+  dealerName:  string | null,
+) {
+  const serviceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY as string | undefined
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL   as string | undefined
+  if (!serviceKey || !supabaseUrl) return   // graceful degradation — user re-login picks up the change
+
+  // Merge: first read existing metadata, then patch dealer fields
+  const res = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+    },
+  })
+  if (!res.ok) return
+  const existing = await res.json() as { user_metadata?: Record<string, unknown> }
+  const merged = { ...(existing.user_metadata ?? {}), dealer_code: dealerCode, dealer_name: dealerName }
+
+  await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user_metadata: merged }),
+  })
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const [tab, setTab] = useState<'users' | 'permissions' | 'modules'>('users')
-  const [users, setUsers] = useState<AppUser[]>([])
+  const [tab, setTab]         = useState<'users' | 'permissions' | 'modules'>('users')
+  const [users, setUsers]     = useState<AppUser[]>([])
   const [modules, setModules] = useState<Module[]>([])
-  const [search, setSearch] = useState('')
+  const [search, setSearch]   = useState('')
   const [loading, setLoading] = useState(true)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [toast, setToast]     = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   // Add user modal
-  const [showAddUser, setShowAddUser] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newRole, setNewRole] = useState<UserRole>('staff')
-  const [newBranch, setNewBranch] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [showAddUser, setShowAddUser]   = useState(false)
+  const [newName, setNewName]           = useState('')
+  const [newEmail, setNewEmail]         = useState('')
+  const [newRole, setNewRole]           = useState<UserRole>('staff')
+  const [newBranch, setNewBranch]       = useState('')
+  const [newDealerCode, setNewDealerCode] = useState('')
+  const [newDealerName, setNewDealerName] = useState('')
+  const [saving, setSaving]             = useState(false)
 
-  // Permissions
+  // Set dealer modal (for existing users)
+  const [dealerEditUser, setDealerEditUser]   = useState<AppUser | null>(null)
+  const [editDealerCode, setEditDealerCode]   = useState('')
+  const [editDealerName, setEditDealerName]   = useState('')
+  const [savingDealer, setSavingDealer]       = useState(false)
+
+  // Permissions tab
   const [selectedUserId, setSelectedUserId] = useState('')
-  const [pendingPerms, setPendingPerms] = useState<Record<number, Permission>>({})
-  const [savingPerms, setSavingPerms] = useState(false)
+  const [pendingPerms, setPendingPerms]     = useState<Record<number, Permission>>({})
+  const [savingPerms, setSavingPerms]       = useState(false)
 
-  // ── Load data ───────────────────────────────────────────────
+  // ── Load ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([loadUsers(), loadModules()]).finally(() => setLoading(false))
   }, [])
 
   async function loadUsers() {
-    const { data } = await supabase.from('users').select('*').order('full_name')
-    setUsers(data || [])
+    const { data } = await supabase
+      .from('users')
+      .select('id, email, full_name, role, branch, dealer_code, dealer_name, is_active, created_at')
+      .order('full_name')
+    setUsers((data ?? []) as AppUser[])
   }
 
   async function loadModules() {
     const { data } = await supabase.from('modules').select('*').order('sort_order')
-    setModules(data || [])
+    setModules(data ?? [])
   }
 
-  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+  function showToastMsg(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 3500)
   }
 
-  // ── Users ───────────────────────────────────────────────────
-  const filteredUsers = users.filter(u =>
-    (u.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
-  )
+  // ── Create user ────────────────────────────────────────────────────────────
+  async function createUser() {
+    if (!newEmail) { showToastMsg('Email is required', 'error'); return }
+    setSaving(true)
+    const { data, error } = await supabase.auth.signUp({
+      email:    newEmail,
+      password: Math.random().toString(36).slice(-10) + 'A1!',
+      options: {
+        data: {
+          full_name:   newName     || null,
+          dealer_code: newDealerCode.trim().toUpperCase() || null,
+          dealer_name: newDealerName.trim() || null,
+        },
+      },
+    })
+    if (error) { showToastMsg(error.message, 'error'); setSaving(false); return }
 
+    const userId = data?.user?.id
+    if (userId) {
+      await supabase.from('users').upsert({
+        id:          userId,
+        email:       newEmail,
+        full_name:   newName        || newEmail,
+        role:        newRole,
+        branch:      newBranch      || null,
+        dealer_code: newDealerCode.trim().toUpperCase() || null,
+        dealer_name: newDealerName.trim() || null,
+        is_active:   true,
+      })
+    }
+
+    setSaving(false)
+    setShowAddUser(false)
+    setNewName(''); setNewEmail(''); setNewRole('staff'); setNewBranch('')
+    setNewDealerCode(''); setNewDealerName('')
+    await loadUsers()
+    showToastMsg('User created — confirmation email sent')
+  }
+
+  // ── Activate / Deactivate ─────────────────────────────────────────────────
   async function toggleUserActive(u: AppUser) {
     const activating = !u.is_active
     const { error } = await supabase.from('users').update({ is_active: activating }).eq('id', u.id)
-    if (error) { showToast(error.message, 'error'); return }
+    if (error) { showToastMsg(error.message, 'error'); return }
 
-    // When activating, also confirm email in auth so user can log in immediately
     if (activating) {
       try {
-        const serviceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+        const serviceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY as string | undefined
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
         if (serviceKey && supabaseUrl) {
           await fetch(`${supabaseUrl}/auth/v1/admin/users/${u.id}`, {
             method: 'PUT',
             headers: {
-              'Authorization': `Bearer ${serviceKey}`,
-              'apikey': serviceKey,
+              Authorization: `Bearer ${serviceKey}`,
+              apikey: serviceKey,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ email_confirm: true }),
           })
         }
-      } catch (_e) {
-        // Non-fatal — trigger in DB handles this too
-      }
+      } catch { /* non-fatal — DB trigger handles this too */ }
     }
 
     await loadUsers()
-    showToast(activating ? 'User activated — can now log in' : 'User deactivated')
+    showToastMsg(activating ? 'User activated — can now log in' : 'User deactivated')
   }
 
-  async function createUser() {
-    if (!newEmail) { showToast('Email is required', 'error'); return }
-    setSaving(true)
-    // Create auth user — uses signUp, user gets confirmation email
-    const { data, error } = await supabase.auth.signUp({
-      email: newEmail,
-      password: Math.random().toString(36).slice(-10) + 'A1!', // temp password
-      options: { data: { full_name: newName } },
-    })
-    if (error) { showToast(error.message, 'error'); setSaving(false); return }
+  // ── Set dealer ─────────────────────────────────────────────────────────────
+  function openDealerEdit(u: AppUser) {
+    setDealerEditUser(u)
+    setEditDealerCode(u.dealer_code ?? '')
+    setEditDealerName(u.dealer_name ?? '')
+  }
 
-    const userId = data?.user?.id
-    if (userId) {
-      await supabase.from('users').upsert({
-        id: userId, email: newEmail,
-        full_name: newName || newEmail,
-        role: newRole, branch: newBranch || null, is_active: true,
-      })
-    }
-    setSaving(false)
-    setShowAddUser(false)
-    setNewName(''); setNewEmail(''); setNewRole('staff'); setNewBranch('')
+  async function saveDealer() {
+    if (!dealerEditUser) return
+    setSavingDealer(true)
+
+    const code = editDealerCode.trim().toUpperCase() || null
+    const name = editDealerName.trim() || null
+
+    // 1. Update public.users (primary display source)
+    const { error } = await supabase
+      .from('users')
+      .update({ dealer_code: code, dealer_name: name })
+      .eq('id', dealerEditUser.id)
+
+    if (error) { showToastMsg(error.message, 'error'); setSavingDealer(false); return }
+
+    // 2. Sync into auth.users.raw_user_meta_data so JWT contains dealer_code on next login
+    await syncDealerToAuthMeta(dealerEditUser.id, code, name)
+
+    setSavingDealer(false)
+    setDealerEditUser(null)
     await loadUsers()
-    showToast('User created — confirmation email sent')
+    showToastMsg('Dealer code updated. User must re-login for changes to take effect in reports.')
   }
 
-  // ── Permissions ─────────────────────────────────────────────
+  // ── Permissions ────────────────────────────────────────────────────────────
   async function loadPermsForUser(userId: string) {
     setSelectedUserId(userId)
     if (!userId) { setPendingPerms({}); return }
@@ -156,14 +235,17 @@ export default function AdminPage() {
       .select('module_id, can_view, can_modify, can_delete')
       .eq('user_id', userId)
     const map: Record<number, Permission> = {}
-    ;(data || []).forEach(p => { map[p.module_id] = p })
+    ;(data ?? []).forEach(p => { map[p.module_id] = p })
     setPendingPerms(map)
   }
 
   function setPerm(moduleId: number, field: 'can_view' | 'can_modify' | 'can_delete', val: boolean) {
     setPendingPerms(prev => ({
       ...prev,
-      [moduleId]: { ...(prev[moduleId] || { module_id: moduleId, can_view: false, can_modify: false, can_delete: false }), [field]: val }
+      [moduleId]: {
+        ...(prev[moduleId] ?? { module_id: moduleId, can_view: false, can_modify: false, can_delete: false }),
+        [field]: val,
+      },
     }))
   }
 
@@ -171,7 +253,7 @@ export default function AdminPage() {
     const full = mode === 'full'
     setPendingPerms(prev => ({
       ...prev,
-      [moduleId]: { module_id: moduleId, can_view: full, can_modify: full, can_delete: full }
+      [moduleId]: { module_id: moduleId, can_view: full, can_modify: full, can_delete: full },
     }))
   }
 
@@ -179,8 +261,8 @@ export default function AdminPage() {
     if (!selectedUserId) return
     setSavingPerms(true)
     const upserts = modules.filter(m => m.is_active).map(m => ({
-      user_id: selectedUserId,
-      module_id: m.id,
+      user_id:    selectedUserId,
+      module_id:  m.id,
       can_view:   pendingPerms[m.id]?.can_view   ?? false,
       can_modify: pendingPerms[m.id]?.can_modify ?? false,
       can_delete: pendingPerms[m.id]?.can_delete ?? false,
@@ -189,42 +271,47 @@ export default function AdminPage() {
       .from('user_module_permissions')
       .upsert(upserts, { onConflict: 'user_id,module_id' })
     setSavingPerms(false)
-    if (error) { showToast(error.message, 'error'); return }
-    showToast('Permissions saved ✓')
+    if (error) { showToastMsg(error.message, 'error'); return }
+    showToastMsg('Permissions saved')
   }
 
-  // ── Modules ─────────────────────────────────────────────────
+  // ── Modules ────────────────────────────────────────────────────────────────
   async function toggleModule(m: Module) {
     const { error } = await supabase.from('modules').update({ is_active: !m.is_active }).eq('id', m.id)
-    if (error) { showToast(error.message, 'error'); return }
+    if (error) { showToastMsg(error.message, 'error'); return }
     await loadModules()
-    showToast('Module updated')
+    showToastMsg('Module updated')
   }
 
-  // ── Render ──────────────────────────────────────────────────
+  const filteredUsers = users.filter(u =>
+    (u.full_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    u.email.toLowerCase().includes(search.toLowerCase()) ||
+    (u.dealer_code ?? '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="flex items-center justify-center h-64 text-gray-400 text-sm">Loading…</div>
+    <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading…</div>
   )
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Header */}
+    <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-gray-900">Admin Panel</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage users, roles, and module access</p>
+        <p className="mt-1 text-sm text-gray-500">Manage users, dealer assignments, and module access</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
+      <div className="mb-6 flex gap-1 border-b border-gray-200">
         {(['users', 'permissions', 'modules'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={[
-              'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors capitalize',
+              'border-b-2 -mb-px px-4 py-2 text-sm font-medium capitalize transition-colors',
               tab === t
                 ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
+                : 'border-transparent text-gray-500 hover:text-gray-800',
             ].join(' ')}
           >
             {t === 'users' ? '👤 Users' : t === 'permissions' ? '🔐 Permissions' : '🧩 Modules'}
@@ -235,58 +322,83 @@ export default function AdminPage() {
       {/* ── USERS TAB ── */}
       {tab === 'users' && (
         <div>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="mb-4 flex items-center gap-3">
             <input
               type="text"
-              placeholder="Search by name or email…"
+              placeholder="Search by name, email, or dealer code…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="flex-1 max-w-xs border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="max-w-xs flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               onClick={() => setShowAddUser(true)}
-              className="ml-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
               + Add User
             </button>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="border-b border-gray-200 bg-gray-50">
                 <tr>
-                  {['Name', 'Email', 'Role', 'Branch', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                  {['Name', 'Email', 'Dealer', 'Role', 'Branch', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredUsers.map(u => (
-                  <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={u.id} className="transition-colors hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{u.full_name || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{u.email}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${roleBadge[u.role]}`}>
+                      {u.dealer_code ? (
+                        <div>
+                          <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-600/20">
+                            {u.dealer_code}
+                          </span>
+                          {u.dealer_name && (
+                            <p className="mt-0.5 text-xs text-gray-400">{u.dealer_name}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs italic text-amber-600">Not set</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleBadge[u.role]}`}>
                         {u.role}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500">{u.branch || '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                         {u.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openDealerEdit(u)}
+                          className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-blue-50 hover:text-blue-700"
+                          title="Set dealer code"
+                        >
+                          Set Dealer
+                        </button>
                         <button
                           onClick={() => { setTab('permissions'); loadPermsForUser(u.id) }}
-                          className="px-3 py-1 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
+                          className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-gray-100"
                         >
-                          🔐 Perms
+                          Perms
                         </button>
                         <button
                           onClick={() => toggleUserActive(u)}
-                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                            u.is_active
+                              ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                              : 'bg-green-50 text-green-700 hover:bg-green-100'
+                          }`}
                         >
                           {u.is_active ? 'Deactivate' : 'Activate'}
                         </button>
@@ -295,10 +407,22 @@ export default function AdminPage() {
                   </tr>
                 ))}
                 {filteredUsers.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">No users found</td></tr>
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
+                      No users found
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Dealer assignment info box */}
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            <strong>Dealer assignment:</strong> Each user must have a Dealer Code set before they can see AutoDoc job cards.
+            The code must exactly match the <code className="rounded bg-amber-100 px-1">dealer_code</code> column in the{' '}
+            <code className="rounded bg-amber-100 px-1">vehicles</code> table. After changing a dealer code, the user
+            must <strong>sign out and back in</strong> for the updated JWT to take effect.
           </div>
         </div>
       )}
@@ -306,25 +430,23 @@ export default function AdminPage() {
       {/* ── PERMISSIONS TAB ── */}
       {tab === 'permissions' && (
         <div>
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-500 whitespace-nowrap">Select User:</label>
-              <select
-                value={selectedUserId}
-                onChange={e => loadPermsForUser(e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-w-[260px]"
-              >
-                <option value="">— choose a user —</option>
-                {users.filter(u => u.is_active).map(u => (
-                  <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
-                ))}
-              </select>
-            </div>
+          <div className="mb-6 flex items-center gap-4">
+            <label className="whitespace-nowrap text-sm text-gray-500">Select User:</label>
+            <select
+              value={selectedUserId}
+              onChange={e => loadPermsForUser(e.target.value)}
+              className="min-w-[260px] rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— choose a user —</option>
+              {users.filter(u => u.is_active).map(u => (
+                <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
+              ))}
+            </select>
             {selectedUserId && (
               <button
                 onClick={savePerms}
                 disabled={savingPerms}
-                className="ml-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
               >
                 {savingPerms ? 'Saving…' : '💾 Save Permissions'}
               </button>
@@ -332,27 +454,27 @@ export default function AdminPage() {
           </div>
 
           {!selectedUserId ? (
-            <div className="text-center text-gray-400 text-sm py-12">Select a user to manage their permissions</div>
+            <div className="py-12 text-center text-sm text-gray-400">Select a user to manage their permissions</div>
           ) : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="border-b border-gray-200 bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Module</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">👁 View</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">✏️ Modify</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">🗑 Delete</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Quick Set</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Module</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">View</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Modify</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Delete</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Quick Set</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {modules.filter(m => m.is_active).map(m => {
-                    const p = pendingPerms[m.id] || { can_view: false, can_modify: false, can_delete: false }
+                    const p = pendingPerms[m.id] ?? { can_view: false, can_modify: false, can_delete: false }
                     return (
-                      <tr key={m.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={m.id} className="transition-colors hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-900">{m.icon} {m.label}</div>
-                          {m.description && <div className="text-xs text-gray-400 mt-0.5">{m.description}</div>}
+                          {m.description && <div className="mt-0.5 text-xs text-gray-400">{m.description}</div>}
                         </td>
                         {(['can_view', 'can_modify', 'can_delete'] as const).map(field => (
                           <td key={field} className="px-4 py-3 text-center">
@@ -360,14 +482,14 @@ export default function AdminPage() {
                               type="checkbox"
                               checked={p[field]}
                               onChange={e => setPerm(m.id, field, e.target.checked)}
-                              className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                              className="h-4 w-4 cursor-pointer rounded accent-blue-600"
                             />
                           </td>
                         ))}
                         <td className="px-4 py-3 text-center">
                           <div className="flex justify-center gap-1">
-                            <button onClick={() => quickSet(m.id, 'full')} className="px-2 py-1 text-xs border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-700 transition-colors">Full</button>
-                            <button onClick={() => quickSet(m.id, 'none')} className="px-2 py-1 text-xs border border-gray-200 rounded hover:bg-gray-100 transition-colors">None</button>
+                            <button onClick={() => quickSet(m.id, 'full')} className="rounded border border-gray-200 px-2 py-1 text-xs transition-colors hover:bg-blue-50 hover:text-blue-700">Full</button>
+                            <button onClick={() => quickSet(m.id, 'none')} className="rounded border border-gray-200 px-2 py-1 text-xs transition-colors hover:bg-gray-100">None</button>
                           </div>
                         </td>
                       </tr>
@@ -382,31 +504,31 @@ export default function AdminPage() {
 
       {/* ── MODULES TAB ── */}
       {tab === 'modules' && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="border-b border-gray-200 bg-gray-50">
               <tr>
                 {['#', 'Module', 'Route', 'Description', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {modules.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={m.id} className="transition-colors hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-400">{m.sort_order}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{m.icon} {m.label}</td>
-                  <td className="px-4 py-3"><code className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{m.route}</code></td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{m.description || '—'}</td>
+                  <td className="px-4 py-3"><code className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{m.route}</code></td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{m.description || '—'}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {m.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleModule(m)}
-                      className="px-3 py-1 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
+                      className="rounded-md border border-gray-200 px-3 py-1 text-xs font-medium transition-colors hover:bg-gray-100"
                     >
                       {m.is_active ? 'Disable' : 'Enable'}
                     </button>
@@ -420,54 +542,105 @@ export default function AdminPage() {
 
       {/* ── ADD USER MODAL ── */}
       {showAddUser && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-gray-900">Add New User</h2>
-              <button onClick={() => setShowAddUser(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Full Name</label>
-                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Rajesh Kumar"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+        <Modal title="Add New User" onClose={() => setShowAddUser(false)}>
+          <div className="space-y-4">
+            <Field label="Full Name">
+              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Rajesh Kumar"
+                className={INPUT} />
+            </Field>
+            <Field label="Email *">
+              <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="rajesh@dealer.in"
+                className={INPUT} />
+            </Field>
+            <Field label="Role">
+              <select value={newRole} onChange={e => setNewRole(e.target.value as UserRole)} className={INPUT}>
+                <option value="viewer">Viewer — read only</option>
+                <option value="staff">Staff — view + modify</option>
+                <option value="manager">Manager — view + modify + delete</option>
+                <option value="admin">Admin — full access</option>
+              </select>
+            </Field>
+            <Field label="Branch">
+              <input value={newBranch} onChange={e => setNewBranch(e.target.value)} placeholder="e.g. Mumbai"
+                className={INPUT} />
+            </Field>
+
+            {/* Dealer section */}
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <p className="mb-3 text-xs font-semibold text-blue-800">Dealer Assignment (required for AutoDoc access)</p>
+              <div className="space-y-3">
+                <Field label="Dealer Code">
+                  <input
+                    value={newDealerCode}
+                    onChange={e => setNewDealerCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. TN123456"
+                    className={INPUT}
+                  />
+                </Field>
+                <Field label="Dealer Name">
+                  <input
+                    value={newDealerName}
+                    onChange={e => setNewDealerName(e.target.value)}
+                    placeholder="e.g. City Motors Pvt Ltd"
+                    className={INPUT}
+                  />
+                </Field>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Email <span className="text-red-500">*</span></label>
-                <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="rajesh@techwheels.in"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Role</label>
-                <select value={newRole} onChange={e => setNewRole(e.target.value as UserRole)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="viewer">Viewer — read only</option>
-                  <option value="staff">Staff — view + modify</option>
-                  <option value="manager">Manager — view + modify + delete</option>
-                  <option value="admin">Admin — full access</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Branch</label>
-                <input value={newBranch} onChange={e => setNewBranch(e.target.value)} placeholder="e.g. Mumbai"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 mt-3">User will receive a confirmation email to set their password.</p>
-            <div className="flex gap-3 mt-5 justify-end">
-              <button onClick={() => setShowAddUser(false)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
-              <button onClick={createUser} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                {saving ? 'Creating…' : 'Create User'}
-              </button>
             </div>
           </div>
-        </div>
+          <p className="mt-3 text-xs text-gray-400">User will receive a confirmation email to set their password.</p>
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setShowAddUser(false)} className={BTN_SECONDARY}>Cancel</button>
+            <button onClick={createUser} disabled={saving} className={BTN_PRIMARY}>
+              {saving ? 'Creating…' : 'Create User'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── SET DEALER MODAL ── */}
+      {dealerEditUser && (
+        <Modal
+          title={`Set Dealer — ${dealerEditUser.full_name || dealerEditUser.email}`}
+          onClose={() => setDealerEditUser(null)}
+        >
+          <div className="space-y-4">
+            <Field label="Dealer Code">
+              <input
+                value={editDealerCode}
+                onChange={e => setEditDealerCode(e.target.value.toUpperCase())}
+                placeholder="e.g. TN123456"
+                className={INPUT}
+                autoFocus
+              />
+            </Field>
+            <Field label="Dealer Name">
+              <input
+                value={editDealerName}
+                onChange={e => setEditDealerName(e.target.value)}
+                placeholder="e.g. City Motors Pvt Ltd"
+                className={INPUT}
+              />
+            </Field>
+          </div>
+          <p className="mt-3 text-xs text-amber-700">
+            The user must <strong>sign out and sign back in</strong> for the updated dealer code to take effect in their reports and RLS filters.
+          </p>
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setDealerEditUser(null)} className={BTN_SECONDARY}>Cancel</button>
+            <button onClick={saveDealer} disabled={savingDealer} className={BTN_PRIMARY}>
+              {savingDealer ? 'Saving…' : 'Save Dealer'}
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* ── TOAST ── */}
       {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl text-sm font-medium shadow-lg border transition-all z-50 ${
-          toast.type === 'success' ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'
+        <div className={`fixed bottom-6 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg transition-all ${
+          toast.type === 'success'
+            ? 'border-green-200 bg-green-50 text-green-800'
+            : 'border-red-200 bg-red-50 text-red-800'
         }`}>
           {toast.type === 'success' ? '✅' : '❌'} {toast.msg}
         </div>
@@ -476,4 +649,31 @@ export default function AdminPage() {
   )
 }
 
+// ── Shared mini-components ─────────────────────────────────────────────────────
 
+const INPUT = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500'
+const BTN_PRIMARY   = 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
+const BTN_SECONDARY = 'rounded-lg border border-gray-200 px-4 py-2 text-sm transition-colors hover:bg-gray-50'
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm text-gray-600">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="text-2xl leading-none text-gray-400 hover:text-gray-600">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
