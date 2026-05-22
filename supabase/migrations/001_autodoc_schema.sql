@@ -6,7 +6,7 @@
 --
 -- RLS strategy:
 --   Each authenticated user carries dealer_code in their JWT user_metadata.
---   auth.my_dealer_code() surfaces it; every policy uses that helper so the
+--   public.my_dealer_code() surfaces it; every policy uses that helper so the
 --   check is written once and cached per query.
 --
 -- Computed columns:
@@ -257,9 +257,9 @@ CREATE INDEX IF NOT EXISTS idx_documents_doc_type    ON documents(job_card_id, d
 -- RLS HELPER — surfaces dealer_code from JWT user_metadata
 -- ============================================================
 
--- Stored in auth schema alongside the other auth helpers so it doesn't
--- pollute the public namespace.
-CREATE OR REPLACE FUNCTION auth.my_dealer_code()
+-- Create helper in public schema so it can be created from SQL editor
+-- without elevated permissions on auth schema.
+CREATE OR REPLACE FUNCTION public.my_dealer_code()
 RETURNS TEXT
 LANGUAGE sql
 STABLE
@@ -272,7 +272,7 @@ AS $$
     )
 $$;
 
-COMMENT ON FUNCTION auth.my_dealer_code IS
+COMMENT ON FUNCTION public.my_dealer_code IS
     'Returns the dealer_code embedded in the current user''s JWT. '
     'Set user_metadata.dealer_code when provisioning dealership staff.';
 
@@ -292,17 +292,17 @@ ALTER TABLE documents     ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "vehicles: own dealership select" ON vehicles;
 CREATE POLICY "vehicles: own dealership select" ON vehicles
-    FOR SELECT USING (dealer_code = auth.my_dealer_code());
+    FOR SELECT USING (dealer_code = public.my_dealer_code());
 
 DROP POLICY IF EXISTS "vehicles: own dealership insert" ON vehicles;
 CREATE POLICY "vehicles: own dealership insert" ON vehicles
-    FOR INSERT WITH CHECK (dealer_code = auth.my_dealer_code());
+    FOR INSERT WITH CHECK (dealer_code = public.my_dealer_code());
 
 DROP POLICY IF EXISTS "vehicles: own dealership update" ON vehicles;
 CREATE POLICY "vehicles: own dealership update" ON vehicles
     FOR UPDATE
-    USING     (dealer_code = auth.my_dealer_code())
-    WITH CHECK (dealer_code = auth.my_dealer_code());
+    USING     (dealer_code = public.my_dealer_code())
+    WITH CHECK (dealer_code = public.my_dealer_code());
 
 -- ── job_cards ────────────────────────────────────────────────
 -- Ownership is derived through vehicles.dealer_code.
@@ -312,7 +312,7 @@ CREATE POLICY "job_cards: own dealership select" ON job_cards
     FOR SELECT USING (
         reg_number IN (
             SELECT reg_number FROM vehicles
-            WHERE dealer_code = auth.my_dealer_code()
+            WHERE dealer_code = public.my_dealer_code()
         )
     );
 
@@ -321,7 +321,7 @@ CREATE POLICY "job_cards: own dealership insert" ON job_cards
     FOR INSERT WITH CHECK (
         reg_number IN (
             SELECT reg_number FROM vehicles
-            WHERE dealer_code = auth.my_dealer_code()
+            WHERE dealer_code = public.my_dealer_code()
         )
     );
 
@@ -331,7 +331,7 @@ CREATE POLICY "job_cards: own dealership update" ON job_cards
     USING (
         reg_number IN (
             SELECT reg_number FROM vehicles
-            WHERE dealer_code = auth.my_dealer_code()
+            WHERE dealer_code = public.my_dealer_code()
         )
     );
 
@@ -343,7 +343,7 @@ CREATE POLICY "panels: own dealership select" ON panels
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -353,7 +353,7 @@ CREATE POLICY "panels: own dealership insert" ON panels
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -364,7 +364,7 @@ CREATE POLICY "panels: own dealership update" ON panels
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -376,7 +376,7 @@ CREATE POLICY "panel_photos: own dealership select" ON panel_photos
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -386,7 +386,7 @@ CREATE POLICY "panel_photos: own dealership insert" ON panel_photos
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -398,7 +398,7 @@ CREATE POLICY "estimate_rows: own dealership select" ON estimate_rows
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -408,7 +408,7 @@ CREATE POLICY "estimate_rows: own dealership insert" ON estimate_rows
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -419,7 +419,7 @@ CREATE POLICY "estimate_rows: own dealership update" ON estimate_rows
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -431,7 +431,7 @@ CREATE POLICY "documents: own dealership select" ON documents
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 
@@ -441,7 +441,7 @@ CREATE POLICY "documents: own dealership insert" ON documents
         job_card_id IN (
             SELECT jc.id FROM job_cards jc
             JOIN vehicles v ON v.reg_number = jc.reg_number
-            WHERE v.dealer_code = auth.my_dealer_code()
+            WHERE v.dealer_code = public.my_dealer_code()
         )
     );
 

@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
 **Last Updated:** 2026-05-22  
-**Total Active Plans:** 1
+**Total Active Plans:** 2
 
 ---
 
@@ -10,6 +10,7 @@
 | Plan ID | Title | Priority | Status | Owner | Start | ETA | Progress |
 |---------|-------|----------|--------|-------|-------|-----|----------|
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | 🔴 PENDING | Dev Team | 2026-05-22 | 2026-05-23 | 0% |
+| AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 95% |
 
 ---
 
@@ -21,6 +22,13 @@
 - **Status:** Ready to start
 - **Latest Update:** 2026-05-22 - Plan created and ready for Phase 1
 - **Next Step:** Start Phase 1 - Audit service key usage
+
+### 2. AUTODOC-STATUS-001: AutoDoc Prompt Execution Status Audit
+- **File:** [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md)
+- **Risk Level:** 🟡 MEDIUM (schema deployed; dump sync and app parity pending)
+- **Status:** Audit complete, implementation partially complete
+- **Latest Update:** 2026-05-22 - Reports export controls wired and scripted E2E checklist passed (10/10)
+- **Next Step:** Manual E2E walkthrough and strict PPT/Excel format parity validation
 
 ---
 
@@ -72,6 +80,7 @@ Next: Complete edge function, then move to frontend refactor
 ## Navigation
 
 - 📄 [SECURITY_REFACTOR_SERVICE_KEY.md](SECURITY_REFACTOR_SERVICE_KEY.md) - Full plan with activity tracker
+- 📄 [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md) - AutoDoc done/pending audit vs authoritative schema
 - 📄 COMPLETED_PLANS.md (Coming soon)
 
 ---

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { Link, useNavigate } from 'react-router-dom'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
+import { createJobCard, fetchVehicleByReg, listJobCardSummaries, upsertVehicle, type JobSummaryRow } from '../lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,25 @@ interface JobRow {
   has_ppt_post:          boolean
 }
 
+interface CreateJobCardForm {
+  regNumber: string
+  jcNumber: string
+  complaintDate: string
+  kmReading: string
+  claimType: string
+  complaintText: string
+  vin: string
+  model: string
+  year: string
+  colour: string
+  paintType: string
+  dealerCity: string
+  bpCityCategory: string
+  ownerName: string
+  ownerPhone: string
+  dateOfSale: string
+}
+
 type GenKey = `${'pre' | 'post' | 'xls'}-${string}`
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -39,6 +58,7 @@ const SKELETON_COLS = 12
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AutoDocPage() {
+  const navigate = useNavigate()
   const [rows,         setRows]         = useState<JobRow[]>([])
   const [loading,      setLoading]      = useState(true)
   const [refreshing,   setRefreshing]   = useState(false)
@@ -47,26 +67,40 @@ export default function AutoDocPage() {
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatus]       = useState<string>('all')
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [lookupBusy, setLookupBusy] = useState(false)
+  const [vehicleFound, setVehicleFound] = useState(false)
+  const [form, setForm] = useState<CreateJobCardForm>(() => ({
+    regNumber: '',
+    jcNumber: '',
+    complaintDate: new Date().toISOString().slice(0, 10),
+    kmReading: '',
+    claimType: 'Body & Paint',
+    complaintText: '',
+    vin: '',
+    model: '',
+    year: '',
+    colour: '',
+    paintType: '',
+    dealerCity: '',
+    bpCityCategory: '',
+    ownerName: '',
+    ownerPhone: '',
+    dateOfSale: '',
+  }))
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else { setLoading(true); setError(null) }
 
-    const { data, error: err } = await supabase
-      .from('job_card_summary')
-      .select([
-        'job_card_id', 'jc_number', 'reg_number', 'model', 'vehicle_year',
-        'colour', 'complaint_date', 'status', 'warranty_age_days',
-        'tml_share_percent', 'total_estimate_amount', 'panel_count',
-        'photo_count', 'has_ppt_pre', 'has_ppt_post',
-      ].join(', '))
-      .order('jc_created_at', { ascending: false })
-
-    if (err) {
-      setError(err.message)
+    const res = await listJobCardSummaries()
+    if (res.error || !res.data) {
+      setError(res.error ?? 'Failed to load job cards')
     } else {
-      setRows((data ?? []) as unknown as JobRow[])
+      setRows(mapJobRows(res.data))
       setError(null)
     }
 
@@ -75,6 +109,104 @@ export default function AutoDocPage() {
   }, [])
 
   useEffect(() => { void fetchRows() }, [fetchRows])
+
+  async function handleVehicleLookup() {
+    const reg = form.regNumber.trim()
+    if (!reg) return
+    setLookupBusy(true)
+    setCreateError(null)
+
+    const res = await fetchVehicleByReg(reg)
+    setLookupBusy(false)
+    if (res.error) {
+      setVehicleFound(false)
+      setCreateError(res.error)
+      return
+    }
+
+    if (!res.data) {
+      setVehicleFound(false)
+      return
+    }
+
+    const vehicle = res.data
+    setVehicleFound(true)
+    setForm((prev) => ({
+      ...prev,
+      regNumber: vehicle.reg_number,
+      vin: vehicle.vin ?? '',
+      model: vehicle.model ?? '',
+      year: vehicle.year != null ? String(vehicle.year) : '',
+      colour: vehicle.colour ?? '',
+      paintType: vehicle.paint_type ?? '',
+      dealerCity: vehicle.dealer_city ?? '',
+      bpCityCategory: vehicle.bp_city_category ?? '',
+      ownerName: vehicle.owner_name ?? '',
+      ownerPhone: vehicle.owner_phone ?? '',
+      dateOfSale: vehicle.date_of_sale ?? '',
+    }))
+  }
+
+  async function handleCreateJobCard() {
+    setCreating(true)
+    setCreateError(null)
+
+    const year = form.year.trim() ? Number(form.year) : null
+    const kmReading = form.kmReading.trim() ? Number(form.kmReading) : null
+
+    if (year != null && (!Number.isFinite(year) || year < 1900 || year > 2100)) {
+      setCreating(false)
+      setCreateError('Vehicle year must be between 1900 and 2100')
+      return
+    }
+
+    if (kmReading != null && (!Number.isFinite(kmReading) || kmReading < 0)) {
+      setCreating(false)
+      setCreateError('KM reading must be a positive number')
+      return
+    }
+
+    const vehicleRes = await upsertVehicle({
+      regNumber: form.regNumber,
+      vin: form.vin,
+      model: form.model,
+      year,
+      colour: form.colour,
+      paintType: form.paintType,
+      dealerCity: form.dealerCity,
+      bpCityCategory: form.bpCityCategory,
+      ownerName: form.ownerName,
+      ownerPhone: form.ownerPhone,
+      dateOfSale: form.dateOfSale || null,
+    })
+
+    if (vehicleRes.error) {
+      setCreating(false)
+      setCreateError(vehicleRes.error)
+      return
+    }
+
+    const jcRes = await createJobCard({
+      regNumber: form.regNumber,
+      jcNumber: form.jcNumber,
+      complaintDate: form.complaintDate,
+      kmReading,
+      claimType: form.claimType,
+      complaintText: form.complaintText,
+    })
+
+    if (jcRes.error || !jcRes.data) {
+      setCreating(false)
+      setCreateError(jcRes.error ?? 'Unable to create job card')
+      return
+    }
+
+    setCreating(false)
+    setShowCreate(false)
+    showToast('Job card created successfully.', true)
+    await fetchRows(true)
+    navigate(`/autodoc/${jcRes.data.id}`)
+  }
 
   // ── Generate PPT ───────────────────────────────────────────────────────────
   async function handleGenerate(jobCardId: string, type: 'pre-repair' | 'post-repair') {
@@ -134,19 +266,30 @@ export default function AutoDocPage() {
             Generate pre-repair and post-repair PPT reports for TML warranty claims.
           </p>
         </div>
-        <button
-          onClick={() => void fetchRows(true)}
-          disabled={refreshing || loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
-        >
-          {refreshing
-            ? <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
-            : <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-              </svg>
-          }
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            New Job Card
+          </button>
+          <button
+            onClick={() => void fetchRows(true)}
+            disabled={refreshing || loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            {refreshing
+              ? <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
+              : <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+            }
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -340,8 +483,128 @@ export default function AutoDocPage() {
           {toast.msg}
         </div>
       )}
+
+      {showCreate && (
+        <Overlay onClose={() => !creating && setShowCreate(false)}>
+          <h3 className="mb-1 text-base font-semibold text-gray-900">Create Job Card</h3>
+          <p className="mb-4 text-xs text-gray-500">Enter registration details, verify vehicle data, and create a new draft job card.</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Field label="Registration Number*">
+                <div className="flex gap-2">
+                  <input
+                    value={form.regNumber}
+                    onChange={(e) => setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))}
+                    onBlur={() => void handleVehicleLookup()}
+                    placeholder="e.g. MH12AB1234"
+                    className={INPUT}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleVehicleLookup()}
+                    disabled={lookupBusy || creating || !form.regNumber.trim()}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {lookupBusy ? 'Checking…' : 'Lookup'}
+                  </button>
+                </div>
+                {vehicleFound && <p className="mt-1 text-[11px] text-green-600">Vehicle found and prefilled.</p>}
+              </Field>
+            </div>
+
+            <Field label="JC Number*">
+              <input value={form.jcNumber} onChange={(e) => setForm((prev) => ({ ...prev, jcNumber: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Complaint Date*">
+              <input type="date" value={form.complaintDate} onChange={(e) => setForm((prev) => ({ ...prev, complaintDate: e.target.value }))} className={INPUT} />
+            </Field>
+
+            <Field label="KM Reading">
+              <input type="number" min={0} value={form.kmReading} onChange={(e) => setForm((prev) => ({ ...prev, kmReading: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Claim Type">
+              <input value={form.claimType} onChange={(e) => setForm((prev) => ({ ...prev, claimType: e.target.value }))} className={INPUT} />
+            </Field>
+
+            <div className="col-span-2">
+              <Field label="Complaint Text">
+                <textarea value={form.complaintText} onChange={(e) => setForm((prev) => ({ ...prev, complaintText: e.target.value }))} rows={2} className={INPUT} />
+              </Field>
+            </div>
+
+            <Field label="VIN">
+              <input value={form.vin} onChange={(e) => setForm((prev) => ({ ...prev, vin: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Model">
+              <input value={form.model} onChange={(e) => setForm((prev) => ({ ...prev, model: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Year">
+              <input type="number" min={1900} max={2100} value={form.year} onChange={(e) => setForm((prev) => ({ ...prev, year: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Colour">
+              <input value={form.colour} onChange={(e) => setForm((prev) => ({ ...prev, colour: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Paint Type">
+              <input value={form.paintType} onChange={(e) => setForm((prev) => ({ ...prev, paintType: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Dealer City">
+              <input value={form.dealerCity} onChange={(e) => setForm((prev) => ({ ...prev, dealerCity: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="BP City Category">
+              <input value={form.bpCityCategory} onChange={(e) => setForm((prev) => ({ ...prev, bpCityCategory: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Owner Name">
+              <input value={form.ownerName} onChange={(e) => setForm((prev) => ({ ...prev, ownerName: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Owner Phone">
+              <input value={form.ownerPhone} onChange={(e) => setForm((prev) => ({ ...prev, ownerPhone: e.target.value }))} className={INPUT} />
+            </Field>
+            <Field label="Date Of Sale">
+              <input type="date" value={form.dateOfSale} onChange={(e) => setForm((prev) => ({ ...prev, dateOfSale: e.target.value }))} className={INPUT} />
+            </Field>
+          </div>
+
+          {createError && (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{createError}</div>
+          )}
+
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setShowCreate(false)} disabled={creating} className={BTN_SEC}>Cancel</button>
+            <button
+              onClick={() => void handleCreateJobCard()}
+              disabled={creating || !form.regNumber.trim() || !form.jcNumber.trim() || !form.complaintDate}
+              className={BTN_PRI}
+            >
+              {creating ? 'Creating…' : 'Create Job Card'}
+            </button>
+          </div>
+        </Overlay>
+      )}
     </div>
   )
+}
+
+function mapJobRows(source: JobSummaryRow[]): JobRow[] {
+  return source
+    .filter((row) => !!row.job_card_id && !!row.jc_number && !!row.reg_number && !!row.complaint_date)
+    .map((row) => ({
+      job_card_id: row.job_card_id as string,
+      jc_number: row.jc_number as string,
+      reg_number: row.reg_number as string,
+      model: row.model,
+      vehicle_year: row.vehicle_year,
+      colour: row.colour,
+      complaint_date: row.complaint_date as string,
+      status: row.status ?? 'draft',
+      warranty_age_days: row.warranty_age_days,
+      tml_share_percent: row.tml_share_percent,
+      total_estimate_amount: row.total_estimate_amount,
+      panel_count: row.panel_count ?? 0,
+      photo_count: row.photo_count ?? 0,
+      has_ppt_pre: row.has_ppt_pre ?? false,
+      has_ppt_post: row.has_ppt_post ?? false,
+    }))
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -413,3 +676,27 @@ function XCircleIcon() {
     </svg>
   )
 }
+
+function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-gray-700">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+const INPUT = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
+const BTN_PRI = 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 transition-colors'
+const BTN_SEC = 'rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60'

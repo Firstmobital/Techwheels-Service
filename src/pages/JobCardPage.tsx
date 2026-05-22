@@ -2,6 +2,22 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useDirty } from '../context/DirtyContext'
+import {
+  addDocument,
+  addEstimateRow,
+  createAutodocSignedUrlMap,
+  createPanel,
+  createPanelPhoto,
+  deleteEstimateRow,
+  getJobCardSummary,
+  listDocuments,
+  listEstimateRows,
+  listPanelPhotos,
+  listPanels,
+  type DocType,
+} from '../lib/api'
+import { generateRepairPPT } from '../lib/generators/generatePPT'
+import { generateEstimateExcel } from '../lib/generators/generateExcel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,9 +46,18 @@ interface EstRow {
   row_total: number
 }
 
+interface DocRow {
+  id: string
+  job_card_id: string
+  doc_type: DocType
+  storage_path: string
+  file_size_mb: number | null
+  created_at: string
+}
+
 const BLANK_ROW = {
   part_description: '', defect: '', action: '', qty: 1, ndp_value: 0,
-  cut_weld_charges: 0, paint_charges: 0, job_code: '', job_code_desc: '',
+  cut_weld_charges: 0, paint_charges: 0, total_special_charges: 0, job_code: '', job_code_desc: '',
   no_off: 1, labour_charges: 0,
 }
 
@@ -48,6 +73,15 @@ const PHOTO_TYPES: { type: 'defect' | 'primer' | 'paint'; label: string; hdr: st
   { type: 'defect', label: 'Defect', hdr: 'bg-red-50 text-red-700 border-red-100' },
   { type: 'primer', label: 'Primer', hdr: 'bg-amber-50 text-amber-700 border-amber-100' },
   { type: 'paint',  label: 'Paint',  hdr: 'bg-green-50 text-green-700 border-green-100' },
+]
+
+const DOC_TYPES: { type: DocType; label: string; accept: string }[] = [
+  { type: 'service_history', label: 'Service History', accept: '.pdf,image/*' },
+  { type: 'video_job_card', label: 'Job Card Video', accept: 'video/*' },
+  { type: 'video_delivery', label: 'Delivery Video', accept: 'video/*' },
+  { type: 'ppt_pre', label: 'PPT Pre-Repair', accept: '.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+  { type: 'ppt_post', label: 'PPT Post-Repair', accept: '.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+  { type: 'excel_estimate', label: 'Estimate Excel', accept: '.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
 ]
 
 // ─── XHR upload with real progress ───────────────────────────────────────────
@@ -95,18 +129,23 @@ export default function JobCardPage() {
   const [photos,    setPhotos]    = useState<PanelPhoto[]>([])
   const [estRows,   setEstRows]   = useState<EstRow[]>([])
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
+  const [documents, setDocuments] = useState<DocRow[]>([])
+  const [docUrls, setDocUrls] = useState<Record<string, string>>({})
 
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
   const [selPanel,     setSelPanel]     = useState<string | null>(null)
   const [uploadProg,   setUploadProg]   = useState<Record<string, number>>({})
   const [uploadErr,    setUploadErr]    = useState<Record<string, string>>({})
+  const [docUploadProg, setDocUploadProg] = useState<Record<string, number>>({})
+  const [docUploadErr, setDocUploadErr] = useState<Record<string, string>>({})
   const [deleteRow,    setDeleteRow]    = useState<EstRow | null>(null)
   const [addingRow,    setAddingRow]    = useState(false)
   const [addingPanel,  setAddingPanel]  = useState(false)
   const [newPanelName, setNewPanelName] = useState('')
   const [rowForm,      setRowForm]      = useState({ ...BLANK_ROW })
   const [saving,       setSaving]       = useState(false)
+  const [exporting, setExporting] = useState<Set<string>>(new Set())
   const [localDirty,   setLocalDirty]   = useState(false)
   const [lastSaved,    setLastSaved]    = useState<Date | null>(null)
 
@@ -122,34 +161,39 @@ export default function JobCardPage() {
   const fetchAll = useCallback(async () => {
     if (!id) return
     setLoading(true); setError(null)
-    const [jcRes, panelRes, photoRes, estRes] = await Promise.all([
-      supabase.from('job_card_summary').select('*').eq('job_card_id', id ?? '').single<JobSummary>(),
-      supabase.from('panels').select('id, panel_name, action').eq('job_card_id', id ?? '').order('created_at'),
-      supabase.from('panel_photos').select('id, panel_id, photo_type, storage_path, gps_city, captured_at').eq('job_card_id', id ?? ''),
-      supabase.from('estimate_rows')
-        .select('id, sr_no, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total')
-        .eq('job_card_id', id ?? '').order('sr_no'),
+    const [jcRes, panelRes, photoRes, estRes, docRes] = await Promise.all([
+      getJobCardSummary(id),
+      listPanels(id),
+      listPanelPhotos(id),
+      listEstimateRows(id),
+      listDocuments(id),
     ])
 
     if (jcRes.error || !jcRes.data) {
-      setError(jcRes.error?.message ?? 'Job card not found')
+      setError(jcRes.error ?? 'Job card not found')
       setLoading(false); return
     }
+    if (panelRes.error) { setError(panelRes.error); setLoading(false); return }
+    if (photoRes.error) { setError(photoRes.error); setLoading(false); return }
+    if (estRes.error) { setError(estRes.error); setLoading(false); return }
+    if (docRes.error) { setError(docRes.error); setLoading(false); return }
 
-    setJc(jcRes.data)
-    const pnls = (panelRes.data ?? []) as Panel[]
+    setJc(jcRes.data as unknown as JobSummary)
+    const pnls = (panelRes.data ?? []) as unknown as Panel[]
     setPanels(pnls)
     if (pnls.length && !initedPanel.current) { setSelPanel(pnls[0].id); initedPanel.current = true }
-    const phts = (photoRes.data ?? []) as PanelPhoto[]
+    const phts = (photoRes.data ?? []) as unknown as PanelPhoto[]
     setPhotos(phts)
-    setEstRows((estRes.data ?? []) as EstRow[])
+    setEstRows((estRes.data ?? []) as unknown as EstRow[])
+    const docs = (docRes.data ?? []) as unknown as DocRow[]
+    setDocuments(docs)
 
-    if (phts.length) {
-      const { data: urls } = await supabase.storage.from('autodoc').createSignedUrls(phts.map(p => p.storage_path), 3600)
-      const m: Record<string, string> = {}
-      urls?.forEach(u => { if (u.signedUrl && u.path) m[u.path] = u.signedUrl })
-      setPhotoUrls(m)
-    }
+    const [photoUrlRes, docUrlRes] = await Promise.all([
+      createAutodocSignedUrlMap(phts.map((p) => p.storage_path)),
+      createAutodocSignedUrlMap(docs.map((d) => d.storage_path)),
+    ])
+    setPhotoUrls(photoUrlRes.data ?? {})
+    setDocUrls(docUrlRes.data ?? {})
     setLoading(false)
   }, [id])
 
@@ -187,31 +231,63 @@ export default function JobCardPage() {
 
     if (upErr) { setUploadErr(e => ({ ...e, [key]: upErr })); return }
 
-    const { error: dbErr } = await supabase.from('panel_photos').insert({
-      job_card_id: id ?? '', panel_id: panelId, photo_type: photoType, storage_path: path,
+    const dbRes = await createPanelPhoto({
+      jobCardId: id ?? '',
+      panelId,
+      photoType,
+      storagePath: path,
     })
-    if (dbErr) { setUploadErr(e => ({ ...e, [key]: dbErr.message })); return }
+    if (dbRes.error) { setUploadErr(e => ({ ...e, [key]: dbRes.error as string })); return }
 
-    const { data: newPh } = await supabase.from('panel_photos')
-      .select('id, panel_id, photo_type, storage_path, gps_city, captured_at')
-      .eq('job_card_id', id ?? '')
-    const phts = (newPh ?? []) as PanelPhoto[]
+    const listRes = await listPanelPhotos(id ?? '')
+    if (listRes.error) { setUploadErr(e => ({ ...e, [key]: listRes.error as string })); return }
+    const phts = (listRes.data ?? []) as unknown as PanelPhoto[]
     setPhotos(phts)
-    if (phts.length) {
-      const { data: urls } = await supabase.storage.from('autodoc').createSignedUrls(phts.map(p => p.storage_path), 3600)
-      const m: Record<string, string> = {}
-      urls?.forEach(u => { if (u.signedUrl && u.path) m[u.path] = u.signedUrl })
-      setPhotoUrls(m)
-    }
+    const urlRes = await createAutodocSignedUrlMap(phts.map((p) => p.storage_path))
+    if (urlRes.data) setPhotoUrls(urlRes.data)
+  }
+
+  async function handleDocumentUpload(docType: DocType, file: File) {
+    if (!id) return
+    const key = docType
+    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
+    const safeExt = (ext ?? 'bin').replace(/[^a-zA-Z0-9]/g, '')
+    const path = `${jc?.dealer_code ?? 'unknown'}/${id}/documents/${docType}_${Date.now()}.${safeExt}`
+
+    setDocUploadProg((p) => ({ ...p, [key]: 0 }))
+    setDocUploadErr((e) => { const next = { ...e }; delete next[key]; return next })
+
+    const { error: upErr } = await xhrUpload(path, file, (pct) => {
+      setDocUploadProg((p) => ({ ...p, [key]: pct }))
+    })
+
+    setDocUploadProg((p) => { const next = { ...p }; delete next[key]; return next })
+    if (upErr) { setDocUploadErr((e) => ({ ...e, [key]: upErr })); return }
+
+    const sizeMb = Number((file.size / (1024 * 1024)).toFixed(3))
+    const dbRes = await addDocument({
+      jobCardId: id,
+      docType,
+      storagePath: path,
+      fileSizeMb: sizeMb,
+    })
+    if (dbRes.error) { setDocUploadErr((e) => ({ ...e, [key]: dbRes.error as string })); return }
+
+    const listRes = await listDocuments(id)
+    if (listRes.error) { setDocUploadErr((e) => ({ ...e, [key]: listRes.error as string })); return }
+    const docs = (listRes.data ?? []) as unknown as DocRow[]
+    setDocuments(docs)
+    const urls = await createAutodocSignedUrlMap(docs.map((d) => d.storage_path))
+    if (urls.data) setDocUrls(urls.data)
   }
 
   // ── Delete row ────────────────────────────────────────────────────────────
   async function confirmDelete() {
     if (!deleteRow) return
     setSaving(true)
-    const { error: err } = await supabase.from('estimate_rows').delete().eq('id', deleteRow.id)
+    const res = await deleteEstimateRow(deleteRow.id)
     setSaving(false)
-    if (!err) { setEstRows(r => r.filter(x => x.id !== deleteRow.id)); setDeleteRow(null); markDirty() }
+    if (!res.error) { setEstRows(r => r.filter(x => x.id !== deleteRow.id)); setDeleteRow(null); markDirty() }
   }
 
   // ── Add row ───────────────────────────────────────────────────────────────
@@ -219,26 +295,52 @@ export default function JobCardPage() {
     if (!id) return
     setSaving(true)
     const nextSr = (estRows.at(-1)?.sr_no ?? 0) + 1
-    const { data, error: err } = await supabase.from('estimate_rows')
-      .insert({ job_card_id: id, sr_no: nextSr, ...rowForm })
-      .select('id, sr_no, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total')
-      .single()
+    const res = await addEstimateRow({
+      jobCardId: id,
+      srNo: nextSr,
+      partDescription: rowForm.part_description,
+      defect: rowForm.defect,
+      action: rowForm.action,
+      qty: rowForm.qty,
+      ndpValue: rowForm.ndp_value,
+      cutWeldCharges: rowForm.cut_weld_charges,
+      paintCharges: rowForm.paint_charges,
+      totalSpecialCharges: rowForm.total_special_charges,
+      jobCode: rowForm.job_code,
+      jobCodeDesc: rowForm.job_code_desc,
+      noOff: rowForm.no_off,
+      labourCharges: rowForm.labour_charges,
+    })
     setSaving(false)
-    if (err || !data) return
-    setEstRows(r => [...r, data as EstRow])
+    if (res.error || !res.data) return
+    setEstRows(r => [...r, res.data as unknown as EstRow])
     setAddingRow(false); setRowForm({ ...BLANK_ROW }); markDirty()
   }
 
   // ── Add panel ─────────────────────────────────────────────────────────────
   async function handleAddPanel() {
     if (!id || !newPanelName.trim()) return
-    const { data, error: err } = await supabase.from('panels')
-      .insert({ job_card_id: id, panel_name: newPanelName.trim(), action: 'repair' })
-      .select('id, panel_name, action').single()
-    if (!err && data) {
-      const p = data as Panel
+    const res = await createPanel(id, newPanelName.trim())
+    if (!res.error && res.data) {
+      const p = res.data as unknown as Panel
       setPanels(prev => [...prev, p]); setSelPanel(p.id)
       setAddingPanel(false); setNewPanelName('')
+    }
+  }
+
+  async function handleExport(kind: 'pre' | 'post' | 'excel') {
+    if (!id) return
+    const key = `export-${kind}`
+    setExporting((prev) => new Set(prev).add(key))
+    try {
+      if (kind === 'excel') await generateEstimateExcel(id)
+      else await generateRepairPPT(id, kind === 'pre' ? 'pre-repair' : 'post-repair')
+    } finally {
+      setExporting((prev) => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
     }
   }
 
@@ -417,15 +519,38 @@ export default function JobCardPage() {
           <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
             Estimate Rows ({estRows.length})
           </p>
-          <button
-            onClick={() => setAddingRow(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Add Row
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void handleExport('pre')}
+              disabled={exporting.size > 0}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {exporting.has('export-pre') ? 'Generating…' : 'Pre PPT'}
+            </button>
+            <button
+              onClick={() => void handleExport('post')}
+              disabled={exporting.size > 0}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {exporting.has('export-post') ? 'Generating…' : 'Post PPT'}
+            </button>
+            <button
+              onClick={() => void handleExport('excel')}
+              disabled={exporting.size > 0}
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {exporting.has('export-excel') ? 'Generating…' : 'Estimate Excel'}
+            </button>
+            <button
+              onClick={() => setAddingRow(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Add Row
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm print-table">
@@ -482,6 +607,73 @@ export default function JobCardPage() {
               </tfoot>
             </table>
           )}
+        </div>
+      </section>
+
+      {/* Documents */}
+      <section className="mt-6">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+          Documents ({documents.length})
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {DOC_TYPES.map(({ type, label, accept }) => {
+            const docsOfType = documents.filter((doc) => doc.doc_type === type)
+            const pct = docUploadProg[type]
+            const err = docUploadErr[type]
+            return (
+              <div key={type} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                  {label}
+                  {docsOfType.length > 0 && <span className="ml-1 text-gray-400">({docsOfType.length})</span>}
+                </div>
+                <label className="block cursor-pointer border-b border-gray-100 px-3 py-3 hover:bg-gray-50">
+                  <input
+                    type="file"
+                    accept={accept}
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) void handleDocumentUpload(type, file)
+                      e.target.value = ''
+                    }}
+                  />
+                  {pct != null ? (
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-blue-600">Uploading {pct}%</p>
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                        <div className="h-2 rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  ) : err ? (
+                    <p className="text-xs text-red-600">{err}</p>
+                  ) : (
+                    <p className="text-xs text-gray-500">Upload {label.toLowerCase()} file</p>
+                  )}
+                </label>
+                <div className="max-h-36 overflow-y-auto p-2">
+                  {docsOfType.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-gray-400">No files</p>
+                  ) : (
+                    docsOfType.map((doc) => {
+                      const url = docUrls[doc.storage_path]
+                      return (
+                        <a
+                          key={doc.id}
+                          href={url || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mb-1 flex items-center justify-between rounded-md px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
+                        >
+                          <span className="truncate">{doc.storage_path.split('/').pop()}</span>
+                          <span className="ml-2 shrink-0 text-[10px] text-gray-400">{doc.file_size_mb != null ? `${doc.file_size_mb} MB` : ''}</span>
+                        </a>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </section>
 

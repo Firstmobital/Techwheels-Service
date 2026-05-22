@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { REPORT_BRANCH_OPTIONS, matchesBranchSelection } from '../lib/branches'
 import { supabase } from '../lib/supabase'
+import { generateRepairPPT } from '../lib/generators/generatePPT'
+import { generateEstimateExcel } from '../lib/generators/generateExcel'
+import { listJobCardSummaries } from '../lib/api'
 import {
   type BranchFilter,
   type DateRangeFilter,
@@ -31,6 +34,12 @@ interface HeaderStats {
   monthlyRevenue: number
   partsNeedingReorder: number
   openTransitOrders: number
+}
+
+interface ExportLookupRow {
+  jobCardId: string
+  jcNumber: string
+  regNumber: string
 }
 
 const QUERY_PAGE_SIZE = 1000
@@ -64,6 +73,11 @@ export default function ReportsPage() {
     openTransitOrders: 0,
   })
   const [headerStatsLoading, setHeaderStatsLoading] = useState(true)
+  const [exportLookup, setExportLookup] = useState('')
+  const [matchedExportJob, setMatchedExportJob] = useState<ExportLookupRow | null>(null)
+  const [findingExportJob, setFindingExportJob] = useState(false)
+  const [exportingKeys, setExportingKeys] = useState<Set<string>>(new Set())
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const resolvedCategoryId = useMemo<ReportCategoryId>(() => {
     return isCategoryId(params.categoryId) ? params.categoryId : DEFAULT_CATEGORY_ID
@@ -287,6 +301,77 @@ export default function ReportsPage() {
     }
   }, [branch, dateFilter, isManpowerReportSelected])
 
+  const handleFindExportJob = async () => {
+    const needle = exportLookup.trim().toLowerCase()
+    if (!needle) {
+      setExportError('Enter JC number, registration number, or job card UUID.')
+      return
+    }
+
+    setFindingExportJob(true)
+    setExportError(null)
+    setMatchedExportJob(null)
+
+    const byUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (byUuidPattern.test(needle)) {
+      setMatchedExportJob({ jobCardId: needle, jcNumber: needle, regNumber: 'Direct ID' })
+      setFindingExportJob(false)
+      return
+    }
+
+    const res = await listJobCardSummaries()
+    setFindingExportJob(false)
+
+    if (res.error || !res.data) {
+      setExportError(res.error ?? 'Unable to load job cards for lookup.')
+      return
+    }
+
+    const match = res.data.find((row) => {
+      const jc = (row.jc_number ?? '').toLowerCase()
+      const reg = (row.reg_number ?? '').toLowerCase()
+      return jc.includes(needle) || reg.includes(needle)
+    })
+
+    if (!match?.job_card_id || !match.jc_number || !match.reg_number) {
+      setExportError('No matching job card found.')
+      return
+    }
+
+    setMatchedExportJob({
+      jobCardId: match.job_card_id,
+      jcNumber: match.jc_number,
+      regNumber: match.reg_number,
+    })
+  }
+
+  const handleExport = async (kind: 'pre' | 'post' | 'excel') => {
+    if (!matchedExportJob?.jobCardId) {
+      setExportError('Find a job card first.')
+      return
+    }
+    const key = `reports-export-${kind}`
+    setExportError(null)
+    setExportingKeys((prev) => new Set(prev).add(key))
+
+    try {
+      if (kind === 'excel') {
+        await generateEstimateExcel(matchedExportJob.jobCardId)
+      } else {
+        await generateRepairPPT(matchedExportJob.jobCardId, kind === 'pre' ? 'pre-repair' : 'post-repair')
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Export failed.'
+      setExportError(message)
+    } finally {
+      setExportingKeys((prev) => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -395,6 +480,70 @@ export default function ReportsPage() {
           onCustomToChange={setCustomTo}
           customDateError={customDateError}
         />
+
+        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-900">AutoDoc Export Controls</h2>
+            <span className="text-xs text-gray-500">Use this from Reports for pre/post PPT and estimate exports.</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={exportLookup}
+              onChange={(event) => setExportLookup(event.target.value)}
+              placeholder="Enter JC No, Reg No, or Job Card ID"
+              className="h-9 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:w-96"
+            />
+            <button
+              type="button"
+              onClick={() => void handleFindExportJob()}
+              disabled={findingExportJob}
+              className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {findingExportJob ? 'Finding…' : 'Find'}
+            </button>
+          </div>
+
+          {matchedExportJob && (
+            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              Matched: {matchedExportJob.jcNumber} • {matchedExportJob.regNumber}
+            </div>
+          )}
+
+          {exportError && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {exportError}
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleExport('pre')}
+              disabled={!matchedExportJob || exportingKeys.size > 0}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {exportingKeys.has('reports-export-pre') ? 'Generating…' : 'Generate Pre-Repair PPT'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport('post')}
+              disabled={!matchedExportJob || exportingKeys.size > 0}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {exportingKeys.has('reports-export-post') ? 'Generating…' : 'Generate Post-Repair PPT'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport('excel')}
+              disabled={!matchedExportJob || exportingKeys.size > 0}
+              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {exportingKeys.has('reports-export-excel') ? 'Generating…' : 'Generate Estimate Excel'}
+            </button>
+          </div>
+        </section>
 
         {customDateError ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700 shadow-sm">
