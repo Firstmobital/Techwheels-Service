@@ -137,29 +137,47 @@ export function parseDatetime(
       throw new Error(`Invalid Excel serial datetime: "${trimmed}"`);
     }
 
-    // Match DD/MM/YY HH:MM or DD/MM/YYYY HH:MM format
-    const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})$/);
+    // Match DD/MM/YY[YY] HH:MM[:SS] [AM/PM] format
+    const match = trimmed.match(
+      /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?$/
+    );
     if (!match) {
       throw new Error(
-        `Invalid format. Expected DD/MM/YY HH:MM or DD/MM/YYYY HH:MM, got: "${trimmed}"`
+        `Invalid format. Expected DD/MM/YY[YY] HH:MM[:SS] with optional AM/PM, got: "${trimmed}"`
       );
     }
 
-    const [, dayStr, monthStr, yearStr, hourStr, minuteStr] = match;
+    const [, dayStr, monthStr, yearStr, hourStr, minuteStr, secondStr, meridiem] = match;
     const day = parseInt(dayStr, 10);
     const month = parseInt(monthStr, 10);
     const year = yearStr.length === 2 ? 2000 + parseInt(yearStr, 10) : parseInt(yearStr, 10);
-    const hour = parseInt(hourStr, 10);
+    const parsedHour = parseInt(hourStr, 10);
     const minute = parseInt(minuteStr, 10);
+    const second = secondStr == null ? 0 : parseInt(secondStr, 10);
+
+    let hour = parsedHour;
+    if (meridiem) {
+      if (parsedHour < 1 || parsedHour > 12) {
+        throw new Error(`Invalid 12-hour time hour: ${parsedHour}`);
+      }
+
+      const upperMeridiem = meridiem.toUpperCase();
+      if (upperMeridiem === 'AM') {
+        hour = parsedHour === 12 ? 0 : parsedHour;
+      } else {
+        hour = parsedHour === 12 ? 12 : parsedHour + 12;
+      }
+    }
 
     // Validate ranges
     if (day < 1 || day > 31) throw new Error(`Invalid day: ${day}`);
     if (month < 1 || month > 12) throw new Error(`Invalid month: ${month}`);
     if (hour < 0 || hour > 23) throw new Error(`Invalid hour: ${hour}`);
     if (minute < 0 || minute > 59) throw new Error(`Invalid minute: ${minute}`);
+    if (second < 0 || second > 59) throw new Error(`Invalid second: ${second}`);
 
     // Create date and convert to ISO string
-    const date = new Date(year, month - 1, day, hour, minute, 0);
+    const date = new Date(year, month - 1, day, hour, minute, second);
 
     // Verify the date is valid (e.g., Feb 30 is invalid)
     if (
