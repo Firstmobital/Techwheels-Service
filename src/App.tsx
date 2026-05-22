@@ -8,6 +8,7 @@ import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
 import SignUpPage from './pages/SignUpPage'
 import AuthCallback from './pages/AuthCallback'
+import AutoDocPage from './pages/AutoDocPage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -47,6 +48,15 @@ const NAV_ITEMS = [
       <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/autodoc',
+    label: 'AutoDoc',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
       </svg>
     ),
   },
@@ -261,6 +271,25 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                 </>
               )}
             </NavLink>
+
+            <NavLink
+              to="/autodoc"
+              className={({ isActive }) =>
+                [
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                ].join(' ')
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className={isActive ? 'text-blue-600' : 'text-gray-400'}>{NAV_ITEMS[4].icon}</span>
+                  {NAV_ITEMS[4].label}
+                </>
+              )}
+            </NavLink>
           </nav>
 
           {/* Footer with user info + sign out */}
@@ -310,6 +339,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
               <Route path="/reports/:categoryId/:reportId" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/autodoc" element={<AutoDocPage />} />
               <Route path="*" element={<Navigate to="/import" replace />} />
             </Routes>
           </main>

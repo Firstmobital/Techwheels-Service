@@ -1,0 +1,318 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { generateRepairPPT } from '../lib/generators/generatePPT'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface JobRow {
+  job_card_id:       string
+  jc_number:         string
+  reg_number:        string
+  model:             string | null
+  vehicle_year:      number | null
+  colour:            string | null
+  complaint_date:    string
+  status:            string
+  warranty_age_days: number | null
+  tml_share_percent: number | null
+  total_estimate_amount: number | null
+  panel_count:       number
+  photo_count:       number
+  has_ppt_pre:       boolean
+  has_ppt_post:      boolean
+}
+
+type GenKey = `${'pre' | 'post'}-${string}`
+
+const STATUS_COLOURS: Record<string, string> = {
+  draft:     'bg-gray-100 text-gray-600',
+  submitted: 'bg-blue-100 text-blue-700',
+  approved:  'bg-purple-100 text-purple-700',
+  in_work:   'bg-amber-100 text-amber-700',
+  completed: 'bg-green-100 text-green-700',
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function AutoDocPage() {
+  const [rows,       setRows]       = useState<JobRow[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState<string | null>(null)
+  const [generating, setGenerating] = useState<Set<GenKey>>(new Set())
+  const [toast,      setToast]      = useState<{ msg: string; ok: boolean } | null>(null)
+  const [search,     setSearch]     = useState('')
+  const [statusFilter, setStatus]   = useState<string>('all')
+
+  // ── Fetch job cards ────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    supabase
+      .from('job_card_summary')
+      .select([
+        'job_card_id', 'jc_number', 'reg_number', 'model', 'vehicle_year',
+        'colour', 'complaint_date', 'status', 'warranty_age_days',
+        'tml_share_percent', 'total_estimate_amount', 'panel_count',
+        'photo_count', 'has_ppt_pre', 'has_ppt_post',
+      ].join(', '))
+      .order('jc_created_at', { ascending: false })
+      .then(({ data, error: err }) => {
+        if (cancelled) return
+        if (err) { setError(err.message); setLoading(false); return }
+        setRows((data ?? []) as JobRow[])
+        setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Generate PPT ───────────────────────────────────────────────────────────
+  async function handleGenerate(
+    jobCardId: string,
+    type: 'pre-repair' | 'post-repair',
+  ) {
+    const key: GenKey = `${type === 'pre-repair' ? 'pre' : 'post'}-${jobCardId}`
+    setGenerating(prev => new Set(prev).add(key))
+    setToast(null)
+    try {
+      await generateRepairPPT(jobCardId, type)
+      showToast('PPT downloaded successfully.', true)
+    } catch (e) {
+      showToast((e as Error).message ?? 'Failed to generate PPT.', false)
+    } finally {
+      setGenerating(prev => { const s = new Set(prev); s.delete(key); return s })
+    }
+  }
+
+  function showToast(msg: string, ok: boolean) {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  // ── Filtered rows ──────────────────────────────────────────────────────────
+  const q = search.trim().toLowerCase()
+  const displayed = rows.filter(r => {
+    const matchStatus = statusFilter === 'all' || r.status === statusFilter
+    const matchSearch = !q || r.reg_number.toLowerCase().includes(q)
+                            || r.jc_number.toLowerCase().includes(q)
+                            || (r.model ?? '').toLowerCase().includes(q)
+    return matchStatus && matchSearch
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-full bg-gray-50 p-6">
+
+      {/* Page header */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">AutoDoc — Body &amp; Paint</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Generate pre-repair and post-repair PPT reports for TML warranty claims.
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          placeholder="Search by Reg No, JC No, or Model…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="h-9 w-72 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        />
+        <select
+          value={statusFilter}
+          onChange={e => setStatus(e.target.value)}
+          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        >
+          <option value="all">All statuses</option>
+          <option value="draft">Draft</option>
+          <option value="submitted">Submitted</option>
+          <option value="approved">Approved</option>
+          <option value="in_work">In Work</option>
+          <option value="completed">Completed</option>
+        </select>
+        <span className="ml-auto text-xs text-gray-400">{displayed.length} job card{displayed.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* States */}
+      {loading && (
+        <div className="flex items-center gap-3 py-16 justify-center text-gray-400">
+          <div className="h-5 w-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+          <span className="text-sm">Loading job cards…</span>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && displayed.length === 0 && (
+        <div className="py-16 text-center text-sm text-gray-400">
+          No job cards found.{q || statusFilter !== 'all' ? ' Try clearing the filters.' : ''}
+        </div>
+      )}
+
+      {/* Table */}
+      {!loading && !error && displayed.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3">JC Number</th>
+                <th className="px-4 py-3">Reg No.</th>
+                <th className="px-4 py-3">Model</th>
+                <th className="px-4 py-3">Complaint Date</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-center">Age (days)</th>
+                <th className="px-4 py-3 text-center">TML %</th>
+                <th className="px-4 py-3 text-center">Panels</th>
+                <th className="px-4 py-3 text-center">Photos</th>
+                <th className="px-4 py-3 text-right">Estimate</th>
+                <th className="px-4 py-3 text-center">Generate PPT</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {displayed.map(row => {
+                const preKey:  GenKey = `pre-${row.job_card_id}`
+                const postKey: GenKey = `post-${row.job_card_id}`
+                const genPre  = generating.has(preKey)
+                const genPost = generating.has(postKey)
+
+                return (
+                  <tr key={row.job_card_id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-gray-900">{row.jc_number}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{row.reg_number}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {row.model ?? '—'}
+                      {row.vehicle_year ? <span className="ml-1 text-gray-400">'{String(row.vehicle_year).slice(2)}</span> : null}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">{fmtDate(row.complaint_date)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STATUS_COLOURS[row.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {row.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-700">
+                      {row.warranty_age_days ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center font-medium text-gray-700">
+                      {row.tml_share_percent != null ? `${row.tml_share_percent}%` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-600">{row.panel_count}</td>
+                    <td className="px-4 py-3 text-center text-gray-600">{row.photo_count}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">
+                      {row.total_estimate_amount != null
+                        ? `₹ ${row.total_estimate_amount.toLocaleString('en-IN')}`
+                        : '—'}
+                    </td>
+
+                    {/* PPT Buttons */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <PptButton
+                          label="Pre-Repair"
+                          busy={genPre}
+                          disabled={genPost}
+                          onClick={() => handleGenerate(row.job_card_id, 'pre-repair')}
+                        />
+                        <PptButton
+                          label="Post-Repair"
+                          busy={genPost}
+                          disabled={genPre}
+                          onClick={() => handleGenerate(row.job_card_id, 'post-repair')}
+                          variant="post"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className={[
+            'fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl px-5 py-3 text-sm shadow-lg transition-all',
+            toast.ok
+              ? 'bg-green-600 text-white'
+              : 'bg-red-600 text-white',
+          ].join(' ')}
+        >
+          {toast.ok
+            ? <CheckIcon />
+            : <XIcon />}
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+interface PptButtonProps {
+  label:    string
+  busy:     boolean
+  disabled: boolean
+  onClick:  () => void
+  variant?: 'pre' | 'post'
+}
+
+function PptButton({ label, busy, disabled, onClick, variant = 'pre' }: PptButtonProps) {
+  const base   = 'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1'
+  const colours = variant === 'post'
+    ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400 disabled:opacity-40'
+    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-300 disabled:opacity-40'
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy || disabled}
+      className={`${base} ${colours}`}
+    >
+      {busy
+        ? <span className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin" />
+        : <PptIcon />}
+      {busy ? 'Generating…' : label}
+    </button>
+  )
+}
+
+function fmtDate(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function PptIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  )
+}
+
+function XIcon() {
+  return (
+    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  )
+}
