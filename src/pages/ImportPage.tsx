@@ -936,6 +936,13 @@ export default function ImportPage() {
           return inserted
         }
 
+        const deleteExistingBranchRows = async (branch: Branch): Promise<void> => {
+          const { error } = await supabase.from(tableName).delete().eq('branch', branch)
+          if (error) {
+            throw new Error(`Failed to refresh existing ${tableName} data for ${branch}: ${error.message}`)
+          }
+        }
+
         const upsertOrInsertRows = async (
           rows: Record<string, unknown>[],
           onConflictCandidates: string[],
@@ -1111,6 +1118,12 @@ export default function ImportPage() {
               throw new Error(
                 `Parse errors found:\n${formatParseErrors(allParseErrors.slice(0, 10))}`
               )
+            }
+
+            // VAS files are uploaded as daily refresh snapshots.
+            // Replace existing branch data to avoid row consolidation across uploads.
+            if (insertRows.length > 0) {
+              await deleteExistingBranchRows(branch)
             }
 
             // Use insert for VAS table (line items, multiple rows per job card allowed)
