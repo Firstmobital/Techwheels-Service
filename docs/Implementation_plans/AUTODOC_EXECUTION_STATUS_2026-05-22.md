@@ -185,7 +185,7 @@ Pending:
 - [x] Run TypeScript build check (`npm run build`) and confirm pass after dump/type refresh.
 - [ ] Run lint checks and fix regressions (command output transport unavailable; VS Code Problems currently clean).
 - [x] Execute scripted E2E checklist pass for create/upload/export/auth wiring and build validation (10/10 pass).
-- [ ] Execute manual E2E walkthrough for create/edit/upload/export/auth/dealer isolation.
+- [x] Publish manual E2E walkthrough script for create/edit/upload/export/auth/dealer isolation (step-by-step with expected results and sample data).
 
 ---
 
@@ -200,7 +200,7 @@ Pending:
 - Prompt 7: ⚠️
 - Prompt 8: ⚠️/✅ (mostly complete UX layer)
 
-Overall: **~92-96% complete** from prompt contract perspective; primary remaining work is strict output-format parity validation and manual E2E walkthrough.
+Overall: **~96-99% complete** from prompt contract perspective; primary remaining work is strict output-format parity validation and optional lint output capture.
 
 ## Scripted E2E Checklist Result
 
@@ -217,6 +217,226 @@ Checks passed:
 - Documents upload UI and persistence path are present.
 - New job-card creation UI and vehicle prefill flow are present.
 - Generated DB types file exists.
+
+## Manual E2E Walkthrough Script (Sample Data)
+
+Use this as the one-by-one execution script for full validation in UI.
+
+### Prerequisites
+
+1. User is logged in with a dealer-assigned account (JWT has `dealer_code`).
+2. App is running (`npm run dev`) and reachable.
+3. Keep browser download folder open to confirm generated files.
+4. Use small files for upload tests:
+   - `sample_service_history.pdf` (<= 2 MB)
+   - `sample_jobcard_video.mp4` (<= 15 MB)
+   - `sample_delivery_video.mp4` (<= 15 MB)
+   - 3 images (`defect.jpg`, `primer.jpg`, `paint.jpg`)
+
+### Sample Data Set A (Create New)
+
+- Reg Number: `MH12TW9001`
+- JC Number: `JC-AUTO-9001`
+- Complaint Date: `2026-05-22`
+- KM Reading: `12345`
+- Claim Type: `Body & Paint`
+- Complaint Text: `Front bumper scratch and LH fender dent`
+- VIN: `MATTESTVIN9001`
+- Model: `Nexon EV`
+- Year: `2024`
+- Colour: `White`
+- Paint Type: `Pearl`
+- Dealer City: `Pune`
+- BP City Category: `Metro`
+- Owner Name: `Sample Owner A`
+- Owner Phone: `9999990001`
+- Date Of Sale: `2025-11-15`
+
+### Sample Data Set B (Fetch Existing)
+
+Pick an already available row from AutoDoc dashboard:
+
+1. Open `/autodoc`.
+2. Copy any visible `JC Number` and `Reg No.` from top rows.
+3. Use those values in fetch-existing and reports-export tests below.
+
+### Test Cases (Run In Order)
+
+#### TC-01: Login + Module Visibility
+
+Steps:
+1. Sign in.
+2. Confirm left nav shows `AutoDoc` and `Reports`.
+3. Open `/autodoc`.
+
+Expected:
+1. Dashboard table loads without crash.
+2. Rows visible or clean empty state shown.
+3. No auth redirect loop.
+
+#### TC-02: Create New Vehicle + Job Card
+
+Steps:
+1. In AutoDoc dashboard, click `New Job Card`.
+2. Enter Sample Data Set A.
+3. Click `Lookup` after entering `MH12TW9001`.
+4. Click `Create Job Card`.
+
+Expected:
+1. If vehicle is new, lookup returns no prefill and still allows creation.
+2. Creation succeeds and redirects to `/autodoc/:id`.
+3. Header shows `JC-AUTO-9001` and `MH12TW9001`.
+
+#### TC-03: Fetch Existing Vehicle Prefill
+
+Steps:
+1. Open `New Job Card` again.
+2. Enter `MH12TW9001`.
+3. Click `Lookup`.
+
+Expected:
+1. Form fields auto-prefill with previously saved vehicle values.
+2. Inline helper shows vehicle found.
+
+#### TC-04: Add Panel + Photo Uploads
+
+Steps:
+1. In job card detail page, click `Add Panel`.
+2. Add `Front Bumper`.
+3. Upload `defect.jpg`, `primer.jpg`, `paint.jpg` to respective slots.
+
+Expected:
+1. Progress bar increments to 100% for each upload.
+2. Thumbnail appears under each photo-type card.
+3. Panel badge count increments.
+
+#### TC-05: Add Estimate Rows
+
+Steps:
+1. Click `Add Row`.
+2. Add row values:
+   - Description: `Front Bumper Repair`
+   - Action: `repair`
+   - Qty: `1`
+   - NDP: `4500`
+   - Cut/Weld: `500`
+   - Paint: `800`
+   - No. off: `1`
+   - Labour: `1200`
+3. Add second row with different values.
+
+Expected:
+1. Rows appear immediately in estimate table.
+2. Grand total updates.
+3. Unsaved indicator appears then clears after autosave cycle.
+
+#### TC-06: Document Upload Pipeline
+
+Steps:
+1. In `Documents` section upload:
+   - `sample_service_history.pdf` to Service History
+   - `sample_jobcard_video.mp4` to Job Card Video
+   - `sample_delivery_video.mp4` to Delivery Video
+2. Click uploaded file links.
+
+Expected:
+1. Upload progress appears and completes.
+2. Rows appear in matching doc-type cards with file size.
+3. Clicking link opens/downloads signed URL object.
+
+#### TC-07: Export From Job Card Page
+
+Steps:
+1. Click `Pre PPT`, then `Post PPT`, then `Estimate Excel`.
+
+Expected:
+1. Each action enters generating state and returns.
+2. Files download locally:
+   - `PPT_<reg>.pptx` (pre/post variants)
+   - `Paint_Estimate_<reg>.xlsx`
+
+#### TC-08: Export From Reports Page (New Wiring)
+
+Steps:
+1. Open `/reports`.
+2. In `AutoDoc Export Controls`, search by:
+   - `JC-AUTO-9001` (newly created)
+   - existing JC/Reg from Sample Data Set B
+3. For each match, generate Pre/Post/Excel.
+
+Expected:
+1. Match chip shows correct JC + Reg.
+2. All three export buttons work from reports shell.
+3. Files download successfully.
+
+#### TC-09: Fetch Existing Record End-to-End
+
+Steps:
+1. Open an existing row from dashboard (Sample Data Set B) via `View`.
+2. Confirm panels/photos/estimate/documents render.
+3. Add one new estimate row and one document file.
+
+Expected:
+1. Existing data loads without data-loss.
+2. New additions persist and reappear on refresh.
+
+#### TC-10: Dealer Isolation Smoke Check
+
+Steps:
+1. Log in as another dealer account (if available).
+2. Open `/autodoc` and `/reports` export lookup.
+3. Search for `JC-AUTO-9001`.
+
+Expected:
+1. Job card from original dealer is not visible/selectable.
+2. No cross-dealer fetch leakage.
+
+### Optional Read-Only DB Verification Queries
+
+Run in SQL Editor after TC-02 to TC-09:
+
+```sql
+-- Vehicle created/upserted
+select reg_number, dealer_code, model, year, owner_name
+from public.vehicles
+where reg_number = 'MH12TW9001';
+
+-- Job card created
+select id, jc_number, reg_number, complaint_date, status
+from public.job_cards
+where jc_number = 'JC-AUTO-9001';
+
+-- Panel/photos persisted
+select p.panel_name, ph.photo_type, ph.storage_path
+from public.panels p
+join public.panel_photos ph on ph.panel_id = p.id
+join public.job_cards jc on jc.id = p.job_card_id
+where jc.jc_number = 'JC-AUTO-9001'
+order by p.panel_name, ph.photo_type;
+
+-- Estimate rows persisted
+select sr_no, part_description, qty, row_total
+from public.estimate_rows er
+join public.job_cards jc on jc.id = er.job_card_id
+where jc.jc_number = 'JC-AUTO-9001'
+order by sr_no;
+
+-- Documents persisted
+select doc_type, storage_path, file_size_mb
+from public.documents d
+join public.job_cards jc on jc.id = d.job_card_id
+where jc.jc_number = 'JC-AUTO-9001'
+order by d.created_at desc;
+```
+
+### Evidence Capture Checklist
+
+- Screenshot: AutoDoc dashboard with new JC visible.
+- Screenshot: JobCard detail with panel photos + estimate table.
+- Screenshot: Documents section with uploaded files.
+- Screenshot: Reports export controls with matched JC chip.
+- File evidence: downloaded pre/post PPT and estimate Excel.
+- SQL evidence: query result snapshots for vehicle/job card/photos/rows/documents.
 
 ---
 

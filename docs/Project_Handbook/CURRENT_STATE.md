@@ -1,0 +1,69 @@
+# Current Project State Snapshot
+
+Snapshot Date: 2026-05-22
+Version Context: Techwheels Service v1.0 (current workspace state)
+
+## Product Scope
+
+- Domains: Import, Reports, AutoDoc, Admin, Settings.
+- Backend platform: Supabase Auth + Postgres + Storage.
+- UI framework: React + TypeScript + Vite.
+
+## Active Route Surface
+
+- `/import`
+- `/reports/:categoryId/:reportId`
+- `/settings`
+- `/admin`
+- `/autodoc`
+- `/autodoc/:id`
+- `/auth/callback`
+
+## Reporting Surface
+
+- Report categories include labour/revenue, performance, revenue, parts.
+- Report registry is centrally managed under `src/pages/reports/`.
+- Query engines split by general service reports and parts-focused reports.
+
+## Access Control State
+
+- Auth gate enforced at app shell level.
+- Dealer code is resolved from user/app metadata in session JWT.
+- RLS policies enforce dealership row scoping for AutoDoc core data tables.
+- UI-level role labels exist (`admin`, `manager`, `staff`, `viewer`).
+- Module permissions are managed in admin workflow.
+
+## Import State
+
+- Multi-file branch-wise ingest supported for core service and parts datasets.
+- Header mapping + row parse validation pipeline exists for each specialized source.
+- Duplicate-safe insertion and fallback conflict handling are implemented.
+
+## AutoDoc State
+
+- Job card list and detail views active.
+- Vehicle lookup/upsert integrated.
+- Panel/photo/document/estimate subsystems active.
+- PPT and Excel generation features active.
+
+## Admin State
+
+- User create/activate/deactivate features present.
+- Dealer assignment and metadata sync flow present.
+- Module and permission management flow present.
+
+## Open Risk Notes
+
+- Ensure module permission schema consistency across all environments.
+- Keep role controls and DB enforcement assumptions aligned.
+- Keep dealer metadata and JWT refresh expectations clear to users.
+
+## How to Update This Snapshot
+
+When state changes, update:
+
+1. Route surface changes.
+2. Domain capability changes.
+3. Access control enforcement changes.
+4. Schema/report/import behavior changes.
+5. Risks and current assumptions.

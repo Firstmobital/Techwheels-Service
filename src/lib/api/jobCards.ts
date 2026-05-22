@@ -36,6 +36,35 @@ export async function getJobCardSummary(jobCardId: string): Promise<ApiResult<Jo
   return ok(data)
 }
 
+export async function resolveRegNumberFromReference(reference: string): Promise<ApiResult<string | null>> {
+  const needle = reference.trim()
+  if (!needle) return ok(null)
+
+  const normalizedReg = normalizeRegNumber(needle)
+
+  // Try direct reg-number match first.
+  const regMatch = await supabase
+    .from('job_card_summary')
+    .select('reg_number')
+    .eq('reg_number', normalizedReg)
+    .limit(1)
+    .maybeSingle<{ reg_number: string | null }>()
+
+  if (regMatch.error) return fail(regMatch.error)
+  if (regMatch.data?.reg_number) return ok(regMatch.data.reg_number)
+
+  // Fallback: treat input as JC number.
+  const jcMatch = await supabase
+    .from('job_card_summary')
+    .select('reg_number')
+    .eq('jc_number', needle.toUpperCase())
+    .limit(1)
+    .maybeSingle<{ reg_number: string | null }>()
+
+  if (jcMatch.error) return fail(jcMatch.error)
+  return ok(jcMatch.data?.reg_number ?? null)
+}
+
 export async function createJobCard(input: CreateJobCardInput): Promise<ApiResult<JobCardRow>> {
   const regNumber = normalizeRegNumber(input.regNumber)
   const jcNumber = input.jcNumber.trim()

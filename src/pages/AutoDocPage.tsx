@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
-import { createJobCard, fetchVehicleByReg, listJobCardSummaries, upsertVehicle, type JobSummaryRow } from '../lib/api'
+import {
+  createJobCard,
+  fetchVehicleByReg,
+  listJobCardSummaries,
+  resolveRegNumberFromReference,
+  upsertVehicle,
+  type JobSummaryRow,
+} from '../lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,12 +118,22 @@ export default function AutoDocPage() {
   useEffect(() => { void fetchRows() }, [fetchRows])
 
   async function handleVehicleLookup() {
-    const reg = form.regNumber.trim()
-    if (!reg) return
+    const ref = form.regNumber.trim()
+    if (!ref) return
     setLookupBusy(true)
     setCreateError(null)
 
-    const res = await fetchVehicleByReg(reg)
+    const resolveRes = await resolveRegNumberFromReference(ref)
+    if (resolveRes.error) {
+      setLookupBusy(false)
+      setVehicleFound(false)
+      setCreateError(resolveRes.error)
+      return
+    }
+
+    const resolvedReg = resolveRes.data ?? ref
+
+    const res = await fetchVehicleByReg(resolvedReg)
     setLookupBusy(false)
     if (res.error) {
       setVehicleFound(false)
@@ -126,6 +143,7 @@ export default function AutoDocPage() {
 
     if (!res.data) {
       setVehicleFound(false)
+      setCreateError('No matching vehicle found for this registration/JC reference.')
       return
     }
 
@@ -491,13 +509,13 @@ export default function AutoDocPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <Field label="Registration Number*">
+              <Field label="Registration Number or JC Number*">
                 <div className="flex gap-2">
                   <input
                     value={form.regNumber}
                     onChange={(e) => setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))}
                     onBlur={() => void handleVehicleLookup()}
-                    placeholder="e.g. MH12AB1234"
+                    placeholder="e.g. MH12AB1234 or JC-AUTO-9103"
                     className={INPUT}
                   />
                   <button
