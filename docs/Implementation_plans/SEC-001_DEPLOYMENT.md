@@ -28,7 +28,14 @@
 - Deployed to Vercel successfully
 - Build: Zero service key exposure verified
 
-### ⏳ Step 3: Deploy Edge Functions (NEXT - DO THIS NOW)
+### ✅ Step 3: Deploy Edge Functions
+**Status:** COMPLETED (2026-05-22)
+- Both functions deployed to production (commit 9047420)
+- Fixed CORS headers to allow authorization and apikey headers
+- sync-dealer-metadata: ✅ Working - dealer codes assigned successfully
+- confirm-user-email: ✅ Working - user deactivation confirmed
+
+### ⏳ Step 4: Production Testing (IN PROGRESS)
 
 ### Step 1: Apply Audit Logs Table Migration
 
