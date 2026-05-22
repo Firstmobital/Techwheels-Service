@@ -2639,7 +2639,8 @@ export async function getInvoiceDailyTrend(
     const chunk = jobCardValues.slice(index, index + 200)
     let vasQuery = supabase
       .from('service_vas_jc_data')
-      .select('job_card_number, net_price')
+      .select('job_card_number, net_price, job_status')
+      .eq('job_status', 'Invoiced')
       .in('job_card_number', chunk)
 
     vasQuery = applyBranchFilterToQuery(vasQuery, branch)
