@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
 **Last Updated:** 2026-05-22  
-**Total Active Plans:** 3
+**Total Active Plans:** 4
 
 ---
 
@@ -11,18 +11,26 @@
 |---------|-------|----------|--------|-------|-------|-----|----------|
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | ✅ COMPLETED | Dev Team | 2026-05-22 | 2026-05-22 | 100% |
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
-| AUTH-001 | Auth Email Recovery and User Access Continuity | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-22 | 2026-05-23 | 0% |
+| AUTH-001 | Auth Email Recovery and User Access Continuity | 🟠 HIGH | � IN PROGRESS | Techwheels Admin + Dev Team | 2026-05-22 | 2026-05-23 | 65% |
+| BODYSHOP-001 | Bodyshop Module End-to-End Workflow and Live Dashboard | 🔴 CRITICAL | 🔴 PENDING | Techwheels Product + Dev Team | 2026-05-22 | 2026-05-30 | 0% |
 
 ---
 
 ## Active Plans
 
+### BODYSHOP-001: Bodyshop Module End-to-End Workflow and Live Dashboard
+- **File:** [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md)
+- **Risk Level:** 🔴 HIGH (multi-role operational workflow + strict guardrail enforcement)
+- **Status:** Pending kickoff
+- **Latest Update:** 2026-05-22 - End-to-end implementation plan created for 23-stage SOP, live dashboard, pending trackers, and operational control points
+- **Next Step:** Start Phase 1 (freeze schema contract, stage definitions, and validation guardrails)
+
 ### AUTH-001: Auth Email Recovery and User Access Continuity
 - **File:** [AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md)
 - **Risk Level:** 🟡 MEDIUM (temporary credential handling + SMTP/rate-limit dependency)
-- **Status:** Pending kickoff
-- **Latest Update:** 2026-05-22 - Plan created to unblock existing user access without email dependency and harden SMTP delivery
-- **Next Step:** Execute Phase 1 (set one-time password via Admin API for existing Vinod user and validate login)
+- **Status:** Engineering implementation complete; operational execution in progress
+- **Latest Update:** 2026-05-22 - Temp-password edge function + Admin UI fallback implemented and function deployed to Supabase
+- **Next Step:** Execute user operation for Vinod (issue one-time temp password, validate login, force password rotation) + complete SMTP hardening
 
 ### AUTODOC-STATUS-001: AutoDoc Prompt Execution Status Audit
 - **File:** [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md)
@@ -94,6 +102,8 @@ Next: Complete edge function, then move to frontend refactor
 - 📄 [SECURITY_REFACTOR_SERVICE_KEY.md](SECURITY_REFACTOR_SERVICE_KEY.md) - Full plan with activity tracker
 - 📄 [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md) - AutoDoc done/pending audit vs authoritative schema
 - 📄 [AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md) - Auth email throttle recovery and access continuity plan
+- 📄 [AUTH-001_RUNBOOK.md](AUTH-001_RUNBOOK.md) - Operator runbook for temporary-password fallback and SMTP hardening
+- 📄 [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md) - Bodyshop module implementation plan (23-stage workflow + live dashboard)
 - 📄 COMPLETED_PLANS.md (Coming soon)
 
 ---

@@ -40,7 +40,7 @@ This plan restores immediate user access without relying on email delivery, pres
 
 ### Phase 1: Immediate Access Recovery (No Email Dependency)
 - [ ] **Task 1.1:** Identify Vinod's auth user ID in Supabase Authentication -> Users.
-- [ ] **Task 1.2:** Set a strong temporary password via Supabase Admin API (`/auth/v1/admin/users/{id}`) with `email_confirm: true`.
+- [ ] **Task 1.2:** Set a strong temporary password via deployed `set-user-temp-password` function with `email_confirm: true`.
 - [ ] **Task 1.3:** Share temporary password with Vinod through approved secure channel (not email if possible).
 - [ ] **Task 1.4:** Confirm Vinod can sign in at production URL.
 
@@ -54,7 +54,7 @@ This plan restores immediate user access without relying on email delivery, pres
 - [ ] **Task 3.2:** Validate sender domain and DNS records (SPF/DKIM/DMARC as provider requires).
 - [ ] **Task 3.3:** Set production-safe email rate limits in Supabase Auth settings.
 - [ ] **Task 3.4:** Test all outbound auth mail types: invite/confirmation, magic link, password recovery.
-- [ ] **Task 3.5:** Update operations runbook with limits, fallback path, and escalation owner.
+- [x] **Task 3.5:** Update operations runbook with limits, fallback path, and escalation owner.
 
 ---
 
@@ -70,8 +70,8 @@ This plan restores immediate user access without relying on email delivery, pres
 
 ### Phase 1
 ```
-⏳ 1.1 | Capture Vinod auth user ID | Admin | - | - | From Supabase Users screen
-⏳ 1.2 | Set temp password via Admin API + email_confirm true | Admin/Dev | - | - | Bypasses email throttle
+🔄 1.1 | Capture Vinod auth user ID | Admin | 2026-05-22 | - | User visible in Supabase Users list; select exact target row
+🔄 1.2 | Set temp password via deployed function + email_confirm true | Admin/Dev | 2026-05-22 | - | Edge function + Admin UI shipped; execute for Vinod now
 ⏳ 1.3 | Send temp credential via secure channel | Admin | - | - | Avoid plain email where possible
 ⏳ 1.4 | Validate production login | Vinod + Admin | - | - | Record timestamp
 ```
@@ -89,7 +89,7 @@ This plan restores immediate user access without relying on email delivery, pres
 ⏳ 3.2 | DNS authentication validated | Dev/Ops | - | - | SPF/DKIM/DMARC pass
 ⏳ 3.3 | Email rate limits tuned | Dev/Ops | - | - | Based on expected volume
 ⏳ 3.4 | End-to-end auth email tests pass | QA/Admin | - | - | Invite + magic + recovery
-⏳ 3.5 | Runbook updated and shared | Dev Team | - | - | Include incident playbook
+✅ 3.5 | Runbook updated and shared | Dev Team | 2026-05-22 | 2026-05-22 | See AUTH-001_RUNBOOK.md
 ```
 
 ---
@@ -133,6 +133,13 @@ This plan restores immediate user access without relying on email delivery, pres
 
 ## Notes & Lessons Learned
 
+### 2026-05-22 - Implementation Update
+- Added edge function: `supabase/functions/set-user-temp-password/index.ts`.
+- Added Admin UI action `Temp Password` in `src/pages/AdminPage.tsx` users table.
+- Deployed function to Supabase project: `set-user-temp-password`.
+- Verified frontend build succeeds after implementation.
+- Added runbook: `AUTH-001_RUNBOOK.md`.
+
 ### 2026-05-22 - Incident Capture
 - Dashboard auth mail actions failed due to Supabase project email rate limit.
 - Redirect URL settings were correct; issue isolated to email throttle.
@@ -143,9 +150,10 @@ This plan restores immediate user access without relying on email delivery, pres
 ## Related Documentation
 
 - [Implementation Plans Index](INDEX.md)
+- [AUTH-001 Runbook](AUTH-001_RUNBOOK.md)
 - [Project Handbook README](../Project_Handbook/README.md)
 
 ---
 
 **Last Updated:** 2026-05-22 by GitHub Copilot  
-**Status:** 🔴 PENDING
+**Status:** � IN PROGRESS

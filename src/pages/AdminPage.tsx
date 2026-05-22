@@ -35,6 +35,13 @@ interface Permission {
   can_delete: boolean
 }
 
+interface TempPasswordForm {
+  userId: string
+  email: string
+  tempPassword: string
+  emailConfirm: boolean
+}
+
 function isMissingDealerColumnError(error: unknown): boolean {
   const message =
     typeof error === 'object' && error !== null && 'message' in error
@@ -49,6 +56,15 @@ const roleBadge: Record<UserRole, string> = {
   manager: 'bg-purple-100 text-purple-700',
   staff:   'bg-green-100 text-green-700',
   viewer:  'bg-gray-100 text-gray-600',
+}
+
+function generateTemporaryPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()_+-='
+  let value = ''
+  for (let i = 0; i < 16; i += 1) {
+    value += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return `${value}Aa1!`
 }
 
 /** Call Edge Function to sync dealer fields into user_metadata / JWT. */
@@ -96,6 +112,8 @@ export default function AdminPage() {
   const [editDealerCode, setEditDealerCode]   = useState('')
   const [editDealerName, setEditDealerName]   = useState('')
   const [savingDealer, setSavingDealer]       = useState(false)
+  const [tempPasswordForm, setTempPasswordForm] = useState<TempPasswordForm | null>(null)
+  const [settingTempPassword, setSettingTempPassword] = useState(false)
 
   // Permissions tab
   const [selectedUserId, setSelectedUserId] = useState('')
@@ -284,6 +302,42 @@ export default function AdminPage() {
     )
   }
 
+  // ── Temporary password (email throttle fallback) ─────────────────────────
+  function openTempPasswordModal(u: AppUser) {
+    setTempPasswordForm({
+      userId: u.id,
+      email: u.email,
+      tempPassword: generateTemporaryPassword(),
+      emailConfirm: true,
+    })
+  }
+
+  async function setTemporaryPassword() {
+    if (!tempPasswordForm) return
+    if (!tempPasswordForm.tempPassword.trim()) {
+      showToastMsg('Temporary password is required', 'error')
+      return
+    }
+
+    setSettingTempPassword(true)
+    const { error } = await supabase.functions.invoke('set-user-temp-password', {
+      body: {
+        userId: tempPasswordForm.userId,
+        temporaryPassword: tempPasswordForm.tempPassword,
+        emailConfirm: tempPasswordForm.emailConfirm,
+      },
+    })
+    setSettingTempPassword(false)
+
+    if (error) {
+      showToastMsg(error.message, 'error')
+      return
+    }
+
+    showToastMsg('Temporary password set. Share it securely and ask user to change it immediately.')
+    setTempPasswordForm(null)
+  }
+
   // ── Permissions ────────────────────────────────────────────────────────────
   async function loadPermsForUser(userId: string) {
     setSelectedUserId(userId)
@@ -449,6 +503,13 @@ export default function AdminPage() {
                           className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-gray-100"
                         >
                           Perms
+                        </button>
+                        <button
+                          onClick={() => openTempPasswordModal(u)}
+                          className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+                          title="Set a temporary password without sending email"
+                        >
+                          Temp Password
                         </button>
                         <button
                           onClick={() => toggleUserActive(u)}
@@ -697,6 +758,53 @@ export default function AdminPage() {
             <button onClick={() => setDealerEditUser(null)} className={BTN_SECONDARY}>Cancel</button>
             <button onClick={saveDealer} disabled={savingDealer} className={BTN_PRIMARY}>
               {savingDealer ? 'Saving…' : 'Save Dealer'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── TEMP PASSWORD MODAL ── */}
+      {tempPasswordForm && (
+        <Modal
+          title={`Set Temporary Password — ${tempPasswordForm.email}`}
+          onClose={() => setTempPasswordForm(null)}
+        >
+          <p className="mb-4 text-xs text-amber-700">
+            Use this when auth email actions are rate-limited. Share via secure channel and require immediate password change.
+          </p>
+          <div className="space-y-4">
+            <Field label="Temporary Password">
+              <div className="flex gap-2">
+                <input
+                  value={tempPasswordForm.tempPassword}
+                  onChange={e => setTempPasswordForm(prev => prev ? { ...prev, tempPassword: e.target.value } : prev)}
+                  className={INPUT}
+                  placeholder="Min 12 chars, with upper/lower/number/special"
+                  autoFocus
+                />
+                <button
+                  onClick={() => setTempPasswordForm(prev => prev ? { ...prev, tempPassword: generateTemporaryPassword() } : prev)}
+                  className={BTN_SECONDARY}
+                  type="button"
+                >
+                  Regenerate
+                </button>
+              </div>
+            </Field>
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={tempPasswordForm.emailConfirm}
+                onChange={e => setTempPasswordForm(prev => prev ? { ...prev, emailConfirm: e.target.checked } : prev)}
+                className="h-4 w-4 rounded accent-amber-600"
+              />
+              Mark user email as confirmed
+            </label>
+          </div>
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setTempPasswordForm(null)} className={BTN_SECONDARY}>Cancel</button>
+            <button onClick={setTemporaryPassword} disabled={settingTempPassword} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50">
+              {settingTempPassword ? 'Setting…' : 'Set Temp Password'}
             </button>
           </div>
         </Modal>
