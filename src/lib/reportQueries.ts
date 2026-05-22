@@ -2634,20 +2634,15 @@ export async function getInvoiceDailyTrend(
   }
 
   const vasByJobCard = new Map<string, number>()
-  const bounds = getDateRangeBounds(dateFilter)
 
   for (let index = 0; index < jobCardValues.length; index += 200) {
     const chunk = jobCardValues.slice(index, index + 200)
     let vasQuery = supabase
       .from('service_vas_jc_data')
-      .select('job_card_number, job_value, net_price')
+      .select('job_card_number, net_price')
       .in('job_card_number', chunk)
 
     vasQuery = applyBranchFilterToQuery(vasQuery, branch)
-
-    if (bounds) {
-      vasQuery = vasQuery.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
-    }
 
     const { data, error } = await vasQuery
 
@@ -2660,7 +2655,6 @@ export async function getInvoiceDailyTrend(
     for (const vasRow of vasRows) {
       const typedVasRow = vasRow as {
         job_card_number?: unknown
-        job_value?: unknown
         net_price?: unknown
       }
 
@@ -2669,9 +2663,8 @@ export async function getInvoiceDailyTrend(
       if (!jobCard) continue
 
       const existing = vasByJobCard.get(jobCard) ?? 0
-      const vasAmount = parseRevenue(typedVasRow.job_value)
-      const fallbackAmount = vasAmount === 0 ? parseRevenue(typedVasRow.net_price) : vasAmount
-      vasByJobCard.set(jobCard, existing + fallbackAmount)
+      const netPriceAmount = parseRevenue(typedVasRow.net_price)
+      vasByJobCard.set(jobCard, existing + netPriceAmount)
     }
   }
 
