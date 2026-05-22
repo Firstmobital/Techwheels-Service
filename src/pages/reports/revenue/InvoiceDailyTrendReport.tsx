@@ -9,6 +9,7 @@ type SortKey =
   | 'labourTotal'
   | 'sparesTotal'
   | 'consolidatedTotal'
+  | 'vasRevenue'
   | 'avgInvoiceValue'
 
 export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportViewProps) {
@@ -53,6 +54,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
       if (sortKey === 'labourTotal') return (a.labourTotal - b.labourTotal) * direction
       if (sortKey === 'sparesTotal') return (a.sparesTotal - b.sparesTotal) * direction
       if (sortKey === 'consolidatedTotal') return (a.consolidatedTotal - b.consolidatedTotal) * direction
+      if (sortKey === 'vasRevenue') return (a.vasRevenue - b.vasRevenue) * direction
       if (sortKey === 'avgInvoiceValue') return (a.avgInvoiceValue - b.avgInvoiceValue) * direction
       return a.date.localeCompare(b.date) * direction
     })
@@ -65,6 +67,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
       labourTotal: rows.reduce((sum, row) => sum + row.labourTotal, 0),
       sparesTotal: rows.reduce((sum, row) => sum + row.sparesTotal, 0),
       consolidatedTotal: rows.reduce((sum, row) => sum + row.consolidatedTotal, 0),
+      vasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
     }),
     [rows],
   )
@@ -89,6 +92,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
       labourTotal: row.labourTotal,
       sparesTotal: row.sparesTotal,
       consolidatedTotal: row.consolidatedTotal,
+      vasRevenue: row.vasRevenue,
       avgInvoiceValue: row.avgInvoiceValue,
     }))
     exportToCSV(exportData, 'invoice-daily-trend-report')
@@ -100,7 +104,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Invoice Daily Trend Report</h2>
-            <p className="mt-1 text-sm text-gray-500">Daily invoice count with labour, spares, and consolidated totals.</p>
+            <p className="mt-1 text-sm text-gray-500">Daily invoice metrics with labour, spares, consolidated, and VAS revenue totals.</p>
           </div>
           {rows.length > 0 && (
             <button
@@ -116,7 +120,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
           )}
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Days</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">{totals.days.toLocaleString('en-IN')}</p>
@@ -136,6 +140,10 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
           <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Consolidated Total</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-900">{formatCurrency(totals.consolidatedTotal)}</p>
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">VAS Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">{formatCurrency(totals.vasRevenue)}</p>
           </div>
         </div>
       </div>
@@ -173,6 +181,9 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('consolidatedTotal')}>
                     Consolidated Total {sortKey === 'consolidatedTotal' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('vasRevenue')}>
+                    VAS Revenue {sortKey === 'vasRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('avgInvoiceValue')}>
                     Avg Invoice {sortKey === 'avgInvoiceValue' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
@@ -186,6 +197,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
                     <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.labourTotal)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.sparesTotal)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right">{formatCurrency(row.consolidatedTotal)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.vasRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.avgInvoiceValue)}</td>
                   </tr>
                 ))}
@@ -195,6 +207,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.labourTotal)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.sparesTotal)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.consolidatedTotal)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.vasRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.invoiceCount > 0 ? totals.consolidatedTotal / totals.invoiceCount : 0)}</td>
                 </tr>
               </tbody>

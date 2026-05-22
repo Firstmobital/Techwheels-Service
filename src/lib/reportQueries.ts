@@ -283,6 +283,7 @@ export interface InvoiceDailyTrendRow {
   labourTotal: number
   sparesTotal: number
   consolidatedTotal: number
+  vasRevenue: number
   avgInvoiceValue: number
 }
 
@@ -2610,100 +2611,130 @@ export async function getInvoiceDailyTrend(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<InvoiceDailyTrendRow[]> {
-  let from = 0
-  const allRows: Record<string, unknown>[] = []
+  const jcRows = await fetchAllJobCardClosedRows(
+    'closed_date_time, job_card_number, final_labour_amount, final_spares_amount, total_invoice_amount',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  const uniqueJobCardKeys = new Set<string>()
+  const jobCardValues: string[] = []
+
+  for (const row of jcRows) {
+    const typedRow = row as { job_card_number?: unknown }
+    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    if (!jobCard) continue
+
+    const normalized = jobCard.toUpperCase()
+    if (uniqueJobCardKeys.has(normalized)) continue
+    uniqueJobCardKeys.add(normalized)
+    jobCardValues.push(jobCard)
+  }
+
+  const vasByJobCard = new Map<string, number>()
   const bounds = getDateRangeBounds(dateFilter)
 
-  while (true) {
-    let query = supabase
-      .from('service_invoice_data')
-      .select('invoice_date, invoice_number, final_labour_invoice_amount, final_spares_invoice_amount, final_consolidated_invoice_amount')
-      .range(from, from + QUERY_PAGE_SIZE - 1)
+  for (let index = 0; index < jobCardValues.length; index += 200) {
+    const chunk = jobCardValues.slice(index, index + 200)
+    let vasQuery = supabase
+      .from('service_vas_jc_data')
+      .select('job_card_number, job_value, net_price')
+      .in('job_card_number', chunk)
 
-    query = applyBranchFilterToQuery(query, branch)
+    vasQuery = applyBranchFilterToQuery(vasQuery, branch)
 
     if (bounds) {
-      const fromDate = bounds.from.slice(0, 10)
-      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
-      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
+      vasQuery = vasQuery.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
     }
 
-    const { data, error } = await query
+    const { data, error } = await vasQuery
 
     if (error) {
       throw new Error(error.message)
     }
 
-    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-    allRows.push(...batch)
+    const vasRows = (data as unknown as Record<string, unknown>[] | null) ?? []
 
-    if (batch.length < QUERY_PAGE_SIZE) {
-      break
+    for (const vasRow of vasRows) {
+      const typedVasRow = vasRow as {
+        job_card_number?: unknown
+        job_value?: unknown
+        net_price?: unknown
+      }
+
+      const jobCard =
+        typedVasRow.job_card_number == null ? '' : String(typedVasRow.job_card_number).trim().toUpperCase()
+      if (!jobCard) continue
+
+      const existing = vasByJobCard.get(jobCard) ?? 0
+      const vasAmount = parseRevenue(typedVasRow.job_value)
+      const fallbackAmount = vasAmount === 0 ? parseRevenue(typedVasRow.net_price) : vasAmount
+      vasByJobCard.set(jobCard, existing + fallbackAmount)
     }
-
-    from += QUERY_PAGE_SIZE
   }
 
   interface WorkingInvoiceDailyRow {
     date: string
-    invoiceKeys: Set<string>
+    invoiceCount: number
     labourTotal: number
     sparesTotal: number
     consolidatedTotal: number
+    vasRevenue: number
   }
 
   const byDate = new Map<string, WorkingInvoiceDailyRow>()
 
-  for (const [rowIndex, row] of allRows.entries()) {
+  for (const row of jcRows) {
     const typedRow = row as {
-      invoice_date?: unknown
-      invoice_number?: unknown
-      final_labour_invoice_amount?: unknown
-      final_spares_invoice_amount?: unknown
-      final_consolidated_invoice_amount?: unknown
+      closed_date_time?: unknown
+      job_card_number?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+      total_invoice_amount?: unknown
     }
 
-    const date = typedRow.invoice_date == null ? 'Unknown' : String(typedRow.invoice_date)
-    const invoiceKey =
-      typedRow.invoice_number == null
-        ? `${date}_row_${rowIndex}`
-        : String(typedRow.invoice_number).trim() || `${date}_row_${rowIndex}`
+    const dateTime = typedRow.closed_date_time == null ? '' : String(typedRow.closed_date_time)
+    const date = dateTime ? dateTime.slice(0, 10) : 'Unknown'
 
-    const labour = parseRevenue(typedRow.final_labour_invoice_amount)
-    const spares = parseRevenue(typedRow.final_spares_invoice_amount)
-    const consolidated = parseRevenue(typedRow.final_consolidated_invoice_amount)
+    const labour = parseRevenue(typedRow.final_labour_amount)
+    const spares = parseRevenue(typedRow.final_spares_amount)
+    const consolidated = parseRevenue(typedRow.total_invoice_amount)
+    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
+    const vasRevenue = jobCard ? vasByJobCard.get(jobCard) ?? 0 : 0
 
     const existing = byDate.get(date)
     if (existing) {
-      existing.invoiceKeys.add(invoiceKey)
+      existing.invoiceCount += 1
       existing.labourTotal += labour
       existing.sparesTotal += spares
       existing.consolidatedTotal += consolidated
+      existing.vasRevenue += vasRevenue
       continue
     }
 
-    const invoiceKeys = new Set<string>()
-    invoiceKeys.add(invoiceKey)
-
     byDate.set(date, {
       date,
-      invoiceKeys,
+      invoiceCount: 1,
       labourTotal: labour,
       sparesTotal: spares,
       consolidatedTotal: consolidated,
+      vasRevenue,
     })
   }
 
   const rows: InvoiceDailyTrendRow[] = []
 
   for (const day of byDate.values()) {
-    const invoiceCount = day.invoiceKeys.size
+    const invoiceCount = day.invoiceCount
     rows.push({
       date: day.date,
       invoiceCount,
       labourTotal: day.labourTotal,
       sparesTotal: day.sparesTotal,
       consolidatedTotal: day.consolidatedTotal,
+      vasRevenue: day.vasRevenue,
       avgInvoiceValue: invoiceCount > 0 ? day.consolidatedTotal / invoiceCount : 0,
     })
   }
