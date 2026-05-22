@@ -51,36 +51,24 @@ const roleBadge: Record<UserRole, string> = {
   viewer:  'bg-gray-100 text-gray-600',
 }
 
-/** Call Supabase Auth Admin API to sync dealer fields into user_metadata / JWT. */
+/** Call Edge Function to sync dealer fields into user_metadata / JWT. */
 async function syncDealerToAuthMeta(
   userId:      string,
   dealerCode:  string | null,
   dealerName:  string | null,
 ) {
-  const serviceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY as string | undefined
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL   as string | undefined
-  if (!serviceKey || !supabaseUrl) return   // graceful degradation — user re-login picks up the change
-
-  // Merge: first read existing metadata, then patch dealer fields
-  const res = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
-    headers: {
-      Authorization: `Bearer ${serviceKey}`,
-      apikey: serviceKey,
-    },
-  })
-  if (!res.ok) return
-  const existing = await res.json() as { user_metadata?: Record<string, unknown> }
-  const merged = { ...(existing.user_metadata ?? {}), dealer_code: dealerCode, dealer_name: dealerName }
-
-  await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${serviceKey}`,
-      apikey: serviceKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ user_metadata: merged }),
-  })
+  try {
+    const { error } = await supabase.functions.invoke('sync-dealer-metadata', {
+      body: { userId, dealerCode, dealerName },
+    })
+    if (error) {
+      console.warn('sync-dealer-metadata failed:', error)
+      // Non-fatal: user can re-login to pick up JWT changes
+    }
+  } catch (err) {
+    console.warn('Edge function call failed:', err)
+    // Non-fatal: user can re-login to pick up JWT changes
+  }
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -172,14 +160,22 @@ export default function AdminPage() {
   async function createUser() {
     if (!newEmail) { showToastMsg('Email is required', 'error'); return }
     setSaving(true)
+
+    // Use default dealer if not specified
+    const defaultDealerCode = import.meta.env.VITE_DEFAULT_DEALER_CODE || 'DEFAULT'
+    const defaultDealerName = import.meta.env.VITE_DEFAULT_DEALER_NAME || 'Your Dealership'
+    
+    const dealerCode = newDealerCode.trim().toUpperCase() || defaultDealerCode
+    const dealerName = newDealerName.trim() || defaultDealerName
+
     const { data, error } = await supabase.auth.signUp({
       email:    newEmail,
       password: Math.random().toString(36).slice(-10) + 'A1!',
       options: {
         data: {
-          full_name:   newName     || null,
-          dealer_code: newDealerCode.trim().toUpperCase() || null,
-          dealer_name: newDealerName.trim() || null,
+          full_name:   newName || null,
+          dealer_code: dealerCode,  // Set in JWT
+          dealer_name: dealerName,
         },
       },
     })
@@ -188,14 +184,14 @@ export default function AdminPage() {
     const userId = data?.user?.id
     if (userId) {
       const upsertWithDealer = await supabase.from('users').upsert({
-        id:         userId,
-        email:      newEmail,
-        full_name:  newName   || newEmail,
-        role:       newRole,
-        branch:     newBranch || null,
-        dealer_code: newDealerCode.trim().toUpperCase() || null,
-        dealer_name: newDealerName.trim() || null,
-        is_active:  true,
+        id:        userId,
+        email:     newEmail,
+        full_name: newName   || newEmail,
+        role:      newRole,
+        branch:    newBranch || null,
+        is_active: true,
+        // DO NOT include dealer_code/dealer_name here
+        // (they don't exist in schema; JWT is the source of truth)
       })
 
       if (upsertWithDealer.error && isMissingDealerColumnError(upsertWithDealer.error)) {
@@ -227,20 +223,17 @@ export default function AdminPage() {
 
     if (activating) {
       try {
-        const serviceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY as string | undefined
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
-        if (serviceKey && supabaseUrl) {
-          await fetch(`${supabaseUrl}/auth/v1/admin/users/${u.id}`, {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${serviceKey}`,
-              apikey: serviceKey,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email_confirm: true }),
-          })
+        const { error: edgeFnError } = await supabase.functions.invoke('confirm-user-email', {
+          body: { userId: u.id },
+        })
+        if (edgeFnError) {
+          console.warn('Email confirm edge function failed:', edgeFnError)
+          showToastMsg('Warning: Email confirmation may have failed (user may need to verify manually)', 'error')
         }
-      } catch { /* non-fatal — DB trigger handles this too */ }
+      } catch (err) {
+        console.warn('Edge function call failed:', err)
+        // Non-fatal
+      }
     }
 
     await loadUsers()
