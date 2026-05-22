@@ -11,6 +11,7 @@ type SortKey =
   | 'labourRevenue'
   | 'sparesRevenue'
   | 'totalRevenue'
+  | 'vasRevenue'
   | 'avgRevenuePerJobCard'
 
 export default function ProductLinePerformanceReport({ branch, dateFilter }: ReportViewProps) {
@@ -85,6 +86,13 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
         return a.parentProductLine.localeCompare(b.parentProductLine)
       }
 
+      if (sortKey === 'vasRevenue') {
+        if (a.vasRevenue !== b.vasRevenue) {
+          return (a.vasRevenue - b.vasRevenue) * direction
+        }
+        return b.totalRevenue - a.totalRevenue
+      }
+
       if (sortKey === 'avgRevenuePerJobCard') {
         if (a.avgRevenuePerJobCard !== b.avgRevenuePerJobCard) {
           return (a.avgRevenuePerJobCard - b.avgRevenuePerJobCard) * direction
@@ -102,6 +110,7 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
       labourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
       sparesRevenue: rows.reduce((sum, row) => sum + row.sparesRevenue, 0),
       totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      vasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
       groupCount: rows.length,
     }),
     [rows],
@@ -129,6 +138,7 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
       labourRevenue: row.labourRevenue,
       sparesRevenue: row.sparesRevenue,
       totalRevenue: row.totalRevenue,
+      vasRevenue: row.vasRevenue,
       avgRevenuePerJobCard: row.avgRevenuePerJobCard,
     }))
     exportToCSV(exportData, 'product-line-performance-report')
@@ -156,7 +166,7 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
           )}
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">{formatCurrency(totals.totalRevenue)}</p>
@@ -168,6 +178,10 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
           <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Spares Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{formatCurrency(totals.sparesRevenue)}</p>
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">VAS Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">{formatCurrency(totals.vasRevenue)}</p>
           </div>
           <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">Job Cards</p>
@@ -216,6 +230,9 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('totalRevenue')}>
                     Total Revenue {sortKey === 'totalRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('vasRevenue')}>
+                    VAS Revenue {sortKey === 'vasRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('avgRevenuePerJobCard')}>
                     Avg Revenue / JC {sortKey === 'avgRevenuePerJobCard' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
@@ -230,6 +247,7 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.labourRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.sparesRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right">{formatCurrency(row.totalRevenue)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.vasRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.avgRevenuePerJobCard)}</td>
                   </tr>
                 ))}
@@ -239,6 +257,7 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.labourRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.sparesRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalRevenue)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.vasRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(totals.jobCards > 0 ? totals.totalRevenue / totals.jobCards : 0)}</td>
                 </tr>
               </tbody>

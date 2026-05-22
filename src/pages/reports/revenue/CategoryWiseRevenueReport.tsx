@@ -4,7 +4,14 @@ import { getCategoryWiseRevenue } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
 import { exportToCSV } from '../../../lib/exportUtils'
 
-type SortKey = 'category' | 'vehicleCount' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue' | 'contributionPercentage'
+type SortKey =
+  | 'category'
+  | 'vehicleCount'
+  | 'labourRevenue'
+  | 'partsRevenue'
+  | 'totalRevenue'
+  | 'vasRevenue'
+  | 'contributionPercentage'
 
 export default function CategoryWiseRevenueReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<CategoryWiseRevenue[]>([])
@@ -74,6 +81,13 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
         return a.category.localeCompare(b.category)
       }
 
+      if (sortKey === 'vasRevenue') {
+        if (a.vasRevenue !== b.vasRevenue) {
+          return (a.vasRevenue - b.vasRevenue) * direction
+        }
+        return a.category.localeCompare(b.category)
+      }
+
       if (sortKey === 'contributionPercentage') {
         if (a.contributionPercentage !== b.contributionPercentage) {
           return (a.contributionPercentage - b.contributionPercentage) * direction
@@ -91,6 +105,7 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
       totalLabourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
       totalPartsRevenue: rows.reduce((sum, row) => sum + row.partsRevenue, 0),
       totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      totalVasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
       categories: rows.length,
     }),
     [rows],
@@ -117,6 +132,7 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
       labourRevenue: row.labourRevenue,
       partsRevenue: row.partsRevenue,
       totalRevenue: row.totalRevenue,
+      vasRevenue: row.vasRevenue,
       contributionPercentage: row.contributionPercentage,
     }))
     exportToCSV(exportData, 'category-wise-revenue-report')
@@ -156,6 +172,10 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
           <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Parts Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{formatCurrency(totals.totalPartsRevenue)}</p>
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">VAS Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">{formatCurrency(totals.totalVasRevenue)}</p>
           </div>
           <div className="rounded-lg border border-purple-100 bg-purple-50 px-4 py-3 sm:col-span-2 lg:col-span-1">
             <p className="text-xs font-medium uppercase tracking-wide text-purple-600">Total Vehicles</p>
@@ -201,6 +221,9 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('totalRevenue')}>
                     Total Revenue {sortKey === 'totalRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('vasRevenue')}>
+                    VAS Revenue {sortKey === 'vasRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('contributionPercentage')}>
                     Contribution % {sortKey === 'contributionPercentage' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
@@ -214,6 +237,7 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.labourRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.partsRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right">{formatCurrency(row.totalRevenue)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.vasRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{row.contributionPercentage.toFixed(2)}%</td>
                   </tr>
                 ))}
@@ -223,6 +247,7 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalLabourRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalPartsRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalRevenue)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalVasRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">100.00%</td>
                 </tr>
               </tbody>

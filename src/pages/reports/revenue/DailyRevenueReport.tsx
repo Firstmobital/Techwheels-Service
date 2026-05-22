@@ -4,7 +4,15 @@ import { getDailyRevenueReport } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
 import { exportToCSV } from '../../../lib/exportUtils'
 
-type SortKey = 'date' | 'vehicleCount' | 'invoiceCount' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue' | 'avgBillingPerVehicle'
+type SortKey =
+  | 'date'
+  | 'vehicleCount'
+  | 'invoiceCount'
+  | 'labourRevenue'
+  | 'partsRevenue'
+  | 'totalRevenue'
+  | 'vasRevenue'
+  | 'avgBillingPerVehicle'
 
 export default function DailyRevenueReportComponent({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<DailyRevenueReport[]>([])
@@ -81,6 +89,13 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
         return a.date.localeCompare(b.date) * -1
       }
 
+      if (sortKey === 'vasRevenue') {
+        if (a.vasRevenue !== b.vasRevenue) {
+          return (a.vasRevenue - b.vasRevenue) * direction
+        }
+        return a.date.localeCompare(b.date) * -1
+      }
+
       if (sortKey === 'avgBillingPerVehicle') {
         if (a.avgBillingPerVehicle !== b.avgBillingPerVehicle) {
           return (a.avgBillingPerVehicle - b.avgBillingPerVehicle) * direction
@@ -99,6 +114,7 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
       totalLabourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
       totalPartsRevenue: rows.reduce((sum, row) => sum + row.partsRevenue, 0),
       totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      totalVasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
       days: rows.length,
     }),
     [rows],
@@ -126,6 +142,7 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
       labourRevenue: row.labourRevenue,
       partsRevenue: row.partsRevenue,
       totalRevenue: row.totalRevenue,
+      vasRevenue: row.vasRevenue,
       avgBillingPerVehicle: row.avgBillingPerVehicle,
     }))
     exportToCSV(exportData, 'daily-revenue-report')
@@ -153,7 +170,7 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
           )}
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">{formatCurrency(totals.totalRevenue)}</p>
@@ -165,6 +182,10 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
           <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Parts Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{formatCurrency(totals.totalPartsRevenue)}</p>
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">VAS Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">{formatCurrency(totals.totalVasRevenue)}</p>
           </div>
           <div className="rounded-lg border border-purple-100 bg-purple-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-purple-600">Total Vehicles</p>
@@ -217,6 +238,9 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('totalRevenue')}>
                     Total Revenue {sortKey === 'totalRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('vasRevenue')}>
+                    VAS Revenue {sortKey === 'vasRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('avgBillingPerVehicle')}>
                     Avg Billing/Vehicle {sortKey === 'avgBillingPerVehicle' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
@@ -231,6 +255,7 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.labourRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.partsRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right">{formatCurrency(row.totalRevenue)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.vasRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.avgBillingPerVehicle)}</td>
                   </tr>
                 ))}
@@ -241,6 +266,7 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalLabourRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalPartsRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalRevenue)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalVasRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 text-right">
                     {formatCurrency(totals.totalVehicles > 0 ? totals.totalRevenue / totals.totalVehicles : 0)}
                   </td>

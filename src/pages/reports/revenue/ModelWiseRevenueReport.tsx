@@ -21,6 +21,7 @@ type SortKey =
   | 'labourRevenue'
   | 'sparesRevenue'
   | 'totalRevenue'
+  | 'vasRevenue'
   | 'avgRevenuePerJC'
   | 'topServiceType'
 
@@ -73,6 +74,7 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
 
   const totals = useMemo(() => {
     const totalRevenue = rows.reduce((sum, row) => sum + row.totalRevenue, 0)
+    const totalVasRevenue = rows.reduce((sum, row) => sum + row.vasRevenue, 0)
     const totalJCs = rows.reduce((sum, row) => sum + row.jobCardCount, 0)
     const topModel = rows[0]?.model ?? '-'
 
@@ -81,6 +83,7 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
       topModel,
       totalJCs,
       totalRevenue,
+      totalVasRevenue,
     }
   }, [rows])
 
@@ -104,6 +107,7 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
       labourRevenue: row.labourRevenue,
       sparesRevenue: row.sparesRevenue,
       totalRevenue: row.totalRevenue,
+      vasRevenue: row.vasRevenue,
       avgRevenuePerJC: row.avgRevenuePerJC,
       topServiceType: row.topServiceType,
     }))
@@ -132,7 +136,7 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
           )}
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Models Active</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">{totals.modelsActive.toLocaleString('en-IN')}</p>
@@ -148,6 +152,10 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
           <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Total Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{formatCurrency(totals.totalRevenue)}</p>
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">VAS Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">{formatCurrency(totals.totalVasRevenue)}</p>
           </div>
         </div>
       </div>
@@ -204,6 +212,9 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('totalRevenue')}>
                       Total Rev {sortKey === 'totalRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('vasRevenue')}>
+                      VAS Rev {sortKey === 'vasRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('avgRevenuePerJC')}>
                       Avg/JC {sortKey === 'avgRevenuePerJC' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
@@ -220,6 +231,7 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
                       <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.labourRevenue)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.sparesRevenue)}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 font-semibold text-right">{formatCurrency(row.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.vasRevenue)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 text-right">{formatCurrency(row.avgRevenuePerJC)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700">{row.topServiceType}</td>
                     </tr>

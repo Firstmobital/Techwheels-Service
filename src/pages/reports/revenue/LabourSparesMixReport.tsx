@@ -40,12 +40,14 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
         acc.jobCardCount += row.jobCardCount
         acc.labourRevenue += row.labourRevenue
         acc.sparesRevenue += row.sparesRevenue
+        acc.vasRevenue += row.vasRevenue
         return acc
       },
       {
         jobCardCount: 0,
         labourRevenue: 0,
         sparesRevenue: 0,
+        vasRevenue: 0,
       },
     )
   }, [rows])
@@ -62,6 +64,7 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
       labourRevenue: row.labourRevenue,
       sparesRevenue: row.sparesRevenue,
       totalRevenue: row.totalRevenue,
+      vasRevenue: row.vasRevenue,
       labourSharePercentage: row.labourSharePercentage,
       sparesSharePercentage: row.sparesSharePercentage,
     }))
@@ -91,7 +94,7 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="text-xs text-gray-500">Job Cards</p>
           <p className="mt-1 text-lg font-semibold text-gray-900">{totals.jobCardCount.toLocaleString('en-IN')}</p>
@@ -108,6 +111,10 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
           <p className="text-xs text-gray-500">Total Revenue</p>
           <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
         </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="text-xs text-gray-500">VAS Revenue</p>
+          <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {totals.vasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -119,6 +126,7 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
               <th className="px-3 py-2 font-semibold">Labour Revenue</th>
               <th className="px-3 py-2 font-semibold">Spares Revenue</th>
               <th className="px-3 py-2 font-semibold">Total Revenue</th>
+              <th className="px-3 py-2 font-semibold">VAS Revenue</th>
               <th className="px-3 py-2 font-semibold">Labour Share %</th>
               <th className="px-3 py-2 font-semibold">Spares Share %</th>
             </tr>
@@ -126,11 +134,11 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
           <tbody>
             {loading ? (
               <tr>
-                <td className="px-3 py-4 text-gray-500" colSpan={7}>Loading report...</td>
+                <td className="px-3 py-4 text-gray-500" colSpan={8}>Loading report...</td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td className="px-3 py-4 text-gray-500" colSpan={7}>No records found for selected filters.</td>
+                <td className="px-3 py-4 text-gray-500" colSpan={8}>No records found for selected filters.</td>
               </tr>
             ) : (
               rows.map((row) => (
@@ -140,6 +148,7 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
                   <td className="px-3 py-2">{row.labourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                   <td className="px-3 py-2">{row.sparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                   <td className="px-3 py-2">{row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                  <td className="px-3 py-2">{row.vasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
                   <td className="px-3 py-2">{row.labourSharePercentage.toFixed(1)}%</td>
                   <td className="px-3 py-2">{row.sparesSharePercentage.toFixed(1)}%</td>
                 </tr>

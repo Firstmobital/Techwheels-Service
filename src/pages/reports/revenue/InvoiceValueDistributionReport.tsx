@@ -9,7 +9,7 @@ import type { ReportViewProps } from '../types'
 import { exportToCSV } from '../../../lib/exportUtils'
 
 type BandSortKey = 'bandLabel' | 'invoiceCount' | 'percentage' | 'totalAmount' | 'avgInvoiceValue'
-type BranchSortKey = 'branch' | 'invoiceCount' | 'percentage' | 'totalAmount' | 'avgInvoiceValue'
+type BranchSortKey = 'branch' | 'invoiceCount' | 'percentage' | 'totalAmount' | 'vasRevenue' | 'avgInvoiceValue'
 
 export default function InvoiceValueDistributionReport({ branch, dateFilter }: ReportViewProps) {
   const [report, setReport] = useState<InvoiceValueDistributionReportData | null>(null)
@@ -71,6 +71,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
       if (branchSortKey === 'invoiceCount') return (a.invoiceCount - b.invoiceCount) * direction
       if (branchSortKey === 'percentage') return (a.percentage - b.percentage) * direction
       if (branchSortKey === 'totalAmount') return (a.totalAmount - b.totalAmount) * direction
+      if (branchSortKey === 'vasRevenue') return (a.vasRevenue - b.vasRevenue) * direction
       if (branchSortKey === 'avgInvoiceValue') return (a.avgInvoiceValue - b.avgInvoiceValue) * direction
       return (a.invoiceCount - b.invoiceCount) * direction
     })
@@ -95,11 +96,13 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
       (acc, row) => {
         acc.invoiceCount += row.invoiceCount
         acc.totalAmount += row.totalAmount
+        acc.vasRevenue += row.vasRevenue
         return acc
       },
       {
         invoiceCount: 0,
         totalAmount: 0,
+        vasRevenue: 0,
       },
     )
   }, [report?.branchSpread])
@@ -131,6 +134,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
       invoiceCount: row.invoiceCount,
       percentage: row.percentage,
       totalAmount: row.totalAmount,
+      vasRevenue: row.vasRevenue,
       avgInvoiceValue: row.avgInvoiceValue,
     }))
     const branchData = report.branchSpread.map((row) => ({
@@ -169,7 +173,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
         </div>
 
         {!isLoading && !error && report && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Invoices</p>
               <p className="mt-1 text-2xl font-semibold text-blue-900">{report.totalInvoices.toLocaleString('en-IN')}</p>
@@ -181,6 +185,10 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
             <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">Total Invoice Value</p>
               <p className="mt-1 text-2xl font-semibold text-emerald-900">{formatCurrency(report.totalAmount)}</p>
+            </div>
+            <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-violet-600">VAS Revenue</p>
+              <p className="mt-1 text-2xl font-semibold text-violet-900">{formatCurrency(report.totalVasRevenue)}</p>
             </div>
             <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Branches Covered</p>
@@ -273,6 +281,9 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
                     <th className="px-3 py-2 font-semibold cursor-pointer hover:bg-gray-100" onClick={() => toggleBranchSort('totalAmount')}>
                       Total Value {branchSortKey === 'totalAmount' && (branchSortDirection === 'asc' ? '↑' : '↓')}
                     </th>
+                    <th className="px-3 py-2 font-semibold cursor-pointer hover:bg-gray-100" onClick={() => toggleBranchSort('vasRevenue')}>
+                      VAS Revenue {branchSortKey === 'vasRevenue' && (branchSortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
                     <th className="px-3 py-2 font-semibold cursor-pointer hover:bg-gray-100" onClick={() => toggleBranchSort('avgInvoiceValue')}>
                       Avg Invoice {branchSortKey === 'avgInvoiceValue' && (branchSortDirection === 'asc' ? '↑' : '↓')}
                     </th>
@@ -285,6 +296,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
                       <td className="px-3 py-2">{row.invoiceCount.toLocaleString('en-IN')}</td>
                       <td className="px-3 py-2">{row.percentage.toFixed(1)}%</td>
                       <td className="px-3 py-2">{formatCurrency(row.totalAmount)}</td>
+                      <td className="px-3 py-2">{formatCurrency(row.vasRevenue)}</td>
                       <td className="px-3 py-2">{formatCurrency(row.avgInvoiceValue)}</td>
                     </tr>
                   ))}
@@ -293,6 +305,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
                     <td className="px-3 py-2 text-gray-900">{branchTotals.invoiceCount.toLocaleString('en-IN')}</td>
                     <td className="px-3 py-2 text-gray-900">100.0%</td>
                     <td className="px-3 py-2 text-gray-900">{formatCurrency(branchTotals.totalAmount)}</td>
+                    <td className="px-3 py-2 text-gray-900">{formatCurrency(branchTotals.vasRevenue)}</td>
                     <td className="px-3 py-2 text-gray-900">
                       {formatCurrency(branchTotals.invoiceCount > 0 ? branchTotals.totalAmount / branchTotals.invoiceCount : 0)}
                     </td>

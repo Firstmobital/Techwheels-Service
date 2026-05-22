@@ -4,7 +4,7 @@ import { getMonthlyRevenuesTrend } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
 import { exportToCSV } from '../../../lib/exportUtils'
 
-type SortKey = 'month' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue'
+type SortKey = 'month' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue' | 'vasRevenue'
 
 export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<MonthlyTrendRevenue[]>([])
@@ -67,6 +67,13 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
         return b.month.localeCompare(a.month)
       }
 
+      if (sortKey === 'vasRevenue') {
+        if (a.vasRevenue !== b.vasRevenue) {
+          return (a.vasRevenue - b.vasRevenue) * direction
+        }
+        return b.month.localeCompare(a.month)
+      }
+
       return b.totalRevenue - a.totalRevenue
     })
   }, [rows, sortDirection, sortKey])
@@ -76,6 +83,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
       totalLabourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
       totalPartsRevenue: rows.reduce((sum, row) => sum + row.partsRevenue, 0),
       totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      totalVasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
       months: rows.length,
     }),
     [rows],
@@ -86,6 +94,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
       labourRevenue: rows.length > 0 ? totals.totalLabourRevenue / rows.length : 0,
       partsRevenue: rows.length > 0 ? totals.totalPartsRevenue / rows.length : 0,
       totalRevenue: rows.length > 0 ? totals.totalRevenue / rows.length : 0,
+      vasRevenue: rows.length > 0 ? totals.totalVasRevenue / rows.length : 0,
     }),
     [rows.length, totals],
   )
@@ -119,6 +128,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
       labourRevenue: row.labourRevenue,
       partsRevenue: row.partsRevenue,
       totalRevenue: row.totalRevenue,
+      vasRevenue: row.vasRevenue,
     }))
     exportToCSV(exportData, 'monthly-trend-report')
   }
@@ -145,7 +155,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
           )}
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">{formatCurrency(totals.totalRevenue)}</p>
@@ -158,6 +168,10 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Parts Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{formatCurrency(totals.totalPartsRevenue)}</p>
           </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">VAS Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">{formatCurrency(totals.totalVasRevenue)}</p>
+          </div>
           <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">Months Reported</p>
             <p className="mt-1 text-2xl font-semibold text-indigo-900">{totals.months.toLocaleString()}</p>
@@ -167,7 +181,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
         {rows.length > 0 && (
           <div className="mt-4 border-t border-gray-200 pt-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Average Monthly Metrics</h3>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               <div className="rounded-lg bg-blue-50 px-3 py-2">
                 <p className="text-xs text-blue-600 uppercase tracking-wide">Avg Labour Revenue</p>
                 <p className="mt-1 text-lg font-semibold text-blue-900">{formatCurrency(avgMonthly.labourRevenue)}</p>
@@ -179,6 +193,10 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
               <div className="rounded-lg bg-emerald-50 px-3 py-2">
                 <p className="text-xs text-emerald-600 uppercase tracking-wide">Avg Total Revenue</p>
                 <p className="mt-1 text-lg font-semibold text-emerald-900">{formatCurrency(avgMonthly.totalRevenue)}</p>
+              </div>
+              <div className="rounded-lg bg-violet-50 px-3 py-2">
+                <p className="text-xs text-violet-600 uppercase tracking-wide">Avg VAS Revenue</p>
+                <p className="mt-1 text-lg font-semibold text-violet-900">{formatCurrency(avgMonthly.vasRevenue)}</p>
               </div>
             </div>
           </div>
@@ -215,6 +233,9 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('totalRevenue')}>
                     Total Revenue {sortKey === 'totalRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('vasRevenue')}>
+                    VAS Revenue {sortKey === 'vasRevenue' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -224,6 +245,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.labourRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.partsRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right">{formatCurrency(row.totalRevenue)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.vasRevenue)}</td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
@@ -231,6 +253,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalLabourRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalPartsRevenue)}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalRevenue)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(totals.totalVasRevenue)}</td>
                 </tr>
               </tbody>
             </table>
