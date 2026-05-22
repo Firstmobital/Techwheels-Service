@@ -7,23 +7,16 @@
 
 ## Quick Status Overview
 
-| Plan ID | Title | Priority | Status | Owner | Start | ETA | Progress |
+| Plan ID | Title | Priority | Status | Owner | Start | End | Progress |
 |---------|-------|----------|--------|-------|-------|-----|----------|
-| SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | 🔴 PENDING | Dev Team | 2026-05-22 | 2026-05-23 | 0% |
+| SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | ✅ COMPLETED | Dev Team | 2026-05-22 | 2026-05-22 | 100% |
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
 
 ---
 
 ## Active Plans
 
-### 1. SEC-001: Security Refactor - Service Role Key Exposure
-- **File:** [SECURITY_REFACTOR_SERVICE_KEY.md](SECURITY_REFACTOR_SERVICE_KEY.md)
-- **Risk Level:** 🔴 CRITICAL
-- **Status:** Ready to start
-- **Latest Update:** 2026-05-22 - Plan created and ready for Phase 1
-- **Next Step:** Start Phase 1 - Audit service key usage
-
-### 2. AUTODOC-STATUS-001: AutoDoc Prompt Execution Status Audit
+### AUTODOC-STATUS-001: AutoDoc Prompt Execution Status Audit
 - **File:** [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md)
 - **Risk Level:** 🟡 MEDIUM (schema deployed; dump sync and app parity pending)
 - **Status:** Audit complete, implementation partially complete
@@ -34,7 +27,18 @@
 
 ## Completed Plans
 
-> None yet. Plans will be archived here upon completion.
+### ✅ SEC-001: Security Refactor - Service Role Key Exposure
+- **File:** [SECURITY_REFACTOR_SERVICE_KEY.md](SECURITY_REFACTOR_SERVICE_KEY.md)
+- **Completed:** 2026-05-22
+- **Summary:** Complete security refactor eliminating service key exposure from frontend
+  - All 6 phases completed: Audit, Edge Functions, Frontend, Database, Deployment (prep), Documentation
+  - 2 Edge Functions created: confirm-user-email, sync-dealer-metadata
+  - Frontend AdminPage.tsx refactored to use Edge Functions
+  - Build verified with zero key exposure
+  - Audit logging infrastructure created
+  - Secure admin operations pattern documented
+- **Deployment Status:** Ready for production (see [SEC-001_DEPLOYMENT.md](SEC-001_DEPLOYMENT.md))
+- **Git Commit:** 7376427
 
 ---
 
