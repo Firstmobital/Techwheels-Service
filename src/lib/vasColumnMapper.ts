@@ -109,9 +109,22 @@ export function parseDatetime(
   try {
     const trimmed = value.trim();
 
-    // Try to parse as Excel serial number first
-    const asNumber = parseFloat(trimmed);
-    if (!isNaN(asNumber) && asNumber > 0 && asNumber < 100000) {
+    // Parse as Excel serial only when the entire string is numeric.
+    const isStrictNumeric = /^[+-]?\d+(?:\.\d+)?$/.test(trimmed);
+    if (isStrictNumeric) {
+      const asNumber = Number(trimmed);
+
+      if (!Number.isFinite(asNumber)) {
+        throw new Error(`Invalid numeric datetime: "${trimmed}"`);
+      }
+
+      // Reject implausibly small serials that usually come from partial parses.
+      if (asNumber < 20000 || asNumber > 100000) {
+        throw new Error(
+          `Excel serial out of expected range for ${fieldName}: "${trimmed}"`
+        );
+      }
+
       // Excel date serial: days since 1900-01-01 (with adjustment for leap year bug)
       // Excel's magic number: 25569 = days between 1900-01-01 and 1970-01-01
       const msPerDay = 86400000;
@@ -120,20 +133,22 @@ export function parseDatetime(
       if (!isNaN(date.getTime())) {
         return date.toISOString();
       }
+
+      throw new Error(`Invalid Excel serial datetime: "${trimmed}"`);
     }
 
-    // Match DD/MM/YY HH:MM format
-    const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})$/);
+    // Match DD/MM/YY HH:MM or DD/MM/YYYY HH:MM format
+    const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})$/);
     if (!match) {
       throw new Error(
-        `Invalid format. Expected DD/MM/YY HH:MM, got: "${trimmed}"`
+        `Invalid format. Expected DD/MM/YY HH:MM or DD/MM/YYYY HH:MM, got: "${trimmed}"`
       );
     }
 
     const [, dayStr, monthStr, yearStr, hourStr, minuteStr] = match;
     const day = parseInt(dayStr, 10);
     const month = parseInt(monthStr, 10);
-    const year = 2000 + parseInt(yearStr, 10);
+    const year = yearStr.length === 2 ? 2000 + parseInt(yearStr, 10) : parseInt(yearStr, 10);
     const hour = parseInt(hourStr, 10);
     const minute = parseInt(minuteStr, 10);
 
