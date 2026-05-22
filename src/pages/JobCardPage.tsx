@@ -123,12 +123,12 @@ export default function JobCardPage() {
     if (!id) return
     setLoading(true); setError(null)
     const [jcRes, panelRes, photoRes, estRes] = await Promise.all([
-      supabase.from('job_card_summary').select('*').eq('job_card_id', id).single<JobSummary>(),
-      supabase.from('panels').select('id, panel_name, action').eq('job_card_id', id).order('created_at'),
-      supabase.from('panel_photos').select('id, panel_id, photo_type, storage_path, gps_city, captured_at').eq('job_card_id', id),
+      supabase.from('job_card_summary').select('*').eq('job_card_id', id ?? '').single<JobSummary>(),
+      supabase.from('panels').select('id, panel_name, action').eq('job_card_id', id ?? '').order('created_at'),
+      supabase.from('panel_photos').select('id, panel_id, photo_type, storage_path, gps_city, captured_at').eq('job_card_id', id ?? ''),
       supabase.from('estimate_rows')
         .select('id, sr_no, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total')
-        .eq('job_card_id', id).order('sr_no'),
+        .eq('job_card_id', id ?? '').order('sr_no'),
     ])
 
     if (jcRes.error || !jcRes.data) {
@@ -147,7 +147,7 @@ export default function JobCardPage() {
     if (phts.length) {
       const { data: urls } = await supabase.storage.from('autodoc').createSignedUrls(phts.map(p => p.storage_path), 3600)
       const m: Record<string, string> = {}
-      urls?.forEach(u => { if (u.signedUrl) m[u.path] = u.signedUrl })
+      urls?.forEach(u => { if (u.signedUrl && u.path) m[u.path] = u.signedUrl })
       setPhotoUrls(m)
     }
     setLoading(false)
@@ -160,7 +160,7 @@ export default function JobCardPage() {
     if (!id) return
     const t = setInterval(() => {
       if (!dirtyRef.current) return
-      localStorage.setItem(`autodoc_draft_${id}`, JSON.stringify({
+      if (id) localStorage.setItem(`autodoc_draft_${id}`, JSON.stringify({
         rows: estRowsRef.current, savedAt: Date.now(),
       }))
       setLastSaved(new Date())
@@ -174,7 +174,7 @@ export default function JobCardPage() {
   async function handleUpload(panelId: string, photoType: 'defect' | 'primer' | 'paint', file: File) {
     const key  = `${panelId}-${photoType}`
     const ext  = file.name.split('.').pop() ?? 'jpg'
-    const path = `${jc?.dealer_code ?? 'unknown'}/${id}/${panelId}/${photoType}_${Date.now()}.${ext}`
+    const path = `${jc?.dealer_code ?? 'unknown'}/${id ?? 'unknown'}/${panelId}/${photoType}_${Date.now()}.${ext}`
 
     setUploadProg(p => ({ ...p, [key]: 0 }))
     setUploadErr(e => { const n = { ...e }; delete n[key]; return n })
@@ -188,19 +188,19 @@ export default function JobCardPage() {
     if (upErr) { setUploadErr(e => ({ ...e, [key]: upErr })); return }
 
     const { error: dbErr } = await supabase.from('panel_photos').insert({
-      job_card_id: id, panel_id: panelId, photo_type: photoType, storage_path: path,
+      job_card_id: id ?? '', panel_id: panelId, photo_type: photoType, storage_path: path,
     })
     if (dbErr) { setUploadErr(e => ({ ...e, [key]: dbErr.message })); return }
 
     const { data: newPh } = await supabase.from('panel_photos')
       .select('id, panel_id, photo_type, storage_path, gps_city, captured_at')
-      .eq('job_card_id', id!)
+      .eq('job_card_id', id ?? '')
     const phts = (newPh ?? []) as PanelPhoto[]
     setPhotos(phts)
     if (phts.length) {
       const { data: urls } = await supabase.storage.from('autodoc').createSignedUrls(phts.map(p => p.storage_path), 3600)
       const m: Record<string, string> = {}
-      urls?.forEach(u => { if (u.signedUrl) m[u.path] = u.signedUrl })
+      urls?.forEach(u => { if (u.signedUrl && u.path) m[u.path] = u.signedUrl })
       setPhotoUrls(m)
     }
   }

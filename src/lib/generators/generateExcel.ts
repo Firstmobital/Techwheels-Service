@@ -144,7 +144,7 @@ async function fetchData(jobCardId: string) {
   if (estRes.error)
     throw new Error(`Estimate rows: ${estRes.error.message}`)
 
-  return { jc: sumRes.data, rows: (estRes.data ?? []) as EstimateRow[] }
+  return { jc: sumRes.data, rows: (estRes.data ?? []) as unknown as EstimateRow[] }
 }
 
 // ─── Sheet 1: Guidelines ──────────────────────────────────────────────────────

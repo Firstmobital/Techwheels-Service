@@ -66,7 +66,7 @@ export default function AutoDocPage() {
     if (err) {
       setError(err.message)
     } else {
-      setRows((data ?? []) as JobRow[])
+      setRows((data ?? []) as unknown as JobRow[])
       setError(null)
     }
 
