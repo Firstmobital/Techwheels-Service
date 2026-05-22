@@ -1,1 +1,57 @@
 @import "tailwindcss";
+
+/* Hide scrollbar track while keeping scroll functionality */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Safe-area bottom padding for iOS home indicator */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+/* ── Print styles ─────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide chrome: sidebar, topbar, buttons, action columns */
+  aside,
+  header,
+  nav,
+  .print\:hidden { display: none !important; }
+
+  /* Reset page layout */
+  body, html { height: auto !important; overflow: visible !important; }
+
+  .flex.h-screen { display: block !important; height: auto !important; }
+  main { overflow: visible !important; padding-bottom: 0 !important; }
+
+  /* Expand table wrapper so it uses full page width */
+  .print-table {
+    overflow: visible !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  .print-table table {
+    width: 100% !important;
+    font-size: 9pt !important;
+  }
+
+  .print-table thead tr {
+    background-color: #1e3a5f !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-table tbody tr:nth-child(even) {
+    background-color: #f9fafb !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Avoid page breaks inside rows */
+  .print-table tr { page-break-inside: avoid; }
+  .print-table thead { display: table-header-group; }
+  .print-table tfoot { display: table-footer-group; }
+
+  /* Keep page content from being cut off */
+  @page { margin: 1.5cm; }
+}

@@ -1,0 +1,624 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useDirty } from '../context/DirtyContext'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface JobSummary {
+  job_card_id: string; jc_number: string; reg_number: string
+  model: string | null; colour: string | null; complaint_date: string
+  status: string; dealer_code: string | null; dealer_name: string | null
+  warranty_age_days: number | null; tml_share_percent: number | null
+  total_estimate_amount: number | null
+}
+
+interface Panel { id: string; panel_name: string; action: string | null }
+
+interface PanelPhoto {
+  id: string; panel_id: string
+  photo_type: 'defect' | 'primer' | 'paint'
+  storage_path: string; gps_city: string | null; captured_at: string | null
+}
+
+interface EstRow {
+  id: string; sr_no: number; part_description: string | null
+  defect: string | null; action: string | null; qty: number
+  ndp_value: number; cut_weld_charges: number; paint_charges: number
+  total_special_charges: number; job_code: string | null
+  job_code_desc: string | null; no_off: number; labour_charges: number
+  row_total: number
+}
+
+const BLANK_ROW = {
+  part_description: '', defect: '', action: '', qty: 1, ndp_value: 0,
+  cut_weld_charges: 0, paint_charges: 0, job_code: '', job_code_desc: '',
+  no_off: 1, labour_charges: 0,
+}
+
+const STATUS_COLOURS: Record<string, string> = {
+  draft:     'bg-gray-100 text-gray-600',
+  submitted: 'bg-blue-100 text-blue-700',
+  approved:  'bg-purple-100 text-purple-700',
+  in_work:   'bg-amber-100 text-amber-700',
+  completed: 'bg-green-100 text-green-700',
+}
+
+const PHOTO_TYPES: { type: 'defect' | 'primer' | 'paint'; label: string; hdr: string }[] = [
+  { type: 'defect', label: 'Defect', hdr: 'bg-red-50 text-red-700 border-red-100' },
+  { type: 'primer', label: 'Primer', hdr: 'bg-amber-50 text-amber-700 border-amber-100' },
+  { type: 'paint',  label: 'Paint',  hdr: 'bg-green-50 text-green-700 border-green-100' },
+]
+
+// ─── XHR upload with real progress ───────────────────────────────────────────
+
+async function xhrUpload(
+  path: string,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<{ error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const base    = (import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+  const token   = session?.access_token ?? anonKey
+
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest()
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+    })
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) { resolve({ error: null }); return }
+      try {
+        const r = JSON.parse(xhr.responseText) as { message?: string }
+        resolve({ error: r.message ?? `Upload failed (${xhr.status})` })
+      } catch { resolve({ error: `Upload failed (${xhr.status})` }) }
+    })
+    xhr.addEventListener('error', () => resolve({ error: 'Network error during upload' }))
+    xhr.open('POST', `${base}/storage/v1/object/autodoc/${path}`)
+    xhr.setRequestHeader('authorization', `Bearer ${token}`)
+    xhr.setRequestHeader('apikey', anonKey)
+    xhr.setRequestHeader('content-type', file.type || 'application/octet-stream')
+    xhr.setRequestHeader('x-upsert', 'true')
+    xhr.send(file)
+  })
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function JobCardPage() {
+  const { id }     = useParams<{ id: string }>()
+  const { setDirty } = useDirty()
+
+  const [jc,        setJc]        = useState<JobSummary | null>(null)
+  const [panels,    setPanels]    = useState<Panel[]>([])
+  const [photos,    setPhotos]    = useState<PanelPhoto[]>([])
+  const [estRows,   setEstRows]   = useState<EstRow[]>([])
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
+
+  const [loading,      setLoading]      = useState(true)
+  const [error,        setError]        = useState<string | null>(null)
+  const [selPanel,     setSelPanel]     = useState<string | null>(null)
+  const [uploadProg,   setUploadProg]   = useState<Record<string, number>>({})
+  const [uploadErr,    setUploadErr]    = useState<Record<string, string>>({})
+  const [deleteRow,    setDeleteRow]    = useState<EstRow | null>(null)
+  const [addingRow,    setAddingRow]    = useState(false)
+  const [addingPanel,  setAddingPanel]  = useState(false)
+  const [newPanelName, setNewPanelName] = useState('')
+  const [rowForm,      setRowForm]      = useState({ ...BLANK_ROW })
+  const [saving,       setSaving]       = useState(false)
+  const [localDirty,   setLocalDirty]   = useState(false)
+  const [lastSaved,    setLastSaved]    = useState<Date | null>(null)
+
+  const estRowsRef   = useRef(estRows)
+  const dirtyRef     = useRef(false)
+  const initedPanel  = useRef(false)
+  useEffect(() => { estRowsRef.current = estRows }, [estRows])
+  useEffect(() => { dirtyRef.current = localDirty }, [localDirty])
+
+  const markDirty = () => { setLocalDirty(true); setDirty(true) }
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  const fetchAll = useCallback(async () => {
+    if (!id) return
+    setLoading(true); setError(null)
+    const [jcRes, panelRes, photoRes, estRes] = await Promise.all([
+      supabase.from('job_card_summary').select('*').eq('job_card_id', id).single<JobSummary>(),
+      supabase.from('panels').select('id, panel_name, action').eq('job_card_id', id).order('created_at'),
+      supabase.from('panel_photos').select('id, panel_id, photo_type, storage_path, gps_city, captured_at').eq('job_card_id', id),
+      supabase.from('estimate_rows')
+        .select('id, sr_no, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total')
+        .eq('job_card_id', id).order('sr_no'),
+    ])
+
+    if (jcRes.error || !jcRes.data) {
+      setError(jcRes.error?.message ?? 'Job card not found')
+      setLoading(false); return
+    }
+
+    setJc(jcRes.data)
+    const pnls = (panelRes.data ?? []) as Panel[]
+    setPanels(pnls)
+    if (pnls.length && !initedPanel.current) { setSelPanel(pnls[0].id); initedPanel.current = true }
+    const phts = (photoRes.data ?? []) as PanelPhoto[]
+    setPhotos(phts)
+    setEstRows((estRes.data ?? []) as EstRow[])
+
+    if (phts.length) {
+      const { data: urls } = await supabase.storage.from('autodoc').createSignedUrls(phts.map(p => p.storage_path), 3600)
+      const m: Record<string, string> = {}
+      urls?.forEach(u => { if (u.signedUrl) m[u.path] = u.signedUrl })
+      setPhotoUrls(m)
+    }
+    setLoading(false)
+  }, [id])
+
+  useEffect(() => { void fetchAll() }, [fetchAll])
+
+  // ── Auto-save 30 s ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!id) return
+    const t = setInterval(() => {
+      if (!dirtyRef.current) return
+      localStorage.setItem(`autodoc_draft_${id}`, JSON.stringify({
+        rows: estRowsRef.current, savedAt: Date.now(),
+      }))
+      setLastSaved(new Date())
+      setLocalDirty(false)
+      setDirty(false)
+    }, 30_000)
+    return () => clearInterval(t)
+  }, [id, setDirty])
+
+  // ── Upload photo ──────────────────────────────────────────────────────────
+  async function handleUpload(panelId: string, photoType: 'defect' | 'primer' | 'paint', file: File) {
+    const key  = `${panelId}-${photoType}`
+    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const path = `${jc?.dealer_code ?? 'unknown'}/${id}/${panelId}/${photoType}_${Date.now()}.${ext}`
+
+    setUploadProg(p => ({ ...p, [key]: 0 }))
+    setUploadErr(e => { const n = { ...e }; delete n[key]; return n })
+
+    const { error: upErr } = await xhrUpload(path, file, pct => {
+      setUploadProg(p => ({ ...p, [key]: pct }))
+    })
+
+    setUploadProg(p => { const n = { ...p }; delete n[key]; return n })
+
+    if (upErr) { setUploadErr(e => ({ ...e, [key]: upErr })); return }
+
+    const { error: dbErr } = await supabase.from('panel_photos').insert({
+      job_card_id: id, panel_id: panelId, photo_type: photoType, storage_path: path,
+    })
+    if (dbErr) { setUploadErr(e => ({ ...e, [key]: dbErr.message })); return }
+
+    const { data: newPh } = await supabase.from('panel_photos')
+      .select('id, panel_id, photo_type, storage_path, gps_city, captured_at')
+      .eq('job_card_id', id!)
+    const phts = (newPh ?? []) as PanelPhoto[]
+    setPhotos(phts)
+    if (phts.length) {
+      const { data: urls } = await supabase.storage.from('autodoc').createSignedUrls(phts.map(p => p.storage_path), 3600)
+      const m: Record<string, string> = {}
+      urls?.forEach(u => { if (u.signedUrl) m[u.path] = u.signedUrl })
+      setPhotoUrls(m)
+    }
+  }
+
+  // ── Delete row ────────────────────────────────────────────────────────────
+  async function confirmDelete() {
+    if (!deleteRow) return
+    setSaving(true)
+    const { error: err } = await supabase.from('estimate_rows').delete().eq('id', deleteRow.id)
+    setSaving(false)
+    if (!err) { setEstRows(r => r.filter(x => x.id !== deleteRow.id)); setDeleteRow(null); markDirty() }
+  }
+
+  // ── Add row ───────────────────────────────────────────────────────────────
+  async function handleAddRow() {
+    if (!id) return
+    setSaving(true)
+    const nextSr = (estRows.at(-1)?.sr_no ?? 0) + 1
+    const { data, error: err } = await supabase.from('estimate_rows')
+      .insert({ job_card_id: id, sr_no: nextSr, ...rowForm })
+      .select('id, sr_no, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total')
+      .single()
+    setSaving(false)
+    if (err || !data) return
+    setEstRows(r => [...r, data as EstRow])
+    setAddingRow(false); setRowForm({ ...BLANK_ROW }); markDirty()
+  }
+
+  // ── Add panel ─────────────────────────────────────────────────────────────
+  async function handleAddPanel() {
+    if (!id || !newPanelName.trim()) return
+    const { data, error: err } = await supabase.from('panels')
+      .insert({ job_card_id: id, panel_name: newPanelName.trim(), action: 'repair' })
+      .select('id, panel_name, action').single()
+    if (!err && data) {
+      const p = data as Panel
+      setPanels(prev => [...prev, p]); setSelPanel(p.id)
+      setAddingPanel(false); setNewPanelName('')
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  if (loading) return <PageSkeleton />
+  if (error || !jc) return (
+    <div className="p-6">
+      <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+        <span>{error ?? 'Job card not found'}</span>
+        <button onClick={fetchAll} className="ml-4 text-xs font-medium underline hover:no-underline">Retry</button>
+      </div>
+      <Link to="/autodoc" className="inline-flex items-center text-sm text-blue-600 hover:underline">← Back to AutoDoc</Link>
+    </div>
+  )
+
+  const panelPhotos = photos.filter(p => p.panel_id === selPanel)
+  const grandTotal  = estRows.reduce((s, r) => s + r.row_total, 0)
+
+  return (
+    <div className="min-h-full bg-gray-50 p-4 pb-24 md:p-6 md:pb-6">
+
+      {/* Header */}
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link to="/autodoc" className="mb-1 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+            AutoDoc
+          </Link>
+          <h2 className="text-lg font-semibold text-gray-900">{jc.jc_number}</h2>
+          <p className="mt-0.5 text-sm text-gray-500">
+            {[jc.reg_number, jc.model, jc.colour].filter(Boolean).join('  ·  ')}
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {localDirty && (
+            <span className="text-[10px] font-medium text-amber-600">● Unsaved changes</span>
+          )}
+          {lastSaved && !localDirty && (
+            <span className="text-[10px] text-gray-400">
+              Saved {lastSaved.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_COLOURS[jc.status] ?? 'bg-gray-100 text-gray-600'}`}>
+            {jc.status.replace('_', ' ')}
+          </span>
+        </div>
+      </div>
+
+      {/* Panel selector strip */}
+      <section className="mb-5">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">Panels</p>
+        <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
+          {panels.map(p => {
+            const cnt = photos.filter(ph => ph.panel_id === p.id).length
+            const sel = selPanel === p.id
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelPanel(p.id)}
+                className={[
+                  'flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-colors min-h-[2.5rem]',
+                  sel ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                {p.panel_name}
+                {cnt > 0 && (
+                  <span className={`inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-bold ${sel ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                    {cnt}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setAddingPanel(true)}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-50 min-h-[2.5rem] transition-colors"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Panel
+          </button>
+        </div>
+      </section>
+
+      {/* Photo upload zones */}
+      {selPanel && (
+        <section className="mb-6">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+            Photos — {panels.find(p => p.id === selPanel)?.panel_name}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {PHOTO_TYPES.map(({ type, label, hdr }) => {
+              const key      = `${selPanel}-${type}`
+              const pct      = uploadProg[key]
+              const err      = uploadErr[key]
+              const existing = panelPhotos.filter(p => p.photo_type === type)
+
+              return (
+                <div key={type} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <div className={`border-b px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide ${hdr}`}>
+                    {label} Photo
+                    {existing.length > 0 && <span className="ml-1.5 font-normal opacity-70">({existing.length})</span>}
+                  </div>
+
+                  {/* Drop / tap zone */}
+                  <label className="group flex min-h-28 cursor-pointer flex-col items-center justify-center border-b border-gray-100 p-3 transition-colors hover:bg-gray-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (file) void handleUpload(selPanel, type, file)
+                        e.target.value = ''
+                      }}
+                    />
+                    {pct != null ? (
+                      <div className="w-full px-2">
+                        <p className="mb-1.5 text-center text-xs font-medium text-blue-600">Uploading {pct}%</p>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                          <div className="h-2 rounded-full bg-blue-500 transition-all duration-200" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    ) : err ? (
+                      <div className="text-center">
+                        <p className="text-xs text-red-600">{err}</p>
+                        <span className="mt-1 block text-xs font-medium text-blue-600">Tap to retry</span>
+                      </div>
+                    ) : (
+                      <>
+                        <svg className="mb-2 h-7 w-7 text-gray-300 transition-colors group-hover:text-gray-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                        </svg>
+                        <span className="text-xs text-gray-400 group-hover:text-gray-600">
+                          {existing.length > 0 ? `Add another ${label.toLowerCase()} photo` : `Upload ${label.toLowerCase()} photo`}
+                        </span>
+                      </>
+                    )}
+                  </label>
+
+                  {/* Thumbnails */}
+                  {existing.length > 0 && (
+                    <div className="no-scrollbar flex gap-2 overflow-x-auto p-2">
+                      {existing.map(ph => {
+                        const url = photoUrls[ph.storage_path]
+                        return (
+                          <div key={ph.id} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                            {url
+                              ? <img src={url} alt={label} className="h-full w-full object-cover" />
+                              : <div className="flex h-full w-full items-center justify-center text-gray-300">
+                                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18.75 10.5h.008v.008h-.008V10.5z" />
+                                  </svg>
+                                </div>
+                            }
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Estimate rows */}
+      <section>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+            Estimate Rows ({estRows.length})
+          </p>
+          <button
+            onClick={() => setAddingRow(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Row
+          </button>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm print-table">
+          {estRows.length === 0 ? (
+            <div className="py-12 text-center text-sm text-gray-400">No estimate rows yet. Use the button above to add.</div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-100 text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  <th className="px-3 py-2.5">Sr</th>
+                  <th className="px-3 py-2.5">Description</th>
+                  <th className="px-3 py-2.5">Action</th>
+                  <th className="px-3 py-2.5 text-right">QTY</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap">NDP</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap">Special</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap">Labour</th>
+                  <th className="px-3 py-2.5 text-right whitespace-nowrap">Total</th>
+                  <th className="px-3 py-2.5 print:hidden w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {estRows.map(row => (
+                  <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-2.5 text-xs text-gray-500">{row.sr_no}</td>
+                    <td className="px-3 py-2.5 max-w-[200px]">
+                      <div className="text-gray-800">{row.part_description ?? '—'}</div>
+                      {row.defect && <div className="text-[10px] text-gray-400">{row.defect}</div>}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs capitalize text-gray-600 whitespace-nowrap">{row.action ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-700">{row.qty}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-700 whitespace-nowrap">₹{row.ndp_value.toLocaleString('en-IN')}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-700 whitespace-nowrap">₹{row.total_special_charges.toLocaleString('en-IN')}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-700 whitespace-nowrap">₹{row.labour_charges.toLocaleString('en-IN')}</td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">₹{row.row_total.toLocaleString('en-IN')}</td>
+                    <td className="px-3 py-2.5 print:hidden">
+                      <button
+                        onClick={() => setDeleteRow(row)}
+                        className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200 bg-gray-50">
+                  <td colSpan={7} className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Grand Total</td>
+                  <td className="px-3 py-2.5 text-right font-bold text-gray-900 whitespace-nowrap">₹{grandTotal.toLocaleString('en-IN')}</td>
+                  <td className="print:hidden" />
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      </section>
+
+      {/* Delete confirm modal */}
+      {deleteRow && (
+        <Overlay onClose={() => setDeleteRow(null)}>
+          <div className="text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+              <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+            <h3 className="text-base font-semibold text-gray-900">Delete estimate row?</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              "{deleteRow.part_description ?? `Row ${deleteRow.sr_no}`}" will be permanently removed.
+            </p>
+            <div className="mt-5 flex justify-center gap-3">
+              <button onClick={() => setDeleteRow(null)} className={BTN_SEC}>Cancel</button>
+              <button onClick={confirmDelete} disabled={saving} className={BTN_DANGER}>
+                {saving ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </Overlay>
+      )}
+
+      {/* Add row modal */}
+      {addingRow && (
+        <Overlay onClose={() => setAddingRow(false)}>
+          <h3 className="mb-4 text-base font-semibold text-gray-900">Add Estimate Row</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Field label="Part Description">
+                <input value={rowForm.part_description} onChange={e => setRowForm(f => ({ ...f, part_description: e.target.value }))} className={INPUT} placeholder="e.g. Bonnet Panel" />
+              </Field>
+            </div>
+            <Field label="Defect">
+              <input value={rowForm.defect} onChange={e => setRowForm(f => ({ ...f, defect: e.target.value }))} className={INPUT} placeholder="e.g. Rusting" />
+            </Field>
+            <Field label="Action">
+              <select value={rowForm.action} onChange={e => setRowForm(f => ({ ...f, action: e.target.value }))} className={INPUT}>
+                <option value="">—</option>
+                <option value="repair">Repair</option>
+                <option value="replace">Replace</option>
+                <option value="refinish">Refinish</option>
+              </select>
+            </Field>
+            <Field label="QTY">
+              <input type="number" min={1} value={rowForm.qty} onChange={e => setRowForm(f => ({ ...f, qty: Number(e.target.value) }))} className={INPUT} />
+            </Field>
+            <Field label="NDP Value (₹)">
+              <input type="number" min={0} step={0.01} value={rowForm.ndp_value} onChange={e => setRowForm(f => ({ ...f, ndp_value: Number(e.target.value) }))} className={INPUT} />
+            </Field>
+            <Field label="Cut & Weld (₹)">
+              <input type="number" min={0} step={0.01} value={rowForm.cut_weld_charges} onChange={e => setRowForm(f => ({ ...f, cut_weld_charges: Number(e.target.value) }))} className={INPUT} />
+            </Field>
+            <Field label="Paint Charges (₹)">
+              <input type="number" min={0} step={0.01} value={rowForm.paint_charges} onChange={e => setRowForm(f => ({ ...f, paint_charges: Number(e.target.value) }))} className={INPUT} />
+            </Field>
+            <Field label="No. off">
+              <input type="number" min={1} value={rowForm.no_off} onChange={e => setRowForm(f => ({ ...f, no_off: Number(e.target.value) }))} className={INPUT} />
+            </Field>
+            <Field label="Labour (₹)">
+              <input type="number" min={0} step={0.01} value={rowForm.labour_charges} onChange={e => setRowForm(f => ({ ...f, labour_charges: Number(e.target.value) }))} className={INPUT} />
+            </Field>
+          </div>
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setAddingRow(false)} className={BTN_SEC}>Cancel</button>
+            <button onClick={handleAddRow} disabled={saving} className={BTN_PRI}>{saving ? 'Saving…' : 'Add Row'}</button>
+          </div>
+        </Overlay>
+      )}
+
+      {/* Add panel modal */}
+      {addingPanel && (
+        <Overlay onClose={() => setAddingPanel(false)}>
+          <h3 className="mb-3 text-base font-semibold text-gray-900">Add Panel</h3>
+          <Field label="Panel Name">
+            <input
+              value={newPanelName}
+              onChange={e => setNewPanelName(e.target.value)}
+              placeholder="e.g. Front LH Door"
+              className={INPUT}
+              onKeyDown={e => e.key === 'Enter' && void handleAddPanel()}
+              autoFocus
+            />
+          </Field>
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setAddingPanel(false)} className={BTN_SEC}>Cancel</button>
+            <button onClick={handleAddPanel} disabled={!newPanelName.trim()} className={BTN_PRI}>Add Panel</button>
+          </div>
+        </Overlay>
+      )}
+    </div>
+  )
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function PageSkeleton() {
+  return (
+    <div className="animate-pulse p-6">
+      <div className="mb-1 h-3 w-24 rounded bg-gray-200" />
+      <div className="mb-1 h-6 w-44 rounded bg-gray-200" />
+      <div className="mb-6 h-4 w-60 rounded bg-gray-200" />
+      <div className="mb-6 flex gap-2">
+        {[80, 100, 90, 120].map(w => <div key={w} style={{ width: w }} className="h-10 rounded-full bg-gray-200 shrink-0" />)}
+      </div>
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        {[0, 1, 2].map(i => <div key={i} className="h-44 rounded-xl bg-gray-200" />)}
+      </div>
+      <div className="h-48 rounded-xl bg-gray-200" />
+    </div>
+  )
+}
+
+function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-gray-700">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+const INPUT      = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
+const BTN_PRI    = 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 transition-colors'
+const BTN_SEC    = 'rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors'
+const BTN_DANGER = 'rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60 transition-colors'
