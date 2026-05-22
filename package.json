@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
+    "exceljs": "^4.4.0",
     "papaparse": "^5.5.3",
     "pptxgenjs": "^4.0.1",
     "react": "^19.2.5",

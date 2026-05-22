@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
+import { generateEstimateExcel } from '../lib/generators/generateExcel'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ interface JobRow {
   has_ppt_post:      boolean
 }
 
-type GenKey = `${'pre' | 'post'}-${string}`
+type GenKey = `${'pre' | 'post' | 'xls'}-${string}`
 
 const STATUS_COLOURS: Record<string, string> = {
   draft:     'bg-gray-100 text-gray-600',
@@ -81,6 +82,21 @@ export default function AutoDocPage() {
       showToast('PPT downloaded successfully.', true)
     } catch (e) {
       showToast((e as Error).message ?? 'Failed to generate PPT.', false)
+    } finally {
+      setGenerating(prev => { const s = new Set(prev); s.delete(key); return s })
+    }
+  }
+
+  // ── Generate Excel ──────────────────────────────────────────────────────────
+  async function handleExcel(jobCardId: string) {
+    const key: GenKey = `xls-${jobCardId}`
+    setGenerating(prev => new Set(prev).add(key))
+    setToast(null)
+    try {
+      await generateEstimateExcel(jobCardId)
+      showToast('Excel estimate downloaded successfully.', true)
+    } catch (e) {
+      showToast((e as Error).message ?? 'Failed to generate Excel.', false)
     } finally {
       setGenerating(prev => { const s = new Set(prev); s.delete(key); return s })
     }
@@ -174,6 +190,7 @@ export default function AutoDocPage() {
                 <th className="px-4 py-3 text-center">Photos</th>
                 <th className="px-4 py-3 text-right">Estimate</th>
                 <th className="px-4 py-3 text-center">Generate PPT</th>
+                <th className="px-4 py-3 text-center">Export Excel</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -183,9 +200,12 @@ export default function AutoDocPage() {
                 const genPre  = generating.has(preKey)
                 const genPost = generating.has(postKey)
 
+                const xlsKey: GenKey = `xls-${row.job_card_id}`
+                const genXls = generating.has(xlsKey)
+
                 return (
                   <tr key={row.job_card_id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{row.jc_number}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{row.jc_number}</td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-700">{row.reg_number}</td>
                     <td className="px-4 py-3 text-gray-700">
                       {row.model ?? '—'}
@@ -217,17 +237,26 @@ export default function AutoDocPage() {
                         <PptButton
                           label="Pre-Repair"
                           busy={genPre}
-                          disabled={genPost}
+                          disabled={genPost || genXls}
                           onClick={() => handleGenerate(row.job_card_id, 'pre-repair')}
                         />
                         <PptButton
                           label="Post-Repair"
                           busy={genPost}
-                          disabled={genPre}
+                          disabled={genPre || genXls}
                           onClick={() => handleGenerate(row.job_card_id, 'post-repair')}
                           variant="post"
                         />
                       </div>
+                    </td>
+
+                    {/* Excel Button */}
+                    <td className="px-4 py-3 text-center">
+                      <XlsButton
+                        busy={genXls}
+                        disabled={genPre || genPost}
+                        onClick={() => handleExcel(row.job_card_id)}
+                      />
                     </td>
                   </tr>
                 )
@@ -297,6 +326,30 @@ function PptIcon() {
   return (
     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+    </svg>
+  )
+}
+
+function XlsButton({ busy, disabled, onClick }: { busy: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy || disabled}
+      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-1 disabled:opacity-40"
+    >
+      {busy
+        ? <span className="h-3 w-3 rounded-full border border-white border-t-transparent animate-spin" />
+        : <XlsIcon />}
+      {busy ? 'Generating…' : 'Estimate'}
+    </button>
+  )
+}
+
+function XlsIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18M10 3v18M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z" />
     </svg>
   )
 }
