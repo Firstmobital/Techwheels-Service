@@ -35,6 +35,14 @@ interface Permission {
   can_delete: boolean
 }
 
+function isMissingDealerColumnError(error: unknown): boolean {
+  const message =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message?: unknown }).message ?? '')
+      : ''
+  return /dealer_code|dealer_name|column/i.test(message)
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const roleBadge: Record<UserRole, string> = {
   admin:   'bg-blue-100 text-blue-700',
@@ -83,6 +91,7 @@ export default function AdminPage() {
   const [search, setSearch]   = useState('')
   const [loading, setLoading] = useState(true)
   const [toast, setToast]     = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [supportsDealerColumns, setSupportsDealerColumns] = useState(true)
 
   // Add user modal
   const [showAddUser, setShowAddUser]   = useState(false)
@@ -111,11 +120,42 @@ export default function AdminPage() {
   }, [])
 
   async function loadUsers() {
-    const { data } = await supabase
+    const withDealer = await supabase
       .from('users')
       .select('id, email, full_name, role, branch, dealer_code, dealer_name, is_active, created_at')
       .order('full_name')
-    setUsers((data ?? []) as AppUser[])
+
+    if (!withDealer.error) {
+      setSupportsDealerColumns(true)
+      setUsers((withDealer.data ?? []) as AppUser[])
+      return
+    }
+
+    if (!isMissingDealerColumnError(withDealer.error)) {
+      showToastMsg(withDealer.error.message, 'error')
+      setUsers([])
+      return
+    }
+
+    const fallback = await supabase
+      .from('users')
+      .select('id, email, full_name, role, branch, is_active, created_at')
+      .order('full_name')
+
+    if (fallback.error) {
+      showToastMsg(fallback.error.message, 'error')
+      setUsers([])
+      return
+    }
+
+    setSupportsDealerColumns(false)
+    setUsers(
+      ((fallback.data ?? []) as Array<Omit<AppUser, 'dealer_code' | 'dealer_name'>>).map((u) => ({
+        ...u,
+        dealer_code: null,
+        dealer_name: null,
+      }))
+    )
   }
 
   async function loadModules() {
@@ -147,16 +187,28 @@ export default function AdminPage() {
 
     const userId = data?.user?.id
     if (userId) {
-      await supabase.from('users').upsert({
-        id:          userId,
-        email:       newEmail,
-        full_name:   newName        || newEmail,
-        role:        newRole,
-        branch:      newBranch      || null,
+      const upsertWithDealer = await supabase.from('users').upsert({
+        id:         userId,
+        email:      newEmail,
+        full_name:  newName   || newEmail,
+        role:       newRole,
+        branch:     newBranch || null,
         dealer_code: newDealerCode.trim().toUpperCase() || null,
         dealer_name: newDealerName.trim() || null,
-        is_active:   true,
+        is_active:  true,
       })
+
+      if (upsertWithDealer.error && isMissingDealerColumnError(upsertWithDealer.error)) {
+        setSupportsDealerColumns(false)
+        await supabase.from('users').upsert({
+          id:        userId,
+          email:     newEmail,
+          full_name: newName   || newEmail,
+          role:      newRole,
+          branch:    newBranch || null,
+          is_active: true,
+        })
+      }
     }
 
     setSaving(false)
@@ -215,7 +267,15 @@ export default function AdminPage() {
       .update({ dealer_code: code, dealer_name: name })
       .eq('id', dealerEditUser.id)
 
-    if (error) { showToastMsg(error.message, 'error'); setSavingDealer(false); return }
+    if (error && !isMissingDealerColumnError(error)) {
+      showToastMsg(error.message, 'error')
+      setSavingDealer(false)
+      return
+    }
+
+    if (error && isMissingDealerColumnError(error)) {
+      setSupportsDealerColumns(false)
+    }
 
     // 2. Sync into auth.users.raw_user_meta_data so JWT contains dealer_code on next login
     await syncDealerToAuthMeta(dealerEditUser.id, code, name)
@@ -223,7 +283,11 @@ export default function AdminPage() {
     setSavingDealer(false)
     setDealerEditUser(null)
     await loadUsers()
-    showToastMsg('Dealer code updated. User must re-login for changes to take effect in reports.')
+    showToastMsg(
+      error && isMissingDealerColumnError(error)
+        ? 'Dealer metadata updated in auth. public.users dealer columns are not present in this schema, so dealer values are not shown in Admin users table.'
+        : 'Dealer code updated. User must re-login for changes to take effect in reports.'
+    )
   }
 
   // ── Permissions ────────────────────────────────────────────────────────────
@@ -424,6 +488,15 @@ export default function AdminPage() {
             <code className="rounded bg-amber-100 px-1">vehicles</code> table. After changing a dealer code, the user
             must <strong>sign out and back in</strong> for the updated JWT to take effect.
           </div>
+          {!supportsDealerColumns && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              Admin compatibility mode: current DB schema does not have
+              <code className="mx-1 rounded bg-amber-100 px-1">public.users.dealer_code</code>
+              or
+              <code className="mx-1 rounded bg-amber-100 px-1">public.users.dealer_name</code>.
+                Users are listed, and dealer assignment is handled via auth metadata/JWT.
+            </div>
+          )}
         </div>
       )}
 

@@ -1,31 +1,48 @@
-# Security Refactor: Move Service Role Key from Frontend to Edge Function
+# Security Refactor: Complete Dealer-Scoped Admin System & Service Key Elimination
 
 **Plan ID:** SEC-001  
 **Created:** 2026-05-22  
-**Priority:** CRITICAL  
+**Last Updated:** 2026-05-22  
+**Priority:** 🔴 CRITICAL  
 **Owner:** Development Team  
+**Target Completion:** 2026-05-24 EOD  
 
 ---
 
 ## Executive Summary
 
-The frontend currently exposes the Supabase service role key (VITE_SUPABASE_SERVICE_KEY), which grants full database privileges. This is a critical security vulnerability. This plan describes moving all admin operations to a server-side Supabase Edge Function, removing the key from frontend code entirely.
+This plan refactors the entire admin identity model and eliminates frontend exposure of the Supabase service role key (VITE_SUPABASE_SERVICE_KEY), which grants full database privileges—a critical security vulnerability.
+
+**Current State Problem:**
+1. Service key exposed in browser frontend ([src/pages/AdminPage.tsx](../../src/pages/AdminPage.tsx#L60))—allows complete DB compromise.
+2. Dealer assignment logic fragmented across auth metadata and public.users columns (which don't exist in authoritative schema).
+3. Admin operations call Auth Admin API directly with service key instead of going through secure boundary.
+4. No request validation in browser code; relying on frontend-only access control.
+
+**Target State:**
+1. Service key never leaves backend/Edge Functions.
+2. Dealer identity stored exclusively in auth metadata (JWT path), matching RLS dependencies.
+3. Public users table contains only role/branch/active status (no dealer duplication).
+4. All admin operations validated server-side: JWT check, admin role check, audit logging.
+5. Frontend calls secure Edge Functions that enforce authorization.
 
 **Risk Level:** 🔴 CRITICAL (Key exposure can lead to data loss, account takeover)  
-**Estimated Duration:** 3-5 hours  
-**Rollback Strategy:** Rotate service key immediately; redeploy previous frontend without changes
+**Estimated Duration:** 6-8 hours (includes testing & validation)  
+**Rollback Strategy:** Redeploy previous frontend + rotate service key immediately
 
 ---
 
 ## Objectives
 
-1. Remove VITE_SUPABASE_SERVICE_KEY from all frontend code and env files
-2. Implement Supabase Edge Functions for admin-only operations
-3. Move email_confirm logic from frontend to edge function
-4. Update AdminPage to call edge functions instead of direct auth API calls
-5. Add request validation (JWT, admin role check) in edge functions
-6. Rotate Supabase service role key after frontend deployment
-7. Document the secure pattern for future admin features
+1. ✅ **Remove service key exposure** from frontend code entirely
+2. ✅ **Create secure Edge Function boundary** for all admin operations
+3. ✅ **Unify dealer identity model** to auth metadata only (no public.users dealer columns needed)
+4. ✅ **Add comprehensive request validation** (JWT, admin role, audit logging) in Edge Functions
+5. ✅ **Refactor AdminPage** to use secure Edge Function endpoints instead of direct API calls
+6. ✅ **Add "default dealership" setting** so new employees auto-inherit single dealer code
+7. ✅ **Document secure pattern** for future admin features (users, roles, permissions)
+8. ✅ **Rotate service key** after frontend deployment
+9. ✅ **Achieve zero key exposure** in dist/ build and production frontend
 
 ---
 
