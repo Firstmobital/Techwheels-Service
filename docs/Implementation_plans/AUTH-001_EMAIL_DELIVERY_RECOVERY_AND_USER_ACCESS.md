@@ -71,7 +71,7 @@ This plan restores immediate user access without relying on email delivery, pres
 ### Phase 1
 ```
 🔄 1.1 | Capture Vinod auth user ID | Admin | 2026-05-22 | - | User visible in Supabase Users list; select exact target row
-🔄 1.2 | Set temp password via deployed function + email_confirm true | Admin/Dev | 2026-05-22 | - | Edge function + Admin UI shipped; execute for Vinod now
+🔄 1.2 | Set temp password via deployed function + email_confirm true | Admin/Dev | 2026-05-22 | - | Edge function and UI error handling hardened + redeployed on 2026-05-22; execute retry for Vinod now
 ⏳ 1.3 | Send temp credential via secure channel | Admin | - | - | Avoid plain email where possible
 ⏳ 1.4 | Validate production login | Vinod + Admin | - | - | Record timestamp
 ```
@@ -139,6 +139,12 @@ This plan restores immediate user access without relying on email delivery, pres
 - Deployed function to Supabase project: `set-user-temp-password`.
 - Verified frontend build succeeds after implementation.
 - Added runbook: `AUTH-001_RUNBOOK.md`.
+
+### 2026-05-22 - Edge Function Hardening + Redeploy
+- Fixed `set-user-temp-password` to include `apikey` on Supabase Auth admin update calls and preserve upstream status/error details.
+- Improved Admin UI temp-password flow to show parsed edge-function error payloads instead of generic non-2xx text.
+- Applied same hardening pattern to `confirm-user-email` and `sync-dealer-metadata`.
+- Redeployed all three functions to project `jmdndcphkmaljhwgzqxq` via Supabase CLI.
 
 ### 2026-05-22 - Incident Capture
 - Dashboard auth mail actions failed due to Supabase project email rate limit.

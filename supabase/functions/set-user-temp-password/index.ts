@@ -119,6 +119,7 @@ Deno.serve(async (req) => {
     const updateRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'PUT',
       headers: {
+        apikey: SERVICE_KEY,
         Authorization: `Bearer ${SERVICE_KEY}`,
         'Content-Type': 'application/json',
       },
@@ -134,7 +135,16 @@ Deno.serve(async (req) => {
 
     if (!updateRes.ok) {
       const err = await updateRes.text()
-      throw new Error(`Supabase error ${updateRes.status}: ${err}`)
+      const normalizedError = normalizeSupabaseError(err)
+      return new Response(
+        JSON.stringify({
+          error: `Failed to set temporary password: ${normalizedError}`,
+        }),
+        {
+          status: updateRes.status,
+          headers,
+        }
+      )
     }
 
     return new Response(
@@ -151,7 +161,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
-      { status: 400, headers }
+      { status: 500, headers }
     )
   }
 })
@@ -163,4 +173,13 @@ function isStrongPassword(password: string): boolean {
   if (!/[0-9]/.test(password)) return false
   if (!/[^A-Za-z0-9]/.test(password)) return false
   return true
+}
+
+function normalizeSupabaseError(errorText: string): string {
+  try {
+    const parsed = JSON.parse(errorText) as { error?: string; msg?: string; message?: string }
+    return parsed.error ?? parsed.msg ?? parsed.message ?? errorText
+  } catch {
+    return errorText
+  }
 }

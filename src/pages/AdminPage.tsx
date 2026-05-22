@@ -42,6 +42,10 @@ interface TempPasswordForm {
   emailConfirm: boolean
 }
 
+interface FunctionInvokeError extends Error {
+  context?: Response
+}
+
 function isMissingDealerColumnError(error: unknown): boolean {
   const message =
     typeof error === 'object' && error !== null && 'message' in error
@@ -84,6 +88,30 @@ async function syncDealerToAuthMeta(
   } catch (err) {
     console.warn('Edge function call failed:', err)
     // Non-fatal: user can re-login to pick up JWT changes
+  }
+}
+
+async function extractFunctionErrorMessage(error: unknown): Promise<string> {
+  if (!(error instanceof Error)) {
+    return 'Failed to invoke edge function'
+  }
+
+  const functionError = error as FunctionInvokeError
+  const fallbackMessage = functionError.message || 'Edge function returned a non-2xx status code'
+
+  if (!functionError.context) {
+    return fallbackMessage
+  }
+
+  try {
+    const payload = (await functionError.context.json()) as {
+      error?: string
+      message?: string
+      details?: string
+    }
+    return payload.error ?? payload.message ?? payload.details ?? fallbackMessage
+  } catch {
+    return fallbackMessage
   }
 }
 
@@ -330,7 +358,8 @@ export default function AdminPage() {
     setSettingTempPassword(false)
 
     if (error) {
-      showToastMsg(error.message, 'error')
+      const message = await extractFunctionErrorMessage(error)
+      showToastMsg(message, 'error')
       return
     }
 

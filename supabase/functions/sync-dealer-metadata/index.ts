@@ -20,10 +20,18 @@ Deno.serve(async (req) => {
 
     const { userId, dealerCode, dealerName } = await req.json()
 
+    if (!userId || typeof userId !== 'string') {
+      return new Response(JSON.stringify({ error: 'userId is required' }), {
+        status: 400,
+        headers,
+      })
+    }
+
     // Call Supabase Auth API to update metadata
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'PUT',
       headers: {
+        apikey: SERVICE_KEY,
         Authorization: `Bearer ${SERVICE_KEY}`,
         'Content-Type': 'application/json',
       },
@@ -37,7 +45,13 @@ Deno.serve(async (req) => {
 
     if (!res.ok) {
       const err = await res.text()
-      throw new Error(`Supabase error ${res.status}: ${err}`)
+      return new Response(
+        JSON.stringify({ error: `Failed to sync dealer metadata: ${normalizeSupabaseError(err)}` }),
+        {
+          status: res.status,
+          headers,
+        }
+      )
     }
 
     return new Response(JSON.stringify({ success: true }), {
@@ -47,7 +61,16 @@ Deno.serve(async (req) => {
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
-      { status: 400, headers }
+      { status: 500, headers }
     )
   }
 })
+
+function normalizeSupabaseError(errorText: string): string {
+  try {
+    const parsed = JSON.parse(errorText) as { error?: string; msg?: string; message?: string }
+    return parsed.error ?? parsed.msg ?? parsed.message ?? errorText
+  } catch {
+    return errorText
+  }
+}

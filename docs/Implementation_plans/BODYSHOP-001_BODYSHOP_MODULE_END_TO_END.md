@@ -37,6 +37,45 @@ This plan translates that SOP into an implementable app module in the same Techw
 
 ---
 
+## Authoritative Schema Baseline (Audited 2026-05-22)
+
+**Authority Source:** `local_folder/backups/full_database_20260522_170319.sql`  
+**Authority Rule:** If any conflict appears between docs/code and schema assumptions, the dump wins without reconciliation.
+
+### Confirmed Existing Public Objects (Use As-Is)
+- `public.vehicles`
+- `public.job_cards`
+- `public.panels`
+- `public.panel_photos`
+- `public.estimate_rows`
+- `public.documents`
+- `public.job_card_summary` (security_invoker view)
+
+### Confirmed Existing Types and Functions
+- Enum types: `public.job_card_status`, `public.panel_action`, `public.photo_type`, `public.doc_type`
+- Functions: `public.my_dealer_code()`, `public.set_updated_at()`
+- Trigger: `trg_job_cards_updated_at` on `public.job_cards`
+
+### Confirmed Existing Security Model
+- RLS enabled on: `vehicles`, `job_cards`, `panels`, `panel_photos`, `estimate_rows`, `documents`
+- Dealer isolation enforced via policies that depend on `public.my_dealer_code()`
+- Storage RLS policies exist for bucket `autodoc` with dealer-prefixed path enforcement
+
+### Confirmed Existing Operational Dependencies
+- Storage bucket `autodoc` exists with allowed MIME set for image/pdf/video/ppt/xls files
+- Module registry table `public.modules` exists, but no seeded `bodyshop` module row is present in dump data
+
+### Confirmed Gaps (Do Not Assume Existing)
+- No dedicated Bodyshop-specific table set exists in current authoritative dump
+- No database enum/state model for 23-stage Bodyshop lifecycle exists today
+- No dump-verified trigger/function/policy currently encodes Bodyshop transition guardrails
+
+### Implementation Constraint
+- Do not claim or reference any table/column/function/trigger/policy as existing unless present in the audited dump
+- Any new persistence model required for 23-stage SOP must be delivered as additive migration work in later phases
+
+---
+
 ## Scope Definition
 
 ### In Scope
@@ -80,10 +119,15 @@ This plan translates that SOP into an implementable app module in the same Techw
 
 ## Implementation Tasks
 
+### Phase 0: Authority Lock (Dump-First)
+- [x] **Task 0.1:** Audit authoritative dump and freeze baseline objects for Bodyshop module design.
+- [x] **Task 0.2:** Confirm existing RLS, policy, trigger, and storage constraints for AutoDoc/Bodyshop-adjacent flow.
+- [x] **Task 0.3:** Record known schema gaps and prohibit assumption-based schema references.
+
 ### Phase 1: Module Foundation and Data Contract
-- [ ] **Task 1.1:** Finalize Bodyshop domain schema contract (job card master, stage history, docs, photos, approvals, payments).
-- [ ] **Task 1.2:** Define stage enum/constants for all 23 stages and canonical stage order.
-- [ ] **Task 1.3:** Add validation model for mandatory fields (gate entry, survey, approval, DO, payment).
+- [ ] **Task 1.1:** Map SOP fields to currently existing objects (`vehicles`, `job_cards`, `panels`, `panel_photos`, `estimate_rows`, `documents`) without assuming missing DB fields.
+- [ ] **Task 1.2:** Define app-layer 23-stage canonical order and transition rules compatible with current `job_card_status` enum limits.
+- [ ] **Task 1.3:** Define additive migration scope for any required Bodyshop fields/entities not present in authoritative dump.
 - [ ] **Task 1.4:** Define alert rules (aging vehicles 10+ days, pending approvals, pending billing/delivery/payment).
 
 ### Phase 2: New Job Card (Gate Entry) Experience
@@ -91,7 +135,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 - [ ] **Task 2.2:** Add document checklist for mandatory collection (8 docs + optional KYC/affidavit/GST).
 - [ ] **Task 2.3:** Implement number plate capture/photo placeholders and vehicle photo buckets (exterior/interior).
 - [ ] **Task 2.4:** Add WhatsApp group creation action (Phase 1 simulation + audit note).
-- [ ] **Task 2.5:** Persist form data and create initial stage record as Receiving.
+- [ ] **Task 2.5:** Persist gate-entry data in dump-verified objects and initialize app-layer stage as Receiving.
 
 ### Phase 3: Job Card Detail and 23-Stage Workflow Engine
 - [ ] **Task 3.1:** Build detail modal/page with full process timeline and stage jump controls.
@@ -133,11 +177,18 @@ This plan translates that SOP into an implementable app module in the same Techw
 - ⏳ PENDING
 - ❌ BLOCKED
 
+### Phase 0
+```
+✅ 0.1 | Audit authoritative dump baseline | GitHub Copilot | 2026-05-22 | 2026-05-22 | Source fixed to full_database_20260522_170319.sql
+✅ 0.2 | Verify RLS/policies/triggers/storage constraints | GitHub Copilot | 2026-05-22 | 2026-05-22 | Dealer-isolated RLS confirmed on core tables
+✅ 0.3 | Register schema gaps and no-invention rule | GitHub Copilot | 2026-05-22 | 2026-05-22 | No Bodyshop-specific schema found in dump
+```
+
 ### Phase 1
 ```
-⏳ 1.1 | Finalize Bodyshop data contract | Dev Team | - | - | Includes entity map + required fields
-⏳ 1.2 | Define 23-stage enum and order | Dev Team | - | - | Single source of truth constants
-⏳ 1.3 | Add validation model | Dev Team | - | - | Mandatory and conditional fields
+⏳ 1.1 | Map SOP to existing dump-backed objects | Dev Team | - | - | No assumption of non-existent columns
+⏳ 1.2 | Define 23-stage app-layer order/rules | Dev Team | - | - | DB enum currently has 5 statuses only
+⏳ 1.3 | Define additive migration scope | Dev Team | - | - | Only for missing persistence requirements
 ⏳ 1.4 | Alert/aging rule definitions | Product + Dev | - | - | 10+ day urgency threshold
 ```
 
@@ -147,7 +198,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 ⏳ 2.2 | Implement document checklist | Frontend | - | - | Mandatory docs with status flags
 ⏳ 2.3 | Add photo capture buckets | Frontend | - | - | Number plate + ext/int
 ⏳ 2.4 | Add WhatsApp group action | Frontend | - | - | Simulated tracking action
-⏳ 2.5 | Persist creation + stage init | Frontend + API | - | - | Set stage=Receiving
+⏳ 2.5 | Persist creation + stage init | Frontend + API | - | - | App-layer stage init only
 ```
 
 ### Phase 3
@@ -190,6 +241,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 
 ## Dependencies & Prerequisites
 
+- [ ] Authoritative dump baseline accepted: `full_database_20260522_170319.sql`.
 - [ ] Final SOP sign-off for all stage definitions and mandatory checkpoints.
 - [ ] Role mapping confirmation for Advisor, CRM, BSM, SM, GM, CCM.
 - [ ] Approved data fields for insurance, surveyor, DO, and payment records.
@@ -201,6 +253,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|-----------|
+| Schema assumptions drift from authoritative dump | Medium | High | Enforce dump-first rule and block non-audited references |
 | Stage transition ambiguity from real-world exceptions | Medium | High | Freeze canonical transition rules with product + operations before build |
 | Missing uploads/document quality causing downstream delays | High | High | Enforce mandatory checks and add blocked-state reason prompts |
 | Dashboard mismatch vs operational reality | Medium | High | Daily reconciliation during UAT with controlled sample set |
@@ -234,6 +287,11 @@ This plan translates that SOP into an implementable app module in the same Techw
 - Full SOP and dashboard requirements captured for Bodyshop lifecycle.
 - 23-stage operational flow converted into implementation-ready sequence.
 - Critical control points defined as mandatory system guardrails.
+
+### 2026-05-22 - Authority Audit Applied
+- Audited `full_database_20260522_170319.sql` and locked it as schema authority for this plan.
+- Confirmed core AutoDoc entities, dealer-isolated RLS policies, and `autodoc` storage bucket/policies.
+- Confirmed no Bodyshop-dedicated schema currently exists; additive migration planning is required for full SOP persistence.
 
 ---
 
