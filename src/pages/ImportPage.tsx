@@ -10,11 +10,11 @@ import {
   type ParseError as VasParseError,
 } from '../lib/vasColumnMapper'
 import {
-  mapInvoiceHeaders,
-  buildInvoiceInsertRow,
-  formatInvoiceParseErrors,
-  type InvoiceParseError,
-} from '../lib/invoiceColumnMapper'
+  mapCancelJobCardHeaders,
+  buildCancelJobCardInsertRow,
+  formatCancelJobCardParseErrors,
+  type CancelJobCardParseError,
+} from '../lib/cancelJobCardColumnMapper'
 import {
   mapJcClosedHeaders,
   buildJcClosedInsertRow,
@@ -92,9 +92,9 @@ const CARDS: CardConfig[] = [
     description: 'Closed job card records across all branches.',
   },
   {
-    tableName: 'service_invoice_data',
-    title: 'Invoice Data',
-    description: 'Service invoice records across all branches.',
+    tableName: 'cancel_job_card',
+    title: 'Cancel Job Cards Data',
+    description: 'cancel job card records across all branches.',
   },
   {
     tableName: 'service_vas_jc_data',
@@ -349,25 +349,64 @@ async function getTableColumns(tableName: string): Promise<string[]> {
     ]
   }
 
-  if (tableName === 'service_invoice_data') {
+  if (tableName === 'cancel_job_card') {
     return [
       'id',
-      'invoice_number',
-      'invoice_date',
-      'bill_to_first_name',
-      'bill_to_last_name',
-      'final_labour_invoice_amount',
-      'final_spares_invoice_amount',
-      'final_consolidated_invoice_amount',
-      'discounts_labour',
-      'other_charges_labour',
-      'discounts_parts',
-      'other_charges_parts',
-      'final_tcs_amount',
-      'order_number',
-      'sr_number',
+      'job_card_number',
+      'status',
+      'vehicle_registration_number',
+      'job_card_channel',
+      'created_date_time',
+      'completed_date_time',
+      'closed_date_time',
+      'service_request_no',
+      'account',
+      'last_name',
+      'first_name',
+      'labour_rate_list',
+      'sr_assigned_to',
+      'parts_price_list',
+      'customer_po_ref',
+      'delivery_variance_percent',
+      'sr_type',
+      'payment_type',
+      'fms',
+      'insurance_company_name',
+      'insurance_type',
+      'insurance_expiry_date',
+      'open_for_days',
+      'parts_entry_complete',
+      'crn',
+      'action_on_delay_reason',
+      'arn',
+      'account_phone_number',
+      'contact_phones',
+      'vehicle_delivery_date',
+      'effective_final_delivery_estimate_date',
+      'delivery_variance_hours',
+      'effective_total_estimate',
+      'total_estimate_variance_percent',
+      'balance_payment_to_be_adjusted',
+      'total_payment_amount_adjusted',
+      'parent_product_line',
+      'product_line',
+      'division',
+      'total_invoice_amount',
+      'kms',
+      'hours',
+      'vehicle_sale_date',
+      'tm_invoice_date',
+      'warranty',
+      'amc',
+      'final_labour_amount',
+      'final_spares_amount',
+      'total_order_value',
+      'delay_reason',
+      'jobs_entry_complete',
+      'supervisor',
+      'invoiced',
+      'invoice_format',
       'chassis_number',
-      'vrn',
       'branch',
       'created_at',
       'updated_at',
@@ -421,7 +460,7 @@ function buildInsertRows(
   })
 }
 
-function dedupeJcClosedRowsByConflictKey(
+function dedupeRowsByJobCardBranch(
   rows: Record<string, unknown>[],
 ): Record<string, unknown>[] {
   const byConflictKey = new Map<string, Record<string, unknown>>()
@@ -780,14 +819,14 @@ export default function ImportPage() {
 
       try {
         const isVasTable = tableName === 'service_vas_jc_data'
-        const isInvoiceTable = tableName === 'service_invoice_data'
+        const isCancelJobCardTable = tableName === 'cancel_job_card'
         const isJcClosedTable = tableName === 'job_card_closed_data'
         const isPartsConsumptionTable = tableName === 'service_parts_consumption_data'
         const isPartsOrderTable = tableName === 'service_parts_order_data'
         const isPartsStockTable = tableName === 'service_parts_stock_snapshot_data'
         const isSpecialMappedTable =
           isVasTable ||
-          isInvoiceTable ||
+          isCancelJobCardTable ||
           isJcClosedTable ||
           isPartsConsumptionTable ||
           isPartsOrderTable ||
@@ -1116,87 +1155,59 @@ export default function ImportPage() {
               )
             }
 
-            const dedupedRows = dedupeJcClosedRowsByConflictKey(insertRows)
+            const dedupedRows = dedupeRowsByJobCardBranch(insertRows)
 
             totalInserted += await upsertOrInsertRows(dedupedRows, [
               'job_card_number,branch',
               'job_card_number',
             ])
-          } else if (isInvoiceTable) {
-            // Invoice table: map only required headers and parse date/amount fields
+          } else if (isCancelJobCardTable) {
             const excelHeaders = Object.keys(rawRows[0] ?? {})
-            const invoiceTableColumns = await getTableColumns(tableName)
-            const invoiceColumnSet = new Set(invoiceTableColumns)
-            let invoiceHeaderMapping: Record<string, string>
+            const cancelJobCardTableColumns = await getTableColumns(tableName)
+            const cancelJobCardColumnSet = new Set(cancelJobCardTableColumns)
+            let cancelJobCardHeaderMapping: Record<string, string>
             try {
-              invoiceHeaderMapping = mapInvoiceHeaders(excelHeaders)
+              cancelJobCardHeaderMapping = mapCancelJobCardHeaders(excelHeaders)
             } catch (err) {
               throw new Error(
-                `Invoice Data (${branch}, ${slot.file.name}): ${err instanceof Error ? err.message : String(err)}`,
+                `Cancel Job Cards Data (${branch}, ${slot.file.name}): ${err instanceof Error ? err.message : String(err)}`,
               )
             }
 
-            // Compatibility: only map columns that exist in the deployed DB schema.
-            // This avoids schema-cache failures when optional invoice columns are missing.
-            invoiceHeaderMapping = Object.fromEntries(
-              Object.entries(invoiceHeaderMapping).filter(([dbColumn]) => invoiceColumnSet.has(dbColumn)),
+            cancelJobCardHeaderMapping = Object.fromEntries(
+              Object.entries(cancelJobCardHeaderMapping).filter(([dbColumn]) =>
+                cancelJobCardColumnSet.has(dbColumn),
+              ),
             )
 
-            const invoiceParseErrors: InvoiceParseError[] = []
+            const cancelJobCardParseErrors: CancelJobCardParseError[] = []
             const insertRows: Record<string, unknown>[] = []
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
-              const { row, errors } = buildInvoiceInsertRow(
+              const { row, errors } = buildCancelJobCardInsertRow(
                 rawRows[rowIdx],
                 branch,
-                invoiceHeaderMapping,
+                cancelJobCardHeaderMapping,
                 rowIdx + 2,
               ) // +2 because row 1 is header
 
               if (errors.length > 0) {
-                invoiceParseErrors.push(...errors)
+                cancelJobCardParseErrors.push(...errors)
               } else if (row) {
                 insertRows.push(row)
               }
             }
 
-            if (invoiceParseErrors.length > 0) {
+            if (cancelJobCardParseErrors.length > 0) {
               throw new Error(
-                `Invoice Data parse errors found:\n${formatInvoiceParseErrors(invoiceParseErrors.slice(0, 10))}`,
+                `Cancel Job Cards Data parse errors found:\n${formatCancelJobCardParseErrors(cancelJobCardParseErrors.slice(0, 10))}`,
               )
             }
 
-            // Compatibility: some deployed DB schemas can lag behind app payload columns
-            // (for example `discounts_labour`). If PostgREST rejects an unknown column,
-            // remove it from payload and retry.
-            const rowsForInsert = insertRows.map((row) => ({ ...row }))
-            const removedColumns = new Set<string>()
-
-            while (true) {
-              try {
-                totalInserted += await insertRowsWithDuplicateSkip(rowsForInsert)
-                break
-              } catch (err) {
-                const message = err instanceof Error ? err.message : String(err)
-                const missingColumnMatch = message.match(
-                  /Could not find the '([^']+)' column of 'service_invoice_data' in the schema cache/i,
-                )
-
-                if (!missingColumnMatch) {
-                  throw err
-                }
-
-                const missingColumn = missingColumnMatch[1]
-                if (!missingColumn || removedColumns.has(missingColumn)) {
-                  throw err
-                }
-
-                removedColumns.add(missingColumn)
-
-                for (const row of rowsForInsert) {
-                  delete row[missingColumn]
-                }
-              }
-            }
+            const dedupedRows = dedupeRowsByJobCardBranch(insertRows)
+            totalInserted += await upsertOrInsertRows(dedupedRows, [
+              'job_card_number,branch',
+              'job_card_number',
+            ])
           } else if (isPartsConsumptionTable && partsConsumptionHeaderMapping) {
             const parseErrors: PartsConsumptionParseError[] = []
             const insertRows: Record<string, unknown>[] = []
