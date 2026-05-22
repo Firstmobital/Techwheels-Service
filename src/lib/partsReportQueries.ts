@@ -167,6 +167,59 @@ export interface PartsFilterOptions {
   fiscalYears: number[]
 }
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const
+
+function getMonthName(monthName: unknown, fiscalMonth: unknown, createdAt: unknown): string | null {
+  const normalizedMonthName = typeof monthName === 'string' ? monthName.trim() : ''
+  if (normalizedMonthName) return normalizedMonthName
+
+  const monthFromFiscal = typeof fiscalMonth === 'number' && fiscalMonth >= 1 && fiscalMonth <= 12
+    ? MONTH_NAMES[fiscalMonth - 1]
+    : null
+  if (monthFromFiscal) return monthFromFiscal
+
+  if (typeof createdAt === 'string' && createdAt) {
+    const date = new Date(createdAt)
+    if (!Number.isNaN(date.getTime())) {
+      return MONTH_NAMES[date.getMonth()]
+    }
+  }
+
+  return null
+}
+
+function getFiscalYear(fiscalYear: unknown, createdAt: unknown): number | null {
+  if (typeof fiscalYear === 'number' && Number.isFinite(fiscalYear)) return fiscalYear
+
+  if (typeof createdAt === 'string' && createdAt) {
+    const date = new Date(createdAt)
+    if (!Number.isNaN(date.getTime())) {
+      return date.getFullYear()
+    }
+  }
+
+  return null
+}
+
+function monthSortIndex(monthName: string | null): number {
+  if (!monthName) return 99
+  const index = MONTH_NAMES.findIndex((month) => month.toLowerCase() === monthName.toLowerCase())
+  return index >= 0 ? index : 99
+}
+
 // ──────────────────────────────────────────────────────────────
 // Query Functions
 // ──────────────────────────────────────────────────────────────
@@ -188,7 +241,21 @@ export async function getPartsFilterOptions(branch: string): Promise<PartsFilter
 
     const vendors = (vendorsRes.data?.map((r: any) => r.vendor).filter(Boolean) as string[]) || []
     const categories = (categoriesRes.data?.map((r: any) => r.product_category).filter(Boolean) as string[]) || []
-    const years = (yearsRes.data?.map((r: any) => r.fiscal_year).filter(Boolean) as number[]) || []
+    let years = (yearsRes.data?.map((r: any) => r.fiscal_year).filter(Boolean) as number[]) || []
+
+    if (years.length === 0) {
+      let fallbackYearsQuery = supabase
+        .from('service_parts_consumption_data')
+        .select('created_at')
+        .not('created_at', 'is', null)
+
+      fallbackYearsQuery = applyBranchFilterToQuery(fallbackYearsQuery, branch)
+
+      const { data: fallbackYearsData } = await fallbackYearsQuery
+      years = (fallbackYearsData || [])
+        .map((row: any) => getFiscalYear(null, row.created_at))
+        .filter((year: number | null): year is number => year !== null)
+    }
 
     return {
       vendors: Array.from(new Set(vendors)).sort(),
@@ -220,7 +287,8 @@ export async function getMonthlyConsumptionTrend(
     const { data, error } = await query.order('part_number').order('fiscal_year').order('month_name')
 
     if (error) throw error
-    return (data || []).map((row: any) => ({
+
+    const trendRows = (data || []).map((row: any) => ({
       partNumber: row.part_number,
       partDescription: row.part_description,
       fiscalYear: row.fiscal_year,
@@ -230,6 +298,70 @@ export async function getMonthlyConsumptionTrend(
       totalConsumption: row.total_consumption || 0,
       vendor: row.vendor,
     }))
+
+    if (trendRows.length > 0) {
+      return trendRows
+    }
+
+    let fallbackQuery = supabase
+      .from('service_parts_consumption_data')
+      .select('part_number, part_description, fiscal_year, fiscal_month, month_name, otc_quantity, ws_quantity, total_consumption, portal, branch, created_at')
+
+    fallbackQuery = applyBranchFilterToQuery(fallbackQuery, filters.branch)
+    if (filters.portal && filters.portal !== 'ALL') fallbackQuery = fallbackQuery.eq('portal', filters.portal)
+
+    const { data: fallbackData, error: fallbackError } = await fallbackQuery.order('part_number')
+    if (fallbackError) throw fallbackError
+
+    const [partMasterRes] = await Promise.all([
+      supabase.from('part_master').select('part_number, vendor, product_category'),
+    ])
+
+    const partMeta = new Map<string, { vendor: string | null; productCategory: string | null }>()
+    for (const row of partMasterRes.data || []) {
+      partMeta.set(row.part_number, {
+        vendor: row.vendor,
+        productCategory: row.product_category,
+      })
+    }
+
+    const fallbackRows = (fallbackData || [])
+      .map((row: any) => {
+        const meta = partMeta.get(row.part_number)
+        const normalizedMonth = getMonthName(row.month_name, row.fiscal_month, row.created_at)
+        const normalizedFiscalYear = getFiscalYear(row.fiscal_year, row.created_at)
+
+        return {
+          partNumber: row.part_number,
+          partDescription: row.part_description,
+          fiscalYear: normalizedFiscalYear,
+          monthName: normalizedMonth,
+          otcQuantity: row.otc_quantity || 0,
+          wsQuantity: row.ws_quantity || 0,
+          totalConsumption: row.total_consumption || 0,
+          vendor: meta?.vendor || null,
+          productCategory: meta?.productCategory || null,
+        }
+      })
+      .filter((row) => {
+        if (filters.vendor && row.vendor !== filters.vendor) return false
+        if (filters.productCategory && row.productCategory !== filters.productCategory) return false
+        if (filters.fiscalYear && row.fiscalYear !== filters.fiscalYear) return false
+        if (filters.monthName && row.monthName !== filters.monthName) return false
+        return true
+      })
+      .sort((a, b) => {
+        const partCompare = a.partNumber.localeCompare(b.partNumber)
+        if (partCompare !== 0) return partCompare
+
+        const fiscalYearA = a.fiscalYear ?? 0
+        const fiscalYearB = b.fiscalYear ?? 0
+        if (fiscalYearA !== fiscalYearB) return fiscalYearA - fiscalYearB
+
+        return monthSortIndex(a.monthName) - monthSortIndex(b.monthName)
+      })
+
+    return fallbackRows.map(({ productCategory: _productCategory, ...row }) => row)
   } catch (err) {
     console.error('Error fetching monthly consumption trend:', err)
     return []
