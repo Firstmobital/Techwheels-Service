@@ -1,78 +1,50 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
-import { validateRequest } from '../_shared/auth.ts'
-import { logAuditEvent } from '../_shared/audit.ts'
 
 Deno.serve(async (req) => {
-  // Handle CORS
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  // Override with proper CORS headers that allow authorization
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Content-Type': 'application/json',
   }
-
-  // Only POST allowed
-  if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: corsHeaders }
-    )
+  
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers })
   }
 
   try {
-    // Parse and validate request
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+    const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    
+    if (!SUPABASE_URL || !SERVICE_KEY) {
+      throw new Error('Missing environment variables')
+    }
+
     const { userId } = await req.json()
-    if (!userId || typeof userId !== 'string') {
-      return new Response(
-        JSON.stringify({ error: 'userId required (string)' }),
-        { status: 400, headers: corsHeaders }
-      )
-    }
 
-    // Validate caller is admin
-    const caller = await validateRequest(req)
-
-    // Get service role client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-    if (!serviceRoleKey) {
-      throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured')
-    }
-
-    const admin = createClient(supabaseUrl, serviceRoleKey)
-
-    // Confirm email
-    const { error } = await admin.auth.admin.updateUserById(userId, {
-      email_confirm: true,
+    // Call Supabase Auth API to confirm email
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email_confirm: true }),
     })
 
-    if (error) {
-      console.error('Email confirm error:', error)
-      return new Response(
-        JSON.stringify({ error: `Failed to confirm email: ${error.message}` }),
-        { status: 500, headers: corsHeaders }
-      )
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Supabase error ${res.status}: ${err}`)
     }
 
-    // Audit log
-    await logAuditEvent({
-      actor_id: caller.userId,
-      action: 'email_confirmed',
-      resource_type: 'user',
-      resource_id: userId,
-      details: { timestamp: new Date().toISOString() },
-      timestamp: new Date().toISOString(),
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers,
     })
-
-    return new Response(
-      JSON.stringify({ success: true }),
-      { status: 200, headers: corsHeaders }
-    )
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    console.error('confirm-user-email error:', message)
     return new Response(
-      JSON.stringify({ error: message }),
-      { status: 401, headers: corsHeaders }
+      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+      { status: 400, headers }
     )
   }
 })

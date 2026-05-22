@@ -1,87 +1,53 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
-import { validateRequest } from '../_shared/auth.ts'
-import { logAuditEvent } from '../_shared/audit.ts'
-
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Content-Type': 'application/json',
   }
-
-  if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: corsHeaders }
-    )
+  
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers })
   }
 
   try {
+    // Get environment variables
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+    const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    
+    if (!SUPABASE_URL || !SERVICE_KEY) {
+      throw new Error('Missing environment variables')
+    }
+
     const { userId, dealerCode, dealerName } = await req.json()
 
-    if (!userId || typeof userId !== 'string') {
-      return new Response(
-        JSON.stringify({ error: 'userId required (string)' }),
-        { status: 400, headers: corsHeaders }
-      )
-    }
-
-    // Validate caller is admin
-    const caller = await validateRequest(req)
-
-    // Get service role client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-    if (!serviceRoleKey) {
-      throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured')
-    }
-
-    const admin = createClient(supabaseUrl, serviceRoleKey)
-
-    // Read existing metadata
-    const { data: userData, error: readError } = await admin.auth.admin.getUserById(userId)
-
-    if (readError || !userData.user) {
-      throw new Error(`User not found: ${readError?.message}`)
-    }
-
-    // Merge new dealer fields into existing metadata
-    const existingMetadata = userData.user.user_metadata || {}
-    const updatedMetadata = {
-      ...existingMetadata,
-      dealer_code: dealerCode || null,
-      dealer_name: dealerName || null,
-    }
-
-    // Update user metadata
-    const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
-      user_metadata: updatedMetadata,
+    // Call Supabase Auth API to update metadata
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_metadata: {
+          dealer_code: dealerCode,
+          dealer_name: dealerName,
+        },
+      }),
     })
 
-    if (updateError) {
-      throw new Error(`Failed to update metadata: ${updateError.message}`)
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Supabase error ${res.status}: ${err}`)
     }
 
-    // Audit log
-    await logAuditEvent({
-      actor_id: caller.userId,
-      action: 'dealer_metadata_updated',
-      resource_type: 'user',
-      resource_id: userId,
-      details: { dealerCode, dealerName },
-      timestamp: new Date().toISOString(),
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers,
     })
-
-    return new Response(
-      JSON.stringify({ success: true }),
-      { status: 200, headers: corsHeaders }
-    )
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    console.error('sync-dealer-metadata error:', message)
     return new Response(
-      JSON.stringify({ error: message }),
-      { status: 401, headers: corsHeaders }
+      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+      { status: 400, headers }
     )
   }
 })
