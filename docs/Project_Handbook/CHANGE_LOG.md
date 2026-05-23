@@ -28,6 +28,12 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 - Added check script for DBL-0002: `supabase/sql_checks/20260523120000_add_module_permission_helper_functions_checks.sql`.
 - Verified DBL-0002 using read-only checks and archived migration to `supabase/exec_success_migrations/20260523120000_add_module_permission_helper_functions.sql`.
 - Deleted the temporary DBL-0002 check script from `supabase/sql_checks/` after verification evidence was captured.
+- Added Phase 3.3 RBAC hardening draft migration: `supabase/migrations/20260523143000_phase33_tighten_parts_import_rls.sql`.
+- Added temporary paired verification script: `supabase/sql_checks/20260523143000_phase33_tighten_parts_import_rls_checks.sql`.
+- Added DB ledger proposal entry: `DBL-0004`.
+- Recorded DBL-0004 SQL Editor timeout during initial apply attempt.
+- Added lock-safe retry migration: `supabase/migrations/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry.sql`.
+- Added paired lock-safe read-only verification script: `supabase/sql_checks/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry_checks.sql`.
 
 Template for future entries:
 

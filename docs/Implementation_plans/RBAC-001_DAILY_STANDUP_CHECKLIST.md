@@ -115,3 +115,58 @@ Evidence links:
 - PR/Commit: Local working tree update
 - Migration file: supabase/exec_success_migrations/20260523120000_add_module_permission_helper_functions.sql
 - Validation output: SQL verification checks passed; ledger status set to VERIFIED
+
+### 2026-05-23 (Update 3)
+Owner: GitHub Copilot
+Overall status: AMBER
+
+Done today:
+- [x] Drafted Phase 3.3 policy-tightening migration for import/parts tables (DBL-0004).
+- [x] Drafted temporary paired read-only verification checks for DBL-0004.
+
+In progress:
+- [ ] DBL-0004 review and SQL editor execution.
+
+Planned next:
+- [ ] Apply migration in Supabase SQL Editor.
+- [ ] Run paired sql_checks and share output for verification review.
+
+Blockers:
+- [ ] External review/apply step pending.
+
+DB change reference:
+- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
+
+Evidence links:
+- PR/Commit: Local working tree update
+- Migration file: supabase/migrations/20260523143000_phase33_tighten_parts_import_rls.sql
+- Validation output: Pending SQL editor apply + paired check execution
+
+### 2026-05-23 (Update 4)
+Owner: GitHub Copilot
+Overall status: AMBER
+
+Done today:
+- [x] Initial DBL-0004 SQL Editor execution attempted.
+- [x] Captured blocker: upstream timeout while applying migration.
+- [x] Added lock-safe retry migration with NOWAIT section handling.
+- [x] Added paired read-only lock-safe verification checks.
+
+In progress:
+- [ ] Re-run DBL-0004 using lock-safe retry migration until no section is skipped.
+
+Planned next:
+- [ ] Execute `supabase/migrations/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry.sql` in Supabase SQL Editor (rerun as needed).
+- [ ] Execute `supabase/sql_checks/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry_checks.sql` and share output.
+- [ ] On READY status, move DBL-0004 migration to executed archive, update ledger to APPLIED then VERIFIED, and remove temporary check file.
+
+Blockers:
+- [ ] Runtime lock contention/timeout in SQL Editor on busy target tables.
+
+DB change reference:
+- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
+
+Evidence links:
+- PR/Commit: Local working tree update
+- Migration file: supabase/migrations/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry.sql
+- Validation output: Pending lock-safe apply + lock-safe check execution

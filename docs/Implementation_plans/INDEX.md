@@ -25,8 +25,8 @@
 - **Daily Tracker:** [RBAC-001_DAILY_STANDUP_CHECKLIST.md](RBAC-001_DAILY_STANDUP_CHECKLIST.md)
 - **Risk Level:** 🔴 CRITICAL (access control + policy hardening)
 - **Status:** Implementation complete; awaiting stakeholder sign-off
-- **Latest Update:** 2026-05-23 - DBL-0002 verification checks passed and migration archived to exec_success_migrations
-- **Next Step:** Collect Admin/Engineering/QA sign-offs and proceed with rollout operations
+- **Latest Update:** 2026-05-23 - DBL-0004 initial SQL Editor apply timed out; lock-safe retry migration + checks added
+- **Next Step:** Execute lock-safe retry migration (rerun until all sections apply), then run paired checks and update ledger status
 
 ### BODYSHOP-001: Bodyshop Module End-to-End Workflow and Live Dashboard
 - **File:** [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md)
