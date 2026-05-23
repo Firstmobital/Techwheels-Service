@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
@@ -59,6 +59,15 @@ interface EstimateLineItem {
   partsPrice: string
   paintPrice: string
   labourPrice: string
+}
+
+interface DamagePhotoItem {
+  id: string
+  panel: string
+  stage: 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'
+  url: string
+  name: string
+  uploadedAtLabel: string
 }
 
 type GenKey = `${'pre' | 'post' | 'xls'}-${string}`
@@ -134,6 +143,9 @@ export default function AutoDocPage() {
   const [selectedPanels, setSelectedPanels] = useState<string[]>([])
   const [activePanel, setActivePanel] = useState('')
   const [damagePhotoType, setDamagePhotoType] = useState<'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('Pre-repair / Damage')
+  const [damagePhotos, setDamagePhotos] = useState<DamagePhotoItem[]>([])
+  const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
+  const damagePhotosRef = useRef<DamagePhotoItem[]>([])
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>([
     {
       id: 'row-1',
@@ -209,6 +221,59 @@ export default function AutoDocPage() {
     setEstimateRows((prev) => prev.filter((row) => row.id !== id))
   }
 
+  function openDamagePhotoPicker() {
+    if (!activePanel) {
+      showToast('Select a panel first before uploading photos.', false)
+      return
+    }
+    damageUploadInputRef.current?.click()
+  }
+
+  function handleDamagePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    if (!activePanel) {
+      showToast('Select a panel first before uploading photos.', false)
+      event.target.value = ''
+      return
+    }
+
+    const nowLabel = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    const nextPhotos: DamagePhotoItem[] = Array.from(files).map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      panel: activePanel,
+      stage: damagePhotoType,
+      url: URL.createObjectURL(file),
+      name: file.name,
+      uploadedAtLabel: nowLabel,
+    }))
+
+    setDamagePhotos((prev) => [...prev, ...nextPhotos])
+    showToast(`${nextPhotos.length} photo${nextPhotos.length > 1 ? 's' : ''} uploaded.`, true)
+
+    // Allow selecting the same file again in the next pick.
+    event.target.value = ''
+  }
+
+  function removeDamagePhoto(photoId: string) {
+    setDamagePhotos((prev) => {
+      const target = prev.find((photo) => photo.id === photoId)
+      if (target) URL.revokeObjectURL(target.url)
+      return prev.filter((photo) => photo.id !== photoId)
+    })
+  }
+
+  useEffect(() => {
+    damagePhotosRef.current = damagePhotos
+  }, [damagePhotos])
+
+  useEffect(() => {
+    return () => {
+      damagePhotosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url))
+    }
+  }, [])
+
   const estimateTotals = estimateRows.reduce((acc, row) => {
     const parts = Number(row.partsPrice) || 0
     const paint = Number(row.paintPrice) || 0
@@ -220,6 +285,12 @@ export default function AutoDocPage() {
       grand: acc.grand + parts + paint + labour,
     }
   }, { parts: 0, paint: 0, labour: 0, grand: 0 })
+
+  const visibleDamagePhotos = damagePhotos.filter((photo) => {
+    const panelMatches = !activePanel || photo.panel === activePanel
+    const stageMatches = photo.stage === damagePhotoType
+    return panelMatches && stageMatches
+  })
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
@@ -1141,34 +1212,64 @@ export default function AutoDocPage() {
               </div>
             </div>
 
-            <div className="relative rounded-xl border-2 border-dashed border-red-300 bg-red-50 p-8 text-center">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={openDamagePhotoPicker}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  openDamagePhotoPicker()
+                }
+              }}
+              className="relative cursor-pointer rounded-xl border-2 border-dashed border-red-300 bg-red-50 p-8 text-center"
+            >
+              <input
+                ref={damageUploadInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleDamagePhotoUpload}
+                className="hidden"
+              />
               <span className="absolute right-4 top-3 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Required</span>
               <svg className="mx-auto mb-2 h-9 w-9 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
               </svg>
               <p className="text-xl font-medium text-gray-900">Tap to capture / upload panel photo</p>
               <p className="mt-1 text-sm text-gray-600">GPS - timestamp - panel name auto-tagged</p>
+              <button
+                type="button"
+                onClick={openDamagePhotoPicker}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+              >
+                Upload photo
+              </button>
             </div>
 
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="relative overflow-hidden rounded-lg border border-gray-300 bg-gray-100 p-6 text-center">
-                <svg className="mx-auto mb-2 h-7 w-7 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                </svg>
-                <p className="text-sm font-medium text-gray-700">Sample 1</p>
-                <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] text-white">{activePanel || 'Panel'} - {damagePhotoType.includes('Post') ? 'Post' : 'Pre'} - Jaipur 10:12</div>
-              </div>
-
-              <div className="relative overflow-hidden rounded-lg border border-gray-300 bg-gray-100 p-6 text-center">
-                <svg className="mx-auto mb-2 h-7 w-7 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                </svg>
-                <p className="text-sm font-medium text-gray-700">Sample 2</p>
-                <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] text-white">{activePanel || 'Panel'} - {damagePhotoType.includes('Post') ? 'Post' : 'Pre'} - Jaipur 10:13</div>
-              </div>
+              {visibleDamagePhotos.map((photo) => (
+                <div key={photo.id} className="relative overflow-hidden rounded-lg border border-gray-300 bg-gray-100">
+                  <img src={photo.url} alt={photo.name} className="h-40 w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeDamagePhoto(photo.id)}
+                    className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white"
+                    aria-label="Remove uploaded photo"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] text-white">
+                    {photo.panel} - {photo.stage.startsWith('Post') ? 'Post' : photo.stage.startsWith('Under') ? 'Under' : 'Pre'} - {photo.uploadedAtLabel}
+                  </div>
+                </div>
+              ))}
 
               <button
                 type="button"
+                onClick={openDamagePhotoPicker}
                 className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
               >
                 Add more
