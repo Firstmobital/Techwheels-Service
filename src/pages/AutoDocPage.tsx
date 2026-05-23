@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
 import {
   createJobCard,
   fetchVehicleByReg,
+  generateClaimEmailContent,
+  getJobCardSummary,
   listJobCardSummaries,
+  logActivity,
   resolveRegNumberFromReference,
+  sendClaimEmail,
+  updateJobCardStatus,
   upsertVehicle,
   type JobSummaryRow,
 } from '../lib/api'
@@ -70,8 +75,6 @@ interface DamagePhotoItem {
   uploadedAtLabel: string
 }
 
-type GenKey = `${'pre' | 'post' | 'xls'}-${string}`
-
 const STATUS_COLOURS: Record<string, string> = {
   draft:     'bg-gray-100 text-gray-600',
   submitted: 'bg-blue-100 text-blue-700',
@@ -80,7 +83,7 @@ const STATUS_COLOURS: Record<string, string> = {
   completed: 'bg-green-100 text-green-700',
 }
 
-const SKELETON_COLS = 12
+const SKELETON_COLS = 11
 const DAMAGE_PANEL_OPTIONS = [
   'Hood',
   'Front Bumper',
@@ -103,7 +106,6 @@ export default function AutoDocPage() {
   const [rows,         setRows]         = useState<JobRow[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
-  const [generating,   setGenerating]   = useState<Set<GenKey>>(new Set())
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatus]       = useState<string>('all')
@@ -140,6 +142,8 @@ export default function AutoDocPage() {
     dealerCode: '',
     dateOfSale: '',
   }))
+  const [activeJobCardId, setActiveJobCardId] = useState<string | null>(null)
+  const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
   const [selectedPanels, setSelectedPanels] = useState<string[]>([])
   const [activePanel, setActivePanel] = useState('')
   const [damagePhotoType, setDamagePhotoType] = useState<'' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('')
@@ -316,6 +320,26 @@ export default function AutoDocPage() {
 
   useEffect(() => { void fetchRows() }, [fetchRows])
 
+  useEffect(() => {
+    if (!activeJobCardId && rows.length > 0) {
+      setActiveJobCardId(rows[0].job_card_id)
+    }
+  }, [activeJobCardId, rows])
+
+  useEffect(() => {
+    async function loadActiveSummary() {
+      if (!activeJobCardId) {
+        setActiveSummary(null)
+        return
+      }
+      const res = await getJobCardSummary(activeJobCardId)
+      if (!res.error && res.data) {
+        setActiveSummary(res.data)
+      }
+    }
+    void loadActiveSummary()
+  }, [activeJobCardId])
+
   // ── Compute KPIs ───────────────────────────────────────────────────────────
   useEffect(() => {
     const today = new Date()
@@ -457,32 +481,109 @@ export default function AutoDocPage() {
 
   // ── Generate PPT ───────────────────────────────────────────────────────────
   async function handleGenerate(jobCardId: string, type: 'pre-repair' | 'post-repair') {
-    const key: GenKey = `${type === 'pre-repair' ? 'pre' : 'post'}-${jobCardId}`
-    setGenerating(prev => new Set(prev).add(key))
     setToast(null)
     try {
       await generateRepairPPT(jobCardId, type)
       showToast('PPT downloaded successfully.', true)
     } catch (e) {
       showToast((e as Error).message ?? 'Failed to generate PPT.', false)
-    } finally {
-      setGenerating(prev => { const s = new Set(prev); s.delete(key); return s })
     }
   }
 
   // ── Generate Excel ─────────────────────────────────────────────────────────
   async function handleExcel(jobCardId: string) {
-    const key: GenKey = `xls-${jobCardId}`
-    setGenerating(prev => new Set(prev).add(key))
     setToast(null)
     try {
       await generateEstimateExcel(jobCardId)
       showToast('Excel estimate downloaded successfully.', true)
     } catch (e) {
       showToast((e as Error).message ?? 'Failed to generate Excel.', false)
-    } finally {
-      setGenerating(prev => { const s = new Set(prev); s.delete(key); return s })
     }
+  }
+
+  async function handleSubmitGeneratePpt(type: 'pre-repair' | 'post-repair') {
+    if (!activeJobCardId) {
+      showToast('Select a job card first from dashboard.', false)
+      return
+    }
+    await handleGenerate(activeJobCardId, type)
+    await logActivity(`submit_generate_${type === 'pre-repair' ? 'pre_ppt' : 'post_ppt'}`, {
+      resourceType: 'job_card',
+      resourceId: activeJobCardId,
+      details: { tab: 'submit' },
+    })
+  }
+
+  async function handleSubmitExportExcel() {
+    if (!activeJobCardId) {
+      showToast('Select a job card first from dashboard.', false)
+      return
+    }
+    await handleExcel(activeJobCardId)
+    await logActivity('submit_export_excel', {
+      resourceType: 'job_card',
+      resourceId: activeJobCardId,
+      details: { tab: 'submit' },
+    })
+  }
+
+  async function handleComposeAndSend() {
+    if (!activeJobCardId || !activeSummary) {
+      showToast('Select a job card first from dashboard.', false)
+      return
+    }
+
+    const content = generateClaimEmailContent({
+      jc_number: (activeSummary.jc_number ?? form.jcNumber) || 'JC-NA',
+      reg_number: (activeSummary.reg_number ?? form.regNumber) || 'REG-NA',
+      model: activeSummary.model ?? null,
+      colour: activeSummary.colour ?? null,
+      complaint_date: activeSummary.complaint_date ?? new Date().toISOString(),
+      dealer_name: activeSummary.dealer_name ?? null,
+      total_estimate_amount: activeSummary.total_estimate_amount ?? null,
+    })
+
+    const targetEmail = (import.meta.env.VITE_WARRANTY_EMAIL_TO as string | undefined)?.trim() || 'warranty@tatamotors.com'
+    const sendRes = await sendClaimEmail(activeJobCardId, {
+      to: targetEmail,
+      subject: content.subject,
+      html: content.html,
+      attachments: ['ppt_pre', 'excel_estimate'],
+    })
+
+    if (sendRes.error) {
+      showToast(sendRes.error, false)
+      return
+    }
+
+    await updateJobCardStatus(activeJobCardId, 'submitted')
+    await fetchRows(true)
+    showToast('Claim email sent and status updated to submitted.', true)
+  }
+
+  async function handleSubmitClaim() {
+    if (!activeJobCardId) {
+      showToast('Select a job card first from dashboard.', false)
+      return
+    }
+    if (!deliveryVideoName) {
+      showToast('Upload delivery video before submitting claim.', false)
+      return
+    }
+
+    const res = await updateJobCardStatus(activeJobCardId, 'completed')
+    if (res.error) {
+      showToast(res.error, false)
+      return
+    }
+
+    await logActivity('submit_claim_completed', {
+      resourceType: 'job_card',
+      resourceId: activeJobCardId,
+      details: { deliveryVideoName },
+    })
+    await fetchRows(true)
+    showToast('Warranty claim submitted and marked completed.', true)
   }
 
   function showToast(msg: string, ok: boolean) {
@@ -679,7 +780,7 @@ export default function AutoDocPage() {
           <table className="min-w-full divide-y divide-gray-100 text-sm">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                {['JC Number', 'Reg No.', 'Model', 'Date', 'Status', 'Age', 'TML%', 'Panels', 'Photos', 'Estimate', 'PPT', 'Excel'].map(h => (
+                {['JC Number', 'Reg No.', 'Model', 'Date', 'Status', 'Age', 'TML%', 'Panels', 'Photos', 'Estimate', 'View'].map(h => (
                   <th key={h} className="px-4 py-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -722,23 +823,13 @@ export default function AutoDocPage() {
                 <th className="px-4 py-3 text-center">Panels</th>
                 <th className="px-4 py-3 text-center">Photos</th>
                 <th className="px-4 py-3 text-right">Estimate</th>
-                <th className="px-4 py-3 text-center">Generate PPT</th>
-                <th className="px-4 py-3 text-center">Export Excel</th>
-                <th className="px-4 py-3 print:hidden" />
+                <th className="px-4 py-3 text-center">View</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {dashboardDisplayed.map(row => {
-                const preKey: GenKey  = `pre-${row.job_card_id}`
-                const postKey: GenKey = `post-${row.job_card_id}`
-                const xlsKey: GenKey  = `xls-${row.job_card_id}`
-                const genPre  = generating.has(preKey)
-                const genPost = generating.has(postKey)
-                const genXls  = generating.has(xlsKey)
-                const anyGen  = genPre || genPost || genXls
-
                 return (
-                  <tr key={row.job_card_id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={row.job_card_id} className="transition-colors hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{row.jc_number}</td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-700">{row.reg_number}</td>
                     <td className="px-4 py-3 text-gray-700">
@@ -765,45 +856,27 @@ export default function AutoDocPage() {
                         : '—'}
                     </td>
 
-                    {/* PPT Buttons */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <PptButton
-                          label="Pre-Repair"
-                          busy={genPre}
-                          disabled={anyGen && !genPre}
-                          onClick={() => void handleGenerate(row.job_card_id, 'pre-repair')}
-                        />
-                        <PptButton
-                          label="Post-Repair"
-                          busy={genPost}
-                          disabled={anyGen && !genPost}
-                          onClick={() => void handleGenerate(row.job_card_id, 'post-repair')}
-                          variant="post"
-                        />
-                      </div>
-                    </td>
-
-                    {/* Excel Button */}
+                    {/* View / select context */}
                     <td className="px-4 py-3 text-center">
-                      <XlsButton
-                        busy={genXls}
-                        disabled={anyGen && !genXls}
-                        onClick={() => void handleExcel(row.job_card_id)}
-                      />
-                    </td>
-
-                    {/* View link */}
-                    <td className="px-4 py-3 print:hidden">
-                      <Link
-                        to={`/autodoc/${row.job_card_id}`}
-                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveJobCardId(row.job_card_id)
+                          setForm((prev) => ({
+                            ...prev,
+                            regNumber: row.reg_number,
+                            jcNumber: row.jc_number,
+                            model: row.model ?? prev.model,
+                          }))
+                          showToast(`Selected ${row.jc_number} for workflow.`, true)
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50"
                       >
-                        View
+                        Use
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                         </svg>
-                      </Link>
+                      </button>
                     </td>
                   </tr>
                 )
@@ -1594,7 +1667,7 @@ export default function AutoDocPage() {
               <p className="mb-4 text-sm text-gray-600">Photos + geo-tags + video thumbnail + vehicle details + damage remarks</p>
               <button
                 type="button"
-                onClick={() => showToast('PPT generation queued.', true)}
+                onClick={() => void handleSubmitGeneratePpt('pre-repair')}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Generate PPT
@@ -1606,7 +1679,7 @@ export default function AutoDocPage() {
               <p className="mb-4 text-sm text-gray-600">Parts + Paint + Labour breakdown with auto-calculated total expenses</p>
               <button
                 type="button"
-                onClick={() => showToast('Excel export queued.', true)}
+                onClick={() => void handleSubmitExportExcel()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Export Excel
@@ -1618,7 +1691,7 @@ export default function AutoDocPage() {
               <p className="mb-4 text-sm text-gray-600">PPT + Excel + compressed video attached, dealer code and VIN auto-filled in email</p>
               <button
                 type="button"
-                onClick={() => showToast('Email compose opened.', true)}
+                onClick={() => void handleComposeAndSend()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Compose and Send
@@ -1666,7 +1739,7 @@ export default function AutoDocPage() {
               <p className="mb-4 text-sm text-gray-600">Before + during + after photos + delivery video in one warranty claim deck</p>
               <button
                 type="button"
-                onClick={() => showToast('Post-repair PPT generation queued.', true)}
+                onClick={() => void handleSubmitGeneratePpt('post-repair')}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Generate PPT
@@ -1678,7 +1751,7 @@ export default function AutoDocPage() {
               <p className="mb-4 text-sm text-gray-600">Full documentation sent to Tata warranty department</p>
               <button
                 type="button"
-                onClick={() => showToast('Warranty claim submitted.', true)}
+                onClick={() => void handleSubmitClaim()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Submit Claim
@@ -1824,58 +1897,9 @@ function mapJobRows(source: JobSummaryRow[]): JobRow[] {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-interface PptButtonProps {
-  label:    string
-  busy:     boolean
-  disabled: boolean
-  onClick:  () => void
-  variant?: 'pre' | 'post'
-}
-
-function PptButton({ label, busy, disabled, onClick, variant = 'pre' }: PptButtonProps) {
-  const base    = 'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1'
-  const colours = variant === 'post'
-    ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400 disabled:opacity-40'
-    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-300 disabled:opacity-40'
-  return (
-    <button type="button" onClick={onClick} disabled={busy || disabled} className={`${base} ${colours}`}>
-      {busy ? <Spinner /> : <DownloadIcon />}
-      {busy ? 'Generating…' : label}
-    </button>
-  )
-}
-
-function XlsButton({ busy, disabled, onClick }: { busy: boolean; disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button" onClick={onClick} disabled={busy || disabled}
-      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-1 disabled:opacity-40"
-    >
-      {busy ? <Spinner /> : <TableIcon />}
-      {busy ? 'Generating…' : 'Estimate'}
-    </button>
-  )
-}
-
 function fmtDate(d: string | null) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function Spinner()      { return <span className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin" /> }
-function DownloadIcon() {
-  return (
-    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-    </svg>
-  )
-}
-function TableIcon() {
-  return (
-    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18M10 3v18M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z" />
-    </svg>
-  )
 }
 function CheckIcon() {
   return (

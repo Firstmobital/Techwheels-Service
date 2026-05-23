@@ -10,6 +10,8 @@ export type CreateJobCardInput = {
   complaintText?: string
 }
 
+export type JobCardStatus = 'draft' | 'submitted' | 'approved' | 'in_work' | 'completed'
+
 export async function listJobCardSummaries(): Promise<ApiResult<JobSummaryRow[]>> {
   const { data, error } = await supabase
     .from('job_card_summary')
@@ -91,6 +93,20 @@ export async function createJobCard(input: CreateJobCardInput): Promise<ApiResul
   const { data, error } = await supabase
     .from('job_cards')
     .insert(payload)
+    .select('*')
+    .single<JobCardRow>()
+
+  if (error) return fail(error)
+  return ok(data)
+}
+
+export async function updateJobCardStatus(jobCardId: string, status: JobCardStatus): Promise<ApiResult<JobCardRow>> {
+  if (!jobCardId.trim()) return fail('Job card id is required')
+
+  const { data, error } = await supabase
+    .from('job_cards')
+    .update({ status })
+    .eq('id', jobCardId)
     .select('*')
     .single<JobCardRow>()
 
