@@ -314,14 +314,17 @@ export default function AutoDocPage() {
   return (
     <div className="min-h-full bg-gray-50 p-4 pb-24 md:p-6 md:pb-6">
 
-      {/* Page header */}
+      {/* Tab Navigation */}
+      <div className="mb-6 flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
+        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Dashboard</button>
+        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">New Car</button>
+        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Document Damage</button>
+        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Quotation</button>
+        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Reports & Submit</button>
+      </div>
+
+      {/* Action buttons */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">AutoDoc — Body &amp; Paint</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Generate pre-repair and post-repair PPT reports for TML warranty claims.
-          </p>
-        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowCreate(true)}
