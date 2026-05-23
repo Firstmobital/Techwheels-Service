@@ -62,6 +62,20 @@ const STATUS_COLOURS: Record<string, string> = {
 }
 
 const SKELETON_COLS = 12
+const DAMAGE_PANEL_OPTIONS = [
+  'Hood',
+  'Front Bumper',
+  'LH Fender',
+  'RH Fender',
+  'LH Front Door',
+  'RH Front Door',
+  'LH Rear Door',
+  'RH Rear Door',
+  'Roof',
+  'Boot Lid',
+  'Rear Bumper',
+  'Underbody',
+]
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -107,6 +121,27 @@ export default function AutoDocPage() {
     dealerCode: '',
     dateOfSale: '',
   }))
+  const [selectedPanels, setSelectedPanels] = useState<string[]>([])
+  const [activePanel, setActivePanel] = useState('')
+  const [damagePhotoType, setDamagePhotoType] = useState<'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('Pre-repair / Damage')
+
+  function toggleDamagePanel(panel: string) {
+    setSelectedPanels((prev) => {
+      if (prev.includes(panel)) {
+        const next = prev.filter((p) => p !== panel)
+        if (activePanel === panel) {
+          setActivePanel(next[0] ?? '')
+        }
+        return next
+      }
+
+      const next = [...prev, panel]
+      if (!activePanel) {
+        setActivePanel(panel)
+      }
+      return next
+    })
+  }
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
@@ -954,6 +989,140 @@ export default function AutoDocPage() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* DAMAGE */}
+      {activeTab === 'damage' && (
+        <div className="w-full space-y-4">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Select Affected Panels
+              </h3>
+              <span className="text-xs text-gray-500">Tap to select - each panel requires a photo</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              {DAMAGE_PANEL_OPTIONS.map((panel) => {
+                const isSelected = selectedPanels.includes(panel)
+                return (
+                  <button
+                    key={panel}
+                    type="button"
+                    onClick={() => toggleDamagePanel(panel)}
+                    className={[
+                      'rounded-lg border px-3 py-3 text-center text-sm font-medium transition-colors',
+                      isSelected
+                        ? 'border-blue-300 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50',
+                    ].join(' ')}
+                  >
+                    {panel}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p className="mt-4 text-sm font-medium text-blue-700">
+              Selected: {selectedPanels.length > 0 ? selectedPanels.join(', ') : 'none'}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                </svg>
+                Damage Photo Upload <span className="text-sm font-medium text-red-600">* mandatory per panel</span>
+              </h3>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <select
+                  value={activePanel}
+                  onChange={(e) => setActivePanel(e.target.value)}
+                  className="h-10 min-w-[180px] rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">Select panel</option>
+                  {selectedPanels.map((panel) => (
+                    <option key={panel} value={panel}>{panel}</option>
+                  ))}
+                </select>
+                <select
+                  value={damagePhotoType}
+                  onChange={(e) => setDamagePhotoType(e.target.value as 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair')}
+                  className="h-10 min-w-[180px] rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="Pre-repair / Damage">Pre-repair / Damage</option>
+                  <option value="Under-repair">Under-repair</option>
+                  <option value="Post-repair">Post-repair</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="relative rounded-xl border-2 border-dashed border-red-300 bg-red-50 p-8 text-center">
+              <span className="absolute right-4 top-3 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Required</span>
+              <svg className="mx-auto mb-2 h-9 w-9 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              </svg>
+              <p className="text-xl font-medium text-gray-900">Tap to capture / upload panel photo</p>
+              <p className="mt-1 text-sm text-gray-600">GPS - timestamp - panel name auto-tagged</p>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="relative overflow-hidden rounded-lg border border-gray-300 bg-gray-100 p-6 text-center">
+                <svg className="mx-auto mb-2 h-7 w-7 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                </svg>
+                <p className="text-sm font-medium text-gray-700">Sample 1</p>
+                <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] text-white">{activePanel || 'Panel'} - {damagePhotoType.includes('Post') ? 'Post' : 'Pre'} - Jaipur 10:12</div>
+              </div>
+
+              <div className="relative overflow-hidden rounded-lg border border-gray-300 bg-gray-100 p-6 text-center">
+                <svg className="mx-auto mb-2 h-7 w-7 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                </svg>
+                <p className="text-sm font-medium text-gray-700">Sample 2</p>
+                <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] text-white">{activePanel || 'Panel'} - {damagePhotoType.includes('Post') ? 'Post' : 'Pre'} - Jaipur 10:13</div>
+              </div>
+
+              <button
+                type="button"
+                className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+              >
+                Add more
+              </button>
+            </div>
+
+            <div className="my-4 h-px bg-gray-200" />
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Technician Remarks for selected panel <span className="text-red-600">*</span>
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Describe rust / damage observed, severity, recommended action..."
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setActiveTab('estimate')}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+              >
+                Next: Estimate
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
