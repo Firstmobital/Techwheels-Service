@@ -23,9 +23,10 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 - Updated RBAC implementation plan and index to include compact tracker and update conditions.
 - Updated sync protocol to require DB ledger/protocol use for schema/RLS/function changes.
 - Updated current-state snapshot to reflect deny-by-default frontend RBAC and new DB tracking governance.
-- Updated DBL-0002 status to APPLIED after SQL editor execution; verification and authority dump refresh remain pending before archive move.
+- Updated DBL-0002 status to APPLIED after SQL editor execution.
 - Added paired SQL verification workflow: each migration now requires a read-only check script in `supabase/sql_checks/`.
 - Added check script for DBL-0002: `supabase/sql_checks/20260523120000_add_module_permission_helper_functions_checks.sql`.
+- Verified DBL-0002 using read-only checks and archived migration to `supabase/exec_success_migrations/20260523120000_add_module_permission_helper_functions.sql`.
 
 Template for future entries:
 

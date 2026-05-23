@@ -40,7 +40,7 @@ Version Context: Techwheels Service v1.0 (current workspace state)
 - DB change tracking file introduced: `docs/Project_Handbook/DB_CHANGE_LEDGER.md`.
 - Mandatory DB workflow file introduced: `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`.
 - RBAC daily execution tracking file introduced: `docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md`.
-- DBL-0002 helper permission functions migration has been applied in Supabase SQL Editor; verification and authority dump refresh are pending.
+- DBL-0002 helper permission functions migration is verified via read-only checks and archived under supabase/exec_success_migrations.
 
 ## Module-Route Contract
 
