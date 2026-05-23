@@ -1699,6 +1699,19 @@ export default function AutoDocPage() {
             <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Draft</span>
           </div>
 
+          <div className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
+            <p className="text-xs text-blue-800">
+              <span className="font-semibold">Rate Card Status:</span>{' '}
+              {loadingModelRates ? (
+                <span className="text-blue-600">Loading rates...</span>
+              ) : activeModelRates.length > 0 ? (
+                <span className="text-emerald-600">✓ {activeModelRates.length} panel rates active for {form.model}</span>
+              ) : (
+                <span className="text-gray-600">No active rates found — labour must be entered manually</span>
+              )}
+            </p>
+          </div>
+
           <div className="hidden overflow-x-auto xl:block">
             <table className="min-w-full border-separate border-spacing-y-2 text-sm">
               <thead>
@@ -1777,6 +1790,7 @@ export default function AutoDocPage() {
                           min={0}
                           value={row.labourPrice}
                           onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
+                          placeholder={row.action === 'Repaint' && activeModelRates.length > 0 ? 'Auto-fill' : ''}
                           className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         />
                       </td>
@@ -1798,6 +1812,19 @@ export default function AutoDocPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3 xl:hidden">
+            <p className="text-xs text-blue-800">
+              <span className="font-semibold">Rate Card Status:</span>{' '}
+              {loadingModelRates ? (
+                <span className="text-blue-600">Loading rates...</span>
+              ) : activeModelRates.length > 0 ? (
+                <span className="text-emerald-600">✓ {activeModelRates.length} panel rates active for {form.model}</span>
+              ) : (
+                <span className="text-gray-600">No active rates found — labour must be entered manually</span>
+              )}
+            </p>
           </div>
 
           <div className="space-y-3 xl:hidden">
@@ -1887,6 +1914,9 @@ export default function AutoDocPage() {
                         onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
                         className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       />
+                      {row.action === 'Repaint' && activeModelRates.length > 0 && (
+                        <p className="mt-1 text-[11px] text-emerald-600">Auto-filled from {form.paintType || 'paint type'}</p>
+                      )}
                     </label>
                   </div>
 

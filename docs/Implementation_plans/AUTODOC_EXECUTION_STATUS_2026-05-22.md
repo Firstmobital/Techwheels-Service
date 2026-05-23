@@ -53,6 +53,7 @@ Done in codebase (this execution):
     - `autodoc_panel_master`
     - `autodoc_rate_rows`
     - migration: [supabase/migrations/20260523_create_autodoc_rate_cards.sql](../../supabase/migrations/20260523_create_autodoc_rate_cards.sql)
+    - execution: migration applied in Supabase SQL Editor on 2026-05-23
   - Added frontend API module for rate cards and active model rate lookup:
     - [src/lib/api/autodocRates.ts](../../src/lib/api/autodocRates.ts)
     - export wired in [src/lib/api/index.ts](../../src/lib/api/index.ts)
