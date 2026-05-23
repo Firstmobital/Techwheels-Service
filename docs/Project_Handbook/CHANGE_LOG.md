@@ -28,6 +28,12 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 - Added check script for DBL-0002: `supabase/sql_checks/20260523120000_add_module_permission_helper_functions_checks.sql`.
 - Verified DBL-0002 using read-only checks and archived migration to `supabase/exec_success_migrations/20260523120000_add_module_permission_helper_functions.sql`.
 - Deleted the temporary DBL-0002 check script from `supabase/sql_checks/` after verification evidence was captured.
+- Created migration to register AutoDoc as top-level module (DBL-0005):
+	- Migration file: `supabase/migrations/20260523180000_add_autodoc_module.sql`
+	- AutoDoc module: name=`autodoc`, label=`AutoDoc`, route=`/autodoc`, sort_order=9, active=true
+	- Enables RBAC permission assignment for vehicle documentation workflows
+	- Verified with all checks passing: module_creation_check=PASS, autodoc_module_details=COMPLETE, sequence_check=PASS
+	- Updated ledger: DBL-0005 → VERIFIED
 - Added Phase 3.3 RBAC hardening draft migration: `supabase/migrations/20260523143000_phase33_tighten_parts_import_rls.sql`.
 - Added temporary paired verification script: `supabase/sql_checks/20260523143000_phase33_tighten_parts_import_rls_checks.sql`.
 - Added DB ledger proposal entry: `DBL-0004`.

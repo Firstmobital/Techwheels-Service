@@ -88,7 +88,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/reports': ['reports'],
   '/settings': ['employees'],
   '/admin': ['admin'],
-  '/autodoc': ['job_cards'],
+  '/autodoc': ['autodoc'],
 }
 
 function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly ModuleName[]) {
