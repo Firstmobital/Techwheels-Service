@@ -79,6 +79,14 @@ export default function AutoDocPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [lookupBusy, setLookupBusy] = useState(false)
   const [vehicleFound, setVehicleFound] = useState(false)
+  const [kpis, setKpis] = useState({
+    totalToday: 0,
+    totalTodayNew: 0,
+    totalTodayInProgress: 0,
+    pendingApproval: 0,
+    approvedInWork: 0,
+    completedThisWeek: 0,
+  })
   const [form, setForm] = useState<CreateJobCardForm>(() => ({
     regNumber: '',
     jcNumber: '',
@@ -116,6 +124,36 @@ export default function AutoDocPage() {
   }, [])
 
   useEffect(() => { void fetchRows() }, [fetchRows])
+
+  // ── Compute KPIs ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const weekAgo = new Date(today)
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    const totalToday = rows.filter(r => new Date(r.complaint_date) >= today).length
+    const totalTodayNew = rows.filter(r => 
+      new Date(r.complaint_date) >= today && r.status === 'draft'
+    ).length
+    const totalTodayInProgress = rows.filter(r => 
+      new Date(r.complaint_date) >= today && (r.status === 'submitted' || r.status === 'in_work')
+    ).length
+    const pendingApproval = rows.filter(r => r.status === 'submitted').length
+    const approvedInWork = rows.filter(r => r.status === 'approved' || r.status === 'in_work').length
+    const completedThisWeek = rows.filter(r => 
+      r.status === 'completed' && new Date(r.complaint_date) >= weekAgo
+    ).length
+
+    setKpis({
+      totalToday,
+      totalTodayNew,
+      totalTodayInProgress,
+      pendingApproval,
+      approvedInWork,
+      completedThisWeek,
+    })
+  }, [rows])
 
   async function handleVehicleLookup() {
     const ref = form.regNumber.trim()
@@ -307,6 +345,75 @@ export default function AutoDocPage() {
             }
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Total Cars Today */}
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Cars Today</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.totalToday}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                {kpis.totalTodayNew} new, {kpis.totalTodayInProgress} in progress
+              </p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
+              <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v12m8-12v12M3.172 3.172a4 4 0 015.656 0L12 6.343m0 0l3.172-3.171a4 4 0 015.656 5.656L12 17.657l-8.828-8.829a4 4 0 010-5.656z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Pending Tata Approval */}
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Pending Tata Approval</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.pendingApproval}</p>
+              <p className="mt-1 text-xs text-gray-500">PPTs sent today</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100">
+              <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Approved & In Work */}
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Approved & In Work</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.approvedInWork}</p>
+              <p className="mt-1 text-xs text-gray-500">Quotation approved</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100">
+              <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Completed This Week */}
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Completed This Week</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.completedThisWeek}</p>
+              <p className="mt-1 text-xs text-gray-500">Warranty claims filed</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-100">
+              <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
 

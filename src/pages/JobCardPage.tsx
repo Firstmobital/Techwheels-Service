@@ -10,11 +10,16 @@ import {
   createPanel,
   createPanelPhoto,
   deleteEstimateRow,
+  fetchActivityLogsForJobCard,
+  generateClaimEmailContent,
   getJobCardSummary,
   listDocuments,
   listEstimateRows,
   listPanelPhotos,
   listPanels,
+  logActivity,
+  sendClaimEmail,
+  type ActivityLogEntry,
   type DocType,
 } from '../lib/api'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
@@ -138,6 +143,7 @@ export default function JobCardPage() {
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
   const [documents, setDocuments] = useState<DocRow[]>([])
   const [docUrls, setDocUrls] = useState<Record<string, string>>({})
+  const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([])
 
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
@@ -154,6 +160,13 @@ export default function JobCardPage() {
   const [rowForm,      setRowForm]      = useState({ ...BLANK_ROW })
   const [saving,       setSaving]       = useState(false)
   const [exporting, setExporting] = useState<Set<string>>(new Set())
+  const [composingEmail, setComposingEmail] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailForm, setEmailForm] = useState({
+    to: 'claims@tatamotors.com',
+    subject: '',
+    body: '',
+  })
   const [localDirty,   setLocalDirty]   = useState(false)
   const [lastSaved,    setLastSaved]    = useState<Date | null>(null)
 
@@ -169,12 +182,13 @@ export default function JobCardPage() {
   const fetchAll = useCallback(async () => {
     if (!id) return
     setLoading(true); setError(null)
-    const [jcRes, panelRes, photoRes, estRes, docRes] = await Promise.all([
+    const [jcRes, panelRes, photoRes, estRes, docRes, actRes] = await Promise.all([
       getJobCardSummary(id),
       listPanels(id),
       listPanelPhotos(id),
       listEstimateRows(id),
       listDocuments(id),
+      fetchActivityLogsForJobCard(id),
     ])
 
     if (jcRes.error || !jcRes.data) {
@@ -185,6 +199,7 @@ export default function JobCardPage() {
     if (photoRes.error) { setError(photoRes.error); setLoading(false); return }
     if (estRes.error) { setError(estRes.error); setLoading(false); return }
     if (docRes.error) { setError(docRes.error); setLoading(false); return }
+    if (actRes.error) { setError(actRes.error); setLoading(false); return }
 
     setJc(jcRes.data as unknown as JobSummary)
     const pnls = (panelRes.data ?? []) as unknown as Panel[]
@@ -195,6 +210,7 @@ export default function JobCardPage() {
     setEstRows((estRes.data ?? []) as unknown as EstRow[])
     const docs = (docRes.data ?? []) as unknown as DocRow[]
     setDocuments(docs)
+    setActivityLogs(actRes.data ?? [])
 
     const [photoUrlRes, docUrlRes] = await Promise.all([
       createAutodocSignedUrlMap(phts.map((p) => p.storage_path)),
@@ -254,6 +270,14 @@ export default function JobCardPage() {
     setPhotos(phts)
     const urlRes = await createAutodocSignedUrlMap(phts.map((p) => p.storage_path))
     if (urlRes.data) setPhotoUrls(urlRes.data)
+    
+    // Log activity
+    await logActivity('photo_uploaded', {
+      resourceType: 'job_card',
+      resourceId: id,
+      details: { photoType, panelId, repairStage },
+    })
+    markDirty()
   }
 
   async function handleDocumentUpload(docType: DocType, file: File) {
@@ -324,6 +348,13 @@ export default function JobCardPage() {
     if (res.error || !res.data) return
     setEstRows(r => [...r, res.data as unknown as EstRow])
     setAddingRow(false); setRowForm({ ...BLANK_ROW }); markDirty()
+    
+    // Log activity
+    await logActivity('estimate_row_added', {
+      resourceType: 'job_card',
+      resourceId: id,
+      details: { description: rowForm.part_description, amount: rowForm.ndp_value },
+    })
   }
 
   // ── Add panel ─────────────────────────────────────────────────────────────
@@ -334,6 +365,13 @@ export default function JobCardPage() {
       const p = res.data as unknown as Panel
       setPanels(prev => [...prev, p]); setSelPanel(p.id)
       setAddingPanel(false); setNewPanelName('')
+      
+      // Log activity
+      await logActivity('panel_added', {
+        resourceType: 'job_card',
+        resourceId: id,
+        details: { panelName: newPanelName.trim() },
+      })
     }
   }
 
@@ -344,6 +382,13 @@ export default function JobCardPage() {
     try {
       if (kind === 'excel') await generateEstimateExcel(id)
       else await generateRepairPPT(id, kind === 'pre' ? 'pre-repair' : 'post-repair')
+      
+      // Log activity
+      await logActivity(`${kind === 'excel' ? 'excel' : 'ppt'}_exported`, {
+        resourceType: 'job_card',
+        resourceId: id,
+        details: { exportType: kind },
+      })
     } finally {
       setExporting((prev) => {
         const next = new Set(prev)
@@ -575,6 +620,21 @@ export default function JobCardPage() {
               {exporting.has('export-excel') ? 'Generating…' : 'Estimate Excel'}
             </button>
             <button
+              onClick={() => {
+                if (jc) {
+                  const { subject, html } = generateClaimEmailContent(jc)
+                  setEmailForm({ to: 'claims@tatamotors.com', subject, body: html })
+                  setComposingEmail(true)
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Email
+            </button>
+            <button
               onClick={() => setAddingRow(true)}
               className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
             >
@@ -710,6 +770,60 @@ export default function JobCardPage() {
         </div>
       </section>
 
+      {/* Activity Log */}
+      <section className="mt-6">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+          Activity Log ({activityLogs.length})
+        </p>
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          {activityLogs.length === 0 ? (
+            <div className="py-8 text-center text-sm text-gray-400">No activities yet</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {activityLogs.map((log, idx) => {
+                const actionLabel = log.action
+                  .split('_')
+                  .map((word, i) => i === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word)
+                  .join(' ')
+                
+                const getIcon = (action: string) => {
+                  if (action.includes('photo')) return '📷'
+                  if (action.includes('panel')) return '📌'
+                  if (action.includes('estimate')) return '📊'
+                  if (action.includes('ppt')) return '📑'
+                  if (action.includes('excel')) return '📊'
+                  return '✓'
+                }
+
+                const timestamp = new Date(log.timestamp).toLocaleString('en-IN', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+
+                return (
+                  <div key={idx} className="flex items-start gap-3 px-4 py-3">
+                    <div className="mt-1 text-lg">{getIcon(log.action)}</div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">{actionLabel}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{timestamp}</p>
+                      {log.details && Object.keys(log.details).length > 0 && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          {Object.entries(log.details as Record<string, unknown>)
+                            .map(([k, v]) => `${k}: ${String(v).slice(0, 30)}`)
+                            .join(' • ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Delete confirm modal */}
       {deleteRow && (
         <Overlay onClose={() => setDeleteRow(null)}>
@@ -797,6 +911,89 @@ export default function JobCardPage() {
           <div className="mt-5 flex justify-end gap-3">
             <button onClick={() => setAddingPanel(false)} className={BTN_SEC}>Cancel</button>
             <button onClick={handleAddPanel} disabled={!newPanelName.trim()} className={BTN_PRI}>Add Panel</button>
+          </div>
+        </Overlay>
+      )}
+
+      {/* Email compose modal */}
+      {composingEmail && (
+        <Overlay onClose={() => setComposingEmail(false)}>
+          <h3 className="mb-1 text-base font-semibold text-gray-900">Compose Email to Tata Motors</h3>
+          <p className="mb-4 text-xs text-gray-500">Send warranty claim documents for review and approval.</p>
+          
+          <div className="space-y-3">
+            <Field label="To">
+              <input
+                value={emailForm.to}
+                onChange={e => setEmailForm(f => ({ ...f, to: e.target.value }))}
+                type="email"
+                className={INPUT}
+              />
+            </Field>
+            <Field label="Subject">
+              <input
+                value={emailForm.subject}
+                onChange={e => setEmailForm(f => ({ ...f, subject: e.target.value }))}
+                className={INPUT}
+              />
+            </Field>
+            <Field label="Message">
+              <textarea
+                value={emailForm.body}
+                onChange={e => setEmailForm(f => ({ ...f, body: e.target.value }))}
+                rows={10}
+                className={INPUT}
+              />
+            </Field>
+            
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold text-amber-900 mb-2">Attachments to be sent:</p>
+              <ul className="text-xs text-amber-800 space-y-1">
+                <li>✓ Pre-Repair PPT Report</li>
+                <li>✓ Post-Repair PPT Report</li>
+                <li>✓ Estimate & Quotation (Excel)</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setComposingEmail(false)} disabled={sendingEmail} className={BTN_SEC}>Cancel</button>
+            <button
+              onClick={async () => {
+                if (!id || !jc) return
+                setSendingEmail(true)
+                try {
+                  const sendRes = await sendClaimEmail(id, {
+                    to: emailForm.to,
+                    subject: emailForm.subject,
+                    html: emailForm.body,
+                    attachments: ['Pre-Repair PPT', 'Post-Repair PPT', 'Estimate Excel'],
+                  })
+
+                  if (sendRes.error) {
+                    alert('Failed to send email: ' + sendRes.error)
+                    return
+                  }
+
+                  await logActivity('email_sent', {
+                    resourceType: 'job_card',
+                    resourceId: id,
+                    details: { to: emailForm.to, subject: emailForm.subject },
+                  })
+
+                  setComposingEmail(false)
+                  alert('✓ Email sent successfully to ' + emailForm.to)
+                } catch (err) {
+                  alert('Error sending email: ' + (err instanceof Error ? err.message : 'Unknown error'))
+                } finally {
+                  setSendingEmail(false)
+                }
+              }}
+              disabled={sendingEmail}
+              className={BTN_PRI}
+            >
+              {sendingEmail ? 'Sending…' : 'Send Email'}
+            </button>
           </div>
         </Overlay>
       )}
