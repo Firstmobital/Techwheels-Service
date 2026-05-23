@@ -665,7 +665,7 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200 bg-gray-50">
               <tr>
-                {['#', 'Module', 'Route', 'Description', 'Status', 'Actions'].map(h => (
+                {['#', 'Module', 'DB Name', 'Route', 'Description', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -675,6 +675,7 @@ export default function AdminPage() {
                 <tr key={m.id} className="transition-colors hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-400">{m.sort_order}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{m.icon} {m.label}</td>
+                  <td className="px-4 py-3"><code className="rounded bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{m.name}</code></td>
                   <td className="px-4 py-3"><code className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{m.route}</code></td>
                   <td className="px-4 py-3 text-xs text-gray-500">{m.description || '—'}</td>
                   <td className="px-4 py-3">
