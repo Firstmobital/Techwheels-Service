@@ -47,6 +47,7 @@ interface CreateJobCardForm {
   bpCityCategory: string
   ownerName: string
   ownerPhone: string
+  dealerCode: string
   dateOfSale: string
 }
 
@@ -92,7 +93,7 @@ export default function AutoDocPage() {
     jcNumber: '',
     complaintDate: new Date().toISOString().slice(0, 10),
     kmReading: '',
-    claimType: 'Body & Paint',
+    claimType: '',
     complaintText: '',
     vin: '',
     model: '',
@@ -103,6 +104,7 @@ export default function AutoDocPage() {
     bpCityCategory: '',
     ownerName: '',
     ownerPhone: '',
+    dealerCode: '',
     dateOfSale: '',
   }))
 
@@ -618,7 +620,7 @@ export default function AutoDocPage() {
 
       {/* JOB CARD FORM */}
       {activeTab === 'jobcard' && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="rounded-lg border border-gray-200 bg-white p-6 max-w-4xl">
           <div className="mb-6 flex items-center gap-2">
             <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -645,7 +647,7 @@ export default function AutoDocPage() {
               <button
                 onClick={() => void handleVehicleLookup()}
                 disabled={lookupBusy || creating || !form.regNumber.trim()}
-                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 justify-center"
+                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 justify-center whitespace-nowrap"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -655,11 +657,303 @@ export default function AutoDocPage() {
             </div>
             <p className="mt-2 text-xs text-gray-500">Auto-fills VIN, model, owner & dealer from your Supabase database</p>
             {vehicleFound && <p className="mt-2 text-sm text-green-600">✓ Vehicle found and prefilled.</p>}
+            {form.regNumber && !vehicleFound && (
+              <div className="mt-3 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                <svg className="h-5 w-5 flex-shrink-0 text-amber-600 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4v2m0 4v2m0-14l-9 5v10a2 2 0 002 2h14a2 2 0 002-2V5l-9-5z" />
+                </svg>
+                <p className="text-sm text-amber-800">Not found in database — fill manually, will be saved to Supabase</p>
+              </div>
+            )}
           </div>
 
-          <div className="border-t border-gray-200 pt-6">
-            <p className="text-center text-sm text-gray-500 py-8">Scroll down to continue filling vehicle details, owner information, and upload documents.</p>
-          </div>
+          {/* VEHICLE DETAILS */}
+          {form.regNumber && (
+            <>
+              <div className="mb-6">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-600">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Vehicle Details
+                </h3>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      VIN / Chassis No <span className="text-red-600">*</span>
+                      {vehicleFound && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto</span>}
+                    </label>
+                    <input type="text" placeholder="17-char VIN" value={form.vin} onChange={(e) => setForm(prev => ({ ...prev, vin: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Model <span className="text-red-600">*</span>
+                      {vehicleFound && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto</span>}
+                    </label>
+                    <select value={form.model} onChange={(e) => setForm(prev => ({ ...prev, model: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="">Select</option>
+                      <option>Nexon EV</option>
+                      <option>Harrier</option>
+                      <option>Safari</option>
+                      <option>Altroz</option>
+                      <option>Punch</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Year <span className="text-red-600">*</span>
+                      {vehicleFound && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto</span>}
+                    </label>
+                    <select value={form.year} onChange={(e) => setForm(prev => ({ ...prev, year: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="">Year</option>
+                      <option>2025</option>
+                      <option>2024</option>
+                      <option>2023</option>
+                      <option>2022</option>
+                      <option>2021</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Colour
+                      {vehicleFound && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto</span>}
+                    </label>
+                    <input type="text" placeholder="e.g. Pristine White" value={form.colour} onChange={(e) => setForm(prev => ({ ...prev, colour: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Paint Type <span className="text-red-600">*</span>
+                    </label>
+                    <select value={form.paintType} onChange={(e) => setForm(prev => ({ ...prev, paintType: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="">Select</option>
+                      <option>Solid</option>
+                      <option>Metallic</option>
+                      <option>Pearl</option>
+                      <option>Matte</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      KM Reading <span className="text-red-600">*</span>
+                    </label>
+                    <input type="number" placeholder="e.g. 18420" value={form.kmReading} onChange={(e) => setForm(prev => ({ ...prev, kmReading: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Date of Sale <span className="text-red-600">*</span>
+                    </label>
+                    <input type="date" value={form.dateOfSale} onChange={(e) => setForm(prev => ({ ...prev, dateOfSale: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Complaint Report Date <span className="text-red-600">*</span>
+                    </label>
+                    <input type="date" value={form.complaintDate} onChange={(e) => setForm(prev => ({ ...prev, complaintDate: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Car Ageing
+                      <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto-calc</span>
+                    </label>
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-900 font-medium flex items-center gap-2">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      — days
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* OWNER & DEALER */}
+              <div className="mb-6">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-600">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Owner & Dealer
+                </h3>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Owner Name <span className="text-red-600">*</span>
+                      {vehicleFound && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto</span>}
+                    </label>
+                    <input type="text" placeholder="Full name" value={form.ownerName} onChange={(e) => setForm(prev => ({ ...prev, ownerName: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Owner Phone <span className="text-red-600">*</span>
+                      {vehicleFound && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto</span>}
+                    </label>
+                    <input type="text" placeholder="10-digit mobile" maxLength={10} value={form.ownerPhone} onChange={(e) => setForm(prev => ({ ...prev, ownerPhone: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Dealership Code <span className="text-red-600">*</span>
+                      {vehicleFound && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto</span>}
+                    </label>
+                    <input type="text" placeholder="TM-RJ-0042" value={form.dealerCode} onChange={(e) => setForm(prev => ({ ...prev, dealerCode: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Dealer City <span className="text-red-600">*</span>
+                    </label>
+                    <input type="text" placeholder="e.g. Jaipur" value={form.dealerCity} onChange={(e) => setForm(prev => ({ ...prev, dealerCity: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      B&P City Category (SU794) <span className="text-red-600">*</span>
+                    </label>
+                    <select value={form.bpCityCategory} onChange={(e) => setForm(prev => ({ ...prev, bpCityCategory: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="">Select Category</option>
+                      <option>Category A</option>
+                      <option>Category B</option>
+                      <option>Category C</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* JOB DETAILS */}
+              <div className="mb-6">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-600">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  Job Details
+                </h3>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Job Card Number <span className="text-red-600">*</span>
+                    </label>
+                    <input type="text" placeholder="e.g. JC-2026-042" value={form.jcNumber} onChange={(e) => setForm(prev => ({ ...prev, jcNumber: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Warranty Claim Type <span className="text-red-600">*</span>
+                    </label>
+                    <select value={form.claimType} onChange={(e) => setForm(prev => ({ ...prev, claimType: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      <option value="">Select</option>
+                      <option>Body / Panel Rust</option>
+                      <option>Paint Defect</option>
+                      <option>Panel Damage</option>
+                      <option>Underbody Corrosion</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                    Customer Complaint
+                  </label>
+                  <textarea rows={2} placeholder="Describe the issue as reported by customer..." value={form.complaintText} onChange={(e) => setForm(prev => ({ ...prev, complaintText: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                </div>
+              </div>
+
+              {/* DOCUMENTS */}
+              <div className="mb-6">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-600">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Documents
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-2 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Service History <span className="text-red-600">*</span>
+                    </label>
+                    <div className="relative border-2 border-dashed border-red-300 rounded-lg p-6 text-center cursor-pointer hover:border-red-400 transition-colors bg-red-50">
+                      <span className="absolute top-2 right-2 bg-red-100 text-red-700 text-[10px] font-semibold px-2 py-1 rounded">Required</span>
+                      <svg className="h-8 w-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-sm font-medium text-gray-900">Upload Service History PDF</p>
+                      <p className="text-xs text-gray-600 mt-1">PDF format only</p>
+                      <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 flex items-center gap-1 text-xs font-medium text-gray-600">
+                      Vehicle Walkaround Video <span className="text-red-600">*</span>
+                    </label>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span>⏱️</span> 30–60 sec
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span>🔄</span> Full walkaround
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span>📋</span> Number plate visible
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>📦</span> Auto-compressed &lt;15MB
+                      </div>
+                    </div>
+                    <div className="relative border-2 border-dashed border-red-300 rounded-lg p-6 text-center cursor-pointer hover:border-red-400 transition-colors bg-red-50">
+                      <span className="absolute top-2 right-2 bg-red-100 text-red-700 text-[10px] font-semibold px-2 py-1 rounded">Required</span>
+                      <svg className="h-8 w-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm font-medium text-gray-900">Upload Vehicle Video</p>
+                      <p className="text-xs text-gray-600 mt-1">MP4 / MOV — auto-compressed to &lt;15MB</p>
+                      <input type="file" accept="video/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
+                    <div className="mt-3 hidden bg-gray-100 border border-gray-300 rounded-lg p-2 text-xs text-gray-700">
+                      <div className="flex items-center gap-2 mb-1">
+                        <svg className="h-4 w-4 animate-spin text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Compressing video to low resolution…
+                      </div>
+                      <div className="w-full bg-gray-300 rounded h-1">
+                        <div className="bg-blue-600 h-1 rounded w-0" style={{ width: '45%' }}></div>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">45%</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-4 flex items-center justify-between">
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2h-2.382a1 1 0 00-.894.553l-.448.894a1 1 0 01-.894.553h-3.752a1 1 0 01-.894-.553l-.448-.894A1 1 0 0010.382 7H8a2 2 0 00-2 2z" />
+                  </svg>
+                  Vehicle not in DB — will be saved to Supabase on submit
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => toast && setToast({ ...toast, msg: 'Draft saved' })}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    Save Draft
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('damage')}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                    Next: Document Damage
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
