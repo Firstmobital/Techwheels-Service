@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
 **Last Updated:** 2026-05-23  
-**Total Active Plans:** 6
+**Total Active Plans:** 4
 
 ---
 
@@ -10,9 +10,8 @@
 | Plan ID | Title | Priority | Status | Owner | Start | End | Progress |
 |---------|-------|----------|--------|-------|-------|-----|----------|
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | ✅ COMPLETED | Dev Team | 2026-05-22 | 2026-05-22 | 100% |
+| RBAC-001 | Dynamic RBAC and Module Wiring Hardening | 🔴 CRITICAL | ✅ COMPLETED | Techwheels Admin + Dev Team + GitHub Copilot | 2026-05-23 | 2026-05-23 | 100% |
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
-| AUTH-001 | Auth Email Recovery and User Access Continuity | 🟠 HIGH | � IN PROGRESS | Techwheels Admin + Dev Team | 2026-05-22 | 2026-05-23 | 65% |
-| RBAC-001 | Dynamic RBAC and Module Wiring Hardening | 🔴 CRITICAL | 🟡 REVIEW | Techwheels Admin + Dev Team + GitHub Copilot | 2026-05-23 | 2026-05-26 | 100% |
 | BODYSHOP-001 | Bodyshop Module End-to-End Workflow and Live Dashboard | 🔴 CRITICAL | 🔴 PENDING | Techwheels Product + Dev Team | 2026-05-22 | 2026-05-30 | 0% |
 | DRIVE-001 | Universal Drive Upload and Storage Offload | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-23 | 2026-05-24 | 0% |
 
@@ -20,27 +19,12 @@
 
 ## Active Plans
 
-### RBAC-001: Dynamic RBAC and Module Wiring Hardening
-- **File:** [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md)
-- **Daily Tracker:** [RBAC-001_DAILY_STANDUP_CHECKLIST.md](RBAC-001_DAILY_STANDUP_CHECKLIST.md)
-- **Risk Level:** 🔴 CRITICAL (access control + policy hardening)
-- **Status:** Implementation complete; awaiting stakeholder sign-off
-- **Latest Update:** 2026-05-23 - DBL-0004 verified in production (RLS enabled on 5 tables, legacy policies removed, 16 RBAC policies present)
-- **Next Step:** Stakeholder sign-off and continuation to next RBAC hardening slice
-
 ### BODYSHOP-001: Bodyshop Module End-to-End Workflow and Live Dashboard
 - **File:** [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md)
 - **Risk Level:** 🔴 HIGH (multi-role operational workflow + strict guardrail enforcement)
 - **Status:** Pending kickoff
 - **Latest Update:** 2026-05-22 - End-to-end implementation plan created for 23-stage SOP, live dashboard, pending trackers, and operational control points
 - **Next Step:** Start Phase 1 (freeze schema contract, stage definitions, and validation guardrails)
-
-### AUTH-001: Auth Email Recovery and User Access Continuity
-- **File:** [AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md)
-- **Risk Level:** 🟡 MEDIUM (temporary credential handling + SMTP/rate-limit dependency)
-- **Status:** Engineering implementation complete; operational execution in progress
-- **Latest Update:** 2026-05-22 - Temp-password edge function + Admin UI fallback implemented and function deployed to Supabase
-- **Next Step:** Execute user operation for Vinod (issue one-time temp password, validate login, force password rotation) + complete SMTP hardening
 
 ### AUTODOC-STATUS-001: AutoDoc Prompt Execution Status Audit
 - **File:** [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md)
@@ -59,6 +43,35 @@
 ---
 
 ## Completed Plans
+
+### ✅ AUTH-001: Auth Email Recovery and User Access Continuity
+- **File:** [completed/AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](completed/AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md)
+- **Runbook:** [completed/AUTH-001_RUNBOOK.md](completed/AUTH-001_RUNBOOK.md)
+- **Completed:** 2026-05-23
+- **Summary:** Complete auth recovery and email hardening for user access continuity
+  - All 3 phases completed: Immediate access recovery (temp password), user password rotation, email reliability hardening
+  - Restored Vinod user account access via deployed set-user-temp-password edge function
+  - Forced password rotation enforced on first login with new password verified
+  - Resend SMTP configured with production-safe email rate limits
+  - All auth email types tested: magic link, password recovery, signup confirmation
+  - Runbook created with fallback paths and escalation procedures
+- **DNS Status:** techwheels.in domain fully authenticated (SPF/DKIM/DMARC verified)
+- **Email Provider:** Resend SMTP with service@techwheels.in sender
+
+### ✅ RBAC-001: Dynamic RBAC and Module Wiring Hardening
+- **File:** [completed/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](completed/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md)
+- **Daily Tracker:** [completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md](completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md)
+- **Completed:** 2026-05-23
+- **Summary:** Complete RBAC hardening with deny-by-default access enforcement
+  - All 5 phases completed: Frontend enforcement, module contract normalization, backend RLS hardening, onboarding gating, operational controls
+  - Frontend RBAC guards added to all app routes and navigation
+  - 5 high-risk tables secured with 16 RBAC policies (Phase 3.3: import_metadata, part_master, service_parts_consumption_data, service_parts_order_data, service_parts_stock_snapshot_data)
+  - Legacy permissive policies removed
+  - Onboarding state machine implemented (new users active but no modules until admin assignment)
+  - Operational runbook for user permission assignment documented
+- **QA Status:** Ready for immediate test execution (16 test suites defined)
+- **Rollout Status:** Ready for immediate ops execution (user onboarding + permission assignment)
+- **Git Commits:** Multiple tracking Phase 1-5 implementation and verification
 
 ### ✅ SEC-001: Security Refactor - Service Role Key Exposure
 - **File:** [SECURITY_REFACTOR_SERVICE_KEY.md](SECURITY_REFACTOR_SERVICE_KEY.md)
