@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
@@ -6,6 +6,7 @@ import {
   createJobCard,
   fetchVehicleByReg,
   generateClaimEmailContent,
+  getActiveModelRates,
   getJobCardSummary,
   listDocuments,
   listJobCardSummaries,
@@ -16,6 +17,7 @@ import {
   updateJobCardStatus,
   upsertVehicle,
   type DocumentRow,
+  type ModelPanelRate,
   type JobSummaryRow,
 } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
@@ -88,7 +90,7 @@ const STATUS_COLOURS: Record<string, string> = {
 }
 
 const SKELETON_COLS = 11
-const DAMAGE_PANEL_OPTIONS = [
+const DEFAULT_DAMAGE_PANEL_OPTIONS = [
   'Hood',
   'Front Bumper',
   'LH Fender',
@@ -156,6 +158,27 @@ function createInitialForm(): CreateJobCardForm {
   }
 }
 
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+function inferRateTypeFromPaint(paintType: string): 'pp' | 'pm' | 'ps' {
+  const pt = normalizeText(paintType)
+  if (pt.includes('pearl')) return 'pp'
+  if (pt.includes('metal')) return 'pm'
+  return 'ps'
+}
+
+function getLabourRateForPanel(rateRows: ModelPanelRate[], panel: string, paintType: string): number | null {
+  const match = rateRows.find((row) => normalizeText(row.panelLabel) === normalizeText(panel))
+  if (!match) return null
+
+  const rateType = inferRateTypeFromPaint(paintType)
+  if (rateType === 'pp') return match.ppRate
+  if (rateType === 'pm') return match.pmRate
+  return match.psRate
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AutoDocPage() {
@@ -196,6 +219,8 @@ export default function AutoDocPage() {
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>(() => readSessionJSON<EstimateLineItem[]>(SESSION_KEYS.estimateRows, []))
   const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
+  const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
+  const [loadingModelRates, setLoadingModelRates] = useState(false)
     const readiness = {
       prePpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_pre'),
       postPpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_post'),
@@ -206,7 +231,63 @@ export default function AutoDocPage() {
     const composeReady = readiness.prePpt && readiness.excel
     const submitReady = readiness.postPpt && readiness.deliveryVideo
 
+  const damagePanelOptions = useMemo(
+    () => (
+      activeModelRates.length > 0
+        ? Array.from(new Set(activeModelRates.map((row) => row.panelLabel).filter(Boolean)))
+        : DEFAULT_DAMAGE_PANEL_OPTIONS
+    ),
+    [activeModelRates],
+  )
+
   const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    const modelName = form.model.trim()
+    const cityCategory = form.bpCityCategory.trim()
+
+    if (!modelName || !cityCategory) {
+      setActiveModelRates([])
+      return
+    }
+
+    let cancelled = false
+    setLoadingModelRates(true)
+
+    void getActiveModelRates({ cityCategory, modelName })
+      .then((res) => {
+        if (cancelled) return
+        if (res.error || !res.data) {
+          setActiveModelRates([])
+          return
+        }
+        setActiveModelRates(res.data.rows)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingModelRates(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [form.bpCityCategory, form.model])
+
+  useEffect(() => {
+    setSelectedPanels((prev) => {
+      const next = prev.filter((panel) => damagePanelOptions.includes(panel))
+      if (next.length === prev.length && next.every((panel, idx) => panel === prev[idx])) {
+        return prev
+      }
+      return next
+    })
+  }, [damagePanelOptions])
+
+  useEffect(() => {
+    if (!activePanel) return
+    if (!selectedPanels.includes(activePanel)) {
+      setActivePanel(selectedPanels[0] ?? '')
+    }
+  }, [activePanel, selectedPanels])
 
   function toggleDamagePanel(panel: string) {
     setSelectedPanels((prev) => {
@@ -235,9 +316,20 @@ export default function AutoDocPage() {
         if (!next.partNo || next.partNo === '-') {
           next.partNo = '-'
         }
+        const labourRate = getLabourRateForPanel(activeModelRates, next.panel, form.paintType)
+        if (labourRate != null) {
+          next.labourPrice = String(labourRate)
+        }
       }
       if (patch.action === 'Parts Replacement' && next.partNo === '-') {
         next.partNo = ''
+      }
+
+      if ((patch.panel || patch.action === 'Repaint') && next.action === 'Repaint') {
+        const labourRate = getLabourRateForPanel(activeModelRates, next.panel, form.paintType)
+        if (labourRate != null) {
+          next.labourPrice = String(labourRate)
+        }
       }
       return next
     }))
@@ -248,7 +340,9 @@ export default function AutoDocPage() {
       ...prev,
       {
         id: `row-${Date.now()}`,
-        panel: selectedPanels.find((panel) => !prev.some((row) => row.panel === panel)) ?? 'Selected Panel',
+        panel: selectedPanels.find((panel) => !prev.some((row) => row.panel === panel))
+          ?? damagePanelOptions.find((panel) => !prev.some((row) => row.panel === panel))
+          ?? 'Selected Panel',
         action: '',
         partNo: '',
         partsPrice: '',
@@ -355,6 +449,15 @@ export default function AutoDocPage() {
   useEffect(() => {
     damagePhotosRef.current = damagePhotos
   }, [damagePhotos])
+
+  useEffect(() => {
+    setEstimateRows((prev) => prev.map((row) => {
+      if (row.action !== 'Repaint') return row
+      const labourRate = getLabourRateForPanel(activeModelRates, row.panel, form.paintType)
+      if (labourRate == null) return row
+      return { ...row, labourPrice: String(labourRate) }
+    }))
+  }, [activeModelRates, form.paintType])
 
   useEffect(() => {
     return () => {
@@ -1423,7 +1526,7 @@ export default function AutoDocPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-              {DAMAGE_PANEL_OPTIONS.map((panel) => {
+              {damagePanelOptions.map((panel) => {
                 const isSelected = selectedPanels.includes(panel)
                 return (
                   <button
@@ -1442,6 +1545,10 @@ export default function AutoDocPage() {
                 )
               })}
             </div>
+
+            {loadingModelRates && (
+              <p className="mt-2 text-xs text-gray-500">Loading model-wise panels...</p>
+            )}
 
             <p className="mt-4 text-sm font-medium text-blue-700">
               Selected: {selectedPanels.length > 0 ? selectedPanels.join(', ') : 'none'}
@@ -1612,7 +1719,17 @@ export default function AutoDocPage() {
                   const isRepaint = row.action === 'Repaint'
                   return (
                     <tr key={row.id} className="rounded-lg bg-white shadow-[0_0_0_1px_rgba(229,231,235,1)]">
-                      <td className="px-2 py-2 font-medium text-gray-900">{row.panel}</td>
+                      <td className="px-2 py-2">
+                        <select
+                          value={row.panel}
+                          onChange={(e) => updateEstimateRow(row.id, { panel: e.target.value })}
+                          className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        >
+                          {[...new Set([...selectedPanels, ...damagePanelOptions])].map((panel) => (
+                            <option key={panel} value={panel}>{panel}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="px-2 py-2">
                         <select
                           value={row.action}
@@ -1690,7 +1807,7 @@ export default function AutoDocPage() {
               return (
                 <div key={row.id} className="rounded-lg border border-gray-200 bg-white p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="text-base font-semibold text-gray-900">{row.panel}</p>
+                    <p className="text-base font-semibold text-gray-900">Estimate Row</p>
                     <button
                       type="button"
                       onClick={() => removeEstimateRow(row.id)}
@@ -1704,6 +1821,18 @@ export default function AutoDocPage() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="text-xs font-medium text-gray-600">
+                      Panel
+                      <select
+                        value={row.panel}
+                        onChange={(e) => updateEstimateRow(row.id, { panel: e.target.value })}
+                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      >
+                        {[...new Set([...selectedPanels, ...damagePanelOptions])].map((panel) => (
+                          <option key={panel} value={panel}>{panel}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="text-xs font-medium text-gray-600">
                       Action
                       <select

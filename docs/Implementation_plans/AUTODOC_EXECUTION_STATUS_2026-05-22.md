@@ -3,7 +3,7 @@
 **Plan ID:** AUTODOC-STATUS-001  
 **Created:** 2026-05-22  
 **Owner:** GitHub Copilot (execution audit)  
-**Status:** ⚠️ IN EXECUTION (UI + workflow wiring complete; deployment/config + production verification pending) — Last update: 2026-05-23
+**Status:** ⚠️ IN EXECUTION (core AutoDoc + dynamic rate-card system implemented; production validation pending) — Last update: 2026-05-23
 
 ---
 
@@ -33,8 +33,8 @@ Done in codebase (this execution):
   - Dashboard list restricted to today-only vehicles
   - Added row-level "Use" action to set active workflow job card context
 - Persistence across refresh/tab-switch:
-  - Active AutoDoc tab persisted in localStorage
-  - Active job card context persisted in localStorage
+  - Active AutoDoc tab persisted in sessionStorage
+  - Active job card context persisted in sessionStorage
   - Submit readiness state rehydrated from DB documents on reload
 - DB-backed readiness gating implemented:
   - Compose and Send disabled until Pre-PPT + Excel are generated and uploaded
@@ -47,16 +47,30 @@ Done in codebase (this execution):
 - Recipient rule applied:
   - Submit flow now targets `vinodexodus@gmail.com` (no fallback)
 
+- Dynamic model-wise labour rate architecture implemented:
+  - Added rate card schema and policies:
+    - `autodoc_rate_cards`
+    - `autodoc_panel_master`
+    - `autodoc_rate_rows`
+    - migration: [supabase/migrations/20260523_create_autodoc_rate_cards.sql](../../supabase/migrations/20260523_create_autodoc_rate_cards.sql)
+  - Added frontend API module for rate cards and active model rate lookup:
+    - [src/lib/api/autodocRates.ts](../../src/lib/api/autodocRates.ts)
+    - export wired in [src/lib/api/index.ts](../../src/lib/api/index.ts)
+  - Settings page now supports:
+    - Uploading XLSX/CSV model-panel PP/PM/PS rates
+    - Creating card per city category
+    - Activating selected card
+    - file: [src/pages/SettingsPage.tsx](../../src/pages/SettingsPage.tsx)
+  - AutoDoc damage + estimate now consume active rates dynamically:
+    - Damage "Select Affected Panels" renders from active model/card rates (fallback to defaults when unavailable)
+    - Estimate "Labour" auto-fills by panel using paint-type mapped PP/PM/PS
+    - file: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+
 Pending to finish production rollout:
-- Deploy updated edge function:
-  - [supabase/functions/send-transactional-email/index.ts](../../supabase/functions/send-transactional-email/index.ts)
-- Ensure required edge env vars are present in deployed environment:
-  - `RESEND_API_KEY`
-  - `RESEND_FROM_EMAIL`
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY`
 - Run production E2E on deployed app for attachment send path:
   - Generate files -> upload to storage -> compose/send with real attachments -> verify recipient inbox -> verify status transitions (`draft` -> `submitted` -> `completed`)
+- Run production E2E for rate-card-driven estimate behaviour:
+  - Upload sample rate file -> activate card -> create job for matching model/city -> verify dynamic damage panels + labour autofill
 - Optional hardening:
   - Add migration-backed workflow flags table if stricter immutable audit trail is needed beyond `documents` + `audit_logs`
 
@@ -76,8 +90,8 @@ Pending to finish production rollout:
 - Auth gating and dealer isolation via RLS policies
 
 **Remaining (Required to close execution):**
-- Deploy + verify server-side attachment email flow in production environment
 - End-to-end confirmation of submit gating in deployed app
+- End-to-end confirmation of rate-card upload/activate/dynamic estimate behaviour in deployed app
 
 **Remaining (Optional Enhancements):**
 - Auto-capture GPS geo-tagging on photo upload (browser permission required)
