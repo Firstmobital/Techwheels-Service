@@ -60,6 +60,29 @@ Operational note:
 
 ---
 
+## Step D: Universal Sender for Non-Auth Email (Optional, Implemented)
+
+Use only for custom operational/transactional app emails. Do not use this path to replace Supabase Auth invite/magic/recovery sending.
+
+Function:
+- `supabase/functions/send-transactional-email/index.ts`
+
+Required environment variables:
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `ALLOWED_ORIGINS` (comma-separated production origins)
+
+Security controls implemented:
+- Bearer-token authentication required.
+- Admin role check through `public.users` via shared auth validator.
+- CORS allow-list restriction through `ALLOWED_ORIGINS`.
+- Audit logging of send success/failure into `audit_logs`.
+
+Deploy command:
+- `supabase functions deploy send-transactional-email --project-ref jmdndcphkmaljhwgzqxq`
+
+---
+
 ## Validation Checklist
 
 - [ ] Temporary password set for target user
@@ -68,6 +91,11 @@ Operational note:
 - [ ] User re-login verified with new password
 - [ ] SMTP configured and verified
 - [ ] Invite/magic/recovery email tests passing
+
+Final closure checklist:
+- [ ] Universal sender deployed with required environment variables
+- [ ] `ALLOWED_ORIGINS` set to production app origins (not wildcard)
+- [ ] Incident evidence captured (timestamps, actor, user confirmation)
 
 ---
 

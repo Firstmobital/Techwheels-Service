@@ -39,8 +39,8 @@ This plan restores immediate user access without relying on email delivery, pres
 ## Implementation Tasks
 
 ### Phase 1: Immediate Access Recovery (No Email Dependency)
-- [ ] **Task 1.1:** Identify Vinod's auth user ID in Supabase Authentication -> Users.
-- [ ] **Task 1.2:** Set a strong temporary password via deployed `set-user-temp-password` function with `email_confirm: true`.
+- [x] **Task 1.1:** Identify Vinod's auth user ID in Supabase Authentication -> Users.
+- [x] **Task 1.2:** Set a strong temporary password via deployed `set-user-temp-password` function with `email_confirm: true`.
 - [ ] **Task 1.3:** Share temporary password with Vinod through approved secure channel (not email if possible).
 - [ ] **Task 1.4:** Confirm Vinod can sign in at production URL.
 
@@ -55,7 +55,7 @@ This plan restores immediate user access without relying on email delivery, pres
 - [ ] **Task 3.3:** Set production-safe email rate limits in Supabase Auth settings.
 - [ ] **Task 3.4:** Test all outbound auth mail types: invite/confirmation, magic link, password recovery.
 - [x] **Task 3.5:** Update operations runbook with limits, fallback path, and escalation owner.
-- [ ] **Task 3.6:** Reuse existing universal email sender for non-Auth transactional emails only, with mandatory security hardening.
+- [x] **Task 3.6:** Reuse existing universal email sender for non-Auth transactional emails only, with mandatory security hardening.
 
 ---
 
@@ -71,8 +71,8 @@ This plan restores immediate user access without relying on email delivery, pres
 
 ### Phase 1
 ```
-🔄 1.1 | Capture Vinod auth user ID | Admin | 2026-05-22 | - | User visible in Supabase Users list; select exact target row
-🔄 1.2 | Set temp password via deployed function + email_confirm true | Admin/Dev | 2026-05-22 | - | Edge function and UI error handling hardened + redeployed on 2026-05-22; execute retry for Vinod now
+✅ 1.1 | Capture Vinod auth user ID | Admin | 2026-05-22 | 2026-05-22 | Confirmed in authoritative DB dump
+✅ 1.2 | Set temp password via deployed function + email_confirm true | Admin/Dev | 2026-05-22 | 2026-05-22 | Confirmed by auth.users metadata in authoritative DB dump
 ⏳ 1.3 | Send temp credential via secure channel | Admin | - | - | Avoid plain email where possible
 ⏳ 1.4 | Validate production login | Vinod + Admin | - | - | Record timestamp
 ```
@@ -91,7 +91,7 @@ This plan restores immediate user access without relying on email delivery, pres
 ⏳ 3.3 | Email rate limits tuned | Dev/Ops | - | - | Based on expected volume
 🔄 3.4 | End-to-end auth email tests pass | QA/Admin | 2026-05-23 | - | Recovery link UI flow implemented; invite/magic/recovery production verification pending
 ✅ 3.5 | Runbook updated and shared | Dev Team | 2026-05-22 | 2026-05-22 | See AUTH-001_RUNBOOK.md
-⏳ 3.6 | Universal sender adopted for custom app emails | Dev | - | - | Do not replace Supabase Auth SMTP path for invite/magic/recovery
+✅ 3.6 | Universal sender adopted for custom app emails | Dev | 2026-05-23 | 2026-05-23 | Implemented as admin-authenticated edge function send-transactional-email
 ```
 
 ---
@@ -170,6 +170,20 @@ This plan restores immediate user access without relying on email delivery, pres
 	- Restrict CORS origin to approved app origins for production.
 	- Keep usage scope limited to non-Auth notifications and operational messaging.
 
+### 2026-05-23 - Universal Sender Implementation Completed
+- Added edge function: `supabase/functions/send-transactional-email/index.ts`.
+- Reused shared admin auth validation from `supabase/functions/_shared/auth.ts`.
+- Added request validation for recipient list and email formats.
+- Added audit logging for success and failure via `supabase/functions/_shared/audit.ts`.
+- Added CORS allow-list support via `ALLOWED_ORIGINS` environment variable.
+
+### Remaining Closeout Actions (Operational)
+- [ ] Configure Supabase Auth SMTP provider with Resend credentials in project settings.
+- [ ] Validate DNS records (SPF, DKIM, DMARC) for sender domain.
+- [ ] Set and verify production-safe Supabase Auth rate limits.
+- [ ] Execute and record invite/magic-link/recovery production test evidence.
+- [ ] Record secure-channel temp credential handoff and user login verification for incident closure.
+
 ---
 
 ## Related Documentation
@@ -181,4 +195,4 @@ This plan restores immediate user access without relying on email delivery, pres
 ---
 
 **Last Updated:** 2026-05-23 by GitHub Copilot  
-**Status:** � IN PROGRESS
+**Status:** IN PROGRESS
