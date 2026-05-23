@@ -85,21 +85,40 @@ Deploy command:
 
 ## Validation Checklist
 
-- [ ] Temporary password set for target user
-- [ ] User logged in once with temporary password
-- [ ] User changed password successfully
-- [ ] User re-login verified with new password
-- [ ] SMTP configured and verified
-- [ ] Invite/magic/recovery email tests passing
 
 Final closure checklist:
-- [ ] Universal sender deployed with required environment variables
-- [ ] `ALLOWED_ORIGINS` set to production app origins (not wildcard)
-- [ ] Incident evidence captured (timestamps, actor, user confirmation)
+- [x] Temporary password set for target user
+- [x] User logged in once with temporary password
+- [x] User changed password successfully
+- [x] User re-login verified with new password
+- [x] SMTP configured and verified
+- [x] Invite/magic/recovery email tests passing
+
+Final closure checklist:
+- [x] Universal sender deployed with required environment variables
+- [x] `ALLOWED_ORIGINS` set to production app origins (not wildcard)
+- [x] Incident evidence captured (timestamps, actor, user confirmation)
+- [x] All 3 email flows tested: magic link, password recovery, signup confirmation
 
 ---
 
 ## Incident Notes Template
+---
+
+## Closure Summary
+
+**Date:** 2026-05-23  
+**Status:** ✅ COMPLETED
+
+All AUTH-001 objectives achieved. Email delivery is now resilient and user access recovery flows are functional.
+
+### Evidence
+- SMTP: Resend configured with service@techwheels.in
+- Recovery flows: Magic link ✅, Password recovery ✅, Signup confirmation ✅
+- Frontend: Password-change enforcement (/reset-password route) deployed
+- Incident: Temp credential issued, rotated, and retired per protocol
+- Rate limits: Supabase Auth email limits tuned for production
+
 
 - Date/Time:
 - Affected user email:
