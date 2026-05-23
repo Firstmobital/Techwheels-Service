@@ -103,31 +103,39 @@ const DAMAGE_PANEL_OPTIONS = [
   'Underbody',
 ]
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const SESSION_KEYS = {
+  activeTab: 'autodoc_active_tab',
+  activeJobCardId: 'autodoc_active_job_card_id',
+  formDraft: 'autodoc_form_draft',
+  selectedPanels: 'autodoc_selected_panels',
+  activePanel: 'autodoc_active_panel',
+  damagePhotoType: 'autodoc_damage_photo_type',
+  estimateRows: 'autodoc_estimate_rows',
+  deliveryVideoName: 'autodoc_delivery_video_name',
+} as const
 
-export default function AutoDocPage() {
-  const navigate = useNavigate()
-  const [rows,         setRows]         = useState<JobRow[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState<string | null>(null)
-  const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
-  const [search,       setSearch]       = useState('')
-  const [statusFilter, setStatus]       = useState<string>('all')
-  const [showCreate, setShowCreate] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-  const [lookupBusy, setLookupBusy] = useState(false)
-  const [vehicleFound, setVehicleFound] = useState(false)
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('autodoc_active_tab') || 'dashboard')
-  const [kpis, setKpis] = useState({
-    totalToday: 0,
-    totalTodayNew: 0,
-    totalTodayInProgress: 0,
-    pendingApproval: 0,
-    approvedInWork: 0,
-    completedThisWeek: 0,
-  })
-  const [form, setForm] = useState<CreateJobCardForm>(() => ({
+function readSessionValue(key: string): string | null {
+  if (typeof window === 'undefined') return null
+  return window.sessionStorage.getItem(key)
+}
+
+function writeSessionValue(key: string, value: string) {
+  if (typeof window === 'undefined') return
+  window.sessionStorage.setItem(key, value)
+}
+
+function readSessionJSON<T>(key: string, fallback: T): T {
+  const raw = readSessionValue(key)
+  if (!raw) return fallback
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+function createInitialForm(): CreateJobCardForm {
+  return {
     regNumber: '',
     jcNumber: '',
     complaintDate: new Date().toISOString().slice(0, 10),
@@ -145,18 +153,49 @@ export default function AutoDocPage() {
     ownerPhone: '',
     dealerCode: '',
     dateOfSale: '',
-  }))
-  const [activeJobCardId, setActiveJobCardId] = useState<string | null>(() => localStorage.getItem('autodoc_active_job_card_id'))
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function AutoDocPage() {
+  const navigate = useNavigate()
+  const [rows,         setRows]         = useState<JobRow[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [error,        setError]        = useState<string | null>(null)
+  const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
+  const [search,       setSearch]       = useState('')
+  const [statusFilter, setStatus]       = useState<string>('all')
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [lookupBusy, setLookupBusy] = useState(false)
+  const [vehicleFound, setVehicleFound] = useState(false)
+  const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
+  const [kpis, setKpis] = useState({
+    totalToday: 0,
+    totalTodayNew: 0,
+    totalTodayInProgress: 0,
+    pendingApproval: 0,
+    approvedInWork: 0,
+    completedThisWeek: 0,
+  })
+  const [form, setForm] = useState<CreateJobCardForm>(() => readSessionJSON<CreateJobCardForm>(SESSION_KEYS.formDraft, createInitialForm()))
+  const [activeJobCardId, setActiveJobCardId] = useState<string | null>(() => readSessionValue(SESSION_KEYS.activeJobCardId))
   const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
   const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
-  const [selectedPanels, setSelectedPanels] = useState<string[]>([])
-  const [activePanel, setActivePanel] = useState('')
-  const [damagePhotoType, setDamagePhotoType] = useState<'' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('')
+  const [selectedPanels, setSelectedPanels] = useState<string[]>(() => readSessionJSON<string[]>(SESSION_KEYS.selectedPanels, []))
+  const [activePanel, setActivePanel] = useState(() => readSessionValue(SESSION_KEYS.activePanel) || '')
+  const [damagePhotoType, setDamagePhotoType] = useState<'' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>(() => {
+    const saved = readSessionValue(SESSION_KEYS.damagePhotoType)
+    if (saved === 'Pre-repair / Damage' || saved === 'Under-repair' || saved === 'Post-repair') return saved
+    return ''
+  })
   const [damagePhotos, setDamagePhotos] = useState<DamagePhotoItem[]>([])
   const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
-  const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>([])
-  const [deliveryVideoName, setDeliveryVideoName] = useState('')
+  const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>(() => readSessionJSON<EstimateLineItem[]>(SESSION_KEYS.estimateRows, []))
+  const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
     const readiness = {
       prePpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_pre'),
       postPpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_post'),
@@ -381,15 +420,16 @@ export default function AutoDocPage() {
     }
   }, [activeJobCardId, rows])
 
+  useEffect(() => { writeSessionValue(SESSION_KEYS.activeTab, activeTab) }, [activeTab])
   useEffect(() => {
-    localStorage.setItem('autodoc_active_tab', activeTab)
-  }, [activeTab])
-
-  useEffect(() => {
-    if (activeJobCardId) {
-      localStorage.setItem('autodoc_active_job_card_id', activeJobCardId)
-    }
+    if (activeJobCardId) writeSessionValue(SESSION_KEYS.activeJobCardId, activeJobCardId)
   }, [activeJobCardId])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.formDraft, JSON.stringify(form)) }, [form])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.selectedPanels, JSON.stringify(selectedPanels)) }, [selectedPanels])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.activePanel, activePanel) }, [activePanel])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.damagePhotoType, damagePhotoType) }, [damagePhotoType])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.estimateRows, JSON.stringify(estimateRows)) }, [estimateRows])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.deliveryVideoName, deliveryVideoName) }, [deliveryVideoName])
 
   useEffect(() => {
     async function loadActiveSummary() {
