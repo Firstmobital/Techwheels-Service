@@ -142,30 +142,11 @@ export default function AutoDocPage() {
   }))
   const [selectedPanels, setSelectedPanels] = useState<string[]>([])
   const [activePanel, setActivePanel] = useState('')
-  const [damagePhotoType, setDamagePhotoType] = useState<'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('Pre-repair / Damage')
+  const [damagePhotoType, setDamagePhotoType] = useState<'' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('')
   const [damagePhotos, setDamagePhotos] = useState<DamagePhotoItem[]>([])
   const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
-  const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>([
-    {
-      id: 'row-1',
-      panel: 'LH Front Door',
-      action: 'Parts Replacement',
-      partNo: 'TM-2046',
-      partsPrice: '8500',
-      paintPrice: '3200',
-      labourPrice: '1200',
-    },
-    {
-      id: 'row-2',
-      panel: 'RH Front Door',
-      action: 'Repaint',
-      partNo: '-',
-      partsPrice: '',
-      paintPrice: '2800',
-      labourPrice: '900',
-    },
-  ])
+  const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>([])
 
   function toggleDamagePanel(panel: string) {
     setSelectedPanels((prev) => {
@@ -226,6 +207,10 @@ export default function AutoDocPage() {
       showToast('Select a panel first before uploading photos.', false)
       return
     }
+    if (!damagePhotoType) {
+      showToast('Select photo stage before uploading photos.', false)
+      return
+    }
     damageUploadInputRef.current?.click()
   }
 
@@ -238,12 +223,17 @@ export default function AutoDocPage() {
       event.target.value = ''
       return
     }
+    if (!damagePhotoType) {
+      showToast('Select photo stage before uploading photos.', false)
+      event.target.value = ''
+      return
+    }
 
     const nowLabel = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     const nextPhotos: DamagePhotoItem[] = Array.from(files).map((file) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       panel: activePanel,
-      stage: damagePhotoType,
+      stage: damagePhotoType as DamagePhotoItem['stage'],
       url: URL.createObjectURL(file),
       name: file.name,
       uploadedAtLabel: nowLabel,
@@ -288,9 +278,12 @@ export default function AutoDocPage() {
 
   const visibleDamagePhotos = damagePhotos.filter((photo) => {
     const panelMatches = !activePanel || photo.panel === activePanel
-    const stageMatches = photo.stage === damagePhotoType
+    const stageMatches = !damagePhotoType || photo.stage === damagePhotoType
     return panelMatches && stageMatches
   })
+  const currentVehicleReg = form.regNumber.trim() || 'Not selected'
+  const currentVehicleModel = form.model.trim() || 'Model NA'
+  const currentVehicleJc = form.jcNumber.trim() || 'JC NA'
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
@@ -1152,7 +1145,12 @@ export default function AutoDocPage() {
                 </svg>
                 Select Affected Panels
               </h3>
-              <span className="text-xs text-gray-500">Tap to select - each panel requires a photo</span>
+              <div className="flex flex-col items-start gap-1 sm:items-end">
+                <span className="text-xs text-gray-500">Tap to select - each panel requires a photo</span>
+                <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-200">
+                  Vehicle: {currentVehicleReg} - {currentVehicleModel} - {currentVehicleJc}
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -1183,12 +1181,15 @@ export default function AutoDocPage() {
 
           <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                </svg>
-                Damage Photo Upload <span className="text-sm font-medium text-red-600">* mandatory per panel</span>
-              </h3>
+              <div className="flex flex-col gap-1">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                  <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  </svg>
+                  Damage Photo Upload <span className="text-sm font-medium text-red-600">* mandatory per panel</span>
+                </h3>
+                <p className="text-xs font-medium text-gray-600">Uploading for registration: <span className="text-blue-700">{currentVehicleReg}</span></p>
+              </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <select
                   value={activePanel}
@@ -1202,9 +1203,10 @@ export default function AutoDocPage() {
                 </select>
                 <select
                   value={damagePhotoType}
-                  onChange={(e) => setDamagePhotoType(e.target.value as 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair')}
+                  onChange={(e) => setDamagePhotoType(e.target.value as '' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair')}
                   className="h-10 min-w-[180px] rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 >
+                  <option value="">Select stage</option>
                   <option value="Pre-repair / Damage">Pre-repair / Damage</option>
                   <option value="Under-repair">Under-repair</option>
                   <option value="Post-repair">Post-repair</option>
@@ -1238,6 +1240,9 @@ export default function AutoDocPage() {
               </svg>
               <p className="text-xl font-medium text-gray-900">Tap to capture / upload panel photo</p>
               <p className="mt-1 text-sm text-gray-600">GPS - timestamp - panel name auto-tagged</p>
+              {!damagePhotoType && (
+                <p className="mt-2 text-xs font-medium text-amber-700">Select photo stage before uploading.</p>
+              )}
               <button
                 type="button"
                 onClick={openDamagePhotoPicker}
@@ -1508,19 +1513,19 @@ export default function AutoDocPage() {
             <div className="grid grid-cols-2 gap-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-right sm:grid-cols-4">
               <div>
                 <p className="text-xs text-gray-500">Parts Total</p>
-                <p className="text-2xl font-semibold text-gray-900">Rs {estimateTotals.parts.toLocaleString('en-IN')}</p>
+                <p className="text-2xl font-semibold text-gray-900">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.parts.toLocaleString('en-IN')}`}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">Paint Total</p>
-                <p className="text-2xl font-semibold text-gray-900">Rs {estimateTotals.paint.toLocaleString('en-IN')}</p>
+                <p className="text-2xl font-semibold text-gray-900">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.paint.toLocaleString('en-IN')}`}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">Labour Total</p>
-                <p className="text-2xl font-semibold text-gray-900">Rs {estimateTotals.labour.toLocaleString('en-IN')}</p>
+                <p className="text-2xl font-semibold text-gray-900">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.labour.toLocaleString('en-IN')}`}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">Grand Total (1+2+3)</p>
-                <p className="text-3xl font-bold text-blue-700">Rs {estimateTotals.grand.toLocaleString('en-IN')}</p>
+                <p className="text-3xl font-bold text-blue-700">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.grand.toLocaleString('en-IN')}`}</p>
               </div>
             </div>
           </div>
