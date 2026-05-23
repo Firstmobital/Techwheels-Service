@@ -57,12 +57,13 @@ interface Panel {
 }
 
 interface PanelPhoto {
-  id:           string
-  panel_id:     string
-  photo_type:   'defect' | 'primer' | 'paint'
-  storage_path: string
-  gps_city:     string | null
-  captured_at:  string | null
+  id:            string
+  panel_id:      string
+  photo_type:    'defect' | 'primer' | 'paint'
+  repair_stage:  'pre-repair' | 'post-repair'
+  storage_path:  string
+  gps_city:      string | null
+  captured_at:   string | null
 }
 
 interface EstimateRow {
@@ -129,7 +130,7 @@ async function fetchAll(jobCardId: string) {
 
     supabase
       .from('panel_photos')
-      .select('id, panel_id, photo_type, storage_path, gps_city, captured_at')
+      .select('id, panel_id, photo_type, repair_stage, storage_path, gps_city, captured_at')
       .eq('job_card_id', jobCardId)
       .order('captured_at'),
 
@@ -237,20 +238,19 @@ function addCoverSlide(prs: PptxGenJS, jc: JobSummary, type: 'pre-repair' | 'pos
   })
 }
 
-// ─── Slide: Photo ─────────────────────────────────────────────────────────────
+// ─── Slide: Photo (Two-column layout) ──────────────────────────────────────
 
 const TITLE_H  = 0.68
 const STRIPE_H = 0.06
 const FOOT_H   = 0.42
-const PHOTO_Y  = TITLE_H + STRIPE_H
-const PHOTO_H  = H - PHOTO_Y - FOOT_H
 
 function addPhotoSlide(
-  prs:       PptxGenJS,
-  panelName: string,
-  pType:     'defect' | 'primer' | 'paint',
-  dataURL:   string | null,
-  gpsCity:   string | null,
+  prs:        PptxGenJS,
+  summary:    JobSummary,
+  panelName:  string,
+  pType:      'defect' | 'primer' | 'paint',
+  dataURL:    string | null,
+  gpsCity:    string | null,
   capturedAt: string | null,
 ) {
   const slide = prs.addSlide()
@@ -260,7 +260,7 @@ function addPhotoSlide(
     x: 0, y: 0, w: W, h: H, fill: { color: WHITE },
   })
 
-  // Title bar
+  // Title bar across full width
   slide.addShape(prs.ShapeType.rect, {
     x: 0, y: 0, w: W, h: TITLE_H, fill: { color: NAVY },
   })
@@ -280,35 +280,103 @@ function addPhotoSlide(
     x: 0, y: TITLE_H, w: W, h: STRIPE_H, fill: { color: GOLD },
   })
 
-  // Photo area or placeholder
+  // ── Two-column layout ───────────────────────────────────────────────────
+
+  const CONTENT_Y  = TITLE_H + STRIPE_H
+  const CONTENT_H  = H - CONTENT_Y - FOOT_H
+
+  // Left column: Vehicle details (40% width)
+  const LEFT_W = W * 0.4
+  const LEFT_X = 0
+
+  slide.addShape(prs.ShapeType.rect, {
+    x: LEFT_X, y: CONTENT_Y, w: LEFT_W, h: CONTENT_H, fill: { color: LGRAY },
+  })
+
+  // Panel section
+  let detailY = CONTENT_Y + 0.2
+  slide.addText('PANEL', {
+    x: LEFT_X + 0.15, y: detailY, w: LEFT_W - 0.3, h: 0.2,
+    fontSize: 9, bold: true, color: GOLD, fontFace: 'Calibri',
+  })
+  slide.addText(panelName.toUpperCase(), {
+    x: LEFT_X + 0.15, y: detailY + 0.2, w: LEFT_W - 0.3, h: 0.35,
+    fontSize: 13, bold: true, color: DGRAY, fontFace: 'Calibri',
+  })
+
+  // Vehicle details section
+  detailY += 0.7
+  const detailFields = [
+    { label: 'REG NO.', value: summary.reg_number ?? '—' },
+    { label: 'VIN', value: summary.vin ?? '—' },
+    { label: 'MODEL', value: summary.model ?? '—' },
+    { label: 'COLOUR', value: summary.colour ?? '—' },
+    { label: 'JC NO.', value: summary.jc_number ?? '—' },
+  ]
+
+  detailFields.forEach(({ label, value }) => {
+    slide.addText(label, {
+      x: LEFT_X + 0.15, y: detailY, w: LEFT_W - 0.3, h: 0.18,
+      fontSize: 8, bold: true, color: GOLD, fontFace: 'Calibri',
+    })
+    slide.addText(value, {
+      x: LEFT_X + 0.15, y: detailY + 0.18, w: LEFT_W - 0.3, h: 0.25,
+      fontSize: 10, color: DGRAY, fontFace: 'Calibri',
+    })
+    detailY += 0.48
+  })
+
+  // Right column: Image (60% width)
+  const RIGHT_W = W * 0.6
+  const RIGHT_X = LEFT_W
+  const IMG_H   = CONTENT_H - 0.35  // Space for geotag at bottom
+
+  // Image area or placeholder
   if (dataURL) {
     slide.addImage({
       data: dataURL,
-      x: 0, y: PHOTO_Y, w: W, h: PHOTO_H,
-      sizing: { type: 'contain', w: W, h: PHOTO_H },
+      x: RIGHT_X, y: CONTENT_Y, w: RIGHT_W, h: IMG_H,
+      sizing: { type: 'contain', w: RIGHT_W, h: IMG_H },
     })
   } else {
     slide.addShape(prs.ShapeType.rect, {
-      x: 0, y: PHOTO_Y, w: W, h: PHOTO_H, fill: { color: LGRAY },
+      x: RIGHT_X, y: CONTENT_Y, w: RIGHT_W, h: IMG_H, fill: { color: LGRAY },
     })
     slide.addText('Photo not available', {
-      x: 0, y: PHOTO_Y + PHOTO_H / 2 - 0.2, w: W, h: 0.4,
-      fontSize: 14, color: DGRAY, align: 'center',
+      x: RIGHT_X, y: CONTENT_Y + IMG_H / 2 - 0.2, w: RIGHT_W, h: 0.4,
+      fontSize: 14, color: DGRAY, align: 'center', fontFace: 'Calibri',
     })
   }
 
-  // Footer bar
+  // Geotag strip at bottom of right column
+  const geoStripY = CONTENT_Y + IMG_H
+  slide.addShape(prs.ShapeType.rect, {
+    x: RIGHT_X, y: geoStripY, w: RIGHT_W, h: 0.35, fill: { color: DGRAY },
+  })
+
+  const geoTag  = gpsCity ? `📍 ${gpsCity}` : ''
+  const dateTag = capturedAt ? fmt(capturedAt) : ''
+  const geoInfo = [geoTag, dateTag].filter(Boolean).join('   |   ')
+
+  if (geoInfo) {
+    slide.addText(geoInfo, {
+      x: RIGHT_X + 0.1, y: geoStripY, w: RIGHT_W - 0.2, h: 0.35,
+      fontSize: 9, color: WHITE, fontFace: 'Calibri', valign: 'middle',
+    })
+  }
+
+  // ─── Footer bar ────────────────────────────────────────────────────────
+
   const footY = H - FOOT_H
   slide.addShape(prs.ShapeType.rect, {
     x: 0, y: footY, w: W, h: FOOT_H, fill: { color: NAVY },
   })
 
-  const geoTag  = gpsCity    ? `📍 ${gpsCity}` : ''
-  const dateTag = capturedAt ? fmt(capturedAt) : ''
-  const footer  = [geoTag, dateTag].filter(Boolean).join('   |   ')
+  const dealerLine = [summary.dealer_name, summary.dealer_city, fmt(capturedAt)]
+    .filter(Boolean).join('   |   ')
 
-  if (footer) {
-    slide.addText(footer, {
+  if (dealerLine) {
+    slide.addText(dealerLine, {
       x: 0.25, y: footY, w: W - 0.5, h: FOOT_H,
       fontSize: 10, color: WHITE, fontFace: 'Calibri', valign: 'middle',
     })
@@ -447,11 +515,15 @@ export async function generateRepairPPT(
   // 1. Fetch all Supabase data in parallel
   const { summary, panels, photos, estRows } = await fetchAll(jobCardId)
 
-  // 2. Decide which photo types to render
+  // 2. Decide which photo types to render based on repair stage
+  // Pre-repair: defect & primer photos only, from pre-repair stage
+  // Post-repair: all photo types, from post-repair stage
   const allowedTypes: Array<'defect' | 'primer' | 'paint'> =
     type === 'pre-repair' ? ['defect', 'primer'] : ['defect', 'primer', 'paint']
 
-  const renderPhotos = photos.filter(p => allowedTypes.includes(p.photo_type))
+  const renderPhotos = photos.filter(
+    p => allowedTypes.includes(p.photo_type) && p.repair_stage === type,
+  )
 
   // 3. Download all photos concurrently
   const imgMap = new Map<string, string | null>()
@@ -484,6 +556,7 @@ export async function generateRepairPPT(
       for (const photo of panelPhotos) {
         addPhotoSlide(
           prs,
+          summary,
           panel.panel_name,
           photo.photo_type,
           imgMap.get(photo.id) ?? null,

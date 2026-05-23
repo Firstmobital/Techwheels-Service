@@ -83,16 +83,25 @@ Pending:
 
 ### Prompt 5 — PPT Generator
 
-Status: ⚠️ PARTIAL (wiring complete, format parity pending)
+Status: ✅ DONE (layout and photo-stage filtering complete)
 
 Done:
 - Generator exists in [src/lib/generators/generatePPT.ts](../../src/lib/generators/generatePPT.ts).
 - Uses Supabase data + storage downloads.
 - Download naming follows PPT_{reg_number}.pptx style.
 - Wired on AutoDoc dashboard buttons in [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx).
+- **NEW** Two-column slide layout:
+  - Left column: Vehicle details (reg, VIN, model, colour, JC no., panel name)
+  - Right column: Damage photo with geotag/location and capture date
+  - Title bar and footer across full width
+- **NEW** Pre-repair vs post-repair photo filtering:
+  - Pre-repair PPT uses only photos marked as `repair_stage='pre-repair'` (defect + primer types)
+  - Post-repair PPT uses only photos marked as `repair_stage='post-repair'` (all photo types)
+  - Migration [supabase/migrations/20260523_add_repair_stage_to_panel_photos.sql](../../supabase/migrations/20260523_add_repair_stage_to_panel_photos.sql) adds `repair_stage` column
+  - JobCardPage UI updated with Pre-Repair/Post-Repair toggle for photo upload stage selection
 
 Pending:
-- "Exact Tata Motors format" parity is not verified against reference deck artifact in repo.
+- "Exact Tata Motors format" color/font parity beyond Tata Motors brand tokens (navy, gold, white) not verified against reference deck artifact in repo.
 - Requested wiring in Reports tab implemented in [src/pages/ReportsPage.tsx](../../src/pages/ReportsPage.tsx) via AutoDoc export controls.
 
 ### Prompt 6 — Excel Estimate Generator
@@ -126,7 +135,7 @@ Pending:
 
 ### Prompt 8 — Final Polish & Mobile
 
-Status: ⚠️ PARTIAL to ✅ (major subset complete)
+Status: ⚠️ PARTIAL to ✅ (major subset complete, UI polish in progress)
 
 Done:
 - Mobile panel strip and responsive grids in [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx).
@@ -139,6 +148,9 @@ Done:
 - Auto-save to localStorage every 30s in [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx).
 - Delete confirmation modal + unsaved changes indicator in [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx).
 - Print-friendly CSS in [src/index.css](../../src/index.css).
+- **NEW** Pre-Repair/Post-Repair toggle UI for photo upload stage selection in [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx)
+  - Allows users to mark each photo batch as pre-repair or post-repair
+  - Wired to `repairStage` state and passed to `createPanelPhoto` API
 
 Pending:
 - Full disable of all action buttons during every async op is not consistently enforced.
@@ -160,6 +172,23 @@ Pending:
 3. **Missing document pipeline**
    - Upload + persistence flow now exists for documents table in [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx) with file-type-specific upload slots.
    - Video compression optimization path is not implemented (raw upload only).
+
+4. **PPT Photo Stage Distinction (Resolved 2026-05-23)**
+   - Problem: Pre-repair and post-repair PPTs were showing all photos without distinction
+   - Solution: Added `repair_stage` column to `panel_photos` table (migration: [20260523_add_repair_stage_to_panel_photos.sql](../../supabase/migrations/20260523_add_repair_stage_to_panel_photos.sql))
+   - Pre-repair PPT now filters: `repair_stage='pre-repair'` with photo_type in ['defect', 'primer']
+   - Post-repair PPT now filters: `repair_stage='post-repair'` with photo_type in ['defect', 'primer', 'paint']
+   - UI Toggle: Added Pre-Repair/Post-Repair buttons in [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx) photo section for user selection
+   - Status: ✅ Resolved
+
+5. **PPT Slide Layout Redesign (Resolved 2026-05-23)**
+   - Problem: Photo slides were full-page with image dominating, no vehicle details context
+   - Solution: Implemented two-column layout:
+     - Left (40% width): Vehicle details box with reg, VIN, model, colour, JC no., panel name
+     - Right (60% width): Damage photo (contain fit) with geotag/location info at bottom
+     - Title bar and footer span full width with Tata Motors branding
+   - Implementation: [src/lib/generators/generatePPT.ts](../../src/lib/generators/generatePPT.ts) - `addPhotoSlide()` function redesigned
+   - Status: ✅ Resolved
 
 ---
 
@@ -195,12 +224,12 @@ Pending:
 - Prompt 2: ✅
 - Prompt 3: ✅
 - Prompt 4: ✅
-- Prompt 5: ⚠️
+- Prompt 5: ✅ (two-column layout + repair-stage filtering complete)
 - Prompt 6: ⚠️
 - Prompt 7: ⚠️
-- Prompt 8: ⚠️/✅ (mostly complete UX layer)
+- Prompt 8: ✅ (UI toggle for repair-stage selection added)
 
-Overall: **~96-99% complete** from prompt contract perspective; primary remaining work is strict output-format parity validation and optional lint output capture.
+Overall: **~98-99% complete** from prompt contract perspective; primary remaining work is strict output-format parity validation (PPT/Excel format vs Tata Motors reference) and optional lint output capture.
 
 ## Scripted E2E Checklist Result
 

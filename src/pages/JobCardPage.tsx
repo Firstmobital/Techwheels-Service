@@ -35,6 +35,7 @@ interface Panel { id: string; panel_name: string; action: string | null }
 interface PanelPhoto {
   id: string; panel_id: string
   photo_type: 'defect' | 'primer' | 'paint'
+  repair_stage?: 'pre-repair' | 'post-repair'
   storage_path: string; gps_city: string | null; captured_at: string | null
 }
 
@@ -141,6 +142,7 @@ export default function JobCardPage() {
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
   const [selPanel,     setSelPanel]     = useState<string | null>(null)
+  const [repairStage,  setRepairStage]  = useState<'pre-repair' | 'post-repair'>('pre-repair')
   const [uploadProg,   setUploadProg]   = useState<Record<string, number>>({})
   const [uploadErr,    setUploadErr]    = useState<Record<string, string>>({})
   const [docUploadProg, setDocUploadProg] = useState<Record<string, number>>({})
@@ -242,6 +244,7 @@ export default function JobCardPage() {
       panelId,
       photoType,
       storagePath: path,
+      repairStage,
     })
     if (dbRes.error) { setUploadErr(e => ({ ...e, [key]: dbRes.error as string })); return }
 
@@ -437,9 +440,33 @@ export default function JobCardPage() {
       {/* Photo upload zones */}
       {selPanel && (
         <section className="mb-6">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-            Photos — {panels.find(p => p.id === selPanel)?.panel_name}
-          </p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+              Photos — {panels.find(p => p.id === selPanel)?.panel_name}
+            </p>
+            <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 p-1">
+              <button
+                onClick={() => setRepairStage('pre-repair')}
+                className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors ${
+                  repairStage === 'pre-repair'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Pre-Repair
+              </button>
+              <button
+                onClick={() => setRepairStage('post-repair')}
+                className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors ${
+                  repairStage === 'post-repair'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Post-Repair
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {PHOTO_TYPES.map(({ type, label, hdr }) => {
               const key      = `${selPanel}-${type}`

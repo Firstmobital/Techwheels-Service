@@ -5,11 +5,11 @@ import { fail, ok, type ApiResult, type PanelPhotoInsert, type PanelPhotoRow, ty
 export async function listPanelPhotos(jobCardId: string): Promise<ApiResult<PanelPhotoRow[]>> {
   const { data, error } = await supabase
     .from('panel_photos')
-    .select('id, panel_id, photo_type, storage_path, gps_city, captured_at')
+    .select('id, panel_id, photo_type, repair_stage, storage_path, gps_city, captured_at')
     .eq('job_card_id', jobCardId)
 
   if (error) return fail(error)
-  return ok((data ?? []) as PanelPhotoRow[])
+  return ok((data ?? []) as unknown as PanelPhotoRow[])
 }
 
 export async function createPanelPhoto(input: {
@@ -17,18 +17,20 @@ export async function createPanelPhoto(input: {
   panelId: string
   photoType: PhotoType
   storagePath: string
+  repairStage?: 'pre-repair' | 'post-repair'
 }): Promise<ApiResult<PanelPhotoRow>> {
-  const payload: PanelPhotoInsert = {
+  const payload: PanelPhotoInsert & { repair_stage?: string } = {
     job_card_id: input.jobCardId,
     panel_id: input.panelId,
     photo_type: input.photoType,
     storage_path: input.storagePath,
+    repair_stage: input.repairStage || 'pre-repair',
   }
 
   const { data, error } = await supabase
     .from('panel_photos')
-    .insert(payload)
-    .select('id, panel_id, photo_type, storage_path, gps_city, captured_at')
+    .insert(payload as unknown as PanelPhotoInsert)
+    .select('id, panel_id, photo_type, repair_stage, storage_path, gps_city, captured_at')
     .single<PanelPhotoRow>()
 
   if (error) return fail(error)
