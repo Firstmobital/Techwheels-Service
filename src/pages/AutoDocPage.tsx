@@ -500,6 +500,12 @@ export default function AutoDocPage() {
       || (r.model ?? '').toLowerCase().includes(q)
     return matchStatus && matchSearch
   })
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const dashboardDisplayed = displayed.filter((r) => {
+    const complaintDate = new Date(r.complaint_date)
+    return complaintDate >= todayStart
+  })
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -649,7 +655,7 @@ export default function AutoDocPage() {
         </select>
         {!loading && (
           <span className="ml-auto text-xs text-gray-400">
-            {displayed.length} job card{displayed.length !== 1 ? 's' : ''}
+            {dashboardDisplayed.length} job card{dashboardDisplayed.length !== 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -694,14 +700,14 @@ export default function AutoDocPage() {
       )}
 
       {/* Empty state */}
-      {!loading && !error && displayed.length === 0 && (
+      {!loading && !error && dashboardDisplayed.length === 0 && (
         <div className="py-16 text-center text-sm text-gray-400">
-          No job cards found.{q || statusFilter !== 'all' ? ' Try clearing the filters.' : ''}
+          No job cards found for today.{q || statusFilter !== 'all' ? ' Try clearing the filters.' : ''}
         </div>
       )}
 
       {/* Table */}
-      {!loading && !error && displayed.length > 0 && (
+      {!loading && !error && dashboardDisplayed.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm print-table">
           <table className="min-w-full divide-y divide-gray-100 text-sm">
             <thead>
@@ -722,7 +728,7 @@ export default function AutoDocPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {displayed.map(row => {
+              {dashboardDisplayed.map(row => {
                 const preKey: GenKey  = `pre-${row.job_card_id}`
                 const postKey: GenKey = `post-${row.job_card_id}`
                 const xlsKey: GenKey  = `xls-${row.job_card_id}`
