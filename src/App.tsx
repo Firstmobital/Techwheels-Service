@@ -113,11 +113,33 @@ function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
 
 function AccessDenied() {
   return (
-    <div className="mx-auto my-10 w-full max-w-2xl rounded-xl border border-amber-200 bg-white p-6 text-center shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">No module access assigned</h2>
-      <p className="mt-2 text-sm text-gray-600">
-        Your account is signed in, but no view permissions are enabled yet. Ask an admin to assign module permissions.
-      </p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-2xl">
+        <div className="rounded-xl border border-amber-200 bg-white p-8 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <svg className="h-8 w-8 text-amber-600" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c.866-1.5 2.845-2.501 4.953-2.501h10.7c2.108 0 4.087 1.001 4.953 2.501M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-gray-900">Module access required</h2>
+              <p className="mt-2 text-sm text-gray-600">
+                Your account is active, but you don't have permission to access any modules yet. Contact your administrator to request access to:
+              </p>
+              <ul className="mt-3 space-y-1 text-sm text-gray-600">
+                <li>• <strong>Job Cards</strong> — Create and manage service jobs</li>
+                <li>• <strong>Reports</strong> — View cross-module analytics and dashboards</li>
+                <li>• <strong>Employees</strong> — Manage employee master data</li>
+                <li>• <strong>AutoDoc</strong> — Build vehicle documentation and estimates</li>
+              </ul>
+              <p className="mt-4 text-xs text-gray-500">
+                If you believe this is a mistake, ask your administrator to check your module assignments in the Admin Panel.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

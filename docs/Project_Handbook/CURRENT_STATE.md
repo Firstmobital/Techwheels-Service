@@ -41,6 +41,13 @@ Version Context: Techwheels Service v1.0 (current workspace state)
 - Mandatory DB workflow file introduced: `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`.
 - RBAC daily execution tracking file introduced: `docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md`.
 
+## Module-Route Contract
+
+- Canonical module-route mapping defined in: `docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md`.
+- Route strategy decision (explicit mapping vs. DB route migration) finalized in: `docs/Project_Handbook/ROUTE_STRATEGY_DECISION.md`.
+- **Strategy**: Frontend maintains explicit `ROUTE_MODULE_MAP` (not DB-synced) to enable semantic frontend workflows independent of DB data entity routes.
+- **Authority**: `public.modules` table is authoritative for module names; `ROUTE_MODULE_MAP` in `src/App.tsx` is authoritative for route assignments.
+
 ## Import State
 
 - Multi-file branch-wise ingest supported for core service and parts datasets.

@@ -54,11 +54,15 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Account request sent!</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Your account has been created. An admin will activate your access shortly.
-            Check your email to confirm your address.
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Account created!</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Please check your email to confirm your address. Once confirmed, an administrator will assign you module permissions to access the system.
           </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+            <p className="text-xs text-blue-800">
+              💡 <strong>Next step:</strong> After email confirmation, you'll see a "No module access assigned" message. Contact your administrator to request access to Job Cards, Reports, or other modules.
+            </p>
+          </div>
           <button
             onClick={onSwitchToLogin}
             className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition"
