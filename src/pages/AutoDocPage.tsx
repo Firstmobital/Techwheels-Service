@@ -620,7 +620,7 @@ export default function AutoDocPage() {
 
       {/* JOB CARD FORM */}
       {activeTab === 'jobcard' && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 max-w-4xl">
+        <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <div className="mb-6 flex items-center gap-2">
             <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -677,7 +677,7 @@ export default function AutoDocPage() {
                   </svg>
                   Vehicle Details
                 </h3>
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       VIN / Chassis No <span className="text-red-600">*</span>
@@ -714,7 +714,7 @@ export default function AutoDocPage() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Colour
@@ -741,7 +741,7 @@ export default function AutoDocPage() {
                     <input type="number" placeholder="e.g. 18420" value={form.kmReading} onChange={(e) => setForm(prev => ({ ...prev, kmReading: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Date of Sale <span className="text-red-600">*</span>
@@ -777,7 +777,7 @@ export default function AutoDocPage() {
                   </svg>
                   Owner & Dealer
                 </h3>
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Owner Name <span className="text-red-600">*</span>
@@ -800,7 +800,7 @@ export default function AutoDocPage() {
                     <input type="text" placeholder="TM-RJ-0042" value={form.dealerCode} onChange={(e) => setForm(prev => ({ ...prev, dealerCode: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Dealer City <span className="text-red-600">*</span>
@@ -829,7 +829,7 @@ export default function AutoDocPage() {
                   </svg>
                   Job Details
                 </h3>
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Job Card Number <span className="text-red-600">*</span>
@@ -865,7 +865,7 @@ export default function AutoDocPage() {
                   </svg>
                   Documents
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <div>
                     <label className="mb-2 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Service History <span className="text-red-600">*</span>
@@ -924,14 +924,14 @@ export default function AutoDocPage() {
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 pt-4 flex items-center justify-between">
-                <p className="text-xs text-gray-500 flex items-center gap-1">
+              <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
+                <p className="flex items-center gap-1 text-xs text-gray-500">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2h-2.382a1 1 0 00-.894.553l-.448.894a1 1 0 01-.894.553h-3.752a1 1 0 01-.894-.553l-.448-.894A1 1 0 0010.382 7H8a2 2 0 00-2 2z" />
                   </svg>
                   Vehicle not in DB — will be saved to Supabase on submit
                 </p>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => toast && setToast({ ...toast, msg: 'Draft saved' })}
                     className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
