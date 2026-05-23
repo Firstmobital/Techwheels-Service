@@ -47,24 +47,24 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 - [x] **Task 1.5:** Build validation for TypeScript and production bundle.
 
 ### Phase 2: Module Contract Normalization
-- [ ] **Task 2.1:** Define canonical mapping between DB module names/routes and frontend routes.
-- [ ] **Task 2.2:** Decide whether frontend paths should migrate to DB routes or keep explicit mapping layer.
-- [ ] **Task 2.3:** Document contract in handbook and developer docs.
+- [x] **Task 2.1:** Define canonical mapping between DB module names/routes and frontend routes.
+- [x] **Task 2.2:** Decide whether frontend paths should migrate to DB routes or keep explicit mapping layer.
+- [x] **Task 2.3:** Document contract in handbook and developer docs.
 
 ### Phase 3: Backend RBAC Hardening
 - [x] **Task 3.1:** Audit permissive RLS policies for authenticated and anon roles.
 - [x] **Task 3.2:** Create SQL migration plan foundation to restrict read/write per role/module/dealer scope.
-- [ ] **Task 3.3:** Validate critical tables cannot be queried without intended access.
+- [x] **Task 3.3:** Validate critical tables cannot be queried without intended access.
 
 ### Phase 4: New User Onboarding Controls
-- [ ] **Task 4.1:** Confirm desired behavior for is_active default on signup.
-- [ ] **Task 4.2:** Enforce onboarding state (inactive or no-module-access until admin assignment).
-- [ ] **Task 4.3:** Update signup/admin UX copy to match true behavior.
+- [x] **Task 4.1:** Confirm desired behavior for is_active default on signup.
+- [x] **Task 4.2:** Enforce onboarding state (inactive or no-module-access until admin assignment).
+- [x] **Task 4.3:** Update signup/admin UX copy to match true behavior.
 
 ### Phase 5: QA and Rollout
-- [ ] **Task 5.1:** Execute role matrix tests (admin, manager, staff, viewer, new signup).
-- [ ] **Task 5.2:** Verify direct URL access is blocked for unauthorized modules.
-- [ ] **Task 5.3:** Publish operator checklist for permission assignment and validation.
+- [x] **Task 5.1:** Execute role matrix tests (admin, manager, staff, viewer, new signup).
+- [x] **Task 5.2:** Verify direct URL access is blocked for unauthorized modules.
+- [x] **Task 5.3:** Publish operator checklist for permission assignment and validation.
 - [x] **Task 5.4:** Create compact daily standup tracker with ownership and update conditions.
 
 ---
@@ -123,8 +123,8 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 
 - [x] Authoritative schema available: local_folder/backups/full_database.sql
 - [x] Frontend build pipeline operational
-- [ ] Backend policy change window approved
-- [ ] QA test matrix approved by stakeholders
+- [ ] Backend policy change window approved (external sign-off pending)
+- [ ] QA test matrix approved by stakeholders (external sign-off pending)
 
 ---
 
@@ -191,9 +191,9 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 ---
 
 **Last Updated:** 2026-05-23 by GitHub Copilot  
-**Status:** 🟢 IMPLEMENTATION COMPLETE  
+**Status:** 🟡 IMPLEMENTATION COMPLETE (awaiting stakeholder sign-off)  
 **Progress:** 100%  
-**Ready for:** Phase 5 QA execution + Phase 5 rollout operations
+**Ready for:** Stakeholder sign-off + Phase 5 rollout operations
 
 ---
 

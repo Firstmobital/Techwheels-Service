@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
 **Last Updated:** 2026-05-23  
-**Total Active Plans:** 5
+**Total Active Plans:** 6
 
 ---
 
@@ -12,8 +12,9 @@
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | ✅ COMPLETED | Dev Team | 2026-05-22 | 2026-05-22 | 100% |
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
 | AUTH-001 | Auth Email Recovery and User Access Continuity | 🟠 HIGH | � IN PROGRESS | Techwheels Admin + Dev Team | 2026-05-22 | 2026-05-23 | 65% |
-| RBAC-001 | Dynamic RBAC and Module Wiring Hardening | 🔴 CRITICAL | 🟡 IN PROGRESS | Techwheels Admin + Dev Team + GitHub Copilot | 2026-05-23 | 2026-05-26 | 55% |
+| RBAC-001 | Dynamic RBAC and Module Wiring Hardening | 🔴 CRITICAL | 🟡 REVIEW | Techwheels Admin + Dev Team + GitHub Copilot | 2026-05-23 | 2026-05-26 | 100% |
 | BODYSHOP-001 | Bodyshop Module End-to-End Workflow and Live Dashboard | 🔴 CRITICAL | 🔴 PENDING | Techwheels Product + Dev Team | 2026-05-22 | 2026-05-30 | 0% |
+| DRIVE-001 | Universal Drive Upload and Storage Offload | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-23 | 2026-05-24 | 0% |
 
 ---
 
@@ -23,9 +24,9 @@
 - **File:** [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md)
 - **Daily Tracker:** [RBAC-001_DAILY_STANDUP_CHECKLIST.md](RBAC-001_DAILY_STANDUP_CHECKLIST.md)
 - **Risk Level:** 🔴 CRITICAL (access control + policy hardening)
-- **Status:** Frontend guard implementation complete; backend hardening pending
+- **Status:** Implementation complete; awaiting stakeholder sign-off
 - **Latest Update:** 2026-05-23 - DBL-0002 verification checks passed and migration archived to exec_success_migrations
-- **Next Step:** Begin policy tightening migration set for Phase 3.3 using helper functions
+- **Next Step:** Collect Admin/Engineering/QA sign-offs and proceed with rollout operations
 
 ### BODYSHOP-001: Bodyshop Module End-to-End Workflow and Live Dashboard
 - **File:** [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md)
@@ -47,6 +48,13 @@
 - **Status:** Audit complete, implementation partially complete
 - **Latest Update:** 2026-05-22 - Reports export controls wired and scripted E2E checklist passed (10/10)
 - **Next Step:** Owner decision on contract scope (in-scope implementation track vs documented exception)
+
+### DRIVE-001: Universal Drive Upload and Storage Offload
+- **File:** [DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md](DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md)
+- **Risk Level:** 🟡 MEDIUM (external API dependency + file lifecycle correctness)
+- **Status:** Pending kickoff
+- **Latest Update:** 2026-05-23 - Plan created for Drive offload pipeline with Techwheels_Service root, registration foldering, and regno_doctype_date.ext naming.
+- **Next Step:** Complete Phase 2.1/2.2 by creating and sharing Techwheels_Service Drive root folder to service account
 
 ---
 
@@ -115,6 +123,7 @@ Next: Complete edge function, then move to frontend refactor
 - 📄 [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md) - Dynamic module permission enforcement and backend RBAC hardening plan
 - 📄 [RBAC-001_DAILY_STANDUP_CHECKLIST.md](RBAC-001_DAILY_STANDUP_CHECKLIST.md) - Compact daily standup checklist (done/in-progress/next/blockers)
 - 📄 [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md) - Bodyshop module implementation plan (23-stage workflow + live dashboard)
+- 📄 [DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md](DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md) - Universal Drive upload, DB link writeback, and Supabase storage cleanup plan
 - 📄 COMPLETED_PLANS.md (Coming soon)
 
 ---
