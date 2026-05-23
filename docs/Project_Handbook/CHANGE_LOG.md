@@ -27,6 +27,7 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 - Added paired SQL verification workflow: each migration now requires a read-only check script in `supabase/sql_checks/`.
 - Added check script for DBL-0002: `supabase/sql_checks/20260523120000_add_module_permission_helper_functions_checks.sql`.
 - Verified DBL-0002 using read-only checks and archived migration to `supabase/exec_success_migrations/20260523120000_add_module_permission_helper_functions.sql`.
+- Deleted the temporary DBL-0002 check script from `supabase/sql_checks/` after verification evidence was captured.
 
 Template for future entries:
 

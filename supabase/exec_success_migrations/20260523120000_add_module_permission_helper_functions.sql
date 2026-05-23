@@ -1,6 +1,6 @@
 -- RBAC Phase 3 foundation
 -- Adds reusable permission helper functions for future RLS hardening.
--- Verification checks: supabase/sql_checks/20260523120000_add_module_permission_helper_functions_checks.sql
+-- Verification checks were executed via a temporary paired sql_checks file and recorded in DB ledger evidence.
 
 CREATE OR REPLACE FUNCTION public.has_module_view(p_module text)
 RETURNS boolean

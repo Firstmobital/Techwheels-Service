@@ -23,12 +23,13 @@ Prevent schema drift and prevent assumption-based development by enforcing one w
 7. Update ledger status to APPLIED and add execution evidence.
 8. Run paired sql_checks script, capture output, and set status VERIFIED.
 9. Move successfully executed migration file from supabase/migrations to supabase/exec_success_migrations.
-10. Update handbook docs: CURRENT_STATE.md, CHANGE_LOG.md, README.md if behavior changed.
+10. Delete the paired sql_checks file after verification evidence is recorded to keep supabase/sql_checks temporary-only.
+11. Update handbook docs: CURRENT_STATE.md, CHANGE_LOG.md, README.md if behavior changed.
 
 ## Minimum Evidence Required
 
 - Migration filename
-- Paired sql_checks filename
+- Paired sql_checks filename (recorded in evidence even if the check file is later deleted)
 - Execution timestamp and environment
 - Validation proof (query output, test result, or functional verification)
 - Rollback command/file reference
