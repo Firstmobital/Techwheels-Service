@@ -76,6 +76,7 @@ type ModuleName =
   | 'employees'
   | 'reports'
   | 'admin'
+  | 'autodoc'
 
 type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc'
 
