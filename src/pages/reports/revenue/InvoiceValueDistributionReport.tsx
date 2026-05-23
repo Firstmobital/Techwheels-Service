@@ -134,7 +134,6 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
       invoiceCount: row.invoiceCount,
       percentage: row.percentage,
       totalAmount: row.totalAmount,
-      vasRevenue: row.vasRevenue,
       avgInvoiceValue: row.avgInvoiceValue,
     }))
     const branchData = report.branchSpread.map((row) => ({
@@ -142,6 +141,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
       invoiceCount: row.invoiceCount,
       percentage: row.percentage,
       totalAmount: row.totalAmount,
+      vasRevenue: row.vasRevenue,
       avgInvoiceValue: row.avgInvoiceValue,
     }))
     exportToCSV(bandData, 'invoice-value-bands')
