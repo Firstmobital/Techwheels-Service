@@ -68,7 +68,6 @@ export default function AutoDocPage() {
   const navigate = useNavigate()
   const [rows,         setRows]         = useState<JobRow[]>([])
   const [loading,      setLoading]      = useState(true)
-  const [refreshing,   setRefreshing]   = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [generating,   setGenerating]   = useState<Set<GenKey>>(new Set())
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
@@ -108,8 +107,7 @@ export default function AutoDocPage() {
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true)
-    else { setLoading(true); setError(null) }
+    if (!isRefresh) { setLoading(true); setError(null) }
 
     const res = await listJobCardSummaries()
     if (res.error || !res.data) {
@@ -120,7 +118,6 @@ export default function AutoDocPage() {
     }
 
     setLoading(false)
-    setRefreshing(false)
   }, [])
 
   useEffect(() => { void fetchRows() }, [fetchRows])
@@ -314,41 +311,44 @@ export default function AutoDocPage() {
   return (
     <div className="min-h-full bg-gray-50 p-4 pb-24 md:p-6 md:pb-6">
 
-      {/* Tab Navigation */}
-      <div className="mb-6 flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
-        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Dashboard</button>
-        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">New Car</button>
-        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Document Damage</button>
-        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Quotation</button>
-        <button className="px-4 py-2 text-sm font-medium text-gray-700 border-b-2 border-transparent hover:border-blue-400">Reports & Submit</button>
-      </div>
+      {/* Tab Navigation as Cards */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-700">Dashboard</span>
+        </button>
 
-      {/* Action buttons */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            New Job Card
-          </button>
-          <button
-            onClick={() => void fetchRows(true)}
-            disabled={refreshing || loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
-            {refreshing
-              ? <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
-              : <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-            }
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
-        </div>
+        <button 
+          onClick={() => setShowCreate(true)}
+          className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-700">New Car</span>
+        </button>
+
+        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-700 text-center">Document<br/>Damage</span>
+        </button>
+
+        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v3m3-9v3m-3-3V4m3 0v3m0 6.5H6a1.5 1.5 0 01-1.5-1.5V5A1.5 1.5 0 016 3.5h12A1.5 1.5 0 0119.5 5v11a1.5 1.5 0 01-1.5 1.5z" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-700">Quotation</span>
+        </button>
+
+        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-700 text-center">Reports<br/>& Submit</span>
+        </button>
       </div>
 
       {/* KPI Cards */}
