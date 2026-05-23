@@ -12,6 +12,8 @@ export default function AuthCallback() {
     const hash = window.location.hash
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
+    const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
+    const flowType = hashParams.get('type')
 
     const handle = async () => {
       if (code) {
@@ -27,6 +29,12 @@ export default function AuthCallback() {
         setError('Invalid confirmation link.')
         return
       }
+
+      if (flowType === 'recovery') {
+        navigate('/reset-password', { replace: true })
+        return
+      }
+
       // Success — go to dashboard
       navigate('/import', { replace: true })
     }

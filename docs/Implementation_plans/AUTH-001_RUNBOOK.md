@@ -35,7 +35,7 @@ Expected result:
 
 1. Send temp password through secure channel (phone call, secure chat, or in person).
 2. Ask user to login immediately at production URL.
-3. Ask user to change password immediately after first login.
+3. App now redirects users with `force_password_change=true` to `/reset-password`; user must set a new strong password.
 4. Verify user can log out and log in again with new password.
 
 Operational note:
@@ -56,7 +56,7 @@ Operational note:
 6. Run validation tests:
    - Create user and verify invite/confirmation delivery
    - Send magic link
-   - Send password recovery
+   - Send password recovery (login page `Forgot password` now uses `/auth/callback` -> `/reset-password` recovery flow)
 
 ---
 

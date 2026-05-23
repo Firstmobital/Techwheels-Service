@@ -9,7 +9,9 @@ export default function LoginPage({ onSwitchToSignUp }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sendingRecovery, setSendingRecovery] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -18,6 +20,29 @@ export default function LoginPage({ onSwitchToSignUp }: Props) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) setError(error.message)
     setLoading(false)
+  }
+
+  const handlePasswordRecovery = async () => {
+    setError(null)
+    setMessage(null)
+
+    if (!email.trim()) {
+      setError('Enter your email first, then click Forgot password.')
+      return
+    }
+
+    setSendingRecovery(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    })
+    setSendingRecovery(false)
+
+    if (error) {
+      setError(error.message)
+      return
+    }
+
+    setMessage('Password recovery link sent. Check your inbox and open the link to reset password.')
   }
 
   return (
@@ -71,12 +96,27 @@ export default function LoginPage({ onSwitchToSignUp }: Props) {
               </div>
             )}
 
+            {message && (
+              <div className="rounded-lg bg-green-50 border border-green-200 px-3.5 py-2.5 text-sm text-green-700">
+                {message}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
               className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               {loading ? 'Signing in…' : 'Sign in'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePasswordRecovery}
+              disabled={sendingRecovery}
+              className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sendingRecovery ? 'Sending recovery link…' : 'Forgot password'}
             </button>
           </form>
 

@@ -8,6 +8,7 @@ import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
 import SignUpPage from './pages/SignUpPage'
 import AuthCallback from './pages/AuthCallback'
+import PasswordUpdatePage from './pages/PasswordUpdatePage'
 import AutoDocPage from './pages/AutoDocPage'
 import JobCardPage from './pages/JobCardPage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
@@ -92,6 +93,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       ? <LoginPage onSwitchToSignUp={() => setAuthView('signup')} />
       : <SignUpPage onSwitchToLogin={() => setAuthView('login')} />
   }
+
+  const mustChangePassword = Boolean(user.user_metadata?.force_password_change)
+  const onResetPasswordPage = window.location.pathname === '/reset-password'
+
+  if (mustChangePassword && !onResetPasswordPage) {
+    return <Navigate to="/reset-password" replace />
+  }
+
   return <>{children}</>
 }
 
@@ -329,6 +338,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                 <Route path="/reports/:categoryId/:reportId" element={<ReportsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/admin" element={<AdminPage />} />
+                <Route path="/reset-password" element={<PasswordUpdatePage />} />
                 <Route path="/autodoc" element={<AutoDocPage />} />
                 <Route path="/autodoc/:id" element={<JobCardPage />} />
                 <Route path="*" element={<Navigate to="/import" replace />} />

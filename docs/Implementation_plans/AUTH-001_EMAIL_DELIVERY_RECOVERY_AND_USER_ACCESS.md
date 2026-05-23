@@ -55,6 +55,7 @@ This plan restores immediate user access without relying on email delivery, pres
 - [ ] **Task 3.3:** Set production-safe email rate limits in Supabase Auth settings.
 - [ ] **Task 3.4:** Test all outbound auth mail types: invite/confirmation, magic link, password recovery.
 - [x] **Task 3.5:** Update operations runbook with limits, fallback path, and escalation owner.
+- [ ] **Task 3.6:** Reuse existing universal email sender for non-Auth transactional emails only, with mandatory security hardening.
 
 ---
 
@@ -78,7 +79,7 @@ This plan restores immediate user access without relying on email delivery, pres
 
 ### Phase 2
 ```
-⏳ 2.1 | Vinod changes password immediately | Vinod | - | - | Must be same session/day
+✅ 2.1 | Enforce immediate password change path in frontend | Dev Team | 2026-05-23 | 2026-05-23 | Forced redirect to reset-password when force_password_change=true
 ⏳ 2.2 | Verify login with new password | Vinod + Admin | - | - | Confirm no lockout
 ⏳ 2.3 | Confirm temp password retired | Admin | - | - | Mark as closed
 ```
@@ -88,8 +89,9 @@ This plan restores immediate user access without relying on email delivery, pres
 ⏳ 3.1 | SMTP provider configured in Supabase | Dev | - | - | Use production sender
 ⏳ 3.2 | DNS authentication validated | Dev/Ops | - | - | SPF/DKIM/DMARC pass
 ⏳ 3.3 | Email rate limits tuned | Dev/Ops | - | - | Based on expected volume
-⏳ 3.4 | End-to-end auth email tests pass | QA/Admin | - | - | Invite + magic + recovery
+🔄 3.4 | End-to-end auth email tests pass | QA/Admin | 2026-05-23 | - | Recovery link UI flow implemented; invite/magic/recovery production verification pending
 ✅ 3.5 | Runbook updated and shared | Dev Team | 2026-05-22 | 2026-05-22 | See AUTH-001_RUNBOOK.md
+⏳ 3.6 | Universal sender adopted for custom app emails | Dev | - | - | Do not replace Supabase Auth SMTP path for invite/magic/recovery
 ```
 
 ---
@@ -100,6 +102,7 @@ This plan restores immediate user access without relying on email delivery, pres
 - [ ] Service role credentials available to authorized operator.
 - [ ] Approved secure channel to transmit temporary credentials.
 - [ ] SMTP account ready (provider API key/credentials + verified domain).
+- [ ] Resend API credentials for custom transactional sender (`RESEND_API_KEY`, verified `RESEND_FROM_EMAIL`).
 
 ---
 
@@ -151,6 +154,22 @@ This plan restores immediate user access without relying on email delivery, pres
 - Redirect URL settings were correct; issue isolated to email throttle.
 - Admin API password set path chosen as immediate user access fallback.
 
+### 2026-05-23 - Frontend Recovery and Rotation Guard
+- Added frontend `Forgot password` action on login screen using Supabase `resetPasswordForEmail`.
+- Updated auth callback to route `type=recovery` flows to password update page.
+- Added dedicated password update page and enforced redirect for users with `force_password_change=true`.
+- Password update flow clears `force_password_change` in user metadata after successful change.
+
+### 2026-05-23 - Additional Email Sender Strategy
+- Existing universal sender implementation from another project is approved for reuse in this project for custom transactional emails.
+- Supabase Auth emails (invite, magic link, password recovery) must remain on Supabase Auth provider path and be hardened via SMTP configuration in Auth settings.
+- Universal sender must not be deployed as an open relay (`auth: false` without additional guardrails is not allowed for production use here).
+- Required hardening for reusable sender in this project:
+	- Enforce caller authentication (bearer token validation).
+	- Enforce role-based authorization (admin/operator check via `public.users`).
+	- Restrict CORS origin to approved app origins for production.
+	- Keep usage scope limited to non-Auth notifications and operational messaging.
+
 ---
 
 ## Related Documentation
@@ -161,5 +180,5 @@ This plan restores immediate user access without relying on email delivery, pres
 
 ---
 
-**Last Updated:** 2026-05-22 by GitHub Copilot  
+**Last Updated:** 2026-05-23 by GitHub Copilot  
 **Status:** � IN PROGRESS
