@@ -158,9 +158,14 @@ async function fetchAll(jobCardId: string) {
   }
 }
 
-// ─── Slide: Cover ─────────────────────────────────────────────────────────────
+// ─── Slide: Cover (Two-column: details left, vehicle front image right) ─────
 
-function addCoverSlide(prs: PptxGenJS, jc: JobSummary, type: 'pre-repair' | 'post-repair') {
+function addCoverSlide(
+  prs: PptxGenJS,
+  jc: JobSummary,
+  type: 'pre-repair' | 'post-repair',
+  vehiclePhotoDataURL?: string | null,
+) {
   const slide = prs.addSlide()
 
   // Full navy background
@@ -178,10 +183,12 @@ function addCoverSlide(prs: PptxGenJS, jc: JobSummary, type: 'pre-repair' | 'pos
     x: 0, y: 0, w: 0.18, h: H - 0.28, fill: { color: GOLD },
   })
 
+  // ── Left column: Vehicle details (50% width) ────────────────────────────
+
   // Main title
   slide.addText('RUSTING VEHICLE DETAIL', {
-    x: 0.38, y: 0.55, w: W - 0.5, h: 0.9,
-    fontSize: 34, bold: true, color: WHITE,
+    x: 0.38, y: 0.55, w: W * 0.5 - 0.56, h: 0.9,
+    fontSize: 28, bold: true, color: WHITE,
     fontFace: 'Calibri',
     align: 'left',
   })
@@ -191,45 +198,70 @@ function addCoverSlide(prs: PptxGenJS, jc: JobSummary, type: 'pre-repair' | 'pos
     ? 'PRE-REPAIR DOCUMENTATION'
     : 'POST-REPAIR DOCUMENTATION'
   slide.addText(subLabel, {
-    x: 0.38, y: 1.48, w: 6, h: 0.38,
-    fontSize: 13, bold: true, color: GOLD,
+    x: 0.38, y: 1.48, w: W * 0.5 - 0.56, h: 0.38,
+    fontSize: 11, bold: true, color: GOLD,
     fontFace: 'Calibri', align: 'left',
   })
 
   // Gold divider
   slide.addShape(prs.ShapeType.rect, {
-    x: 0.38, y: 2.0, w: W - 0.7, h: 0.04, fill: { color: GOLD },
+    x: 0.38, y: 2.0, w: W * 0.5 - 0.56, h: 0.04, fill: { color: GOLD },
   })
 
-  // 6 detail fields in 2 columns
+  // 6 detail fields in 2 columns (adjusted for left side only)
   const fields = [
     { label: 'CHASSIS NO.',      value: jc.vin          ?? '—' },
-    { label: 'REGISTRATION NO.', value: jc.reg_number   ?? '—' },
+    { label: 'REG NO.',          value: jc.reg_number   ?? '—' },
     { label: 'DATE OF SALE',     value: fmt(jc.date_of_sale)   },
     { label: 'MODEL',            value: jc.model        ?? '—' },
     { label: 'COLOUR',           value: jc.colour       ?? '—' },
-    { label: 'JC NUMBER',        value: jc.jc_number    ?? '—' },
+    { label: 'JC NO.',           value: jc.jc_number    ?? '—' },
   ]
 
+  const colW = (W * 0.5 - 0.56) / 2
   fields.forEach(({ label, value }, i) => {
     const col  = i % 2           // 0 = left, 1 = right
     const row  = Math.floor(i / 2)
-    const xOff = col === 0 ? 0.38 : 5.4
-    const yOff = 2.15 + row * 0.82
+    const xOff = 0.38 + col * colW
+    const yOff = 2.15 + row * 0.65
 
     slide.addText(label, {
-      x: xOff, y: yOff, w: 4.5, h: 0.25,
-      fontSize: 9, color: GOLD, fontFace: 'Calibri',
+      x: xOff, y: yOff, w: colW - 0.1, h: 0.22,
+      fontSize: 8, color: GOLD, fontFace: 'Calibri',
       bold: true, align: 'left',
     })
     slide.addText(value, {
-      x: xOff, y: yOff + 0.24, w: 4.5, h: 0.44,
-      fontSize: 17, color: WHITE, fontFace: 'Calibri',
+      x: xOff, y: yOff + 0.22, w: colW - 0.1, h: 0.38,
+      fontSize: 11, color: WHITE, fontFace: 'Calibri',
       bold: true, align: 'left',
     })
   })
 
-  // Dealer name in gold stripe
+  // ── Right column: Vehicle front image (50% width) ──────────────────────
+
+  const IMG_X = W * 0.5
+  const IMG_W = W * 0.5
+  const IMG_Y = 0.55
+  const IMG_H = H - 0.28 - IMG_Y
+
+  if (vehiclePhotoDataURL) {
+    slide.addImage({
+      data: vehiclePhotoDataURL,
+      x: IMG_X, y: IMG_Y, w: IMG_W, h: IMG_H,
+      sizing: { type: 'contain', w: IMG_W, h: IMG_H },
+    })
+  } else {
+    // Placeholder if no vehicle photo available
+    slide.addShape(prs.ShapeType.rect, {
+      x: IMG_X, y: IMG_Y, w: IMG_W, h: IMG_H, fill: { color: DGRAY },
+    })
+    slide.addText('Vehicle Photo\nNot Available', {
+      x: IMG_X + 0.2, y: IMG_Y + IMG_H / 2 - 0.3, w: IMG_W - 0.4, h: 0.6,
+      fontSize: 14, color: WHITE, align: 'center', fontFace: 'Calibri', bold: true,
+    })
+  }
+
+  // Dealer name in gold stripe (bottom)
   const dealerLine = [jc.dealer_name, jc.dealer_city].filter(Boolean).join('  |  ')
   slide.addText(dealerLine.toUpperCase(), {
     x: 0.38, y: H - 0.28, w: W - 0.5, h: 0.28,
@@ -541,8 +573,12 @@ export async function generateRepairPPT(
   prs.subject = `Warranty Repair — ${summary.reg_number}`
   prs.title   = 'RUSTING VEHICLE DETAIL'
 
-  // Slide 1 — Cover
-  addCoverSlide(prs, summary, type)
+  // Get first defect photo for cover slide (vehicle front image)
+  const firstDefectPhoto = renderPhotos.find(p => p.photo_type === 'defect')
+  const vehiclePhotoDataURL = firstDefectPhoto ? (imgMap.get(firstDefectPhoto.id) ?? null) : null
+
+  // Slide 1 — Cover with vehicle front image
+  addCoverSlide(prs, summary, type, vehiclePhotoDataURL)
 
   // Slides 2…N — Photos grouped by panel, ordered defect → primer → paint
   const TYPE_ORDER: Array<'defect' | 'primer' | 'paint'> = ['defect', 'primer', 'paint']
