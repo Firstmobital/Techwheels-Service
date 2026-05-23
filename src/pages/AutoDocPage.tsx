@@ -51,6 +51,16 @@ interface CreateJobCardForm {
   dateOfSale: string
 }
 
+interface EstimateLineItem {
+  id: string
+  panel: string
+  action: '' | 'Repaint' | 'Parts Replacement'
+  partNo: string
+  partsPrice: string
+  paintPrice: string
+  labourPrice: string
+}
+
 type GenKey = `${'pre' | 'post' | 'xls'}-${string}`
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -124,6 +134,26 @@ export default function AutoDocPage() {
   const [selectedPanels, setSelectedPanels] = useState<string[]>([])
   const [activePanel, setActivePanel] = useState('')
   const [damagePhotoType, setDamagePhotoType] = useState<'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('Pre-repair / Damage')
+  const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>([
+    {
+      id: 'row-1',
+      panel: 'LH Front Door',
+      action: 'Parts Replacement',
+      partNo: 'TM-2046',
+      partsPrice: '8500',
+      paintPrice: '3200',
+      labourPrice: '1200',
+    },
+    {
+      id: 'row-2',
+      panel: 'RH Front Door',
+      action: 'Repaint',
+      partNo: '-',
+      partsPrice: '',
+      paintPrice: '2800',
+      labourPrice: '900',
+    },
+  ])
 
   function toggleDamagePanel(panel: string) {
     setSelectedPanels((prev) => {
@@ -142,6 +172,54 @@ export default function AutoDocPage() {
       return next
     })
   }
+
+  function updateEstimateRow(id: string, patch: Partial<EstimateLineItem>) {
+    setEstimateRows((prev) => prev.map((row) => {
+      if (row.id !== id) return row
+      const next = { ...row, ...patch }
+      if (patch.action === 'Repaint') {
+        next.partsPrice = ''
+        if (!next.partNo || next.partNo === '-') {
+          next.partNo = '-'
+        }
+      }
+      if (patch.action === 'Parts Replacement' && next.partNo === '-') {
+        next.partNo = ''
+      }
+      return next
+    }))
+  }
+
+  function addEstimateRow() {
+    setEstimateRows((prev) => ([
+      ...prev,
+      {
+        id: `row-${Date.now()}`,
+        panel: selectedPanels.find((panel) => !prev.some((row) => row.panel === panel)) ?? 'Selected Panel',
+        action: '',
+        partNo: '',
+        partsPrice: '',
+        paintPrice: '',
+        labourPrice: '',
+      },
+    ]))
+  }
+
+  function removeEstimateRow(id: string) {
+    setEstimateRows((prev) => prev.filter((row) => row.id !== id))
+  }
+
+  const estimateTotals = estimateRows.reduce((acc, row) => {
+    const parts = Number(row.partsPrice) || 0
+    const paint = Number(row.paintPrice) || 0
+    const labour = Number(row.labourPrice) || 0
+    return {
+      parts: acc.parts + parts,
+      paint: acc.paint + paint,
+      labour: acc.labour + labour,
+      grand: acc.grand + parts + paint + labour,
+    }
+  }, { parts: 0, paint: 0, labour: 0, grand: 0 })
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
@@ -1122,6 +1200,253 @@ export default function AutoDocPage() {
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ESTIMATE */}
+      {activeTab === 'estimate' && (
+        <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="flex items-center gap-2 text-xl font-semibold text-gray-900 sm:text-2xl">
+              <svg className="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Repair Estimate - {form.regNumber || 'RJ-14-YH-7659'} - {form.model || 'Nexon EV'} - {form.jcNumber || 'JC-2026-041'}
+            </h3>
+            <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Draft</span>
+          </div>
+
+          <div className="hidden overflow-x-auto xl:block">
+            <table className="min-w-full border-separate border-spacing-y-2 text-sm">
+              <thead>
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <th className="px-2 py-2">Panel</th>
+                  <th className="px-2 py-2">Action</th>
+                  <th className="px-2 py-2">Part No.</th>
+                  <th className="px-2 py-2">Parts Price (Rs) <span className="text-red-600">*</span></th>
+                  <th className="px-2 py-2">Paint Price (Rs) <span className="text-red-600">*</span></th>
+                  <th className="px-2 py-2">Labour (Rs)</th>
+                  <th className="px-2 py-2">Total (Rs)</th>
+                  <th className="px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {estimateRows.map((row) => {
+                  const total = (Number(row.partsPrice) || 0) + (Number(row.paintPrice) || 0) + (Number(row.labourPrice) || 0)
+                  const isRepaint = row.action === 'Repaint'
+                  return (
+                    <tr key={row.id} className="rounded-lg bg-white shadow-[0_0_0_1px_rgba(229,231,235,1)]">
+                      <td className="px-2 py-2 font-medium text-gray-900">{row.panel}</td>
+                      <td className="px-2 py-2">
+                        <select
+                          value={row.action}
+                          onChange={(e) => updateEstimateRow(row.id, { action: e.target.value as EstimateLineItem['action'] })}
+                          className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        >
+                          <option value="">Select</option>
+                          <option value="Repaint">Repaint</option>
+                          <option value="Parts Replacement">Parts Replacement</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="text"
+                          value={row.partNo}
+                          disabled={isRepaint}
+                          onChange={(e) => updateEstimateRow(row.id, { partNo: e.target.value })}
+                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none disabled:bg-gray-100"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.partsPrice}
+                          disabled={isRepaint}
+                          onChange={(e) => updateEstimateRow(row.id, { partsPrice: e.target.value })}
+                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                          placeholder={isRepaint ? 'N/A' : 'Required'}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.paintPrice}
+                          onChange={(e) => updateEstimateRow(row.id, { paintPrice: e.target.value })}
+                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                          placeholder="Required"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.labourPrice}
+                          onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
+                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-base font-semibold text-gray-900">Rs {total.toLocaleString('en-IN')}</td>
+                      <td className="px-2 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeEstimateRow(row.id)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                          aria-label="Remove row"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-3 xl:hidden">
+            {estimateRows.map((row) => {
+              const total = (Number(row.partsPrice) || 0) + (Number(row.paintPrice) || 0) + (Number(row.labourPrice) || 0)
+              const isRepaint = row.action === 'Repaint'
+              return (
+                <div key={row.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-base font-semibold text-gray-900">{row.panel}</p>
+                    <button
+                      type="button"
+                      onClick={() => removeEstimateRow(row.id)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                      aria-label="Remove row"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="text-xs font-medium text-gray-600">
+                      Action
+                      <select
+                        value={row.action}
+                        onChange={(e) => updateEstimateRow(row.id, { action: e.target.value as EstimateLineItem['action'] })}
+                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">Select</option>
+                        <option value="Repaint">Repaint</option>
+                        <option value="Parts Replacement">Parts Replacement</option>
+                      </select>
+                    </label>
+                    <label className="text-xs font-medium text-gray-600">
+                      Part No.
+                      <input
+                        type="text"
+                        value={row.partNo}
+                        disabled={isRepaint}
+                        onChange={(e) => updateEstimateRow(row.id, { partNo: e.target.value })}
+                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none disabled:bg-gray-100"
+                      />
+                    </label>
+                    <label className="text-xs font-medium text-gray-600">
+                      Parts Price (Rs)
+                      <input
+                        type="number"
+                        min={0}
+                        value={row.partsPrice}
+                        disabled={isRepaint}
+                        onChange={(e) => updateEstimateRow(row.id, { partsPrice: e.target.value })}
+                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                        placeholder={isRepaint ? 'N/A' : 'Required'}
+                      />
+                    </label>
+                    <label className="text-xs font-medium text-gray-600">
+                      Paint Price (Rs)
+                      <input
+                        type="number"
+                        min={0}
+                        value={row.paintPrice}
+                        onChange={(e) => updateEstimateRow(row.id, { paintPrice: e.target.value })}
+                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        placeholder="Required"
+                      />
+                    </label>
+                    <label className="text-xs font-medium text-gray-600 md:col-span-2">
+                      Labour (Rs)
+                      <input
+                        type="number"
+                        min={0}
+                        value={row.labourPrice}
+                        onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
+                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </label>
+                  </div>
+
+                  <p className="mt-3 text-right text-base font-semibold text-gray-900">Total: Rs {total.toLocaleString('en-IN')}</p>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={addEstimateRow}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Add Panel
+            </button>
+
+            <div className="grid grid-cols-2 gap-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-right sm:grid-cols-4">
+              <div>
+                <p className="text-xs text-gray-500">Parts Total</p>
+                <p className="text-2xl font-semibold text-gray-900">Rs {estimateTotals.parts.toLocaleString('en-IN')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Paint Total</p>
+                <p className="text-2xl font-semibold text-gray-900">Rs {estimateTotals.paint.toLocaleString('en-IN')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Labour Total</p>
+                <p className="text-2xl font-semibold text-gray-900">Rs {estimateTotals.labour.toLocaleString('en-IN')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Grand Total (1+2+3)</p>
+                <p className="text-3xl font-bold text-blue-700">Rs {estimateTotals.grand.toLocaleString('en-IN')}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="my-4 h-px bg-gray-200" />
+
+          <div className="flex flex-wrap justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => showToast('Excel exported successfully.', true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18M10 3v18M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z" />
+              </svg>
+              Export Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('submit')}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
+            >
+              Next: Submit Reports
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
           </div>
         </div>
       )}
