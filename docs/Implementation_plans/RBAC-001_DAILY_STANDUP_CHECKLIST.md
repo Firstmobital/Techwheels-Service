@@ -170,3 +170,57 @@ Evidence links:
 - PR/Commit: Local working tree update
 - Migration file: supabase/migrations/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry.sql
 - Validation output: Pending lock-safe apply + lock-safe check execution
+
+### 2026-05-23 (Update 5)
+Owner: GitHub Copilot
+Overall status: AMBER
+
+Done today:
+- [x] Executed first lock-safe NOWAIT retry migration.
+- [x] Confirmed no-op outcome (all legacy policies still present; new policies absent; RLS still disabled) due to live lock contention.
+- [x] Added lock-timeout retry migration to replace instant-skip NOWAIT behavior.
+
+In progress:
+- [ ] Execute lock-timeout retry migration until all table sections apply.
+
+Planned next:
+- [ ] Execute `supabase/migrations/20260523162000_phase33_tighten_parts_import_rls_locktimeout_retry.sql` in Supabase SQL Editor (rerun if any section reports skipped).
+- [ ] Re-run `supabase/sql_checks/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry_checks.sql` and confirm READY.
+
+Blockers:
+- [ ] Ongoing lock contention on target parts/import tables in production activity window.
+
+DB change reference:
+- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (PROPOSED)
+
+Evidence links:
+- PR/Commit: Local working tree update
+- Migration file: supabase/migrations/20260523162000_phase33_tighten_parts_import_rls_locktimeout_retry.sql
+- Validation output: Pending lock-timeout apply + checks
+
+### 2026-05-23 (Update 6)
+Owner: GitHub Copilot
+Overall status: GREEN
+
+Done today:
+- [x] Resolved execution blockers (missing helper functions + lock contention).
+- [x] Executed lock-timeout Phase 3.3 migration successfully.
+- [x] Verified DBL-0004 with paired read-only checks: READY, legacy_count=0, present_count=16, rls_count=5.
+- [x] Prepared DBL-0004 closeout actions (ledger verification + migration archive + temporary check cleanup).
+
+In progress:
+- [ ] Stakeholder review/sign-off.
+
+Planned next:
+- [ ] Start next RBAC hardening slice using authoritative dump baseline.
+
+Blockers:
+- [ ] None.
+
+DB change reference:
+- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0004 (VERIFIED)
+
+Evidence links:
+- PR/Commit: Local working tree update
+- Migration file: supabase/exec_success_migrations/20260523162000_phase33_tighten_parts_import_rls_locktimeout_retry.sql
+- Validation output: phase33_status=READY; legacy_count=0; present_count=16; rls_count=5

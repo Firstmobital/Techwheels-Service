@@ -34,6 +34,12 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 - Recorded DBL-0004 SQL Editor timeout during initial apply attempt.
 - Added lock-safe retry migration: `supabase/migrations/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry.sql`.
 - Added paired lock-safe read-only verification script: `supabase/sql_checks/20260523153000_phase33_tighten_parts_import_rls_locksafe_retry_checks.sql`.
+- Recorded that first lock-safe NOWAIT retry executed as no-op under active table locks (no RLS/policy state change).
+- Added lock-timeout retry migration: `supabase/migrations/20260523162000_phase33_tighten_parts_import_rls_locktimeout_retry.sql`.
+- Added read-only preflight/failure diagnostics script: `supabase/sql_checks/20260523170000_phase33_preflight_and_failure_diagnostics.sql`.
+- Verified DBL-0004 in production via paired read-only checks (`READY`, `legacy_count=0`, `present_count=16`, `rls_count=5`).
+- Archived successful DBL-0004 migration to `supabase/exec_success_migrations/20260523162000_phase33_tighten_parts_import_rls_locktimeout_retry.sql`.
+- Removed temporary DBL-0004 check scripts from `supabase/sql_checks/` after verification evidence capture.
 
 Template for future entries:
 

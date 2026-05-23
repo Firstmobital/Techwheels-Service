@@ -1,17 +1,17 @@
--- RBAC Phase 3.3 lock-safe retry migration
--- Purpose: apply the same policy tightening as 20260523143000_phase33_tighten_parts_import_rls.sql
--- without waiting on long table locks in busy environments.
+-- RBAC Phase 3.3 lock-timeout retry migration (v2)
+-- Purpose: same policy tightening as DBL-0004, but avoids NOWAIT instant-skip behavior.
 --
--- Operational behavior:
--- - Uses NOWAIT table locks per table section.
--- - If a table is currently busy, that section is skipped with a NOTICE.
--- - Re-run this script until all sections report "applied" and no section reports "skipped".
+-- Behavior:
+-- - Per-table block sets short lock timeout (5s) and statement timeout (60s).
+-- - If a table remains busy, only that table is skipped and others continue.
+-- - Re-run until all table blocks report "applied" notices.
 
 DO $$
 BEGIN
   -- import_metadata
   BEGIN
-    LOCK TABLE public.import_metadata IN ACCESS EXCLUSIVE MODE NOWAIT;
+    PERFORM set_config('lock_timeout', '5s', true);
+    PERFORM set_config('statement_timeout', '60s', true);
 
     ALTER TABLE public.import_metadata ENABLE ROW LEVEL SECURITY;
 
@@ -42,15 +42,18 @@ BEGIN
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
-    RAISE NOTICE 'phase33 lock-safe: import_metadata applied';
+    RAISE NOTICE 'phase33 lock-timeout: import_metadata applied';
   EXCEPTION
     WHEN lock_not_available THEN
-      RAISE NOTICE 'phase33 lock-safe: import_metadata skipped (table busy, rerun later)';
+      RAISE NOTICE 'phase33 lock-timeout: import_metadata skipped (table busy, rerun later)';
+    WHEN OTHERS THEN
+      RAISE NOTICE 'phase33 lock-timeout: import_metadata failed [%] %', SQLSTATE, SQLERRM;
   END;
 
   -- part_master
   BEGIN
-    LOCK TABLE public.part_master IN ACCESS EXCLUSIVE MODE NOWAIT;
+    PERFORM set_config('lock_timeout', '5s', true);
+    PERFORM set_config('statement_timeout', '60s', true);
 
     ALTER TABLE public.part_master ENABLE ROW LEVEL SECURITY;
 
@@ -80,15 +83,18 @@ BEGIN
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
-    RAISE NOTICE 'phase33 lock-safe: part_master applied';
+    RAISE NOTICE 'phase33 lock-timeout: part_master applied';
   EXCEPTION
     WHEN lock_not_available THEN
-      RAISE NOTICE 'phase33 lock-safe: part_master skipped (table busy, rerun later)';
+      RAISE NOTICE 'phase33 lock-timeout: part_master skipped (table busy, rerun later)';
+    WHEN OTHERS THEN
+      RAISE NOTICE 'phase33 lock-timeout: part_master failed [%] %', SQLSTATE, SQLERRM;
   END;
 
   -- service_parts_consumption_data
   BEGIN
-    LOCK TABLE public.service_parts_consumption_data IN ACCESS EXCLUSIVE MODE NOWAIT;
+    PERFORM set_config('lock_timeout', '5s', true);
+    PERFORM set_config('statement_timeout', '60s', true);
 
     ALTER TABLE public.service_parts_consumption_data ENABLE ROW LEVEL SECURITY;
 
@@ -142,15 +148,18 @@ BEGIN
       OR public.has_module_delete('parts_consumption')
     );
 
-    RAISE NOTICE 'phase33 lock-safe: service_parts_consumption_data applied';
+    RAISE NOTICE 'phase33 lock-timeout: service_parts_consumption_data applied';
   EXCEPTION
     WHEN lock_not_available THEN
-      RAISE NOTICE 'phase33 lock-safe: service_parts_consumption_data skipped (table busy, rerun later)';
+      RAISE NOTICE 'phase33 lock-timeout: service_parts_consumption_data skipped (table busy, rerun later)';
+    WHEN OTHERS THEN
+      RAISE NOTICE 'phase33 lock-timeout: service_parts_consumption_data failed [%] %', SQLSTATE, SQLERRM;
   END;
 
   -- service_parts_order_data
   BEGIN
-    LOCK TABLE public.service_parts_order_data IN ACCESS EXCLUSIVE MODE NOWAIT;
+    PERFORM set_config('lock_timeout', '5s', true);
+    PERFORM set_config('statement_timeout', '60s', true);
 
     ALTER TABLE public.service_parts_order_data ENABLE ROW LEVEL SECURITY;
 
@@ -219,15 +228,18 @@ BEGIN
       AND (dealer_code IS NULL OR dealer_code = public.my_dealer_code())
     );
 
-    RAISE NOTICE 'phase33 lock-safe: service_parts_order_data applied';
+    RAISE NOTICE 'phase33 lock-timeout: service_parts_order_data applied';
   EXCEPTION
     WHEN lock_not_available THEN
-      RAISE NOTICE 'phase33 lock-safe: service_parts_order_data skipped (table busy, rerun later)';
+      RAISE NOTICE 'phase33 lock-timeout: service_parts_order_data skipped (table busy, rerun later)';
+    WHEN OTHERS THEN
+      RAISE NOTICE 'phase33 lock-timeout: service_parts_order_data failed [%] %', SQLSTATE, SQLERRM;
   END;
 
   -- service_parts_stock_snapshot_data
   BEGIN
-    LOCK TABLE public.service_parts_stock_snapshot_data IN ACCESS EXCLUSIVE MODE NOWAIT;
+    PERFORM set_config('lock_timeout', '5s', true);
+    PERFORM set_config('statement_timeout', '60s', true);
 
     ALTER TABLE public.service_parts_stock_snapshot_data ENABLE ROW LEVEL SECURITY;
 
@@ -281,10 +293,12 @@ BEGIN
       OR public.has_module_delete('parts_inventory')
     );
 
-    RAISE NOTICE 'phase33 lock-safe: service_parts_stock_snapshot_data applied';
+    RAISE NOTICE 'phase33 lock-timeout: service_parts_stock_snapshot_data applied';
   EXCEPTION
     WHEN lock_not_available THEN
-      RAISE NOTICE 'phase33 lock-safe: service_parts_stock_snapshot_data skipped (table busy, rerun later)';
+      RAISE NOTICE 'phase33 lock-timeout: service_parts_stock_snapshot_data skipped (table busy, rerun later)';
+    WHEN OTHERS THEN
+      RAISE NOTICE 'phase33 lock-timeout: service_parts_stock_snapshot_data failed [%] %', SQLSTATE, SQLERRM;
   END;
 END
 $$;
