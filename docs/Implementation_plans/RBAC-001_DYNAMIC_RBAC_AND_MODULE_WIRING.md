@@ -98,7 +98,7 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 ### Phase 3
 ```
 ✅ 3.1 | RLS policy deep audit | GitHub Copilot | 2026-05-23 | 2026-05-23 | Authoritative dump reviewed and permissive policy risk documented
-✅ 3.2 | Restrictive RBAC migration SQL design foundation | GitHub Copilot | 2026-05-23 | 2026-05-23 | Added helper permission migration: 20260523120000_add_module_permission_helper_functions.sql (DBL-0002 PROPOSED)
+✅ 3.2 | Restrictive RBAC migration SQL design foundation | GitHub Copilot | 2026-05-23 | 2026-05-23 | Added helper permission migration: 20260523120000_add_module_permission_helper_functions.sql (DBL-0002 APPLIED; verification pending)
 ✅ 3.3 | Unauthorized query validation tests | GitHub Copilot | 2026-05-23 | 2026-05-23 | Created RBAC_TABLE_ACCESS_VALIDATION_TESTS.md with 5 test suites covering auth/permission checks
 ```
 

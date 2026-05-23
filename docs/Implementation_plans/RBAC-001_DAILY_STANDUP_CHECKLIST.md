@@ -82,9 +82,9 @@ Blockers:
 - [ ] Pending decision: canonical route strategy (DB route vs frontend mapping layer).
 
 DB change reference:
-- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0002 (PROPOSED)
+- Ledger row IDs from docs/Project_Handbook/DB_CHANGE_LEDGER.md: DBL-0002 (APPLIED, pending verification)
 
 Evidence links:
 - PR/Commit: Local working tree update
 - Migration file: supabase/migrations/20260523120000_add_module_permission_helper_functions.sql
-- Validation output: npm run build passed
+- Validation output: npm run build passed; DB validation for helper functions pending
