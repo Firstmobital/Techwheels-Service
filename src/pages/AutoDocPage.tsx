@@ -147,6 +147,8 @@ export default function AutoDocPage() {
   const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>([])
+  const [deliveryVideoName, setDeliveryVideoName] = useState('')
+  const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null)
 
   function toggleDamagePanel(panel: string) {
     setSelectedPanels((prev) => {
@@ -252,6 +254,18 @@ export default function AutoDocPage() {
       if (target) URL.revokeObjectURL(target.url)
       return prev.filter((photo) => photo.id !== photoId)
     })
+  }
+
+  function openDeliveryVideoPicker() {
+    deliveryVideoInputRef.current?.click()
+  }
+
+  function handleDeliveryVideoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setDeliveryVideoName(file.name)
+    showToast('Delivery video selected successfully.', true)
+    event.target.value = ''
   }
 
   useEffect(() => {
@@ -1553,6 +1567,117 @@ export default function AutoDocPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* SUBMIT */}
+      {activeTab === 'submit' && (
+        <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-2xl font-semibold text-gray-900">
+              Reports and Submit - {form.regNumber || 'Registration NA'}
+            </h3>
+            <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Awaiting Approval</span>
+          </div>
+
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">Pre-repair submission to Tata Motors</p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 p-4">
+              <p className="mb-2 text-xl font-semibold text-gray-900">Damage Report PPT</p>
+              <p className="mb-4 text-sm text-gray-600">Photos + geo-tags + video thumbnail + vehicle details + damage remarks</p>
+              <button
+                type="button"
+                onClick={() => showToast('PPT generation queued.', true)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+              >
+                Generate PPT
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <p className="mb-2 text-xl font-semibold text-gray-900">Quotation Excel</p>
+              <p className="mb-4 text-sm text-gray-600">Parts + Paint + Labour breakdown with auto-calculated total expenses</p>
+              <button
+                type="button"
+                onClick={() => showToast('Excel export queued.', true)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+              >
+                Export Excel
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <p className="mb-2 text-xl font-semibold text-gray-900">Send to Tata Motors</p>
+              <p className="mb-4 text-sm text-gray-600">PPT + Excel + compressed video attached, dealer code and VIN auto-filled in email</p>
+              <button
+                type="button"
+                onClick={() => showToast('Email compose opened.', true)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+              >
+                Compose and Send
+              </button>
+            </div>
+          </div>
+
+          <div className="my-5 h-px bg-gray-200" />
+
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">Delivery Video (mandatory at delivery)</p>
+          <div className="mb-3 flex flex-wrap items-center gap-6 rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+            <span>30-60 sec walkaround</span>
+            <span>Number plate visible</span>
+            <span>Auto-compressed less than 15MB</span>
+          </div>
+
+          <div className="max-w-xl rounded-xl border-2 border-dashed border-red-300 bg-red-50 p-6 text-center">
+            <input
+              ref={deliveryVideoInputRef}
+              type="file"
+              accept="video/*"
+              onChange={handleDeliveryVideoUpload}
+              className="hidden"
+            />
+            <p className="mb-1 text-xl font-semibold text-gray-900">Upload Delivery Walkaround Video</p>
+            <p className="mb-4 text-sm text-gray-600">Blocked until video uploaded</p>
+            <button
+              type="button"
+              onClick={openDeliveryVideoPicker}
+              className="inline-flex items-center rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+            >
+              {deliveryVideoName ? 'Replace Video' : 'Upload Video'}
+            </button>
+            <p className="mt-3 text-xs font-medium text-gray-600">
+              {deliveryVideoName ? `Selected: ${deliveryVideoName}` : 'Required for delivery'}
+            </p>
+          </div>
+
+          <div className="my-5 h-px bg-gray-200" />
+
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">Post-repair warranty claim</p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 p-4">
+              <p className="mb-2 text-xl font-semibold text-gray-900">Post-Repair PPT</p>
+              <p className="mb-4 text-sm text-gray-600">Before + during + after photos + delivery video in one warranty claim deck</p>
+              <button
+                type="button"
+                onClick={() => showToast('Post-repair PPT generation queued.', true)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+              >
+                Generate PPT
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <p className="mb-2 text-xl font-semibold text-gray-900">Submit Warranty Claim</p>
+              <p className="mb-4 text-sm text-gray-600">Full documentation sent to Tata warranty department</p>
+              <button
+                type="button"
+                onClick={() => showToast('Warranty claim submitted.', true)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+              >
+                Submit Claim
+              </button>
+            </div>
           </div>
         </div>
       )}
