@@ -78,6 +78,7 @@ export default function AutoDocPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [lookupBusy, setLookupBusy] = useState(false)
   const [vehicleFound, setVehicleFound] = useState(false)
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [kpis, setKpis] = useState({
     totalToday: 0,
     totalTodayNew: 0,
@@ -313,45 +314,54 @@ export default function AutoDocPage() {
 
       {/* Tab Navigation as Cards - v2 Design */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:gap-4">
-        <button className="flex flex-col items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-4 hover:bg-gray-100 hover:border-gray-400 transition-colors">
-          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <button 
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'dashboard' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
+          <svg className={`h-5 w-5 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">Dashboard</span>
+          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-700'}`}>Dashboard</span>
         </button>
 
         <button 
-          onClick={() => setShowCreate(true)}
-          className="flex flex-col items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-4 hover:bg-gray-100 hover:border-gray-400 transition-colors">
-          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          onClick={() => setActiveTab('jobcard')}
+          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'jobcard' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
+          <svg className={`h-5 w-5 ${activeTab === 'jobcard' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">Job Card</span>
+          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'jobcard' ? 'text-blue-600' : 'text-gray-700'}`}>Job Card</span>
         </button>
 
-        <button className="flex flex-col items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-4 hover:bg-gray-100 hover:border-gray-400 transition-colors">
-          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+        <button 
+          onClick={() => setActiveTab('damage')}
+          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'damage' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
+          <svg className={`h-5 w-5 ${activeTab === 'damage' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">Damage</span>
+          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'damage' ? 'text-blue-600' : 'text-gray-700'}`}>Damage</span>
         </button>
 
-        <button className="flex flex-col items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-4 hover:bg-gray-100 hover:border-gray-400 transition-colors">
-          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <button 
+          onClick={() => setActiveTab('estimate')}
+          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'estimate' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
+          <svg className={`h-5 w-5 ${activeTab === 'estimate' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">Estimate</span>
+          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'estimate' ? 'text-blue-600' : 'text-gray-700'}`}>Estimate</span>
         </button>
 
-        <button className="flex flex-col items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-4 hover:bg-gray-100 hover:border-gray-400 transition-colors">
-          <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <button 
+          onClick={() => setActiveTab('submit')}
+          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'submit' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
+          <svg className={`h-5 w-5 ${activeTab === 'submit' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">Submit</span>
+          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'submit' ? 'text-blue-600' : 'text-gray-700'}`}>Submit</span>
         </button>
       </div>
 
       {/* KPI Cards */}
+      {activeTab === 'dashboard' && (
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Cars Today */}
         <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -419,7 +429,10 @@ export default function AutoDocPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {activeTab === 'dashboard' && (
+      <>
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
@@ -598,6 +611,55 @@ export default function AutoDocPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      </>
+      )}
+
+      {/* JOB CARD FORM */}
+      {activeTab === 'jobcard' && (
+        <div className="rounded-lg border border-gray-200 bg-white p-6">
+          <div className="mb-6 flex items-center gap-2">
+            <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h2 className="text-lg font-semibold text-gray-900">Job Card — New Vehicle Registration</h2>
+          </div>
+
+          {/* VEHICLE LOOKUP */}
+          <div className="mb-6">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-600">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Vehicle Lookup
+            </h3>
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+              <input
+                type="text"
+                value={form.regNumber}
+                onChange={(e) => setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))}
+                placeholder="RJ-14-YH-7659"
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-base font-medium tracking-widest text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+              <button
+                onClick={() => void handleVehicleLookup()}
+                disabled={lookupBusy || creating || !form.regNumber.trim()}
+                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 justify-center"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {lookupBusy ? 'Checking…' : 'Fetch from DB'}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">Auto-fills VIN, model, owner & dealer from your Supabase database</p>
+            {vehicleFound && <p className="mt-2 text-sm text-green-600">✓ Vehicle found and prefilled.</p>}
+          </div>
+
+          <div className="border-t border-gray-200 pt-6">
+            <p className="text-center text-sm text-gray-500 py-8">Scroll down to continue filling vehicle details, owner information, and upload documents.</p>
+          </div>
         </div>
       )}
 
