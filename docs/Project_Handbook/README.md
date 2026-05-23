@@ -230,5 +230,7 @@ All documentation sync rules are defined in:
 - `docs/Project_Handbook/DOCS_IMPACT_MATRIX.md`
 - `docs/Project_Handbook/CHANGE_LOG.md`
 - `docs/Project_Handbook/CURRENT_STATE.md`
+- `docs/Project_Handbook/DB_CHANGE_LEDGER.md`
+- `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`
 
 Any change to business logic, function contracts, schema, access rules, or route behavior must update those docs in the same change set.

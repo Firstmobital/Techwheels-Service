@@ -28,10 +28,18 @@ Version Context: Techwheels Service v1.0 (current workspace state)
 ## Access Control State
 
 - Auth gate enforced at app shell level.
+- Frontend navigation and route access now use deny-by-default module permission checks.
 - Dealer code is resolved from user/app metadata in session JWT.
 - RLS policies enforce dealership row scoping for AutoDoc core data tables.
 - UI-level role labels exist (`admin`, `manager`, `staff`, `viewer`).
 - Module permissions are managed in admin workflow.
+
+## DB Governance State
+
+- Authoritative schema reference: `local_folder/backups/full_database.sql`.
+- DB change tracking file introduced: `docs/Project_Handbook/DB_CHANGE_LEDGER.md`.
+- Mandatory DB workflow file introduced: `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`.
+- RBAC daily execution tracking file introduced: `docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md`.
 
 ## Import State
 

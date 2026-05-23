@@ -12,7 +12,7 @@
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | ✅ COMPLETED | Dev Team | 2026-05-22 | 2026-05-22 | 100% |
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
 | AUTH-001 | Auth Email Recovery and User Access Continuity | 🟠 HIGH | � IN PROGRESS | Techwheels Admin + Dev Team | 2026-05-22 | 2026-05-23 | 65% |
-| RBAC-001 | Dynamic RBAC and Module Wiring Hardening | 🔴 CRITICAL | 🟡 IN PROGRESS | Techwheels Admin + Dev Team + GitHub Copilot | 2026-05-23 | 2026-05-26 | 40% |
+| RBAC-001 | Dynamic RBAC and Module Wiring Hardening | 🔴 CRITICAL | 🟡 IN PROGRESS | Techwheels Admin + Dev Team + GitHub Copilot | 2026-05-23 | 2026-05-26 | 55% |
 | BODYSHOP-001 | Bodyshop Module End-to-End Workflow and Live Dashboard | 🔴 CRITICAL | 🔴 PENDING | Techwheels Product + Dev Team | 2026-05-22 | 2026-05-30 | 0% |
 
 ---
@@ -21,10 +21,11 @@
 
 ### RBAC-001: Dynamic RBAC and Module Wiring Hardening
 - **File:** [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md)
+- **Daily Tracker:** [RBAC-001_DAILY_STANDUP_CHECKLIST.md](RBAC-001_DAILY_STANDUP_CHECKLIST.md)
 - **Risk Level:** 🔴 CRITICAL (access control + policy hardening)
 - **Status:** Frontend guard implementation complete; backend hardening pending
-- **Latest Update:** 2026-05-23 - Deny-by-default frontend route/nav enforcement implemented and build validated
-- **Next Step:** Begin Phase 3 backend RLS hardening plan and migration design
+- **Latest Update:** 2026-05-23 - Daily tracker + DB ledger/protocol established; Phase 3 migration foundation file created
+- **Next Step:** Review and approve DBL-0002, then apply migration and begin policy tightening migration set
 
 ### BODYSHOP-001: Bodyshop Module End-to-End Workflow and Live Dashboard
 - **File:** [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md)
@@ -112,6 +113,7 @@ Next: Complete edge function, then move to frontend refactor
 - 📄 [AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md) - Auth email throttle recovery and access continuity plan
 - 📄 [AUTH-001_RUNBOOK.md](AUTH-001_RUNBOOK.md) - Operator runbook for temporary-password fallback and SMTP hardening
 - 📄 [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md) - Dynamic module permission enforcement and backend RBAC hardening plan
+- 📄 [RBAC-001_DAILY_STANDUP_CHECKLIST.md](RBAC-001_DAILY_STANDUP_CHECKLIST.md) - Compact daily standup checklist (done/in-progress/next/blockers)
 - 📄 [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md) - Bodyshop module implementation plan (23-stage workflow + live dashboard)
 - 📄 COMPLETED_PLANS.md (Coming soon)
 

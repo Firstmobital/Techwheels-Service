@@ -1,6 +1,6 @@
 # Documentation Sync Protocol
 
-Last Updated: 2026-05-22
+Last Updated: 2026-05-23
 Status: Mandatory
 
 ## Goal
@@ -17,6 +17,8 @@ Mandatory files to review on each change:
 2. `docs/Project_Handbook/CHANGE_LOG.md`
 3. `docs/Project_Handbook/README.md`
 4. `docs/Project_Handbook/DOCS_IMPACT_MATRIX.md`
+5. `docs/Project_Handbook/DB_CHANGE_LEDGER.md` (required for schema/RLS/function/view/index changes)
+6. `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md` (required reference for DB workflow)
 
 ## Update Triggers
 
@@ -38,7 +40,8 @@ Update docs when any of these happen:
 3. Update `CURRENT_STATE.md` snapshot fields.
 4. Add one entry to `CHANGE_LOG.md`.
 5. Update handbook sections in `README.md` if behavior/architecture changed.
-6. Verify all changed paths are covered by docs updates before merge.
+6. For database changes, create/update ledger row in `DB_CHANGE_LEDGER.md` and follow `DB_CHANGE_PROTOCOL.md`.
+7. Verify all changed paths are covered by docs updates before merge.
 
 ## Change Log Entry Template
 

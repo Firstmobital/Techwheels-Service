@@ -52,8 +52,8 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 - [ ] **Task 2.3:** Document contract in handbook and developer docs.
 
 ### Phase 3: Backend RBAC Hardening
-- [ ] **Task 3.1:** Audit permissive RLS policies for authenticated and anon roles.
-- [ ] **Task 3.2:** Create SQL migration plan to restrict read/write per role/module/dealer scope.
+- [x] **Task 3.1:** Audit permissive RLS policies for authenticated and anon roles.
+- [x] **Task 3.2:** Create SQL migration plan foundation to restrict read/write per role/module/dealer scope.
 - [ ] **Task 3.3:** Validate critical tables cannot be queried without intended access.
 
 ### Phase 4: New User Onboarding Controls
@@ -65,6 +65,7 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 - [ ] **Task 5.1:** Execute role matrix tests (admin, manager, staff, viewer, new signup).
 - [ ] **Task 5.2:** Verify direct URL access is blocked for unauthorized modules.
 - [ ] **Task 5.3:** Publish operator checklist for permission assignment and validation.
+- [x] **Task 5.4:** Create compact daily standup tracker with ownership and update conditions.
 
 ---
 
@@ -96,8 +97,8 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 
 ### Phase 3
 ```
-⏳ 3.1 | RLS policy deep audit | Dev Team | - | - | Pending
-⏳ 3.2 | Restrictive RBAC migration SQL design | Dev Team | - | - | Pending
+✅ 3.1 | RLS policy deep audit | GitHub Copilot | 2026-05-23 | 2026-05-23 | Authoritative dump reviewed and permissive policy risk documented
+✅ 3.2 | Restrictive RBAC migration SQL design foundation | GitHub Copilot | 2026-05-23 | 2026-05-23 | Added helper permission migration: 20260523120000_add_module_permission_helper_functions.sql (DBL-0002 PROPOSED)
 ⏳ 3.3 | Unauthorized query validation tests | QA + Dev Team | - | - | Pending
 ```
 
@@ -113,6 +114,7 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 ⏳ 5.1 | Role matrix regression testing | QA | - | - | Pending
 ⏳ 5.2 | Direct URL bypass testing | QA | - | - | Pending
 ⏳ 5.3 | Operations runbook publication | Dev Team | - | - | Pending
+✅ 5.4 | Compact daily checklist creation | GitHub Copilot | 2026-05-23 | 2026-05-23 | Created RBAC-001_DAILY_STANDUP_CHECKLIST.md with ownership and mandatory update conditions
 ```
 
 ---
@@ -168,12 +170,15 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 
 - docs/Implementation_plans/INDEX.md
 - docs/Implementation_plans/TEMPLATE.md
+- docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md
 - docs/Implementation_plans/AUTODOC_EXECUTION_STATUS_2026-05-22.md
 - docs/Project_Handbook/CURRENT_STATE.md
+- docs/Project_Handbook/DB_CHANGE_LEDGER.md
+- docs/Project_Handbook/DB_CHANGE_PROTOCOL.md
 - local_folder/backups/full_database.sql
 
 ---
 
 **Last Updated:** 2026-05-23 by GitHub Copilot  
 **Status:** 🟡 IN PROGRESS  
-**Progress:** 40%
+**Progress:** 55%
