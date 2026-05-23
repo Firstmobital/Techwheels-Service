@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import ImportPage from './pages/ImportPage'
 import ReportsPage from './pages/ReportsPage.tsx'
@@ -67,6 +67,76 @@ const NAV_ITEMS = [
   },
 ]
 
+type ModuleName =
+  | 'job_cards'
+  | 'invoices'
+  | 'parts_inventory'
+  | 'parts_orders'
+  | 'parts_consumption'
+  | 'employees'
+  | 'reports'
+  | 'admin'
+
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc'
+
+interface PermissionRow {
+  module_name: string
+}
+
+const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
+  '/import': ['job_cards'],
+  '/reports': ['reports'],
+  '/settings': ['employees'],
+  '/admin': ['admin'],
+  '/autodoc': ['job_cards'],
+}
+
+function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly ModuleName[]) {
+  return modules.some((moduleName) => allowedModules.has(moduleName))
+}
+
+function canAccessPath(pathname: string, allowedModules: Set<string>) {
+  if (pathname === '/') return true
+  if (pathname.startsWith('/reports')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reports'])
+  if (pathname.startsWith('/import')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/import'])
+  if (pathname.startsWith('/settings')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
+  if (pathname.startsWith('/admin')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/admin'])
+  if (pathname.startsWith('/autodoc')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
+  if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback')) return true
+  return false
+}
+
+function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
+  const preferenceOrder: AppRoute[] = ['/import', '/reports', '/settings', '/autodoc', '/admin']
+  return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
+}
+
+function AccessDenied() {
+  return (
+    <div className="mx-auto my-10 w-full max-w-2xl rounded-xl border border-amber-200 bg-white p-6 text-center shadow-sm">
+      <h2 className="text-lg font-semibold text-gray-900">No module access assigned</h2>
+      <p className="mt-2 text-sm text-gray-600">
+        Your account is signed in, but no view permissions are enabled yet. Ask an admin to assign module permissions.
+      </p>
+    </div>
+  )
+}
+
+function RequireAccess({
+  allowedModules,
+  modules,
+  children,
+}: {
+  allowedModules: Set<string>
+  modules: readonly ModuleName[]
+  children: React.ReactNode
+}) {
+  if (!hasAnyModuleAccess(allowedModules, modules)) {
+    return <AccessDenied />
+  }
+  return <>{children}</>
+}
+
 // ─── Auth wrapper ─────────────────────────────────────────────────────────────
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -120,6 +190,8 @@ function AppInner() {
   const { isDirty }    = useDirty()
   const [isReportsOpen, setIsReportsOpen] = useState(false)
   const [user,          setUser]          = useState<User | null>(null)
+  const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set())
+  const [permissionsLoading, setPermissionsLoading] = useState(true)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
@@ -130,12 +202,75 @@ function AppInner() {
   }, [])
 
   useEffect(() => {
+    let mounted = true
+
+    async function loadAccess() {
+      if (!user) {
+        if (mounted) {
+          setAllowedModules(new Set())
+          setPermissionsLoading(false)
+        }
+        return
+      }
+
+      setPermissionsLoading(true)
+
+      const [{ data: profile }, { data: permissionRows }] = await Promise.all([
+        supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
+        supabase.rpc('get_all_my_permissions'),
+      ])
+
+      const nextModules = new Set<string>(((permissionRows ?? []) as PermissionRow[]).map((row) => row.module_name))
+
+      if (profile?.role === 'admin') {
+        const { data: activeModules } = await supabase
+          .from('modules')
+          .select('name')
+          .eq('is_active', true)
+        ;(activeModules ?? []).forEach((moduleRow) => {
+          if (moduleRow.name) {
+            nextModules.add(moduleRow.name)
+          }
+        })
+      }
+
+      if (mounted) {
+        setAllowedModules(nextModules)
+        setPermissionsLoading(false)
+      }
+    }
+
+    void loadAccess()
+
+    return () => {
+      mounted = false
+    }
+  }, [user])
+
+  useEffect(() => {
     if (location.pathname.startsWith('/reports')) setIsReportsOpen(true)
   }, [location.pathname])
 
   const isReportsRoute  = location.pathname.startsWith('/reports')
   const isAutodocRoute  = location.pathname.startsWith('/autodoc')
   const handleSignOut   = () => supabase.auth.signOut()
+  const defaultRoute    = useMemo(() => getDefaultRoute(allowedModules), [allowedModules])
+  const canSeeCurrentPath = useMemo(
+    () => canAccessPath(location.pathname, allowedModules),
+    [allowedModules, location.pathname],
+  )
+
+  const visibleNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => {
+      if (item.to === '/import') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/import'])
+      if (item.to === '/reports') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reports'])
+      if (item.to === '/settings') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
+      if (item.to === '/admin') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/admin'])
+      if (item.to === '/autodoc') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
+      return false
+    }),
+    [allowedModules],
+  )
 
   if (!hasSupabaseEnv) {
     return (
@@ -156,6 +291,16 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
   }
 
   if (window.location.pathname === '/auth/callback') return <AuthCallback />
+
+  if (permissionsLoading) {
+    return (
+      <AuthGate>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+        </div>
+      </AuthGate>
+    )
+  }
 
   return (
     <AuthGate>
@@ -188,9 +333,12 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
             <nav className="flex-1 space-y-0.5 px-3 py-4">
               <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400">Menu</p>
 
-              <SideNavLink to="/import" icon={NAV_ITEMS[0].icon} label={NAV_ITEMS[0].label} />
+              {visibleNavItems.some((item) => item.to === '/import') && (
+                <SideNavLink to="/import" icon={NAV_ITEMS[0].icon} label={NAV_ITEMS[0].label} />
+              )}
 
               {/* Reports accordion */}
+              {visibleNavItems.some((item) => item.to === '/reports') && (
               <div className="space-y-1">
                 <button
                   type="button"
@@ -228,12 +376,17 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   </div>
                 )}
               </div>
+              )}
 
-              <SideNavLink to="/settings" icon={NAV_ITEMS[2].icon} label={NAV_ITEMS[2].label} />
-              <SideNavLink to="/admin"    icon={NAV_ITEMS[3].icon} label={NAV_ITEMS[3].label} />
+              {visibleNavItems.some((item) => item.to === '/settings') && (
+                <SideNavLink to="/settings" icon={NAV_ITEMS[2].icon} label={NAV_ITEMS[2].label} />
+              )}
+              {visibleNavItems.some((item) => item.to === '/admin') && (
+                <SideNavLink to="/admin" icon={NAV_ITEMS[3].icon} label={NAV_ITEMS[3].label} />
+              )}
 
               {/* AutoDoc with dirty dot */}
-              <NavLink
+              {visibleNavItems.some((item) => item.to === '/autodoc') && <NavLink
                 to="/autodoc"
                 className={({ isActive }) => [
                   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
@@ -249,7 +402,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                     )}
                   </>
                 )}
-              </NavLink>
+              </NavLink>}
             </nav>
 
             {/* Sidebar footer */}
@@ -330,26 +483,88 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
 
             {/* Page content */}
             <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+              {!defaultRoute ? (
+                <AccessDenied />
+              ) : !canSeeCurrentPath ? (
+                <AccessDenied />
+              ) : (
               <Routes>
-                <Route index element={<Navigate to="/import" replace />} />
-                <Route path="/import" element={<ImportPage />} />
-                <Route path="/reports" element={<Navigate to="/reports/labour-revenue" replace />} />
-                <Route path="/reports/:categoryId" element={<ReportsPage />} />
-                <Route path="/reports/:categoryId/:reportId" element={<ReportsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/admin" element={<AdminPage />} />
+                <Route index element={<Navigate to={defaultRoute} replace />} />
+                <Route
+                  path="/import"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/import']}>
+                      <ImportPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/reports"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/reports']}>
+                      <Navigate to="/reports/labour-revenue" replace />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/reports/:categoryId"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/reports']}>
+                      <ReportsPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/reports/:categoryId/:reportId"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/reports']}>
+                      <ReportsPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/settings"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/settings']}>
+                      <SettingsPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/admin"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/admin']}>
+                      <AdminPage />
+                    </RequireAccess>
+                  )}
+                />
                 <Route path="/reset-password" element={<PasswordUpdatePage />} />
-                <Route path="/autodoc" element={<AutoDocPage />} />
-                <Route path="/autodoc/:id" element={<JobCardPage />} />
-                <Route path="*" element={<Navigate to="/import" replace />} />
+                <Route
+                  path="/autodoc"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/autodoc']}>
+                      <AutoDocPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/autodoc/:id"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/autodoc']}>
+                      <JobCardPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route path="*" element={<Navigate to={defaultRoute} replace />} />
               </Routes>
+              )}
             </main>
           </div>
         </div>
 
         {/* Mobile bottom tab bar */}
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-center justify-around border-t border-gray-200 bg-white px-2 py-1 safe-bottom">
-          {NAV_ITEMS.map(item => (
+          {visibleNavItems.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
