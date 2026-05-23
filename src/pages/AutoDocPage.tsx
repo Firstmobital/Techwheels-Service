@@ -312,42 +312,42 @@ export default function AutoDocPage() {
     <div className="min-h-full bg-gray-50 p-4 pb-24 md:p-6 md:pb-6">
 
       {/* Tab Navigation as Cards */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:gap-4">
+        <button className="flex flex-col items-center gap-1.5 rounded-lg border border-gray-300 bg-amber-50 px-3 py-4 hover:bg-amber-100 hover:border-amber-400 transition-colors">
           <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700">Dashboard</span>
+          <span className="text-xs font-semibold text-gray-700 text-center">Dashboard</span>
         </button>
 
         <button 
           onClick={() => setShowCreate(true)}
-          className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+          className="flex flex-col items-center gap-1.5 rounded-lg border border-gray-300 bg-amber-50 px-3 py-4 hover:bg-amber-100 hover:border-amber-400 transition-colors">
           <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700">New Car</span>
+          <span className="text-xs font-semibold text-gray-700 text-center">New Car</span>
         </button>
 
-        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+        <button className="flex flex-col items-center gap-1.5 rounded-lg border border-gray-300 bg-amber-50 px-3 py-4 hover:bg-amber-100 hover:border-amber-400 transition-colors sm:col-span-1">
           <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700 text-center">Document<br/>Damage</span>
+          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">Document<br/>Damage</span>
         </button>
 
-        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+        <button className="flex flex-col items-center gap-1.5 rounded-lg border border-gray-300 bg-amber-50 px-3 py-4 hover:bg-amber-100 hover:border-amber-400 transition-colors">
           <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3v3m3-9v3m-3-3V4m3 0v3m0 6.5H6a1.5 1.5 0 01-1.5-1.5V5A1.5 1.5 0 016 3.5h12A1.5 1.5 0 0119.5 5v11a1.5 1.5 0 01-1.5 1.5z" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700">Quotation</span>
+          <span className="text-xs font-semibold text-gray-700 text-center">Quotation</span>
         </button>
 
-        <button className="flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-amber-50 px-4 py-3 hover:bg-amber-100 hover:border-amber-400 transition-colors">
+        <button className="flex flex-col items-center gap-1.5 rounded-lg border border-gray-300 bg-amber-50 px-3 py-4 hover:bg-amber-100 hover:border-amber-400 transition-colors">
           <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
           </svg>
-          <span className="text-xs font-semibold text-gray-700 text-center">Reports<br/>& Submit</span>
+          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">Reports<br/>& Submit</span>
         </button>
       </div>
 
