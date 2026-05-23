@@ -21,7 +21,8 @@ Prevent schema drift and prevent assumption-based development by enforcing one w
 5. Apply migration manually in target environment.
 6. Update ledger status to APPLIED and add execution evidence.
 7. Validate behavior (queries/tests/build checks) and set status VERIFIED.
-8. Update handbook docs: CURRENT_STATE.md, CHANGE_LOG.md, README.md if behavior changed.
+8. Move successfully executed migration file from supabase/migrations to supabase/exec_success_migrations.
+9. Update handbook docs: CURRENT_STATE.md, CHANGE_LOG.md, README.md if behavior changed.
 
 ## Minimum Evidence Required
 

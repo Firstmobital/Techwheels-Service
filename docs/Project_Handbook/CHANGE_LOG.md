@@ -18,6 +18,8 @@ Tracks documentation-sync updates for business logic, architecture, and access c
 	- `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`
 - Added RBAC migration foundation file: `supabase/migrations/20260523120000_add_module_permission_helper_functions.sql`.
 - Added DB ledger proposal entry: `DBL-0002`.
+- Added executed migration archive folder: `supabase/exec_success_migrations/` with usage README.
+- Updated migration/process docs to move verified SQL files out of `supabase/migrations/`.
 - Updated RBAC implementation plan and index to include compact tracker and update conditions.
 - Updated sync protocol to require DB ledger/protocol use for schema/RLS/function changes.
 - Updated current-state snapshot to reflect deny-by-default frontend RBAC and new DB tracking governance.

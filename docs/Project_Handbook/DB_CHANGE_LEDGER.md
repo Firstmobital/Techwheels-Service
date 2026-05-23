@@ -22,6 +22,7 @@ Purpose: Single source of truth for planned and applied DB changes so no one gue
 |----|------|----------------|------|----------------|-------|----------|--------|-------------|---------------------|---------------|
 | DBL-0001 | 2026-05-23 | Start RBAC hardening documentation and tracking controls | docs/process | N/A | GitHub Copilot | Techwheels Admin | VERIFIED | N/A | docs updates committed | local_folder/backups/full_database.sql |
 | DBL-0002 | 2026-05-23 | Add helper SQL functions for module permission checks (view/modify/delete) | function | supabase/migrations/20260523120000_add_module_permission_helper_functions.sql | GitHub Copilot | Techwheels Admin + Dev Team | PROPOSED | N/A | Migration file created; pending apply | local_folder/backups/full_database.sql |
+| DBL-0003 | 2026-05-23 | Introduce executed-migration archive workflow and folder | docs/process | N/A | GitHub Copilot | Techwheels Admin | VERIFIED | N/A | README + protocol updated; archive folder created | local_folder/backups/full_database.sql |
 
 ---
 

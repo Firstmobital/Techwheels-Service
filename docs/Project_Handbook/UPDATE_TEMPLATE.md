@@ -41,6 +41,14 @@ Use this template in every feature/fix/change set.
 - [ ] `docs/Project_Handbook/CHANGE_LOG.md`
 - [ ] `docs/Project_Handbook/DOCS_IMPACT_MATRIX.md` (if mappings changed)
 
+## Migration Lifecycle Checklist (Required if DB change exists)
+
+- [ ] Added/updated row in `docs/Project_Handbook/DB_CHANGE_LEDGER.md`
+- [ ] Followed `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md` workflow
+- [ ] Migration execution evidence captured (env + timestamp + validation)
+- [ ] If execution successful, moved SQL file from `supabase/migrations/` to `supabase/exec_success_migrations/`
+- [ ] Authority checked against `local_folder/backups/full_database.sql`
+
 ## Notes
 
 - Follow-up actions:
