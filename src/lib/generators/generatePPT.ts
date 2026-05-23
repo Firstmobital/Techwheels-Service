@@ -543,7 +543,8 @@ function addSummarySlide(prs: PptxGenJS, jc: JobSummary, rows: EstimateRow[]) {
 export async function generateRepairPPT(
   jobCardId: string,
   type: 'pre-repair' | 'post-repair',
-): Promise<void> {
+  options?: { download?: boolean; fileName?: string },
+): Promise<Blob> {
   // 1. Fetch all Supabase data in parallel
   const { summary, panels, photos, estRows } = await fetchAll(jobCardId)
 
@@ -606,8 +607,24 @@ export async function generateRepairPPT(
   // Last slide — Expenses summary
   addSummarySlide(prs, summary, estRows)
 
-  // 5. Trigger browser download
+  // 5. Build PPT blob
+  const blob = await prs.write({ outputType: 'blob' }) as Blob
+
+  // 6. Optional browser download
   const slug     = (summary.reg_number ?? jobCardId).replace(/\s+/g, '_')
-  const fileName = `PPT_${slug}.pptx`
-  await prs.writeFile({ fileName })
+  const defaultName = `PPT_${slug}.pptx`
+  const fileName = options?.fileName || defaultName
+
+  if (options?.download !== false) {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  return blob
 }

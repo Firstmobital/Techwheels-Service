@@ -443,7 +443,10 @@ function buildEstimateSheet(
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
-export async function generateEstimateExcel(jobCardId: string): Promise<void> {
+export async function generateEstimateExcel(
+  jobCardId: string,
+  options?: { download?: boolean; fileName?: string },
+): Promise<Blob> {
   const { jc, rows } = await fetchData(jobCardId)
 
   const wb = new ExcelJS.Workbook()
@@ -459,12 +462,20 @@ export async function generateEstimateExcel(jobCardId: string): Promise<void> {
   const blob   = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
-  const url  = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href     = url
-  link.download = `Paint_Estimate_${(jc.reg_number ?? jobCardId).replace(/\s+/g, '_')}.xlsx`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+
+  const defaultName = `Paint_Estimate_${(jc.reg_number ?? jobCardId).replace(/\s+/g, '_')}.xlsx`
+  const fileName = options?.fileName || defaultName
+
+  if (options?.download !== false) {
+    const url  = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href     = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  return blob
 }

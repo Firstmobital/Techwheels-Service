@@ -3,7 +3,7 @@
 **Plan ID:** AUTODOC-STATUS-001  
 **Created:** 2026-05-22  
 **Owner:** GitHub Copilot (execution audit)  
-**Status:** ✅ COMPLETE (All 8 prompts fully implemented as per live app at https://techwheels-service.vercel.app/autodoc) — Final update: 2026-05-23 (both migrations deployed)
+**Status:** ⚠️ IN EXECUTION (UI + workflow wiring complete; deployment/config + production verification pending) — Last update: 2026-05-23
 
 ---
 
@@ -19,6 +19,47 @@
 
 The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim workflow system. **All core functionality is now fully implemented (2026-05-23):**
 
+### Execution Delta (2026-05-23 — latest)
+
+Done in codebase (this execution):
+- Submit tab is fully wired (no longer static UI):
+  - Generate Pre-Repair PPT
+  - Export Estimate Excel
+  - Compose and Send
+  - Generate Post-Repair PPT
+  - Submit Claim
+- Dashboard final design alignment:
+  - Removed legacy PPT/Excel action controls from dashboard list
+  - Dashboard list restricted to today-only vehicles
+  - Added row-level "Use" action to set active workflow job card context
+- Persistence across refresh/tab-switch:
+  - Active AutoDoc tab persisted in localStorage
+  - Active job card context persisted in localStorage
+  - Submit readiness state rehydrated from DB documents on reload
+- DB-backed readiness gating implemented:
+  - Compose and Send disabled until Pre-PPT + Excel are generated and uploaded
+  - Submit Claim disabled until Delivery Video uploaded + Post-PPT generated
+- Server-side attachment pipeline implemented:
+  - PPT/Excel generators now return blobs (with optional browser download)
+  - Generated files uploaded to Storage and persisted in `documents`
+  - Email API updated to send attachment refs
+  - Edge function updated to fetch attachments from Storage and send true attachments via Resend
+- Recipient rule applied:
+  - Submit flow now targets `vinodexodus@gmail.com` (no fallback)
+
+Pending to finish production rollout:
+- Deploy updated edge function:
+  - [supabase/functions/send-transactional-email/index.ts](../../supabase/functions/send-transactional-email/index.ts)
+- Ensure required edge env vars are present in deployed environment:
+  - `RESEND_API_KEY`
+  - `RESEND_FROM_EMAIL`
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- Run production E2E on deployed app for attachment send path:
+  - Generate files -> upload to storage -> compose/send with real attachments -> verify recipient inbox -> verify status transitions (`draft` -> `submitted` -> `completed`)
+- Optional hardening:
+  - Add migration-backed workflow flags table if stricter immutable audit trail is needed beyond `documents` + `audit_logs`
+
 **Completed (✅):**
 - Vite + React + TypeScript + Tailwind stack with Supabase backend
 - Dashboard with KPI cards (Total Cars Today, Pending Tata Approval, Approved & In Work, Completed This Week)
@@ -33,6 +74,10 @@ The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim w
 - Email compose and send to Tata Motors with warranty claim template
 - Responsive mobile UI with panel/photo selection workflow
 - Auth gating and dealer isolation via RLS policies
+
+**Remaining (Required to close execution):**
+- Deploy + verify server-side attachment email flow in production environment
+- End-to-end confirmation of submit gating in deployed app
 
 **Remaining (Optional Enhancements):**
 - Auto-capture GPS geo-tagging on photo upload (browser permission required)
@@ -337,6 +382,18 @@ Pending:
 - [x] Execute scripted E2E checklist pass for create/upload/export/auth wiring and build validation (10/10 pass).
 - [x] Publish manual E2E walkthrough script for create/edit/upload/export/auth/dealer isolation (step-by-step with expected results and sample data).
 
+### Phase E — Submit Workflow Finalization (New)
+- [x] Wire submit page actions to real handlers (PPT, Excel, compose/send, submit claim).
+- [x] Remove dashboard PPT/Excel controls per final design.
+- [x] Add DB status transitions (`submitted`, `completed`) in submit flow.
+- [x] Implement document-based readiness gating (pre-ppt + excel, post-ppt + delivery video).
+- [x] Persist active tab/job context across refresh and tab-switch.
+- [x] Implement storage upload + document persistence for generated PPT/Excel artifacts.
+- [x] Implement server-side email attachment references in frontend API.
+- [x] Implement edge-function attachment fetch and Resend payload mapping.
+- [ ] Deploy edge function and validate attachment send in production.
+- [ ] Validate env vars and production recipient delivery (`vinodexodus@gmail.com`).
+
 ---
 
 ## Current Completion Snapshot
@@ -350,20 +407,23 @@ Pending:
 - Prompt 7: ✅ (auth gating + dealer isolation complete)
 - Prompt 8: ✅ (dashboard KPIs + multi-step workflow + activity log + email integration + mobile UI complete)
 
-**Overall: ✅ 100% COMPLETE** — AutoDoc Warranty Repair Manager fully implemented matching live app at https://techwheels-service.vercel.app/autodoc
+**Overall: ⚠️ 90% COMPLETE (code complete, deployment verification pending)** — AutoDoc Warranty Repair Manager implementation is functionally wired; production attachment delivery and final rollout checks are pending.
 
-**Status:** All features implemented and built successfully on 2026-05-23
+**Status:** Build-green and functionally wired in codebase on 2026-05-23; waiting on production deployment + runtime verification for attachment send path.
 - 716 TypeScript modules compiled
 - Production bundle: 2,999KB (824KB gzipped)
 - Build time: 667ms
 - 0 TypeScript errors
 - All KPI cards calculating correctly
-- Email integration fully functional (edge function + Resend API)
+- Email integration wired (edge function + Resend API + storage attachments), pending deployed runtime verification
 - Activity log tracking all actions (audit_logs table)
 - Complete dealer isolation via RLS policies
-- Both migrations deployed:
+- Migrations deployed:
   - ✅ `20260523_add_repair_stage_to_panel_photos.sql` (pre/post-repair photo distinction)
   - ✅ `20260523_create_email_logs_table.sql` (email audit trail + RLS policies)
+
+**Runtime Deployment Pending:**
+- Updated edge function `send-transactional-email` with storage-backed attachments must be deployed and verified.
 
 **Optional Enhancements (Out of Scope):**
 - GPS auto-capture with browser geolocation permissions

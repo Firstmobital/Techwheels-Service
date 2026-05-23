@@ -12,6 +12,12 @@ export interface EmailLog {
   created_at: string
 }
 
+export interface EmailAttachmentRef {
+  filename: string
+  storagePath: string
+  bucket?: string
+}
+
 /**
  * Send transactional email via edge function
  */
@@ -19,6 +25,7 @@ async function sendTransactionalEmail(
   to: string,
   subject: string,
   html: string,
+  attachments?: EmailAttachmentRef[],
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
     const response = await fetch(
@@ -35,6 +42,7 @@ async function sendTransactionalEmail(
           html,
           text: html.replace(/<[^>]*>/g, ''), // Strip HTML for plain text
           purpose: 'manual_message',
+          attachments,
         }),
       },
     )
@@ -90,11 +98,11 @@ export async function sendClaimEmail(
     to: string
     subject: string
     html: string
-    attachments?: string[]
+    attachments?: EmailAttachmentRef[]
   },
 ): Promise<ApiResult<EmailLog>> {
   // Send email via edge function
-  const sendRes = await sendTransactionalEmail(options.to, options.subject, options.html)
+  const sendRes = await sendTransactionalEmail(options.to, options.subject, options.html, options.attachments)
   if (sendRes.error) {
     return fail(`Failed to send email: ${sendRes.error}`)
   }
@@ -104,7 +112,7 @@ export async function sendClaimEmail(
     recipientEmail: options.to,
     subject: options.subject,
     body: options.html,
-    attachments: options.attachments,
+    attachments: options.attachments?.map((a) => a.storagePath),
     sentAt: new Date().toISOString(),
   })
 

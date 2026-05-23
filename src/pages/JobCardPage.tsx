@@ -967,7 +967,6 @@ export default function JobCardPage() {
                     to: emailForm.to,
                     subject: emailForm.subject,
                     html: emailForm.body,
-                    attachments: ['Pre-Repair PPT', 'Post-Repair PPT', 'Estimate Excel'],
                   })
 
                   if (sendRes.error) {

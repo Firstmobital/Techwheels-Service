@@ -7,14 +7,18 @@ import {
   fetchVehicleByReg,
   generateClaimEmailContent,
   getJobCardSummary,
+  listDocuments,
   listJobCardSummaries,
   logActivity,
   resolveRegNumberFromReference,
   sendClaimEmail,
+  uploadDocumentFile,
   updateJobCardStatus,
   upsertVehicle,
+  type DocumentRow,
   type JobSummaryRow,
 } from '../lib/api'
+import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,7 +118,7 @@ export default function AutoDocPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [lookupBusy, setLookupBusy] = useState(false)
   const [vehicleFound, setVehicleFound] = useState(false)
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('autodoc_active_tab') || 'dashboard')
   const [kpis, setKpis] = useState({
     totalToday: 0,
     totalTodayNew: 0,
@@ -142,8 +146,9 @@ export default function AutoDocPage() {
     dealerCode: '',
     dateOfSale: '',
   }))
-  const [activeJobCardId, setActiveJobCardId] = useState<string | null>(null)
+  const [activeJobCardId, setActiveJobCardId] = useState<string | null>(() => localStorage.getItem('autodoc_active_job_card_id'))
   const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
+  const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
   const [selectedPanels, setSelectedPanels] = useState<string[]>([])
   const [activePanel, setActivePanel] = useState('')
   const [damagePhotoType, setDamagePhotoType] = useState<'' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>('')
@@ -152,6 +157,16 @@ export default function AutoDocPage() {
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>([])
   const [deliveryVideoName, setDeliveryVideoName] = useState('')
+    const readiness = {
+      prePpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_pre'),
+      postPpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_post'),
+      excel: jobDocuments.some((doc) => doc.doc_type === 'excel_estimate'),
+      deliveryVideo: jobDocuments.some((doc) => doc.doc_type === 'video_delivery'),
+    }
+
+    const composeReady = readiness.prePpt && readiness.excel
+    const submitReady = readiness.postPpt && readiness.deliveryVideo
+
   const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null)
 
   function toggleDamagePanel(panel: string) {
@@ -261,14 +276,40 @@ export default function AutoDocPage() {
   }
 
   function openDeliveryVideoPicker() {
+    if (!activeJobCardId) {
+      showToast('Select a job card first from dashboard.', false)
+      return
+    }
     deliveryVideoInputRef.current?.click()
   }
 
-  function handleDeliveryVideoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleDeliveryVideoUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
+
+    if (!activeJobCardId) {
+      showToast('Select a job card first from dashboard.', false)
+      event.target.value = ''
+      return
+    }
+
+    const uploadRes = await uploadDocumentFile({
+      jobCardId: activeJobCardId,
+      docType: 'video_delivery',
+      file,
+      fileName: file.name,
+      contentType: file.type || 'video/mp4',
+    })
+
+    if (uploadRes.error) {
+      showToast(uploadRes.error, false)
+      event.target.value = ''
+      return
+    }
+
     setDeliveryVideoName(file.name)
-    showToast('Delivery video selected successfully.', true)
+    await refreshDocuments(activeJobCardId)
+    showToast('Delivery video uploaded and linked to this job card.', true)
     event.target.value = ''
   }
 
@@ -320,6 +361,20 @@ export default function AutoDocPage() {
 
   useEffect(() => { void fetchRows() }, [fetchRows])
 
+  const refreshDocuments = useCallback(async (jobCardId: string) => {
+    const res = await listDocuments(jobCardId)
+    if (res.error || !res.data) {
+      setJobDocuments([])
+      return
+    }
+    setJobDocuments(res.data)
+    const deliveryDoc = res.data.find((doc) => doc.doc_type === 'video_delivery')
+    if (deliveryDoc?.storage_path) {
+      const fileName = deliveryDoc.storage_path.split('/').pop() ?? 'uploaded-video'
+      setDeliveryVideoName(fileName)
+    }
+  }, [])
+
   useEffect(() => {
     if (!activeJobCardId && rows.length > 0) {
       setActiveJobCardId(rows[0].job_card_id)
@@ -327,18 +382,30 @@ export default function AutoDocPage() {
   }, [activeJobCardId, rows])
 
   useEffect(() => {
+    localStorage.setItem('autodoc_active_tab', activeTab)
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeJobCardId) {
+      localStorage.setItem('autodoc_active_job_card_id', activeJobCardId)
+    }
+  }, [activeJobCardId])
+
+  useEffect(() => {
     async function loadActiveSummary() {
       if (!activeJobCardId) {
         setActiveSummary(null)
+        setJobDocuments([])
         return
       }
       const res = await getJobCardSummary(activeJobCardId)
       if (!res.error && res.data) {
         setActiveSummary(res.data)
       }
+      await refreshDocuments(activeJobCardId)
     }
     void loadActiveSummary()
-  }, [activeJobCardId])
+  }, [activeJobCardId, refreshDocuments])
 
   // ── Compute KPIs ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -480,25 +547,34 @@ export default function AutoDocPage() {
   }
 
   // ── Generate PPT ───────────────────────────────────────────────────────────
-  async function handleGenerate(jobCardId: string, type: 'pre-repair' | 'post-repair') {
+  async function handleGenerate(jobCardId: string, type: 'pre-repair' | 'post-repair', download = true) {
     setToast(null)
     try {
-      await generateRepairPPT(jobCardId, type)
-      showToast('PPT downloaded successfully.', true)
+      const blob = await generateRepairPPT(jobCardId, type, { download })
+      if (download) showToast('PPT downloaded successfully.', true)
+      return blob
     } catch (e) {
       showToast((e as Error).message ?? 'Failed to generate PPT.', false)
+      return null
     }
   }
 
   // ── Generate Excel ─────────────────────────────────────────────────────────
-  async function handleExcel(jobCardId: string) {
+  async function handleExcel(jobCardId: string, download = true) {
     setToast(null)
     try {
-      await generateEstimateExcel(jobCardId)
-      showToast('Excel estimate downloaded successfully.', true)
+      const blob = await generateEstimateExcel(jobCardId, { download })
+      if (download) showToast('Excel estimate downloaded successfully.', true)
+      return blob
     } catch (e) {
       showToast((e as Error).message ?? 'Failed to generate Excel.', false)
+      return null
     }
+  }
+
+  function storageFileName(path: string, fallback: string): string {
+    const last = path.split('/').pop()?.trim()
+    return last && last.length > 0 ? last : fallback
   }
 
   async function handleSubmitGeneratePpt(type: 'pre-repair' | 'post-repair') {
@@ -506,12 +582,31 @@ export default function AutoDocPage() {
       showToast('Select a job card first from dashboard.', false)
       return
     }
-    await handleGenerate(activeJobCardId, type)
+    const regSlug = (activeSummary?.reg_number || form.regNumber || activeJobCardId).replace(/\s+/g, '_')
+    const fileName = `${type === 'pre-repair' ? 'pre' : 'post'}_repair_${regSlug}.pptx`
+    const blob = await handleGenerate(activeJobCardId, type, true)
+    if (!blob) return
+
+    const uploadRes = await uploadDocumentFile({
+      jobCardId: activeJobCardId,
+      docType: type === 'pre-repair' ? 'ppt_pre' : 'ppt_post',
+      file: blob,
+      fileName,
+      contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+
+    if (uploadRes.error) {
+      showToast(uploadRes.error, false)
+      return
+    }
+
+    await refreshDocuments(activeJobCardId)
     await logActivity(`submit_generate_${type === 'pre-repair' ? 'pre_ppt' : 'post_ppt'}`, {
       resourceType: 'job_card',
       resourceId: activeJobCardId,
       details: { tab: 'submit' },
     })
+    showToast(`${type === 'pre-repair' ? 'Pre-repair' : 'Post-repair'} PPT generated and uploaded.`, true)
   }
 
   async function handleSubmitExportExcel() {
@@ -519,17 +614,40 @@ export default function AutoDocPage() {
       showToast('Select a job card first from dashboard.', false)
       return
     }
-    await handleExcel(activeJobCardId)
+    const regSlug = (activeSummary?.reg_number || form.regNumber || activeJobCardId).replace(/\s+/g, '_')
+    const fileName = `estimate_${regSlug}.xlsx`
+    const blob = await handleExcel(activeJobCardId, true)
+    if (!blob) return
+
+    const uploadRes = await uploadDocumentFile({
+      jobCardId: activeJobCardId,
+      docType: 'excel_estimate',
+      file: blob,
+      fileName,
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    if (uploadRes.error) {
+      showToast(uploadRes.error, false)
+      return
+    }
+
+    await refreshDocuments(activeJobCardId)
     await logActivity('submit_export_excel', {
       resourceType: 'job_card',
       resourceId: activeJobCardId,
       details: { tab: 'submit' },
     })
+    showToast('Estimate Excel generated and uploaded.', true)
   }
 
   async function handleComposeAndSend() {
     if (!activeJobCardId || !activeSummary) {
       showToast('Select a job card first from dashboard.', false)
+      return
+    }
+    if (!composeReady) {
+      showToast('Generate and upload Pre-repair PPT and Excel before sending.', false)
       return
     }
 
@@ -543,12 +661,30 @@ export default function AutoDocPage() {
       total_estimate_amount: activeSummary.total_estimate_amount ?? null,
     })
 
-    const targetEmail = (import.meta.env.VITE_WARRANTY_EMAIL_TO as string | undefined)?.trim() || 'warranty@tatamotors.com'
+    const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
+    const excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    if (!preDoc || !excelDoc) {
+      showToast('Required attachments are missing in document store.', false)
+      return
+    }
+
+    const targetEmail = 'vinodexodus@gmail.com'
     const sendRes = await sendClaimEmail(activeJobCardId, {
       to: targetEmail,
       subject: content.subject,
       html: content.html,
-      attachments: ['ppt_pre', 'excel_estimate'],
+      attachments: [
+        {
+          filename: storageFileName(preDoc.storage_path, 'pre-repair.pptx'),
+          storagePath: preDoc.storage_path,
+          bucket: AUTODOC_BUCKET,
+        },
+        {
+          filename: storageFileName(excelDoc.storage_path, 'estimate.xlsx'),
+          storagePath: excelDoc.storage_path,
+          bucket: AUTODOC_BUCKET,
+        },
+      ],
     })
 
     if (sendRes.error) {
@@ -566,8 +702,8 @@ export default function AutoDocPage() {
       showToast('Select a job card first from dashboard.', false)
       return
     }
-    if (!deliveryVideoName) {
-      showToast('Upload delivery video before submitting claim.', false)
+    if (!submitReady) {
+      showToast('Upload delivery video and generate post-repair PPT before submitting.', false)
       return
     }
 
@@ -1655,7 +1791,7 @@ export default function AutoDocPage() {
         <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-2xl font-semibold text-gray-900">
-              Reports and Submit - {form.regNumber || 'Registration NA'}
+              Reports and Submit - {activeSummary?.reg_number || form.regNumber || 'Registration NA'}
             </h3>
             <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Awaiting Approval</span>
           </div>
@@ -1668,10 +1804,14 @@ export default function AutoDocPage() {
               <button
                 type="button"
                 onClick={() => void handleSubmitGeneratePpt('pre-repair')}
+                disabled={!activeJobCardId}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Generate PPT
               </button>
+              <p className={`mt-2 text-xs font-medium ${readiness.prePpt ? 'text-green-600' : 'text-gray-500'}`}>
+                {readiness.prePpt ? 'Uploaded' : 'Not uploaded'}
+              </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
@@ -1680,10 +1820,14 @@ export default function AutoDocPage() {
               <button
                 type="button"
                 onClick={() => void handleSubmitExportExcel()}
+                disabled={!activeJobCardId}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Export Excel
               </button>
+              <p className={`mt-2 text-xs font-medium ${readiness.excel ? 'text-green-600' : 'text-gray-500'}`}>
+                {readiness.excel ? 'Uploaded' : 'Not uploaded'}
+              </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
@@ -1692,10 +1836,14 @@ export default function AutoDocPage() {
               <button
                 type="button"
                 onClick={() => void handleComposeAndSend()}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                disabled={!composeReady}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Compose and Send
               </button>
+              {!composeReady && (
+                <p className="mt-2 text-xs font-medium text-amber-700">Generate and upload Pre-repair PPT and Excel first.</p>
+              )}
             </div>
           </div>
 
@@ -1728,6 +1876,9 @@ export default function AutoDocPage() {
             <p className="mt-3 text-xs font-medium text-gray-600">
               {deliveryVideoName ? `Selected: ${deliveryVideoName}` : 'Required for delivery'}
             </p>
+            <p className={`mt-1 text-xs font-medium ${readiness.deliveryVideo ? 'text-green-600' : 'text-gray-500'}`}>
+              {readiness.deliveryVideo ? 'Delivery video uploaded' : 'Delivery video pending'}
+            </p>
           </div>
 
           <div className="my-5 h-px bg-gray-200" />
@@ -1740,10 +1891,14 @@ export default function AutoDocPage() {
               <button
                 type="button"
                 onClick={() => void handleSubmitGeneratePpt('post-repair')}
+                disabled={!activeJobCardId}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
               >
                 Generate PPT
               </button>
+              <p className={`mt-2 text-xs font-medium ${readiness.postPpt ? 'text-green-600' : 'text-gray-500'}`}>
+                {readiness.postPpt ? 'Uploaded' : 'Not uploaded'}
+              </p>
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4">
@@ -1752,10 +1907,14 @@ export default function AutoDocPage() {
               <button
                 type="button"
                 onClick={() => void handleSubmitClaim()}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                disabled={!submitReady}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Submit Claim
               </button>
+              {!submitReady && (
+                <p className="mt-2 text-xs font-medium text-amber-700">Upload delivery video and Post-repair PPT first.</p>
+              )}
             </div>
           </div>
         </div>
