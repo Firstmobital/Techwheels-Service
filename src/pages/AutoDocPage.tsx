@@ -581,9 +581,9 @@ export default function AutoDocPage() {
     const stageMatches = !damagePhotoType || photo.stage === damagePhotoType
     return panelMatches && stageMatches
   })
-  const currentVehicleReg = (activeSummary?.reg_number ?? form.regNumber.trim()) || 'Not selected'
-  const currentVehicleModel = (activeSummary?.model ?? form.model.trim()) || 'Model NA'
-  const currentVehicleJc = (activeSummary?.jc_number ?? form.jcNumber.trim()) || 'JC NA'
+  const currentVehicleReg = ((activeJobCardId ? activeSummary?.reg_number : null) ?? form.regNumber.trim()) || 'Not selected'
+  const currentVehicleModel = ((activeJobCardId ? activeSummary?.model : null) ?? form.model.trim()) || 'Model NA'
+  const currentVehicleJc = ((activeJobCardId ? activeSummary?.jc_number : null) ?? form.jcNumber.trim()) || 'JC NA'
   const hasVehicleDraftFields = [
     form.vin,
     form.model,
@@ -628,12 +628,6 @@ export default function AutoDocPage() {
       setDeliveryVideoName(fileName)
     }
   }, [])
-
-  useEffect(() => {
-    if (!activeJobCardId && rows.length > 0) {
-      setActiveJobCardId(rows[0].job_card_id)
-    }
-  }, [activeJobCardId, rows])
 
   useEffect(() => { writeSessionValue(SESSION_KEYS.activeTab, activeTab) }, [activeTab])
   useEffect(() => {
@@ -782,18 +776,18 @@ export default function AutoDocPage() {
     setCreating(false)
   }
 
-  async function persistDraftJobCard(showSuccessToast: boolean): Promise<boolean> {
+  async function persistDraftJobCard(showSuccessToast: boolean): Promise<string | null> {
     setCreateError(null)
 
     const regNumber = form.regNumber.trim()
     const jcNumber = form.jcNumber.trim()
     if (!regNumber) {
       showToast('Enter registration number before saving draft.', false)
-      return false
+      return null
     }
     if (!jcNumber) {
       showToast('Enter job card number before saving draft.', false)
-      return false
+      return null
     }
 
     const year = form.year.trim() ? Number(form.year) : null
@@ -801,12 +795,12 @@ export default function AutoDocPage() {
 
     if (year != null && (!Number.isFinite(year) || year < 1900 || year > 2100)) {
       showToast('Vehicle year must be between 1900 and 2100.', false)
-      return false
+      return null
     }
 
     if (kmReading != null && (!Number.isFinite(kmReading) || kmReading < 0)) {
       showToast('KM reading must be a positive number.', false)
-      return false
+      return null
     }
 
     const vehicleRes = await upsertVehicle({
@@ -825,12 +819,27 @@ export default function AutoDocPage() {
 
     if (vehicleRes.error) {
       showToast(vehicleRes.error, false)
-      return false
+      return null
     }
 
-    if (activeJobCardId) {
+    const normalizedReg = regNumber.toUpperCase()
+    const normalizedJc = jcNumber.toUpperCase()
+    const activeSummaryReg = (activeSummary?.reg_number ?? '').trim().toUpperCase()
+    const activeSummaryJc = (activeSummary?.jc_number ?? '').trim().toUpperCase()
+    const isDifferentFromActiveSummary = !!activeJobCardId
+      && !!activeSummary
+      && (activeSummaryReg !== normalizedReg || activeSummaryJc !== normalizedJc)
+
+    if (isDifferentFromActiveSummary) {
+      setActiveJobCardId(null)
+      setActiveSummary(null)
+    }
+
+    const persistedActiveJobCardId = isDifferentFromActiveSummary ? null : activeJobCardId
+
+    if (persistedActiveJobCardId) {
       if (showSuccessToast) showToast('Draft saved.', true)
-      return true
+      return persistedActiveJobCardId
     }
 
     const complaintDate = form.complaintDate || new Date().toISOString().slice(0, 10)
@@ -845,14 +854,14 @@ export default function AutoDocPage() {
 
     if (jcRes.error || !jcRes.data) {
       showToast(jcRes.error ?? 'Unable to create draft job card.', false)
-      return false
+      return null
     }
 
     setActiveJobCardId(jcRes.data.id)
     await fetchRows(true)
 
     if (showSuccessToast) showToast('Draft created and saved.', true)
-    return true
+    return jcRes.data.id
   }
 
   async function handleCreateJobCard() {
@@ -979,18 +988,14 @@ export default function AutoDocPage() {
     showToast(`${type === 'pre-repair' ? 'Pre-repair' : 'Post-repair'} PPT generated and uploaded.`, true)
   }
 
-  async function handleSubmitExportExcel() {
-    if (!activeJobCardId) {
-      showToast('Select a job card first from dashboard.', false)
-      return
-    }
-    const regSlug = (activeSummary?.reg_number || form.regNumber || activeJobCardId).replace(/\s+/g, '_')
+  async function exportEstimateForJobCard(jobCardId: string) {
+    const regSlug = (activeSummary?.reg_number || form.regNumber || jobCardId).replace(/\s+/g, '_')
     const fileName = `estimate_${regSlug}.xlsx`
-    const blob = await handleExcel(activeJobCardId, true)
+    const blob = await handleExcel(jobCardId, true)
     if (!blob) return
 
     const uploadRes = await uploadDocumentFile({
-      jobCardId: activeJobCardId,
+      jobCardId,
       docType: 'excel_estimate',
       file: blob,
       fileName,
@@ -1002,13 +1007,30 @@ export default function AutoDocPage() {
       return
     }
 
-    await refreshDocuments(activeJobCardId)
+    await refreshDocuments(jobCardId)
     await logActivity('submit_export_excel', {
       resourceType: 'job_card',
-      resourceId: activeJobCardId,
+      resourceId: jobCardId,
       details: { tab: 'submit' },
     })
     showToast('Estimate Excel generated and uploaded.', true)
+  }
+
+  async function handleSubmitExportExcel() {
+    if (!activeJobCardId) {
+      showToast('Select a job card first from dashboard.', false)
+      return
+    }
+    await exportEstimateForJobCard(activeJobCardId)
+  }
+
+  async function handleEstimateExportExcel() {
+    const jobCardId = activeJobCardId ?? await persistDraftJobCard(false)
+    if (!jobCardId) {
+      showToast('Save draft first before exporting estimate.', false)
+      return
+    }
+    await exportEstimateForJobCard(jobCardId)
   }
 
   async function handleComposeAndSend() {
@@ -1428,6 +1450,8 @@ export default function AutoDocPage() {
                 value={form.regNumber}
                 onChange={(e) => {
                   setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))
+                  setActiveJobCardId(null)
+                  setActiveSummary(null)
                   setVehicleFound(false)
                   setVehicleLookupStatus('idle')
                   setCreateError(null)
@@ -1621,7 +1645,17 @@ export default function AutoDocPage() {
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Job Card Number <span className="text-red-600">*</span>
                     </label>
-                    <input type="text" placeholder="e.g. JC-2026-042" value={form.jcNumber} onChange={(e) => setForm(prev => ({ ...prev, jcNumber: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    <input
+                      type="text"
+                      placeholder="e.g. JC-2026-042"
+                      value={form.jcNumber}
+                      onChange={(e) => {
+                        setForm(prev => ({ ...prev, jcNumber: e.target.value }))
+                        setActiveJobCardId(null)
+                        setActiveSummary(null)
+                      }}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    />
                   </div>
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
@@ -1948,7 +1982,7 @@ export default function AutoDocPage() {
               <svg className="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Repair Estimate - {form.regNumber || 'RJ-14-YH-7659'} - {form.model || 'Nexon EV'} - {form.jcNumber || 'JC-2026-041'}
+              Repair Estimate - {currentVehicleReg} - {currentVehicleModel} - {currentVehicleJc}
             </h3>
             <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Draft</span>
           </div>
@@ -2221,7 +2255,7 @@ export default function AutoDocPage() {
           <div className="flex flex-wrap justify-end gap-3">
             <button
               type="button"
-              onClick={() => showToast('Excel exported successfully.', true)}
+              onClick={() => void handleEstimateExportExcel()}
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -2248,7 +2282,7 @@ export default function AutoDocPage() {
         <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-2xl font-semibold text-gray-900">
-              Reports and Submit - {activeSummary?.reg_number || form.regNumber || 'Registration NA'}
+              Reports and Submit - {currentVehicleReg}
             </h3>
             <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Awaiting Approval</span>
           </div>
