@@ -1416,11 +1416,14 @@ export default function AutoDocPage() {
     const fileName = `${type === 'pre-repair' ? 'pre' : 'post'}_repair_${regSlug}.pptx`
     const blob = await handleGenerate(activeJobCardId, type, true)
     if (!blob) return
+    const uploadFile = new File([blob], fileName, {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
 
     const uploadRes = await uploadDocumentFile({
       jobCardId: activeJobCardId,
       docType: type === 'pre-repair' ? 'ppt_pre' : 'ppt_post',
-      file: blob,
+      file: uploadFile,
       fileName,
       contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     })
@@ -1444,11 +1447,14 @@ export default function AutoDocPage() {
     const fileName = `estimate_${regSlug}.xlsx`
     const blob = await handleExcel(jobCardId, true)
     if (!blob) return
+    const uploadFile = new File([blob], fileName, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
 
     const uploadRes = await uploadDocumentFile({
       jobCardId,
       docType: 'excel_estimate',
-      file: blob,
+      file: uploadFile,
       fileName,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })

@@ -99,16 +99,47 @@ export async function uploadDocumentFile(input: {
 
   const storagePath = `${dealerCode}/${input.jobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
 
+  const effectiveContentType = input.contentType || input.file.type || 'application/octet-stream'
+
   const { error: uploadError } = await supabase.storage
     .from(AUTODOC_BUCKET)
     .upload(storagePath, input.file, {
-      contentType: input.contentType,
+      contentType: effectiveContentType,
       upsert: false,
     })
 
   if (uploadError) return fail(uploadError)
 
   const sizeMb = Number((input.file.size / (1024 * 1024)).toFixed(3))
+
+  // Prefer service-role edge function to avoid client-side RLS failures on documents table.
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+  const token = sessionRes.session?.access_token
+  if (supabaseUrl && token) {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          jobCardId: input.jobCardId,
+          docType: input.docType,
+          storagePath,
+          fileSizeMb: sizeMb,
+        }),
+      })
+
+      const payload = await res.json().catch(() => ({}))
+      if (res.ok && payload?.data) {
+        return ok(payload.data as DocumentRow)
+      }
+    } catch {
+      // fallback to client-side upsert below
+    }
+  }
+
   return upsertDocumentByType({
     jobCardId: input.jobCardId,
     docType: input.docType,
