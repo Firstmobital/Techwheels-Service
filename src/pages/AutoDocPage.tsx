@@ -13,6 +13,7 @@ import {
   listActivePanelLabels,
   listDocuments,
   listJobCardSummaries,
+  listPanels,
   logActivity,
   resolveRegNumberFromReference,
   sendClaimEmail,
@@ -126,6 +127,7 @@ const SESSION_KEYS = {
   activeJobCardId: 'autodoc_active_job_card_id',
   formDraft: 'autodoc_form_draft',
   selectedPanels: 'autodoc_selected_panels',
+  selectedPanelsByJob: 'autodoc_selected_panels_by_job',
   activePanel: 'autodoc_active_panel',
   damagePhotoType: 'autodoc_damage_photo_type',
   estimateRows: 'autodoc_estimate_rows',
@@ -150,6 +152,18 @@ function readSessionJSON<T>(key: string, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function readPanelsByJobMap(): Record<string, string[]> {
+  return readSessionJSON<Record<string, string[]>>(SESSION_KEYS.selectedPanelsByJob, {})
+}
+
+function sanitizePanelList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
 }
 
 function createInitialForm(): CreateJobCardForm {
@@ -635,10 +649,41 @@ export default function AutoDocPage() {
   }, [activeJobCardId])
   useEffect(() => { writeSessionValue(SESSION_KEYS.formDraft, JSON.stringify(form)) }, [form])
   useEffect(() => { writeSessionValue(SESSION_KEYS.selectedPanels, JSON.stringify(selectedPanels)) }, [selectedPanels])
+  useEffect(() => {
+    if (!activeJobCardId) return
+    const map = readPanelsByJobMap()
+    map[activeJobCardId] = selectedPanels
+    writeSessionValue(SESSION_KEYS.selectedPanelsByJob, JSON.stringify(map))
+  }, [activeJobCardId, selectedPanels])
   useEffect(() => { writeSessionValue(SESSION_KEYS.activePanel, activePanel) }, [activePanel])
   useEffect(() => { writeSessionValue(SESSION_KEYS.damagePhotoType, damagePhotoType) }, [damagePhotoType])
   useEffect(() => { writeSessionValue(SESSION_KEYS.estimateRows, JSON.stringify(estimateRows)) }, [estimateRows])
   useEffect(() => { writeSessionValue(SESSION_KEYS.deliveryVideoName, deliveryVideoName) }, [deliveryVideoName])
+
+  useEffect(() => {
+    async function rehydratePanelsForActiveJobCard() {
+      if (!activeJobCardId) {
+        setSelectedPanels([])
+        setActivePanel('')
+        return
+      }
+
+      const fromMap = sanitizePanelList(readPanelsByJobMap()[activeJobCardId])
+
+      const panelRes = await listPanels(activeJobCardId)
+      const fromDb = panelRes.error || !panelRes.data
+        ? []
+        : panelRes.data
+          .map((panel) => panel.panel_name?.trim() ?? '')
+          .filter((name) => name.length > 0)
+
+      const rehydratedPanels = Array.from(new Set(fromDb.length > 0 ? fromDb : fromMap))
+      setSelectedPanels(rehydratedPanels)
+      setActivePanel((prev) => (rehydratedPanels.includes(prev) ? prev : (rehydratedPanels[0] ?? '')))
+    }
+
+    void rehydratePanelsForActiveJobCard()
+  }, [activeJobCardId])
 
   useEffect(() => {
     async function loadActiveSummary() {
