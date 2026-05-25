@@ -21,8 +21,16 @@ export interface ServiceTypeCount {
 export interface ServiceTypeLabourRevenue {
   serviceType: string
   totalLabourRevenue: number
+  totalSparesRevenue: number
+  totalRevenue: number
   jobCardCount: number
   avgLabourRevenue: number
+}
+
+export interface ServiceTypeJcChassisRow {
+  serviceType: string
+  jobCardNumber: string
+  chassisNumber: string
 }
 
 export interface LabourKpiSummary {
@@ -59,6 +67,20 @@ export interface ManpowerWiseFilters {
 export interface ManpowerWiseFilterOptions {
   serviceTypes: string[]
   parentProductLines: string[]
+}
+
+export interface DuplicateChassisSameMonthRow {
+  month: string
+  chassisNumber: string
+  branch: string
+  jobCardNumber: string
+  serviceType: string
+  advisor: string
+  reportDate: string | null
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  duplicateCountInMonth: number
 }
 
 export interface BranchLabourRevenueComparison {
@@ -446,25 +468,6 @@ function normalizeJobCardNumber(raw: unknown): string | null {
   return withoutDecimalSuffix || null
 }
 
-function dedupeByJobCardNumber<T extends { job_card_number?: unknown }>(rows: T[]): T[] {
-  const byJobCard = new Map<string, T>()
-  const noJobCardRows: T[] = []
-
-  for (const row of rows) {
-    const jobCard = normalizeJobCardNumber(row.job_card_number)
-    if (!jobCard) {
-      noJobCardRows.push(row)
-      continue
-    }
-
-    if (!byJobCard.has(jobCard)) {
-      byJobCard.set(jobCard, row)
-    }
-  }
-
-  return [...byJobCard.values(), ...noJobCardRows]
-}
-
 const QUERY_PAGE_SIZE = 1000
 
 interface JobCardClosedFetchFilters {
@@ -563,7 +566,6 @@ function applyDateFilterToQuery(
 ): any {
   if (!bounds) return query
 
-  const closedDateField = options.closedDateField ?? 'closed_date_time'
   const invoiceDateField = options.invoiceDateField
 
   const toLocalDateString = (isoDateTime: string): string => {
@@ -574,15 +576,10 @@ function applyDateFilterToQuery(
     return `${year}-${month}-${day}`
   }
 
-  // Prefer invoice_date if explicitly requested and available
-  if (dateFilter.dateFieldType === 'invoice_date' && invoiceDateField) {
-    const fromDate = toLocalDateString(bounds.from)
-    const toExclusiveDate = toLocalDateString(bounds.toExclusive)
-    return query.gte(invoiceDateField, fromDate).lt(invoiceDateField, toExclusiveDate)
-  }
-
-  // Default to closed_date_time for all other cases
-  return query.gte(closedDateField, bounds.from).lt(closedDateField, bounds.toExclusive)
+  // Always use invoice_date with >= from and <= to (inclusive)
+  const fromDate = toLocalDateString(bounds.from)
+  const toDate = toLocalDateString(bounds.toExclusive)
+  return query.gte(invoiceDateField, fromDate).lte(invoiceDateField, toDate)
 }
 
 async function fetchJobCardWithEmployeeData(
@@ -714,7 +711,7 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
     from += QUERY_PAGE_SIZE
   }
 
-  return dedupeExactRows(allRows)
+  return allRows
 }
 
 async function fetchAllJobCardClosedRows(
@@ -776,7 +773,7 @@ async function fetchAllJobCardClosedRows(
     from += QUERY_PAGE_SIZE
   }
 
-  let finalRows = dedupeExactRows(allRows)
+  let finalRows = allRows
 
   // Fallback for schemas without dedicated fuel column: infer from branch label if possible.
   if (fuelSelection && !fuelColumn) {
@@ -786,28 +783,6 @@ async function fetchAllJobCardClosedRows(
   }
 
   return finalRows
-}
-
-function buildStableRowKey(row: Record<string, unknown>): string {
-  const entries = Object.entries(row).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-  return JSON.stringify(entries)
-}
-
-function dedupeExactRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
-  const seen = new Set<string>()
-  const deduped: Record<string, unknown>[] = []
-
-  for (const row of rows) {
-    const key = buildStableRowKey(row)
-    if (seen.has(key)) {
-      continue
-    }
-
-    seen.add(key)
-    deduped.push(row)
-  }
-
-  return deduped
 }
 
 function normalizeLookupValue(raw: unknown): string {
@@ -884,13 +859,9 @@ export async function getServiceTypeCounts(
     dateFilter,
   })
 
-  const dedupedData = dedupeByJobCardNumber(
-    (data ?? []) as Array<{ sr_type?: unknown; job_card_number?: unknown }>,
-  )
-
   const grouped = new Map<string, ServiceTypeCount>()
 
-  for (const row of dedupedData) {
+  for (const row of data ?? []) {
     const normalized = normalizeServiceType((row as { sr_type?: unknown }).sr_type)
     const key = serviceTypeGroupKey(normalized)
     const existing = grouped.get(key)
@@ -914,65 +885,57 @@ export async function getServiceTypeLabourRevenue(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<ServiceTypeLabourRevenue[]> {
-  const data = await fetchJobCardWithEmployeeData('sr_type, final_labour_amount, job_card_number', {
+  const data = await fetchJobCardWithEmployeeData('sr_type, final_labour_amount, final_spares_amount, job_card_number', {
     branch,
     dateFilter,
     serviceType: serviceTypeFilter,
   })
 
-  const dedupedData = dedupeByJobCardNumber(
-    (data ?? []) as Array<{ sr_type?: unknown; final_labour_amount?: unknown; job_card_number?: unknown }>,
-  )
-
   interface WorkingServiceTypeRevenue {
     serviceType: string
     totalLabourRevenue: number
-    jobCards: Set<string>
+    totalSparesRevenue: number
+    jobCardCount: number
   }
 
   const grouped = new Map<string, WorkingServiceTypeRevenue>()
 
-  for (const row of dedupedData) {
-    const typedRow = row as { sr_type?: unknown; final_labour_amount?: unknown; job_card_number?: unknown }
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      sr_type?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+      job_card_number?: unknown
+    }
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const key = serviceTypeGroupKey(serviceType)
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const labourValueRaw = typedRow.final_labour_amount
-    const labourValue =
-      typeof labourValueRaw === 'number'
-        ? labourValueRaw
-        : labourValueRaw == null
-        ? 0
-        : Number(labourValueRaw)
-
-    const safeLabourValue = Number.isFinite(labourValue) ? labourValue : 0
+    const safeLabourValue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const safeSparesValue = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const existing = grouped.get(key)
 
     if (existing) {
       existing.totalLabourRevenue += safeLabourValue
-      if (jobCardNumber) {
-        existing.jobCards.add(jobCardNumber)
-      }
+      existing.totalSparesRevenue += safeSparesValue
+      existing.jobCardCount += 1
       continue
-    }
-
-    const jobCards = new Set<string>()
-    if (jobCardNumber) {
-      jobCards.add(jobCardNumber)
     }
 
     grouped.set(key, {
       serviceType,
       totalLabourRevenue: safeLabourValue,
-      jobCards,
+      totalSparesRevenue: safeSparesValue,
+      jobCardCount: 1,
     })
   }
 
   const rows: ServiceTypeLabourRevenue[] = [...grouped.values()].map((row) => {
-    const jobCardCount = row.jobCards.size
+    const jobCardCount = row.jobCardCount
+    const totalRevenue = row.totalLabourRevenue + row.totalSparesRevenue
     return {
       serviceType: row.serviceType,
       totalLabourRevenue: row.totalLabourRevenue,
+      totalSparesRevenue: row.totalSparesRevenue,
+      totalRevenue,
       jobCardCount,
       avgLabourRevenue: jobCardCount > 0 ? row.totalLabourRevenue / jobCardCount : 0,
     }
@@ -983,6 +946,51 @@ export async function getServiceTypeLabourRevenue(
       return b.totalLabourRevenue - a.totalLabourRevenue
     }
     return a.serviceType.localeCompare(b.serviceType)
+  })
+}
+
+export async function getServiceTypeJcChassisRows(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
+): Promise<ServiceTypeJcChassisRow[]> {
+  const data = await fetchJobCardWithEmployeeData('sr_type, job_card_number, chassis_number', {
+    branch,
+    dateFilter,
+    serviceType: serviceTypeFilter,
+  })
+
+  const unique = new Map<string, ServiceTypeJcChassisRow>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      sr_type?: unknown
+      job_card_number?: unknown
+      chassis_number?: unknown
+    }
+
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const jobCardNumber =
+      typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
+    const chassisNumber =
+      typedRow.chassis_number == null ? '' : String(typedRow.chassis_number).trim().toUpperCase()
+
+    if (!jobCardNumber || !chassisNumber) continue
+
+    const key = `${serviceType}__${jobCardNumber}__${chassisNumber}`
+    if (unique.has(key)) continue
+
+    unique.set(key, {
+      serviceType,
+      jobCardNumber,
+      chassisNumber,
+    })
+  }
+
+  return [...unique.values()].sort((a, b) => {
+    if (a.serviceType !== b.serviceType) return a.serviceType.localeCompare(b.serviceType)
+    if (a.chassisNumber !== b.chassisNumber) return a.chassisNumber.localeCompare(b.chassisNumber)
+    return a.jobCardNumber.localeCompare(b.jobCardNumber)
   })
 }
 
@@ -1000,27 +1008,18 @@ export async function getLabourKpiSummary(
     },
   )
 
-  const dedupedData = dedupeByJobCardNumber(
-    (data ?? []) as Array<{
-      job_card_number?: unknown
-      total_invoice_amount?: unknown
-      final_spares_amount?: unknown
-      sr_type?: unknown
-    }>,
-  )
-
   let monthlyRevenue = 0
   let partsNeedingReorder = 0
   let openTransitOrders = 0
 
-  for (const row of dedupedData) {
+  for (const row of data ?? []) {
     const typedRow = row as {
       total_invoice_amount?: unknown
       final_spares_amount?: unknown
       sr_type?: unknown
     }
 
-    monthlyRevenue += parseRevenue(typedRow.total_invoice_amount)
+    monthlyRevenue += parseRevenueExcludingGst(typedRow.total_invoice_amount)
 
     if (parseRevenue(typedRow.final_spares_amount) > 0) {
       partsNeedingReorder += 1
@@ -1033,7 +1032,7 @@ export async function getLabourKpiSummary(
   }
 
   return {
-    monthlyJobCards: dedupedData.length,
+    monthlyJobCards: (data ?? []).length,
     monthlyRevenue,
     partsNeedingReorder,
     openTransitOrders,
@@ -1055,23 +1054,10 @@ export async function getManpowerWiseLabourRevenue(
     },
   )
 
-  const dedupedData = dedupeByJobCardNumber(
-    (data ?? []) as Array<{
-      employee_code?: unknown
-      sr_assigned_to?: unknown
-      sr_type?: unknown
-      parent_product_line?: unknown
-      final_labour_amount?: unknown
-      job_card_number?: unknown
-      employee_location?: unknown
-      employee_fuel_type?: unknown
-    }>,
-  )
-
   interface WorkingManpowerServiceTypeRow {
     serviceType: string
     totalLabourRevenue: number
-    jobCards: Set<string>
+    jobCardCount: number
   }
 
   interface WorkingManpowerRow {
@@ -1080,13 +1066,13 @@ export async function getManpowerWiseLabourRevenue(
     location: string
     fuelType: string
     totalLabourRevenue: number
-    jobCards: Set<string>
+    jobCardCount: number
     serviceTypeByKey: Map<string, WorkingManpowerServiceTypeRow>
   }
 
   const grouped = new Map<string, WorkingManpowerRow>()
 
-  for (const row of dedupedData) {
+  for (const row of data ?? []) {
     const typedRow = row as {
       branch?: unknown
       employee_code?: unknown
@@ -1105,8 +1091,7 @@ export async function getManpowerWiseLabourRevenue(
       employeeCode === 'Unknown' ? `name__${normalizeLookupValue(employeeName)}` : employeeCodeGroupKey(employeeCode)
 
     const serviceTypeKey = serviceTypeGroupKey(serviceType)
-    const labourAmount = parseRevenue(typedRow.final_labour_amount)
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
+    const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
 
     // Get location and fuel_type from employee_master data
     const empLocation = typedRow.employee_location ? String(typedRow.employee_location).trim() : ''
@@ -1116,22 +1101,18 @@ export async function getManpowerWiseLabourRevenue(
 
     if (existingManpower) {
       existingManpower.totalLabourRevenue += labourAmount
-      if (jobCardNumber) {
-        existingManpower.jobCards.add(jobCardNumber)
-      }
+      existingManpower.jobCardCount += 1
 
       const existingServiceType = existingManpower.serviceTypeByKey.get(serviceTypeKey)
 
       if (existingServiceType) {
         existingServiceType.totalLabourRevenue += labourAmount
-        if (jobCardNumber) {
-          existingServiceType.jobCards.add(jobCardNumber)
-        }
+        existingServiceType.jobCardCount += 1
       } else {
         existingManpower.serviceTypeByKey.set(serviceTypeKey, {
           serviceType,
           totalLabourRevenue: labourAmount,
-          jobCards: new Set(jobCardNumber ? [jobCardNumber] : []),
+          jobCardCount: 1,
         })
       }
 
@@ -1142,13 +1123,8 @@ export async function getManpowerWiseLabourRevenue(
     serviceTypeByKey.set(serviceTypeKey, {
       serviceType,
       totalLabourRevenue: labourAmount,
-      jobCards: new Set(jobCardNumber ? [jobCardNumber] : []),
+      jobCardCount: 1,
     })
-
-    const manpowerJobCards = new Set<string>()
-    if (jobCardNumber) {
-      manpowerJobCards.add(jobCardNumber)
-    }
 
     grouped.set(manpowerKey, {
       employeeCode,
@@ -1156,7 +1132,7 @@ export async function getManpowerWiseLabourRevenue(
       location: empLocation,
       fuelType: empFuelType,
       totalLabourRevenue: labourAmount,
-      jobCards: manpowerJobCards,
+      jobCardCount: 1,
       serviceTypeByKey,
     })
   }
@@ -1168,7 +1144,7 @@ export async function getManpowerWiseLabourRevenue(
 
     const serviceTypeBreakup: ManpowerServiceTypeLabourRevenue[] = [...manpower.serviceTypeByKey.values()].map(
       (serviceTypeRow) => {
-        const jobCardCount = serviceTypeRow.jobCards.size
+        const jobCardCount = serviceTypeRow.jobCardCount
         return {
           serviceType: serviceTypeRow.serviceType,
           totalLabourRevenue: serviceTypeRow.totalLabourRevenue,
@@ -1188,7 +1164,7 @@ export async function getManpowerWiseLabourRevenue(
     const manpowerLabel =
       manpower.employeeCode === 'Unknown' ? employeeName : `${manpower.employeeCode} - ${employeeName}`
 
-    const jobCardCount = manpower.jobCards.size
+    const jobCardCount = manpower.jobCardCount
 
     rows.push({
       employeeCode: manpower.employeeCode,
@@ -1208,6 +1184,108 @@ export async function getManpowerWiseLabourRevenue(
       return b.totalLabourRevenue - a.totalLabourRevenue
     }
     return a.manpowerLabel.localeCompare(b.manpowerLabel)
+  })
+}
+
+export async function getDuplicateChassisSameMonthReport(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<DuplicateChassisSameMonthRow[]> {
+  const invoiceDateField =
+    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
+  const data = await fetchAllJobCardClosedRows(
+    `${dateColumnSelection}chassis_number, branch, job_card_number, sr_type, sr_assigned_to, closed_date_time, final_labour_amount, final_spares_amount`,
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  interface WorkingDuplicateRow {
+    month: string
+    chassisNumber: string
+    branch: string
+    jobCardNumber: string
+    serviceType: string
+    advisor: string
+    reportDate: string | null
+    labourRevenue: number
+    sparesRevenue: number
+    totalRevenue: number
+  }
+
+  const grouped = new Map<string, WorkingDuplicateRow[]>()
+
+  for (const row of data ?? []) {
+    const typedRow = row as {
+      chassis_number?: unknown
+      branch?: unknown
+      job_card_number?: unknown
+      sr_type?: unknown
+      sr_assigned_to?: unknown
+      closed_date_time?: unknown
+      invoice_date?: unknown
+      Invoice_date?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+    }
+
+    const rawChassis = typedRow.chassis_number == null ? '' : String(typedRow.chassis_number).trim().toUpperCase()
+    if (!rawChassis) continue
+
+    const reportDateValue = getJobCardReportDateValue(typedRow, dateFilter)
+    const reportMonth = toIsoDate(reportDateValue, 'month')
+    if (!reportMonth) continue
+
+    const reportDate = toIsoDate(reportDateValue, 'day')
+    const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
+    const totalRevenue = labourRevenue + sparesRevenue
+
+    const detail: WorkingDuplicateRow = {
+      month: reportMonth,
+      chassisNumber: rawChassis,
+      branch: normalizeBranch(typedRow.branch),
+      jobCardNumber: normalizeJobCardNumber(typedRow.job_card_number) ?? 'Unknown',
+      serviceType: normalizeServiceType(typedRow.sr_type),
+      advisor: normalizeManpowerName(typedRow.sr_assigned_to),
+      reportDate,
+      labourRevenue,
+      sparesRevenue,
+      totalRevenue,
+    }
+
+    const key = `${reportMonth}__${rawChassis}`
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.push(detail)
+    } else {
+      grouped.set(key, [detail])
+    }
+  }
+
+  const rows: DuplicateChassisSameMonthRow[] = []
+
+  for (const groupRows of grouped.values()) {
+    if (groupRows.length < 2) continue
+
+    const duplicateCountInMonth = groupRows.length
+    for (const row of groupRows) {
+      rows.push({
+        ...row,
+        duplicateCountInMonth,
+      })
+    }
+  }
+
+  return rows.sort((a, b) => {
+    if (a.month !== b.month) return b.month.localeCompare(a.month)
+    if (a.chassisNumber !== b.chassisNumber) return a.chassisNumber.localeCompare(b.chassisNumber)
+    const dateA = a.reportDate ?? ''
+    const dateB = b.reportDate ?? ''
+    if (dateA !== dateB) return dateB.localeCompare(dateA)
+    return a.jobCardNumber.localeCompare(b.jobCardNumber)
   })
 }
 
@@ -1285,7 +1363,15 @@ function parseRevenue(value: unknown): number {
           return isParenthesizedNegative ? -parsed : parsed
         })()
 
-  return Number.isFinite(numeric) ? numeric : 0
+  const value_to_return = Number.isFinite(numeric) ? numeric : 0
+  return Math.round(value_to_return)
+}
+
+function parseRevenueExcludingGst(value: unknown): number {
+  const gross = parseRevenue(value)
+  if (gross === 0) return 0
+  const result = gross / 1.18
+  return Math.round(result)
 }
 
 function toIsoDate(value: unknown, format: 'day' | 'month'): string | null {
@@ -1375,13 +1461,7 @@ export async function getBranchLabourRevenueComparison(
       from += QUERY_PAGE_SIZE
     }
 
-    return dedupeByJobCardNumber(
-      allRows as Array<{
-        branch?: unknown
-        final_labour_amount?: unknown
-        job_card_number?: unknown
-      }>,
-    )
+    return allRows
   }
 
   const [selectedData, previousData] = await Promise.all([
@@ -1396,14 +1476,14 @@ export async function getBranchLabourRevenueComparison(
     const typedRow = row as { branch?: unknown; final_labour_amount?: unknown }
     const branchName = normalizeBranch(typedRow.branch)
     const existing = selectedByBranch.get(branchName) ?? 0
-    selectedByBranch.set(branchName, existing + parseRevenue(typedRow.final_labour_amount))
+    selectedByBranch.set(branchName, existing + parseRevenueExcludingGst(typedRow.final_labour_amount))
   }
 
   for (const row of previousData ?? []) {
     const typedRow = row as { branch?: unknown; final_labour_amount?: unknown }
     const branchName = normalizeBranch(typedRow.branch)
     const existing = previousByBranch.get(branchName) ?? 0
-    previousByBranch.set(branchName, existing + parseRevenue(typedRow.final_labour_amount))
+    previousByBranch.set(branchName, existing + parseRevenueExcludingGst(typedRow.final_labour_amount))
   }
 
   const branchNames = new Set<string>([...selectedByBranch.keys(), ...previousByBranch.keys()])
@@ -1472,8 +1552,8 @@ export async function getDailyRevenueReport(
     const dateStr = toIsoDate(reportDate, 'day') ?? 'Unknown'
     const vehicleNum = typedRow.vehicle_registration_number ? String(typedRow.vehicle_registration_number).trim() : null
     const jobCardNum = normalizeJobCardNumber(typedRow.job_card_number)
-    const labourAmount = parseRevenue(typedRow.final_labour_amount)
-    const partsAmount = parseRevenue(typedRow.final_spares_amount)
+    const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const partsAmount = parseRevenueExcludingGst(typedRow.final_spares_amount)
 
     const existing = dailyByDate.get(dateStr)
 
@@ -1550,8 +1630,8 @@ export async function getCategoryWiseRevenue(
     const category = normalizeServiceType(typedRow.sr_type)
     const categoryKey = serviceTypeGroupKey(category)
     const vehicleNum = typedRow.vehicle_registration_number ? String(typedRow.vehicle_registration_number).trim() : null
-    const labourAmount = parseRevenue(typedRow.final_labour_amount)
-    const partsAmount = parseRevenue(typedRow.final_spares_amount)
+    const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const partsAmount = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const rowTotal = labourAmount + partsAmount
     totalPeriodRevenue += rowTotal
 
@@ -1644,8 +1724,8 @@ export async function getMonthlyRevenuesTrend(
 
     const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
     const monthStr = toIsoDate(reportDate, 'month') ?? 'Unknown'
-    const labourAmount = parseRevenue(typedRow.final_labour_amount)
-    const partsAmount = parseRevenue(typedRow.final_spares_amount)
+    const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const partsAmount = parseRevenueExcludingGst(typedRow.final_spares_amount)
 
     const existing = monthlyByMonth.get(monthStr)
 
@@ -2077,8 +2157,8 @@ export async function getLabourSparesMixByServiceType(
 
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const serviceTypeKey = serviceTypeGroupKey(serviceType)
-    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
-    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+    const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
 
     const existing = grouped.get(serviceTypeKey)
@@ -2161,8 +2241,8 @@ export async function getProductLinePerformance(
     const productLine = normalizeParentProductLine(typedRow.product_line) || 'Unknown'
     const groupKey = `${parentProductLine.toLowerCase()}__${productLine.toLowerCase()}`
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
-    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+    const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
 
     const existing = grouped.get(groupKey)
 
@@ -2250,12 +2330,12 @@ export async function getModelWiseRevenue(
     const model = normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown'
     const modelKey = model.toLowerCase()
     const serviceType = normalizeServiceType(typedRow.sr_type)
-    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
-    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+    const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const hasInvoiceAmount =
       typedRow.total_invoice_amount != null && String(typedRow.total_invoice_amount).trim() !== ''
     const totalRevenue = hasInvoiceAmount
-      ? parseRevenue(typedRow.total_invoice_amount)
+      ? parseRevenueExcludingGst(typedRow.total_invoice_amount)
       : labourRevenue + sparesRevenue
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
     const jobCardKey = jobCardNumber
@@ -2425,7 +2505,7 @@ export async function getTatDurationReport(
     totalTatHours += tatHours
     bucket.jobCardCount += 1
     bucket.totalTatHours += tatHours
-    bucket.totalRevenue += parseRevenue(typedRow.total_invoice_amount)
+    bucket.totalRevenue += parseRevenueExcludingGst(typedRow.total_invoice_amount)
   }
 
   const buckets: TatDurationBucketRow[] = bucketTemplate.map((template) => {
@@ -2539,8 +2619,8 @@ export async function getEmployeeUtilizationReport(
     const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
     const closedDay = toIsoDate(reportDate, 'day')
 
-    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
-    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+    const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
 
     const existing = grouped.get(key)
 
@@ -2913,8 +2993,8 @@ export async function getVehicleWiseRevenue(
     const vehicleKey = vehicleRegistrationNumber.toLowerCase()
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
     const visitKey = jobCardNumber
-    const labourRevenue = parseRevenue(typedRow.final_labour_amount)
-    const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
+    const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
 
     let closedDate: string | null = null
     if (typedRow.closed_date_time != null) {
@@ -3208,8 +3288,8 @@ export async function getInvoiceDailyTrend(
         ? `${date}_row_${rowIndex}`
         : String(typedRow.invoice_number).trim() || `${date}_row_${rowIndex}`
 
-    const labour = parseRevenue(typedRow.final_labour_invoice_amount)
-    const spares = parseRevenue(typedRow.final_spares_invoice_amount)
+    const labour = parseRevenueExcludingGst(typedRow.final_labour_invoice_amount)
+    const spares = parseRevenueExcludingGst(typedRow.final_spares_invoice_amount)
     const consolidated = parseRevenue(typedRow.final_consolidated_invoice_amount)
 
     const existing = byDate.get(date)
@@ -3371,7 +3451,7 @@ export async function getJcInvoiceReconciliation(
     }
 
     const key = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
-    const jcAmount = parseRevenue(typedRow.total_invoice_amount)
+    const jcAmount = parseRevenueExcludingGst(typedRow.total_invoice_amount)
     const branchName = normalizeBranch(typedRow.branch)
     const branchRow = getBranchRow(branchName)
 
@@ -3504,7 +3584,7 @@ export async function getNetPriceFinalRevenueVariance(
     if (!jobCard) continue
 
     const existing = jcQueueByJobCard.get(jobCard) ?? []
-    existing.push(parseRevenue(typedRow.total_invoice_amount))
+    existing.push(parseRevenueExcludingGst(typedRow.total_invoice_amount))
     jcQueueByJobCard.set(jobCard, existing)
   }
 
@@ -3834,7 +3914,7 @@ export async function getEndToEndJobLifecycleReport(
     const hasValidInvoiceDate = invoiceDate != null && !Number.isNaN(invoiceDate.getTime())
 
     const estimate = vasByKey.get(key)?.estimatedValue ?? 0
-    const realized = parseRevenue(typedRow.total_invoice_amount)
+    const realized = parseRevenueExcludingGst(typedRow.total_invoice_amount)
     const invoiced = invoiceInfo?.invoicedValue ?? 0
 
     totalJobs += 1

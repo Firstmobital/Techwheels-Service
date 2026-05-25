@@ -116,11 +116,16 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
         employee_code: row.employee_code == null ? null : String(row.employee_code),
         event_time: row.closed_date_time == null ? null : String(row.closed_date_time),
         amount:
-          typeof row.total_invoice_amount === 'number'
-            ? row.total_invoice_amount
-            : row.total_invoice_amount == null
-            ? null
-            : Number(row.total_invoice_amount),
+          (() => {
+            const parsed =
+              typeof row.total_invoice_amount === 'number'
+                ? row.total_invoice_amount
+                : row.total_invoice_amount == null
+                ? null
+                : Number(row.total_invoice_amount)
+            if (parsed == null || !Number.isFinite(parsed)) return null
+            return parsed / 1.18
+          })(),
       }))
 
       setRows(mappedRows)

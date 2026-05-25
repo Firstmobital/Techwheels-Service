@@ -1,4 +1,5 @@
 import BranchLabourRevenueReport from './BranchLabourRevenueReport'
+import DuplicateChassisSameMonthReport from './DuplicateChassisSameMonthReport'
 import ManpowerWiseLabourRevenueReport from './ManpowerWiseLabourRevenueReport'
 import ServiceTypeLabourRevenueReport from './ServiceTypeLabourRevenueReport'
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
@@ -33,5 +34,13 @@ export const LABOUR_REVENUE_REPORTS: ReportDefinition[] = [
     description: 'Labour revenue and job count by manpower with service-type breakup.',
     cardHint: 'Best for advisor-level revenue contribution with category breakdown.',
     Component: ManpowerWiseLabourRevenueReport,
+  },
+  {
+    id: 'duplicate-chassis-same-month',
+    categoryId: 'labour-revenue',
+    label: 'Duplicate Chassis (Same Month)',
+    description: 'Shows duplicate chassis entries only when they repeat within the same month.',
+    cardHint: 'Best for finding repeat same-month chassis activity and duplicate job entries.',
+    Component: DuplicateChassisSameMonthReport,
   },
 ]

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   type BranchFilter,
   type DateRangeFilter,
+  getServiceTypeJcChassisRows,
   getServiceTypeLabourRevenue,
+  type ServiceTypeJcChassisRow,
   type ServiceTypeLabourRevenue,
 } from '../../../lib/reportQueries'
 import { exportToCSV, generateExportFilename, formatCurrencyForExport } from '../../../lib/exportUtils'
@@ -21,6 +23,7 @@ export default function ServiceTypeLabourRevenueReport({
   serviceTypeFilter = 'ALL',
 }: ServiceTypeReportProps) {
   const [rows, setRows] = useState<ServiceTypeLabourRevenue[]>([])
+  const [jcChassisRows, setJcChassisRows] = useState<ServiceTypeJcChassisRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('totalLabourRevenue')
@@ -32,10 +35,14 @@ export default function ServiceTypeLabourRevenueReport({
     setIsLoading(true)
     setError(null)
 
-    getServiceTypeLabourRevenue(branch, dateFilter, serviceTypeFilter)
-      .then((data) => {
+    Promise.all([
+      getServiceTypeLabourRevenue(branch, dateFilter, serviceTypeFilter),
+      getServiceTypeJcChassisRows(branch, dateFilter, serviceTypeFilter),
+    ])
+      .then(([data, jcChassis]) => {
         if (!active) return
         setRows(data)
+        setJcChassisRows(jcChassis)
       })
       .catch((err: Error) => {
         if (!active) return
@@ -83,7 +90,9 @@ export default function ServiceTypeLabourRevenueReport({
 
   const totals = useMemo(
     () => ({
-      totalRevenue: rows.reduce((sum, row) => sum + row.totalLabourRevenue, 0),
+      totalLabourRevenue: rows.reduce((sum, row) => sum + row.totalLabourRevenue, 0),
+      totalSparesRevenue: rows.reduce((sum, row) => sum + row.totalSparesRevenue, 0),
+      totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
       totalJobs: rows.reduce((sum, row) => sum + row.jobCardCount, 0),
       serviceTypes: rows.length,
     }),
@@ -107,11 +116,26 @@ export default function ServiceTypeLabourRevenueReport({
     const exportData = sortedRows.map((row) => ({
       'Service Type': row.serviceType,
       'Labour Revenue': formatCurrencyForExport(row.totalLabourRevenue),
+      'Spares Revenue': formatCurrencyForExport(row.totalSparesRevenue),
+      'Total Revenue': formatCurrencyForExport(row.totalRevenue),
       'Job Cards': row.jobCardCount.toString(),
       'Avg Revenue Per Job': formatCurrencyForExport(row.avgLabourRevenue),
     }))
 
     const filename = generateExportFilename('service-type-labour-revenue')
+    exportToCSV(exportData, filename)
+  }
+
+  const handleJcChassisExport = () => {
+    if (jcChassisRows.length === 0) return
+
+    const exportData = jcChassisRows.map((row) => ({
+      'Service Type': row.serviceType,
+      'Job Card Number': row.jobCardNumber,
+      'Chassis Number': row.chassisNumber,
+    }))
+
+    const filename = generateExportFilename('service-type-filtered-jc-chassis')
     exportToCSV(exportData, filename)
   }
 
@@ -126,21 +150,44 @@ export default function ServiceTypeLabourRevenueReport({
         </div>
 
         {rows.length > 0 && (
-          <button
-            onClick={handleExport}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export to CSV
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export Summary CSV
+            </button>
+            <button
+              onClick={handleJcChassisExport}
+              className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export Filtered JC & Chassis
+            </button>
+          </div>
         )}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Labour Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">
+              Rs. {totals.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-violet-600">Total Spares Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">
+              Rs. {totals.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">Total Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-indigo-900">
               Rs. {totals.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
             </p>
           </div>
@@ -148,7 +195,7 @@ export default function ServiceTypeLabourRevenueReport({
             <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">Total Job Cards</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-900">{totals.totalJobs.toLocaleString()}</p>
           </div>
-          <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 sm:col-span-2">
+          <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Service Types</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{totals.serviceTypes.toLocaleString()}</p>
           </div>
@@ -220,6 +267,12 @@ export default function ServiceTypeLabourRevenueReport({
                       </button>
                     </th>
                     <th className="px-3 py-2 text-right font-semibold text-gray-600">
+                      Spares Revenue
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600">
+                      Total Revenue
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600">
                       <button
                         onClick={() => toggleSort('jobCardCount')}
                         className="inline-flex items-center gap-1 hover:text-gray-900"
@@ -243,6 +296,12 @@ export default function ServiceTypeLabourRevenueReport({
                       <td className="px-3 py-2 text-gray-700">{row.serviceType}</td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        {row.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        {row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.jobCardCount.toLocaleString()}
