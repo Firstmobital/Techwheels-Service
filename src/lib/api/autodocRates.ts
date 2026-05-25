@@ -43,6 +43,12 @@ export interface AutoDocLookupOptions {
   yearOptions: string[]
 }
 
+export interface AutoDocWorkflowOptions {
+  statusOptions: string[]
+  photoStageOptions: string[]
+  estimateActionOptions: string[]
+}
+
 export interface RateCardExportRow {
   modelName: string
   panelLabel: string
@@ -375,12 +381,6 @@ export async function getAutoDocLookupOptions(): Promise<ApiResult<AutoDocLookup
     yearSet.add(String(year))
   }
 
-  const defaultPaintTypes = ['Solid', 'Metallic', 'Pearl', 'Matte']
-  const defaultClaimTypes = ['Body / Panel Rust', 'Paint Defect', 'Panel Damage', 'Underbody Corrosion']
-
-  defaultPaintTypes.forEach((paint) => paintTypeSet.add(paint))
-  defaultClaimTypes.forEach((claim) => claimTypeSet.add(claim))
-
   return ok({
     modelOptions: Array.from(modelSet).sort((a, b) => a.localeCompare(b)),
     paintTypeOptions: Array.from(paintTypeSet).sort((a, b) => a.localeCompare(b)),
@@ -392,6 +392,66 @@ export async function getAutoDocLookupOptions(): Promise<ApiResult<AutoDocLookup
       .sort((a, b) => b - a)
       .map((value) => String(value)),
   })
+}
+
+export async function getAutoDocWorkflowOptions(): Promise<ApiResult<AutoDocWorkflowOptions>> {
+  const [jobCardsRes, photosRes, estimateRes] = await Promise.all([
+    supabase
+      .from('job_cards')
+      .select('status')
+      .limit(5000),
+    supabase
+      .from('panel_photos')
+      .select('repair_stage')
+      .limit(5000),
+    supabase
+      .from('estimate_rows')
+      .select('action')
+      .limit(5000),
+  ])
+
+  if (jobCardsRes.error) return fail(jobCardsRes.error)
+  if (photosRes.error) return fail(photosRes.error)
+  if (estimateRes.error) return fail(estimateRes.error)
+
+  const statusOptions = Array.from(new Set(
+    ((jobCardsRes.data ?? []) as Array<{ status: string | null }>)
+      .map((row) => row.status?.trim())
+      .filter((value): value is string => Boolean(value)),
+  )).sort((a, b) => a.localeCompare(b))
+
+  const photoStageOptions = Array.from(new Set(
+    ((photosRes.data ?? []) as Array<{ repair_stage: string | null }>)
+      .map((row) => row.repair_stage?.trim())
+      .filter((value): value is string => Boolean(value)),
+  )).sort((a, b) => a.localeCompare(b))
+
+  const estimateActionOptions = Array.from(new Set(
+    ((estimateRes.data ?? []) as Array<{ action: string | null }>)
+      .map((row) => row.action?.trim())
+      .filter((value): value is string => Boolean(value)),
+  )).sort((a, b) => a.localeCompare(b))
+
+  return ok({ statusOptions, photoStageOptions, estimateActionOptions })
+}
+
+export async function listActivePanelLabels(): Promise<ApiResult<string[]>> {
+  const res = await supabase
+    .from('autodoc_panel_master')
+    .select('panel_label, sort_order')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('panel_label', { ascending: true })
+
+  if (res.error) return fail(res.error)
+
+  const labels = Array.from(new Set(
+    ((res.data ?? []) as Array<{ panel_label: string | null }>)
+      .map((row) => row.panel_label?.trim())
+      .filter((value): value is string => Boolean(value)),
+  ))
+
+  return ok(labels)
 }
 
 export async function exportActiveRateRowsByCityCategory(cityCategoryInput: string): Promise<ApiResult<RateCardExportRow[]>> {

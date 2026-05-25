@@ -7,8 +7,10 @@ import {
   fetchVehicleByReg,
   generateClaimEmailContent,
   getAutoDocLookupOptions,
+  getAutoDocWorkflowOptions,
   getActiveModelRates,
   getJobCardSummary,
+  listActivePanelLabels,
   listDocuments,
   listJobCardSummaries,
   logActivity,
@@ -66,7 +68,7 @@ interface CreateJobCardForm {
 interface EstimateLineItem {
   id: string
   panel: string
-  action: '' | 'Repaint' | 'Parts Replacement'
+  action: string
   partNo: string
   partsPrice: string
   paintPrice: string
@@ -76,7 +78,7 @@ interface EstimateLineItem {
 interface DamagePhotoItem {
   id: string
   panel: string
-  stage: 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'
+  stage: string
   url: string
   name: string
   uploadedAtLabel: string
@@ -101,20 +103,6 @@ const STATUS_COLOURS: Record<string, string> = {
 }
 
 const SKELETON_COLS = 11
-const DEFAULT_DAMAGE_PANEL_OPTIONS = [
-  'Hood',
-  'Front Bumper',
-  'LH Fender',
-  'RH Fender',
-  'LH Front Door',
-  'RH Front Door',
-  'LH Rear Door',
-  'RH Rear Door',
-  'Roof',
-  'Boot Lid',
-  'Rear Bumper',
-  'Underbody',
-]
 
 function defaultYearOptions(): string[] {
   const currentYear = new Date().getFullYear()
@@ -126,10 +114,10 @@ function defaultYearOptions(): string[] {
 }
 
 const DEFAULT_FORM_LOOKUPS: AutoDocFormLookupState = {
-  modelOptions: ['ALTROZ', 'HARRIER', 'NEXON EV', 'PUNCH EV', 'SAFARI'],
-  paintTypeOptions: ['Solid', 'Metallic', 'Pearl', 'Matte'],
-  cityCategoryOptions: ['A', 'B', 'C'],
-  claimTypeOptions: ['Body / Panel Rust', 'Paint Defect', 'Panel Damage', 'Underbody Corrosion'],
+  modelOptions: [],
+  paintTypeOptions: [],
+  cityCategoryOptions: [],
+  claimTypeOptions: [],
   yearOptions: defaultYearOptions(),
 }
 
@@ -216,7 +204,7 @@ export default function AutoDocPage() {
   const [error,        setError]        = useState<string | null>(null)
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [search,       setSearch]       = useState('')
-  const [statusFilter, setStatus]       = useState<string>('all')
+  const [statusFilter, setStatus]       = useState<string>('')
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -224,6 +212,10 @@ export default function AutoDocPage() {
   const [vehicleFound, setVehicleFound] = useState(false)
   const [vehicleLookupStatus, setVehicleLookupStatus] = useState<VehicleLookupStatus>('idle')
   const [formLookups, setFormLookups] = useState<AutoDocFormLookupState>(DEFAULT_FORM_LOOKUPS)
+  const [statusOptions, setStatusOptions] = useState<string[]>([])
+  const [photoStageOptions, setPhotoStageOptions] = useState<string[]>([])
+  const [estimateActionOptions, setEstimateActionOptions] = useState<string[]>([])
+  const [panelMasterOptions, setPanelMasterOptions] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
   const [kpis, setKpis] = useState({
     totalToday: 0,
@@ -239,11 +231,7 @@ export default function AutoDocPage() {
   const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
   const [selectedPanels, setSelectedPanels] = useState<string[]>(() => readSessionJSON<string[]>(SESSION_KEYS.selectedPanels, []))
   const [activePanel, setActivePanel] = useState(() => readSessionValue(SESSION_KEYS.activePanel) || '')
-  const [damagePhotoType, setDamagePhotoType] = useState<'' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair'>(() => {
-    const saved = readSessionValue(SESSION_KEYS.damagePhotoType)
-    if (saved === 'Pre-repair / Damage' || saved === 'Under-repair' || saved === 'Post-repair') return saved
-    return ''
-  })
+  const [damagePhotoType, setDamagePhotoType] = useState(() => readSessionValue(SESSION_KEYS.damagePhotoType) || '')
   const [damagePhotos, setDamagePhotos] = useState<DamagePhotoItem[]>([])
   const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
@@ -265,9 +253,9 @@ export default function AutoDocPage() {
     () => (
       activeModelRates.length > 0
         ? Array.from(new Set(activeModelRates.map((row) => row.panelLabel).filter(Boolean)))
-        : DEFAULT_DAMAGE_PANEL_OPTIONS
+        : panelMasterOptions
     ),
-    [activeModelRates],
+    [activeModelRates, panelMasterOptions],
   )
 
   const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null)
@@ -286,6 +274,28 @@ export default function AutoDocPage() {
           claimTypeOptions: lookup.claimTypeOptions.length > 0 ? lookup.claimTypeOptions : prev.claimTypeOptions,
           yearOptions: lookup.yearOptions.length > 0 ? lookup.yearOptions : prev.yearOptions,
         }))
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void getAutoDocWorkflowOptions()
+      .then((res) => {
+        if (cancelled || res.error || !res.data) return
+        setStatusOptions(res.data.statusOptions)
+        setPhotoStageOptions(res.data.photoStageOptions)
+        setEstimateActionOptions(res.data.estimateActionOptions)
+      })
+
+    void listActivePanelLabels()
+      .then((res) => {
+        if (cancelled || res.error || !res.data) return
+        setPanelMasterOptions(res.data)
       })
 
     return () => {
@@ -438,7 +448,7 @@ export default function AutoDocPage() {
     const nextPhotos: DamagePhotoItem[] = Array.from(files).map((file) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       panel: activePanel,
-      stage: damagePhotoType as DamagePhotoItem['stage'],
+      stage: damagePhotoType,
       url: URL.createObjectURL(file),
       name: file.name,
       uploadedAtLabel: nowLabel,
@@ -979,7 +989,7 @@ export default function AutoDocPage() {
   // ── Filtered rows ──────────────────────────────────────────────────────────
   const q = search.trim().toLowerCase()
   const displayed = rows.filter(r => {
-    const matchStatus = statusFilter === 'all' || r.status === statusFilter
+    const matchStatus = !statusFilter || r.status === statusFilter
     const matchSearch = !q
       || r.reg_number.toLowerCase().includes(q)
       || r.jc_number.toLowerCase().includes(q)
@@ -1137,12 +1147,10 @@ export default function AutoDocPage() {
           onChange={e => setStatus(e.target.value)}
           className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
         >
-          <option value="all">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="submitted">Submitted</option>
-          <option value="approved">Approved</option>
-          <option value="in_work">In Work</option>
-          <option value="completed">Completed</option>
+          <option value="">All statuses</option>
+          {statusOptions.map((status) => (
+            <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>
+          ))}
         </select>
         {!loading && (
           <span className="ml-auto text-xs text-gray-400">
@@ -1193,7 +1201,7 @@ export default function AutoDocPage() {
       {/* Empty state */}
       {!loading && !error && dashboardDisplayed.length === 0 && (
         <div className="py-16 text-center text-sm text-gray-400">
-          No job cards found for today.{q || statusFilter !== 'all' ? ' Try clearing the filters.' : ''}
+          No job cards found for today.{q || statusFilter ? ' Try clearing the filters.' : ''}
         </div>
       )}
 
@@ -1702,13 +1710,13 @@ export default function AutoDocPage() {
                 </select>
                 <select
                   value={damagePhotoType}
-                  onChange={(e) => setDamagePhotoType(e.target.value as '' | 'Pre-repair / Damage' | 'Under-repair' | 'Post-repair')}
+                  onChange={(e) => setDamagePhotoType(e.target.value)}
                   className="h-10 min-w-[180px] rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 >
                   <option value="">Select stage</option>
-                  <option value="Pre-repair / Damage">Pre-repair / Damage</option>
-                  <option value="Under-repair">Under-repair</option>
-                  <option value="Post-repair">Post-repair</option>
+                  {photoStageOptions.map((stage) => (
+                    <option key={stage} value={stage}>{stage.replace(/_/g, ' ')}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1875,8 +1883,9 @@ export default function AutoDocPage() {
                           className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         >
                           <option value="">Select</option>
-                          <option value="Repaint">Repaint</option>
-                          <option value="Parts Replacement">Parts Replacement</option>
+                          {estimateActionOptions.map((action) => (
+                            <option key={action} value={action}>{action}</option>
+                          ))}
                         </select>
                       </td>
                       <td className="px-2 py-2">
@@ -1993,8 +2002,9 @@ export default function AutoDocPage() {
                         className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       >
                         <option value="">Select</option>
-                        <option value="Repaint">Repaint</option>
-                        <option value="Parts Replacement">Parts Replacement</option>
+                        {estimateActionOptions.map((action) => (
+                          <option key={action} value={action}>{action}</option>
+                        ))}
                       </select>
                     </label>
                     <label className="text-xs font-medium text-gray-600">
