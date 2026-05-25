@@ -115,12 +115,39 @@ function photoTypeLabel(t: 'defect' | 'primer' | 'paint'): string {
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchAll(jobCardId: string) {
-  const [summaryRes, panelsRes, photosRes, estRes] = await Promise.all([
-    supabase
-      .from('job_card_summary')
-      .select('*')
-      .eq('job_card_id', jobCardId)
-      .single<JobSummary>(),
+  // Get auth token for edge function call
+  const { data: auth } = await supabase.auth.getSession()
+  const token = auth?.session?.access_token
+
+  if (!token) {
+    throw new Error('Not authenticated. Please log in again.')
+  }
+
+  // Fetch summary and estimate via edge function (bypasses RLS)
+  const estimateDataPromise = (async () => {
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
+    if (!SUPABASE_URL) throw new Error('Supabase URL not configured')
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-export-data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ jobCardId }),
+    })
+
+    if (!res.ok) {
+      const errData = await res.json()
+      throw new Error(errData.error ?? `Failed to fetch estimate data (HTTP ${res.status})`)
+    }
+
+    const result = await res.json()
+    return { summary: result.jc, estRows: result.rows }
+  })()
+
+  const [estimateData, panelsRes, photosRes] = await Promise.all([
+    estimateDataPromise,
 
     supabase
       .from('panels')
@@ -133,28 +160,20 @@ async function fetchAll(jobCardId: string) {
       .select('id, panel_id, photo_type, repair_stage, storage_path, gps_city, captured_at')
       .eq('job_card_id', jobCardId)
       .order('captured_at'),
-
-    supabase
-      .from('estimate_rows')
-      .select('sr_no, panel_name, part_description, action, qty, ndp_value, labour_charges, row_total')
-      .eq('job_card_id', jobCardId)
-      .order('sr_no'),
   ])
 
-  if (summaryRes.error || !summaryRes.data)
-    throw new Error(`Job card not found: ${summaryRes.error?.message ?? 'no data'}`)
+  if (!estimateData.summary)
+    throw new Error('Job card not found')
   if (panelsRes.error)
     throw new Error(`Panels fetch failed: ${panelsRes.error.message}`)
   if (photosRes.error)
     throw new Error(`Photos fetch failed: ${photosRes.error.message}`)
-  if (estRes.error)
-    throw new Error(`Estimate fetch failed: ${estRes.error.message}`)
 
   return {
-    summary:  summaryRes.data,
+    summary:  estimateData.summary as JobSummary,
     panels:   (panelsRes.data  ?? []) as Panel[],
     photos:   (photosRes.data  ?? []) as PanelPhoto[],
-    estRows:  (estRes.data     ?? []) as EstimateRow[],
+    estRows:  (estimateData.estRows ?? []) as EstimateRow[],
   }
 }
 

@@ -113,38 +113,48 @@ function applyBorders(ws: ExcelJS.Worksheet, r1: number, r2: number, c1: number,
       border(ws.getCell(r, c))
 }
 
-// ─── Supabase fetch ───────────────────────────────────────────────────────────
+// ─── Supabase fetch via edge function ─────────────────────────────────────────
+// Uses edge function to bypass RLS and fetch data with SERVICE_ROLE access
 
 async function fetchData(jobCardId: string) {
-  const [sumRes, estRes] = await Promise.all([
-    supabase
-      .from('job_card_summary')
-      .select([
-        'job_card_id', 'jc_number', 'complaint_date', 'claim_type', 'km_reading',
-        'reg_number', 'vin', 'model', 'colour', 'paint_type',
-        'dealer_code', 'dealer_name', 'dealer_city', 'bp_city_category',
-        'date_of_sale', 'warranty_age_days', 'tml_share_percent',
-      ].join(', '))
-      .eq('job_card_id', jobCardId)
-      .single<JobSummary>(),
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
+  
+  if (!SUPABASE_URL) {
+    throw new Error('Supabase URL not configured')
+  }
 
-    supabase
-      .from('estimate_rows')
-      .select([
-        'sr_no', 'part_number', 'part_description', 'defect', 'action',
-        'qty', 'ndp_value', 'cut_weld_charges', 'paint_charges',
-        'total_special_charges', 'job_code', 'job_code_desc', 'no_off', 'labour_charges',
-      ].join(', '))
-      .eq('job_card_id', jobCardId)
-      .order('sr_no'),
-  ])
+  // Call edge function to fetch estimate data (bypasses RLS)
+  const { data: auth } = await supabase.auth.getSession()
+  const token = auth?.session?.access_token
 
-  if (sumRes.error || !sumRes.data)
-    throw new Error(`Job card not found: ${sumRes.error?.message ?? 'no data'}`)
-  if (estRes.error)
-    throw new Error(`Estimate rows: ${estRes.error.message}`)
+  if (!token) {
+    throw new Error('Not authenticated. Please log in again.')
+  }
 
-  return { jc: sumRes.data, rows: (estRes.data ?? []) as unknown as EstimateRow[] }
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-export-data`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ jobCardId }),
+  })
+
+  if (!res.ok) {
+    const errData = await res.json()
+    throw new Error(errData.error ?? `Failed to fetch estimate data (HTTP ${res.status})`)
+  }
+
+  const result = await res.json()
+  
+  if (!result.jc) {
+    throw new Error('No job card data returned')
+  }
+
+  return {
+    jc: result.jc as JobSummary,
+    rows: (result.rows ?? []) as EstimateRow[],
+  }
 }
 
 // ─── Sheet 1: Guidelines ──────────────────────────────────────────────────────
