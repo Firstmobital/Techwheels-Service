@@ -1673,13 +1673,25 @@ export default function AutoDocPage() {
 
   // ── Filtered rows ──────────────────────────────────────────────────────────
   const q = search.trim().toLowerCase()
+  const today = new Date()
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+  const toComplaintYmd = (value: string): string | null => {
+    const dateOnly = value.match(/^\d{4}-\d{2}-\d{2}/)
+    if (dateOnly) return dateOnly[0]
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return null
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`
+  }
+
   const displayed = rows.filter(r => {
+    const isToday = toComplaintYmd(r.complaint_date) === todayYmd
     const matchStatus = !statusFilter || r.status === statusFilter
     const matchSearch = !q
       || r.reg_number.toLowerCase().includes(q)
       || r.jc_number.toLowerCase().includes(q)
       || (r.model ?? '').toLowerCase().includes(q)
-    return matchStatus && matchSearch
+    return isToday && matchStatus && matchSearch
   })
 
   const statusPriority: Record<string, number> = {
