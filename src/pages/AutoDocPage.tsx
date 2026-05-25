@@ -128,6 +128,7 @@ const SESSION_KEYS = {
   formDraft: 'autodoc_form_draft',
   selectedPanels: 'autodoc_selected_panels',
   selectedPanelsByJob: 'autodoc_selected_panels_by_job',
+  preRepairPanelsByJob: 'autodoc_pre_repair_panels_by_job',
   activePanel: 'autodoc_active_panel',
   damagePhotoType: 'autodoc_damage_photo_type',
   estimateRows: 'autodoc_estimate_rows',
@@ -268,6 +269,7 @@ export default function AutoDocPage() {
   const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
   const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
   const [selectedPanels, setSelectedPanels] = useState<string[]>(() => readSessionJSON<string[]>(SESSION_KEYS.selectedPanels, []))
+  const [preRepairPanelsByJob, setPreRepairPanelsByJob] = useState<Record<string, string[]>>(() => readSessionJSON<Record<string, string[]>>(SESSION_KEYS.preRepairPanelsByJob, {}))
   const [activePanel, setActivePanel] = useState(() => readSessionValue(SESSION_KEYS.activePanel) || '')
   const [damagePhotoType, setDamagePhotoType] = useState(() => readSessionValue(SESSION_KEYS.damagePhotoType) || '')
   const [damagePhotos, setDamagePhotos] = useState<DamagePhotoItem[]>([])
@@ -295,6 +297,16 @@ export default function AutoDocPage() {
     ),
     [activeModelRates, panelMasterOptions],
   )
+
+  const preRepairPanelsForActiveJob = useMemo(() => {
+    if (!activeJobCardId) return []
+    return sanitizePanelList(preRepairPanelsByJob[activeJobCardId])
+  }, [activeJobCardId, preRepairPanelsByJob])
+
+  const panelSelectionOptions = useMemo(() => {
+    if (damagePhotoType === 'post-repair') return preRepairPanelsForActiveJob
+    return damagePanelOptions
+  }, [damagePanelOptions, damagePhotoType, preRepairPanelsForActiveJob])
 
   const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -394,6 +406,15 @@ export default function AutoDocPage() {
   }, [activePanel, selectedPanels])
 
   function toggleDamagePanel(panel: string) {
+    if (damagePhotoType === 'post-repair') {
+      if (!preRepairPanelsForActiveJob.includes(panel)) {
+        showToast('Post-repair is locked to panels selected in pre-repair.', false)
+        return
+      }
+      setActivePanel(panel)
+      return
+    }
+
     setSelectedPanels((prev) => {
       if (prev.includes(panel)) {
         const next = prev.filter((p) => p !== panel)
@@ -655,6 +676,29 @@ export default function AutoDocPage() {
     map[activeJobCardId] = selectedPanels
     writeSessionValue(SESSION_KEYS.selectedPanelsByJob, JSON.stringify(map))
   }, [activeJobCardId, selectedPanels])
+  useEffect(() => {
+    writeSessionValue(SESSION_KEYS.preRepairPanelsByJob, JSON.stringify(preRepairPanelsByJob))
+  }, [preRepairPanelsByJob])
+  useEffect(() => {
+    if (!activeJobCardId || damagePhotoType !== 'pre-repair') return
+    const sanitized = sanitizePanelList(selectedPanels)
+    setPreRepairPanelsByJob((prev) => {
+      const existing = sanitizePanelList(prev[activeJobCardId])
+      if (existing.length === sanitized.length && existing.every((panel, idx) => panel === sanitized[idx])) {
+        return prev
+      }
+      return {
+        ...prev,
+        [activeJobCardId]: sanitized,
+      }
+    })
+  }, [activeJobCardId, damagePhotoType, selectedPanels])
+  useEffect(() => {
+    if (damagePhotoType !== 'post-repair') return
+    const lockedPanels = preRepairPanelsForActiveJob
+    setSelectedPanels(lockedPanels)
+    setActivePanel((prev) => (lockedPanels.includes(prev) ? prev : (lockedPanels[0] ?? '')))
+  }, [damagePhotoType, preRepairPanelsForActiveJob])
   useEffect(() => { writeSessionValue(SESSION_KEYS.activePanel, activePanel) }, [activePanel])
   useEffect(() => { writeSessionValue(SESSION_KEYS.damagePhotoType, damagePhotoType) }, [damagePhotoType])
   useEffect(() => { writeSessionValue(SESSION_KEYS.estimateRows, JSON.stringify(estimateRows)) }, [estimateRows])
@@ -679,6 +723,14 @@ export default function AutoDocPage() {
 
       const rehydratedPanels = Array.from(new Set(fromDb.length > 0 ? fromDb : fromMap))
       setSelectedPanels(rehydratedPanels)
+      setPreRepairPanelsByJob((prev) => {
+        const existing = sanitizePanelList(prev[activeJobCardId])
+        if (existing.length > 0) return prev
+        return {
+          ...prev,
+          [activeJobCardId]: rehydratedPanels,
+        }
+      })
       setActivePanel((prev) => (rehydratedPanels.includes(prev) ? prev : (rehydratedPanels[0] ?? '')))
     }
 
@@ -809,6 +861,7 @@ export default function AutoDocPage() {
     setActivePanel('')
     setDamagePhotos([])
     setDamagePhotoType('')
+    setPreRepairPanelsByJob({})
     setEstimateRows([])
     setDeliveryVideoName('')
     setActiveJobCardId(null)
@@ -1859,7 +1912,7 @@ export default function AutoDocPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-              {damagePanelOptions.map((panel) => {
+              {panelSelectionOptions.map((panel) => {
                 const isSelected = selectedPanels.includes(panel)
                 return (
                   <button
@@ -1881,6 +1934,12 @@ export default function AutoDocPage() {
 
             {loadingModelRates && (
               <p className="mt-2 text-xs text-gray-500">Loading model-wise panels...</p>
+            )}
+            {damagePhotoType === 'post-repair' && preRepairPanelsForActiveJob.length === 0 && (
+              <p className="mt-2 text-xs font-medium text-amber-700">Select panels in pre-repair first, then switch to post-repair.</p>
+            )}
+            {damagePhotoType === 'post-repair' && preRepairPanelsForActiveJob.length > 0 && (
+              <p className="mt-2 text-xs font-medium text-blue-700">Post-repair panels are locked to pre-repair selection.</p>
             )}
 
             <p className="mt-4 text-sm font-medium text-blue-700">
@@ -1912,7 +1971,14 @@ export default function AutoDocPage() {
                 </select>
                 <select
                   value={damagePhotoType}
-                  onChange={(e) => setDamagePhotoType(e.target.value)}
+                  onChange={(e) => {
+                    const nextStage = e.target.value
+                    if (nextStage === 'post-repair' && preRepairPanelsForActiveJob.length === 0) {
+                      showToast('Select and save pre-repair panels first.', false)
+                      return
+                    }
+                    setDamagePhotoType(nextStage)
+                  }}
                   className="h-10 min-w-[180px] rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 >
                   <option value="">Select stage</option>
