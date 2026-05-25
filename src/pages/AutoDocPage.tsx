@@ -26,7 +26,6 @@ import {
   uploadDocumentFile,
   updateJobCardStatus,
   upsertVehicle,
-  addEstimateRow,
   type DocumentRow,
   type ModelPanelRate,
   type JobSummaryRow,
@@ -1249,26 +1248,23 @@ export default function AutoDocPage() {
     if (estimateRows.length > 0) {
       for (let idx = 0; idx < estimateRows.length; idx++) {
         const row = estimateRows[idx]
-        const rowRes = await addEstimateRow({
-          jobCardId: jcRes.data.id,
-          srNo: idx + 1,
-          panelName: row.panel || undefined,
-          partNumber: row.partNo || undefined,
-          partDescription: undefined,
-          defect: undefined,
-          action: row.action || undefined,
-          qty: 1,
-          ndpValue: Number(row.partsPrice) || 0,
-          cutWeldCharges: 0,
-          paintCharges: Number(row.paintPrice) || 0,
-          totalSpecialCharges: 0,
-          jobCode: undefined,
-          jobCodeDesc: undefined,
-          noOff: 1,
-          labourCharges: Number(row.labourPrice) || 0,
-        })
-        if (rowRes.error) {
-          console.warn(`Failed to save estimate row ${row.id}:`, rowRes.error)
+        try {
+          await supabase.from('estimate_rows').insert({
+            job_card_id: jcRes.data.id,
+            sr_no: idx + 1,
+            panel_name: row.panel || null,
+            part_number: row.partNo || null,
+            action: row.action || null,
+            qty: 1,
+            ndp_value: Number(row.partsPrice) || 0,
+            cut_weld_charges: 0,
+            paint_charges: Number(row.paintPrice) || 0,
+            total_special_charges: 0,
+            no_off: 1,
+            labour_charges: Number(row.labourPrice) || 0,
+          })
+        } catch (err) {
+          console.warn(`Failed to save estimate row ${row.id}:`, err)
         }
       }
     }
