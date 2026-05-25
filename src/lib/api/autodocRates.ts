@@ -43,6 +43,14 @@ export interface AutoDocLookupOptions {
   yearOptions: string[]
 }
 
+export interface RateCardExportRow {
+  modelName: string
+  panelLabel: string
+  ppRate: number | null
+  pmRate: number | null
+  psRate: number | null
+}
+
 function normalizeModelName(value: string): string {
   return value.trim().toUpperCase()
 }
@@ -384,4 +392,55 @@ export async function getAutoDocLookupOptions(): Promise<ApiResult<AutoDocLookup
       .sort((a, b) => b - a)
       .map((value) => String(value)),
   })
+}
+
+export async function exportActiveRateRowsByCityCategory(cityCategoryInput: string): Promise<ApiResult<RateCardExportRow[]>> {
+  const cityCategory = cityCategoryInput.trim()
+  if (!cityCategory) return fail('City category is required')
+
+  let activeCardId: string | null = null
+
+  for (const candidate of cityCategoryCandidates(cityCategory)) {
+    const cardRes = await supabase
+      .from('autodoc_rate_cards')
+      .select('id')
+      .eq('city_category', candidate)
+      .eq('is_active', true)
+      .maybeSingle<{ id: string }>()
+
+    if (cardRes.error) return fail(cardRes.error)
+    if (cardRes.data?.id) {
+      activeCardId = cardRes.data.id
+      break
+    }
+  }
+
+  if (!activeCardId) return ok([])
+
+  const rowsRes = await supabase
+    .from('autodoc_rate_rows')
+    .select('model_name, panel_label, pp_rate, pm_rate, ps_rate')
+    .eq('rate_card_id', activeCardId)
+    .order('model_name', { ascending: true })
+    .order('panel_label', { ascending: true })
+
+  if (rowsRes.error) return fail(rowsRes.error)
+
+  const rows = ((rowsRes.data ?? []) as Array<{
+    model_name: string | null
+    panel_label: string | null
+    pp_rate: number | null
+    pm_rate: number | null
+    ps_rate: number | null
+  }>)
+    .filter((row) => Boolean(row.model_name) && Boolean(row.panel_label))
+    .map((row) => ({
+      modelName: (row.model_name ?? '').trim(),
+      panelLabel: (row.panel_label ?? '').trim(),
+      ppRate: row.pp_rate,
+      pmRate: row.pm_rate,
+      psRate: row.ps_rate,
+    }))
+
+  return ok(rows)
 }

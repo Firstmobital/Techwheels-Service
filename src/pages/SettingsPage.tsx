@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import {
   activateRateCard,
   createRateCardWithRows,
+  exportActiveRateRowsByCityCategory,
   listRateCards,
   type RateCardRow,
   type RateRowInput,
@@ -234,6 +235,7 @@ export default function SettingsPage() {
   const [rateCards, setRateCards] = useState<RateCardRow[]>([])
   const [loadingRateCards, setLoadingRateCards] = useState(true)
   const [uploadingRates, setUploadingRates] = useState(false)
+  const [exportingRates, setExportingRates] = useState(false)
   const [activatingRateCardId, setActivatingRateCardId] = useState<string | null>(null)
   const [rateUploadConfig, setRateUploadConfig] = useState({
     name: '',
@@ -408,6 +410,52 @@ export default function SettingsPage() {
       setActivatingRateCardId(null)
     }
   }, [fetchRateCards])
+
+  const handleExportRateFile = useCallback(async () => {
+    setExportingRates(true)
+    setMessage(null)
+    setError(null)
+
+    try {
+      const category = rateUploadConfig.cityCategory.trim()
+      const res = await exportActiveRateRowsByCityCategory(category)
+      if (res.error || !res.data) {
+        throw new Error(res.error ?? 'Failed to export rate file.')
+      }
+
+      const rows = res.data
+      const sheetRows: Array<[string, string, number | string, number | string, number | string]> = [
+        ['model', 'panel', 'paint_type_pp_pearl', 'paint_type_pm_metallic', 'paint_type_ps_solid'],
+      ]
+
+      rows.forEach((row) => {
+        sheetRows.push([
+          row.modelName,
+          row.panelLabel,
+          row.ppRate ?? '',
+          row.pmRate ?? '',
+          row.psRate ?? '',
+        ])
+      })
+
+      const worksheet = XLSX.utils.aoa_to_sheet(sheetRows)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Rate Card')
+
+      const fileName = `autodoc_rate_card_category_${category || 'A'}.xlsx`
+      XLSX.writeFile(workbook, fileName)
+
+      if (rows.length > 0) {
+        setMessage(`Exported ${rows.length.toLocaleString()} rate rows for category ${category}.`)
+      } else {
+        setMessage(`No active rate card rows found for category ${category}. Exported editable template.`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export rate file.')
+    } finally {
+      setExportingRates(false)
+    }
+  }, [rateUploadConfig.cityCategory])
 
   const handleUploadFile = useCallback(async (file: File) => {
     setUploading(true)
@@ -811,14 +859,24 @@ export default function SettingsPage() {
                 Upload model-wise panel labour rates (PP / PM / PS) and activate per city category.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => rateFileInputRef.current?.click()}
-              disabled={uploadingRates}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {uploadingRates ? 'Uploading rates...' : 'Upload Rate File'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleExportRateFile()}
+                disabled={exportingRates || uploadingRates}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {exportingRates ? 'Exporting...' : 'Export'}
+              </button>
+              <button
+                type="button"
+                onClick={() => rateFileInputRef.current?.click()}
+                disabled={uploadingRates || exportingRates}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {uploadingRates ? 'Importing...' : 'Import'}
+              </button>
+            </div>
             <input
               ref={rateFileInputRef}
               type="file"
