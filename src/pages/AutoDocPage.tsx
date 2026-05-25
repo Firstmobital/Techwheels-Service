@@ -26,6 +26,7 @@ import {
   uploadDocumentFile,
   updateJobCardStatus,
   upsertVehicle,
+  addEstimateRow,
   type DocumentRow,
   type ModelPanelRate,
   type JobSummaryRow,
@@ -1242,6 +1243,34 @@ export default function AutoDocPage() {
     if (jcRes.error || !jcRes.data) {
       showToast(jcRes.error ?? 'Unable to create draft job card.', false)
       return null
+    }
+
+    // Save estimate rows to database
+    if (estimateRows.length > 0) {
+      for (let idx = 0; idx < estimateRows.length; idx++) {
+        const row = estimateRows[idx]
+        const rowRes = await addEstimateRow({
+          jobCardId: jcRes.data.id,
+          srNo: idx + 1,
+          panelName: row.panel || undefined,
+          partNumber: row.partNo || undefined,
+          partDescription: undefined,
+          defect: undefined,
+          action: row.action || undefined,
+          qty: 1,
+          ndpValue: Number(row.partsPrice) || 0,
+          cutWeldCharges: 0,
+          paintCharges: Number(row.paintPrice) || 0,
+          totalSpecialCharges: 0,
+          jobCode: undefined,
+          jobCodeDesc: undefined,
+          noOff: 1,
+          labourCharges: Number(row.labourPrice) || 0,
+        })
+        if (rowRes.error) {
+          console.warn(`Failed to save estimate row ${row.id}:`, rowRes.error)
+        }
+      }
     }
 
     setActiveJobCardId(jcRes.data.id)

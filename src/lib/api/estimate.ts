@@ -4,6 +4,8 @@ import { fail, ok, type ApiResult, type EstimateInsert, type EstimateRow } from 
 export type AddEstimateRowInput = {
   jobCardId: string
   srNo: number
+  panelName?: string
+  partNumber?: string
   partDescription?: string
   defect?: string
   action?: string
@@ -18,7 +20,7 @@ export type AddEstimateRowInput = {
   labourCharges: number
 }
 
-const ESTIMATE_SELECT = 'id, sr_no, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total'
+const ESTIMATE_SELECT = 'id, sr_no, panel_name, part_number, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total'
 
 export async function listEstimateRows(jobCardId: string): Promise<ApiResult<EstimateRow[]>> {
   const { data, error } = await supabase
@@ -35,6 +37,8 @@ export async function addEstimateRow(input: AddEstimateRowInput): Promise<ApiRes
   const payload: EstimateInsert = {
     job_card_id: input.jobCardId,
     sr_no: input.srNo,
+    panel_name: input.panelName?.trim() || null,
+    part_number: input.partNumber?.trim() || null,
     part_description: input.partDescription?.trim() || null,
     defect: input.defect?.trim() || null,
     action: input.action?.trim() || null,
