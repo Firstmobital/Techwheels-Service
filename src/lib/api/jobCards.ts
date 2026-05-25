@@ -11,21 +11,24 @@ export type CreateJobCardInput = {
 }
 
 export type JobCardStatus = 'draft' | 'submitted' | 'approved' | 'in_work' | 'completed'
+export type JobDashboardSummaryRow = JobSummaryRow & {
+  panel_names?: string[]
+}
 
-export async function listJobCardSummaries(): Promise<ApiResult<JobSummaryRow[]>> {
+export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSummaryRow[]>> {
   const { data, error } = await supabase
     .from('job_card_summary')
     .select([
       'job_card_id', 'jc_number', 'reg_number', 'model', 'vehicle_year',
       'colour', 'complaint_date', 'status', 'warranty_age_days',
       'tml_share_percent', 'total_estimate_amount', 'panel_count',
-      'photo_count', 'has_ppt_pre', 'has_ppt_post',
+      'photo_count', 'has_ppt_pre', 'has_ppt_post', 'owner_name', 'km_reading',
     ].join(', '))
     .order('jc_created_at', { ascending: false })
 
   if (error) return fail(error)
 
-  const summaries = ((data ?? []) as unknown as JobSummaryRow[])
+  const summaries = ((data ?? []) as unknown as JobDashboardSummaryRow[])
   if (summaries.length === 0) return ok(summaries)
 
   const jobCardIds = summaries
@@ -42,6 +45,13 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobSummaryRow[]>
 
   if (estimateError) return fail(estimateError)
 
+  const { data: panelRows, error: panelError } = await supabase
+    .from('panels')
+    .select('job_card_id, panel_name')
+    .in('job_card_id', jobCardIds)
+
+  if (panelError) return fail(panelError)
+
   const totalsByJobCard = new Map<string, number>()
   for (const row of estimateRows ?? []) {
     const jobCardId = row.job_card_id
@@ -51,9 +61,20 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobSummaryRow[]>
     totalsByJobCard.set(jobCardId, prev + (Number.isFinite(rowTotal) ? rowTotal : 0))
   }
 
+  const panelNamesByJobCard = new Map<string, string[]>()
+  for (const panelRow of panelRows ?? []) {
+    const jobCardId = panelRow.job_card_id
+    const panelName = panelRow.panel_name?.trim()
+    if (!jobCardId || !panelName) continue
+    const existing = panelNamesByJobCard.get(jobCardId) ?? []
+    if (!existing.includes(panelName)) existing.push(panelName)
+    panelNamesByJobCard.set(jobCardId, existing)
+  }
+
   const adjusted = summaries.map((row) => ({
     ...row,
     total_estimate_amount: row.job_card_id ? (totalsByJobCard.get(row.job_card_id) ?? 0) : 0,
+    panel_names: row.job_card_id ? (panelNamesByJobCard.get(row.job_card_id) ?? []) : [],
   }))
 
   return ok(adjusted)

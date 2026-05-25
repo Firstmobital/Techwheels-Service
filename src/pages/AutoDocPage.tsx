@@ -28,6 +28,7 @@ import {
   upsertVehicle,
   type DocumentRow,
   type ModelPanelRate,
+  type JobDashboardSummaryRow,
   type JobSummaryRow,
   type PhotoType,
 } from '../lib/api'
@@ -48,7 +49,10 @@ interface JobRow {
   tml_share_percent:     number | null
   total_estimate_amount: number | null
   panel_count:           number
+  panel_names:           string[]
   photo_count:           number
+  owner_name:            string | null
+  km_reading:            number | null
   has_ppt_pre:           boolean
   has_ppt_post:          boolean
 }
@@ -2009,9 +2013,16 @@ export default function AutoDocPage() {
                       {row.reg_number} • {row.model ?? 'Model NA'} • Job# {row.jc_number}
                     </p>
                   </div>
+                  {(() => {
+                    const panelLabel = row.panel_names.length > 0 ? row.panel_names.join(', ') : '—'
+                    const ownerLabel = row.owner_name?.trim() || '—'
+                    const kmLabel = row.km_reading != null ? row.km_reading.toLocaleString('en-IN') : '—'
+                    return (
                   <p className="mt-1 text-base leading-tight text-gray-600 sm:ml-[52px]">
-                    {fmtDate(row.complaint_date)} • Age: {row.warranty_age_days ?? '—'} days • Panels: {row.panel_count} • Estimate: ₹ {(row.total_estimate_amount ?? 0).toLocaleString('en-IN')}
+                    {fmtDate(row.complaint_date)} • {ownerLabel} • KM: {kmLabel} • Age: {row.warranty_age_days ?? '—'} days • Panels: {panelLabel} • Estimate: ₹ {(row.total_estimate_amount ?? 0).toLocaleString('en-IN')}
                   </p>
+                    )
+                  })()}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2.5 md:pl-4">
@@ -3237,7 +3248,7 @@ export default function AutoDocPage() {
   )
 }
 
-function mapJobRows(source: JobSummaryRow[]): JobRow[] {
+function mapJobRows(source: JobDashboardSummaryRow[]): JobRow[] {
   return source
     .filter((row) => !!row.job_card_id && !!row.jc_number && !!row.reg_number && !!row.complaint_date)
     .map((row) => ({
@@ -3253,7 +3264,10 @@ function mapJobRows(source: JobSummaryRow[]): JobRow[] {
       tml_share_percent: row.tml_share_percent,
       total_estimate_amount: row.total_estimate_amount,
       panel_count: row.panel_count ?? 0,
+      panel_names: row.panel_names ?? [],
       photo_count: row.photo_count ?? 0,
+      owner_name: row.owner_name,
+      km_reading: row.km_reading,
       has_ppt_pre: row.has_ppt_pre ?? false,
       has_ppt_post: row.has_ppt_post ?? false,
     }))
