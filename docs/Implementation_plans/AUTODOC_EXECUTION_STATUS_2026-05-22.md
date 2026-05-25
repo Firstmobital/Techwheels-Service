@@ -19,6 +19,52 @@
 
 The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim workflow system. **All core functionality is now fully implemented (2026-05-23):**
 
+### Execution Delta (2026-05-25 — latest, production hardening + drift correction)
+
+Done in codebase (this execution):
+- Fixed estimate persistence so current Estimate rows always sync before export/send transitions:
+  - Estimate -> Next: Submit now saves/syncs estimate rows first.
+  - Estimate export and Submit export paths force fresh draft sync before generation.
+  - file: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Added service-role edge function for estimate row synchronization to avoid frontend RLS insert failures:
+  - new function: [supabase/functions/estimate-rows-insert/index.ts](../../supabase/functions/estimate-rows-insert/index.ts)
+- Fixed generated document upload/link pipeline:
+  - Correct MIME handling for generated XLSX/PPT uploads.
+  - Dealer-prefixed storage path aligned to storage RLS policy (`split_part(name,'/',1)=my_dealer_code`).
+  - Added service-role metadata upsert edge function for `documents` linking.
+  - files:
+    - [src/lib/api/documents.ts](../../src/lib/api/documents.ts)
+    - [supabase/functions/document-link-upsert/index.ts](../../supabase/functions/document-link-upsert/index.ts)
+    - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Restored Estimate UX/data completeness:
+  - Defect dropdown restored from DB-derived workflow options.
+  - `part_description` now persists from panel details.
+  - Excel generation uses `part_description` fallback to `panel_name`.
+  - files:
+    - [src/lib/api/autodocRates.ts](../../src/lib/api/autodocRates.ts)
+    - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+    - [src/lib/generators/generateExcel.ts](../../src/lib/generators/generateExcel.ts)
+- Fixed send-path reliability:
+  - "Send to Tata Motors" no longer fails hard on `email_logs` SELECT/RLS (`insert` without `select`, logging non-blocking).
+  - "Submit Warranty Claim" now sends a post-repair email before status completion (was status-only earlier).
+  - files:
+    - [src/lib/api/email.ts](../../src/lib/api/email.ts)
+    - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Workflow gating updates applied per requested behavior:
+  - Submit Claim activation changed to require only Post-Repair PPT (delivery video no longer blocks activation).
+  - file: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Dashboard behavior + amount drift fixes:
+  - Dashboard list now shows only today's job cards.
+  - Estimate totals in list/detail now recomputed from `estimate_rows` directly in API layer to avoid join fan-out inflation from `job_card_summary`.
+  - files:
+    - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+    - [src/lib/api/jobCards.ts](../../src/lib/api/jobCards.ts)
+
+Authoritative schema audit note (from current [local_folder/backups/full_database.sql](../../local_folder/backups/full_database.sql)):
+- `job_card_summary` computes `sum(er.row_total)` in a multi-left-join projection (panels/photos/documents/estimate), which can overcount totals under fan-out conditions.
+- App-side correction has been implemented in [src/lib/api/jobCards.ts](../../src/lib/api/jobCards.ts) for immediate production stability.
+- Recommended follow-up: add DB migration to rewrite `job_card_summary` estimate aggregation using pre-aggregated subqueries.
+
 ### Execution Delta (2026-05-25 — latest, per production behavior audit)
 
 Done in codebase (this execution):
@@ -204,6 +250,12 @@ Done:
    - [src/lib/api/estimate.ts](../../src/lib/api/estimate.ts) — estimate row management
    - [src/lib/api/documents.ts](../../src/lib/api/documents.ts) — document storage
 - Standardized typed `{ data, error }` responses via [src/lib/api/types.ts](../../src/lib/api/types.ts).
+- Added resilient document metadata linking path via service-role edge function fallback:
+  - function: [supabase/functions/document-link-upsert/index.ts](../../supabase/functions/document-link-upsert/index.ts)
+  - client integration: [src/lib/api/documents.ts](../../src/lib/api/documents.ts)
+- Added RLS-safe estimate row sync edge function used by AutoDoc workflow:
+  - function: [supabase/functions/estimate-rows-insert/index.ts](../../supabase/functions/estimate-rows-insert/index.ts)
+  - client integration: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
 
 Note:
 - Env naming remains Vite-native (`VITE_*`) by design in this repository.
@@ -222,7 +274,9 @@ Done:
 - Routes added in [src/App.tsx](../../src/App.tsx): /autodoc and /autodoc/:id
 - Nav entry added in [src/App.tsx](../../src/App.tsx)
 - Dashboard list uses real Supabase query from job_card_summary in [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Dashboard table is now intentionally restricted to today's complaint-date rows in [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
 - Damage/photo and estimate row save flows are wired in [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx)
+- Estimate/save/export/send pipeline now performs explicit draft/estimate sync prior to submit actions in [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
 
 Pending:
 - Prompt-specified env names were not adopted (NEXT_PUBLIC_* not in client code; app uses Vite envs).
