@@ -151,7 +151,7 @@ export default function ManpowerWiseLabourRevenueReport({
           </button>
         )}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Labour Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">{formatCurrency(totals.totalRevenue)}</p>
@@ -160,7 +160,7 @@ export default function ManpowerWiseLabourRevenueReport({
             <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">Total Job Cards</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-900">{totals.totalJobs.toLocaleString()}</p>
           </div>
-          <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 sm:col-span-2">
+          <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Manpower Count</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{totals.manpowerCount.toLocaleString()}</p>
           </div>
@@ -196,6 +196,8 @@ export default function ManpowerWiseLabourRevenueReport({
                       Manpower
                     </button>
                   </th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">Location</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">Fuel Type</th>
                   <th className="px-3 py-2 text-right font-semibold text-gray-600">
                     <button
                       onClick={() => toggleSort('totalLabourRevenue')}
@@ -241,6 +243,16 @@ export default function ManpowerWiseLabourRevenueReport({
                           </button>
                         </td>
                         <td className="px-3 py-2 text-gray-700">{row.manpowerLabel}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.location || '-'}</td>
+                        <td className="px-3 py-2 text-gray-700">
+                          <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                            row.fuelType === 'EV' ? 'bg-green-100 text-green-800' :
+                            row.fuelType === 'PV' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {row.fuelType || '-'}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-right font-medium text-gray-900">
                           {formatCurrency(row.totalLabourRevenue)}
                         </td>
@@ -254,7 +266,7 @@ export default function ManpowerWiseLabourRevenueReport({
 
                       {isExpanded ? (
                         <tr className="bg-gray-50/70">
-                          <td colSpan={5} className="px-3 py-3">
+                          <td colSpan={7} className="px-3 py-3">
                             <div className="rounded-lg border border-gray-200 bg-white p-3">
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                 Service Type Breakup

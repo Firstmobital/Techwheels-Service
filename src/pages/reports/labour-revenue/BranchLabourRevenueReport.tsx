@@ -10,6 +10,7 @@ import { exportToCSV, generateExportFilename } from '../../../lib/exportUtils'
 interface BranchLabourRevenueReportProps {
   branch: BranchFilter
   dateFilter: DateRangeFilter
+  serviceTypeFilter?: 'ALL' | string | string[]
 }
 
 type SortKey = 'branch' | 'selectedRevenue' | 'previousRevenue' | 'absoluteChange' | 'percentageChange'
@@ -30,7 +31,11 @@ function formatCurrency(value: number): string {
   return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
-export default function BranchLabourRevenueReport({ branch, dateFilter }: BranchLabourRevenueReportProps) {
+export default function BranchLabourRevenueReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+}: BranchLabourRevenueReportProps) {
   const [rows, setRows] = useState<BranchLabourRevenueComparison[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -43,7 +48,7 @@ export default function BranchLabourRevenueReport({ branch, dateFilter }: Branch
     setIsLoading(true)
     setError(null)
 
-    getBranchLabourRevenueComparison(branch, dateFilter)
+    getBranchLabourRevenueComparison(branch, dateFilter, serviceTypeFilter)
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -60,7 +65,7 @@ export default function BranchLabourRevenueReport({ branch, dateFilter }: Branch
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
@@ -152,7 +157,7 @@ export default function BranchLabourRevenueReport({ branch, dateFilter }: Branch
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Branch Wise Labour Revenue (MoM)</h2>
           <p className="mt-1 text-sm text-gray-500">
-            {periodLabel} from PSF Revenue Report data using closed_date_time.
+            {periodLabel} from PSF Revenue Report data using invoice date.
           </p>
         </div>
 

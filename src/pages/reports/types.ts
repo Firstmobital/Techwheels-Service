@@ -45,7 +45,7 @@ export type ReportId =
 export interface ReportViewProps {
   branch: BranchFilter
   dateFilter: DateRangeFilter
-  serviceTypeFilter?: 'ALL' | string
+  serviceTypeFilter?: 'ALL' | string | string[]
   parentProductLineFilter?: 'ALL' | string
 }
 

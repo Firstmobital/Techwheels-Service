@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
-import {
-  activateRateCard,
-  createRateCardWithRows,
-  exportActiveRateRowsByCityCategory,
-  listRateCards,
-  type RateCardRow,
-  type RateRowInput,
-} from '../lib/api'
 
 interface EmployeeRow {
   id: number
@@ -16,6 +8,7 @@ interface EmployeeRow {
   employee_name: string
   location: string | null
   department: string | null
+  fuel_type: string | null
 }
 
 interface MappingIssueRow {
@@ -36,14 +29,7 @@ interface EmployeeUploadRow {
   employee_name: string
   location: string | null
   department: string | null
-}
-
-interface RateUploadRow {
-  modelName: string
-  panelLabel: string
-  ppRate: number | null
-  pmRate: number | null
-  psRate: number | null
+  fuel_type: string | null
 }
 
 const REQUIRED_HEADERS = {
@@ -102,6 +88,9 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
           }
         }
 
+        // Optional header for fuel_type
+        const fuelTypeHeader = normalizedToOriginal.get('fuel type') || normalizedToOriginal.get('fuel_type')
+
         if (missingHeaders.length > 0) {
           reject(new Error(`Missing required headers: ${missingHeaders.join(', ')}`))
           return
@@ -113,6 +102,7 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
             const name = String(row[resolvedHeaders.employee_name] ?? '').trim()
             const location = String(row[resolvedHeaders.location] ?? '').trim()
             const department = String(row[resolvedHeaders.department] ?? '').trim()
+            const fuelType = fuelTypeHeader ? String(row[fuelTypeHeader] ?? '').trim() : ''
 
             if (!code || !name) {
               return null
@@ -123,6 +113,7 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
               employee_name: name,
               location: location || null,
               department: department || null,
+              fuel_type: fuelType || null,
             }
           })
           .filter((row): row is EmployeeUploadRow => row !== null)
@@ -143,91 +134,8 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
   })
 }
 
-function parseRateNumber(raw: unknown): number | null {
-  const value = String(raw ?? '').replace(/,/g, '').trim()
-  if (!value) return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function parseRateWorkbook(file: File): Promise<RateUploadRow[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer)
-        const workbook = XLSX.read(data, { type: 'array' })
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json<Array<unknown>>(worksheet, { header: 1, defval: '' })
-
-        let currentModel = ''
-        const parsed: RateUploadRow[] = []
-
-        rows.forEach((colsRaw) => {
-          const cols = [...colsRaw].map((v) => String(v ?? '').trim())
-          const modelCol = cols[0] || ''
-          const panelCol = cols[1] || ''
-
-          const headerLike = modelCol.toLowerCase() === 'model' || panelCol.toLowerCase() === 'panel'
-          if (headerLike) return
-
-          const pp = parseRateNumber(cols[2])
-          const pm = parseRateNumber(cols[3])
-          const ps = parseRateNumber(cols[4])
-
-          const looksLikeModelRow = modelCol && !panelCol && pp == null && pm == null && ps == null
-          if (looksLikeModelRow) {
-            currentModel = modelCol
-            return
-          }
-
-          // Flat sheet format (like exported template): each row carries model + panel.
-          // Always honor the current row's model when present.
-          if (modelCol && panelCol) {
-            currentModel = modelCol
-          }
-
-          if (!currentModel) {
-            if (modelCol && panelCol) {
-              currentModel = modelCol
-            } else {
-              return
-            }
-          }
-
-          const panelLabel = panelCol || cols[0] || ''
-          if (!panelLabel) return
-
-          parsed.push({
-            modelName: currentModel,
-            panelLabel,
-            ppRate: pp,
-            pmRate: pm,
-            psRate: ps,
-          })
-        })
-
-        const validRows = parsed.filter((row) => row.modelName && row.panelLabel)
-        if (validRows.length === 0) {
-          reject(new Error('No valid rate rows found in uploaded file.'))
-          return
-        }
-
-        resolve(validRows)
-      } catch (error) {
-        reject(new Error(error instanceof Error ? error.message : 'Failed to parse rate workbook.'))
-      }
-    }
-
-    reader.onerror = () => reject(new Error('Could not read rate file.'))
-    reader.readAsArrayBuffer(file)
-  })
-}
-
 export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const rateFileInputRef = useRef<HTMLInputElement>(null)
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([])
   const [issues, setIssues] = useState<MappingIssueRow[]>([])
@@ -237,18 +145,8 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false)
   const [savingCode, setSavingCode] = useState<string | null>(null)
   const [resolvingIssueId, setResolvingIssueId] = useState<number | null>(null)
-
-  const [rateCards, setRateCards] = useState<RateCardRow[]>([])
-  const [loadingRateCards, setLoadingRateCards] = useState(true)
-  const [uploadingRates, setUploadingRates] = useState(false)
-  const [exportingRates, setExportingRates] = useState(false)
-  const [activatingRateCardId, setActivatingRateCardId] = useState<string | null>(null)
-  const [rateUploadConfig, setRateUploadConfig] = useState({
-    name: '',
-    cityCategory: 'A',
-    notes: '',
-    setActive: true,
-  })
+  const [deletingEmployeeId, setDeletingEmployeeId] = useState<number | null>(null)
+  const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null)
 
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -259,7 +157,54 @@ export default function SettingsPage() {
     employee_name: '',
     location: '',
     department: '',
+    fuel_type: '',
   })
+
+  const handleExportEmployees = useCallback(() => {
+    if (employees.length === 0) {
+      setError('No employees to export.')
+      return
+    }
+
+    const exportData = employees.map((emp) => ({
+      'SA Code': emp.employee_code,
+      'SA Name': emp.employee_name,
+      Location: emp.location || '',
+      Department: emp.department || '',
+      'Fuel Type': emp.fuel_type || '',
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees')
+    XLSX.writeFile(workbook, `employees_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    setMessage('Employees exported successfully.')
+  }, [employees])
+
+  const handleExportIssues = useCallback(() => {
+    if (issues.length === 0) {
+      setError('No mapping issues to export.')
+      return
+    }
+
+    const exportData = issues.map((issue) => ({
+      When: new Date(issue.created_at).toLocaleString('en-IN'),
+      Source: issue.source_table,
+      Branch: issue.branch,
+      'Row Number': issue.row_number || '',
+      'Job Card': issue.job_card_number || '',
+      'SR Assigned To': issue.sr_assigned_to || '',
+      Reason: issue.reason,
+      Status: issue.status,
+      'Resolved Employee Code': issue.resolved_employee_code || '',
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Mapping Issues')
+    XLSX.writeFile(workbook, `mapping_issues_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    setMessage('Mapping issues exported successfully.')
+  }, [issues])
 
   // Filter state for Unmapped SR Entries
   const [filterJobCard, setFilterJobCard] = useState('')
@@ -312,11 +257,17 @@ export default function SettingsPage() {
     return { total, byBranch }
   }, [issues])
 
+  const getDefaultFuelType = (employeeCode: string): string | null => {
+    if (employeeCode === '3000840') return 'PV'
+    if (employeeCode === '500A840') return 'EV'
+    return null
+  }
+
   const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true)
     const { data, error: fetchError } = await supabase
       .from('employee_master')
-      .select('id, employee_code, employee_name, location, department')
+      .select('id, employee_code, employee_name, location, department, fuel_type')
       .order('employee_code', { ascending: true })
 
     if (fetchError) {
@@ -334,9 +285,7 @@ export default function SettingsPage() {
       .select(
         'id, source_table, branch, row_number, job_card_number, sr_assigned_to, reason, status, resolved_employee_code, created_at',
       )
-      .eq('status', 'open')
       .order('created_at', { ascending: false })
-      .limit(100)
 
     if (fetchError) {
       setError(fetchError.message)
@@ -347,121 +296,406 @@ export default function SettingsPage() {
     setLoadingIssues(false)
   }, [])
 
-  const fetchRateCards = useCallback(async () => {
-    setLoadingRateCards(true)
-    const res = await listRateCards()
-    if (res.error || !res.data) {
-      setError(res.error ?? 'Failed to load rate cards')
-    } else {
-      setRateCards(res.data)
+  const handleAutoResolveByCode = useCallback(async () => {
+    if (issues.length === 0) {
+      setMessage('No unmapped entries to resolve.')
+      return
     }
-    setLoadingRateCards(false)
-  }, [])
+
+    if (employees.length === 0) {
+      setError('No employees in master to match against.')
+      return
+    }
+
+    setMessage(null)
+    setError(null)
+
+    try {
+      const employeeCodeMap = new Map(employees.map((emp) => [emp.employee_code.toLowerCase().trim(), emp]))
+
+      let resolvedCount = 0
+      const failedResolves: string[] = []
+
+      for (const issue of issues) {
+        if (!issue.sr_assigned_to) {
+          failedResolves.push('(no SR code)')
+          continue
+        }
+
+        const normalizedSrCode = issue.sr_assigned_to.toLowerCase().trim()
+        const matchedEmployee = employeeCodeMap.get(normalizedSrCode)
+
+        if (!matchedEmployee) {
+          failedResolves.push(issue.sr_assigned_to)
+          continue
+        }
+
+        // Update source table with matched employee code
+        const employeeBranch = normalizeBranch(matchedEmployee.location)
+        const updatePayload = employeeBranch
+          ? { employee_code: matchedEmployee.employee_code, branch: employeeBranch }
+          : { employee_code: matchedEmployee.employee_code }
+
+        let sourceQuery = supabase
+          .from(issue.source_table)
+          .update(updatePayload)
+          .eq('branch', issue.branch)
+
+        if (issue.job_card_number) {
+          sourceQuery = sourceQuery.eq('job_card_number', issue.job_card_number)
+        }
+        if (issue.sr_assigned_to) {
+          sourceQuery = sourceQuery.eq('sr_assigned_to', issue.sr_assigned_to)
+        }
+
+        const { error: sourceError } = await sourceQuery.is('employee_code', null)
+
+        if (sourceError) {
+          console.error(`Failed to update source table for issue ${issue.id}:`, sourceError)
+          failedResolves.push(issue.sr_assigned_to)
+          continue
+        }
+
+        // Update mapping issues table
+        const { error: mappingError } = await supabase
+          .from('import_employee_mapping_issues')
+          .update({ status: 'resolved', resolved_employee_code: matchedEmployee.employee_code })
+          .eq('id', issue.id)
+
+        if (mappingError) {
+          console.error(`Failed to resolve issue ${issue.id}:`, mappingError)
+          failedResolves.push(issue.sr_assigned_to)
+          continue
+        }
+
+        resolvedCount += 1
+      }
+
+      setMessage(
+        `Auto-resolved ${resolvedCount} mapping issue(s). ${failedResolves.length} could not be matched and are shown below.`,
+      )
+
+      if (resolvedCount > 0) {
+        await fetchIssues()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-resolve mapping issues.')
+    }
+  }, [issues, employees, fetchIssues])
+
+  const handleAutoResolveVasJcByCode = useCallback(async () => {
+    if (employees.length === 0) {
+      setError('No employees in master to match against.')
+      return
+    }
+
+    setMessage(null)
+    setError(null)
+
+    try {
+      const employeeCodeMap = new Map(
+        employees.map((emp) => [emp.employee_code.toLowerCase().trim(), emp]),
+      )
+
+      // Get all unmapped service_vas_jc_data entries
+      const vasJcIssues = issues.filter((issue) => issue.source_table === 'service_vas_jc_data')
+
+      if (vasJcIssues.length === 0) {
+        setMessage('No unmapped VAS JC entries found to resolve.')
+        return
+      }
+
+      let resolvedCount = 0
+      const failedResolves: string[] = []
+
+      for (const issue of vasJcIssues) {
+        if (!issue.sr_assigned_to) {
+          failedResolves.push('(no SR code)')
+          continue
+        }
+
+        const normalizedSrCode = issue.sr_assigned_to.toLowerCase().trim()
+        const matchedEmployee = employeeCodeMap.get(normalizedSrCode)
+
+        if (!matchedEmployee) {
+          failedResolves.push(issue.sr_assigned_to)
+          continue
+        }
+
+        // Update VAS JC table with matched employee code and name
+        const employeeBranch = normalizeBranch(matchedEmployee.location)
+        const updatePayload = {
+          employee_code: matchedEmployee.employee_code,
+          sr_assigned_to: matchedEmployee.employee_code,
+          ...(employeeBranch && { branch: employeeBranch }),
+        }
+
+        let vasQuery = supabase
+          .from('service_vas_jc_data')
+          .update(updatePayload)
+          .eq('branch', issue.branch)
+
+        if (issue.job_card_number) {
+          vasQuery = vasQuery.eq('job_card_number', issue.job_card_number)
+        }
+        if (issue.sr_assigned_to) {
+          vasQuery = vasQuery.eq('sr_assigned_to', issue.sr_assigned_to)
+        }
+
+        const { error: sourceError } = await vasQuery.is('employee_code', null)
+
+        if (sourceError) {
+          console.error(`Failed to update VAS JC for issue ${issue.id}:`, sourceError)
+          failedResolves.push(issue.sr_assigned_to)
+          continue
+        }
+
+        // Update mapping issues table
+        const { error: mappingError } = await supabase
+          .from('import_employee_mapping_issues')
+          .update({ status: 'resolved', resolved_employee_code: matchedEmployee.employee_code })
+          .eq('id', issue.id)
+
+        if (mappingError) {
+          console.error(`Failed to resolve issue ${issue.id}:`, mappingError)
+          failedResolves.push(issue.sr_assigned_to)
+          continue
+        }
+
+        resolvedCount += 1
+      }
+
+      setMessage(
+        `Assigned ${resolvedCount} VAS JC entry(ies) by employee code. ${failedResolves.length} could not be matched.`,
+      )
+
+      if (resolvedCount > 0) {
+        await fetchIssues()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-assign VAS JC entries.')
+    }
+  }, [issues, employees, fetchIssues])
+
+  const handleBulkAutoAssignAllVasJc = useCallback(async () => {
+    if (!window.confirm('Auto-assign names to ALL unmapped VAS JC entries based on employee codes?\n\nThis will process all records.')) {
+      return
+    }
+
+    if (employees.length === 0) {
+      setError('No employees in master to match against.')
+      return
+    }
+
+    setMessage(null)
+    setError(null)
+
+    try {
+      const employeeCodeMap = new Map(
+        employees.map((emp) => [emp.employee_code.toLowerCase().trim(), emp]),
+      )
+
+      // Get all unmapped VAS JC issues
+      const vasJcIssues = issues.filter((issue) => issue.source_table === 'service_vas_jc_data')
+
+      if (vasJcIssues.length === 0) {
+        setMessage('No unmapped VAS JC entries found.')
+        return
+      }
+
+      let resolvedCount = 0
+      let failedCount = 0
+      const failedCodes: string[] = []
+
+      for (const issue of vasJcIssues) {
+        if (!issue.sr_assigned_to) {
+          failedCount += 1
+          continue
+        }
+
+        const normalizedSrCode = issue.sr_assigned_to.toLowerCase().trim()
+        const matchedEmployee = employeeCodeMap.get(normalizedSrCode)
+
+        if (!matchedEmployee) {
+          failedCount += 1
+          failedCodes.push(issue.sr_assigned_to)
+          continue
+        }
+
+        const employeeBranch = normalizeBranch(matchedEmployee.location)
+        const updatePayload = {
+          employee_code: matchedEmployee.employee_code,
+          sr_assigned_to: matchedEmployee.employee_code,
+          ...(employeeBranch && { branch: employeeBranch }),
+        }
+
+        // Update service_vas_jc_data
+        const { error: sourceError } = await supabase
+          .from('service_vas_jc_data')
+          .update(updatePayload)
+          .eq('branch', issue.branch)
+          .eq('job_card_number', issue.job_card_number)
+          .eq('sr_assigned_to', issue.sr_assigned_to)
+          .is('employee_code', null)
+
+        if (sourceError) {
+          console.error(`Failed to update VAS JC for issue ${issue.id}:`, sourceError)
+          failedCount += 1
+          failedCodes.push(issue.sr_assigned_to)
+          continue
+        }
+
+        // Update mapping issue
+        const { error: mappingError } = await supabase
+          .from('import_employee_mapping_issues')
+          .update({ status: 'resolved', resolved_employee_code: matchedEmployee.employee_code })
+          .eq('id', issue.id)
+
+        if (mappingError) {
+          console.error(`Failed to resolve issue ${issue.id}:`, mappingError)
+          failedCount += 1
+          failedCodes.push(issue.sr_assigned_to)
+          continue
+        }
+
+        resolvedCount += 1
+      }
+
+      setMessage(
+        `Auto-assigned ${resolvedCount} VAS JC entries. ${failedCount} could not be matched${failedCodes.length > 0 ? ': ' + failedCodes.join(', ') : '.'}`,
+      )
+
+      if (resolvedCount > 0) {
+        await fetchIssues()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to bulk auto-assign VAS JC entries.')
+    }
+  }, [issues, employees, fetchIssues])
+
+  const handleAutoAssignAllPendencies = useCallback(async () => {
+    if (!window.confirm('Auto-assign ALL unmapped pendencies based on employee codes?\n\nThis will update:\n- All service_vas_jc_data entries\n- All job_card_closed_data entries\n\nContinue?')) {
+      return
+    }
+
+    if (employees.length === 0) {
+      setError('No employees in master to match against.')
+      return
+    }
+
+    setMessage(null)
+    setError(null)
+
+    try {
+      const employeeCodeMap = new Map(
+        employees.map((emp) => [emp.employee_code.toLowerCase().trim(), emp]),
+      )
+
+      let totalResolved = 0
+      let totalFailed = 0
+      const failedCodes: string[] = []
+
+      // Process all unmapped issues
+      for (const issue of issues) {
+        if (!issue.sr_assigned_to) {
+          totalFailed += 1
+          continue
+        }
+
+        const normalizedSrCode = issue.sr_assigned_to.toLowerCase().trim()
+        const matchedEmployee = employeeCodeMap.get(normalizedSrCode)
+
+        if (!matchedEmployee) {
+          totalFailed += 1
+          if (!failedCodes.includes(issue.sr_assigned_to)) {
+            failedCodes.push(issue.sr_assigned_to)
+          }
+          continue
+        }
+
+        const employeeBranch = normalizeBranch(matchedEmployee.location)
+        const updatePayload = {
+          employee_code: matchedEmployee.employee_code,
+          sr_assigned_to: matchedEmployee.employee_code,
+          ...(employeeBranch && { branch: employeeBranch }),
+        }
+
+        // Update the source table (could be service_vas_jc_data or job_card_closed_data)
+        const { error: sourceError } = await supabase
+          .from(issue.source_table)
+          .update(updatePayload)
+          .eq('branch', issue.branch)
+          .eq('sr_assigned_to', issue.sr_assigned_to)
+          .is('employee_code', null)
+
+        if (sourceError) {
+          console.error(`Failed to update ${issue.source_table} for issue ${issue.id}:`, sourceError)
+          totalFailed += 1
+          if (!failedCodes.includes(issue.sr_assigned_to)) {
+            failedCodes.push(issue.sr_assigned_to)
+          }
+          continue
+        }
+
+        // Update mapping issue
+        const { error: mappingError } = await supabase
+          .from('import_employee_mapping_issues')
+          .update({ status: 'resolved', resolved_employee_code: matchedEmployee.employee_code })
+          .eq('id', issue.id)
+
+        if (mappingError) {
+          console.error(`Failed to resolve issue ${issue.id}:`, mappingError)
+          totalFailed += 1
+          if (!failedCodes.includes(issue.sr_assigned_to)) {
+            failedCodes.push(issue.sr_assigned_to)
+          }
+          continue
+        }
+
+        totalResolved += 1
+      }
+
+      setMessage(
+        `Auto-assigned ${totalResolved} pendency(ies). ${totalFailed} could not be matched${failedCodes.length > 0 ? ': ' + failedCodes.join(', ') : '.'}`,
+      )
+
+      if (totalResolved > 0) {
+        await fetchIssues()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to auto-assign all pendencies.')
+    }
+  }, [issues, employees, fetchIssues])
+
+  const handleDeleteEmployee = useCallback(async (employee: EmployeeRow) => {
+    if (!window.confirm(`Delete ${employee.employee_code} - ${employee.employee_name}?`)) {
+      return
+    }
+
+    setDeletingEmployeeId(employee.id)
+    setMessage(null)
+    setError(null)
+
+    const { error: deleteError } = await supabase
+      .from('employee_master')
+      .delete()
+      .eq('id', employee.id)
+
+    if (deleteError) {
+      setError(deleteError.message)
+      setDeletingEmployeeId(null)
+      return
+    }
+
+    setMessage(`Deleted ${employee.employee_code}.`)
+    setDeletingEmployeeId(null)
+    await fetchEmployees()
+  }, [fetchEmployees])
 
   useEffect(() => {
     void fetchEmployees()
     void fetchIssues()
-    void fetchRateCards()
-  }, [fetchEmployees, fetchIssues, fetchRateCards])
-
-  const handleUploadRateFile = useCallback(async (file: File) => {
-    setUploadingRates(true)
-    setMessage(null)
-    setError(null)
-
-    try {
-      const parsedRows = await parseRateWorkbook(file)
-      const payloadRows: RateRowInput[] = parsedRows.map((row) => ({
-        modelName: row.modelName,
-        panelLabel: row.panelLabel,
-        ppRate: row.ppRate,
-        pmRate: row.pmRate,
-        psRate: row.psRate,
-      }))
-
-      const cardName = rateUploadConfig.name.trim() || `Water Base Paint Labour - Category ${rateUploadConfig.cityCategory}`
-      const createRes = await createRateCardWithRows({
-        name: cardName,
-        cityCategory: rateUploadConfig.cityCategory,
-        notes: rateUploadConfig.notes,
-        rows: payloadRows,
-        setActive: rateUploadConfig.setActive,
-      })
-
-      if (createRes.error) throw new Error(createRes.error)
-
-      setMessage(`Uploaded ${payloadRows.length.toLocaleString()} rate rows to card ${createRes.data?.name ?? cardName}.`)
-      setRateUploadConfig((prev) => ({ ...prev, name: '', notes: '' }))
-      await fetchRateCards()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload rate card file.')
-    } finally {
-      setUploadingRates(false)
-    }
-  }, [fetchRateCards, rateUploadConfig])
-
-  const handleActivateRateCard = useCallback(async (cardId: string) => {
-    setActivatingRateCardId(cardId)
-    setMessage(null)
-    setError(null)
-
-    try {
-      const res = await activateRateCard(cardId)
-      if (res.error) throw new Error(res.error)
-      setMessage('Rate card activated successfully.')
-      await fetchRateCards()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to activate rate card.')
-    } finally {
-      setActivatingRateCardId(null)
-    }
-  }, [fetchRateCards])
-
-  const handleExportRateFile = useCallback(async () => {
-    setExportingRates(true)
-    setMessage(null)
-    setError(null)
-
-    try {
-      const category = rateUploadConfig.cityCategory.trim()
-      const res = await exportActiveRateRowsByCityCategory(category)
-      if (res.error || !res.data) {
-        throw new Error(res.error ?? 'Failed to export rate file.')
-      }
-
-      const rows = res.data
-      const sheetRows: Array<[string, string, number | string, number | string, number | string]> = [
-        ['model', 'panel', 'paint_type_pp_pearl', 'paint_type_pm_metallic', 'paint_type_ps_solid'],
-      ]
-
-      rows.forEach((row) => {
-        sheetRows.push([
-          row.modelName,
-          row.panelLabel,
-          row.ppRate ?? '',
-          row.pmRate ?? '',
-          row.psRate ?? '',
-        ])
-      })
-
-      const worksheet = XLSX.utils.aoa_to_sheet(sheetRows)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Rate Card')
-
-      const fileName = `autodoc_rate_card_category_${category || 'A'}.xlsx`
-      XLSX.writeFile(workbook, fileName)
-
-      if (rows.length > 0) {
-        setMessage(`Exported ${rows.length.toLocaleString()} rate rows for category ${category}.`)
-      } else {
-        setMessage(`No active rate card rows found for category ${category}. Exported editable template.`)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export rate file.')
-    } finally {
-      setExportingRates(false)
-    }
-  }, [rateUploadConfig.cityCategory])
+  }, [fetchEmployees, fetchIssues])
 
   const handleUploadFile = useCallback(async (file: File) => {
     setUploading(true)
@@ -497,12 +731,13 @@ export default function SettingsPage() {
       employee_name: employee.employee_name.trim(),
       location: employee.location?.trim() || null,
       department: employee.department?.trim() || null,
+      fuel_type: employee.fuel_type?.trim() || null,
     }
 
     if (!payload.employee_code || !payload.employee_name) {
       setError('Employee code and employee name are required.')
       setSavingCode(null)
-      return
+      return false
     }
 
     const { error: saveError } = await supabase
@@ -517,6 +752,8 @@ export default function SettingsPage() {
     }
 
     setSavingCode(null)
+
+    return !saveError
   }, [fetchEmployees])
 
   const handleAddEmployee = useCallback(async () => {
@@ -528,6 +765,7 @@ export default function SettingsPage() {
       employee_name: newEmployee.employee_name.trim(),
       location: newEmployee.location.trim() || null,
       department: newEmployee.department.trim() || null,
+      fuel_type: newEmployee.fuel_type.trim() || getDefaultFuelType(newEmployee.employee_code.trim()) || null,
     }
 
     if (!payload.employee_code || !payload.employee_name) {
@@ -544,7 +782,7 @@ export default function SettingsPage() {
       return
     }
 
-    setNewEmployee({ employee_code: '', employee_name: '', location: '', department: '' })
+    setNewEmployee({ employee_code: '', employee_name: '', location: '', department: '', fuel_type: '' })
     setMessage(`Added ${payload.employee_code}.`)
     await fetchEmployees()
   }, [fetchEmployees, newEmployee])
@@ -699,14 +937,23 @@ export default function SettingsPage() {
               <h2 className="text-sm font-semibold text-gray-900">Employee Master</h2>
               <p className="mt-0.5 text-xs text-gray-500">Expected headers: SA CODE, SA NAME, location, department.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {uploading ? 'Uploading...' : 'Upload Employee File'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleExportEmployees()}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Export Employees
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {uploading ? 'Uploading...' : 'Upload Employee File'}
+              </button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -723,7 +970,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="px-5 py-4">
-            <div className="grid grid-cols-4 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="grid grid-cols-5 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
               <input
                 value={newEmployee.employee_code}
                 onChange={(event) => setNewEmployee((prev) => ({ ...prev, employee_code: event.target.value }))}
@@ -742,11 +989,17 @@ export default function SettingsPage() {
                 placeholder="location"
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
+              <input
+                value={newEmployee.department}
+                onChange={(event) => setNewEmployee((prev) => ({ ...prev, department: event.target.value }))}
+                placeholder="department"
+                className="rounded border border-gray-300 px-2 py-1 text-xs"
+              />
               <div className="flex items-center gap-2">
                 <input
-                  value={newEmployee.department}
-                  onChange={(event) => setNewEmployee((prev) => ({ ...prev, department: event.target.value }))}
-                  placeholder="department"
+                  value={newEmployee.fuel_type}
+                  onChange={(event) => setNewEmployee((prev) => ({ ...prev, fuel_type: event.target.value }))}
+                  placeholder="Fuel Type (PV/EV)"
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                 />
                 <button
@@ -767,17 +1020,18 @@ export default function SettingsPage() {
                     <th className="px-3 py-2 font-semibold">SA NAME</th>
                     <th className="px-3 py-2 font-semibold">Location</th>
                     <th className="px-3 py-2 font-semibold">Department</th>
+                    <th className="px-3 py-2 font-semibold">Fuel Type</th>
                     <th className="px-3 py-2 font-semibold">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loadingEmployees ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={5}>Loading employees...</td>
+                      <td className="px-3 py-3 text-gray-400" colSpan={6}>Loading employees...</td>
                     </tr>
                   ) : employees.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={5}>No employees found.</td>
+                      <td className="px-3 py-3 text-gray-400" colSpan={6}>No employees found.</td>
                     </tr>
                   ) : (
                     employees.map((employee) => (
@@ -785,6 +1039,7 @@ export default function SettingsPage() {
                         <td className="px-3 py-2">
                           <input
                             value={employee.employee_code}
+                            disabled={editingEmployeeId !== employee.id}
                             onChange={(event) => {
                               const value = event.target.value
                               setEmployees((prev) =>
@@ -793,12 +1048,13 @@ export default function SettingsPage() {
                                 ),
                               )
                             }}
-                            className="w-full rounded border border-gray-300 px-2 py-1"
+                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
                           />
                         </td>
                         <td className="px-3 py-2">
                           <input
                             value={employee.employee_name}
+                            disabled={editingEmployeeId !== employee.id}
                             onChange={(event) => {
                               const value = event.target.value
                               setEmployees((prev) =>
@@ -807,12 +1063,13 @@ export default function SettingsPage() {
                                 ),
                               )
                             }}
-                            className="w-full rounded border border-gray-300 px-2 py-1"
+                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
                           />
                         </td>
                         <td className="px-3 py-2">
                           <input
                             value={employee.location ?? ''}
+                            disabled={editingEmployeeId !== employee.id}
                             onChange={(event) => {
                               const value = event.target.value
                               setEmployees((prev) =>
@@ -821,12 +1078,13 @@ export default function SettingsPage() {
                                 ),
                               )
                             }}
-                            className="w-full rounded border border-gray-300 px-2 py-1"
+                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
                           />
                         </td>
                         <td className="px-3 py-2">
                           <input
                             value={employee.department ?? ''}
+                            disabled={editingEmployeeId !== employee.id}
                             onChange={(event) => {
                               const value = event.target.value
                               setEmployees((prev) =>
@@ -835,18 +1093,71 @@ export default function SettingsPage() {
                                 ),
                               )
                             }}
-                            className="w-full rounded border border-gray-300 px-2 py-1"
+                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            onClick={() => void handleSaveEmployee(employee)}
-                            disabled={savingCode === employee.employee_code}
-                            className="rounded bg-blue-600 px-3 py-1 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {savingCode === employee.employee_code ? 'Saving...' : 'Save'}
-                          </button>
+                          <input
+                            value={employee.fuel_type ?? ''}
+                            disabled={editingEmployeeId !== employee.id}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setEmployees((prev) =>
+                                prev.map((row) =>
+                                  row.id === employee.id ? { ...row, fuel_type: value } : row,
+                                ),
+                              )
+                            }}
+                            placeholder="PV/EV"
+                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-2">
+                            {editingEmployeeId === employee.id ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const saved = await handleSaveEmployee(employee)
+                                    if (saved) {
+                                      setEditingEmployeeId(null)
+                                    }
+                                  }}
+                                  disabled={savingCode === employee.employee_code}
+                                  className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {savingCode === employee.employee_code ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingEmployeeId(null)
+                                    void fetchEmployees()
+                                  }}
+                                  className="rounded bg-gray-500 px-3 py-1 text-xs font-medium text-white"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEditingEmployeeId(employee.id)}
+                                className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteEmployee(employee)}
+                              disabled={deletingEmployeeId === employee.id || savingCode === employee.employee_code}
+                              className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {deletingEmployeeId === employee.id ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -860,146 +1171,50 @@ export default function SettingsPage() {
         <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">AutoDoc Rate Cards</h2>
-              <p className="mt-0.5 text-xs text-gray-500">
-                Upload model-wise panel labour rates (PP / PM / PS) and activate per city category.
-              </p>
+              <h2 className="text-sm font-semibold text-gray-900">Unmapped SR Entries (All Pendencies)</h2>
+              <p className="mt-0.5 text-xs text-gray-500">All issues captured while importing VAS and JC closed data, including open and resolved.</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => void handleExportRateFile()}
-                disabled={exportingRates || uploadingRates}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void handleAutoAssignAllPendencies()}
+                disabled={loadingIssues || issues.length === 0 || loadingEmployees}
+                className="rounded-lg bg-red-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {exportingRates ? 'Exporting...' : 'Export'}
+                ⚡ Auto-Assign ALL Pendencies
               </button>
               <button
                 type="button"
-                onClick={() => rateFileInputRef.current?.click()}
-                disabled={uploadingRates || exportingRates}
+                onClick={() => void handleBulkAutoAssignAllVasJc()}
+                disabled={loadingIssues || issues.length === 0 || loadingEmployees}
+                className="rounded-lg bg-red-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Auto-Assign ALL VAS JC
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAutoResolveVasJcByCode()}
+                disabled={loadingIssues || issues.length === 0 || loadingEmployees}
+                className="rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Assign VAS JC Names
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAutoResolveByCode()}
+                disabled={loadingIssues || issues.length === 0 || loadingEmployees}
+                className="rounded-lg bg-orange-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Auto-Resolve by Code
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExportIssues()}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {uploadingRates ? 'Importing...' : 'Import'}
+                Export Issues
               </button>
             </div>
-            <input
-              ref={rateFileInputRef}
-              type="file"
-              accept=".xlsx,.csv"
-              className="sr-only"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) {
-                  void handleUploadRateFile(file)
-                }
-                event.target.value = ''
-              }}
-            />
-          </div>
-
-          <div className="space-y-4 px-5 py-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-700">Card Name</label>
-                <input
-                  value={rateUploadConfig.name}
-                  onChange={(event) => setRateUploadConfig((prev) => ({ ...prev, name: event.target.value }))}
-                  placeholder="Water base paint labour rates"
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-700">City Category</label>
-                <select
-                  value={rateUploadConfig.cityCategory}
-                  onChange={(event) => setRateUploadConfig((prev) => ({ ...prev, cityCategory: event.target.value }))}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                >
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-700">Notes</label>
-                <input
-                  value={rateUploadConfig.notes}
-                  onChange={(event) => setRateUploadConfig((prev) => ({ ...prev, notes: event.target.value }))}
-                  placeholder="e.g. incl. 6% water-base premium"
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                />
-              </div>
-              <div className="flex items-end">
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={rateUploadConfig.setActive}
-                    onChange={(event) => setRateUploadConfig((prev) => ({ ...prev, setActive: event.target.checked }))}
-                    className="rounded border-gray-300"
-                  />
-                  Activate after upload
-                </label>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
-                    <th className="px-3 py-2 font-semibold">Card Name</th>
-                    <th className="px-3 py-2 font-semibold">Category</th>
-                    <th className="px-3 py-2 font-semibold">Status</th>
-                    <th className="px-3 py-2 font-semibold">Created</th>
-                    <th className="px-3 py-2 font-semibold">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loadingRateCards ? (
-                    <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={5}>Loading rate cards...</td>
-                    </tr>
-                  ) : rateCards.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={5}>No rate cards uploaded yet.</td>
-                    </tr>
-                  ) : (
-                    rateCards.map((card) => (
-                      <tr key={card.id} className="border-b border-gray-100">
-                        <td className="px-3 py-2 font-medium text-gray-800">{card.name}</td>
-                        <td className="px-3 py-2">{card.city_category}</td>
-                        <td className="px-3 py-2">
-                          <span className={[
-                            'rounded-full px-2 py-0.5 text-[11px] font-semibold',
-                            card.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600',
-                          ].join(' ')}>
-                            {card.is_active ? 'Active' : card.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-gray-500">{new Date(card.created_at).toLocaleDateString('en-IN')}</td>
-                        <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            onClick={() => void handleActivateRateCard(card.id)}
-                            disabled={card.is_active || activatingRateCardId === card.id}
-                            className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {activatingRateCardId === card.id ? 'Activating...' : card.is_active ? 'Active' : 'Activate'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-4">
-            <h2 className="text-sm font-semibold text-gray-900">Unmapped SR Entries</h2>
-            <p className="mt-0.5 text-xs text-gray-500">Open issues captured while importing VAS and JC closed data.</p>
           </div>
 
           {/* Mapping Stats */}

@@ -10,11 +10,16 @@ import { exportToCSV, generateExportFilename, formatCurrencyForExport } from '..
 interface ServiceTypeReportProps {
   branch: BranchFilter
   dateFilter: DateRangeFilter
+  serviceTypeFilter?: 'ALL' | string | string[]
 }
 
 type SortKey = 'serviceType' | 'totalLabourRevenue' | 'jobCardCount' | 'avgLabourRevenue'
 
-export default function ServiceTypeLabourRevenueReport({ branch, dateFilter }: ServiceTypeReportProps) {
+export default function ServiceTypeLabourRevenueReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+}: ServiceTypeReportProps) {
   const [rows, setRows] = useState<ServiceTypeLabourRevenue[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +32,7 @@ export default function ServiceTypeLabourRevenueReport({ branch, dateFilter }: S
     setIsLoading(true)
     setError(null)
 
-    getServiceTypeLabourRevenue(branch, dateFilter)
+    getServiceTypeLabourRevenue(branch, dateFilter, serviceTypeFilter)
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -44,7 +49,7 @@ export default function ServiceTypeLabourRevenueReport({ branch, dateFilter }: S
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
@@ -116,7 +121,7 @@ export default function ServiceTypeLabourRevenueReport({ branch, dateFilter }: S
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Service Type Wise Labour Revenue</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Labour revenue by service type from PSF Revenue Report data using closed_date_time.
+            Labour revenue by service type from PSF Revenue Report data using invoice date.
           </p>
         </div>
 

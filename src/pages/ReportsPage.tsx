@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { REPORT_BRANCH_OPTIONS, matchesBranchSelection } from '../lib/branches'
-import { supabase } from '../lib/supabase'
-import { generateRepairPPT } from '../lib/generators/generatePPT'
-import { generateEstimateExcel } from '../lib/generators/generateExcel'
-import { listJobCardSummaries } from '../lib/api'
+import { REPORT_BRANCH_OPTIONS } from '../lib/branches'
 import {
   type BranchFilter,
   type DateRangeFilter,
   type DateRangePreset,
+  type DateFieldType,
+  getLabourKpiSummary,
   getManpowerWiseFilterOptions,
+  getServiceTypeCounts,
 } from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
 import {
@@ -36,14 +35,6 @@ interface HeaderStats {
   openTransitOrders: number
 }
 
-interface ExportLookupRow {
-  jobCardId: string
-  jcNumber: string
-  regNumber: string
-}
-
-const QUERY_PAGE_SIZE = 1000
-
 function getTodayDateInputValue(): string {
   const now = new Date()
   const year = now.getFullYear()
@@ -57,12 +48,14 @@ export default function ReportsPage() {
   const params = useParams<{ categoryId?: string; reportId?: string }>()
 
   const [branch, setBranch] = useState<BranchFilter>('ALL')
-  const branchOptions = [...REPORT_BRANCH_OPTIONS]
+  const branchOptions: string[] = [...REPORT_BRANCH_OPTIONS]
+  const [fuelType, setFuelType] = useState<'ALL' | 'PV' | 'EV'>('ALL')
 
   const [datePreset, setDatePreset] = useState<DateRangePreset>('this-month')
   const [customFrom, setCustomFrom] = useState(getTodayDateInputValue)
   const [customTo, setCustomTo] = useState(getTodayDateInputValue)
-  const [serviceTypeFilter, setServiceTypeFilter] = useState<'ALL' | string>('ALL')
+  const [dateFieldType, setDateFieldType] = useState<DateFieldType>('closed_date')
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string[]>([])
   const [parentProductLineFilter, setParentProductLineFilter] = useState<'ALL' | string>('ALL')
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>([])
   const [parentProductLineOptions, setParentProductLineOptions] = useState<string[]>([])
@@ -73,11 +66,6 @@ export default function ReportsPage() {
     openTransitOrders: 0,
   })
   const [headerStatsLoading, setHeaderStatsLoading] = useState(true)
-  const [exportLookup, setExportLookup] = useState('')
-  const [matchedExportJob, setMatchedExportJob] = useState<ExportLookupRow | null>(null)
-  const [findingExportJob, setFindingExportJob] = useState(false)
-  const [exportingKeys, setExportingKeys] = useState<Set<string>>(new Set())
-  const [exportError, setExportError] = useState<string | null>(null)
 
   const resolvedCategoryId = useMemo<ReportCategoryId>(() => {
     return isCategoryId(params.categoryId) ? params.categoryId : DEFAULT_CATEGORY_ID
@@ -96,14 +84,43 @@ export default function ReportsPage() {
   }, [params.reportId, resolvedCategoryId])
 
   const isManpowerReportSelected = selectedReport?.id === 'manpower-wise-labour-revenue'
+  const isServiceTypeWiseReportSelected = selectedReport?.id === 'service-type-labour-revenue'
+  const isBranchLabourRevenueReportSelected = selectedReport?.id === 'branch-labour-revenue'
+  const shouldShowServiceTypeFilter =
+    isManpowerReportSelected || isServiceTypeWiseReportSelected || isBranchLabourRevenueReportSelected
+
+  const canApplyFuelTypeFilter = branch === 'Sitapura' || branch === 'ALL'
+
+  const effectiveBranchFilter = useMemo<BranchFilter>(() => {
+    if (branch === 'ALL' && fuelType !== 'ALL') {
+      return `Sitapura ${fuelType}`
+    }
+
+    if (branch === 'Sitapura' && fuelType !== 'ALL') {
+      return `Sitapura ${fuelType}`
+    }
+
+    return branch
+  }, [branch, fuelType])
+
+  const effectiveDateFieldType = useMemo<DateFieldType>(() => {
+    if (resolvedCategoryId === 'labour-revenue') {
+      return 'invoice_date'
+    }
+
+    return dateFieldType
+  }, [dateFieldType, resolvedCategoryId])
+
+  const showDateFieldTypeFilter = resolvedCategoryId !== 'labour-revenue'
 
   const dateFilter = useMemo<DateRangeFilter>(
     () => ({
       preset: datePreset,
       customFrom,
       customTo,
+      dateFieldType: effectiveDateFieldType,
     }),
-    [customFrom, customTo, datePreset],
+    [customFrom, customTo, datePreset, effectiveDateFieldType],
   )
 
   const customDateError = useMemo(() => {
@@ -149,109 +166,27 @@ export default function ReportsPage() {
     const loadHeaderStats = async () => {
       setHeaderStatsLoading(true)
 
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      try {
+        const summary = await getLabourKpiSummary(
+          effectiveBranchFilter,
+          dateFilter,
+          shouldShowServiceTypeFilter ? serviceTypeFilter : 'ALL',
+        )
 
-      const fetchAllRows = async (
-        buildQuery: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
-      ): Promise<Record<string, unknown>[]> => {
-        let from = 0
-        const rows: Record<string, unknown>[] = []
-
-        while (true) {
-          const { data, error } = await buildQuery(from, from + QUERY_PAGE_SIZE - 1)
-
-          if (error) {
-            throw new Error(error.message)
-          }
-
-          const batch = (data as Record<string, unknown>[] | null) ?? []
-          rows.push(...batch)
-
-          if (batch.length < QUERY_PAGE_SIZE) {
-            break
-          }
-
-          from += QUERY_PAGE_SIZE
-        }
-
-        return rows
-      }
-
-      const includeBranch = (rawBranch: unknown) => matchesBranchSelection(rawBranch, branch)
-
-      const results = await Promise.allSettled([
-        fetchAllRows((from, to) =>
-          supabase
-            .from('job_card_closed_data')
-            .select('branch, total_invoice_amount')
-            .gte('closed_date_time', startOfMonth)
-            .range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase
-            .from('vw_parts_stock_health')
-            .select('branch')
-            .lt('weeks_of_supply', 2)
-            .range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase
-            .from('service_parts_order_data')
-            .select('branch')
-            .gt('intransit_qty', 0)
-            .range(from, to),
-        ),
-      ])
-
-      if (!active) return
-
-      const jcRows = results[0].status === 'fulfilled' ? results[0].value : []
-      const filteredJcRows = jcRows.filter((row) => includeBranch((row as { branch?: unknown }).branch))
-      const monthlyJobCards = filteredJcRows.length
-
-      let monthlyRevenue = 0
-      if (filteredJcRows.length > 0) {
-        monthlyRevenue = filteredJcRows.reduce((sum, row) => {
-          const typedRow = row as { total_invoice_amount?: unknown }
-          const raw = typedRow.total_invoice_amount
-          if (typeof raw === 'number') return sum + raw
-          if (raw == null) return sum
-          const parsed = Number(raw)
-          return Number.isFinite(parsed) ? sum + parsed : sum
-        }, 0)
-      }
-
-      const partsRows = results[1].status === 'fulfilled' ? results[1].value : []
-      const partsNeedingReorder = partsRows.reduce((count, row) => {
-        const typedRow = row as { branch?: unknown }
-        return includeBranch(typedRow.branch) ? count + 1 : count
-      }, 0)
-
-      const inTransitRows = results[2].status === 'fulfilled' ? results[2].value : []
-      const openTransitOrders = inTransitRows.reduce((count, row) => {
-        const typedRow = row as { branch?: unknown }
-        return includeBranch(typedRow.branch) ? count + 1 : count
-      }, 0)
-
-      if (results[0].status !== 'fulfilled' && results[1].status !== 'fulfilled' && results[2].status !== 'fulfilled') {
+        if (!active) return
+        setHeaderStats(summary)
+      } catch {
+        if (!active) return
         setHeaderStats({
           monthlyJobCards: 0,
           monthlyRevenue: 0,
           partsNeedingReorder: 0,
           openTransitOrders: 0,
         })
+      } finally {
+        if (!active) return
         setHeaderStatsLoading(false)
-        return
       }
-
-      setHeaderStats({
-        monthlyJobCards,
-        monthlyRevenue,
-        partsNeedingReorder,
-        openTransitOrders,
-      })
-      setHeaderStatsLoading(false)
     }
 
     void loadHeaderStats()
@@ -259,118 +194,79 @@ export default function ReportsPage() {
     return () => {
       active = false
     }
-  }, [branch])
+  }, [
+    dateFilter,
+    effectiveBranchFilter,
+    serviceTypeFilter,
+    shouldShowServiceTypeFilter,
+  ])
 
   useEffect(() => {
     if (branch === 'ALL') return
-    if ((branchOptions as string[]).includes(branch)) return
+    if (branchOptions.includes(branch)) return
     setBranch('ALL')
   }, [branch, branchOptions])
 
   useEffect(() => {
-    if (!isManpowerReportSelected) {
+    if (canApplyFuelTypeFilter) return
+    if (fuelType === 'ALL') return
+    setFuelType('ALL')
+  }, [canApplyFuelTypeFilter, fuelType])
+
+  useEffect(() => {
+    if (!shouldShowServiceTypeFilter) {
       setServiceTypeOptions([])
+      setServiceTypeFilter([])
       setParentProductLineOptions([])
-      setServiceTypeFilter('ALL')
       setParentProductLineFilter('ALL')
       return
     }
 
     let active = true
 
-    getManpowerWiseFilterOptions(branch, dateFilter)
-      .then((options) => {
-        if (!active) return
-        setServiceTypeOptions(options.serviceTypes)
-        setParentProductLineOptions(options.parentProductLines)
-        setServiceTypeFilter((prev) => (prev === 'ALL' || options.serviceTypes.includes(prev) ? prev : 'ALL'))
-        setParentProductLineFilter((prev) =>
-          prev === 'ALL' || options.parentProductLines.includes(prev) ? prev : 'ALL',
-        )
-      })
-      .catch(() => {
-        if (!active) return
-        setServiceTypeOptions([])
-        setParentProductLineOptions([])
-        setServiceTypeFilter('ALL')
-        setParentProductLineFilter('ALL')
-      })
+    if (isManpowerReportSelected) {
+      getManpowerWiseFilterOptions(effectiveBranchFilter, dateFilter)
+        .then((options) => {
+          if (!active) return
+          setServiceTypeOptions(options.serviceTypes)
+          setParentProductLineOptions(options.parentProductLines)
+          setServiceTypeFilter((prev) => prev.filter((value) => options.serviceTypes.includes(value)))
+          setParentProductLineFilter((prev) =>
+            prev === 'ALL' || options.parentProductLines.includes(prev) ? prev : 'ALL',
+          )
+        })
+        .catch(() => {
+          if (!active) return
+          setServiceTypeOptions([])
+          setParentProductLineOptions([])
+          setServiceTypeFilter([])
+          setParentProductLineFilter('ALL')
+        })
+    } else {
+      getServiceTypeCounts(effectiveBranchFilter, dateFilter)
+        .then((counts) => {
+          if (!active) return
+          const options = counts
+            .map((item) => item.serviceType)
+            .filter((value) => value !== 'Unknown')
+          setServiceTypeOptions(options)
+          setServiceTypeFilter((prev) => prev.filter((value) => options.includes(value)))
+          setParentProductLineOptions([])
+          setParentProductLineFilter('ALL')
+        })
+        .catch(() => {
+          if (!active) return
+          setServiceTypeOptions([])
+          setServiceTypeFilter([])
+          setParentProductLineOptions([])
+          setParentProductLineFilter('ALL')
+        })
+    }
 
     return () => {
       active = false
     }
-  }, [branch, dateFilter, isManpowerReportSelected])
-
-  const handleFindExportJob = async () => {
-    const needle = exportLookup.trim().toLowerCase()
-    if (!needle) {
-      setExportError('Enter JC number, registration number, or job card UUID.')
-      return
-    }
-
-    setFindingExportJob(true)
-    setExportError(null)
-    setMatchedExportJob(null)
-
-    const byUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (byUuidPattern.test(needle)) {
-      setMatchedExportJob({ jobCardId: needle, jcNumber: needle, regNumber: 'Direct ID' })
-      setFindingExportJob(false)
-      return
-    }
-
-    const res = await listJobCardSummaries()
-    setFindingExportJob(false)
-
-    if (res.error || !res.data) {
-      setExportError(res.error ?? 'Unable to load job cards for lookup.')
-      return
-    }
-
-    const match = res.data.find((row) => {
-      const jc = (row.jc_number ?? '').toLowerCase()
-      const reg = (row.reg_number ?? '').toLowerCase()
-      return jc.includes(needle) || reg.includes(needle)
-    })
-
-    if (!match?.job_card_id || !match.jc_number || !match.reg_number) {
-      setExportError('No matching job card found.')
-      return
-    }
-
-    setMatchedExportJob({
-      jobCardId: match.job_card_id,
-      jcNumber: match.jc_number,
-      regNumber: match.reg_number,
-    })
-  }
-
-  const handleExport = async (kind: 'pre' | 'post' | 'excel') => {
-    if (!matchedExportJob?.jobCardId) {
-      setExportError('Find a job card first.')
-      return
-    }
-    const key = `reports-export-${kind}`
-    setExportError(null)
-    setExportingKeys((prev) => new Set(prev).add(key))
-
-    try {
-      if (kind === 'excel') {
-        await generateEstimateExcel(matchedExportJob.jobCardId)
-      } else {
-        await generateRepairPPT(matchedExportJob.jobCardId, kind === 'pre' ? 'pre-repair' : 'post-repair')
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Export failed.'
-      setExportError(message)
-    } finally {
-      setExportingKeys((prev) => {
-        const next = new Set(prev)
-        next.delete(key)
-        return next
-      })
-    }
-  }
+  }, [dateFilter, effectiveBranchFilter, isManpowerReportSelected, shouldShowServiceTypeFilter])
 
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
@@ -465,6 +361,10 @@ export default function ReportsPage() {
           onBranchChange={setBranch}
           branchOptions={branchOptions}
           branchError={null}
+          fuelType={fuelType}
+          onFuelTypeChange={setFuelType}
+          disableFuelType={!canApplyFuelTypeFilter}
+          showServiceTypeFilter={shouldShowServiceTypeFilter}
           showManpowerFilters={isManpowerReportSelected}
           serviceTypeFilter={serviceTypeFilter}
           onServiceTypeFilterChange={setServiceTypeFilter}
@@ -474,6 +374,9 @@ export default function ReportsPage() {
           parentProductLineOptions={parentProductLineOptions}
           datePreset={datePreset}
           onDatePresetChange={setDatePreset}
+          dateFieldType={effectiveDateFieldType}
+          onDateFieldTypeChange={setDateFieldType}
+          showDateFieldTypeFilter={showDateFieldTypeFilter}
           customFrom={customFrom}
           onCustomFromChange={setCustomFrom}
           customTo={customTo}
@@ -481,77 +384,13 @@ export default function ReportsPage() {
           customDateError={customDateError}
         />
 
-        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-gray-900">AutoDoc Export Controls</h2>
-            <span className="text-xs text-gray-500">Use this from Reports for pre/post PPT and estimate exports.</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={exportLookup}
-              onChange={(event) => setExportLookup(event.target.value)}
-              placeholder="Enter JC No, Reg No, or Job Card ID"
-              className="h-9 w-full rounded-lg border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:w-96"
-            />
-            <button
-              type="button"
-              onClick={() => void handleFindExportJob()}
-              disabled={findingExportJob}
-              className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {findingExportJob ? 'Finding…' : 'Find'}
-            </button>
-          </div>
-
-          {matchedExportJob && (
-            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-              Matched: {matchedExportJob.jcNumber} • {matchedExportJob.regNumber}
-            </div>
-          )}
-
-          {exportError && (
-            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {exportError}
-            </div>
-          )}
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleExport('pre')}
-              disabled={!matchedExportJob || exportingKeys.size > 0}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {exportingKeys.has('reports-export-pre') ? 'Generating…' : 'Generate Pre-Repair PPT'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport('post')}
-              disabled={!matchedExportJob || exportingKeys.size > 0}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {exportingKeys.has('reports-export-post') ? 'Generating…' : 'Generate Post-Repair PPT'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport('excel')}
-              disabled={!matchedExportJob || exportingKeys.size > 0}
-              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-            >
-              {exportingKeys.has('reports-export-excel') ? 'Generating…' : 'Generate Estimate Excel'}
-            </button>
-          </div>
-        </section>
-
         {customDateError ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700 shadow-sm">
             Fix the date range validation to view the selected report.
           </div>
         ) : selectedReport ? (
           <selectedReport.Component
-            branch={branch}
+            branch={effectiveBranchFilter}
             dateFilter={dateFilter}
             serviceTypeFilter={serviceTypeFilter}
             parentProductLineFilter={parentProductLineFilter}

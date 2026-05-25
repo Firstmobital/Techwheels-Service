@@ -50,6 +50,11 @@ const JC_CLOSED_SPECS = [
     aliases: ['Closed Date Time', 'Job Card Closed Date'],
   },
   {
+    dbCol: 'invoice_date',
+    required: false,
+    aliases: ['Invoice Date'],
+  },
+  {
     dbCol: 'first_name',
     required: true,
     aliases: ['First Name', 'Name'],
@@ -112,7 +117,7 @@ const NUMERIC_COLUMNS = new Set([
 
 const TIMESTAMP_COLUMNS = new Set(['created_date_time', 'closed_date_time'])
 
-const DATE_COLUMNS = new Set(['vehicle_sale_date', 'last_service_date'])
+const DATE_COLUMNS = new Set(['vehicle_sale_date', 'last_service_date', 'invoice_date'])
 
 export interface JcClosedParseError {
   rowNumber: number
@@ -196,6 +201,16 @@ function parseTimestampValue(value: unknown, fieldName: string): string | null {
     return toIsoFromParts(`${y}-${m}-${d}`, `${hh}:${mm}:${ss}`)
   }
 
+  // Handle DD/MM/YY HH:MM or DD/MM/YYYY HH:MM format (Indian date format)
+  // Also handle variable-length hour/minute (H:MM, H:M, HH:MM, etc.)
+  const ddmmyyHms = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (ddmmyyHms) {
+    const [, d, m, y, hh = '00', mm = '00', ss = '00'] = ddmmyyHms
+    const yearNum = parseInt(y, 10)
+    const yearStr = y.length === 2 ? (yearNum > 50 ? `19${y}` : `20${y}`) : y
+    return toIsoFromParts(`${yearStr}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`, `${hh.padStart(2, '0')}:${mm}:${ss}`)
+  }
+
   throw new Error(`Invalid datetime value for ${fieldName}: "${raw}"`)
 }
 
@@ -209,6 +224,14 @@ function parseDateValue(value: unknown, fieldName: string): string | null {
   const raw = String(value).trim()
   if (!raw) return null
 
+  // Excel serial date may come as text (e.g. "46023" or "46023.00").
+  if (/^\d+(?:\.\d+)?$/.test(raw)) {
+    const numericSerial = Number.parseFloat(raw)
+    if (!Number.isNaN(numericSerial)) {
+      return excelSerialToIso(numericSerial).slice(0, 10)
+    }
+  }
+
   const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (ymd) {
     return raw
@@ -217,6 +240,20 @@ function parseDateValue(value: unknown, fieldName: string): string | null {
   const parsed = new Date(raw)
   if (!Number.isNaN(parsed.getTime())) {
     return parsed.toISOString().slice(0, 10)
+  }
+
+  // Handle DD/MM/YY or DD/MM/YYYY format (Indian date format)
+  const ddmmyy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  if (ddmmyy) {
+    const [, d, m, y] = ddmmyy
+    const yearNum = parseInt(y, 10)
+    const yearStr = y.length === 2 ? (yearNum > 50 ? `19${y}` : `20${y}`) : y
+    const isoDate = `${yearStr}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+    // Validate the date
+    const dateObj = new Date(`${isoDate}T00:00:00`)
+    if (!Number.isNaN(dateObj.getTime())) {
+      return isoDate
+    }
   }
 
   throw new Error(`Invalid date value for ${fieldName}: "${raw}"`)
@@ -304,6 +341,17 @@ export function buildJcClosedInsertRow(
       value: '',
       error: 'Job Card # is required',
     })
+  }
+
+  // Backward-compatible fallback for deployments where invoice_date is NOT NULL.
+  // If source does not include Invoice Date, infer it from closed/created timestamp.
+  if (!row.invoice_date) {
+    const closed = row.closed_date_time == null ? '' : String(row.closed_date_time)
+    const created = row.created_date_time == null ? '' : String(row.created_date_time)
+    const inferred = closed || created
+    if (inferred) {
+      row.invoice_date = inferred.slice(0, 10)
+    }
   }
 
   if (errors.length > 0) {

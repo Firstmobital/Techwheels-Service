@@ -1,13 +1,16 @@
 import { supabase } from './supabase'
 import { REPORT_BRANCH_OPTIONS, applyBranchFilterToQuery } from './branches'
+import { getTableColumns } from './getTableColumns'
 
 export type BranchFilter = 'ALL' | string
 export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'custom'
+export type DateFieldType = 'closed_date' | 'invoice_date'
 
 export interface DateRangeFilter {
   preset: DateRangePreset
   customFrom?: string
   customTo?: string
+  dateFieldType?: DateFieldType
 }
 
 export interface ServiceTypeCount {
@@ -22,6 +25,13 @@ export interface ServiceTypeLabourRevenue {
   avgLabourRevenue: number
 }
 
+export interface LabourKpiSummary {
+  monthlyJobCards: number
+  monthlyRevenue: number
+  partsNeedingReorder: number
+  openTransitOrders: number
+}
+
 export interface ManpowerServiceTypeLabourRevenue {
   serviceType: string
   totalLabourRevenue: number
@@ -33,6 +43,8 @@ export interface ManpowerLabourRevenue {
   employeeCode: string
   employeeName: string
   manpowerLabel: string
+  location: string
+  fuelType: string
   totalLabourRevenue: number
   jobCardCount: number
   avgLabourRevenue: number
@@ -40,7 +52,7 @@ export interface ManpowerLabourRevenue {
 }
 
 export interface ManpowerWiseFilters {
-  serviceType: 'ALL' | string
+  serviceType: 'ALL' | string | string[]
   parentProductLine: 'ALL' | string
 }
 
@@ -64,7 +76,6 @@ export interface DailyRevenueReport {
   labourRevenue: number
   partsRevenue: number
   totalRevenue: number
-  vasRevenue: number
   avgBillingPerVehicle: number
 }
 
@@ -74,7 +85,6 @@ export interface CategoryWiseRevenue {
   labourRevenue: number
   partsRevenue: number
   totalRevenue: number
-  vasRevenue: number
   contributionPercentage: number
 }
 
@@ -83,7 +93,6 @@ export interface MonthlyTrendRevenue {
   labourRevenue: number
   partsRevenue: number
   totalRevenue: number
-  vasRevenue: number
 }
 
 export type VasPerformanceGroupBy = 'complaint_code' | 'job_code' | 'performed_by' | 'sr_type'
@@ -153,7 +162,6 @@ export interface LabourSparesMixRow {
   labourRevenue: number
   sparesRevenue: number
   totalRevenue: number
-  vasRevenue: number
   labourSharePercentage: number
   sparesSharePercentage: number
 }
@@ -165,7 +173,6 @@ export interface ProductLinePerformanceRow {
   labourRevenue: number
   sparesRevenue: number
   totalRevenue: number
-  vasRevenue: number
   avgRevenuePerJobCard: number
 }
 
@@ -175,7 +182,6 @@ export interface ModelWiseRevenueRow {
   labourRevenue: number
   sparesRevenue: number
   totalRevenue: number
-  vasRevenue: number
   avgRevenuePerJC: number
   topServiceType: string
 }
@@ -253,7 +259,6 @@ export interface VehicleWiseRevenueRow {
   labourRevenue: number
   sparesRevenue: number
   totalRevenue: number
-  vasRevenue: number
   avgRevenuePerVisit: number
   firstVisitDate: string | null
   lastVisitDate: string | null
@@ -273,14 +278,12 @@ export interface BranchInvoiceSpreadRow {
   invoiceCount: number
   percentage: number
   totalAmount: number
-  vasRevenue: number
   avgInvoiceValue: number
 }
 
 export interface InvoiceValueDistributionReport {
   totalInvoices: number
   totalAmount: number
-  totalVasRevenue: number
   avgInvoiceValue: number
   valueBands: InvoiceValueBandRow[]
   branchSpread: BranchInvoiceSpreadRow[]
@@ -292,7 +295,6 @@ export interface InvoiceDailyTrendRow {
   labourTotal: number
   sparesTotal: number
   consolidatedTotal: number
-  vasRevenue: number
   avgInvoiceValue: number
 }
 
@@ -424,19 +426,239 @@ function normalizeVehicleRegistration(raw: unknown): string {
   return normalized || 'Unknown'
 }
 
+function normalizeJobCardNumber(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null
+
+  const normalized = String(raw).trim().replace(/\s+/g, ' ').toUpperCase()
+  if (!normalized) return null
+
+  const withoutDecimalSuffix = normalized.replace(/\.0+$/, '')
+  return withoutDecimalSuffix || null
+}
+
+function dedupeByJobCardNumber<T extends { job_card_number?: unknown }>(rows: T[]): T[] {
+  const byJobCard = new Map<string, T>()
+  const noJobCardRows: T[] = []
+
+  for (const row of rows) {
+    const jobCard = normalizeJobCardNumber(row.job_card_number)
+    if (!jobCard) {
+      noJobCardRows.push(row)
+      continue
+    }
+
+    if (!byJobCard.has(jobCard)) {
+      byJobCard.set(jobCard, row)
+    }
+  }
+
+  return [...byJobCard.values(), ...noJobCardRows]
+}
+
 const QUERY_PAGE_SIZE = 1000
 
 interface JobCardClosedFetchFilters {
   branch: BranchFilter
   dateFilter: DateRangeFilter
-  serviceType?: 'ALL' | string
+  serviceType?: 'ALL' | string | string[]
   parentProductLine?: 'ALL' | string
 }
 
-async function fetchAllJobCardClosedRows(
+type JobCardInvoiceDateColumn = 'invoice_date' | 'Invoice_date' | null
+type JobCardFuelColumn = 'fuel_type' | 'Fuel_type' | 'portal' | 'Portal' | null
+
+let jobCardInvoiceDateColumnCache: JobCardInvoiceDateColumn | undefined
+let jobCardFuelColumnCache: JobCardFuelColumn | undefined
+
+async function getJobCardInvoiceDateColumn(): Promise<JobCardInvoiceDateColumn> {
+  if (jobCardInvoiceDateColumnCache !== undefined) {
+    return jobCardInvoiceDateColumnCache
+  }
+
+  const columns = await getTableColumns('job_card_closed_data')
+
+  if (columns.includes('invoice_date')) {
+    jobCardInvoiceDateColumnCache = 'invoice_date'
+    return jobCardInvoiceDateColumnCache
+  }
+
+  if (columns.includes('Invoice_date')) {
+    jobCardInvoiceDateColumnCache = 'Invoice_date'
+    return jobCardInvoiceDateColumnCache
+  }
+
+  const { error: lowerError } = await supabase.from('job_card_closed_data').select('invoice_date').limit(1)
+  if (!lowerError) {
+    jobCardInvoiceDateColumnCache = 'invoice_date'
+    return jobCardInvoiceDateColumnCache
+  }
+
+  const { error: upperError } = await supabase.from('job_card_closed_data').select('Invoice_date').limit(1)
+  if (!upperError) {
+    jobCardInvoiceDateColumnCache = 'Invoice_date'
+    return jobCardInvoiceDateColumnCache
+  }
+
+  jobCardInvoiceDateColumnCache = null
+  return jobCardInvoiceDateColumnCache
+}
+
+async function getJobCardFuelColumn(): Promise<JobCardFuelColumn> {
+  if (jobCardFuelColumnCache !== undefined) {
+    return jobCardFuelColumnCache
+  }
+
+  const columns = await getTableColumns('job_card_closed_data')
+  const candidateColumns: JobCardFuelColumn[] = ['fuel_type', 'Fuel_type', 'portal', 'Portal']
+
+  for (const column of candidateColumns) {
+    if (column && columns.includes(column)) {
+      jobCardFuelColumnCache = column
+      return jobCardFuelColumnCache
+    }
+  }
+
+  for (const column of candidateColumns) {
+    if (!column) continue
+    const { error } = await supabase.from('job_card_closed_data').select(column).limit(1)
+    if (!error) {
+      jobCardFuelColumnCache = column
+      return jobCardFuelColumnCache
+    }
+  }
+
+  jobCardFuelColumnCache = null
+  return jobCardFuelColumnCache
+}
+
+function parseFuelSelectionFromBranch(branch: BranchFilter): 'PV' | 'EV' | null {
+  const normalized = String(branch ?? '').trim().toLowerCase()
+  if (normalized === 'sitapura pv') return 'PV'
+  if (normalized === 'sitapura ev') return 'EV'
+  return null
+}
+
+function matchesFuelSelectionByBranchLabel(rawBranch: unknown, fuelType: 'PV' | 'EV'): boolean {
+  const normalized = String(rawBranch ?? '').trim().toLowerCase()
+  if (!normalized) return false
+  if (fuelType === 'PV') return normalized.includes('pv')
+  return normalized.includes('ev')
+}
+
+function applyDateFilterToQuery(
+  query: any,
+  dateFilter: DateRangeFilter,
+  bounds: { from: string; toExclusive: string } | null,
+  options: { closedDateField?: string; invoiceDateField?: string | null } = {},
+): any {
+  if (!bounds) return query
+
+  const closedDateField = options.closedDateField ?? 'closed_date_time'
+  const invoiceDateField = options.invoiceDateField
+
+  const toLocalDateString = (isoDateTime: string): string => {
+    const date = new Date(isoDateTime)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  // Prefer invoice_date if explicitly requested and available
+  if (dateFilter.dateFieldType === 'invoice_date' && invoiceDateField) {
+    const fromDate = toLocalDateString(bounds.from)
+    const toExclusiveDate = toLocalDateString(bounds.toExclusive)
+    return query.gte(invoiceDateField, fromDate).lt(invoiceDateField, toExclusiveDate)
+  }
+
+  // Default to closed_date_time for all other cases
+  return query.gte(closedDateField, bounds.from).lt(closedDateField, bounds.toExclusive)
+}
+
+async function fetchJobCardWithEmployeeData(
   selectColumns: string,
   filters: JobCardClosedFetchFilters,
 ): Promise<Record<string, unknown>[]> {
+  // Parse fuel selection BEFORE fetching - we'll use it for employee filtering
+  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
+  // For JC fetch, use 'Sitapura' as branch if we're filtering by fuel (PV/EV)
+  const jcFilters = fuelSelection
+    ? { ...filters, branch: 'Sitapura' as BranchFilter }
+    : filters
+
+  // Fetch all job card rows from job_card_closed_data (WITHOUT fuel filtering)
+  const jcData = await fetchAllJobCardClosedRowsWithoutFuelFilter(
+    selectColumns + ', employee_code',
+    jcFilters,
+  )
+
+  // Get all unique employee codes
+  const employeeCodes = new Set<string>()
+  for (const row of jcData) {
+    const typedRow = row as { employee_code?: unknown }
+    const code = normalizeEmployeeCode(typedRow.employee_code)
+    if (code && code !== 'Unknown') {
+      employeeCodes.add(code)
+    }
+  }
+
+  // Fetch employee master data for all codes
+  const employeeMap = new Map<string, Record<string, unknown>>()
+  if (employeeCodes.size > 0) {
+    const codesArray = Array.from(employeeCodes)
+    const { data: employees } = await supabase
+      .from('employee_master')
+      .select('employee_code, location, fuel_type')
+      .in('employee_code', codesArray)
+
+    if (employees && Array.isArray(employees)) {
+      for (const emp of employees) {
+        const typedEmp = emp as { employee_code?: unknown; location?: unknown; fuel_type?: unknown }
+        const code = normalizeEmployeeCode(typedEmp.employee_code)
+        if (code && code !== 'Unknown') {
+          employeeMap.set(code, typedEmp)
+        }
+      }
+    }
+  }
+
+  // Merge employee data into job card rows
+  let mergedData: Record<string, unknown>[] = []
+  for (const row of jcData) {
+    const typedRow = row as { employee_code?: unknown }
+    const code = normalizeEmployeeCode(typedRow.employee_code)
+    const employeeData = code && code !== 'Unknown' ? employeeMap.get(code) : null
+
+    const mergedRow = {
+      ...row,
+      employee_location: employeeData ? (employeeData as { location?: unknown }).location : null,
+      employee_fuel_type: employeeData ? (employeeData as { fuel_type?: unknown }).fuel_type : null,
+    }
+
+    mergedData.push(mergedRow)
+  }
+
+  // Apply fuel filter AFTER merge using employee_master fuel_type
+  if (fuelSelection) {
+    mergedData = mergedData.filter((row) => {
+      const typedRow = row as { employee_fuel_type?: unknown }
+      const empFuelType = typedRow.employee_fuel_type
+      if (!empFuelType) return false
+      const normalized = String(empFuelType).trim().toUpperCase()
+      return normalized === fuelSelection
+    })
+  }
+
+  return mergedData
+}
+
+async function fetchAllJobCardClosedRowsWithoutFuelFilter(
+  selectColumns: string,
+  filters: JobCardClosedFetchFilters,
+): Promise<Record<string, unknown>[]> {
+  const invoiceDateField =
+    filters.dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+
   let from = 0
   const allRows: Record<string, unknown>[] = []
 
@@ -448,7 +670,11 @@ async function fetchAllJobCardClosedRows(
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    if (filters.serviceType && filters.serviceType !== 'ALL') {
+    if (Array.isArray(filters.serviceType)) {
+      if (filters.serviceType.length > 0) {
+        query = query.in('sr_type', filters.serviceType)
+      }
+    } else if (filters.serviceType && filters.serviceType !== 'ALL') {
       query = query.eq('sr_type', filters.serviceType)
     }
 
@@ -457,9 +683,10 @@ async function fetchAllJobCardClosedRows(
     }
 
     const bounds = getDateRangeBounds(filters.dateFilter)
-    if (bounds) {
-      query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
-    }
+    query = applyDateFilterToQuery(query, filters.dateFilter, bounds, {
+      closedDateField: 'closed_date_time',
+      invoiceDateField,
+    })
 
     const { data, error } = await query
 
@@ -477,7 +704,105 @@ async function fetchAllJobCardClosedRows(
     from += QUERY_PAGE_SIZE
   }
 
-  return allRows
+  return dedupeExactRows(allRows)
+}
+
+async function fetchAllJobCardClosedRows(
+  selectColumns: string,
+  filters: JobCardClosedFetchFilters,
+): Promise<Record<string, unknown>[]> {
+  const invoiceDateField =
+    filters.dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
+  const fuelColumn = fuelSelection ? await getJobCardFuelColumn() : null
+  const queryBranch: BranchFilter = fuelSelection ? 'Sitapura' : filters.branch
+
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+
+  while (true) {
+    let query = supabase
+      .from('job_card_closed_data')
+      .select(selectColumns)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    query = applyBranchFilterToQuery(query, queryBranch)
+
+    if (fuelSelection && fuelColumn) {
+      query = query.eq(fuelColumn, fuelSelection)
+    }
+
+    if (Array.isArray(filters.serviceType)) {
+      if (filters.serviceType.length > 0) {
+        query = query.in('sr_type', filters.serviceType)
+      }
+    } else if (filters.serviceType && filters.serviceType !== 'ALL') {
+      query = query.eq('sr_type', filters.serviceType)
+    }
+
+    if (filters.parentProductLine && filters.parentProductLine !== 'ALL') {
+      query = query.eq('parent_product_line', filters.parentProductLine)
+    }
+
+    const bounds = getDateRangeBounds(filters.dateFilter)
+    query = applyDateFilterToQuery(query, filters.dateFilter, bounds, {
+      closedDateField: 'closed_date_time',
+      invoiceDateField,
+    })
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  let finalRows = dedupeExactRows(allRows)
+
+  // Fallback for schemas without dedicated fuel column: infer from branch label if possible.
+  if (fuelSelection && !fuelColumn) {
+    finalRows = finalRows.filter((row) =>
+      matchesFuelSelectionByBranchLabel((row as { branch?: unknown }).branch, fuelSelection),
+    )
+  }
+
+  return finalRows
+}
+
+function buildStableRowKey(row: Record<string, unknown>): string {
+  const entries = Object.entries(row).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+  return JSON.stringify(entries)
+}
+
+function dedupeExactRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const seen = new Set<string>()
+  const deduped: Record<string, unknown>[] = []
+
+  for (const row of rows) {
+    const key = buildStableRowKey(row)
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    deduped.push(row)
+  }
+
+  return deduped
+}
+
+function normalizeLookupValue(raw: unknown): string {
+  if (raw === null || raw === undefined) return ''
+  return String(raw).trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 function startOfDay(date: Date): Date {
@@ -544,14 +869,18 @@ export async function getServiceTypeCounts(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<ServiceTypeCount[]> {
-  const data = await fetchAllJobCardClosedRows('sr_type', {
+  const data = await fetchAllJobCardClosedRows('sr_type, job_card_number', {
     branch,
     dateFilter,
   })
 
+  const dedupedData = dedupeByJobCardNumber(
+    (data ?? []) as Array<{ sr_type?: unknown; job_card_number?: unknown }>,
+  )
+
   const grouped = new Map<string, ServiceTypeCount>()
 
-  for (const row of data ?? []) {
+  for (const row of dedupedData) {
     const normalized = normalizeServiceType((row as { sr_type?: unknown }).sr_type)
     const key = serviceTypeGroupKey(normalized)
     const existing = grouped.get(key)
@@ -573,18 +902,31 @@ export async function getServiceTypeCounts(
 export async function getServiceTypeLabourRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<ServiceTypeLabourRevenue[]> {
-  const data = await fetchAllJobCardClosedRows('sr_type, final_labour_amount', {
+  const data = await fetchJobCardWithEmployeeData('sr_type, final_labour_amount, job_card_number', {
     branch,
     dateFilter,
+    serviceType: serviceTypeFilter,
   })
 
-  const grouped = new Map<string, ServiceTypeLabourRevenue>()
+  const dedupedData = dedupeByJobCardNumber(
+    (data ?? []) as Array<{ sr_type?: unknown; final_labour_amount?: unknown; job_card_number?: unknown }>,
+  )
 
-  for (const row of data ?? []) {
-    const typedRow = row as { sr_type?: unknown; final_labour_amount?: unknown }
+  interface WorkingServiceTypeRevenue {
+    serviceType: string
+    totalLabourRevenue: number
+    jobCards: Set<string>
+  }
+
+  const grouped = new Map<string, WorkingServiceTypeRevenue>()
+
+  for (const row of dedupedData) {
+    const typedRow = row as { sr_type?: unknown; final_labour_amount?: unknown; job_card_number?: unknown }
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const key = serviceTypeGroupKey(serviceType)
+    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
     const labourValueRaw = typedRow.final_labour_amount
     const labourValue =
       typeof labourValueRaw === 'number'
@@ -598,23 +940,33 @@ export async function getServiceTypeLabourRevenue(
 
     if (existing) {
       existing.totalLabourRevenue += safeLabourValue
-      existing.jobCardCount += 1
+      if (jobCardNumber) {
+        existing.jobCards.add(jobCardNumber)
+      }
       continue
+    }
+
+    const jobCards = new Set<string>()
+    if (jobCardNumber) {
+      jobCards.add(jobCardNumber)
     }
 
     grouped.set(key, {
       serviceType,
       totalLabourRevenue: safeLabourValue,
-      jobCardCount: 1,
-      avgLabourRevenue: 0,
+      jobCards,
     })
   }
 
-  const rows = [...grouped.values()]
-
-  for (const row of rows) {
-    row.avgLabourRevenue = row.jobCardCount > 0 ? row.totalLabourRevenue / row.jobCardCount : 0
-  }
+  const rows: ServiceTypeLabourRevenue[] = [...grouped.values()].map((row) => {
+    const jobCardCount = row.jobCards.size
+    return {
+      serviceType: row.serviceType,
+      totalLabourRevenue: row.totalLabourRevenue,
+      jobCardCount,
+      avgLabourRevenue: jobCardCount > 0 ? row.totalLabourRevenue / jobCardCount : 0,
+    }
+  })
 
   return rows.sort((a, b) => {
     if (b.totalLabourRevenue !== a.totalLabourRevenue) {
@@ -624,13 +976,67 @@ export async function getServiceTypeLabourRevenue(
   })
 }
 
+export async function getLabourKpiSummary(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
+): Promise<LabourKpiSummary> {
+  const data = await fetchJobCardWithEmployeeData(
+    'job_card_number, total_invoice_amount, final_spares_amount, sr_type',
+    {
+      branch,
+      dateFilter,
+      serviceType: serviceTypeFilter,
+    },
+  )
+
+  const dedupedData = dedupeByJobCardNumber(
+    (data ?? []) as Array<{
+      job_card_number?: unknown
+      total_invoice_amount?: unknown
+      final_spares_amount?: unknown
+      sr_type?: unknown
+    }>,
+  )
+
+  let monthlyRevenue = 0
+  let partsNeedingReorder = 0
+  let openTransitOrders = 0
+
+  for (const row of dedupedData) {
+    const typedRow = row as {
+      total_invoice_amount?: unknown
+      final_spares_amount?: unknown
+      sr_type?: unknown
+    }
+
+    monthlyRevenue += parseRevenue(typedRow.total_invoice_amount)
+
+    if (parseRevenue(typedRow.final_spares_amount) > 0) {
+      partsNeedingReorder += 1
+    }
+
+    const serviceType = normalizeServiceType(typedRow.sr_type).toLowerCase()
+    if (serviceType.includes('transit')) {
+      openTransitOrders += 1
+    }
+  }
+
+  return {
+    monthlyJobCards: dedupedData.length,
+    monthlyRevenue,
+    partsNeedingReorder,
+    openTransitOrders,
+  }
+}
+
 export async function getManpowerWiseLabourRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
   filters: ManpowerWiseFilters = { serviceType: 'ALL', parentProductLine: 'ALL' },
 ): Promise<ManpowerLabourRevenue[]> {
-  const data = await fetchAllJobCardClosedRows(
-    'employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount',
+  const data = await fetchJobCardWithEmployeeData(
+    'branch, employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount, job_card_number, employee_location, employee_fuel_type',
     {
       branch,
       dateFilter,
@@ -639,97 +1045,108 @@ export async function getManpowerWiseLabourRevenue(
     },
   )
 
-  const employeeCodes = new Set<string>()
+  const dedupedData = dedupeByJobCardNumber(
+    (data ?? []) as Array<{
+      employee_code?: unknown
+      sr_assigned_to?: unknown
+      sr_type?: unknown
+      parent_product_line?: unknown
+      final_labour_amount?: unknown
+      job_card_number?: unknown
+      employee_location?: unknown
+      employee_fuel_type?: unknown
+    }>,
+  )
 
-  for (const row of data ?? []) {
-    const typedRow = row as { employee_code?: unknown }
-    const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
-    if (employeeCode !== 'Unknown') {
-      employeeCodes.add(employeeCode)
-    }
-  }
-
-  const nameByEmployeeCode = new Map<string, string>()
-
-  if (employeeCodes.size > 0) {
-    const { data: employeeData, error: employeeError } = await supabase
-      .from('employee_master')
-      .select('employee_code, employee_name')
-      .in('employee_code', [...employeeCodes])
-
-    if (employeeError) {
-      throw new Error(employeeError.message)
-    }
-
-    for (const employee of employeeData ?? []) {
-      const typedEmployee = employee as { employee_code?: unknown; employee_name?: unknown }
-      const employeeCode = normalizeEmployeeCode(typedEmployee.employee_code)
-      const employeeName = normalizeManpowerName(typedEmployee.employee_name)
-      nameByEmployeeCode.set(employeeCodeGroupKey(employeeCode), employeeName)
-    }
+  interface WorkingManpowerServiceTypeRow {
+    serviceType: string
+    totalLabourRevenue: number
+    jobCards: Set<string>
   }
 
   interface WorkingManpowerRow {
     employeeCode: string
-    fallbackName: string
+    employeeName: string
+    location: string
+    fuelType: string
     totalLabourRevenue: number
-    jobCardCount: number
-    serviceTypeByKey: Map<string, ManpowerServiceTypeLabourRevenue>
+    jobCards: Set<string>
+    serviceTypeByKey: Map<string, WorkingManpowerServiceTypeRow>
   }
 
   const grouped = new Map<string, WorkingManpowerRow>()
 
-  for (const row of data ?? []) {
+  for (const row of dedupedData) {
     const typedRow = row as {
+      branch?: unknown
       employee_code?: unknown
       sr_assigned_to?: unknown
       sr_type?: unknown
       final_labour_amount?: unknown
+      job_card_number?: unknown
+      employee_location?: unknown
+      employee_fuel_type?: unknown
     }
 
     const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
-    const fallbackName = normalizeManpowerName(typedRow.sr_assigned_to)
+    const employeeName = normalizeManpowerName(typedRow.sr_assigned_to)
     const serviceType = normalizeServiceType(typedRow.sr_type)
-    const manpowerKey = employeeCodeGroupKey(employeeCode)
+    const manpowerKey =
+      employeeCode === 'Unknown' ? `name__${normalizeLookupValue(employeeName)}` : employeeCodeGroupKey(employeeCode)
+
     const serviceTypeKey = serviceTypeGroupKey(serviceType)
     const labourAmount = parseRevenue(typedRow.final_labour_amount)
+    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
+
+    // Get location and fuel_type from employee_master data
+    const empLocation = typedRow.employee_location ? String(typedRow.employee_location).trim() : ''
+    const empFuelType = typedRow.employee_fuel_type ? String(typedRow.employee_fuel_type).trim() : ''
 
     const existingManpower = grouped.get(manpowerKey)
 
     if (existingManpower) {
       existingManpower.totalLabourRevenue += labourAmount
-      existingManpower.jobCardCount += 1
+      if (jobCardNumber) {
+        existingManpower.jobCards.add(jobCardNumber)
+      }
 
       const existingServiceType = existingManpower.serviceTypeByKey.get(serviceTypeKey)
 
       if (existingServiceType) {
         existingServiceType.totalLabourRevenue += labourAmount
-        existingServiceType.jobCardCount += 1
+        if (jobCardNumber) {
+          existingServiceType.jobCards.add(jobCardNumber)
+        }
       } else {
         existingManpower.serviceTypeByKey.set(serviceTypeKey, {
           serviceType,
           totalLabourRevenue: labourAmount,
-          jobCardCount: 1,
-          avgLabourRevenue: 0,
+          jobCards: new Set(jobCardNumber ? [jobCardNumber] : []),
         })
       }
 
       continue
     }
 
-    const serviceTypeByKey = new Map<string, ManpowerServiceTypeLabourRevenue>()
+    const serviceTypeByKey = new Map<string, WorkingManpowerServiceTypeRow>()
     serviceTypeByKey.set(serviceTypeKey, {
       serviceType,
       totalLabourRevenue: labourAmount,
-      jobCardCount: 1,
-      avgLabourRevenue: 0,
+      jobCards: new Set(jobCardNumber ? [jobCardNumber] : []),
     })
+
+    const manpowerJobCards = new Set<string>()
+    if (jobCardNumber) {
+      manpowerJobCards.add(jobCardNumber)
+    }
 
     grouped.set(manpowerKey, {
       employeeCode,
-      fallbackName,
+      employeeName,
+      location: empLocation,
+      fuelType: empFuelType,
       totalLabourRevenue: labourAmount,
-      jobCardCount: 1,
+      jobCards: manpowerJobCards,
       serviceTypeByKey,
     })
   }
@@ -737,13 +1154,19 @@ export async function getManpowerWiseLabourRevenue(
   const rows: ManpowerLabourRevenue[] = []
 
   for (const manpower of grouped.values()) {
-    const employeeName = nameByEmployeeCode.get(employeeCodeGroupKey(manpower.employeeCode)) ?? manpower.fallbackName
-    const serviceTypeBreakup = [...manpower.serviceTypeByKey.values()]
+    const employeeName = manpower.employeeName
 
-    for (const serviceTypeRow of serviceTypeBreakup) {
-      serviceTypeRow.avgLabourRevenue =
-        serviceTypeRow.jobCardCount > 0 ? serviceTypeRow.totalLabourRevenue / serviceTypeRow.jobCardCount : 0
-    }
+    const serviceTypeBreakup: ManpowerServiceTypeLabourRevenue[] = [...manpower.serviceTypeByKey.values()].map(
+      (serviceTypeRow) => {
+        const jobCardCount = serviceTypeRow.jobCards.size
+        return {
+          serviceType: serviceTypeRow.serviceType,
+          totalLabourRevenue: serviceTypeRow.totalLabourRevenue,
+          jobCardCount,
+          avgLabourRevenue: jobCardCount > 0 ? serviceTypeRow.totalLabourRevenue / jobCardCount : 0,
+        }
+      },
+    )
 
     serviceTypeBreakup.sort((a, b) => {
       if (b.totalLabourRevenue !== a.totalLabourRevenue) {
@@ -755,13 +1178,17 @@ export async function getManpowerWiseLabourRevenue(
     const manpowerLabel =
       manpower.employeeCode === 'Unknown' ? employeeName : `${manpower.employeeCode} - ${employeeName}`
 
+    const jobCardCount = manpower.jobCards.size
+
     rows.push({
       employeeCode: manpower.employeeCode,
       employeeName,
       manpowerLabel,
+      location: manpower.location,
+      fuelType: manpower.fuelType,
       totalLabourRevenue: manpower.totalLabourRevenue,
-      jobCardCount: manpower.jobCardCount,
-      avgLabourRevenue: manpower.jobCardCount > 0 ? manpower.totalLabourRevenue / manpower.jobCardCount : 0,
+      jobCardCount,
+      avgLabourRevenue: jobCardCount > 0 ? manpower.totalLabourRevenue / jobCardCount : 0,
       serviceTypeBreakup,
     })
   }
@@ -832,9 +1259,45 @@ function parseRevenue(value: unknown): number {
       ? value
       : value == null
       ? 0
-      : Number(value)
+      : (() => {
+          const raw = String(value).trim()
+          if (!raw) return 0
+
+          const isParenthesizedNegative = raw.startsWith('(') && raw.endsWith(')')
+          const cleaned = raw
+            .replace(/[₹,]/g, '')
+            .replace(/\bRS\.?\b/gi, '')
+            .replace(/\s+/g, '')
+            .replace(/[()]/g, '')
+
+          const parsed = Number(cleaned)
+          if (!Number.isFinite(parsed)) return 0
+          return isParenthesizedNegative ? -parsed : parsed
+        })()
 
   return Number.isFinite(numeric) ? numeric : 0
+}
+
+function toIsoDate(value: unknown, format: 'day' | 'month'): string | null {
+  if (value == null) return null
+
+  const parsed = new Date(String(value))
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+
+  return format === 'day' ? parsed.toISOString().slice(0, 10) : parsed.toISOString().slice(0, 7)
+}
+
+function getJobCardReportDateValue(
+  row: { closed_date_time?: unknown; invoice_date?: unknown; Invoice_date?: unknown },
+  dateFilter: DateRangeFilter,
+): unknown {
+  if (dateFilter.dateFieldType === 'invoice_date') {
+    return row.invoice_date ?? row.Invoice_date ?? row.closed_date_time
+  }
+
+  return row.closed_date_time ?? row.invoice_date ?? row.Invoice_date
 }
 
 function normalizeBranch(raw: unknown): string {
@@ -843,84 +1306,10 @@ function normalizeBranch(raw: unknown): string {
   return normalized || 'Unknown'
 }
 
-function normalizeJobCardNumber(raw: unknown): string | null {
-  if (raw === null || raw === undefined) return null
-  const normalized = String(raw).trim().toUpperCase()
-  return normalized || null
-}
-
-function buildBranchJobCardKey(branchName: string, jobCardNumber: string): string {
-  void branchName
-  return jobCardNumber
-}
-
-async function fetchInvoicedVasRevenueByBranchJobCard(
-  branch: BranchFilter,
-  jobCardsByBranch: Map<string, Set<string>>,
-): Promise<Map<string, number>> {
-  const requestedJobCards = new Set<string>()
-
-  for (const jobCards of jobCardsByBranch.values()) {
-    for (const jobCard of jobCards) {
-      requestedJobCards.add(jobCard)
-    }
-  }
-
-  if (requestedJobCards.size === 0) {
-    return new Map<string, number>()
-  }
-
-  const vasByBranchJobCard = new Map<string, number>()
-  let from = 0
-
-  while (true) {
-    let query = supabase
-      .from('service_vas_jc_data')
-      .select('branch, job_card_number, net_price, job_status')
-      .range(from, from + QUERY_PAGE_SIZE - 1)
-
-    query = applyBranchFilterToQuery(query, branch)
-
-    const { data, error } = await query
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    const rows = (data as unknown as Record<string, unknown>[] | null) ?? []
-
-    if (rows.length === 0) {
-      break
-    }
-
-    for (const row of rows) {
-      const typedRow = row as { branch?: unknown; job_card_number?: unknown; net_price?: unknown; job_status?: unknown }
-      const jobStatus = typedRow.job_status == null ? '' : String(typedRow.job_status).trim().toLowerCase()
-      if (jobStatus !== 'invoiced') continue
-
-      const branchName = normalizeBranch(typedRow.branch)
-      const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-      if (!jobCardNumber) continue
-      if (!requestedJobCards.has(jobCardNumber)) continue
-
-      const key = buildBranchJobCardKey(branchName, jobCardNumber)
-      const existing = vasByBranchJobCard.get(key) ?? 0
-      vasByBranchJobCard.set(key, existing + parseRevenue(typedRow.net_price))
-    }
-
-    if (rows.length < QUERY_PAGE_SIZE) {
-      break
-    }
-
-    from += QUERY_PAGE_SIZE
-  }
-
-  return vasByBranchJobCard
-}
-
 export async function getBranchLabourRevenueComparison(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<BranchLabourRevenueComparison[]> {
   const selectedBounds = getDateRangeBounds(dateFilter)
   if (!selectedBounds) {
@@ -932,6 +1321,9 @@ export async function getBranchLabourRevenueComparison(
     return []
   }
 
+  const invoiceDateField =
+    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+
   const fetchWindowRows = async (bounds: { from: string; toExclusive: string }): Promise<Record<string, unknown>[]> => {
     let from = 0
     const allRows: Record<string, unknown>[] = []
@@ -939,12 +1331,23 @@ export async function getBranchLabourRevenueComparison(
     while (true) {
       let query = supabase
         .from('job_card_closed_data')
-        .select('branch, final_labour_amount')
-        .gte('closed_date_time', bounds.from)
-        .lt('closed_date_time', bounds.toExclusive)
+        .select('branch, final_labour_amount, job_card_number')
         .range(from, from + QUERY_PAGE_SIZE - 1)
 
       query = applyBranchFilterToQuery(query, branch)
+
+      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+        closedDateField: 'closed_date_time',
+        invoiceDateField,
+      })
+
+      if (Array.isArray(serviceTypeFilter)) {
+        if (serviceTypeFilter.length > 0) {
+          query = query.in('sr_type', serviceTypeFilter)
+        }
+      } else if (serviceTypeFilter !== 'ALL') {
+        query = query.eq('sr_type', serviceTypeFilter)
+      }
 
       const { data, error } = await query
 
@@ -962,7 +1365,13 @@ export async function getBranchLabourRevenueComparison(
       from += QUERY_PAGE_SIZE
     }
 
-    return allRows
+    return dedupeByJobCardNumber(
+      allRows as Array<{
+        branch?: unknown
+        final_labour_amount?: unknown
+        job_card_number?: unknown
+      }>,
+    )
   }
 
   const [selectedData, previousData] = await Promise.all([
@@ -1018,20 +1427,20 @@ export async function getDailyRevenueReport(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<DailyRevenueReport[]> {
+  const invoiceDateField =
+    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    'branch, closed_date_time, vehicle_registration_number, job_card_number, final_labour_amount, final_spares_amount',
+    `${dateColumnSelection}closed_date_time, vehicle_registration_number, job_card_number, final_labour_amount, final_spares_amount`,
     {
       branch,
       dateFilter,
     },
   )
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
   interface DailyGrouping {
     vehicleNumbers: Set<string>
     jobCardNumbers: Set<string>
-    branchJobCardKeys: Set<string>
     labourRevenue: number
     partsRevenue: number
   }
@@ -1040,18 +1449,19 @@ export async function getDailyRevenueReport(
 
   for (const row of data ?? []) {
     const typedRow = row as {
-      branch?: unknown
       closed_date_time?: unknown
+      invoice_date?: unknown
+      Invoice_date?: unknown
       vehicle_registration_number?: unknown
       job_card_number?: unknown
       final_labour_amount?: unknown
       final_spares_amount?: unknown
     }
 
-    const dateStr = typedRow.closed_date_time ? new Date(typedRow.closed_date_time as string).toISOString().split('T')[0] : 'Unknown'
+    const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
+    const dateStr = toIsoDate(reportDate, 'day') ?? 'Unknown'
     const vehicleNum = typedRow.vehicle_registration_number ? String(typedRow.vehicle_registration_number).trim() : null
     const jobCardNum = normalizeJobCardNumber(typedRow.job_card_number)
-    const branchName = normalizeBranch(typedRow.branch)
     const labourAmount = parseRevenue(typedRow.final_labour_amount)
     const partsAmount = parseRevenue(typedRow.final_spares_amount)
 
@@ -1060,45 +1470,28 @@ export async function getDailyRevenueReport(
     if (existing) {
       if (vehicleNum) existing.vehicleNumbers.add(vehicleNum)
       if (jobCardNum) existing.jobCardNumbers.add(jobCardNum)
-      if (jobCardNum) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNum))
       existing.labourRevenue += labourAmount
       existing.partsRevenue += partsAmount
     } else {
       const vehicleNumbers = new Set<string>()
       const jobCardNumbers = new Set<string>()
-      const branchJobCardKeys = new Set<string>()
       if (vehicleNum) vehicleNumbers.add(vehicleNum)
       if (jobCardNum) jobCardNumbers.add(jobCardNum)
-      if (jobCardNum) branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNum))
 
       dailyByDate.set(dateStr, {
         vehicleNumbers,
         jobCardNumbers,
-        branchJobCardKeys,
         labourRevenue: labourAmount,
         partsRevenue: partsAmount,
       })
     }
-
-    if (jobCardNum) {
-      const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-      existingJobCards.add(jobCardNum)
-      jobCardsByBranch.set(branchName, existingJobCards)
-    }
   }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
 
   const rows: DailyRevenueReport[] = []
 
   for (const [date, grouping] of dailyByDate) {
     const totalRevenue = grouping.labourRevenue + grouping.partsRevenue
     const avgBillingPerVehicle = grouping.vehicleNumbers.size > 0 ? totalRevenue / grouping.vehicleNumbers.size : 0
-    let vasRevenue = 0
-
-    for (const key of grouping.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
 
     rows.push({
       date,
@@ -1107,7 +1500,6 @@ export async function getDailyRevenueReport(
       labourRevenue: grouping.labourRevenue,
       partsRevenue: grouping.partsRevenue,
       totalRevenue,
-      vasRevenue,
       avgBillingPerVehicle,
     })
   }
@@ -1120,18 +1512,15 @@ export async function getCategoryWiseRevenue(
   dateFilter: DateRangeFilter,
 ): Promise<CategoryWiseRevenue[]> {
   const data = await fetchAllJobCardClosedRows(
-    'branch, sr_type, vehicle_registration_number, job_card_number, final_labour_amount, final_spares_amount',
+    'sr_type, vehicle_registration_number, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
     },
   )
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
   interface CategoryGrouping {
     vehicleNumbers: Set<string>
-    branchJobCardKeys: Set<string>
     labourRevenue: number
     partsRevenue: number
   }
@@ -1141,10 +1530,8 @@ export async function getCategoryWiseRevenue(
 
   for (const row of data ?? []) {
     const typedRow = row as {
-      branch?: unknown
       sr_type?: unknown
       vehicle_registration_number?: unknown
-      job_card_number?: unknown
       final_labour_amount?: unknown
       final_spares_amount?: unknown
     }
@@ -1152,8 +1539,6 @@ export async function getCategoryWiseRevenue(
     const category = normalizeServiceType(typedRow.sr_type)
     const categoryKey = serviceTypeGroupKey(category)
     const vehicleNum = typedRow.vehicle_registration_number ? String(typedRow.vehicle_registration_number).trim() : null
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const branchName = normalizeBranch(typedRow.branch)
     const labourAmount = parseRevenue(typedRow.final_labour_amount)
     const partsAmount = parseRevenue(typedRow.final_spares_amount)
     const rowTotal = labourAmount + partsAmount
@@ -1163,31 +1548,19 @@ export async function getCategoryWiseRevenue(
 
     if (existing) {
       if (vehicleNum) existing.vehicleNumbers.add(vehicleNum)
-      if (jobCardNumber) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
       existing.labourRevenue += labourAmount
       existing.partsRevenue += partsAmount
     } else {
       const vehicleNumbers = new Set<string>()
-      const branchJobCardKeys = new Set<string>()
       if (vehicleNum) vehicleNumbers.add(vehicleNum)
-      if (jobCardNumber) branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
 
       categoryByType.set(categoryKey, {
         vehicleNumbers,
-        branchJobCardKeys,
         labourRevenue: labourAmount,
         partsRevenue: partsAmount,
       })
     }
-
-    if (jobCardNumber) {
-      const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-      existingJobCards.add(jobCardNumber)
-      jobCardsByBranch.set(branchName, existingJobCards)
-    }
   }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
 
   const rows: CategoryWiseRevenue[] = []
 
@@ -1196,10 +1569,6 @@ export async function getCategoryWiseRevenue(
     if (!grouping) continue
 
     const totalRevenue = grouping.labourRevenue + grouping.partsRevenue
-    let vasRevenue = 0
-    for (const key of grouping.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
     const contributionPercentage = totalPeriodRevenue > 0 ? (totalRevenue / totalPeriodRevenue) * 100 : 0
 
     // Get the original category name from the map by finding any row with this key
@@ -1218,7 +1587,6 @@ export async function getCategoryWiseRevenue(
       labourRevenue: grouping.labourRevenue,
       partsRevenue: grouping.partsRevenue,
       totalRevenue,
-      vasRevenue,
       contributionPercentage,
     })
   }
@@ -1235,38 +1603,35 @@ export async function getMonthlyRevenuesTrend(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<MonthlyTrendRevenue[]> {
+  const invoiceDateField =
+    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    'branch, closed_date_time, job_card_number, final_labour_amount, final_spares_amount',
+    `${dateColumnSelection}closed_date_time, final_labour_amount, final_spares_amount`,
     {
       branch,
       dateFilter,
     },
   )
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
   interface MonthlyGrouping {
     labourRevenue: number
     partsRevenue: number
-    branchJobCardKeys: Set<string>
   }
 
   const monthlyByMonth = new Map<string, MonthlyGrouping>()
 
   for (const row of data ?? []) {
     const typedRow = row as {
-      branch?: unknown
       closed_date_time?: unknown
-      job_card_number?: unknown
+      invoice_date?: unknown
+      Invoice_date?: unknown
       final_labour_amount?: unknown
       final_spares_amount?: unknown
     }
 
-    const monthStr = typedRow.closed_date_time
-      ? new Date(typedRow.closed_date_time as string).toISOString().slice(0, 7)
-      : 'Unknown'
-    const branchName = normalizeBranch(typedRow.branch)
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
+    const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
+    const monthStr = toIsoDate(reportDate, 'month') ?? 'Unknown'
     const labourAmount = parseRevenue(typedRow.final_labour_amount)
     const partsAmount = parseRevenue(typedRow.final_spares_amount)
 
@@ -1275,38 +1640,22 @@ export async function getMonthlyRevenuesTrend(
     if (existing) {
       existing.labourRevenue += labourAmount
       existing.partsRevenue += partsAmount
-      if (jobCardNumber) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
     } else {
       monthlyByMonth.set(monthStr, {
         labourRevenue: labourAmount,
         partsRevenue: partsAmount,
-        branchJobCardKeys: jobCardNumber ? new Set([buildBranchJobCardKey(branchName, jobCardNumber)]) : new Set(),
       })
     }
-
-    if (jobCardNumber) {
-      const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-      existingJobCards.add(jobCardNumber)
-      jobCardsByBranch.set(branchName, existingJobCards)
-    }
   }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
 
   const rows: MonthlyTrendRevenue[] = []
 
   for (const [month, grouping] of monthlyByMonth) {
-    let vasRevenue = 0
-    for (const key of grouping.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
-
     rows.push({
       month,
       labourRevenue: grouping.labourRevenue,
       partsRevenue: grouping.partsRevenue,
       totalRevenue: grouping.labourRevenue + grouping.partsRevenue,
-      vasRevenue,
     })
   }
 
@@ -1331,7 +1680,9 @@ export async function getVasJobPerformance(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+        closedDateField: 'jc_closed_date_time',
+      })
     }
 
     const { data, error } = await query
@@ -1442,7 +1793,9 @@ export async function getVasJobPerformanceDashboard(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+        closedDateField: 'jc_closed_date_time',
+      })
     }
 
     const { data, error } = await query
@@ -1584,7 +1937,9 @@ export async function getVasBillingHoursEfficiency(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+        closedDateField: 'jc_closed_date_time',
+      })
     }
 
     const { data, error } = await query
@@ -1685,17 +2040,14 @@ export async function getLabourSparesMixByServiceType(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<LabourSparesMixRow[]> {
-  const data = await fetchAllJobCardClosedRows('branch, sr_type, final_labour_amount, final_spares_amount, job_card_number', {
+  const data = await fetchAllJobCardClosedRows('sr_type, final_labour_amount, final_spares_amount, job_card_number', {
     branch,
     dateFilter,
   })
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
   interface WorkingMix {
     serviceType: string
     jobCards: Set<string>
-    branchJobCardKeys: Set<string>
     labourRevenue: number
     sparesRevenue: number
   }
@@ -1704,7 +2056,6 @@ export async function getLabourSparesMixByServiceType(
 
   for (const row of data ?? []) {
     const typedRow = row as {
-      branch?: unknown
       sr_type?: unknown
       final_labour_amount?: unknown
       final_spares_amount?: unknown
@@ -1715,51 +2066,32 @@ export async function getLabourSparesMixByServiceType(
     const serviceTypeKey = serviceTypeGroupKey(serviceType)
     const labourRevenue = parseRevenue(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
-    const branchName = normalizeBranch(typedRow.branch)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-
-    if (jobCardNumber) {
-      const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-      existingJobCards.add(jobCardNumber)
-      jobCardsByBranch.set(branchName, existingJobCards)
-    }
 
     const existing = grouped.get(serviceTypeKey)
 
     if (existing) {
       if (jobCardNumber) existing.jobCards.add(jobCardNumber)
-      if (jobCardNumber) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       continue
     }
 
     const jobCards = new Set<string>()
-    const branchJobCardKeys = new Set<string>()
     if (jobCardNumber) jobCards.add(jobCardNumber)
-    if (jobCardNumber) branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
 
     grouped.set(serviceTypeKey, {
       serviceType,
       jobCards,
-      branchJobCardKeys,
       labourRevenue,
       sparesRevenue,
     })
-
   }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
 
   const rows: LabourSparesMixRow[] = []
 
   for (const group of grouped.values()) {
     const totalRevenue = group.labourRevenue + group.sparesRevenue
-    let vasRevenue = 0
-
-    for (const key of group.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
 
     rows.push({
       serviceType: group.serviceType,
@@ -1767,7 +2099,6 @@ export async function getLabourSparesMixByServiceType(
       labourRevenue: group.labourRevenue,
       sparesRevenue: group.sparesRevenue,
       totalRevenue,
-      vasRevenue,
       labourSharePercentage: totalRevenue > 0 ? (group.labourRevenue / totalRevenue) * 100 : 0,
       sparesSharePercentage: totalRevenue > 0 ? (group.sparesRevenue / totalRevenue) * 100 : 0,
     })
@@ -1786,20 +2117,17 @@ export async function getProductLinePerformance(
   dateFilter: DateRangeFilter,
 ): Promise<ProductLinePerformanceRow[]> {
   const data = await fetchAllJobCardClosedRows(
-    'branch, parent_product_line, product_line, job_card_number, final_labour_amount, final_spares_amount',
+    'parent_product_line, product_line, job_card_number, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
     },
   )
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
   interface WorkingProductLinePerformance {
     parentProductLine: string
     productLine: string
     jobCards: Set<string>
-    branchJobCardKeys: Set<string>
     labourRevenue: number
     sparesRevenue: number
   }
@@ -1808,7 +2136,6 @@ export async function getProductLinePerformance(
 
   for (const row of data ?? []) {
     const typedRow = row as {
-      branch?: unknown
       parent_product_line?: unknown
       product_line?: unknown
       job_card_number?: unknown
@@ -1819,55 +2146,36 @@ export async function getProductLinePerformance(
     const parentProductLine = normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown'
     const productLine = normalizeParentProductLine(typedRow.product_line) || 'Unknown'
     const groupKey = `${parentProductLine.toLowerCase()}__${productLine.toLowerCase()}`
-    const branchName = normalizeBranch(typedRow.branch)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
     const labourRevenue = parseRevenue(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
-
-    if (jobCardNumber) {
-      const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-      existingJobCards.add(jobCardNumber)
-      jobCardsByBranch.set(branchName, existingJobCards)
-    }
 
     const existing = grouped.get(groupKey)
 
     if (existing) {
       if (jobCardNumber) existing.jobCards.add(jobCardNumber)
-      if (jobCardNumber) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       continue
     }
 
     const jobCards = new Set<string>()
-    const branchJobCardKeys = new Set<string>()
     if (jobCardNumber) jobCards.add(jobCardNumber)
-    if (jobCardNumber) branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
 
     grouped.set(groupKey, {
       parentProductLine,
       productLine,
       jobCards,
-      branchJobCardKeys,
       labourRevenue,
       sparesRevenue,
     })
-
   }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
 
   const rows: ProductLinePerformanceRow[] = []
 
   for (const group of grouped.values()) {
     const totalRevenue = group.labourRevenue + group.sparesRevenue
     const jobCardCount = group.jobCards.size
-    let vasRevenue = 0
-
-    for (const key of group.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
 
     rows.push({
       parentProductLine: group.parentProductLine,
@@ -1876,7 +2184,6 @@ export async function getProductLinePerformance(
       labourRevenue: group.labourRevenue,
       sparesRevenue: group.sparesRevenue,
       totalRevenue,
-      vasRevenue,
       avgRevenuePerJobCard: jobCardCount > 0 ? totalRevenue / jobCardCount : 0,
     })
   }
@@ -1897,19 +2204,16 @@ export async function getModelWiseRevenue(
   dateFilter: DateRangeFilter,
 ): Promise<ModelWiseRevenueRow[]> {
   const data = await fetchAllJobCardClosedRows(
-    'branch, parent_product_line, final_labour_amount, final_spares_amount, total_invoice_amount, sr_type, job_card_number',
+    'parent_product_line, final_labour_amount, final_spares_amount, total_invoice_amount, sr_type, job_card_number',
     {
       branch,
       dateFilter,
     },
   )
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
   interface WorkingModelRevenue {
     model: string
     jobCards: Set<string>
-    branchJobCardKeys: Set<string>
     labourRevenue: number
     sparesRevenue: number
     totalRevenue: number
@@ -1918,9 +2222,8 @@ export async function getModelWiseRevenue(
 
   const grouped = new Map<string, WorkingModelRevenue>()
 
-  for (const [rowIndex, row] of (data ?? []).entries()) {
+  for (const row of data ?? []) {
     const typedRow = row as {
-      branch?: unknown
       parent_product_line?: unknown
       final_labour_amount?: unknown
       final_spares_amount?: unknown
@@ -1931,7 +2234,6 @@ export async function getModelWiseRevenue(
 
     const model = normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown'
     const modelKey = model.toLowerCase()
-    const branchName = normalizeBranch(typedRow.branch)
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const labourRevenue = parseRevenue(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
@@ -1941,19 +2243,14 @@ export async function getModelWiseRevenue(
       ? parseRevenue(typedRow.total_invoice_amount)
       : labourRevenue + sparesRevenue
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber ?? `${modelKey}__row_${rowIndex}`
-
-    if (jobCardNumber) {
-      const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-      existingJobCards.add(jobCardNumber)
-      jobCardsByBranch.set(branchName, existingJobCards)
-    }
+    const jobCardKey = jobCardNumber
 
     const existing = grouped.get(modelKey)
 
     if (existing) {
-      existing.jobCards.add(jobCardKey)
-      if (jobCardNumber) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
+      if (jobCardKey) {
+        existing.jobCards.add(jobCardKey)
+      }
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       existing.totalRevenue += totalRevenue
@@ -1966,17 +2263,13 @@ export async function getModelWiseRevenue(
 
     grouped.set(modelKey, {
       model,
-      jobCards: new Set([jobCardKey]),
-      branchJobCardKeys: jobCardNumber ? new Set([buildBranchJobCardKey(branchName, jobCardNumber)]) : new Set(),
+      jobCards: new Set(jobCardKey ? [jobCardKey] : []),
       labourRevenue,
       sparesRevenue,
       totalRevenue,
       serviceTypeCount,
     })
-
   }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
 
   const rows: ModelWiseRevenueRow[] = []
 
@@ -1992,11 +2285,6 @@ export async function getModelWiseRevenue(
     }
 
     const jobCardCount = group.jobCards.size
-    let vasRevenue = 0
-
-    for (const key of group.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
 
     rows.push({
       model: group.model,
@@ -2004,7 +2292,6 @@ export async function getModelWiseRevenue(
       labourRevenue: group.labourRevenue,
       sparesRevenue: group.sparesRevenue,
       totalRevenue: group.totalRevenue,
-      vasRevenue,
       avgRevenuePerJC: jobCardCount > 0 ? group.totalRevenue / jobCardCount : 0,
       topServiceType,
     })
@@ -2023,7 +2310,7 @@ export async function getTatDurationReport(
   dateFilter: DateRangeFilter,
 ): Promise<TatDurationReport> {
   const data = await fetchAllJobCardClosedRows(
-    'created_date_time, closed_date_time, total_invoice_amount',
+    'job_card_number, created_date_time, closed_date_time, total_invoice_amount',
     {
       branch,
       dateFilter,
@@ -2062,13 +2349,21 @@ export async function getTatDurationReport(
   let invalidTatCount = 0
   let validTatCount = 0
   let totalTatHours = 0
+  const processedJobCards = new Set<string>()
 
   for (const row of data ?? []) {
     const typedRow = row as {
+      job_card_number?: unknown
       created_date_time?: unknown
       closed_date_time?: unknown
       total_invoice_amount?: unknown
     }
+
+    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
+    if (!jobCardNumber || processedJobCards.has(jobCardNumber)) {
+      continue
+    }
+    processedJobCards.add(jobCardNumber)
 
     const createdRaw = typedRow.created_date_time
     const closedRaw = typedRow.closed_date_time
@@ -2144,7 +2439,7 @@ export async function getTatDurationReport(
   })
 
   return {
-    totalRecords: data.length,
+    totalRecords: processedJobCards.size,
     validTatCount,
     invalidTatCount,
     overallAvgTatHours: validTatCount > 0 ? totalTatHours / validTatCount : 0,
@@ -2157,8 +2452,11 @@ export async function getEmployeeUtilizationReport(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<EmployeeUtilizationRow[]> {
+  const invoiceDateField =
+    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    'employee_code, sr_assigned_to, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
+    `${dateColumnSelection}employee_code, sr_assigned_to, job_card_number, closed_date_time, final_labour_amount, final_spares_amount`,
     {
       branch,
       dateFilter,
@@ -2212,6 +2510,8 @@ export async function getEmployeeUtilizationReport(
       sr_assigned_to?: unknown
       job_card_number?: unknown
       closed_date_time?: unknown
+      invoice_date?: unknown
+      Invoice_date?: unknown
       final_labour_amount?: unknown
       final_spares_amount?: unknown
     }
@@ -2219,12 +2519,9 @@ export async function getEmployeeUtilizationReport(
     const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
     const key = employeeCodeGroupKey(employeeCode)
     const fallbackName = normalizeManpowerName(typedRow.sr_assigned_to)
-    const jobCardNumber =
-      typedRow.job_card_number == null ? null : String(typedRow.job_card_number).trim() || null
-    const closedDay =
-      typedRow.closed_date_time == null
-        ? null
-        : new Date(String(typedRow.closed_date_time)).toISOString().slice(0, 10)
+    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
+    const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
+    const closedDay = toIsoDate(reportDate, 'day')
 
     const labourRevenue = parseRevenue(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
@@ -2569,19 +2866,16 @@ export async function getVehicleWiseRevenue(
   dateFilter: DateRangeFilter,
 ): Promise<VehicleWiseRevenueRow[]> {
   const data = await fetchAllJobCardClosedRows(
-    'branch, vehicle_registration_number, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
+    'vehicle_registration_number, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
     },
   )
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
   interface WorkingVehicleRevenue {
     vehicleRegistrationNumber: string
     visits: Set<string>
-    branchJobCardKeys: Set<string>
     labourRevenue: number
     sparesRevenue: number
     firstVisitDate: string | null
@@ -2590,9 +2884,8 @@ export async function getVehicleWiseRevenue(
 
   const grouped = new Map<string, WorkingVehicleRevenue>()
 
-  for (const [rowIndex, row] of (data ?? []).entries()) {
+  for (const row of data ?? []) {
     const typedRow = row as {
-      branch?: unknown
       vehicle_registration_number?: unknown
       job_card_number?: unknown
       closed_date_time?: unknown
@@ -2602,17 +2895,10 @@ export async function getVehicleWiseRevenue(
 
     const vehicleRegistrationNumber = normalizeVehicleRegistration(typedRow.vehicle_registration_number)
     const vehicleKey = vehicleRegistrationNumber.toLowerCase()
-    const branchName = normalizeBranch(typedRow.branch)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const visitKey = jobCardNumber ?? `${vehicleRegistrationNumber}__row_${rowIndex}`
+    const visitKey = jobCardNumber
     const labourRevenue = parseRevenue(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenue(typedRow.final_spares_amount)
-
-    if (jobCardNumber) {
-      const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-      existingJobCards.add(jobCardNumber)
-      jobCardsByBranch.set(branchName, existingJobCards)
-    }
 
     let closedDate: string | null = null
     if (typedRow.closed_date_time != null) {
@@ -2625,8 +2911,9 @@ export async function getVehicleWiseRevenue(
     const existing = grouped.get(vehicleKey)
 
     if (existing) {
-      existing.visits.add(visitKey)
-      if (jobCardNumber) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCardNumber))
+      if (visitKey) {
+        existing.visits.add(visitKey)
+      }
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       if (closedDate) {
@@ -2641,12 +2928,13 @@ export async function getVehicleWiseRevenue(
     }
 
     const visits = new Set<string>()
-    visits.add(visitKey)
+    if (visitKey) {
+      visits.add(visitKey)
+    }
 
     grouped.set(vehicleKey, {
       vehicleRegistrationNumber,
       visits,
-      branchJobCardKeys: jobCardNumber ? new Set([buildBranchJobCardKey(branchName, jobCardNumber)]) : new Set(),
       labourRevenue,
       sparesRevenue,
       firstVisitDate: closedDate,
@@ -2654,18 +2942,11 @@ export async function getVehicleWiseRevenue(
     })
   }
 
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
-
   const rows: VehicleWiseRevenueRow[] = []
 
   for (const vehicle of grouped.values()) {
     const visitCount = vehicle.visits.size
     const totalRevenue = vehicle.labourRevenue + vehicle.sparesRevenue
-    let vasRevenue = 0
-
-    for (const key of vehicle.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
 
     rows.push({
       vehicleRegistrationNumber: vehicle.vehicleRegistrationNumber,
@@ -2674,7 +2955,6 @@ export async function getVehicleWiseRevenue(
       labourRevenue: vehicle.labourRevenue,
       sparesRevenue: vehicle.sparesRevenue,
       totalRevenue,
-      vasRevenue,
       avgRevenuePerVisit: visitCount > 0 ? totalRevenue / visitCount : 0,
       firstVisitDate: vehicle.firstVisitDate,
       lastVisitDate: vehicle.lastVisitDate,
@@ -2750,7 +3030,6 @@ export async function getInvoiceValueDistribution(
     branch: string
     invoiceCount: number
     totalAmount: number
-    vasRevenue: number
   }
 
   const bandMap = new Map<InvoiceValueBandRow['bandKey'], WorkingBandRow>(
@@ -2804,50 +3083,6 @@ export async function getInvoiceValueDistribution(
         branch: branchName,
         invoiceCount: 1,
         totalAmount: amount,
-        vasRevenue: 0,
-      })
-    }
-  }
-
-  const jcRows = await fetchAllJobCardClosedRows('branch, job_card_number', {
-    branch,
-    dateFilter,
-  })
-
-  const jobCardsByBranch = new Map<string, Set<string>>()
-
-  for (const row of jcRows) {
-    const typedRow = row as { branch?: unknown; job_card_number?: unknown }
-    const branchName = normalizeBranch(typedRow.branch)
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    if (!jobCardNumber) continue
-
-    const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-    existingJobCards.add(jobCardNumber)
-    jobCardsByBranch.set(branchName, existingJobCards)
-  }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
-  let totalVasRevenue = 0
-
-  for (const [branchName, jobCards] of jobCardsByBranch.entries()) {
-    let branchVasRevenue = 0
-
-    for (const jobCard of jobCards) {
-      branchVasRevenue += vasByBranchJobCard.get(buildBranchJobCardKey(branchName, jobCard)) ?? 0
-    }
-
-    totalVasRevenue += branchVasRevenue
-
-    const existingBranch = branchMap.get(branchName)
-    if (existingBranch) {
-      existingBranch.vasRevenue = branchVasRevenue
-    } else {
-      branchMap.set(branchName, {
-        branch: branchName,
-        invoiceCount: 0,
-        totalAmount: 0,
-        vasRevenue: branchVasRevenue,
       })
     }
   }
@@ -2873,7 +3108,6 @@ export async function getInvoiceValueDistribution(
       invoiceCount: row.invoiceCount,
       percentage: totalInvoices > 0 ? (row.invoiceCount / totalInvoices) * 100 : 0,
       totalAmount: row.totalAmount,
-      vasRevenue: row.vasRevenue,
       avgInvoiceValue: row.invoiceCount > 0 ? row.totalAmount / row.invoiceCount : 0,
     }))
     .sort((a, b) => {
@@ -2886,7 +3120,6 @@ export async function getInvoiceValueDistribution(
   return {
     totalInvoices,
     totalAmount,
-    totalVasRevenue,
     avgInvoiceValue: totalInvoices > 0 ? totalAmount / totalInvoices : 0,
     valueBands,
     branchSpread,
@@ -2897,96 +3130,100 @@ export async function getInvoiceDailyTrend(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<InvoiceDailyTrendRow[]> {
-  const jcRows = await fetchAllJobCardClosedRows(
-    'branch, closed_date_time, job_card_number, final_labour_amount, final_spares_amount, total_invoice_amount',
-    {
-      branch,
-      dateFilter,
-    },
-  )
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+  const bounds = getDateRangeBounds(dateFilter)
 
-  const jobCardsByBranch = new Map<string, Set<string>>()
+  while (true) {
+    let query = supabase
+      .from('service_invoice_data')
+      .select('invoice_date, invoice_number, final_labour_invoice_amount, final_spares_invoice_amount, final_consolidated_invoice_amount')
+      .range(from, from + QUERY_PAGE_SIZE - 1)
 
-  for (const row of jcRows) {
-    const typedRow = row as { branch?: unknown; job_card_number?: unknown }
-    const branchName = normalizeBranch(typedRow.branch)
-    const jobCard = normalizeJobCardNumber(typedRow.job_card_number)
-    if (!jobCard) continue
+    query = applyBranchFilterToQuery(query, branch)
 
-    const existingJobCards = jobCardsByBranch.get(branchName) ?? new Set<string>()
-    existingJobCards.add(jobCard)
-    jobCardsByBranch.set(branchName, existingJobCards)
+    if (bounds) {
+      const fromDate = bounds.from.slice(0, 10)
+      const toExclusiveDate = bounds.toExclusive.slice(0, 10)
+      query = query.gte('invoice_date', fromDate).lt('invoice_date', toExclusiveDate)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
   }
-
-  const vasByBranchJobCard = await fetchInvoicedVasRevenueByBranchJobCard(branch, jobCardsByBranch)
 
   interface WorkingInvoiceDailyRow {
     date: string
-    invoiceCount: number
+    invoiceKeys: Set<string>
     labourTotal: number
     sparesTotal: number
     consolidatedTotal: number
-    branchJobCardKeys: Set<string>
   }
 
   const byDate = new Map<string, WorkingInvoiceDailyRow>()
 
-  for (const row of jcRows) {
+  for (const [rowIndex, row] of allRows.entries()) {
     const typedRow = row as {
-      branch?: unknown
-      closed_date_time?: unknown
-      job_card_number?: unknown
-      final_labour_amount?: unknown
-      final_spares_amount?: unknown
-      total_invoice_amount?: unknown
+      invoice_date?: unknown
+      invoice_number?: unknown
+      final_labour_invoice_amount?: unknown
+      final_spares_invoice_amount?: unknown
+      final_consolidated_invoice_amount?: unknown
     }
 
-    const dateTime = typedRow.closed_date_time == null ? '' : String(typedRow.closed_date_time)
-    const date = dateTime ? dateTime.slice(0, 10) : 'Unknown'
+    const date = typedRow.invoice_date == null ? 'Unknown' : String(typedRow.invoice_date)
+    const invoiceKey =
+      typedRow.invoice_number == null
+        ? `${date}_row_${rowIndex}`
+        : String(typedRow.invoice_number).trim() || `${date}_row_${rowIndex}`
 
-    const labour = parseRevenue(typedRow.final_labour_amount)
-    const spares = parseRevenue(typedRow.final_spares_amount)
-    const consolidated = parseRevenue(typedRow.total_invoice_amount)
-    const branchName = normalizeBranch(typedRow.branch)
-    const jobCard = normalizeJobCardNumber(typedRow.job_card_number)
+    const labour = parseRevenue(typedRow.final_labour_invoice_amount)
+    const spares = parseRevenue(typedRow.final_spares_invoice_amount)
+    const consolidated = parseRevenue(typedRow.final_consolidated_invoice_amount)
 
     const existing = byDate.get(date)
     if (existing) {
-      existing.invoiceCount += 1
+      existing.invoiceKeys.add(invoiceKey)
       existing.labourTotal += labour
       existing.sparesTotal += spares
       existing.consolidatedTotal += consolidated
-      if (jobCard) existing.branchJobCardKeys.add(buildBranchJobCardKey(branchName, jobCard))
       continue
     }
 
+    const invoiceKeys = new Set<string>()
+    invoiceKeys.add(invoiceKey)
+
     byDate.set(date, {
       date,
-      invoiceCount: 1,
+      invoiceKeys,
       labourTotal: labour,
       sparesTotal: spares,
       consolidatedTotal: consolidated,
-      branchJobCardKeys: jobCard ? new Set([buildBranchJobCardKey(branchName, jobCard)]) : new Set(),
     })
   }
 
   const rows: InvoiceDailyTrendRow[] = []
 
   for (const day of byDate.values()) {
-    const invoiceCount = day.invoiceCount
-    let vasRevenue = 0
-
-    for (const key of day.branchJobCardKeys) {
-      vasRevenue += vasByBranchJobCard.get(key) ?? 0
-    }
-
+    const invoiceCount = day.invoiceKeys.size
     rows.push({
       date: day.date,
       invoiceCount,
       labourTotal: day.labourTotal,
       sparesTotal: day.sparesTotal,
       consolidatedTotal: day.consolidatedTotal,
-      vasRevenue,
       avgInvoiceValue: invoiceCount > 0 ? day.consolidatedTotal / invoiceCount : 0,
     })
   }
@@ -3113,8 +3350,7 @@ export async function getJcInvoiceReconciliation(
       branch?: unknown
     }
 
-    const keyRaw = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
-    const key = keyRaw.toUpperCase()
+    const key = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     const jcAmount = parseRevenue(typedRow.total_invoice_amount)
     const branchName = normalizeBranch(typedRow.branch)
     const branchRow = getBranchRow(branchName)
@@ -3215,7 +3451,9 @@ export async function getNetPriceFinalRevenueVariance(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+        closedDateField: 'jc_closed_date_time',
+      })
     }
 
     const { data, error } = await query
@@ -3242,7 +3480,7 @@ export async function getNetPriceFinalRevenueVariance(
 
   for (const row of jcRows) {
     const typedRow = row as { job_card_number?: unknown; total_invoice_amount?: unknown }
-    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
+    const jobCard = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     if (!jobCard) continue
 
     const existing = jcQueueByJobCard.get(jobCard) ?? []
@@ -3280,7 +3518,7 @@ export async function getNetPriceFinalRevenueVariance(
     const jobCode = typedRow.job_code == null ? 'Unknown' : String(typedRow.job_code).trim() || 'Unknown'
     const groupKey = `${branchName.toLowerCase()}__${jobCode.toLowerCase()}`
 
-    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
+    const jobCard = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     const estimate = parseRevenue(typedRow.net_price)
 
     totalRecords += 1
@@ -3382,7 +3620,7 @@ export async function getEndToEndJobLifecycleReport(
 
   for (const row of jcRows) {
     const typedRow = row as { job_card_number?: unknown }
-    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    const jobCard = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     if (!jobCard) continue
 
     const key = jobCard.toUpperCase()
@@ -3446,7 +3684,7 @@ export async function getEndToEndJobLifecycleReport(
       net_price?: unknown
     }
 
-    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    const jobCard = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     if (!jobCard) continue
 
     const branchName = normalizeBranch(typedRow.branch)
@@ -3560,7 +3798,7 @@ export async function getEndToEndJobLifecycleReport(
       total_invoice_amount?: unknown
     }
 
-    const jobCard = typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim()
+    const jobCard = normalizeJobCardNumber(typedRow.job_card_number) ?? ''
     if (!jobCard) continue
 
     const branchName = normalizeBranch(typedRow.branch)
