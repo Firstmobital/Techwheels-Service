@@ -195,6 +195,29 @@ function getLabourRateForPanel(rateRows: ModelPanelRate[], panel: string, paintT
   return match.psRate
 }
 
+function canonicalizeEstimateAction(value: string): string {
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return ''
+  if (normalized === 'parts replacement' || normalized === 'part replacement') return 'replace'
+  if (normalized === 'repair') return 'repaint'
+  return normalized
+}
+
+function isRepaintAction(value: string): boolean {
+  return canonicalizeEstimateAction(value) === 'repaint'
+}
+
+function isReplaceAction(value: string): boolean {
+  return canonicalizeEstimateAction(value) === 'replace'
+}
+
+function formatEstimateActionLabel(value: string): string {
+  const canonical = canonicalizeEstimateAction(value)
+  if (canonical === 'repaint') return 'Repaint'
+  if (canonical === 'replace') return 'Parts Replacement'
+  return value
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AutoDocPage() {
@@ -289,7 +312,12 @@ export default function AutoDocPage() {
         if (cancelled || res.error || !res.data) return
         setStatusOptions(res.data.statusOptions)
         setPhotoStageOptions(res.data.photoStageOptions)
-        setEstimateActionOptions(res.data.estimateActionOptions)
+        const normalizedActions = Array.from(new Set(
+          res.data.estimateActionOptions
+            .map((action) => canonicalizeEstimateAction(action))
+            .filter((action) => Boolean(action)),
+        ))
+        setEstimateActionOptions(normalizedActions)
       })
 
     void listActivePanelLabels()
@@ -372,7 +400,11 @@ export default function AutoDocPage() {
     setEstimateRows((prev) => prev.map((row) => {
       if (row.id !== id) return row
       const next = { ...row, ...patch }
-      if (patch.action === 'Repaint') {
+      if (patch.action !== undefined) {
+        next.action = canonicalizeEstimateAction(patch.action)
+      }
+
+      if (isRepaintAction(next.action)) {
         next.partsPrice = ''
         if (!next.partNo || next.partNo === '-') {
           next.partNo = '-'
@@ -382,11 +414,11 @@ export default function AutoDocPage() {
           next.labourPrice = String(labourRate)
         }
       }
-      if (patch.action === 'Parts Replacement' && next.partNo === '-') {
+      if (isReplaceAction(next.action) && next.partNo === '-') {
         next.partNo = ''
       }
 
-      if ((patch.panel || patch.action === 'Repaint') && next.action === 'Repaint') {
+      if ((patch.panel || patch.action !== undefined) && isRepaintAction(next.action)) {
         const labourRate = getLabourRateForPanel(activeModelRates, next.panel, form.paintType)
         if (labourRate != null) {
           next.labourPrice = String(labourRate)
@@ -513,7 +545,7 @@ export default function AutoDocPage() {
 
   useEffect(() => {
     setEstimateRows((prev) => prev.map((row) => {
-      if (row.action !== 'Repaint') return row
+      if (!isRepaintAction(row.action)) return row
       const labourRate = getLabourRateForPanel(activeModelRates, row.panel, form.paintType)
       if (labourRate == null) return row
       return { ...row, labourPrice: String(labourRate) }
@@ -1862,7 +1894,7 @@ export default function AutoDocPage() {
               <tbody>
                 {estimateRows.map((row) => {
                   const total = (Number(row.partsPrice) || 0) + (Number(row.paintPrice) || 0) + (Number(row.labourPrice) || 0)
-                  const isRepaint = row.action === 'Repaint'
+                  const isRepaint = isRepaintAction(row.action)
                   return (
                     <tr key={row.id} className="rounded-lg bg-white shadow-[0_0_0_1px_rgba(229,231,235,1)]">
                       <td className="px-2 py-2">
@@ -1879,12 +1911,12 @@ export default function AutoDocPage() {
                       <td className="px-2 py-2">
                         <select
                           value={row.action}
-                          onChange={(e) => updateEstimateRow(row.id, { action: e.target.value as EstimateLineItem['action'] })}
+                          onChange={(e) => updateEstimateRow(row.id, { action: e.target.value })}
                           className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         >
                           <option value="">Select</option>
                           {estimateActionOptions.map((action) => (
-                            <option key={action} value={action}>{action}</option>
+                            <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
                           ))}
                         </select>
                       </td>
@@ -1924,7 +1956,7 @@ export default function AutoDocPage() {
                           min={0}
                           value={row.labourPrice}
                           onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
-                          placeholder={row.action === 'Repaint' && activeModelRates.length > 0 ? 'Auto-fill' : ''}
+                          placeholder={isRepaintAction(row.action) && activeModelRates.length > 0 ? 'Auto-fill' : ''}
                           className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         />
                       </td>
@@ -1964,7 +1996,7 @@ export default function AutoDocPage() {
           <div className="space-y-3 xl:hidden">
             {estimateRows.map((row) => {
               const total = (Number(row.partsPrice) || 0) + (Number(row.paintPrice) || 0) + (Number(row.labourPrice) || 0)
-              const isRepaint = row.action === 'Repaint'
+              const isRepaint = isRepaintAction(row.action)
               return (
                 <div key={row.id} className="rounded-lg border border-gray-200 bg-white p-4">
                   <div className="mb-3 flex items-center justify-between">
@@ -1998,12 +2030,12 @@ export default function AutoDocPage() {
                       Action
                       <select
                         value={row.action}
-                        onChange={(e) => updateEstimateRow(row.id, { action: e.target.value as EstimateLineItem['action'] })}
+                        onChange={(e) => updateEstimateRow(row.id, { action: e.target.value })}
                         className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       >
                         <option value="">Select</option>
                         {estimateActionOptions.map((action) => (
-                          <option key={action} value={action}>{action}</option>
+                          <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
                         ))}
                       </select>
                     </label>
@@ -2049,7 +2081,7 @@ export default function AutoDocPage() {
                         onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
                         className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       />
-                      {row.action === 'Repaint' && activeModelRates.length > 0 && (
+                      {isRepaintAction(row.action) && activeModelRates.length > 0 && (
                         <p className="mt-1 text-[11px] text-emerald-600">Auto-filled from {form.paintType || 'paint type'}</p>
                       )}
                     </label>
