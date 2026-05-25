@@ -14,6 +14,7 @@ import {
   listDocuments,
   listJobCardSummaries,
   listPanels,
+  createPanel,
   logActivity,
   resolveRegNumberFromReference,
   sendClaimEmail,
@@ -779,6 +780,73 @@ export default function AutoDocPage() {
     }
     void loadActiveSummary()
   }, [activeJobCardId, refreshDocuments])
+
+  useEffect(() => {
+    async function hydrateVehicleContextForSelectedJob() {
+      if (!activeJobCardId || !activeSummary?.reg_number) return
+
+      const vehicleRes = await fetchVehicleByReg(activeSummary.reg_number)
+      if (vehicleRes.error || !vehicleRes.data) {
+        setForm((prev) => ({
+          ...prev,
+          regNumber: activeSummary.reg_number ?? prev.regNumber,
+          jcNumber: activeSummary.jc_number ?? prev.jcNumber,
+          model: activeSummary.model ?? prev.model,
+        }))
+        return
+      }
+
+      const vehicle = vehicleRes.data
+      setForm((prev) => ({
+        ...prev,
+        regNumber: activeSummary.reg_number ?? prev.regNumber,
+        jcNumber: activeSummary.jc_number ?? prev.jcNumber,
+        vin: vehicle.vin ?? prev.vin,
+        model: vehicle.model ?? activeSummary.model ?? prev.model,
+        year: vehicle.year != null ? String(vehicle.year) : prev.year,
+        colour: vehicle.colour ?? prev.colour,
+        paintType: vehicle.paint_type ?? prev.paintType,
+        dealerCity: vehicle.dealer_city ?? prev.dealerCity,
+        bpCityCategory: vehicle.bp_city_category ?? prev.bpCityCategory,
+        ownerName: vehicle.owner_name ?? prev.ownerName,
+        ownerPhone: vehicle.owner_phone ?? prev.ownerPhone,
+        dateOfSale: vehicle.date_of_sale ?? prev.dateOfSale,
+      }))
+    }
+
+    void hydrateVehicleContextForSelectedJob()
+  }, [activeJobCardId, activeSummary])
+
+  useEffect(() => {
+    async function persistSelectedPanelsToDb() {
+      if (!activeJobCardId) return
+      if (panelsHydratedForJobId !== activeJobCardId) return
+
+      const sanitized = sanitizePanelList(selectedPanels)
+      if (sanitized.length === 0) return
+
+      const existingRes = await listPanels(activeJobCardId)
+      if (existingRes.error || !existingRes.data) return
+
+      const existing = new Set(
+        existingRes.data
+          .map((panel) => panel.panel_name?.trim())
+          .filter((name): name is string => Boolean(name && name.length > 0)),
+      )
+
+      for (const panelName of sanitized) {
+        if (existing.has(panelName)) continue
+        const createRes = await createPanel(activeJobCardId, panelName)
+        if (createRes.error) {
+          showToast(`Unable to save panel \"${panelName}\": ${createRes.error}`, false)
+          return
+        }
+        existing.add(panelName)
+      }
+    }
+
+    void persistSelectedPanelsToDb()
+  }, [activeJobCardId, panelsHydratedForJobId, selectedPanels])
 
   // ── Compute KPIs ───────────────────────────────────────────────────────────
   useEffect(() => {
