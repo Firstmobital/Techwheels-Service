@@ -1496,9 +1496,55 @@ export default function AutoDocPage() {
       showToast('Select a job card first from dashboard.', false)
       return
     }
+
+    const syncedJobCardId = await persistDraftJobCard(false)
+    if (!syncedJobCardId) {
+      showToast('Save draft first before sending claim email.', false)
+      return
+    }
+
     if (!composeReady) {
       showToast('Generate and upload Pre-repair PPT and Excel before sending.', false)
       return
+    }
+
+    let latestEstimateAmount = activeSummary.total_estimate_amount ?? null
+    try {
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+      const { data: auth } = await supabase.auth.getSession()
+      const token = auth.session?.access_token
+
+      if (supabaseUrl && token) {
+        const res = await fetch(`${supabaseUrl}/functions/v1/estimate-export-data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ jobCardId: syncedJobCardId }),
+        })
+
+        if (res.ok) {
+          const payload = await res.json() as { rows?: Array<Record<string, unknown>> }
+          const rows = Array.isArray(payload.rows) ? payload.rows : []
+          const computedTotal = rows.reduce((sum, row) => {
+            const rowTotal = Number(row.row_total)
+            if (Number.isFinite(rowTotal)) return sum + rowTotal
+
+            const ndp = Number(row.ndp_value) || 0
+            const paint = Number(row.paint_charges) || 0
+            const labour = Number(row.labour_charges) || 0
+            const special = Number(row.total_special_charges) || 0
+            return sum + ndp + paint + labour + special
+          }, 0)
+
+          if (Number.isFinite(computedTotal)) {
+            latestEstimateAmount = computedTotal
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to recompute latest estimate amount for email:', err)
     }
 
     const content = generateClaimEmailContent({
@@ -1508,7 +1554,7 @@ export default function AutoDocPage() {
       colour: activeSummary.colour ?? null,
       complaint_date: activeSummary.complaint_date ?? new Date().toISOString(),
       dealer_name: activeSummary.dealer_name ?? null,
-      total_estimate_amount: activeSummary.total_estimate_amount ?? null,
+      total_estimate_amount: latestEstimateAmount,
     })
 
     const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
