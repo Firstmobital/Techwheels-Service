@@ -1603,6 +1603,62 @@ export default function AutoDocPage() {
       return
     }
 
+    const postDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_post')
+    if (!postDoc) {
+      showToast('Post-repair PPT attachment is missing. Please generate it again.', false)
+      return
+    }
+
+    const excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
+    const deliveryDoc = jobDocuments.find((doc) => doc.doc_type === 'video_delivery')
+
+    const content = generateClaimEmailContent({
+      jc_number: (activeSummary?.jc_number ?? form.jcNumber) || 'JC-NA',
+      reg_number: (activeSummary?.reg_number ?? form.regNumber) || 'REG-NA',
+      model: activeSummary?.model ?? null,
+      colour: activeSummary?.colour ?? null,
+      complaint_date: activeSummary?.complaint_date ?? new Date().toISOString(),
+      dealer_name: activeSummary?.dealer_name ?? null,
+      total_estimate_amount: activeSummary?.total_estimate_amount ?? null,
+    })
+
+    const attachments = [
+      {
+        filename: storageFileName(postDoc.storage_path, 'post-repair.pptx'),
+        storagePath: postDoc.storage_path,
+        bucket: AUTODOC_BUCKET,
+      },
+      ...(excelDoc ? [{
+        filename: storageFileName(excelDoc.storage_path, 'estimate.xlsx'),
+        storagePath: excelDoc.storage_path,
+        bucket: AUTODOC_BUCKET,
+      }] : []),
+      ...(preDoc ? [{
+        filename: storageFileName(preDoc.storage_path, 'pre-repair.pptx'),
+        storagePath: preDoc.storage_path,
+        bucket: AUTODOC_BUCKET,
+      }] : []),
+      ...(deliveryDoc ? [{
+        filename: storageFileName(deliveryDoc.storage_path, 'delivery-video.mp4'),
+        storagePath: deliveryDoc.storage_path,
+        bucket: AUTODOC_BUCKET,
+      }] : []),
+    ]
+
+    const targetEmail = 'vinodexodus@gmail.com'
+    const sendRes = await sendClaimEmail(activeJobCardId, {
+      to: targetEmail,
+      subject: `[POST-REPAIR] ${content.subject}`,
+      html: content.html,
+      attachments,
+    })
+
+    if (sendRes.error) {
+      showToast(sendRes.error, false)
+      return
+    }
+
     const res = await updateJobCardStatus(activeJobCardId, 'completed')
     if (res.error) {
       showToast(res.error, false)
@@ -1612,10 +1668,10 @@ export default function AutoDocPage() {
     await logActivity('submit_claim_completed', {
       resourceType: 'job_card',
       resourceId: activeJobCardId,
-      details: { deliveryVideoName },
+      details: { deliveryVideoName, emailSent: true },
     })
     await fetchRows(true)
-    showToast('Warranty claim submitted and marked completed.', true)
+    showToast('Post-repair claim email sent and warranty claim marked completed.', true)
   }
 
   function showToast(msg: string, ok: boolean) {
