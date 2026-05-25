@@ -182,6 +182,12 @@ function parseRateWorkbook(file: File): Promise<RateUploadRow[]> {
             return
           }
 
+          // Flat sheet format (like exported template): each row carries model + panel.
+          // Always honor the current row's model when present.
+          if (modelCol && panelCol) {
+            currentModel = modelCol
+          }
+
           if (!currentModel) {
             if (modelCol && panelCol) {
               currentModel = modelCol
