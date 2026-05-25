@@ -75,6 +75,7 @@ export interface DailyRevenueReport {
   invoiceCount: number
   labourRevenue: number
   partsRevenue: number
+  vasRevenue: number
   totalRevenue: number
   avgBillingPerVehicle: number
 }
@@ -84,6 +85,7 @@ export interface CategoryWiseRevenue {
   vehicleCount: number
   labourRevenue: number
   partsRevenue: number
+  vasRevenue: number
   totalRevenue: number
   contributionPercentage: number
 }
@@ -92,6 +94,7 @@ export interface MonthlyTrendRevenue {
   month: string
   labourRevenue: number
   partsRevenue: number
+  vasRevenue: number
   totalRevenue: number
 }
 
@@ -161,6 +164,7 @@ export interface LabourSparesMixRow {
   jobCardCount: number
   labourRevenue: number
   sparesRevenue: number
+  vasRevenue: number
   totalRevenue: number
   labourSharePercentage: number
   sparesSharePercentage: number
@@ -172,6 +176,7 @@ export interface ProductLinePerformanceRow {
   jobCardCount: number
   labourRevenue: number
   sparesRevenue: number
+  vasRevenue: number
   totalRevenue: number
   avgRevenuePerJobCard: number
 }
@@ -181,6 +186,7 @@ export interface ModelWiseRevenueRow {
   jobCardCount: number
   labourRevenue: number
   sparesRevenue: number
+  vasRevenue: number
   totalRevenue: number
   avgRevenuePerJC: number
   topServiceType: string
@@ -258,6 +264,7 @@ export interface VehicleWiseRevenueRow {
   repeatVisitCount: number
   labourRevenue: number
   sparesRevenue: number
+  vasRevenue: number
   totalRevenue: number
   avgRevenuePerVisit: number
   firstVisitDate: string | null
@@ -278,12 +285,14 @@ export interface BranchInvoiceSpreadRow {
   invoiceCount: number
   percentage: number
   totalAmount: number
+  vasRevenue: number
   avgInvoiceValue: number
 }
 
 export interface InvoiceValueDistributionReport {
   totalInvoices: number
   totalAmount: number
+  totalVasRevenue: number
   avgInvoiceValue: number
   valueBands: InvoiceValueBandRow[]
   branchSpread: BranchInvoiceSpreadRow[]
@@ -294,6 +303,7 @@ export interface InvoiceDailyTrendRow {
   invoiceCount: number
   labourTotal: number
   sparesTotal: number
+  vasRevenue: number
   consolidatedTotal: number
   avgInvoiceValue: number
 }
@@ -1499,6 +1509,7 @@ export async function getDailyRevenueReport(
       invoiceCount: grouping.jobCardNumbers.size,
       labourRevenue: grouping.labourRevenue,
       partsRevenue: grouping.partsRevenue,
+      vasRevenue: 0,
       totalRevenue,
       avgBillingPerVehicle,
     })
@@ -1586,6 +1597,7 @@ export async function getCategoryWiseRevenue(
       vehicleCount: grouping.vehicleNumbers.size,
       labourRevenue: grouping.labourRevenue,
       partsRevenue: grouping.partsRevenue,
+      vasRevenue: 0,
       totalRevenue,
       contributionPercentage,
     })
@@ -1655,6 +1667,7 @@ export async function getMonthlyRevenuesTrend(
       month,
       labourRevenue: grouping.labourRevenue,
       partsRevenue: grouping.partsRevenue,
+      vasRevenue: 0,
       totalRevenue: grouping.labourRevenue + grouping.partsRevenue,
     })
   }
@@ -2098,6 +2111,7 @@ export async function getLabourSparesMixByServiceType(
       jobCardCount: group.jobCards.size,
       labourRevenue: group.labourRevenue,
       sparesRevenue: group.sparesRevenue,
+      vasRevenue: 0,
       totalRevenue,
       labourSharePercentage: totalRevenue > 0 ? (group.labourRevenue / totalRevenue) * 100 : 0,
       sparesSharePercentage: totalRevenue > 0 ? (group.sparesRevenue / totalRevenue) * 100 : 0,
@@ -2183,6 +2197,7 @@ export async function getProductLinePerformance(
       jobCardCount,
       labourRevenue: group.labourRevenue,
       sparesRevenue: group.sparesRevenue,
+      vasRevenue: 0,
       totalRevenue,
       avgRevenuePerJobCard: jobCardCount > 0 ? totalRevenue / jobCardCount : 0,
     })
@@ -2291,6 +2306,7 @@ export async function getModelWiseRevenue(
       jobCardCount,
       labourRevenue: group.labourRevenue,
       sparesRevenue: group.sparesRevenue,
+      vasRevenue: 0,
       totalRevenue: group.totalRevenue,
       avgRevenuePerJC: jobCardCount > 0 ? group.totalRevenue / jobCardCount : 0,
       topServiceType,
@@ -2954,6 +2970,7 @@ export async function getVehicleWiseRevenue(
       repeatVisitCount: visitCount > 1 ? visitCount - 1 : 0,
       labourRevenue: vehicle.labourRevenue,
       sparesRevenue: vehicle.sparesRevenue,
+      vasRevenue: 0,
       totalRevenue,
       avgRevenuePerVisit: visitCount > 0 ? totalRevenue / visitCount : 0,
       firstVisitDate: vehicle.firstVisitDate,
@@ -3108,6 +3125,7 @@ export async function getInvoiceValueDistribution(
       invoiceCount: row.invoiceCount,
       percentage: totalInvoices > 0 ? (row.invoiceCount / totalInvoices) * 100 : 0,
       totalAmount: row.totalAmount,
+      vasRevenue: 0,
       avgInvoiceValue: row.invoiceCount > 0 ? row.totalAmount / row.invoiceCount : 0,
     }))
     .sort((a, b) => {
@@ -3120,6 +3138,7 @@ export async function getInvoiceValueDistribution(
   return {
     totalInvoices,
     totalAmount,
+    totalVasRevenue: 0,
     avgInvoiceValue: totalInvoices > 0 ? totalAmount / totalInvoices : 0,
     valueBands,
     branchSpread,
@@ -3223,6 +3242,7 @@ export async function getInvoiceDailyTrend(
       invoiceCount,
       labourTotal: day.labourTotal,
       sparesTotal: day.sparesTotal,
+      vasRevenue: 0,
       consolidatedTotal: day.consolidatedTotal,
       avgInvoiceValue: invoiceCount > 0 ? day.consolidatedTotal / invoiceCount : 0,
     })
