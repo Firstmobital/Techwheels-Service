@@ -269,6 +269,7 @@ export default function AutoDocPage() {
   const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
   const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
   const [selectedPanels, setSelectedPanels] = useState<string[]>(() => readSessionJSON<string[]>(SESSION_KEYS.selectedPanels, []))
+  const [panelsHydratedForJobId, setPanelsHydratedForJobId] = useState<string | null>(null)
   const [preRepairPanelsByJob, setPreRepairPanelsByJob] = useState<Record<string, string[]>>(() => readSessionJSON<Record<string, string[]>>(SESSION_KEYS.preRepairPanelsByJob, {}))
   const [activePanel, setActivePanel] = useState(() => readSessionValue(SESSION_KEYS.activePanel) || '')
   const [damagePhotoType, setDamagePhotoType] = useState(() => readSessionValue(SESSION_KEYS.damagePhotoType) || '')
@@ -304,7 +305,12 @@ export default function AutoDocPage() {
   }, [activeJobCardId, preRepairPanelsByJob])
 
   const panelSelectionOptions = useMemo(() => {
-    if (damagePhotoType === 'post-repair') return preRepairPanelsForActiveJob
+    if (damagePhotoType === 'post-repair') {
+      return [
+        ...preRepairPanelsForActiveJob,
+        ...damagePanelOptions.filter((panel) => !preRepairPanelsForActiveJob.includes(panel)),
+      ]
+    }
     return damagePanelOptions
   }, [damagePanelOptions, damagePhotoType, preRepairPanelsForActiveJob])
 
@@ -407,10 +413,21 @@ export default function AutoDocPage() {
 
   function toggleDamagePanel(panel: string) {
     if (damagePhotoType === 'post-repair') {
-      if (!preRepairPanelsForActiveJob.includes(panel)) {
-        showToast('Post-repair is locked to panels selected in pre-repair.', false)
-        return
-      }
+      const isPreRepairPanel = preRepairPanelsForActiveJob.includes(panel)
+      setSelectedPanels((prev) => {
+        const next = Array.from(new Set([...preRepairPanelsForActiveJob, ...prev]))
+
+        if (isPreRepairPanel) {
+          // Keep pre-repair panels always selected in post-repair.
+          return next
+        }
+
+        if (next.includes(panel)) {
+          return next.filter((item) => item !== panel)
+        }
+
+        return [...next, panel]
+      })
       setActivePanel(panel)
       return
     }
@@ -672,15 +689,17 @@ export default function AutoDocPage() {
   useEffect(() => { writeSessionValue(SESSION_KEYS.selectedPanels, JSON.stringify(selectedPanels)) }, [selectedPanels])
   useEffect(() => {
     if (!activeJobCardId) return
+    if (panelsHydratedForJobId !== activeJobCardId) return
     const map = readPanelsByJobMap()
     map[activeJobCardId] = selectedPanels
     writeSessionValue(SESSION_KEYS.selectedPanelsByJob, JSON.stringify(map))
-  }, [activeJobCardId, selectedPanels])
+  }, [activeJobCardId, panelsHydratedForJobId, selectedPanels])
   useEffect(() => {
     writeSessionValue(SESSION_KEYS.preRepairPanelsByJob, JSON.stringify(preRepairPanelsByJob))
   }, [preRepairPanelsByJob])
   useEffect(() => {
     if (!activeJobCardId || damagePhotoType !== 'pre-repair') return
+    if (panelsHydratedForJobId !== activeJobCardId) return
     const sanitized = sanitizePanelList(selectedPanels)
     setPreRepairPanelsByJob((prev) => {
       const existing = sanitizePanelList(prev[activeJobCardId])
@@ -692,12 +711,15 @@ export default function AutoDocPage() {
         [activeJobCardId]: sanitized,
       }
     })
-  }, [activeJobCardId, damagePhotoType, selectedPanels])
+  }, [activeJobCardId, damagePhotoType, panelsHydratedForJobId, selectedPanels])
   useEffect(() => {
     if (damagePhotoType !== 'post-repair') return
     const lockedPanels = preRepairPanelsForActiveJob
-    setSelectedPanels(lockedPanels)
-    setActivePanel((prev) => (lockedPanels.includes(prev) ? prev : (lockedPanels[0] ?? '')))
+    setSelectedPanels((prev) => {
+      const merged = Array.from(new Set([...lockedPanels, ...prev]))
+      setActivePanel((current) => (merged.includes(current) ? current : (lockedPanels[0] ?? merged[0] ?? '')))
+      return merged
+    })
   }, [damagePhotoType, preRepairPanelsForActiveJob])
   useEffect(() => { writeSessionValue(SESSION_KEYS.activePanel, activePanel) }, [activePanel])
   useEffect(() => { writeSessionValue(SESSION_KEYS.damagePhotoType, damagePhotoType) }, [damagePhotoType])
@@ -707,14 +729,18 @@ export default function AutoDocPage() {
   useEffect(() => {
     async function rehydratePanelsForActiveJobCard() {
       if (!activeJobCardId) {
+        setPanelsHydratedForJobId(null)
         setSelectedPanels([])
         setActivePanel('')
         return
       }
 
-      const fromMap = sanitizePanelList(readPanelsByJobMap()[activeJobCardId])
+      const jobCardId = activeJobCardId
+      setPanelsHydratedForJobId(null)
 
-      const panelRes = await listPanels(activeJobCardId)
+      const fromMap = sanitizePanelList(readPanelsByJobMap()[jobCardId])
+
+      const panelRes = await listPanels(jobCardId)
       const fromDb = panelRes.error || !panelRes.data
         ? []
         : panelRes.data
@@ -724,14 +750,15 @@ export default function AutoDocPage() {
       const rehydratedPanels = Array.from(new Set(fromDb.length > 0 ? fromDb : fromMap))
       setSelectedPanels(rehydratedPanels)
       setPreRepairPanelsByJob((prev) => {
-        const existing = sanitizePanelList(prev[activeJobCardId])
+        const existing = sanitizePanelList(prev[jobCardId])
         if (existing.length > 0) return prev
         return {
           ...prev,
-          [activeJobCardId]: rehydratedPanels,
+          [jobCardId]: rehydratedPanels,
         }
       })
       setActivePanel((prev) => (rehydratedPanels.includes(prev) ? prev : (rehydratedPanels[0] ?? '')))
+      setPanelsHydratedForJobId(jobCardId)
     }
 
     void rehydratePanelsForActiveJobCard()
@@ -1939,7 +1966,7 @@ export default function AutoDocPage() {
               <p className="mt-2 text-xs font-medium text-amber-700">Select panels in pre-repair first, then switch to post-repair.</p>
             )}
             {damagePhotoType === 'post-repair' && preRepairPanelsForActiveJob.length > 0 && (
-              <p className="mt-2 text-xs font-medium text-blue-700">Post-repair panels are locked to pre-repair selection.</p>
+              <p className="mt-2 text-xs font-medium text-blue-700">Pre-repair panels stay selected. You can add extra panels for post-repair if needed.</p>
             )}
 
             <p className="mt-4 text-sm font-medium text-blue-700">
