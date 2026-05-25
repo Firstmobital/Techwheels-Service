@@ -1226,6 +1226,12 @@ export default function AutoDocPage() {
 
     async function syncEstimateRows(jobCardId: string): Promise<boolean> {
       try {
+        const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+        if (!supabaseUrl) {
+          showToast('Supabase URL not configured.', false)
+          return false
+        }
+
         const rowsToInsert = estimateRows.map((row, idx) => ({
           job_card_id: jobCardId,
           sr_no: idx + 1,
@@ -1244,7 +1250,7 @@ export default function AutoDocPage() {
         const session = await supabase.auth.getSession()
         const token = session.data.session?.access_token
 
-        const response = await fetch('/functions/v1/estimate-rows-insert', {
+        const response = await fetch(`${supabaseUrl}/functions/v1/estimate-rows-insert`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
