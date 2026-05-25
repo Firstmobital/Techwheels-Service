@@ -1265,19 +1265,28 @@ export default function AutoDocPage() {
         }))
 
         console.log(`[persistDraftJobCard] Saving ${rowsToInsert.length} estimate rows...`)
+        console.log(`[persistDraftJobCard] Rows to insert:`, JSON.stringify(rowsToInsert, null, 2))
+        
         const session = await supabase.auth.getSession()
         const token = session.data.session?.access_token
+        console.log(`[persistDraftJobCard] Auth token:`, token ? `${token.substring(0, 20)}...` : 'MISSING')
 
+        const requestBody = { rows: rowsToInsert }
+        console.log(`[persistDraftJobCard] Request body:`, JSON.stringify(requestBody, null, 2))
+        
         const response = await fetch('/functions/v1/estimate-rows-insert', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: JSON.stringify({ rows: rowsToInsert }),
+          body: JSON.stringify(requestBody),
         })
 
+        console.log(`[persistDraftJobCard] Response status: ${response.status}`)
         const result = await response.json()
+        console.log(`[persistDraftJobCard] Response body:`, result)
+        
         if (!response.ok) {
           console.error(`[persistDraftJobCard] Insert failed:`, result)
           showToast(`Failed to save estimate rows: ${result.error}`, false)

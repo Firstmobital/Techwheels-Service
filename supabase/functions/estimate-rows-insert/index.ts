@@ -35,7 +35,11 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const { rows } = body
 
+    console.log(`[estimate-rows-insert] Received body:`, JSON.stringify(body, null, 2))
+    console.log(`[estimate-rows-insert] Rows array:`, Array.isArray(rows), rows?.length ?? 0)
+
     if (!Array.isArray(rows) || rows.length === 0) {
+      console.error(`[estimate-rows-insert] Invalid rows: not array or empty`)
       return new Response(
         JSON.stringify({ error: 'rows array is required and must not be empty' }),
         { status: 400, headers }
