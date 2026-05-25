@@ -47,6 +47,7 @@ export interface AutoDocWorkflowOptions {
   statusOptions: string[]
   photoStageOptions: string[]
   estimateActionOptions: string[]
+  estimateDefectOptions: string[]
 }
 
 export interface RateCardExportRow {
@@ -404,7 +405,7 @@ export async function getAutoDocWorkflowOptions(): Promise<ApiResult<AutoDocWork
       .limit(5000),
     supabase
       .from('estimate_rows')
-      .select('action')
+      .select('action, defect')
       .limit(5000),
   ])
 
@@ -429,7 +430,7 @@ export async function getAutoDocWorkflowOptions(): Promise<ApiResult<AutoDocWork
   photoStageOptions.sort((a, b) => a.localeCompare(b))
 
   const estimateActionOptions = Array.from(new Set(
-    ((estimateRes.data ?? []) as Array<{ action: string | null }>)
+    ((estimateRes.data ?? []) as Array<{ action: string | null; defect: string | null }>)
       .map((row) => row.action?.trim())
       .filter((value): value is string => Boolean(value)),
   )).sort((a, b) => a.localeCompare(b))
@@ -438,7 +439,17 @@ export async function getAutoDocWorkflowOptions(): Promise<ApiResult<AutoDocWork
   })
   estimateActionOptions.sort((a, b) => a.localeCompare(b))
 
-  return ok({ statusOptions, photoStageOptions, estimateActionOptions })
+  const estimateDefectOptions = Array.from(new Set(
+    ((estimateRes.data ?? []) as Array<{ action: string | null; defect: string | null }>)
+      .map((row) => row.defect?.trim())
+      .filter((value): value is string => Boolean(value)),
+  )).sort((a, b) => a.localeCompare(b))
+  ;['Rust', 'Dent', 'Scratch', 'Paint Peel', 'Corrosion'].forEach((defect) => {
+    if (!estimateDefectOptions.includes(defect)) estimateDefectOptions.push(defect)
+  })
+  estimateDefectOptions.sort((a, b) => a.localeCompare(b))
+
+  return ok({ statusOptions, photoStageOptions, estimateActionOptions, estimateDefectOptions })
 }
 
 export async function listActivePanelLabels(): Promise<ApiResult<string[]>> {

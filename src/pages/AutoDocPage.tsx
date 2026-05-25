@@ -77,6 +77,7 @@ interface EstimateLineItem {
   id: string
   panel: string
   action: string
+  defect: string
   partNo: string
   partsPrice: string
   paintPrice: string
@@ -279,6 +280,7 @@ export default function AutoDocPage() {
   const [statusOptions, setStatusOptions] = useState<string[]>([])
   const [photoStageOptions, setPhotoStageOptions] = useState<string[]>([])
   const [estimateActionOptions, setEstimateActionOptions] = useState<string[]>([])
+  const [estimateDefectOptions, setEstimateDefectOptions] = useState<string[]>([])
   const [panelMasterOptions, setPanelMasterOptions] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
   const [kpis, setKpis] = useState({
@@ -378,6 +380,7 @@ export default function AutoDocPage() {
             .filter((action) => Boolean(action)),
         ))
         setEstimateActionOptions(normalizedActions)
+        setEstimateDefectOptions(res.data.estimateDefectOptions ?? [])
       })
 
     void listActivePanelLabels()
@@ -518,6 +521,7 @@ export default function AutoDocPage() {
           ?? 'Selected Panel',
         action: '',
         partNo: '',
+        defect: '',
         partsPrice: '',
         paintPrice: '',
         labourPrice: '',
@@ -1237,6 +1241,8 @@ export default function AutoDocPage() {
           sr_no: idx + 1,
           panel_name: row.panel || null,
           part_number: row.partNo || null,
+          part_description: row.panel || null,
+          defect: row.defect || null,
           action: row.action || null,
           qty: 1,
           ndp_value: Number(row.partsPrice) || 0,
@@ -2467,6 +2473,7 @@ export default function AutoDocPage() {
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   <th className="px-2 py-2">Panel</th>
                   <th className="px-2 py-2">Action</th>
+                  <th className="px-2 py-2">Defect</th>
                   <th className="px-2 py-2">Part No.</th>
                   <th className="px-2 py-2">Parts Price (Rs) <span className="text-red-600">*</span></th>
                   <th className="px-2 py-2">Paint Price (Rs) <span className="text-red-600">*</span></th>
@@ -2501,6 +2508,18 @@ export default function AutoDocPage() {
                           <option value="">Select</option>
                           {estimateActionOptions.map((action) => (
                             <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-2">
+                        <select
+                          value={row.defect ?? ''}
+                          onChange={(e) => updateEstimateRow(row.id, { defect: e.target.value })}
+                          className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        >
+                          <option value="">Select</option>
+                          {estimateDefectOptions.map((defect) => (
+                            <option key={defect} value={defect}>{defect}</option>
                           ))}
                         </select>
                       </td>
@@ -2620,6 +2639,19 @@ export default function AutoDocPage() {
                         <option value="">Select</option>
                         {estimateActionOptions.map((action) => (
                           <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs font-medium text-gray-600">
+                      Defect
+                      <select
+                        value={row.defect ?? ''}
+                        onChange={(e) => updateEstimateRow(row.id, { defect: e.target.value })}
+                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">Select</option>
+                        {estimateDefectOptions.map((defect) => (
+                          <option key={defect} value={defect}>{defect}</option>
                         ))}
                       </select>
                     </label>

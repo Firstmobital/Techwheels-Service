@@ -59,6 +59,7 @@ interface JobSummary {
 
 interface EstimateRow {
   sr_no:                 number
+  panel_name:            string | null
   part_number:           string | null
   part_description:      string | null
   defect:                string | null
@@ -390,7 +391,7 @@ function buildEstimateSheet(
     const values: unknown[] = [
       er.sr_no,
       er.part_number      ?? '',
-      er.part_description ?? '',
+      er.part_description ?? er.panel_name ?? '',
       er.defect           ?? '',
       er.action           ?? '',
       er.qty,

@@ -84,9 +84,20 @@ export async function uploadDocumentFile(input: {
   fileName: string
   contentType?: string
 }): Promise<ApiResult<DocumentRow>> {
-  const cleanName = input.fileName.trim() || `${input.docType}.bin`
+  const cleanName = (input.fileName.trim() || `${input.docType}.bin`)
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
   const timestamp = Date.now()
-  const storagePath = `job-cards/${input.jobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
+
+  const { data: sessionRes } = await supabase.auth.getSession()
+  const user = sessionRes.session?.user
+  const dealerCode = String(
+    user?.user_metadata?.dealer_code
+    ?? user?.app_metadata?.dealer_code
+    ?? 'unknown',
+  ).trim() || 'unknown'
+
+  const storagePath = `${dealerCode}/${input.jobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
 
   const { error: uploadError } = await supabase.storage
     .from(AUTODOC_BUCKET)
