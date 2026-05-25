@@ -1829,12 +1829,12 @@ export default function AutoDocPage() {
       {activeTab === 'dashboard' && (
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Cars Today */}
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Today's Cars</p>
-              <p className="mt-2 text-3xl font-semibold leading-none text-gray-900 sm:text-4xl lg:text-5xl">{kpis.totalToday}</p>
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Today's Cars</p>
+              <p className="mt-2 text-4xl font-semibold leading-none text-gray-900">{kpis.totalToday}</p>
+              <p className="mt-2 text-xs text-gray-500">
                 {kpis.totalTodayNew} new, {kpis.totalTodayInProgress} in progress
               </p>
             </div>
@@ -1847,12 +1847,12 @@ export default function AutoDocPage() {
         </div>
 
         {/* Pending Tata Approval */}
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Pending Tata Approval</p>
-              <p className="mt-2 text-3xl font-semibold leading-none text-amber-700 sm:text-4xl lg:text-5xl">{kpis.pendingApproval}</p>
-              <p className="mt-2 text-sm text-gray-500">PPTs sent today</p>
+              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pending Tata Approval</p>
+              <p className="mt-2 text-4xl font-semibold leading-none text-amber-700">{kpis.pendingApproval}</p>
+              <p className="mt-2 text-xs text-gray-500">PPTs sent today</p>
             </div>
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100">
               <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -1863,12 +1863,12 @@ export default function AutoDocPage() {
         </div>
 
         {/* Approved & In Work */}
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Approved & In Work</p>
-              <p className="mt-2 text-3xl font-semibold leading-none text-emerald-700 sm:text-4xl lg:text-5xl">{kpis.approvedInWork}</p>
-              <p className="mt-2 text-sm text-gray-500">Quotation approved</p>
+              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Approved & In Work</p>
+              <p className="mt-2 text-4xl font-semibold leading-none text-emerald-700">{kpis.approvedInWork}</p>
+              <p className="mt-2 text-xs text-gray-500">Quotation approved</p>
             </div>
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
               <svg className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -1879,12 +1879,12 @@ export default function AutoDocPage() {
         </div>
 
         {/* Completed This Week */}
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Claims This Week</p>
-              <p className="mt-2 text-3xl font-semibold leading-none text-gray-900 sm:text-4xl lg:text-5xl">{kpis.completedThisWeek}</p>
-              <p className="mt-2 text-sm text-gray-500">Warranty claims filed</p>
+              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Claims This Week</p>
+              <p className="mt-2 text-4xl font-semibold leading-none text-gray-900">{kpis.completedThisWeek}</p>
+              <p className="mt-2 text-xs text-gray-500">Warranty claims filed</p>
             </div>
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
               <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -1972,9 +1972,9 @@ export default function AutoDocPage() {
 
       {/* Active Queue */}
       {!loading && !error && dashboardDisplayed.length > 0 && (
-        <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm print-table">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm print-table">
           <div className="mb-5 flex items-center justify-between gap-4">
-            <h3 className="flex items-center gap-2 text-xl font-semibold text-gray-900 sm:text-2xl lg:text-3xl">
+            <h3 className="flex items-center gap-2 text-2xl font-semibold text-gray-900">
               <svg className="h-7 w-7 text-gray-800" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
               </svg>
@@ -1986,7 +1986,7 @@ export default function AutoDocPage() {
                 handleNewJobCard()
                 setActiveTab('jobcard')
               }}
-              className="inline-flex items-center gap-2 rounded-2xl border border-gray-300 bg-white px-5 py-2.5 text-base font-semibold text-gray-800 hover:bg-gray-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
@@ -1997,32 +1997,32 @@ export default function AutoDocPage() {
 
           <div className="divide-y divide-gray-100">
             {dashboardDisplayed.map((row) => (
-              <div key={row.job_card_id} className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
+              <div key={row.job_card_id} className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-3">
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${queueVehicleIconClass(row.status)}`}>
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${queueVehicleIconClass(row.status)}`}>
                       <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
                       </svg>
                     </div>
-                    <p className="truncate text-xl font-semibold leading-tight text-gray-900 sm:text-2xl lg:text-[42px]">
+                    <p className="truncate text-2xl font-semibold leading-tight text-gray-900">
                       {row.reg_number} • {row.model ?? 'Model NA'} • Job# {row.jc_number}
                     </p>
                   </div>
-                  <p className="mt-1 text-sm leading-tight text-gray-600 sm:ml-[60px] sm:text-base lg:text-[35px]">
+                  <p className="mt-1 text-base leading-tight text-gray-600 sm:ml-[52px]">
                     {fmtDate(row.complaint_date)} • Age: {row.warranty_age_days ?? '—'} days • Panels: {row.panel_count} • Estimate: ₹ {(row.total_estimate_amount ?? 0).toLocaleString('en-IN')}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2.5 md:pl-4">
-                  <span className={`inline-flex items-center rounded-full px-4 py-1.5 text-lg font-semibold ${queueStatusClass(row.status)}`}>
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${queueStatusClass(row.status)}`}>
                     {queueStatusLabel(row.status)}
                   </span>
 
                   <button
                     type="button"
                     onClick={() => runPrimaryAction(row)}
-                    className="inline-flex items-center rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                    className="inline-flex items-center rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                   >
                     {primaryActionLabel(row.status)}
                   </button>
