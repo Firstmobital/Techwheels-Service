@@ -33,20 +33,33 @@ Deno.serve(async (req) => {
   try {
     // Parse request
     const body = await req.json()
-    const { rows } = body
+    const { jobCardId, rows } = body
 
-    console.log(`[estimate-rows-insert] Received body:`, JSON.stringify(body, null, 2))
-    console.log(`[estimate-rows-insert] Rows array:`, Array.isArray(rows), rows?.length ?? 0)
-
-    if (!Array.isArray(rows) || rows.length === 0) {
-      console.error(`[estimate-rows-insert] Invalid rows: not array or empty`)
+    if (!jobCardId || typeof jobCardId !== 'string') {
       return new Response(
-        JSON.stringify({ error: 'rows array is required and must not be empty' }),
+        JSON.stringify({ error: 'jobCardId is required' }),
         { status: 400, headers }
       )
     }
 
-    console.log(`[estimate-rows-insert] Inserting ${rows.length} rows`)
+    if (!Array.isArray(rows)) {
+      return new Response(
+        JSON.stringify({ error: 'rows must be an array' }),
+        { status: 400, headers }
+      )
+    }
+
+    const normalizedRows = (rows as Partial<EstimateRowInput>[]).map((row) => ({
+      ...row,
+      job_card_id: jobCardId,
+    })) as EstimateRowInput[]
+
+    if (normalizedRows.some((row) => row.job_card_id !== jobCardId)) {
+      return new Response(
+        JSON.stringify({ error: 'row job_card_id does not match jobCardId' }),
+        { status: 400, headers }
+      )
+    }
 
     // Initialize Supabase client with SERVICE_ROLE key (bypasses RLS)
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
@@ -62,10 +75,34 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
+    // Replace all rows for the job card to keep DB in sync with the latest estimate state.
+    const { error: deleteError } = await supabase
+      .from('estimate_rows')
+      .delete()
+      .eq('job_card_id', jobCardId)
+
+    if (deleteError) {
+      console.error(`[estimate-rows-insert] Delete error:`, deleteError)
+      return new Response(
+        JSON.stringify({
+          error: `Failed to replace rows: ${deleteError.message}`
+        }),
+        { status: 500, headers }
+      )
+    }
+
+    if (normalizedRows.length === 0) {
+      console.log(`[estimate-rows-insert] Cleared rows for ${jobCardId}`)
+      return new Response(
+        JSON.stringify({ success: true, count: 0 }),
+        { status: 200, headers }
+      )
+    }
+
     // Insert rows
     const { data: insertedData, error: insertError } = await supabase
       .from('estimate_rows')
-      .insert(rows as EstimateRowInput[])
+      .insert(normalizedRows)
       .select()
 
     if (insertError) {

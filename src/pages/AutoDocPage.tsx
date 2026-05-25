@@ -1224,7 +1224,56 @@ export default function AutoDocPage() {
 
     const persistedActiveJobCardId = isDifferentFromActiveSummary ? null : activeJobCardId
 
+    async function syncEstimateRows(jobCardId: string): Promise<boolean> {
+      try {
+        const rowsToInsert = estimateRows.map((row, idx) => ({
+          job_card_id: jobCardId,
+          sr_no: idx + 1,
+          panel_name: row.panel || null,
+          part_number: row.partNo || null,
+          action: row.action || null,
+          qty: 1,
+          ndp_value: Number(row.partsPrice) || 0,
+          cut_weld_charges: 0,
+          paint_charges: Number(row.paintPrice) || 0,
+          total_special_charges: 0,
+          no_off: 1,
+          labour_charges: Number(row.labourPrice) || 0,
+        }))
+
+        const session = await supabase.auth.getSession()
+        const token = session.data.session?.access_token
+
+        const response = await fetch('/functions/v1/estimate-rows-insert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ jobCardId, rows: rowsToInsert }),
+        })
+
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          const message = typeof result?.error === 'string' ? result.error : `HTTP ${response.status}`
+          console.error('[persistDraftJobCard] estimate row sync failed:', result)
+          showToast(`Failed to save estimate rows: ${message}`, false)
+          return false
+        }
+
+        console.log(`[persistDraftJobCard] Synced estimate rows: ${result.count ?? 0}`)
+        return true
+      } catch (err) {
+        console.error('[persistDraftJobCard] estimate row sync exception:', err)
+        showToast(`Error saving estimate rows: ${(err as Error).message}`, false)
+        return false
+      }
+    }
+
     if (persistedActiveJobCardId) {
+      const synced = await syncEstimateRows(persistedActiveJobCardId)
+      if (!synced) return null
+      await fetchRows(true)
       if (showSuccessToast) showToast('Draft saved.', true)
       return persistedActiveJobCardId
     }
@@ -1245,61 +1294,9 @@ export default function AutoDocPage() {
     }
 
     const jobCardId = jcRes.data.id
-
-    // Save estimate rows to database via edge function (bypasses RLS)
-    if (estimateRows.length > 0) {
-      try {
-        const rowsToInsert = estimateRows.map((row, idx) => ({
-          job_card_id: jobCardId,
-          sr_no: idx + 1,
-          panel_name: row.panel || null,
-          part_number: row.partNo || null,
-          action: row.action || null,
-          qty: 1,
-          ndp_value: Number(row.partsPrice) || 0,
-          cut_weld_charges: 0,
-          paint_charges: Number(row.paintPrice) || 0,
-          total_special_charges: 0,
-          no_off: 1,
-          labour_charges: Number(row.labourPrice) || 0,
-        }))
-
-        console.log(`[persistDraftJobCard] Saving ${rowsToInsert.length} estimate rows...`)
-        console.log(`[persistDraftJobCard] Rows to insert:`, JSON.stringify(rowsToInsert, null, 2))
-        
-        const session = await supabase.auth.getSession()
-        const token = session.data.session?.access_token
-        console.log(`[persistDraftJobCard] Auth token:`, token ? `${token.substring(0, 20)}...` : 'MISSING')
-
-        const requestBody = { rows: rowsToInsert }
-        console.log(`[persistDraftJobCard] Request body:`, JSON.stringify(requestBody, null, 2))
-        
-        const response = await fetch('/functions/v1/estimate-rows-insert', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(requestBody),
-        })
-
-        console.log(`[persistDraftJobCard] Response status: ${response.status}`)
-        const result = await response.json()
-        console.log(`[persistDraftJobCard] Response body:`, result)
-        
-        if (!response.ok) {
-          console.error(`[persistDraftJobCard] Insert failed:`, result)
-          showToast(`Failed to save estimate rows: ${result.error}`, false)
-        } else {
-          console.log(`[persistDraftJobCard] Saved ${result.count} estimate rows`)
-        }
-      } catch (err) {
-        console.error(`[persistDraftJobCard] Exception saving estimate rows:`, err)
-        showToast(`Error saving estimate rows: ${(err as Error).message}`, false)
-      }
-    }
-
     setActiveJobCardId(jobCardId)
+    const synced = await syncEstimateRows(jobCardId)
+    if (!synced) return null
     await fetchRows(true)
 
     if (showSuccessToast) showToast('Draft created and saved.', true)
@@ -1459,15 +1456,16 @@ export default function AutoDocPage() {
   }
 
   async function handleSubmitExportExcel() {
-    if (!activeJobCardId) {
-      showToast('Select a job card first from dashboard.', false)
+    const jobCardId = await persistDraftJobCard(false)
+    if (!jobCardId) {
+      showToast('Save draft first before exporting estimate.', false)
       return
     }
-    await exportEstimateForJobCard(activeJobCardId)
+    await exportEstimateForJobCard(jobCardId)
   }
 
   async function handleEstimateExportExcel() {
-    const jobCardId = activeJobCardId ?? await persistDraftJobCard(false)
+    const jobCardId = await persistDraftJobCard(false)
     if (!jobCardId) {
       showToast('Save draft first before exporting estimate.', false)
       return
@@ -2720,10 +2718,19 @@ export default function AutoDocPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('submit')}
+              onClick={async () => {
+                setSavingDraft(true)
+                try {
+                  const ok = await persistDraftJobCard(false)
+                  if (ok) setActiveTab('submit')
+                } finally {
+                  setSavingDraft(false)
+                }
+              }}
+              disabled={savingDraft}
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
             >
-              Next: Submit Reports
+              {savingDraft ? 'Saving...' : 'Next: Submit Reports'}
               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
