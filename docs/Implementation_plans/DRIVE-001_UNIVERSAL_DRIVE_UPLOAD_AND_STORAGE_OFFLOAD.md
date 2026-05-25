@@ -9,68 +9,170 @@
 
 ## Executive Summary
 
-This plan introduces a universal Supabase Edge Function flow that offloads uploaded storage files to Google Drive, writes the generated Drive sharing URL into the target database URL column (for example `referencedoctype_url`), and then deletes the original object from Supabase Storage to minimize storage usage.
+This plan introduces a universal Supabase Edge Function flow that offloads **documents** (from the `documents` table) to Google Drive, writes the generated Drive sharing URL into new database columns (`documents.drive_url` and `documents.drive_file_id`), and then deletes the original object from Supabase Storage to minimize storage usage.
 
 Google Drive foldering will use a single root folder (`Techwheels_Service`) with automatic subfolder creation by registration number. File names will follow a strict normalized format: `regno_doctype_date.ext`.
 
+**Scope (Phase 1):** `documents` table only. `panel_photos` migration may be considered in Phase 2.
+
+**Database Changes Required:** Add two new nullable text columns to `documents` table: `drive_url` and `drive_file_id`.
+
 **Risk Level:** 🟡 MEDIUM  
 **Estimated Duration:** 1-2 working days (implementation + validation + rollout)  
-**Rollback Strategy:** Disable invocation trigger and keep existing Supabase storage retention behavior until fixes are applied.
+**Rollback Strategy:** Disable invocation trigger and keep existing Supabase storage retention behavior until fixes are applied. Preserve `storage_path` column for future recovery.
 
 ---
 
 ## Objectives
 
-1. Implement an Edge Function that uploads any incoming storage object to Google Drive.
-2. Enforce Drive path strategy: `Techwheels_Service/<registration_no>/`.
-3. Enforce Drive file naming strategy: `regno_doctype_date.ext`.
-4. Update the configured DB URL column with the Drive share link.
-5. Delete source files from Supabase Storage only after successful upload/link update.
+1. Implement an Edge Function (`universal-drive-upload`) that intercepts document uploads to Supabase Storage.
+2. Fetch registration number from `job_cards` table via `job_card_id`.
+3. Enforce Drive path strategy: `Techwheels_Service/<registration_no>/`.
+4. Enforce Drive file naming strategy: `regno_doctype_date.ext`.
+5. Update `documents.drive_url` and `documents.drive_file_id` columns with Drive link and file ID.
+6. Delete source files from Supabase Storage **only** after successful upload, URL write, and database update.
+7. Maintain audit trail of uploads in `pending_drive_uploads` table (best-effort logging).
 
 ---
 
 ## Context & Background
 
-Current requirement is to avoid long-term Supabase Storage usage for uploaded documents by using Drive as the final document system of record. The existing pattern from another project already supports upload, URL writeback, and storage cleanup.
+**Current State (Audited 2026-05-25):**
 
-This plan adapts that behavior for Techwheels with a stricter naming/folder convention:
-- Root folder is manually created once: `Techwheels_Service`
-- Registration-specific folder is auto-created at runtime
-- Files are normalized to `regno_doctype_date.ext`
+The Techwheels application uses two tables for document/media storage:
+- `documents` table: Stores document metadata (PPT, Excel, PDF, video) with `storage_path` pointing to Supabase Storage bucket `autodoc`.
+- `panel_photos` table: Stores repair photos with `storage_path` pointing to the same bucket.
+
+**Current Upload Flow (Documents Only):**
+```
+Frontend XHR Upload to Supabase Storage
+  ↓ Path: {dealer_code}/{job_card_id}/documents/{doc_type}_{timestamp}.{ext}
+  ↓
+INSERT into documents table (storage_path, file_size_mb, doc_type)
+  ↓
+Generate 1-hour signed URLs for display (no persistent URLs stored)
+```
+
+**Problem:** Supabase Storage is used as permanent document repository, incurring ongoing storage costs and reducing control over document lifecycle.
+
+**Solution (This Plan):** Migrate documents to Google Drive immediately after upload, store persistent Drive URLs in the database, and delete the Supabase Storage originals.
+
+**Registration Number Dependency:**
+- Registration number (`reg_number`) is stored in `job_cards` table
+- Must be joined via `job_card_id` to create deterministic folder names
+- Currently not available in the upload metadata; frontend must fetch before invocation
+
+**Adapted Behavior for Techwheels:**
+- Root folder: `Techwheels_Service` (single, manual creation)
+- Subfolder per registration: `Techwheels_Service/{reg_number}/`
+- Deterministic filename: `{reg_number}_{doc_type}_{date}.{ext}` (enables de-dup and easy retrieval)
+- Target columns: `documents.drive_url`, `documents.drive_file_id` (new columns, require migration)
 
 ---
 
 ## Proposed Contract
 
-### Input (Event/Request Payload)
-- `bucket_id`: source Supabase bucket
-- `object_name`: source object path
-- `metadata.db_table`: destination table
-- `metadata.db_column`: destination URL column (for example `referencedoctype_url`)
-- `metadata.db_pk_column`: primary key column (recommended `id`)
-- `metadata.db_pk_value`: primary key value
-- `metadata.registration_no`: required for folder + filename strategy
-- `metadata.doc_type`: required for filename strategy
-- `metadata.doc_date`: optional, defaults to current date (`YYYYMMDD`) when absent
+### Input (Event Payload from Frontend)
+Current frontend only sends these fields during upload:
+- `bucket_id`: Always `"autodoc"` (Supabase Storage bucket)
+- `object_name`: Full storage path: `{dealer_code}/{job_card_id}/documents/{doc_type}_{timestamp}.{ext}`
+- `job_card_id`: FK to `job_cards` table (from React state)
+- `doc_type`: Document type enum (ppt_pre, ppt_post, excel_estimate, service_history, video_job_card, video_delivery)
+- `file_size_mb`: Calculated on frontend before upload
 
-### Output
-- `ok`
-- `link` (Drive URL)
-- `drive_file_id`
-- `db_update_error` (nullable)
+### Required Data Acquisition (In Edge Function)
+The Edge Function must query to obtain missing metadata:
+```sql
+SELECT reg_number FROM job_cards WHERE id = $1::uuid
+```
+**Result:** Obtain `registration_no` for folder and filename generation.
+
+### Output (Function Response)
+On success:
+```json
+{
+  "ok": true,
+  "link": "https://drive.google.com/file/d/FILE_ID/view",
+  "drive_file_id": "FILE_ID",
+  "drive_url": "https://drive.google.com/file/d/FILE_ID/view",
+  "storage_path": "original_storage_path",
+  "doc_type": "ppt_pre",
+  "registration_no": "RJ14AA1234"
+}
+```
+
+On error:
+```json
+{
+  "ok": false,
+  "error": "error description",
+  "error_code": "VALIDATION_ERROR|DB_ERROR|DRIVE_ERROR|STORAGE_ERROR",
+  "db_update_error": "optional error from DB update attempt"
+}
+```
+
+---
+
+## Database Schema Changes (Required)
+
+### Migration: Add Drive URL Columns to `documents` Table
+
+**Table:** `public.documents`
+
+**New Columns:**
+```sql
+ALTER TABLE public.documents 
+ADD COLUMN drive_url TEXT DEFAULT NULL,           -- Google Drive share link
+ADD COLUMN drive_file_id TEXT DEFAULT NULL;       -- Google Drive file ID for re-upload
+```
+
+**Rationale:**
+- `drive_url`: Persistent public/shareable link for document access (replaces 1-hour signed URLs)
+- `drive_file_id`: Stored to enable PATCH-replace behavior (update file content without changing URL)
+
+**Backward Compatibility:**
+- Columns are nullable; existing documents will have NULL values until migrated
+- `storage_path` column is retained for recovery and audit purposes
+- No breaking changes to existing queries
+
+**Migration Sql Location:**
+- Path: `supabase/migrations/[TIMESTAMP]_add_drive_url_columns_to_documents.sql`
+- Must be created and run before edge function deployment
+
+---
 
 ---
 
 ## Implementation Tasks
 
+### Phase 0: Database Schema Preparation
+- [ ] **Task 0.1:** Create migration SQL file: `supabase/migrations/[TIMESTAMP]_add_drive_url_columns_to_documents.sql`.
+- [ ] **Task 0.2:** Migration adds: `drive_url TEXT DEFAULT NULL`, `drive_file_id TEXT DEFAULT NULL` to `documents` table.
+- [ ] **Task 0.3:** Verify migration syntax (test locally against full_database.sql schema).
+- [ ] **Task 0.4:** Plan rollback script in case migration fails (preserve data).
+
 ### Phase 1: Design and Validation Rules
-- [ ] **Task 1.1:** Finalize function name and deployment target (`universal-drive-upload`).
-- [ ] **Task 1.2:** Add strict validation for `registration_no`, `doc_type`, and path-safe values.
-- [ ] **Task 1.3:** Define normalization rules:
-  - `registration_no`: uppercase, strip spaces/special chars where needed
-  - `doc_type`: lowercase snake-case or kebab-safe token
-  - `doc_date`: `YYYYMMDD`
-- [ ] **Task 1.4:** Define final naming formatter: `${regno}_${doctype}_${date}.${ext}`.
+- [ ] **Task 1.1:** Finalize function name: `universal-drive-upload` (Edge Function endpoint).
+- [ ] **Task 1.2:** Add strict validation:
+  - `job_card_id` must exist in `job_cards` table
+  - `doc_type` must match enum (ppt_pre, ppt_post, excel_estimate, service_history, video_job_card, video_delivery)
+  - `storage_path` must not be empty
+  - Reject requests with missing required fields
+- [ ] **Task 1.3:** Add SQL query to fetch `registration_no` from `job_cards`:
+  ```sql
+  SELECT reg_number FROM job_cards WHERE id = $job_card_id LIMIT 1
+  ```
+  - On NULL result: reject with error `REGISTRATION_NOT_FOUND`
+- [ ] **Task 1.4:** Define normalization rules:
+  - `registration_no`: Use as-is (already uppercase in DB, e.g., `RJ14AA1234`)
+  - `doc_type`: Keep as-is (kebab-safe, already validated by enum)
+  - `doc_date`: Use `created_at` from documents table or current date (`YYYYMMDD`)
+  - Extension: Extract from `storage_path` suffix or default to `.pdf`
+- [ ] **Task 1.5:** Define final naming formatter:
+  ```
+  ${registro_no}_${doc_type}_${date}.${ext}
+  Example: RJ14AA1234_ppt_pre_20260525.pptx
+  ```
 
 ### Phase 2: Google Drive Folder Strategy
 - [ ] **Task 2.1:** Create root folder manually in Drive: `Techwheels_Service`.
@@ -80,25 +182,40 @@ This plan adapts that behavior for Techwheels with a stricter naming/folder conv
 - [ ] **Task 2.5:** Add in-memory folder id cache per invocation to reduce duplicate Drive lookups.
 
 ### Phase 3: Upload, Replace, and Linking
-- [ ] **Task 3.1:** Download object from Supabase Storage by `bucket_id` + `object_name`.
-- [ ] **Task 3.2:** Build normalized filename using metadata and original extension.
-- [ ] **Task 3.3:** If DB already has Drive link, extract `fileId` and PATCH-replace content.
-- [ ] **Task 3.4:** If no existing file or replace fails (404/403), create new Drive file.
-- [ ] **Task 3.5:** Generate canonical sharing URL and update DB URL column.
-- [ ] **Task 3.6:** Make file public only when explicitly configured (`MAKE_DRIVE_FILE_PUBLIC=true` or request flag).
+- [ ] **Task 3.1:** Download object from Supabase Storage by bucket + object_name.
+- [ ] **Task 3.2:** Extract file extension from storage_path or original filename.
+- [ ] **Task 3.3:** Build normalized filename: `{registration_no}_{doc_type}_{date}.{ext}`.
+- [ ] **Task 3.4:** Query for existing Drive file ID in `documents.drive_file_id` for this job_card_id + doc_type.
+- [ ] **Task 3.5:** If Drive file exists, PATCH-replace content (avoid creating duplicate files).
+- [ ] **Task 3.6:** If no existing file or replace fails (404/403), create new Drive file in `Techwheels_Service/{registration_no}/` folder.
+- [ ] **Task 3.7:** Generate public Drive share link (format: `https://drive.google.com/file/d/{FILE_ID}/view`).
+- [ ] **Task 3.8:** Update `documents` row: `drive_url = {link}`, `drive_file_id = {FILE_ID}` (via UPDATE statement).
+- [ ] **Task 3.9:** Return success response with link and file_id.
+- [ ] **Task 3.10:** Make file public only when explicitly configured or per default policy (discuss with product).
 
 ### Phase 4: Cleanup, Logging, and Reliability
-- [ ] **Task 4.1:** Log processing status to `pending_drive_uploads` (best-effort).
-- [ ] **Task 4.2:** Delete source object from Supabase Storage only after successful upload attempt.
-- [ ] **Task 4.3:** Preserve error context for DB update failures and return in response.
-- [ ] **Task 4.4:** Add idempotency notes and retry-safe behavior for duplicate requests.
+- [ ] **Task 4.1:** Log processing status to `pending_drive_uploads` table (best-effort, non-blocking):
+  - `job_card_id`, `doc_type`, `registration_no`, `drive_file_id`, `status`, `error_message`, `created_at`
+- [ ] **Task 4.2:** Delete source object from Supabase Storage **only after**:
+  - Drive upload succeeded AND
+  - DB update (drive_url + drive_file_id) succeeded
+- [ ] **Task 4.3:** If deletion fails, log error to `pending_drive_uploads.error_message` (do not fail response).
+- [ ] **Task 4.4:** Preserve error context for all failures and return structured error response.
+- [ ] **Task 4.5:** Document idempotency: If request retried with same job_card_id + doc_type, PATCH-replace existing Drive file (no duplicate).
 
 ### Phase 5: Integration and Rollout
-- [ ] **Task 5.1:** Wire upload caller so required metadata is always sent.
-- [ ] **Task 5.2:** Add/update env vars in Supabase project secrets.
-- [ ] **Task 5.3:** Deploy function and test with at least 5 document types.
-- [ ] **Task 5.4:** Validate DB link persistence in `referencedoctype_url` and similar URL columns.
-- [ ] **Task 5.5:** Confirm object removal from Supabase bucket for all success cases.
+- [ ] **Task 5.1:** Wire upload trigger: After Supabase Storage POST succeeds, invoke edge function with metadata.
+  - Metadata contract: `{ job_card_id, doc_type, bucket_id, object_name, file_size_mb }`
+  - Function will query `registration_no` internally
+- [ ] **Task 5.2:** Add/update env vars in Supabase project secrets:
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+  - `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_BASE64`
+  - `GDRIVE_TECHWHEELS_SERVICE_FOLDER_ID`
+  - `MAKE_DRIVE_FILE_PUBLIC` (true/false or env-based)
+- [ ] **Task 5.3:** Test end-to-end: Upload document from frontend, verify Drive file created, verify `documents.drive_url` and `documents.drive_file_id` populated.
+- [ ] **Task 5.4:** Validate URL persistence: Refresh page, confirm drive_url still accessible and correct.
+- [ ] **Task 5.5:** Confirm Supabase Storage object removed (storage_path no longer accessible after cleanup).
+- [ ] **Task 5.6:** Test with at least 5 document types: ppt_pre, ppt_post, excel_estimate, video_job_card, video_delivery.
 
 ---
 
@@ -112,65 +229,95 @@ This plan adapts that behavior for Techwheels with a stricter naming/folder conv
 - ⏳ PENDING
 - ❌ BLOCKED
 
-### Phase 1
+### Phase 0: Database Schema
 ```
-⏳ 1.1 | Finalize function naming/deployment target | Dev Team | - | - | Use universal-drive-upload
-⏳ 1.2 | Add metadata/path validation | Dev Team | - | - | registration_no/doc_type mandatory
-⏳ 1.3 | Freeze normalization rules | Dev Team | - | - | deterministic formatting
-⏳ 1.4 | Implement filename formatter | Dev Team | - | - | regno_doctype_date.ext
-```
-
-### Phase 2
-```
-⏳ 2.1 | Create Drive root folder | Techwheels Admin | - | - | Techwheels_Service
-⏳ 2.2 | Share folder with service account | Techwheels Admin | - | - | editor permission required
-⏳ 2.3 | Configure root folder env var | Dev Team | - | - | GDRIVE_TECHWHEELS_SERVICE_FOLDER_ID
-⏳ 2.4 | Ensure registration subfolder creation | Dev Team | - | - | folder-per-regno
-⏳ 2.5 | Add folder cache | Dev Team | - | - | reduce API chatter
+⏳ 0.1 | Create migration SQL file | Dev Team | - | - | timestamp_add_drive_url_columns_to_documents.sql
+⏳ 0.2 | Add drive_url & drive_file_id columns | Dev Team | - | - | documents table
+⏳ 0.3 | Test migration syntax locally | Dev Team | - | - | against full_database.sql
+⏳ 0.4 | Prepare rollback script | Dev Team | - | - | data preservation
 ```
 
-### Phase 3
+### Phase 1: Design & Validation
 ```
-⏳ 3.1 | Download source object from bucket | Dev Team | - | - | storage read
-⏳ 3.2 | Build normalized filename | Dev Team | - | - | retain extension
-⏳ 3.3 | PATCH replace by existing fileId | Dev Team | - | - | no duplicate files
-⏳ 3.4 | Fallback create on replace failure | Dev Team | - | - | 404/403 fallback
-⏳ 3.5 | Update DB URL column | Dev Team | - | - | referencedoctype_url target
-⏳ 3.6 | Apply optional public permission | Dev Team | - | - | config-driven
-```
-
-### Phase 4
-```
-⏳ 4.1 | Insert pending_drive_uploads logs | Dev Team | - | - | best-effort only
-⏳ 4.2 | Delete uploaded source object | Dev Team | - | - | storage offload objective
-⏳ 4.3 | Return structured errors | Dev Team | - | - | db_update_error surface
-⏳ 4.4 | Verify retry/idempotent behavior | Dev Team | - | - | safe on duplicate triggers
+⏳ 1.1 | Finalize function naming | Dev Team | - | - | universal-drive-upload
+⏳ 1.2 | Add validation logic | Dev Team | - | - | job_card_id/doc_type/registration_no
+⏳ 1.3 | Implement job_cards lookup | Dev Team | - | - | SELECT reg_number query
+⏳ 1.4 | Define normalization rules | Dev Team | - | - | registration_no as-is, doc_type as-is, YYYYMMDD date
+⏳ 1.5 | Implement filename formatter | Dev Team | - | - | {regno}_{doctype}_{date}.{ext}
 ```
 
-### Phase 5
+### Phase 2: Google Drive Folder Strategy
 ```
-⏳ 5.1 | Wire caller metadata contract | Frontend/API | - | - | include regno/doc/date
-⏳ 5.2 | Configure Supabase secrets | Dev Team | - | - | Drive auth + folder ids
-⏳ 5.3 | Deploy and run integration tests | Dev Team | - | - | multi-doc validation
-⏳ 5.4 | Verify DB URL writeback | Dev Team | - | - | target column persisted
-⏳ 5.5 | Verify storage cleanup | Dev Team | - | - | source removed on success
+⏳ 2.1 | Create root folder in Drive | Techwheels Admin | - | - | Techwheels_Service
+⏳ 2.2 | Share with service account | Techwheels Admin | - | - | editor permission
+⏳ 2.3 | Configure folder ID env var | Dev Team | - | - | GDRIVE_TECHWHEELS_SERVICE_FOLDER_ID
+⏳ 2.4 | Implement auto-subfolder creation | Dev Team | - | - | {registration_no} per document
+⏳ 2.5 | Add folder ID cache per invocation | Dev Team | - | - | reduce Drive API calls
+```
+
+### Phase 3: Upload, Replace, & Database Update
+```
+⏳ 3.1 | Download source from Supabase | Dev Team | - | - | storage read
+⏳ 3.2 | Extract extension from storage_path | Dev Team | - | - | retain original ext
+⏳ 3.3 | Build normalized filename | Dev Team | - | - | {regno}_{doctype}_{date}.{ext}
+⏳ 3.4 | Query for existing drive_file_id | Dev Team | - | - | PATCH-replace if present
+⏳ 3.5 | PATCH-replace existing Drive file | Dev Team | - | - | avoid duplicate files
+⏳ 3.6 | Fallback: Create new Drive file | Dev Team | - | - | on 404/403 or no existing
+⏳ 3.7 | Generate public share URL | Dev Team | - | - | https://drive.google.com/file/d/{FILE_ID}/view
+⏳ 3.8 | UPDATE documents table | Dev Team | - | - | drive_url + drive_file_id
+⏳ 3.9 | Return success response | Dev Team | - | - | link + file_id
+⏳ 3.10 | Apply public permission | Dev Team | - | - | config-driven or default policy
+```
+
+### Phase 4: Cleanup & Logging
+```
+⏳ 4.1 | Implement pending_drive_uploads logging | Dev Team | - | - | best-effort only
+⏳ 4.2 | Delete source from Supabase | Dev Team | - | - | after DB update succeeds
+⏳ 4.3 | Log deletion errors | Dev Team | - | - | non-blocking, in DB
+⏳ 4.4 | Return structured errors | Dev Team | - | - | all failure paths
+⏳ 4.5 | Document idempotency behavior | Dev Team | - | - | PATCH-replace on retry
+```
+
+### Phase 5: Integration & Rollout
+```
+⏳ 5.1 | Wire upload trigger to edge function | Frontend Dev | - | - | metadata contract: {job_card_id, doc_type, bucket_id, object_name, file_size_mb}
+⏳ 5.2 | Configure Supabase secrets | Dev Ops | - | - | 6 env vars (Drive auth + folder id)
+⏳ 5.3 | Deploy edge function | Dev Team | - | - | universal-drive-upload endpoint
+⏳ 5.4 | End-to-end test with real uploads | QA | - | - | verify Drive file + DB columns
+⏳ 5.5 | Validate URL persistence | QA | - | - | page refresh, confirm drive_url works
+⏳ 5.6 | Confirm storage cleanup | QA | - | - | original Supabase object deleted
+⏳ 5.7 | Test 5+ document types | QA | - | - | ppt_pre, ppt_post, excel_estimate, video_job_card, video_delivery
 ```
 
 ---
 
 ## Dependencies & Prerequisites
 
-- [ ] Google Drive root folder created: `Techwheels_Service`
-- [ ] Service account granted access to root folder
-- [ ] Supabase function secrets configured:
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY`
-  - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
-  - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_BASE64`
-  - `GDRIVE_TECHWHEELS_SERVICE_FOLDER_ID`
-  - `GOOGLE_SHARED_DRIVE_ID` (if shared drive is used)
-  - `MAKE_DRIVE_FILE_PUBLIC` (optional)
-- [ ] Upload caller sends required metadata contract
+### Database Prerequisites
+- [ ] Migration file created: `supabase/migrations/[TIMESTAMP]_add_drive_url_columns_to_documents.sql`
+- [ ] Migration tested locally against authoritative schema (`full_database.sql`)
+- [ ] Rollback plan documented
+- [ ] New columns deployed to Supabase project before edge function activation
+
+### Infrastructure Prerequisites
+- [ ] Google Drive root folder `Techwheels_Service` created (manual, one-time)
+- [ ] Service account created with access to Drive API
+- [ ] Service account email granted **Editor** permission to `Techwheels_Service` folder
+- [ ] Service account private key obtained and encoded to base64
+
+### Supabase Configuration Prerequisites
+- [ ] Project secrets configured:
+  - `SUPABASE_URL`: Project URL
+  - `SUPABASE_SERVICE_ROLE_KEY`: Admin API key (for DB updates)
+  - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: Service account email
+  - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_BASE64`: Base64-encoded private key
+  - `GDRIVE_TECHWHEELS_SERVICE_FOLDER_ID`: Root folder ID from Drive
+  - `MAKE_DRIVE_FILE_PUBLIC`: true/false (optional, default: true for now)
+
+### Document Prerequisites
+- [ ] Frontend integration plan finalized (when/where to invoke edge function)
+- [ ] Metadata contract agreed: `{ job_card_id, doc_type, bucket_id, object_name, file_size_mb }`
+- [ ] Logging table `pending_drive_uploads` exists or will be created in migration
 
 ---
 
@@ -178,21 +325,29 @@ This plan adapts that behavior for Techwheels with a stricter naming/folder conv
 
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|-----------|
-| Invalid metadata causes wrong folder/name | Medium | High | Strict validation and reject incomplete payloads |
-| Service account permissions misconfigured | Medium | High | Pre-flight check: read/create in root folder before go-live |
-| Duplicate uploads due to retries | Medium | Medium | Reuse existing Drive fileId from DB and PATCH content |
-| DB update fails after Drive upload | Low | Medium | Log `completed_with_db_error` and surface actionable error |
-| Source cleanup fails and storage cost rises | Medium | Medium | Log cleanup errors and add periodic reconciliation job |
+| Registration number lookup fails (job_card_id invalid) | Low | High | Validate job_card_id exists before invoking; return 400 error with clear message |
+| Drive API rate limiting or quota exceeded | Medium | Medium | Implement exponential backoff + circuit breaker; log to `pending_drive_uploads` for retry |
+| Service account permissions incomplete | High | High | Pre-flight check: Read + Create in root folder before go-live; test with sample upload first |
+| Duplicate files created due to retries | Medium | Medium | Query existing `drive_file_id` and PATCH-replace; document idempotent behavior |
+| DB update fails after Drive upload succeeds | Low | Medium | Log `db_update_error` in response; add manual recovery job to poll for orphaned Drive files |
+| Source file cleanup fails; storage cost accumulates | Medium | Medium | Log cleanup errors; implement periodic reconciliation job to clean up orphaned objects |
+| Migration fails or corrupts existing data | Low | Critical | Test migration locally first; prepare rollback script; have DBA review before production |
+| Frontend doesn't send job_card_id correctly | High | High | Add validation on edge function side; reject incomplete payloads early; add unit tests |
 
 ---
 
 ## Success Criteria
 
-- ✅ Every uploaded file is moved to Drive under `Techwheels_Service/<registration_no>/`.
-- ✅ Drive file naming is consistently `regno_doctype_date.ext`.
-- ✅ DB URL column (for example `referencedoctype_url`) is updated with a valid Drive link.
-- ✅ Source object is deleted from Supabase Storage after successful handling.
-- ✅ Processing logs are available for operational troubleshooting.
+- ✅ Migration SQL file created and tested (new columns added to `documents` table)
+- ✅ Every newly uploaded document is successfully moved to Drive under `Techwheels_Service/<registration_no>/`
+- ✅ Drive file naming is consistently formatted: `{registration_no}_{doc_type}_{date}.{ext}` (e.g., `RJ14AA1234_ppt_pre_20260525.pptx`)
+- ✅ `documents.drive_url` is populated with valid, public Drive link (format: `https://drive.google.com/file/d/{FILE_ID}/view`)
+- ✅ `documents.drive_file_id` is populated with the Drive file ID (enables future PATCH-replace)
+- ✅ Source object deleted from Supabase Storage after successful upload + DB update
+- ✅ Retry behavior is idempotent: PATCH-replace existing Drive file instead of creating duplicates
+- ✅ Processing logs available in `pending_drive_uploads` table for operational troubleshooting
+- ✅ All error paths return structured JSON responses with `error_code` and `error_message`
+- ✅ End-to-end test passes for all 6 document types (ppt_pre, ppt_post, excel_estimate, service_history, video_job_card, video_delivery)
 
 ---
 
@@ -206,6 +361,27 @@ This plan adapts that behavior for Techwheels with a stricter naming/folder conv
 ---
 
 ## Notes & Lessons Learned
+
+### 2026-05-25 - Comprehensive Audit Completed
+- **Database audit findings:**
+  - `documents` table uses `storage_path` (text) pointing to Supabase Storage; no URL columns currently exist
+  - `referencedoctype_url` column mentioned in original plan **does not exist** — need to add `drive_url` and `drive_file_id` instead
+  - Registration number stored in `job_cards` table as `reg_number`, must be looked up via `job_card_id` FK
+  - Storage path format: `{dealer_code}/{job_card_id}/documents/{doc_type}_{timestamp}.{ext}`
+  - **Migration required:** Add columns before edge function deployment
+- **Frontend audit findings:**
+  - Current upload flow sends: `job_card_id`, `doc_type`, `bucket_id`, `object_name`, `file_size_mb`
+  - Registration number NOT currently sent; must be fetched in edge function from `job_cards` table
+  - Document types are: ppt_pre, ppt_post, excel_estimate, service_history, video_job_card, video_delivery
+  - Upsert behavior: old doc of same type deleted before new insert
+- **Scope decision:**
+  - Phase 1 focuses on `documents` table only (simpler, cleaner)
+  - `panel_photos` can be addressed in Phase 2 if needed
+- **Key design decisions:**
+  - Use deterministic filename format for idempotency and easy retrieval
+  - PATCH-replace Drive files on retry to avoid duplicates
+  - Retain `storage_path` column for recovery and audit
+  - Keep both `drive_url` (for display) and `drive_file_id` (for PATCH-replace)
 
 ### 2026-05-23 - Plan Kickoff
 - Decided single Drive root folder strategy (`Techwheels_Service`) with registration-based subfolder model.
@@ -222,5 +398,5 @@ This plan adapts that behavior for Techwheels with a stricter naming/folder conv
 
 ---
 
-**Last Updated:** 2026-05-23 by GitHub Copilot  
-**Status:** 🔴 PENDING
+**Last Updated:** 2026-05-25 by GitHub Copilot (Comprehensive Audit + Updates)  
+**Status:** 🟡 READY FOR IMPLEMENTATION (All audit findings documented, scope clarified, dependencies listed)
