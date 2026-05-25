@@ -329,7 +329,7 @@ export async function getAutoDocLookupOptions(): Promise<ApiResult<AutoDocLookup
       .limit(5000),
     supabase
       .from('vehicles')
-      .select('model, paint_type, bp_city_category, year')
+      .select('paint_type, year')
       .limit(5000),
     supabase
       .from('job_cards')
@@ -358,14 +358,10 @@ export async function getAutoDocLookupOptions(): Promise<ApiResult<AutoDocLookup
     if (value) cityCategorySet.add(value)
   })
 
-  ;((vehiclesRes.data ?? []) as Array<{ model: string | null; paint_type: string | null; bp_city_category: string | null; year: number | null }>).forEach((row) => {
-    const model = row.model?.trim()
+  ;((vehiclesRes.data ?? []) as Array<{ paint_type: string | null; year: number | null }>).forEach((row) => {
     const paintType = row.paint_type?.trim()
-    const cityCategory = row.bp_city_category?.trim()
 
-    if (model) modelSet.add(model)
     if (paintType) paintTypeSet.add(paintType)
-    if (cityCategory) cityCategorySet.add(cityCategory)
     if (typeof row.year === 'number' && Number.isFinite(row.year)) {
       yearSet.add(String(row.year))
     }

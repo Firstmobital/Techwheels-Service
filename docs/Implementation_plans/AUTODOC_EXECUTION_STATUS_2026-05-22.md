@@ -45,6 +45,38 @@ Done in codebase (this execution):
 - Validation:
   - Type + build check passed (`npm run build`).
 
+### Execution Delta (2026-05-25 — canonical-source rationalization)
+
+Done in codebase (this execution):
+- Removed multi-source ambiguity for dropdown data (same field pulling from multiple tables).
+- Enforced single canonical DB source per dropdown domain:
+  - `Model` -> `autodoc_rate_rows.model_name` only
+  - `B&P City Category` -> active `autodoc_rate_cards.city_category` only
+  - `Paint Type` -> `vehicles.paint_type` only
+  - `Claim Type` -> `job_cards.claim_type` only
+  - `Status Filter` -> `job_cards.status` only
+  - `Photo Stage` -> `panel_photos.repair_stage` only
+  - `Estimate Action` -> `estimate_rows.action` only
+  - `Damage panel fallback` -> `autodoc_panel_master.panel_label` only
+- files:
+  - [src/lib/api/autodocRates.ts](../../src/lib/api/autodocRates.ts)
+  - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+
+Rationale (why not dropping `vehicles`, `job_cards`, `autodoc_rate_cards`, etc.):
+- These are not duplicate/useless tables; they are separate domain entities in authoritative schema:
+  - `vehicles`: vehicle master + ownership and sale metadata
+  - `job_cards`: complaint/warranty transaction header
+  - `autodoc_rate_cards` + `autodoc_rate_rows`: pricing policy/versioning
+  - `autodoc_panel_master`: panel taxonomy
+- Dropping any of the above would break existing FKs, workflows, and historical traceability.
+- Confusion root cause was query mixing for dropdowns, not table duplication.
+
+Decommission strategy (safe):
+1. Keep authoritative schema tables intact.
+2. Keep dropdown reads mapped to one table per domain (implemented).
+3. If cleanup is still required, only deprecate obsolete columns/records after explicit dependency audit and signed-off migration plan.
+4. Never downgrade against [local_folder/backups/full_database.sql](../../local_folder/backups/full_database.sql) authority.
+
 Open follow-up (recommended for ops):
 - Add a dedicated lookup/master table for AutoDoc dropdown governance if strict admin-managed catalog control is required (instead of deriving from existing transactional/reference tables).
 - Run production UAT on Vercel for:
