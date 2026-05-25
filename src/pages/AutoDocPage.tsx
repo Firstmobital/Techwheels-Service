@@ -6,6 +6,7 @@ import {
   createJobCard,
   fetchVehicleByReg,
   generateClaimEmailContent,
+  getAutoDocLookupOptions,
   getActiveModelRates,
   getJobCardSummary,
   listDocuments,
@@ -81,6 +82,16 @@ interface DamagePhotoItem {
   uploadedAtLabel: string
 }
 
+interface AutoDocFormLookupState {
+  modelOptions: string[]
+  paintTypeOptions: string[]
+  cityCategoryOptions: string[]
+  claimTypeOptions: string[]
+  yearOptions: string[]
+}
+
+type VehicleLookupStatus = 'idle' | 'loading' | 'found' | 'not_found' | 'error'
+
 const STATUS_COLOURS: Record<string, string> = {
   draft:     'bg-gray-100 text-gray-600',
   submitted: 'bg-blue-100 text-blue-700',
@@ -104,6 +115,23 @@ const DEFAULT_DAMAGE_PANEL_OPTIONS = [
   'Rear Bumper',
   'Underbody',
 ]
+
+function defaultYearOptions(): string[] {
+  const currentYear = new Date().getFullYear()
+  const years: string[] = []
+  for (let year = currentYear + 1; year >= currentYear - 20; year -= 1) {
+    years.push(String(year))
+  }
+  return years
+}
+
+const DEFAULT_FORM_LOOKUPS: AutoDocFormLookupState = {
+  modelOptions: ['ALTROZ', 'HARRIER', 'NEXON EV', 'PUNCH EV', 'SAFARI'],
+  paintTypeOptions: ['Solid', 'Metallic', 'Pearl', 'Matte'],
+  cityCategoryOptions: ['A', 'B', 'C'],
+  claimTypeOptions: ['Body / Panel Rust', 'Paint Defect', 'Panel Damage', 'Underbody Corrosion'],
+  yearOptions: defaultYearOptions(),
+}
 
 const SESSION_KEYS = {
   activeTab: 'autodoc_active_tab',
@@ -194,6 +222,8 @@ export default function AutoDocPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [lookupBusy, setLookupBusy] = useState(false)
   const [vehicleFound, setVehicleFound] = useState(false)
+  const [vehicleLookupStatus, setVehicleLookupStatus] = useState<VehicleLookupStatus>('idle')
+  const [formLookups, setFormLookups] = useState<AutoDocFormLookupState>(DEFAULT_FORM_LOOKUPS)
   const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
   const [kpis, setKpis] = useState({
     totalToday: 0,
@@ -241,6 +271,27 @@ export default function AutoDocPage() {
   )
 
   const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    void getAutoDocLookupOptions()
+      .then((res) => {
+        if (cancelled || res.error || !res.data) return
+        const lookup = res.data
+        setFormLookups((prev) => ({
+          modelOptions: lookup.modelOptions.length > 0 ? lookup.modelOptions : prev.modelOptions,
+          paintTypeOptions: lookup.paintTypeOptions.length > 0 ? lookup.paintTypeOptions : prev.paintTypeOptions,
+          cityCategoryOptions: lookup.cityCategoryOptions.length > 0 ? lookup.cityCategoryOptions : prev.cityCategoryOptions,
+          claimTypeOptions: lookup.claimTypeOptions.length > 0 ? lookup.claimTypeOptions : prev.claimTypeOptions,
+          yearOptions: lookup.yearOptions.length > 0 ? lookup.yearOptions : prev.yearOptions,
+        }))
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const modelName = form.model.trim()
@@ -485,6 +536,19 @@ export default function AutoDocPage() {
   const currentVehicleReg = form.regNumber.trim() || 'Not selected'
   const currentVehicleModel = form.model.trim() || 'Model NA'
   const currentVehicleJc = form.jcNumber.trim() || 'JC NA'
+  const hasVehicleDraftFields = [
+    form.vin,
+    form.model,
+    form.year,
+    form.colour,
+    form.paintType,
+    form.dealerCity,
+    form.bpCityCategory,
+    form.ownerName,
+    form.ownerPhone,
+    form.dateOfSale,
+  ].some((value) => value.trim().length > 0)
+  const showVehicleDetailsForm = Boolean(form.regNumber.trim()) && (vehicleLookupStatus !== 'idle' || hasVehicleDraftFields)
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
@@ -584,12 +648,14 @@ export default function AutoDocPage() {
     const ref = form.regNumber.trim()
     if (!ref) return
     setLookupBusy(true)
+    setVehicleLookupStatus('loading')
     setCreateError(null)
 
     const resolveRes = await resolveRegNumberFromReference(ref)
     if (resolveRes.error) {
       setLookupBusy(false)
       setVehicleFound(false)
+      setVehicleLookupStatus('error')
       setCreateError(resolveRes.error)
       return
     }
@@ -600,13 +666,15 @@ export default function AutoDocPage() {
     setLookupBusy(false)
     if (res.error) {
       setVehicleFound(false)
+      setVehicleLookupStatus('error')
       setCreateError(res.error)
       return
     }
 
     if (!res.data) {
       setVehicleFound(false)
-      setCreateError('No matching vehicle found for this registration/JC reference.')
+      setVehicleLookupStatus('not_found')
+      setCreateError(null)
       // Clear auto-filled fields when lookup fails so user can manually enter data
       setForm((prev) => ({
         ...prev,
@@ -626,6 +694,7 @@ export default function AutoDocPage() {
 
     const vehicle = res.data
     setVehicleFound(true)
+    setVehicleLookupStatus('found')
     setForm((prev) => ({
       ...prev,
       regNumber: vehicle.reg_number,
@@ -659,8 +728,9 @@ export default function AutoDocPage() {
     setActiveSummary(null)
     setJobDocuments([])
     setVehicleFound(false)
+    setVehicleLookupStatus('idle')
     setCreateError(null)
-    setShowCreate(true)
+    setShowCreate(false)
     setCreating(false)
   }
 
@@ -939,7 +1009,12 @@ export default function AutoDocPage() {
         </button>
 
         <button 
-          onClick={() => setActiveTab('jobcard')}
+          onClick={() => {
+            if (activeTab === 'dashboard') {
+              handleNewJobCard()
+            }
+            setActiveTab('jobcard')
+          }}
           className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'jobcard' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
           <svg className={`h-5 w-5 ${activeTab === 'jobcard' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -1237,7 +1312,12 @@ export default function AutoDocPage() {
               <input
                 type="text"
                 value={form.regNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))
+                  setVehicleFound(false)
+                  setVehicleLookupStatus('idle')
+                  setCreateError(null)
+                }}
                 placeholder="RJ-14-YH-7659"
                 className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-base font-medium tracking-widest text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
@@ -1249,12 +1329,13 @@ export default function AutoDocPage() {
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                {lookupBusy ? 'Checking…' : 'Fetch from DB'}
+                {lookupBusy ? 'Fetching…' : 'Fetch from DB'}
               </button>
             </div>
             <p className="mt-2 text-xs text-gray-500">Auto-fills VIN, model, owner & dealer from your Supabase database</p>
-            {vehicleFound && <p className="mt-2 text-sm text-green-600">✓ Vehicle found and prefilled.</p>}
-            {form.regNumber && !vehicleFound && (
+            {vehicleLookupStatus === 'loading' && <p className="mt-2 text-sm text-blue-600">Searching vehicle in database...</p>}
+            {vehicleLookupStatus === 'found' && <p className="mt-2 text-sm text-green-600">✓ Vehicle found and prefilled.</p>}
+            {vehicleLookupStatus === 'not_found' && (
               <div className="mt-3 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
                 <svg className="h-5 w-5 flex-shrink-0 text-amber-600 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4v2m0 4v2m0-14l-9 5v10a2 2 0 002 2h14a2 2 0 002-2V5l-9-5z" />
@@ -1265,7 +1346,7 @@ export default function AutoDocPage() {
           </div>
 
           {/* VEHICLE DETAILS */}
-          {form.regNumber && (
+          {showVehicleDetailsForm && (
             <>
               <div className="mb-6">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-600">
@@ -1289,11 +1370,9 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.model} onChange={(e) => setForm(prev => ({ ...prev, model: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Select</option>
-                      <option>NEXON EV</option>
-                      <option>HARRIER</option>
-                      <option>SAFARI</option>
-                      <option>ALTROZ</option>
-                      <option>PUNCH EV</option>
+                      {formLookups.modelOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -1303,11 +1382,9 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.year} onChange={(e) => setForm(prev => ({ ...prev, year: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Year</option>
-                      <option>2025</option>
-                      <option>2024</option>
-                      <option>2023</option>
-                      <option>2022</option>
-                      <option>2021</option>
+                      {formLookups.yearOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1325,10 +1402,9 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.paintType} onChange={(e) => setForm(prev => ({ ...prev, paintType: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Select</option>
-                      <option>Solid</option>
-                      <option>Metallic</option>
-                      <option>Pearl</option>
-                      <option>Matte</option>
+                      {formLookups.paintTypeOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -1410,9 +1486,9 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.bpCityCategory} onChange={(e) => setForm(prev => ({ ...prev, bpCityCategory: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Select Category</option>
-                      <option>Category A</option>
-                      <option>Category B</option>
-                      <option>Category C</option>
+                      {formLookups.cityCategoryOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1439,10 +1515,9 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.claimType} onChange={(e) => setForm(prev => ({ ...prev, claimType: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Select</option>
-                      <option>Body / Panel Rust</option>
-                      <option>Paint Defect</option>
-                      <option>Panel Damage</option>
-                      <option>Underbody Corrosion</option>
+                      {formLookups.claimTypeOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

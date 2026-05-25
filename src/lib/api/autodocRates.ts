@@ -35,12 +35,57 @@ export interface ModelRatesSummary {
   rows: ModelPanelRate[]
 }
 
+export interface AutoDocLookupOptions {
+  modelOptions: string[]
+  paintTypeOptions: string[]
+  cityCategoryOptions: string[]
+  claimTypeOptions: string[]
+  yearOptions: string[]
+}
+
 function normalizeModelName(value: string): string {
   return value.trim().toUpperCase()
 }
 
 function normalizePanelLabel(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
+}
+
+function normalizeCityCategoryToken(value: string): string {
+  const raw = value.trim().toUpperCase()
+  if (!raw) return ''
+
+  const letterMatch = raw.match(/(?:CATEGORY\s*)?([A-Z])$/)
+  if (letterMatch?.[1]) return letterMatch[1]
+  return raw
+}
+
+function cityCategoryCandidates(value: string): string[] {
+  const trimmed = value.trim()
+  const upper = trimmed.toUpperCase()
+  const token = normalizeCityCategoryToken(value)
+  const candidates = [trimmed, upper]
+
+  if (token) {
+    candidates.push(token, `Category ${token}`, `CATEGORY ${token}`)
+  }
+
+  return Array.from(new Set(candidates.filter(Boolean)))
+}
+
+function normalizeModelKey(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+function modelKeyVariants(value: string): string[] {
+  const base = normalizeModelKey(value)
+  if (!base) return []
+
+  const variants = new Set<string>([base])
+  variants.add(base.replace(/EV$/, ''))
+  variants.add(base.replace(/^NEW/, ''))
+
+  return Array.from(variants).filter(Boolean)
 }
 
 export function panelKeyFromLabel(panelLabel: string): string {
@@ -179,38 +224,164 @@ export async function getActiveModelRates(input: {
 
   if (!cityCategory || !modelName) return ok(null)
 
-  const { data: card, error: cardError } = await supabase
-    .from('autodoc_rate_cards')
-    .select('id, name, city_category, status, is_active, effective_from, effective_to, notes, created_at')
-    .eq('city_category', cityCategory)
-    .eq('is_active', true)
-    .single<RateCardRow>()
+  let card: RateCardRow | null = null
+  for (const candidate of cityCategoryCandidates(cityCategory)) {
+    const cardRes = await supabase
+      .from('autodoc_rate_cards')
+      .select('id, name, city_category, status, is_active, effective_from, effective_to, notes, created_at')
+      .eq('city_category', candidate)
+      .eq('is_active', true)
+      .maybeSingle<RateCardRow>()
 
-  if (cardError) {
-    if (cardError.code === 'PGRST116') return ok(null)
-    return fail(cardError)
+    if (cardRes.error) return fail(cardRes.error)
+    if (cardRes.data) {
+      card = cardRes.data
+      break
+    }
   }
 
   if (!card) return ok(null)
 
-  const { data: rows, error: rowsError } = await supabase
+  const rowShape = 'panel_key, panel_label, pp_rate, pm_rate, ps_rate'
+  const exactRowsRes = await supabase
     .from('autodoc_rate_rows')
-    .select('panel_key, panel_label, pp_rate, pm_rate, ps_rate')
+    .select(rowShape)
     .eq('rate_card_id', card.id)
     .eq('model_name', modelName)
     .order('panel_label', { ascending: true })
 
-  if (rowsError) return fail(rowsError)
+  if (exactRowsRes.error) return fail(exactRowsRes.error)
+
+  let rows = (exactRowsRes.data ?? []) as Array<{
+    panel_key: string
+    panel_label: string
+    pp_rate: number | null
+    pm_rate: number | null
+    ps_rate: number | null
+  }>
+  let matchedModelName = modelName
+
+  if (rows.length === 0) {
+    const modelRowsRes = await supabase
+      .from('autodoc_rate_rows')
+      .select('model_name')
+      .eq('rate_card_id', card.id)
+
+    if (modelRowsRes.error) return fail(modelRowsRes.error)
+
+    const availableModels = Array.from(new Set(((modelRowsRes.data ?? []) as Array<{ model_name: string }>).map((r) => r.model_name)))
+    const targetVariants = modelKeyVariants(input.modelName)
+    const fallbackModel = availableModels.find((candidate) => {
+      const candidateVariants = modelKeyVariants(candidate)
+      return targetVariants.some((variant) => candidateVariants.includes(variant))
+    })
+
+    if (fallbackModel) {
+      matchedModelName = fallbackModel
+      const fallbackRowsRes = await supabase
+        .from('autodoc_rate_rows')
+        .select(rowShape)
+        .eq('rate_card_id', card.id)
+        .eq('model_name', fallbackModel)
+        .order('panel_label', { ascending: true })
+
+      if (fallbackRowsRes.error) return fail(fallbackRowsRes.error)
+      rows = (fallbackRowsRes.data ?? []) as typeof rows
+    }
+  }
 
   return ok({
     card,
-    modelName,
-    rows: ((rows ?? []) as Array<{ panel_key: string; panel_label: string; pp_rate: number | null; pm_rate: number | null; ps_rate: number | null }>).map((r) => ({
+    modelName: matchedModelName,
+    rows: rows.map((r) => ({
       panelKey: r.panel_key,
       panelLabel: r.panel_label,
       ppRate: r.pp_rate,
       pmRate: r.pm_rate,
       psRate: r.ps_rate,
     })),
+  })
+}
+
+export async function getAutoDocLookupOptions(): Promise<ApiResult<AutoDocLookupOptions>> {
+  const [cardsRes, ratesRes, vehiclesRes, jobCardsRes] = await Promise.all([
+    supabase
+      .from('autodoc_rate_cards')
+      .select('city_category, is_active')
+      .eq('is_active', true),
+    supabase
+      .from('autodoc_rate_rows')
+      .select('model_name')
+      .limit(5000),
+    supabase
+      .from('vehicles')
+      .select('model, paint_type, bp_city_category, year')
+      .limit(5000),
+    supabase
+      .from('job_cards')
+      .select('claim_type')
+      .limit(5000),
+  ])
+
+  if (cardsRes.error) return fail(cardsRes.error)
+  if (ratesRes.error) return fail(ratesRes.error)
+  if (vehiclesRes.error) return fail(vehiclesRes.error)
+  if (jobCardsRes.error) return fail(jobCardsRes.error)
+
+  const modelSet = new Set<string>()
+  const paintTypeSet = new Set<string>()
+  const cityCategorySet = new Set<string>()
+  const claimTypeSet = new Set<string>()
+  const yearSet = new Set<string>()
+
+  ;((ratesRes.data ?? []) as Array<{ model_name: string | null }>).forEach((row) => {
+    const value = row.model_name?.trim()
+    if (value) modelSet.add(value)
+  })
+
+  ;((cardsRes.data ?? []) as Array<{ city_category: string | null }>).forEach((row) => {
+    const value = row.city_category?.trim()
+    if (value) cityCategorySet.add(value)
+  })
+
+  ;((vehiclesRes.data ?? []) as Array<{ model: string | null; paint_type: string | null; bp_city_category: string | null; year: number | null }>).forEach((row) => {
+    const model = row.model?.trim()
+    const paintType = row.paint_type?.trim()
+    const cityCategory = row.bp_city_category?.trim()
+
+    if (model) modelSet.add(model)
+    if (paintType) paintTypeSet.add(paintType)
+    if (cityCategory) cityCategorySet.add(cityCategory)
+    if (typeof row.year === 'number' && Number.isFinite(row.year)) {
+      yearSet.add(String(row.year))
+    }
+  })
+
+  ;((jobCardsRes.data ?? []) as Array<{ claim_type: string | null }>).forEach((row) => {
+    const value = row.claim_type?.trim()
+    if (value) claimTypeSet.add(value)
+  })
+
+  const thisYear = new Date().getFullYear()
+  for (let year = thisYear + 1; year >= thisYear - 20; year -= 1) {
+    yearSet.add(String(year))
+  }
+
+  const defaultPaintTypes = ['Solid', 'Metallic', 'Pearl', 'Matte']
+  const defaultClaimTypes = ['Body / Panel Rust', 'Paint Defect', 'Panel Damage', 'Underbody Corrosion']
+
+  defaultPaintTypes.forEach((paint) => paintTypeSet.add(paint))
+  defaultClaimTypes.forEach((claim) => claimTypeSet.add(claim))
+
+  return ok({
+    modelOptions: Array.from(modelSet).sort((a, b) => a.localeCompare(b)),
+    paintTypeOptions: Array.from(paintTypeSet).sort((a, b) => a.localeCompare(b)),
+    cityCategoryOptions: Array.from(cityCategorySet).sort((a, b) => a.localeCompare(b)),
+    claimTypeOptions: Array.from(claimTypeSet).sort((a, b) => a.localeCompare(b)),
+    yearOptions: Array.from(yearSet)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => b - a)
+      .map((value) => String(value)),
   })
 }

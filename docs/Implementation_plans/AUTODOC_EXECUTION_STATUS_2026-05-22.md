@@ -3,7 +3,7 @@
 **Plan ID:** AUTODOC-STATUS-001  
 **Created:** 2026-05-22  
 **Owner:** GitHub Copilot (execution audit)  
-**Status:** ⚠️ IN EXECUTION (core AutoDoc + dynamic rate-card system implemented; production validation pending) — Last update: 2026-05-23
+**Status:** ⚠️ IN EXECUTION (core AutoDoc + dynamic rate-card system implemented; behavior hardening in progress) — Last update: 2026-05-25
 
 ---
 
@@ -18,6 +18,39 @@
 ## Executive Summary
 
 The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim workflow system. **All core functionality is now fully implemented (2026-05-23):**
+
+### Execution Delta (2026-05-25 — latest, per production behavior audit)
+
+Done in codebase (this execution):
+- Completed behavior audit for live issues reported on `/autodoc` and patched implementation in code.
+- Fixed rate lookup mismatch scenarios caused by model/city-category text shape differences:
+  - Enhanced city-category matching with canonical candidate fallback (`A`, `Category A`, `CATEGORY A`).
+  - Enhanced model matching with normalized/fuzzy fallback (handles spacing/case and EV suffix drift).
+  - file: [src/lib/api/autodocRates.ts](../../src/lib/api/autodocRates.ts)
+- Removed hardcoded form dropdown values from Job Card page and switched to DB-driven option loading:
+  - New API `getAutoDocLookupOptions()` reads options from existing DB data (`autodoc_rate_rows`, `autodoc_rate_cards`, `vehicles`, `job_cards`).
+  - Job Card dropdowns now use dynamic options for Model, Paint Type, B&P City Category, Claim Type, and Year.
+  - files:
+    - [src/lib/api/autodocRates.ts](../../src/lib/api/autodocRates.ts)
+    - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Corrected lookup UX/state flow:
+  - Vehicle "not found" warning no longer appears just by typing registration.
+  - Fetch button now drives explicit lookup states (`loading/found/not_found/error`).
+  - Vehicle detail form now opens after fetch action (or existing saved draft), matching fetch-first workflow.
+  - file: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Corrected "+ Job Card" fresh-start behavior:
+  - Clicking Job Card from Dashboard now initializes a fresh job-card draft (no forced dependency on "Clear & New").
+  - Existing in-progress data still remains available across intra-workflow tab moves through session state.
+  - file: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+- Validation:
+  - Type + build check passed (`npm run build`).
+
+Open follow-up (recommended for ops):
+- Add a dedicated lookup/master table for AutoDoc dropdown governance if strict admin-managed catalog control is required (instead of deriving from existing transactional/reference tables).
+- Run production UAT on Vercel for:
+  - model/city combinations that previously showed "No rates found"
+  - Job Card fresh initialization when entering from Dashboard
+  - lookup-driven form expansion and manual-entry path when vehicle is not found
 
 ### Execution Delta (2026-05-23 — latest)
 
