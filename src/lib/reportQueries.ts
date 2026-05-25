@@ -284,6 +284,7 @@ export interface BranchInvoiceSpreadRow {
   branch: string
   invoiceCount: number
   percentage: number
+  vasRevenue: number
   totalAmount: number
   vasRevenue: number
   avgInvoiceValue: number
@@ -3124,6 +3125,7 @@ export async function getInvoiceValueDistribution(
       branch: row.branch,
       invoiceCount: row.invoiceCount,
       percentage: totalInvoices > 0 ? (row.invoiceCount / totalInvoices) * 100 : 0,
+      vasRevenue: 0,
       totalAmount: row.totalAmount,
       vasRevenue: 0,
       avgInvoiceValue: row.invoiceCount > 0 ? row.totalAmount / row.invoiceCount : 0,
