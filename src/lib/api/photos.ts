@@ -50,3 +50,15 @@ export async function createAutodocSignedUrlMap(paths: string[]): Promise<ApiRes
 
   return ok(urls)
 }
+
+export async function deletePanelPhoto(photoId: string): Promise<ApiResult<null>> {
+  if (!photoId.trim()) return fail('Photo id is required')
+
+  const { error } = await supabase
+    .from('panel_photos')
+    .delete()
+    .eq('id', photoId)
+
+  if (error) return fail(error)
+  return ok(null)
+}

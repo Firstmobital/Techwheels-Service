@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
 import {
+  createAutodocSignedUrlMap,
   createJobCard,
+  createPanelPhoto,
   fetchVehicleByReg,
   generateClaimEmailContent,
   getAutoDocLookupOptions,
@@ -13,8 +16,10 @@ import {
   listActivePanelLabels,
   listDocuments,
   listJobCardSummaries,
+  listPanelPhotos,
   listPanels,
   createPanel,
+  deletePanelPhoto,
   logActivity,
   resolveRegNumberFromReference,
   sendClaimEmail,
@@ -24,6 +29,7 @@ import {
   type DocumentRow,
   type ModelPanelRate,
   type JobSummaryRow,
+  type PhotoType,
 } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 
@@ -79,11 +85,14 @@ interface EstimateLineItem {
 
 interface DamagePhotoItem {
   id: string
+  panelId: string
   panel: string
   stage: string
+  photoType: PhotoType
   url: string
   name: string
   uploadedAtLabel: string
+  storagePath: string
 }
 
 interface AutoDocFormLookupState {
@@ -234,6 +243,21 @@ function formatEstimateActionLabel(value: string): string {
   return value
 }
 
+function stageToRepairStage(value: string): 'pre-repair' | 'post-repair' {
+  return value === 'post-repair' ? 'post-repair' : 'pre-repair'
+}
+
+function stageToPhotoType(value: string): PhotoType {
+  return value === 'post-repair' ? 'paint' : 'defect'
+}
+
+function toTimeLabel(value: string | null): string {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AutoDocPage() {
@@ -271,6 +295,8 @@ export default function AutoDocPage() {
   const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
   const [selectedPanels, setSelectedPanels] = useState<string[]>(() => readSessionJSON<string[]>(SESSION_KEYS.selectedPanels, []))
   const [panelsHydratedForJobId, setPanelsHydratedForJobId] = useState<string | null>(null)
+  const [panelIdByName, setPanelIdByName] = useState<Record<string, string>>({})
+  const [, setPanelNameById] = useState<Record<string, string>>({})
   const [preRepairPanelsByJob, setPreRepairPanelsByJob] = useState<Record<string, string[]>>(() => readSessionJSON<Record<string, string[]>>(SESSION_KEYS.preRepairPanelsByJob, {}))
   const [activePanel, setActivePanel] = useState(() => readSessionValue(SESSION_KEYS.activePanel) || '')
   const [damagePhotoType, setDamagePhotoType] = useState(() => readSessionValue(SESSION_KEYS.damagePhotoType) || '')
@@ -515,7 +541,7 @@ export default function AutoDocPage() {
     damageUploadInputRef.current?.click()
   }
 
-  function handleDamagePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleDamagePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.target.files
     if (!files || files.length === 0) return
 
@@ -530,29 +556,83 @@ export default function AutoDocPage() {
       return
     }
 
-    const nowLabel = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-    const nextPhotos: DamagePhotoItem[] = Array.from(files).map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      panel: activePanel,
-      stage: damagePhotoType,
-      url: URL.createObjectURL(file),
-      name: file.name,
-      uploadedAtLabel: nowLabel,
-    }))
+    if (!activeJobCardId) {
+      showToast('Select a job card first from dashboard.', false)
+      event.target.value = ''
+      return
+    }
 
-    setDamagePhotos((prev) => [...prev, ...nextPhotos])
-    showToast(`${nextPhotos.length} photo${nextPhotos.length > 1 ? 's' : ''} uploaded.`, true)
+    const repairStage = stageToRepairStage(damagePhotoType)
+    const photoType = stageToPhotoType(damagePhotoType)
+    const panelId = await ensurePanelIdForName(activeJobCardId, activePanel)
+    if (!panelId) {
+      showToast('Unable to resolve selected panel. Please reselect panel and retry.', false)
+      event.target.value = ''
+      return
+    }
 
-    // Allow selecting the same file again in the next pick.
+    const dealerCode = (activeSummary as { dealer_code?: string | null } | null)?.dealer_code?.trim() || 'unknown'
+    const filesArray = Array.from(files)
+    let uploadedCount = 0
+
+    for (const file of filesArray) {
+      const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
+      const safeExt = (ext ?? 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg'
+      const storagePath = `${dealerCode}/${activeJobCardId}/${panelId}/${photoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${safeExt}`
+
+      const storageRes = await supabase.storage.from(AUTODOC_BUCKET).upload(storagePath, file, {
+        cacheControl: '3600',
+        contentType: file.type || 'image/jpeg',
+        upsert: false,
+      })
+
+      if (storageRes.error) {
+        showToast(storageRes.error.message || 'Failed to upload photo to storage.', false)
+        continue
+      }
+
+      const photoRes = await createPanelPhoto({
+        jobCardId: activeJobCardId,
+        panelId,
+        photoType,
+        storagePath,
+        repairStage,
+      })
+
+      if (photoRes.error) {
+        await supabase.storage.from(AUTODOC_BUCKET).remove([storagePath])
+        showToast(photoRes.error, false)
+        continue
+      }
+
+      uploadedCount += 1
+    }
+
+    await refreshDamagePhotos(activeJobCardId)
+    if (uploadedCount > 0) {
+      showToast(`${uploadedCount} photo${uploadedCount > 1 ? 's' : ''} uploaded.`, true)
+    }
+
     event.target.value = ''
   }
 
-  function removeDamagePhoto(photoId: string) {
-    setDamagePhotos((prev) => {
-      const target = prev.find((photo) => photo.id === photoId)
-      if (target) URL.revokeObjectURL(target.url)
-      return prev.filter((photo) => photo.id !== photoId)
-    })
+  async function removeDamagePhoto(photoId: string) {
+    const target = damagePhotos.find((photo) => photo.id === photoId)
+    if (!target) return
+
+    const deleteRes = await deletePanelPhoto(photoId)
+    if (deleteRes.error) {
+      showToast(deleteRes.error, false)
+      return
+    }
+
+    const storageRemoveRes = await supabase.storage.from(AUTODOC_BUCKET).remove([target.storagePath])
+    if (storageRemoveRes.error) {
+      showToast('Photo record removed, but file cleanup failed in storage.', false)
+    }
+
+    setDamagePhotos((prev) => prev.filter((photo) => photo.id !== photoId))
+    showToast('Photo removed.', true)
   }
 
   function openDeliveryVideoPicker() {
@@ -608,7 +688,11 @@ export default function AutoDocPage() {
 
   useEffect(() => {
     return () => {
-      damagePhotosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url))
+      damagePhotosRef.current.forEach((photo) => {
+        if (photo.url.startsWith('blob:')) {
+          URL.revokeObjectURL(photo.url)
+        }
+      })
     }
   }, [])
 
@@ -682,6 +766,83 @@ export default function AutoDocPage() {
     }
   }, [])
 
+  const refreshDamagePhotos = useCallback(async (jobCardId: string) => {
+    const [panelsRes, photosRes] = await Promise.all([
+      listPanels(jobCardId),
+      listPanelPhotos(jobCardId),
+    ])
+
+    if (panelsRes.error || !panelsRes.data || photosRes.error || !photosRes.data) {
+      setDamagePhotos([])
+      return
+    }
+
+    const nextPanelIdByName: Record<string, string> = {}
+    const nextPanelNameById: Record<string, string> = {}
+    panelsRes.data.forEach((panel) => {
+      const name = panel.panel_name?.trim()
+      if (!name) return
+      nextPanelIdByName[name] = panel.id
+      nextPanelNameById[panel.id] = name
+    })
+    setPanelIdByName(nextPanelIdByName)
+    setPanelNameById(nextPanelNameById)
+
+    const paths = photosRes.data.map((photo) => photo.storage_path).filter((path) => typeof path === 'string' && path.trim().length > 0)
+    const urlRes = await createAutodocSignedUrlMap(paths)
+    const signedUrlMap = urlRes.data ?? {}
+
+    const mapped: DamagePhotoItem[] = photosRes.data
+      .map((photo) => {
+        const storagePath = photo.storage_path?.trim()
+        if (!storagePath) return null
+        const signedUrl = signedUrlMap[storagePath]
+        if (!signedUrl) return null
+        const stage = photo.repair_stage === 'post-repair' ? 'post-repair' : 'pre-repair'
+        const panelName = nextPanelNameById[photo.panel_id] ?? 'Selected Panel'
+        const fileName = storagePath.split('/').pop() ?? 'uploaded-photo'
+        return {
+          id: photo.id,
+          panelId: photo.panel_id,
+          panel: panelName,
+          stage,
+          photoType: photo.photo_type,
+          url: signedUrl,
+          name: fileName,
+          uploadedAtLabel: toTimeLabel(photo.captured_at) || '--',
+          storagePath,
+        }
+      })
+      .filter((photo): photo is DamagePhotoItem => Boolean(photo))
+
+    setDamagePhotos(mapped)
+  }, [])
+
+  const ensurePanelIdForName = useCallback(async (jobCardId: string, panelName: string): Promise<string | null> => {
+    const normalizedPanel = panelName.trim()
+    if (!normalizedPanel) return null
+
+    const cached = panelIdByName[normalizedPanel]
+    if (cached) return cached
+
+    const existingRes = await listPanels(jobCardId)
+    if (existingRes.error || !existingRes.data) return null
+
+    const existing = existingRes.data.find((panel) => (panel.panel_name?.trim() ?? '') === normalizedPanel)
+    if (existing) {
+      setPanelIdByName((prev) => ({ ...prev, [normalizedPanel]: existing.id }))
+      setPanelNameById((prev) => ({ ...prev, [existing.id]: normalizedPanel }))
+      return existing.id
+    }
+
+    const createRes = await createPanel(jobCardId, normalizedPanel)
+    if (createRes.error || !createRes.data) return null
+
+    setPanelIdByName((prev) => ({ ...prev, [normalizedPanel]: createRes.data.id }))
+    setPanelNameById((prev) => ({ ...prev, [createRes.data.id]: normalizedPanel }))
+    return createRes.data.id
+  }, [panelIdByName])
+
   useEffect(() => { writeSessionValue(SESSION_KEYS.activeTab, activeTab) }, [activeTab])
   useEffect(() => {
     if (activeJobCardId) writeSessionValue(SESSION_KEYS.activeJobCardId, activeJobCardId)
@@ -731,7 +892,10 @@ export default function AutoDocPage() {
     async function rehydratePanelsForActiveJobCard() {
       if (!activeJobCardId) {
         setPanelsHydratedForJobId(null)
+        setPanelIdByName({})
+        setPanelNameById({})
         setSelectedPanels([])
+        setDamagePhotos([])
         setActivePanel('')
         return
       }
@@ -742,6 +906,18 @@ export default function AutoDocPage() {
       const fromMap = sanitizePanelList(readPanelsByJobMap()[jobCardId])
 
       const panelRes = await listPanels(jobCardId)
+      if (!panelRes.error && panelRes.data) {
+        const nextPanelIdByName: Record<string, string> = {}
+        const nextPanelNameById: Record<string, string> = {}
+        panelRes.data.forEach((panel) => {
+          const name = panel.panel_name?.trim()
+          if (!name) return
+          nextPanelIdByName[name] = panel.id
+          nextPanelNameById[panel.id] = name
+        })
+        setPanelIdByName(nextPanelIdByName)
+        setPanelNameById(nextPanelNameById)
+      }
       const fromDb = panelRes.error || !panelRes.data
         ? []
         : panelRes.data
@@ -770,6 +946,7 @@ export default function AutoDocPage() {
       if (!activeJobCardId) {
         setActiveSummary(null)
         setJobDocuments([])
+        setDamagePhotos([])
         return
       }
       const res = await getJobCardSummary(activeJobCardId)
@@ -777,9 +954,10 @@ export default function AutoDocPage() {
         setActiveSummary(res.data)
       }
       await refreshDocuments(activeJobCardId)
+      await refreshDamagePhotos(activeJobCardId)
     }
     void loadActiveSummary()
-  }, [activeJobCardId, refreshDocuments])
+  }, [activeJobCardId, refreshDamagePhotos, refreshDocuments])
 
   useEffect(() => {
     async function hydrateVehicleContextForSelectedJob() {
@@ -834,6 +1012,15 @@ export default function AutoDocPage() {
           .filter((name): name is string => Boolean(name && name.length > 0)),
       )
 
+      const nextPanelIdByName: Record<string, string> = {}
+      const nextPanelNameById: Record<string, string> = {}
+      existingRes.data.forEach((panel) => {
+        const name = panel.panel_name?.trim()
+        if (!name) return
+        nextPanelIdByName[name] = panel.id
+        nextPanelNameById[panel.id] = name
+      })
+
       for (const panelName of sanitized) {
         if (existing.has(panelName)) continue
         const createRes = await createPanel(activeJobCardId, panelName)
@@ -842,7 +1029,12 @@ export default function AutoDocPage() {
           return
         }
         existing.add(panelName)
+        nextPanelIdByName[panelName] = createRes.data.id
+        nextPanelNameById[createRes.data.id] = panelName
       }
+
+      setPanelIdByName(nextPanelIdByName)
+      setPanelNameById(nextPanelNameById)
     }
 
     void persistSelectedPanelsToDb()
@@ -2137,7 +2329,7 @@ export default function AutoDocPage() {
                     </svg>
                   </button>
                   <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] text-white">
-                    {photo.panel} - {photo.stage.startsWith('Post') ? 'Post' : photo.stage.startsWith('Under') ? 'Under' : 'Pre'} - {photo.uploadedAtLabel}
+                    {photo.panel} - {photo.stage === 'post-repair' ? 'Post' : 'Pre'} - {photo.uploadedAtLabel}
                   </div>
                 </div>
               ))}
