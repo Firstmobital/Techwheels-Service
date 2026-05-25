@@ -1289,11 +1289,11 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.model} onChange={(e) => setForm(prev => ({ ...prev, model: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Select</option>
-                      <option>Nexon EV</option>
-                      <option>Harrier</option>
-                      <option>Safari</option>
-                      <option>Altroz</option>
-                      <option>Punch</option>
+                      <option>NEXON EV</option>
+                      <option>HARRIER</option>
+                      <option>SAFARI</option>
+                      <option>ALTROZ</option>
+                      <option>PUNCH EV</option>
                     </select>
                   </div>
                   <div>
@@ -1750,12 +1750,14 @@ export default function AutoDocPage() {
           <div className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
             <p className="text-xs text-blue-800">
               <span className="font-semibold">Rate Card Status:</span>{' '}
-              {loadingModelRates ? (
-                <span className="text-blue-600">Loading rates...</span>
+              {!form.model || !form.bpCityCategory ? (
+                <span className="text-gray-600">Awaiting model & city category selection</span>
+              ) : loadingModelRates ? (
+                <span className="text-blue-600">Searching {form.model} + {form.bpCityCategory}...</span>
               ) : activeModelRates.length > 0 ? (
-                <span className="text-emerald-600">✓ {activeModelRates.length} panel rates active for {form.model}</span>
+                <span className="text-emerald-600">✓ {activeModelRates.length} rates active: {form.model} / {form.bpCityCategory}</span>
               ) : (
-                <span className="text-gray-600">No active rates found — labour must be entered manually</span>
+                <span className="text-amber-600">No rates found for {form.model} / {form.bpCityCategory} — check Settings upload & activation</span>
               )}
             </p>
           </div>
