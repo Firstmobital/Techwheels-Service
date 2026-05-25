@@ -131,6 +131,8 @@ async function fetchData(jobCardId: string) {
     throw new Error('Not authenticated. Please log in again.')
   }
 
+  console.log(`[generateExcel] Calling edge function for jobCardId: ${jobCardId}`)
+  
   const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-export-data`, {
     method: 'POST',
     headers: {
@@ -141,14 +143,23 @@ async function fetchData(jobCardId: string) {
   })
 
   if (!res.ok) {
-    const errData = await res.json()
+    const errText = await res.text()
+    console.error(`[generateExcel] Edge function error (HTTP ${res.status}):`, errText)
+    let errData
+    try {
+      errData = JSON.parse(errText)
+    } catch {
+      errData = { error: errText }
+    }
     throw new Error(errData.error ?? `Failed to fetch estimate data (HTTP ${res.status})`)
   }
 
   const result = await res.json()
   
+  console.log(`[generateExcel] Edge function returned:`, { jc: !!result.jc, rowCount: (result.rows ?? []).length })
+
   if (!result.jc) {
-    throw new Error('No job card data returned')
+    throw new Error('No job card data returned from edge function')
   }
 
   return {

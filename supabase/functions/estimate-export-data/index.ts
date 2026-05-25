@@ -52,7 +52,8 @@ Deno.serve(async (req) => {
 
   try {
     // Parse request
-    const { jobCardId } = await req.json()
+    const body = await req.json()
+    const { jobCardId } = body
 
     if (!jobCardId || typeof jobCardId !== 'string') {
       return new Response(
@@ -61,11 +62,14 @@ Deno.serve(async (req) => {
       )
     }
 
+    console.log(`[estimate-export-data] Fetching for jobCardId: ${jobCardId}`)
+
     // Initialize Supabase client with SERVICE_ROLE key (bypasses RLS)
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
     const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+      console.error('[estimate-export-data] Missing env vars')
       return new Response(
         JSON.stringify({ error: 'Server configuration error' }),
         { status: 500, headers }
@@ -74,7 +78,8 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
-    // Fetch job card summary with all columns
+    // Fetch job card summary
+    console.log(`[estimate-export-data] Fetching job_card_summary...`)
     const { data: jcData, error: jcError } = await supabase
       .from('job_card_summary')
       .select([
@@ -86,7 +91,8 @@ Deno.serve(async (req) => {
       .eq('job_card_id', jobCardId)
       .single<JobSummary>()
 
-    if (jcError || !jcData) {
+    if (jcError) {
+      console.error(`[estimate-export-data] JC fetch error:`, jcError)
       return new Response(
         JSON.stringify({
           error: `Job card not found: ${jcError?.message ?? 'no data'}`
@@ -95,7 +101,16 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Fetch estimate rows - return all available columns
+    if (!jcData) {
+      console.error(`[estimate-export-data] No JC data returned`)
+      return new Response(
+        JSON.stringify({ error: 'Job card not found: no data' }),
+        { status: 404, headers }
+      )
+    }
+
+    // Fetch estimate rows
+    console.log(`[estimate-export-data] Fetching estimate_rows...`)
     const { data: estData, error: estError } = await supabase
       .from('estimate_rows')
       .select([
@@ -107,11 +122,14 @@ Deno.serve(async (req) => {
       .order('sr_no')
 
     if (estError) {
+      console.error(`[estimate-export-data] EST fetch error:`, estError)
       return new Response(
         JSON.stringify({ error: `Estimate rows fetch failed: ${estError.message}` }),
         { status: 500, headers }
       )
     }
+
+    console.log(`[estimate-export-data] Success: jc=${jcData.job_card_id}, rows=${(estData ?? []).length}`)
 
     // Return success with data
     return new Response(
@@ -123,6 +141,7 @@ Deno.serve(async (req) => {
     )
 
   } catch (err) {
+    console.error('[estimate-export-data] Exception:', err)
     return new Response(
       JSON.stringify({
         error: `Server error: ${(err as Error).message}`
