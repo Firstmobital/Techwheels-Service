@@ -259,6 +259,29 @@ function toTimeLabel(value: string | null): string {
   return parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
 }
 
+function toLocalYmd(value: string): string | null {
+  if (!value) return null
+
+  const dateOnlyMatch = value.match(/^\d{4}-\d{2}-\d{2}$/)
+  if (dateOnlyMatch) return dateOnlyMatch[0]
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+
+  const y = parsed.getFullYear()
+  const m = String(parsed.getMonth() + 1).padStart(2, '0')
+  const d = String(parsed.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function todayLocalYmd(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AutoDocPage() {
@@ -1689,7 +1712,8 @@ export default function AutoDocPage() {
       || (r.model ?? '').toLowerCase().includes(q)
     return matchStatus && matchSearch
   })
-  const dashboardDisplayed = displayed
+  const todayYmd = todayLocalYmd()
+  const dashboardDisplayed = displayed.filter((row) => toLocalYmd(row.complaint_date) === todayYmd)
 
   // ─────────────────────────────────────────────────────────────────────────
   return (

@@ -24,7 +24,39 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobSummaryRow[]>
     .order('jc_created_at', { ascending: false })
 
   if (error) return fail(error)
-  return ok((data ?? []) as unknown as JobSummaryRow[])
+
+  const summaries = ((data ?? []) as unknown as JobSummaryRow[])
+  if (summaries.length === 0) return ok(summaries)
+
+  const jobCardIds = summaries
+    .map((row) => row.job_card_id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+  if (jobCardIds.length === 0) return ok(summaries)
+
+  // Authoritative total should come from estimate_rows aggregation, not multi-join view sums.
+  const { data: estimateRows, error: estimateError } = await supabase
+    .from('estimate_rows')
+    .select('job_card_id, row_total')
+    .in('job_card_id', jobCardIds)
+
+  if (estimateError) return fail(estimateError)
+
+  const totalsByJobCard = new Map<string, number>()
+  for (const row of estimateRows ?? []) {
+    const jobCardId = row.job_card_id
+    const rowTotal = Number(row.row_total ?? 0)
+    if (!jobCardId) continue
+    const prev = totalsByJobCard.get(jobCardId) ?? 0
+    totalsByJobCard.set(jobCardId, prev + (Number.isFinite(rowTotal) ? rowTotal : 0))
+  }
+
+  const adjusted = summaries.map((row) => ({
+    ...row,
+    total_estimate_amount: row.job_card_id ? (totalsByJobCard.get(row.job_card_id) ?? 0) : 0,
+  }))
+
+  return ok(adjusted)
 }
 
 export async function getJobCardSummary(jobCardId: string): Promise<ApiResult<JobSummaryRow>> {
@@ -35,7 +67,23 @@ export async function getJobCardSummary(jobCardId: string): Promise<ApiResult<Jo
     .single<JobSummaryRow>()
 
   if (error) return fail(error)
-  return ok(data)
+
+  const { data: estimateRows, error: estimateError } = await supabase
+    .from('estimate_rows')
+    .select('row_total')
+    .eq('job_card_id', jobCardId)
+
+  if (estimateError) return fail(estimateError)
+
+  const totalEstimateAmount = (estimateRows ?? []).reduce((sum, row) => {
+    const rowTotal = Number(row.row_total ?? 0)
+    return sum + (Number.isFinite(rowTotal) ? rowTotal : 0)
+  }, 0)
+
+  return ok({
+    ...data,
+    total_estimate_amount: totalEstimateAmount,
+  })
 }
 
 export async function resolveRegNumberFromReference(reference: string): Promise<ApiResult<string | null>> {
