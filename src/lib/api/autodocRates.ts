@@ -423,12 +423,20 @@ export async function getAutoDocWorkflowOptions(): Promise<ApiResult<AutoDocWork
       .map((row) => row.repair_stage?.trim())
       .filter((value): value is string => Boolean(value)),
   )).sort((a, b) => a.localeCompare(b))
+  ;['pre-repair', 'post-repair'].forEach((stage) => {
+    if (!photoStageOptions.includes(stage)) photoStageOptions.push(stage)
+  })
+  photoStageOptions.sort((a, b) => a.localeCompare(b))
 
   const estimateActionOptions = Array.from(new Set(
     ((estimateRes.data ?? []) as Array<{ action: string | null }>)
       .map((row) => row.action?.trim())
       .filter((value): value is string => Boolean(value)),
   )).sort((a, b) => a.localeCompare(b))
+  ;['repaint', 'replace'].forEach((action) => {
+    if (!estimateActionOptions.includes(action)) estimateActionOptions.push(action)
+  })
+  estimateActionOptions.sort((a, b) => a.localeCompare(b))
 
   return ok({ statusOptions, photoStageOptions, estimateActionOptions })
 }

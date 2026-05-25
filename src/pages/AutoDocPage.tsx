@@ -230,6 +230,7 @@ export default function AutoDocPage() {
   const [statusFilter, setStatus]       = useState<string>('')
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [lookupBusy, setLookupBusy] = useState(false)
   const [vehicleFound, setVehicleFound] = useState(false)
@@ -570,14 +571,19 @@ export default function AutoDocPage() {
     }
   }, { parts: 0, paint: 0, labour: 0, grand: 0 })
 
+  const estimatePanelOptions = useMemo(() => {
+    if (selectedPanels.length > 0) return selectedPanels
+    return damagePanelOptions
+  }, [damagePanelOptions, selectedPanels])
+
   const visibleDamagePhotos = damagePhotos.filter((photo) => {
     const panelMatches = !activePanel || photo.panel === activePanel
     const stageMatches = !damagePhotoType || photo.stage === damagePhotoType
     return panelMatches && stageMatches
   })
-  const currentVehicleReg = form.regNumber.trim() || 'Not selected'
-  const currentVehicleModel = form.model.trim() || 'Model NA'
-  const currentVehicleJc = form.jcNumber.trim() || 'JC NA'
+  const currentVehicleReg = (activeSummary?.reg_number ?? form.regNumber.trim()) || 'Not selected'
+  const currentVehicleModel = (activeSummary?.model ?? form.model.trim()) || 'Model NA'
+  const currentVehicleJc = (activeSummary?.jc_number ?? form.jcNumber.trim()) || 'JC NA'
   const hasVehicleDraftFields = [
     form.vin,
     form.model,
@@ -774,6 +780,79 @@ export default function AutoDocPage() {
     setCreateError(null)
     setShowCreate(false)
     setCreating(false)
+  }
+
+  async function persistDraftJobCard(showSuccessToast: boolean): Promise<boolean> {
+    setCreateError(null)
+
+    const regNumber = form.regNumber.trim()
+    const jcNumber = form.jcNumber.trim()
+    if (!regNumber) {
+      showToast('Enter registration number before saving draft.', false)
+      return false
+    }
+    if (!jcNumber) {
+      showToast('Enter job card number before saving draft.', false)
+      return false
+    }
+
+    const year = form.year.trim() ? Number(form.year) : null
+    const kmReading = form.kmReading.trim() ? Number(form.kmReading) : null
+
+    if (year != null && (!Number.isFinite(year) || year < 1900 || year > 2100)) {
+      showToast('Vehicle year must be between 1900 and 2100.', false)
+      return false
+    }
+
+    if (kmReading != null && (!Number.isFinite(kmReading) || kmReading < 0)) {
+      showToast('KM reading must be a positive number.', false)
+      return false
+    }
+
+    const vehicleRes = await upsertVehicle({
+      regNumber: form.regNumber,
+      vin: form.vin,
+      model: form.model,
+      year,
+      colour: form.colour,
+      paintType: form.paintType,
+      dealerCity: form.dealerCity,
+      bpCityCategory: form.bpCityCategory,
+      ownerName: form.ownerName,
+      ownerPhone: form.ownerPhone,
+      dateOfSale: form.dateOfSale || null,
+    })
+
+    if (vehicleRes.error) {
+      showToast(vehicleRes.error, false)
+      return false
+    }
+
+    if (activeJobCardId) {
+      if (showSuccessToast) showToast('Draft saved.', true)
+      return true
+    }
+
+    const complaintDate = form.complaintDate || new Date().toISOString().slice(0, 10)
+    const jcRes = await createJobCard({
+      regNumber: form.regNumber,
+      jcNumber: form.jcNumber,
+      complaintDate,
+      kmReading,
+      claimType: form.claimType,
+      complaintText: form.complaintText,
+    })
+
+    if (jcRes.error || !jcRes.data) {
+      showToast(jcRes.error ?? 'Unable to create draft job card.', false)
+      return false
+    }
+
+    setActiveJobCardId(jcRes.data.id)
+    await fetchRows(true)
+
+    if (showSuccessToast) showToast('Draft created and saved.', true)
+    return true
   }
 
   async function handleCreateJobCard() {
@@ -1028,12 +1107,7 @@ export default function AutoDocPage() {
       || (r.model ?? '').toLowerCase().includes(q)
     return matchStatus && matchSearch
   })
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const dashboardDisplayed = displayed.filter((r) => {
-    const complaintDate = new Date(r.complaint_date)
-    return complaintDate >= todayStart
-  })
+  const dashboardDisplayed = displayed
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -1645,22 +1719,39 @@ export default function AutoDocPage() {
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => toast && setToast({ ...toast, msg: 'Draft saved' })}
+                    onClick={async () => {
+                      setSavingDraft(true)
+                      try {
+                        await persistDraftJobCard(true)
+                      } finally {
+                        setSavingDraft(false)
+                      }
+                    }}
+                    disabled={savingDraft}
                     className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                     </svg>
-                    Save Draft
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
                   </button>
                   <button
-                    onClick={() => setActiveTab('damage')}
+                    onClick={async () => {
+                      setSavingDraft(true)
+                      try {
+                        const ok = await persistDraftJobCard(false)
+                        if (ok) setActiveTab('damage')
+                      } finally {
+                        setSavingDraft(false)
+                      }
+                    }}
+                    disabled={savingDraft}
                     className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors flex items-center gap-2"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                    Next: Document Damage
+                    {savingDraft ? 'Saving...' : 'Next: Document Damage'}
                   </button>
                 </div>
               </div>
@@ -1903,7 +1994,7 @@ export default function AutoDocPage() {
                           onChange={(e) => updateEstimateRow(row.id, { panel: e.target.value })}
                           className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         >
-                          {[...new Set([...selectedPanels, ...damagePanelOptions])].map((panel) => (
+                          {[...new Set([row.panel, ...estimatePanelOptions].filter(Boolean))].map((panel) => (
                             <option key={panel} value={panel}>{panel}</option>
                           ))}
                         </select>
@@ -2021,7 +2112,7 @@ export default function AutoDocPage() {
                         onChange={(e) => updateEstimateRow(row.id, { panel: e.target.value })}
                         className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       >
-                        {[...new Set([...selectedPanels, ...damagePanelOptions])].map((panel) => (
+                        {[...new Set([row.panel, ...estimatePanelOptions].filter(Boolean))].map((panel) => (
                           <option key={panel} value={panel}>{panel}</option>
                         ))}
                       </select>
