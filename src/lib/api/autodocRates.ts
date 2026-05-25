@@ -171,11 +171,24 @@ export async function createRateCardWithRows(input: {
 }): Promise<ApiResult<RateCardRow>> {
   if (!input.rows.length) return fail('At least one rate row is required')
 
+  const cityCategory = input.cityCategory.trim()
+
+  // Prevent unique-active conflict: deactivate current active card before creating a new active card.
+  if (input.setActive) {
+    const deactivateRes = await supabase
+      .from('autodoc_rate_cards')
+      .update({ is_active: false, status: 'archived' })
+      .eq('city_category', cityCategory)
+      .eq('is_active', true)
+
+    if (deactivateRes.error) return fail(deactivateRes.error)
+  }
+
   const { data: card, error: cardError } = await supabase
     .from('autodoc_rate_cards')
     .insert({
       name: input.name.trim(),
-      city_category: input.cityCategory.trim(),
+      city_category: cityCategory,
       notes: input.notes?.trim() || null,
       status: input.setActive ? 'active' : 'draft',
       is_active: Boolean(input.setActive),
@@ -184,17 +197,6 @@ export async function createRateCardWithRows(input: {
     .single<RateCardRow>()
 
   if (cardError || !card) return fail(cardError ?? 'Unable to create rate card')
-
-  if (input.setActive) {
-    const deactivateRes = await supabase
-      .from('autodoc_rate_cards')
-      .update({ is_active: false, status: 'archived' })
-      .eq('city_category', card.city_category)
-      .neq('id', card.id)
-      .eq('is_active', true)
-
-    if (deactivateRes.error) return fail(deactivateRes.error)
-  }
 
   const rateRowsPayload: Array<{
     rate_card_id: string
