@@ -3,7 +3,7 @@
 **Plan ID:** AUTODOC-STATUS-001  
 **Created:** 2026-05-22  
 **Owner:** GitHub Copilot (execution audit)  
-**Status:** ⚠️ IN EXECUTION (core AutoDoc + dynamic rate-card system implemented; behavior hardening in progress) — Last update: 2026-05-25
+**Status:** ⚠️ IN EXECUTION (code complete; production runtime verification + DB view hardening pending) — Last update: 2026-05-25
 
 ---
 
@@ -13,11 +13,51 @@
 - **Conflict handling:** If any app code or migration differs from the dump, this plan treats the dump as correct without reconciliation.
 - **UI/UX Authority:** Live app at https://techwheels-service.vercel.app/autodoc defines the target feature set and workflow
 
+## No-Drift Control (Operational Rule)
+
+This file is the canonical execution tracker for AutoDoc. To avoid future plan drift:
+
+1. Update this document in the same commit whenever AutoDoc behavior changes in:
+  - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+  - [src/pages/JobCardPage.tsx](../../src/pages/JobCardPage.tsx)
+  - [src/pages/SettingsPage.tsx](../../src/pages/SettingsPage.tsx)
+  - [src/lib/api/jobCards.ts](../../src/lib/api/jobCards.ts)
+  - [src/lib/api/autodocRates.ts](../../src/lib/api/autodocRates.ts)
+2. Do not mark an item done unless one of these exists:
+  - merged code reference
+  - successful build evidence
+  - runtime UAT evidence (for production-only items)
+3. Schema conflicts are resolved only against [local_folder/backups/full_database.sql](../../local_folder/backups/full_database.sql), never against older snapshots.
+4. Keep pending items limited to executable outcomes; move historical notes into Execution Delta blocks.
+
+Drift gate checklist (must pass before closing this plan):
+- [ ] Plan pending list matches real pending code/runtime work.
+- [ ] Runtime-only pending items explicitly tagged as UAT/ops pending.
+- [ ] `job_card_summary` aggregation risk status kept in sync with DB migration status.
+- [ ] Last Updated date and updater identity reflect latest AutoDoc change.
+
 ---
 
 ## Executive Summary
 
 The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim workflow system. **All core functionality is now fully implemented (2026-05-23):**
+
+### Execution Delta (2026-05-25 — post-audit doc hardening + restored settings rate import)
+
+Done in codebase (this execution):
+- Restored removed AutoDoc Rate Card section in Settings from last known good implementation:
+  - Import/Export controls
+  - Card create/activate flow
+  - Rate workbook parse + upload handling
+  - file: [src/pages/SettingsPage.tsx](../../src/pages/SettingsPage.tsx)
+- Reconfirmed dashboard list metadata completeness for active vehicles:
+  - panel names
+  - owner name
+  - KM reading
+  - files:
+    - [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+    - [src/lib/api/jobCards.ts](../../src/lib/api/jobCards.ts)
+- Reconciled this execution plan to remove stale pending statements and keep only true open items.
 
 ### Execution Delta (2026-05-25 — latest, production hardening + drift correction)
 
@@ -204,6 +244,7 @@ Pending to finish production rollout:
 **Remaining (Required to close execution):**
 - End-to-end confirmation of submit gating in deployed app
 - End-to-end confirmation of rate-card upload/activate/dynamic estimate behaviour in deployed app
+- Production verification that edge-function attachment delivery path is deployed and sending true attachments for submit flow
 
 **Remaining (Optional Enhancements):**
 - Auto-capture GPS geo-tagging on photo upload (browser permission required)
@@ -440,7 +481,6 @@ Done:
   - Migration: [20260523_create_email_logs_table.sql](../../supabase/migrations/20260523_create_email_logs_table.sql)
 
 Pending:
-- Activity log persistent storage and UI enhancement (currently UI-only; persist to audit_logs via logActivity)
 - Full accessibility audit (keyboard nav, screen reader support)
 - Print-friendly PDF export alongside PPT/Excel
 
@@ -541,7 +581,7 @@ Pending:
 - Prompt 7: ✅ (auth gating + dealer isolation complete)
 - Prompt 8: ✅ (dashboard KPIs + multi-step workflow + activity log + email integration + mobile UI complete)
 
-**Overall: ⚠️ 90% COMPLETE (code complete, deployment verification pending)** — AutoDoc Warranty Repair Manager implementation is functionally wired; production attachment delivery and final rollout checks are pending.
+**Overall: ⚠️ 92% COMPLETE (code complete, deployment/runtime verification pending)** — AutoDoc Warranty Repair Manager implementation is functionally wired; production rollout/UAT checks and DB view hardening are pending.
 
 **Status:** Build-green and functionally wired in codebase on 2026-05-23; waiting on production deployment + runtime verification for attachment send path.
 - 716 TypeScript modules compiled
@@ -558,6 +598,7 @@ Pending:
 
 **Runtime Deployment Pending:**
 - Updated edge function `send-transactional-email` with storage-backed attachments must be deployed and verified.
+- Deployed UAT confirmation for submit gating and rate-card-driven dynamic estimate behavior.
 
 **Optional Enhancements (Out of Scope):**
 - GPS auto-capture with browser geolocation permissions
@@ -843,5 +884,5 @@ Decision rule applied:
 
 ---
 
-**Last Updated:** 2026-05-22  
-**Updated By:** GitHub Copilot
+**Last Updated:** 2026-05-25  
+**Updated By:** GitHub Copilot (GPT-5.3-Codex)
