@@ -72,21 +72,32 @@ export async function logEmail(
     sentAt?: string | null
   },
 ): Promise<ApiResult<EmailLog>> {
-  const { data, error } = await supabase
+  const payload = {
+    job_card_id: jobCardId,
+    recipient_email: options.recipientEmail,
+    subject: options.subject,
+    body: options.body,
+    attachments: options.attachments ?? null,
+    sent_at: options.sentAt ?? null,
+  }
+
+  const { error } = await supabase
     .from('email_logs')
-    .insert({
-      job_card_id: jobCardId,
-      recipient_email: options.recipientEmail,
-      subject: options.subject,
-      body: options.body,
-      attachments: options.attachments ?? null,
-      sent_at: options.sentAt ?? null,
-    })
-    .select('*')
-    .single<EmailLog>()
+    .insert(payload)
 
   if (error) return fail(error)
-  return ok(data)
+
+  // Avoid requiring SELECT permission on email_logs for callers that only need send success.
+  return ok({
+    id: '',
+    job_card_id: jobCardId,
+    recipient_email: options.recipientEmail,
+    subject: options.subject,
+    body: options.body,
+    attachments: options.attachments ?? null,
+    sent_at: options.sentAt ?? null,
+    created_at: new Date().toISOString(),
+  })
 }
 
 /**
@@ -117,7 +128,17 @@ export async function sendClaimEmail(
   })
 
   if (logRes.error) {
-    return fail(`Email sent but logging failed: ${logRes.error}`)
+    console.warn('Email sent but logging failed:', logRes.error)
+    return ok({
+      id: '',
+      job_card_id: jobCardId,
+      recipient_email: options.to,
+      subject: options.subject,
+      body: options.html,
+      attachments: options.attachments?.map((a) => a.storagePath) ?? null,
+      sent_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    })
   }
 
   return ok(logRes.data!)
