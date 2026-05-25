@@ -798,7 +798,8 @@ export default function AutoDocPage() {
         if (!storagePath) return null
         const signedUrl = signedUrlMap[storagePath]
         if (!signedUrl) return null
-        const stage = photo.repair_stage === 'post-repair' ? 'post-repair' : 'pre-repair'
+        const photoStage = (photo as { repair_stage?: string | null }).repair_stage
+        const stage = photoStage === 'post-repair' ? 'post-repair' : 'pre-repair'
         const panelName = nextPanelNameById[photo.panel_id] ?? 'Selected Panel'
         const fileName = storagePath.split('/').pop() ?? 'uploaded-photo'
         return {
@@ -837,10 +838,11 @@ export default function AutoDocPage() {
 
     const createRes = await createPanel(jobCardId, normalizedPanel)
     if (createRes.error || !createRes.data) return null
+    const createdPanel = createRes.data
 
-    setPanelIdByName((prev) => ({ ...prev, [normalizedPanel]: createRes.data.id }))
-    setPanelNameById((prev) => ({ ...prev, [createRes.data.id]: normalizedPanel }))
-    return createRes.data.id
+    setPanelIdByName((prev) => ({ ...prev, [normalizedPanel]: createdPanel.id }))
+    setPanelNameById((prev) => ({ ...prev, [createdPanel.id]: normalizedPanel }))
+    return createdPanel.id
   }, [panelIdByName])
 
   useEffect(() => { writeSessionValue(SESSION_KEYS.activeTab, activeTab) }, [activeTab])
@@ -1024,7 +1026,7 @@ export default function AutoDocPage() {
       for (const panelName of sanitized) {
         if (existing.has(panelName)) continue
         const createRes = await createPanel(activeJobCardId, panelName)
-        if (createRes.error) {
+        if (createRes.error || !createRes.data) {
           showToast(`Unable to save panel \"${panelName}\": ${createRes.error}`, false)
           return
         }
