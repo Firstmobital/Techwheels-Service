@@ -1703,7 +1703,6 @@ export default function AutoDocPage() {
   }
 
   const dashboardDisplayed = displayed
-    .filter((row) => row.status !== 'completed')
     .sort((a, b) => {
       const p = (statusPriority[a.status] ?? 99) - (statusPriority[b.status] ?? 99)
       if (p !== 0) return p
@@ -1731,17 +1730,25 @@ export default function AutoDocPage() {
   }
 
   function queueStatusClass(status: string): string {
-    if (status === 'submitted') return 'bg-amber-100 text-amber-700'
-    if (status === 'approved' || status === 'in_work') return 'bg-emerald-100 text-emerald-700'
-    if (status === 'draft') return 'bg-gray-100 text-gray-700'
-    if (status === 'completed') return 'bg-blue-100 text-blue-700'
-    return 'bg-gray-100 text-gray-600'
+    if (status === 'submitted') return 'border border-amber-200 bg-amber-50 text-amber-700'
+    if (status === 'approved' || status === 'in_work') return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+    if (status === 'draft') return 'border border-slate-200 bg-slate-100 text-slate-600'
+    if (status === 'completed') return 'border border-blue-200 bg-blue-50 text-blue-700'
+    return 'border border-gray-200 bg-gray-100 text-gray-600'
+  }
+
+  function queueVehicleIconClass(status: string): string {
+    if (status === 'submitted') return 'bg-amber-50 text-amber-700'
+    if (status === 'approved' || status === 'in_work') return 'bg-emerald-50 text-emerald-700'
+    if (status === 'completed') return 'bg-blue-50 text-blue-700'
+    return 'bg-blue-50 text-blue-700'
   }
 
   function primaryActionLabel(status: string): string {
     if (status === 'submitted') return 'Send to Tata Motors'
     if (status === 'approved' || status === 'in_work') return 'Open Damage / Estimate'
     if (status === 'draft') return 'Continue Job Card'
+    if (status === 'completed') return 'View Claim'
     return 'View'
   }
 
@@ -1822,16 +1829,16 @@ export default function AutoDocPage() {
       {activeTab === 'dashboard' && (
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Cars Today */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Cars Today</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.totalToday}</p>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Today's Cars</p>
+              <p className="mt-2 text-3xl font-semibold leading-none text-gray-900 sm:text-4xl lg:text-5xl">{kpis.totalToday}</p>
+              <p className="mt-2 text-sm text-gray-500">
                 {kpis.totalTodayNew} new, {kpis.totalTodayInProgress} in progress
               </p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
               <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v12m8-12v12M3.172 3.172a4 4 0 015.656 0L12 6.343m0 0l3.172-3.171a4 4 0 015.656 5.656L12 17.657l-8.828-8.829a4 4 0 010-5.656z" />
               </svg>
@@ -1840,14 +1847,14 @@ export default function AutoDocPage() {
         </div>
 
         {/* Pending Tata Approval */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Pending Tata Approval</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.pendingApproval}</p>
-              <p className="mt-1 text-xs text-gray-500">PPTs sent today</p>
+              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Pending Tata Approval</p>
+              <p className="mt-2 text-3xl font-semibold leading-none text-amber-700 sm:text-4xl lg:text-5xl">{kpis.pendingApproval}</p>
+              <p className="mt-2 text-sm text-gray-500">PPTs sent today</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100">
               <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -1856,15 +1863,15 @@ export default function AutoDocPage() {
         </div>
 
         {/* Approved & In Work */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Approved & In Work</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.approvedInWork}</p>
-              <p className="mt-1 text-xs text-gray-500">Quotation approved</p>
+              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Approved & In Work</p>
+              <p className="mt-2 text-3xl font-semibold leading-none text-emerald-700 sm:text-4xl lg:text-5xl">{kpis.approvedInWork}</p>
+              <p className="mt-2 text-sm text-gray-500">Quotation approved</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100">
-              <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
+              <svg className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
@@ -1872,14 +1879,14 @@ export default function AutoDocPage() {
         </div>
 
         {/* Completed This Week */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Completed This Week</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">{kpis.completedThisWeek}</p>
-              <p className="mt-1 text-xs text-gray-500">Warranty claims filed</p>
+              <p className="text-base font-medium leading-none text-gray-800 sm:text-lg lg:text-[30px]">Claims This Week</p>
+              <p className="mt-2 text-3xl font-semibold leading-none text-gray-900 sm:text-4xl lg:text-5xl">{kpis.completedThisWeek}</p>
+              <p className="mt-2 text-sm text-gray-500">Warranty claims filed</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-100">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
               <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
@@ -1959,34 +1966,63 @@ export default function AutoDocPage() {
       {/* Empty state */}
       {!loading && !error && dashboardDisplayed.length === 0 && (
         <div className="py-16 text-center text-sm text-gray-400">
-          No active job cards found.{q || statusFilter ? ' Try clearing the filters.' : ''}
+          No job cards found for today.{q || statusFilter ? ' Try clearing the filters.' : ''}
         </div>
       )}
 
       {/* Active Queue */}
       {!loading && !error && dashboardDisplayed.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm print-table">
+        <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm print-table">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <h3 className="flex items-center gap-2 text-xl font-semibold text-gray-900 sm:text-2xl lg:text-3xl">
+              <svg className="h-7 w-7 text-gray-800" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
+              </svg>
+              Active Vehicles
+            </h3>
+            <button
+              type="button"
+              onClick={() => {
+                handleNewJobCard()
+                setActiveTab('jobcard')
+              }}
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-300 bg-white px-5 py-2.5 text-base font-semibold text-gray-800 hover:bg-gray-50"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+              </svg>
+              New Job Card
+            </button>
+          </div>
+
           <div className="divide-y divide-gray-100">
             {dashboardDisplayed.map((row) => (
-              <div key={row.job_card_id} className="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <p className="truncate text-2xl font-semibold text-gray-900 md:text-3xl">
-                    {row.reg_number} • {row.model ?? 'Model NA'} • Job# {row.jc_number}
-                  </p>
-                  <p className="mt-1 text-sm text-gray-600 md:text-2xl">
+              <div key={row.job_card_id} className="flex flex-col gap-4 py-5 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${queueVehicleIconClass(row.status)}`}>
+                      <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
+                      </svg>
+                    </div>
+                    <p className="truncate text-xl font-semibold leading-tight text-gray-900 sm:text-2xl lg:text-[42px]">
+                      {row.reg_number} • {row.model ?? 'Model NA'} • Job# {row.jc_number}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-sm leading-tight text-gray-600 sm:ml-[60px] sm:text-base lg:text-[35px]">
                     {fmtDate(row.complaint_date)} • Age: {row.warranty_age_days ?? '—'} days • Panels: {row.panel_count} • Estimate: ₹ {(row.total_estimate_amount ?? 0).toLocaleString('en-IN')}
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${queueStatusClass(row.status)}`}>
+                <div className="flex flex-wrap items-center justify-end gap-2.5 md:pl-4">
+                  <span className={`inline-flex items-center rounded-full px-4 py-1.5 text-lg font-semibold ${queueStatusClass(row.status)}`}>
                     {queueStatusLabel(row.status)}
                   </span>
 
                   <button
                     type="button"
                     onClick={() => runPrimaryAction(row)}
-                    className="inline-flex items-center rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                    className="inline-flex items-center rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
                   >
                     {primaryActionLabel(row.status)}
                   </button>
@@ -1997,7 +2033,7 @@ export default function AutoDocPage() {
                       selectWorkflowRow(row)
                       setActiveTab('damage')
                     }}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                     aria-label="Open damage"
                     title="Open Damage"
                   >
@@ -2012,7 +2048,7 @@ export default function AutoDocPage() {
                       selectWorkflowRow(row)
                       setActiveTab('estimate')
                     }}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                     aria-label="Open estimate"
                     title="Open Estimate"
                   >
@@ -2027,7 +2063,7 @@ export default function AutoDocPage() {
                       selectWorkflowRow(row)
                       setActiveTab('submit')
                     }}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                     aria-label="Open submit"
                     title="Open Submit"
                   >
