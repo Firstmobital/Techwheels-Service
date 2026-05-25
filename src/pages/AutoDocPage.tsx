@@ -1244,36 +1244,57 @@ export default function AutoDocPage() {
       return null
     }
 
-    // Save estimate rows to database
+    const jobCardId = jcRes.data.id
+
+    // Save estimate rows to database via edge function (bypasses RLS)
     if (estimateRows.length > 0) {
-      for (let idx = 0; idx < estimateRows.length; idx++) {
-        const row = estimateRows[idx]
-        try {
-          await supabase.from('estimate_rows').insert({
-            job_card_id: jcRes.data.id,
-            sr_no: idx + 1,
-            panel_name: row.panel || null,
-            part_number: row.partNo || null,
-            action: row.action || null,
-            qty: 1,
-            ndp_value: Number(row.partsPrice) || 0,
-            cut_weld_charges: 0,
-            paint_charges: Number(row.paintPrice) || 0,
-            total_special_charges: 0,
-            no_off: 1,
-            labour_charges: Number(row.labourPrice) || 0,
-          })
-        } catch (err) {
-          console.warn(`Failed to save estimate row ${row.id}:`, err)
+      try {
+        const rowsToInsert = estimateRows.map((row, idx) => ({
+          job_card_id: jobCardId,
+          sr_no: idx + 1,
+          panel_name: row.panel || null,
+          part_number: row.partNo || null,
+          action: row.action || null,
+          qty: 1,
+          ndp_value: Number(row.partsPrice) || 0,
+          cut_weld_charges: 0,
+          paint_charges: Number(row.paintPrice) || 0,
+          total_special_charges: 0,
+          no_off: 1,
+          labour_charges: Number(row.labourPrice) || 0,
+        }))
+
+        console.log(`[persistDraftJobCard] Saving ${rowsToInsert.length} estimate rows...`)
+        const session = await supabase.auth.getSession()
+        const token = session.data.session?.access_token
+
+        const response = await fetch('/functions/v1/estimate-rows-insert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ rows: rowsToInsert }),
+        })
+
+        const result = await response.json()
+        if (!response.ok) {
+          console.error(`[persistDraftJobCard] Insert failed:`, result)
+          showToast(`Failed to save estimate rows: ${result.error}`, false)
+        } else {
+          console.log(`[persistDraftJobCard] Saved ${result.count} estimate rows`)
         }
+      } catch (err) {
+        console.error(`[persistDraftJobCard] Exception saving estimate rows:`, err)
+        showToast(`Error saving estimate rows: ${(err as Error).message}`, false)
       }
     }
 
-    setActiveJobCardId(jcRes.data.id)
+    setActiveJobCardId(jobCardId)
     await fetchRows(true)
 
     if (showSuccessToast) showToast('Draft created and saved.', true)
-    return jcRes.data.id
+    return jobCardId
   }
 
   async function handleCreateJobCard() {
