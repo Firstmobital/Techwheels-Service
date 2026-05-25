@@ -317,7 +317,7 @@ export default function AutoDocPage() {
     }
 
     const composeReady = readiness.prePpt && readiness.excel
-    const submitReady = readiness.postPpt && readiness.deliveryVideo
+    const submitReady = readiness.postPpt
 
   const damagePanelOptions = useMemo(
     () => (
@@ -1599,7 +1599,7 @@ export default function AutoDocPage() {
       return
     }
     if (!submitReady) {
-      showToast('Upload delivery video and generate post-repair PPT before submitting.', false)
+      showToast('Generate post-repair PPT before submitting.', false)
       return
     }
 
@@ -2956,7 +2956,7 @@ export default function AutoDocPage() {
                 Submit Claim
               </button>
               {!submitReady && (
-                <p className="mt-2 text-xs font-medium text-amber-700">Upload delivery video and Post-repair PPT first.</p>
+                <p className="mt-2 text-xs font-medium text-amber-700">Generate Post-repair PPT first.</p>
               )}
             </div>
           </div>
