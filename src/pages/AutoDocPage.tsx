@@ -106,14 +106,6 @@ interface AutoDocFormLookupState {
 
 type VehicleLookupStatus = 'idle' | 'loading' | 'found' | 'not_found' | 'error'
 
-const STATUS_COLOURS: Record<string, string> = {
-  draft:     'bg-gray-100 text-gray-600',
-  submitted: 'bg-blue-100 text-blue-700',
-  approved:  'bg-purple-100 text-purple-700',
-  in_work:   'bg-amber-100 text-amber-700',
-  completed: 'bg-green-100 text-green-700',
-}
-
 const SKELETON_COLS = 11
 
 function defaultYearOptions(): string[] {
@@ -257,29 +249,6 @@ function toTimeLabel(value: string | null): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return ''
   return parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-}
-
-function toLocalYmd(value: string): string | null {
-  if (!value) return null
-
-  const dateOnlyMatch = value.match(/^\d{4}-\d{2}-\d{2}$/)
-  if (dateOnlyMatch) return dateOnlyMatch[0]
-
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return null
-
-  const y = parsed.getFullYear()
-  const m = String(parsed.getMonth() + 1).padStart(2, '0')
-  const d = String(parsed.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function todayLocalYmd(): string {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -1712,8 +1681,73 @@ export default function AutoDocPage() {
       || (r.model ?? '').toLowerCase().includes(q)
     return matchStatus && matchSearch
   })
-  const todayYmd = todayLocalYmd()
-  const dashboardDisplayed = displayed.filter((row) => toLocalYmd(row.complaint_date) === todayYmd)
+
+  const statusPriority: Record<string, number> = {
+    submitted: 0,
+    approved: 1,
+    in_work: 2,
+    draft: 3,
+    completed: 4,
+  }
+
+  const dashboardDisplayed = displayed
+    .filter((row) => row.status !== 'completed')
+    .sort((a, b) => {
+      const p = (statusPriority[a.status] ?? 99) - (statusPriority[b.status] ?? 99)
+      if (p !== 0) return p
+      const aTs = Number.isNaN(new Date(a.complaint_date).getTime()) ? 0 : new Date(a.complaint_date).getTime()
+      const bTs = Number.isNaN(new Date(b.complaint_date).getTime()) ? 0 : new Date(b.complaint_date).getTime()
+      return bTs - aTs
+    })
+
+  function selectWorkflowRow(row: JobRow) {
+    setActiveJobCardId(row.job_card_id)
+    setForm((prev) => ({
+      ...prev,
+      regNumber: row.reg_number,
+      jcNumber: row.jc_number,
+      model: row.model ?? prev.model,
+    }))
+  }
+
+  function queueStatusLabel(status: string): string {
+    if (status === 'submitted') return 'Awaiting Approval'
+    if (status === 'approved' || status === 'in_work') return 'Approved — In Work'
+    if (status === 'draft') return 'Draft'
+    if (status === 'completed') return 'Completed'
+    return status.replace('_', ' ')
+  }
+
+  function queueStatusClass(status: string): string {
+    if (status === 'submitted') return 'bg-amber-100 text-amber-700'
+    if (status === 'approved' || status === 'in_work') return 'bg-emerald-100 text-emerald-700'
+    if (status === 'draft') return 'bg-gray-100 text-gray-700'
+    if (status === 'completed') return 'bg-blue-100 text-blue-700'
+    return 'bg-gray-100 text-gray-600'
+  }
+
+  function primaryActionLabel(status: string): string {
+    if (status === 'submitted') return 'Send to Tata Motors'
+    if (status === 'approved' || status === 'in_work') return 'Open Damage / Estimate'
+    if (status === 'draft') return 'Continue Job Card'
+    return 'View'
+  }
+
+  function runPrimaryAction(row: JobRow) {
+    selectWorkflowRow(row)
+    if (row.status === 'submitted') {
+      setActiveTab('submit')
+      showToast(`Opened submit stage for ${row.jc_number}.`, true)
+      return
+    }
+    if (row.status === 'approved' || row.status === 'in_work') {
+      setActiveTab('damage')
+      showToast(`Opened damage stage for ${row.jc_number}.`, true)
+      return
+    }
+    setActiveTab('jobcard')
+    showToast(`Opened job card for ${row.jc_number}.`, true)
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -1913,86 +1947,86 @@ export default function AutoDocPage() {
       {/* Empty state */}
       {!loading && !error && dashboardDisplayed.length === 0 && (
         <div className="py-16 text-center text-sm text-gray-400">
-          No job cards found for today.{q || statusFilter ? ' Try clearing the filters.' : ''}
+          No active job cards found.{q || statusFilter ? ' Try clearing the filters.' : ''}
         </div>
       )}
 
-      {/* Table */}
+      {/* Active Queue */}
       {!loading && !error && dashboardDisplayed.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm print-table">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <th className="px-4 py-3">JC Number</th>
-                <th className="px-4 py-3">Reg No.</th>
-                <th className="px-4 py-3">Model</th>
-                <th className="px-4 py-3">Complaint Date</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-center">Age (days)</th>
-                <th className="px-4 py-3 text-center">TML %</th>
-                <th className="px-4 py-3 text-center">Panels</th>
-                <th className="px-4 py-3 text-center">Photos</th>
-                <th className="px-4 py-3 text-right">Estimate</th>
-                <th className="px-4 py-3 text-center">View</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {dashboardDisplayed.map(row => {
-                return (
-                  <tr key={row.job_card_id} className="transition-colors hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{row.jc_number}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{row.reg_number}</td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {row.model ?? '—'}
-                      {row.vehicle_year
-                        ? <span className="ml-1 text-gray-400">'{String(row.vehicle_year).slice(2)}</span>
-                        : null}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{fmtDate(row.complaint_date)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${STATUS_COLOURS[row.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                        {row.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-700">{row.warranty_age_days ?? '—'}</td>
-                    <td className="px-4 py-3 text-center font-medium text-gray-700">
-                      {row.tml_share_percent != null ? `${row.tml_share_percent}%` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-600">{row.panel_count}</td>
-                    <td className="px-4 py-3 text-center text-gray-600">{row.photo_count}</td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {row.total_estimate_amount != null
-                        ? `₹ ${row.total_estimate_amount.toLocaleString('en-IN')}`
-                        : '—'}
-                    </td>
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm print-table">
+          <div className="divide-y divide-gray-100">
+            {dashboardDisplayed.map((row) => (
+              <div key={row.job_card_id} className="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-2xl font-semibold text-gray-900 md:text-3xl">
+                    {row.reg_number} • {row.model ?? 'Model NA'} • Job# {row.jc_number}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-600 md:text-2xl">
+                    {fmtDate(row.complaint_date)} • Age: {row.warranty_age_days ?? '—'} days • Panels: {row.panel_count} • Estimate: ₹ {(row.total_estimate_amount ?? 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
 
-                    {/* View / select context */}
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveJobCardId(row.job_card_id)
-                          setForm((prev) => ({
-                            ...prev,
-                            regNumber: row.reg_number,
-                            jcNumber: row.jc_number,
-                            model: row.model ?? prev.model,
-                          }))
-                          showToast(`Selected ${row.jc_number} for workflow.`, true)
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50"
-                      >
-                        Use
-                        <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${queueStatusClass(row.status)}`}>
+                    {queueStatusLabel(row.status)}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => runPrimaryAction(row)}
+                    className="inline-flex items-center rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                  >
+                    {primaryActionLabel(row.status)}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      selectWorkflowRow(row)
+                      setActiveTab('damage')
+                    }}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    aria-label="Open damage"
+                    title="Open Damage"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      selectWorkflowRow(row)
+                      setActiveTab('estimate')
+                    }}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    aria-label="Open estimate"
+                    title="Open Estimate"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      selectWorkflowRow(row)
+                      setActiveTab('submit')
+                    }}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    aria-label="Open submit"
+                    title="Open Submit"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       </>
