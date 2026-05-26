@@ -184,6 +184,8 @@ function sanitizePanelList(value: unknown): string[] {
     .filter((item) => item.length > 0)
 }
 
+const DEFAULT_BP_CITY_CATEGORY = 'A'
+
 function createInitialForm(): CreateJobCardForm {
   return {
     regNumber: '',
@@ -198,7 +200,7 @@ function createInitialForm(): CreateJobCardForm {
     colour: '',
     paintType: '',
     dealerCity: '',
-    bpCityCategory: '',
+    bpCityCategory: DEFAULT_BP_CITY_CATEGORY,
     ownerName: '',
     ownerPhone: '',
     dealerCode: '',
@@ -310,7 +312,15 @@ export default function AutoDocPage() {
   })
   const [dashboardCardFilter, setDashboardCardFilter] = useState<DashboardCardFilter>('active_vehicles')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
-  const [form, setForm] = useState<CreateJobCardForm>(() => readSessionJSON<CreateJobCardForm>(SESSION_KEYS.formDraft, createInitialForm()))
+  const [form, setForm] = useState<CreateJobCardForm>(() => {
+    const initial = createInitialForm()
+    const draft = readSessionJSON<CreateJobCardForm>(SESSION_KEYS.formDraft, initial)
+    return {
+      ...initial,
+      ...draft,
+      bpCityCategory: draft.bpCityCategory?.trim() ? draft.bpCityCategory : DEFAULT_BP_CITY_CATEGORY,
+    }
+  })
   const [activeJobCardId, setActiveJobCardId] = useState<string | null>(() => readSessionValue(SESSION_KEYS.activeJobCardId))
   const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
   const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
@@ -781,6 +791,12 @@ export default function AutoDocPage() {
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b))
   }, [form.claimType, formLookups.claimTypeOptions])
+  const modelSelectOptions = useMemo(() => {
+    const values = new Set(formLookups.modelOptions.map((value) => value.trim()).filter((value) => value.length > 0))
+    const selectedModel = form.model.trim()
+    if (selectedModel) values.add(selectedModel)
+    return Array.from(values).sort((a, b) => a.localeCompare(b))
+  }, [form.model, formLookups.modelOptions])
   const lookupReady = Boolean(
     form.regNumber.trim()
     && form.jcNumber.trim()
@@ -1491,7 +1507,7 @@ export default function AutoDocPage() {
           colour: '',
           paintType: '',
           dealerCity: '',
-          bpCityCategory: '',
+          bpCityCategory: DEFAULT_BP_CITY_CATEGORY,
           ownerName: '',
           ownerPhone: '',
           dateOfSale: '',
@@ -1552,7 +1568,7 @@ export default function AutoDocPage() {
       colour: vehicle.colour ?? '',
       paintType: vehicle.paint_type ?? '',
       dealerCity: vehicle.dealer_city ?? '',
-      bpCityCategory: vehicle.bp_city_category ?? '',
+      bpCityCategory: vehicle.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY,
       ownerName: vehicle.owner_name ?? '',
       ownerPhone: vehicle.owner_phone ?? '',
       dateOfSale: vehicle.date_of_sale ?? '',
@@ -2826,7 +2842,7 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.model} onChange={(e) => setForm(prev => ({ ...prev, model: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Select</option>
-                      {formLookups.modelOptions.map((option) => (
+                      {modelSelectOptions.map((option) => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
