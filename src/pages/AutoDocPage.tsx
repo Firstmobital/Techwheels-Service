@@ -101,6 +101,7 @@ interface DamagePhotoItem {
 }
 
 type DamageStage = 'pre-repair' | 'under-repair' | 'post-repair'
+type WorkflowStage = 'documentation_pre_repair' | 'pre_submit_pending' | 'pre_submit_done' | 'post_repair_ppt' | 'claim_submitted'
 
 interface AutoDocFormLookupState {
   modelOptions: string[]
@@ -295,12 +296,13 @@ export default function AutoDocPage() {
   const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
   const [kpis, setKpis] = useState({
     totalToday: 0,
-    totalTodayNew: 0,
-    totalTodayInProgress: 0,
-    pendingApproval: 0,
-    approvedInWork: 0,
-    completedThisWeek: 0,
+    documentationPreRepair: 0,
+    preSubmitPending: 0,
+    preSubmitDone: 0,
+    postRepairPpt: 0,
+    claimSubmitted: 0,
   })
+  const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [form, setForm] = useState<CreateJobCardForm>(() => readSessionJSON<CreateJobCardForm>(SESSION_KEYS.formDraft, createInitialForm()))
   const [activeJobCardId, setActiveJobCardId] = useState<string | null>(() => readSessionValue(SESSION_KEYS.activeJobCardId))
   const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
@@ -792,6 +794,70 @@ export default function AutoDocPage() {
 
   useEffect(() => { void fetchRows() }, [fetchRows])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function computePostRepairReadiness() {
+      const jobCardIds = rows
+        .map((row) => row.job_card_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+      if (jobCardIds.length === 0) {
+        if (!cancelled) setPostRepairReadyJobIds(new Set())
+        return
+      }
+
+      const [panelsRes, photosRes] = await Promise.all([
+        supabase
+          .from('panels')
+          .select('id, job_card_id')
+          .in('job_card_id', jobCardIds),
+        supabase
+          .from('panel_photos')
+          .select('job_card_id, panel_id')
+          .in('job_card_id', jobCardIds)
+          .eq('repair_stage', 'post-repair'),
+      ])
+
+      if (cancelled || panelsRes.error || photosRes.error) {
+        if (!cancelled) setPostRepairReadyJobIds(new Set())
+        return
+      }
+
+      const selectedPanelIdsByJob = new Map<string, Set<string>>()
+      for (const panel of panelsRes.data ?? []) {
+        if (!panel.job_card_id || !panel.id) continue
+        const existing = selectedPanelIdsByJob.get(panel.job_card_id) ?? new Set<string>()
+        existing.add(panel.id)
+        selectedPanelIdsByJob.set(panel.job_card_id, existing)
+      }
+
+      const postRepairPanelIdsByJob = new Map<string, Set<string>>()
+      for (const photo of photosRes.data ?? []) {
+        if (!photo.job_card_id || !photo.panel_id) continue
+        const existing = postRepairPanelIdsByJob.get(photo.job_card_id) ?? new Set<string>()
+        existing.add(photo.panel_id)
+        postRepairPanelIdsByJob.set(photo.job_card_id, existing)
+      }
+
+      const readySet = new Set<string>()
+      for (const [jobCardId, selectedPanelsSet] of selectedPanelIdsByJob.entries()) {
+        if (selectedPanelsSet.size === 0) continue
+        const postRepairPanelsSet = postRepairPanelIdsByJob.get(jobCardId) ?? new Set<string>()
+        const hasAllPanels = Array.from(selectedPanelsSet).every((panelId) => postRepairPanelsSet.has(panelId))
+        if (hasAllPanels) readySet.add(jobCardId)
+      }
+
+      if (!cancelled) setPostRepairReadyJobIds(readySet)
+    }
+
+    void computePostRepairReadiness()
+
+    return () => {
+      cancelled = true
+    }
+  }, [rows])
+
   const refreshDocuments = useCallback(async (jobCardId: string) => {
     const res = await listDocuments(jobCardId)
     if (res.error || !res.data) {
@@ -1171,31 +1237,32 @@ export default function AutoDocPage() {
   useEffect(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const weekAgo = new Date(today)
-    weekAgo.setDate(weekAgo.getDate() - 7)
-
     const totalToday = rows.filter(r => new Date(r.complaint_date) >= today).length
-    const totalTodayNew = rows.filter(r => 
-      new Date(r.complaint_date) >= today && r.status === 'draft'
-    ).length
-    const totalTodayInProgress = rows.filter(r => 
-      new Date(r.complaint_date) >= today && (r.status === 'submitted' || r.status === 'in_work')
-    ).length
-    const pendingApproval = rows.filter(r => r.status === 'submitted').length
-    const approvedInWork = rows.filter(r => r.status === 'approved' || r.status === 'in_work').length
-    const completedThisWeek = rows.filter(r => 
-      r.status === 'completed' && new Date(r.complaint_date) >= weekAgo
-    ).length
+
+    function deriveWorkflowStage(row: JobRow): WorkflowStage | null {
+      if (row.status === 'completed') return 'claim_submitted'
+      if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
+      if (row.status === 'submitted') return 'pre_submit_done'
+      if (row.status === 'approved') return 'pre_submit_pending'
+      if (row.status === 'in_work') return 'documentation_pre_repair'
+      return null
+    }
+
+    const documentationPreRepair = rows.filter((r) => deriveWorkflowStage(r) === 'documentation_pre_repair').length
+    const preSubmitPending = rows.filter((r) => deriveWorkflowStage(r) === 'pre_submit_pending').length
+    const preSubmitDone = rows.filter((r) => deriveWorkflowStage(r) === 'pre_submit_done').length
+    const postRepairPpt = rows.filter((r) => deriveWorkflowStage(r) === 'post_repair_ppt').length
+    const claimSubmitted = rows.filter((r) => deriveWorkflowStage(r) === 'claim_submitted').length
 
     setKpis({
       totalToday,
-      totalTodayNew,
-      totalTodayInProgress,
-      pendingApproval,
-      approvedInWork,
-      completedThisWeek,
+      documentationPreRepair,
+      preSubmitPending,
+      preSubmitDone,
+      postRepairPpt,
+      claimSubmitted,
     })
-  }, [rows])
+  }, [postRepairReadyJobIds, rows])
 
   async function handleVehicleLookup() {
     const ref = form.regNumber.trim()
@@ -1627,7 +1694,7 @@ export default function AutoDocPage() {
     }
 
     if (!composeReady) {
-      showToast('Generate and upload Pre-repair PPT and Excel before sending.', false)
+      showToast('Upload Pre-repair PPT, Excel, and Vehicle Walkaround Video before sending.', false)
       return
     }
 
@@ -1835,6 +1902,15 @@ export default function AutoDocPage() {
     return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`
   }
 
+  function workflowStageForRow(row: JobRow): WorkflowStage | null {
+    if (row.status === 'completed') return 'claim_submitted'
+    if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
+    if (row.status === 'submitted') return 'pre_submit_done'
+    if (row.status === 'approved') return 'pre_submit_pending'
+    if (row.status === 'in_work') return 'documentation_pre_repair'
+    return null
+  }
+
   const displayed = rows.filter(r => {
     const isToday = toComplaintYmd(r.complaint_date) === todayYmd
     const matchStatus = !statusFilter || r.status === statusFilter
@@ -1845,17 +1921,19 @@ export default function AutoDocPage() {
     return isToday && matchStatus && matchSearch
   })
 
-  const statusPriority: Record<string, number> = {
-    submitted: 0,
-    approved: 1,
-    in_work: 2,
-    draft: 3,
-    completed: 4,
+  const stagePriority: Record<WorkflowStage, number> = {
+    documentation_pre_repair: 0,
+    pre_submit_pending: 1,
+    pre_submit_done: 2,
+    post_repair_ppt: 3,
+    claim_submitted: 4,
   }
 
   const dashboardDisplayed = displayed
     .sort((a, b) => {
-      const p = (statusPriority[a.status] ?? 99) - (statusPriority[b.status] ?? 99)
+      const aStage = workflowStageForRow(a)
+      const bStage = workflowStageForRow(b)
+      const p = (aStage ? stagePriority[aStage] : 99) - (bStage ? stagePriority[bStage] : 99)
       if (p !== 0) return p
       const aTs = Number.isNaN(new Date(a.complaint_date).getTime()) ? 0 : new Date(a.complaint_date).getTime()
       const bTs = Number.isNaN(new Date(b.complaint_date).getTime()) ? 0 : new Date(b.complaint_date).getTime()
@@ -1872,45 +1950,54 @@ export default function AutoDocPage() {
     }))
   }
 
-  function queueStatusLabel(status: string): string {
-    if (status === 'submitted') return 'Awaiting Approval'
-    if (status === 'approved' || status === 'in_work') return 'Approved — In Work'
-    if (status === 'draft') return 'Draft'
-    if (status === 'completed') return 'Completed'
-    return status.replace('_', ' ')
+  function queueStatusLabel(row: JobRow): string {
+    const stage = workflowStageForRow(row)
+    if (stage === 'claim_submitted') return 'Claim Submitted'
+    if (stage === 'post_repair_ppt') return 'Post Repair PPT'
+    if (stage === 'pre_submit_done') return 'Pre Submit Done'
+    if (stage === 'pre_submit_pending') return 'Pre Submit Pending'
+    if (stage === 'documentation_pre_repair') return 'Documentation Pre-Repair'
+    return 'Today\'s Cars'
   }
 
-  function queueStatusClass(status: string): string {
-    if (status === 'submitted') return 'border border-amber-200 bg-amber-50 text-amber-700'
-    if (status === 'approved' || status === 'in_work') return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-    if (status === 'draft') return 'border border-slate-200 bg-slate-100 text-slate-600'
-    if (status === 'completed') return 'border border-blue-200 bg-blue-50 text-blue-700'
-    return 'border border-gray-200 bg-gray-100 text-gray-600'
+  function queueStatusClass(row: JobRow): string {
+    const stage = workflowStageForRow(row)
+    if (stage === 'claim_submitted') return 'border border-blue-200 bg-blue-50 text-blue-700'
+    if (stage === 'post_repair_ppt') return 'border border-indigo-200 bg-indigo-50 text-indigo-700'
+    if (stage === 'pre_submit_done') return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+    if (stage === 'pre_submit_pending') return 'border border-amber-200 bg-amber-50 text-amber-700'
+    if (stage === 'documentation_pre_repair') return 'border border-orange-200 bg-orange-50 text-orange-700'
+    return 'border border-slate-200 bg-slate-100 text-slate-600'
   }
 
-  function queueVehicleIconClass(status: string): string {
-    if (status === 'submitted') return 'bg-amber-50 text-amber-700'
-    if (status === 'approved' || status === 'in_work') return 'bg-emerald-50 text-emerald-700'
-    if (status === 'completed') return 'bg-blue-50 text-blue-700'
-    return 'bg-blue-50 text-blue-700'
+  function queueVehicleIconClass(row: JobRow): string {
+    const stage = workflowStageForRow(row)
+    if (stage === 'claim_submitted') return 'bg-blue-50 text-blue-700'
+    if (stage === 'post_repair_ppt') return 'bg-indigo-50 text-indigo-700'
+    if (stage === 'pre_submit_done') return 'bg-emerald-50 text-emerald-700'
+    if (stage === 'pre_submit_pending') return 'bg-amber-50 text-amber-700'
+    if (stage === 'documentation_pre_repair') return 'bg-orange-50 text-orange-700'
+    return 'bg-slate-50 text-slate-700'
   }
 
-  function primaryActionLabel(status: string): string {
-    if (status === 'submitted') return 'Send to Tata Motors'
-    if (status === 'approved' || status === 'in_work') return 'Open Damage / Estimate'
-    if (status === 'draft') return 'Continue Job Card'
-    if (status === 'completed') return 'View Claim'
-    return 'View'
+  function primaryActionLabel(row: JobRow): string {
+    const stage = workflowStageForRow(row)
+    if (stage === 'claim_submitted') return 'View Claim'
+    if (stage === 'post_repair_ppt') return 'Open Submit'
+    if (stage === 'pre_submit_done' || stage === 'pre_submit_pending') return 'Open Submit'
+    if (stage === 'documentation_pre_repair') return 'Under Repair'
+    return 'Continue Job Card'
   }
 
   function runPrimaryAction(row: JobRow) {
     selectWorkflowRow(row)
-    if (row.status === 'submitted') {
+    const stage = workflowStageForRow(row)
+    if (stage === 'pre_submit_done' || stage === 'pre_submit_pending' || stage === 'post_repair_ppt' || stage === 'claim_submitted') {
       setActiveTab('submit')
       showToast(`Opened submit stage for ${row.jc_number}.`, true)
       return
     }
-    if (row.status === 'approved' || row.status === 'in_work') {
+    if (stage === 'documentation_pre_repair') {
       setActiveTab('damage')
       showToast(`Opened damage stage for ${row.jc_number}.`, true)
       return
@@ -1978,71 +2065,41 @@ export default function AutoDocPage() {
 
       {/* KPI Cards */}
       {activeTab === 'dashboard' && (
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Total Cars Today */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Today's Cars</p>
-              <p className="mt-2 text-4xl font-semibold leading-none text-gray-900">{kpis.totalToday}</p>
-              <p className="mt-2 text-xs text-gray-500">
-                {kpis.totalTodayNew} new, {kpis.totalTodayInProgress} in progress
-              </p>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
-              <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7v12m8-12v12M3.172 3.172a4 4 0 015.656 0L12 6.343m0 0l3.172-3.171a4 4 0 015.656 5.656L12 17.657l-8.828-8.829a4 4 0 010-5.656z" />
-              </svg>
-            </div>
-          </div>
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Today's Cars</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-gray-900">{kpis.totalToday}</p>
+          <p className="mt-2 text-xs text-gray-500">Job cards opened today only</p>
         </div>
 
-        {/* Pending Tata Approval */}
         <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pending Tata Approval</p>
-              <p className="mt-2 text-4xl font-semibold leading-none text-amber-700">{kpis.pendingApproval}</p>
-              <p className="mt-2 text-xs text-gray-500">PPTs sent today</p>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100">
-              <svg className="h-6 w-6 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Documentation Pre-Repair</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-orange-700">{kpis.documentationPreRepair}</p>
+          <p className="mt-2 text-xs text-gray-500">After Next: Document Damage</p>
         </div>
 
-        {/* Approved & In Work */}
         <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Approved & In Work</p>
-              <p className="mt-2 text-4xl font-semibold leading-none text-emerald-700">{kpis.approvedInWork}</p>
-              <p className="mt-2 text-xs text-gray-500">Quotation approved</p>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
-              <svg className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pre Submit Pending</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-amber-700">{kpis.preSubmitPending}</p>
+          <p className="mt-2 text-xs text-gray-500">After Next: Submit Reports</p>
         </div>
 
-        {/* Completed This Week */}
         <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Claims This Week</p>
-              <p className="mt-2 text-4xl font-semibold leading-none text-gray-900">{kpis.completedThisWeek}</p>
-              <p className="mt-2 text-xs text-gray-500">Warranty claims filed</p>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
-              <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-          </div>
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pre Submit Done</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-emerald-700">{kpis.preSubmitDone}</p>
+          <p className="mt-2 text-xs text-gray-500">After Compose and Send</p>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Post Repair PPT</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-indigo-700">{kpis.postRepairPpt}</p>
+          <p className="mt-2 text-xs text-gray-500">Post-repair photo complete by selected panels</p>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Claim Submitted</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-blue-700">{kpis.claimSubmitted}</p>
+          <p className="mt-2 text-xs text-gray-500">After Submit Claim email sent</p>
         </div>
       </div>
       )}
@@ -2151,7 +2208,7 @@ export default function AutoDocPage() {
               <div key={row.job_card_id} className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-3">
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${queueVehicleIconClass(row.status)}`}>
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${queueVehicleIconClass(row)}`}>
                       <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
                       </svg>
@@ -2173,8 +2230,8 @@ export default function AutoDocPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2.5 md:pl-4">
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${queueStatusClass(row.status)}`}>
-                    {queueStatusLabel(row.status)}
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${queueStatusClass(row)}`}>
+                    {queueStatusLabel(row)}
                   </span>
 
                   <button
@@ -2182,7 +2239,7 @@ export default function AutoDocPage() {
                     onClick={() => runPrimaryAction(row)}
                     className="inline-flex items-center rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                   >
-                    {primaryActionLabel(row.status)}
+                    {primaryActionLabel(row)}
                   </button>
 
                   <button
@@ -2614,7 +2671,11 @@ export default function AutoDocPage() {
                       setSavingDraft(true)
                       try {
                         const ok = await persistDraftJobCard(false)
-                        if (ok) setActiveTab('damage')
+                        if (ok) {
+                          await updateJobCardStatus(ok, 'in_work')
+                          await fetchRows(true)
+                          setActiveTab('damage')
+                        }
                       } finally {
                         setSavingDraft(false)
                       }
@@ -3114,7 +3175,11 @@ export default function AutoDocPage() {
                 setSavingDraft(true)
                 try {
                   const ok = await persistDraftJobCard(false)
-                  if (ok) setActiveTab('submit')
+                  if (ok) {
+                    await updateJobCardStatus(ok, 'approved')
+                    await fetchRows(true)
+                    setActiveTab('submit')
+                  }
                 } finally {
                   setSavingDraft(false)
                 }

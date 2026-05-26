@@ -42,6 +42,44 @@ Drift gate checklist (must pass before closing this plan):
 
 The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim workflow system. **All core functionality is now fully implemented (2026-05-23):**
 
+### Execution Delta (2026-05-26 — dashboard workflow/status redesign request)
+
+Requested behavior (new requirement):
+- Remove dashboard card: `Pending Tata Approval`.
+- Replace legacy KPI framing with workflow-stage cards:
+  1. `Today's Cars` (job cards opened today)
+  2. `Documentation Pre-Repair` (on `Next: Document Damage`)
+  3. `Pre Submit Pending` (on `Next: Submit Reports`)
+  4. `Pre Submit Done` (on `Compose and Send` success)
+  5. `Post Repair PPT` (when each selected panel has >=1 post-repair image)
+  6. `Claim Submitted` (on `Submit Claim` success)
+
+Authoritative schema audit (from `local_folder/backups/full_database.sql`):
+- `public.job_card_status` enum is currently limited to:
+  - `draft`, `submitted`, `approved`, `in_work`, `completed`
+- `public.job_cards.status` uses `public.job_card_status` (enum-backed, not free text).
+- `public.panel_photos.repair_stage` in dump allows only pre/post in snapshot; runtime migration now extends under-repair via:
+  - [supabase/migrations/20260526133000_expand_panel_photos_repair_stage_under_repair.sql](../../supabase/migrations/20260526133000_expand_panel_photos_repair_stage_under_repair.sql)
+
+Impact:
+- New workflow labels cannot be persisted 1:1 in `job_cards.status` without enum expansion migration.
+- Existing enum can still support a compatibility mapping, but that introduces semantic overload.
+
+Best way forward (recommended):
+1. Keep `job_cards.status` for coarse lifecycle only (`draft`, `submitted`, `completed`).
+2. Add a dedicated AutoDoc workflow stage field (new enum/text domain) for the six-stage UX model.
+3. Drive dashboard cards from workflow stage + post-repair coverage computation.
+4. Update transition points in UI/actions:
+   - Job Card -> Damage tab transition
+   - Estimate -> Submit tab transition
+   - Compose and Send success
+   - Post-repair panel coverage threshold reached
+   - Submit Claim success
+5. Backfill existing job cards to nearest stage using current docs/photos/status evidence.
+
+Operational note:
+- This preserves backward compatibility for existing integrations that already read `job_cards.status` while giving AutoDoc an explicit, auditable workflow state machine.
+
 ### Execution Delta (2026-05-25 — post-audit doc hardening + restored settings rate import)
 
 Done in codebase (this execution):
@@ -228,7 +266,7 @@ Pending to finish production rollout:
 
 **Completed (✅):**
 - Vite + React + TypeScript + Tailwind stack with Supabase backend
-- Dashboard with KPI cards (Total Cars Today, Pending Tata Approval, Approved & In Work, Completed This Week)
+- Dashboard KPI cards implemented for legacy model; redesign to workflow-stage cards is now tracked as active requirement (see 2026-05-26 execution delta)
 - Active vehicles list with search/filter and status badges
 - Multi-step workflow: Car Intake → Photo Damage → Repair Quotation → Auto-Generate Reports
 - Vehicle registration auto-fill with lookup from existing records
