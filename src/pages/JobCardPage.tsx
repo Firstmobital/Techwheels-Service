@@ -58,6 +58,8 @@ interface DocRow {
   job_card_id: string
   doc_type: DocType
   storage_path: string
+  drive_url: string | null
+  drive_file_id: string | null
   file_size_mb: number | null
   created_at: string
 }
@@ -212,12 +214,24 @@ export default function JobCardPage() {
     setDocuments(docs)
     setActivityLogs(actRes.data ?? [])
 
+    const docDriveUrls: Record<string, string> = {}
+    docs.forEach((doc) => {
+      if (doc.drive_url) docDriveUrls[doc.storage_path] = doc.drive_url
+    })
+
+    const docsNeedingSignedUrls = docs
+      .filter((doc) => !doc.drive_url)
+      .map((doc) => doc.storage_path)
+
     const [photoUrlRes, docUrlRes] = await Promise.all([
       createAutodocSignedUrlMap(phts.map((p) => p.storage_path)),
-      createAutodocSignedUrlMap(docs.map((d) => d.storage_path)),
+      createAutodocSignedUrlMap(docsNeedingSignedUrls),
     ])
     setPhotoUrls(photoUrlRes.data ?? {})
-    setDocUrls(docUrlRes.data ?? {})
+    setDocUrls({
+      ...(docUrlRes.data ?? {}),
+      ...docDriveUrls,
+    })
     setLoading(false)
   }, [id])
 
@@ -310,8 +324,21 @@ export default function JobCardPage() {
     if (listRes.error) { setDocUploadErr((e) => ({ ...e, [key]: listRes.error as string })); return }
     const docs = (listRes.data ?? []) as unknown as DocRow[]
     setDocuments(docs)
-    const urls = await createAutodocSignedUrlMap(docs.map((d) => d.storage_path))
-    if (urls.data) setDocUrls(urls.data)
+
+    const docDriveUrls: Record<string, string> = {}
+    docs.forEach((doc) => {
+      if (doc.drive_url) docDriveUrls[doc.storage_path] = doc.drive_url
+    })
+
+    const docsNeedingSignedUrls = docs
+      .filter((doc) => !doc.drive_url)
+      .map((doc) => doc.storage_path)
+
+    const urls = await createAutodocSignedUrlMap(docsNeedingSignedUrls)
+    setDocUrls({
+      ...(urls.data ?? {}),
+      ...docDriveUrls,
+    })
   }
 
   // ── Delete row ────────────────────────────────────────────────────────────
@@ -755,7 +782,7 @@ export default function JobCardPage() {
                           href={url || '#'}
                           target="_blank"
                           rel="noreferrer"
-                          className="mb-1 flex items-center justify-between rounded-md px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
+                          className={`mb-1 flex items-center justify-between rounded-md px-2 py-1.5 text-xs ${url ? 'text-blue-600 hover:bg-blue-50' : 'cursor-not-allowed text-gray-400'}`}
                         >
                           <span className="truncate">{doc.storage_path.split('/').pop()}</span>
                           <span className="ml-2 shrink-0 text-[10px] text-gray-400">{doc.file_size_mb != null ? `${doc.file_size_mb} MB` : ''}</span>

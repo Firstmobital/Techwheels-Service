@@ -40,10 +40,23 @@ export async function createPanelPhoto(input: {
 export async function createAutodocSignedUrlMap(paths: string[]): Promise<ApiResult<Record<string, string>>> {
   if (paths.length === 0) return ok({})
 
-  const { data, error } = await supabase.storage.from(AUTODOC_BUCKET).createSignedUrls(paths, 3600)
+  const directUrlMap: Record<string, string> = {}
+  const storagePaths: string[] = []
+
+  paths.forEach((path) => {
+    if (/^https?:\/\//i.test(path)) {
+      directUrlMap[path] = path
+      return
+    }
+    storagePaths.push(path)
+  })
+
+  if (storagePaths.length === 0) return ok(directUrlMap)
+
+  const { data, error } = await supabase.storage.from(AUTODOC_BUCKET).createSignedUrls(storagePaths, 3600)
   if (error) return fail(error)
 
-  const urls: Record<string, string> = {}
+  const urls: Record<string, string> = { ...directUrlMap }
   data?.forEach((entry) => {
     if (entry.path && entry.signedUrl) urls[entry.path] = entry.signedUrl
   })

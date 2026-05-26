@@ -321,6 +321,62 @@ ADD COLUMN drive_file_id TEXT DEFAULT NULL;       -- Google Drive file ID for re
 
 ---
 
+## 2026-05-26 Implementation Update
+
+### Completed This Session
+- Added migration file: `supabase/migrations/20260526103000_add_drive_columns_and_pending_uploads.sql`
+  - Adds `drive_url` and `drive_file_id` columns to `documents`
+  - Adds `pending_drive_uploads` table with status/error logging fields
+- Implemented and deployed Edge Function: `universal-drive-upload`
+  - Deployed to project ref: `jmdndcphkmaljhwgzqxq`
+- Integrated frontend document upload flow to invoke universal offload after insert/upsert.
+- Updated document URL rendering to prefer `documents.drive_url` and fallback to signed storage URLs for legacy rows.
+
+### Root Folder Policy (Locked)
+- Canonical Techwheels root folder is fixed to:
+  - `https://drive.google.com/drive/folders/1qbNABzrPC1OdqAFtPhJ6HZHpEOT7hWCQ`
+  - Folder ID: `1qbNABzrPC1OdqAFtPhJ6HZHpEOT7hWCQ`
+- All registration subfolders are created only under this root.
+- Function ignores non-canonical root configuration and enforces this ID.
+
+### Secrets Configured (Confirmed)
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL`
+- `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`
+- `GOOGLE_DRIVE_FOLDER_ID`
+
+Function also supports these compatible names:
+- `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_BASE64`
+- `GDRIVE_TECHWHEELS_SERVICE_FOLDER_ID`
+- `GDRIVE_TECHWHEELS_SERVICE_FOLDER_URL`
+- `GOOGLE_DRIVE_FOLDER_URL`
+
+### CURL Validation (2026-05-26)
+- Endpoint reached successfully after deploy.
+- Test payload used a real `documents` row.
+- Response:
+  - `HTTP 500`
+  - `{"ok":false,"error":"column documents.drive_file_id does not exist","error_code":"DB_ERROR"}`
+- Interpretation: function path is correct; database migration has not been applied in the target database where function runs.
+
+### Migration Error Note: `relation "public.documents" does not exist`
+- Observed during manual migration execution in at least one environment.
+- Likely causes:
+  1. Migration executed against the wrong Supabase project.
+  2. Core AutoDoc schema migration was not applied in that project.
+- Authoritative rule:
+  - `local_folder/backups/full_database.sql` defines `documents` as `public.documents`.
+  - Migration intentionally targets `public.documents` only to prevent accidental drift.
+- Mitigation applied:
+  - Migration now performs an explicit guard check on `to_regclass('public.documents')` and raises a project-mismatch error with guidance.
+
+### Operator Checklist (Immediate Next)
+1. Run migration `20260526103000_add_drive_columns_and_pending_uploads.sql` in the same project as deployed function (`jmdndcphkmaljhwgzqxq`).
+2. Re-run curl test for `universal-drive-upload`.
+3. Confirm `documents.drive_url` + `documents.drive_file_id` populate.
+4. Only then enable `DRIVE_DELETE_SOURCE_OBJECT=true` if storage cleanup is desired.
+
+---
+
 ## Risk Assessment
 
 | Risk | Probability | Impact | Mitigation |

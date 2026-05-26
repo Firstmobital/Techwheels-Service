@@ -18,6 +18,8 @@ export type Database = {
         Row: {
           created_at: string
           doc_type: Database["public"]["Enums"]["doc_type"]
+          drive_file_id: string | null
+          drive_url: string | null
           file_size_mb: number | null
           id: string
           job_card_id: string
@@ -26,6 +28,8 @@ export type Database = {
         Insert: {
           created_at?: string
           doc_type: Database["public"]["Enums"]["doc_type"]
+          drive_file_id?: string | null
+          drive_url?: string | null
           file_size_mb?: number | null
           id?: string
           job_card_id: string
@@ -34,6 +38,8 @@ export type Database = {
         Update: {
           created_at?: string
           doc_type?: Database["public"]["Enums"]["doc_type"]
+          drive_file_id?: string | null
+          drive_url?: string | null
           file_size_mb?: number | null
           id?: string
           job_card_id?: string

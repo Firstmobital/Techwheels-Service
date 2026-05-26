@@ -2,7 +2,55 @@ import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
 import { fail, ok, type ApiResult, type DocType, type DocumentInsert, type DocumentRow } from './types'
 
-const DOCUMENT_SELECT = 'id, job_card_id, doc_type, storage_path, file_size_mb, created_at'
+const DOCUMENT_SELECT = 'id, job_card_id, doc_type, storage_path, drive_url, drive_file_id, file_size_mb, created_at'
+
+type UniversalDriveResponse = {
+  ok?: boolean
+  error?: string
+  drive_url?: string
+  drive_file_id?: string
+}
+
+export async function invokeUniversalDriveUpload(input: {
+  jobCardId: string
+  docType: DocType
+  storagePath: string
+  fileSizeMb: number
+  bucketId?: string
+}): Promise<ApiResult<UniversalDriveResponse>> {
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+  const sessionRes = await supabase.auth.getSession()
+  const token = sessionRes.data.session?.access_token
+
+  if (!supabaseUrl || !token) return fail('No active session for Drive offload request')
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        bucket_id: input.bucketId ?? AUTODOC_BUCKET,
+        object_name: input.storagePath,
+        job_card_id: input.jobCardId,
+        doc_type: input.docType,
+        file_size_mb: input.fileSizeMb,
+      }),
+    })
+
+    const payload = await res.json().catch(() => ({} as UniversalDriveResponse))
+    if (!res.ok || payload?.ok === false) {
+      const message = payload?.error || `Universal drive upload failed (${res.status})`
+      return fail(message)
+    }
+
+    return ok(payload)
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : 'Universal drive upload failed')
+  }
+}
 
 export async function listDocuments(jobCardId: string): Promise<ApiResult<DocumentRow[]>> {
   const { data, error } = await supabase
@@ -35,6 +83,15 @@ export async function addDocument(input: {
     .single<DocumentRow>()
 
   if (error) return fail(error)
+
+  // Offload to Drive asynchronously after DB insert so UI flow is not blocked by external API latency.
+  void invokeUniversalDriveUpload({
+    jobCardId: input.jobCardId,
+    docType: input.docType,
+    storagePath: input.storagePath,
+    fileSizeMb: input.fileSizeMb,
+  })
+
   return ok(data)
 }
 
@@ -69,12 +126,16 @@ export async function upsertDocumentByType(input: {
     }
   }
 
-  return addDocument({
+  const created = await addDocument({
     jobCardId: input.jobCardId,
     docType: input.docType,
     storagePath: input.storagePath,
     fileSizeMb: input.fileSizeMb,
   })
+
+  if (created.error || !created.data) return created
+
+  return ok(created.data)
 }
 
 export async function uploadDocumentFile(input: {
@@ -133,6 +194,12 @@ export async function uploadDocumentFile(input: {
 
       const payload = await res.json().catch(() => ({}))
       if (res.ok && payload?.data) {
+        void invokeUniversalDriveUpload({
+          jobCardId: input.jobCardId,
+          docType: input.docType,
+          storagePath,
+          fileSizeMb: sizeMb,
+        })
         return ok(payload.data as DocumentRow)
       }
     } catch {
@@ -140,10 +207,14 @@ export async function uploadDocumentFile(input: {
     }
   }
 
-  return upsertDocumentByType({
+  const upsertRes = await upsertDocumentByType({
     jobCardId: input.jobCardId,
     docType: input.docType,
     storagePath,
     fileSizeMb: sizeMb,
   })
+
+  if (upsertRes.error || !upsertRes.data) return upsertRes
+
+  return ok(upsertRes.data)
 }
