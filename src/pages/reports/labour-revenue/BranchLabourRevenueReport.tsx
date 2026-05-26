@@ -4,6 +4,8 @@ import {
   type BranchLabourRevenueComparison,
   type DateRangeFilter,
   getBranchLabourRevenueComparison,
+  getFilteredJcChassisRows,
+  type FilteredJcChassisRow,
 } from '../../../lib/reportQueries'
 import { exportToCSV, generateExportFilename } from '../../../lib/exportUtils'
 
@@ -37,6 +39,7 @@ export default function BranchLabourRevenueReport({
   serviceTypeFilter = 'ALL',
 }: BranchLabourRevenueReportProps) {
   const [rows, setRows] = useState<BranchLabourRevenueComparison[]>([])
+  const [jcChassisRows, setJcChassisRows] = useState<FilteredJcChassisRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('selectedRevenue')
@@ -48,10 +51,17 @@ export default function BranchLabourRevenueReport({
     setIsLoading(true)
     setError(null)
 
-    getBranchLabourRevenueComparison(branch, dateFilter, serviceTypeFilter)
-      .then((data) => {
+    Promise.all([
+      getBranchLabourRevenueComparison(branch, dateFilter, serviceTypeFilter),
+      getFilteredJcChassisRows(branch, dateFilter, {
+        serviceType: serviceTypeFilter,
+        parentProductLine: 'ALL',
+      }),
+    ])
+      .then(([data, jcChassis]) => {
         if (!active) return
         setRows(data)
+        setJcChassisRows(jcChassis)
       })
       .catch((err: Error) => {
         if (!active) return
@@ -151,6 +161,21 @@ export default function BranchLabourRevenueReport({
     exportToCSV(exportData, filename)
   }
 
+  const handleJcChassisExport = () => {
+    if (jcChassisRows.length === 0) return
+
+    const exportData = jcChassisRows.map((row) => ({
+      Branch: row.branch,
+      'Invoice Date': row.invoiceDate ?? '',
+      'Service Type': row.serviceType,
+      'Job Card Number': row.jobCardNumber,
+      'Chassis Number': row.chassisNumber,
+    }))
+
+    const filename = generateExportFilename('branch-labour-filtered-jc-chassis')
+    exportToCSV(exportData, filename)
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -162,15 +187,26 @@ export default function BranchLabourRevenueReport({
         </div>
 
         {rows.length > 0 && (
-          <button
-            onClick={handleExport}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export to CSV
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export Summary CSV
+            </button>
+            <button
+              onClick={handleJcChassisExport}
+              className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export Filtered JC & Chassis
+            </button>
+          </div>
         )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

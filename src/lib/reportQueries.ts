@@ -33,6 +33,16 @@ export interface ServiceTypeJcChassisRow {
   chassisNumber: string
 }
 
+export interface FilteredJcChassisRow {
+  branch: string
+  invoiceDate: string | null
+  serviceType: string
+  manpowerLabel: string
+  parentProductLine: string
+  jobCardNumber: string
+  chassisNumber: string
+}
+
 export interface LabourKpiSummary {
   monthlyJobCards: number
   monthlyRevenue: number
@@ -885,11 +895,14 @@ export async function getServiceTypeLabourRevenue(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<ServiceTypeLabourRevenue[]> {
-  const data = await fetchJobCardWithEmployeeData('sr_type, final_labour_amount, final_spares_amount, job_card_number', {
-    branch,
-    dateFilter,
-    serviceType: serviceTypeFilter,
-  })
+  const data = await fetchJobCardWithEmployeeData(
+    'sr_type, final_labour_amount, final_spares_amount, job_card_number',
+    {
+      branch,
+      dateFilter,
+      serviceType: serviceTypeFilter,
+    },
+  )
 
   interface WorkingServiceTypeRevenue {
     serviceType: string
@@ -949,27 +962,42 @@ export async function getServiceTypeLabourRevenue(
   })
 }
 
-export async function getServiceTypeJcChassisRows(
+export async function getFilteredJcChassisRows(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
-  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
-): Promise<ServiceTypeJcChassisRow[]> {
-  const data = await fetchJobCardWithEmployeeData('sr_type, job_card_number, chassis_number', {
-    branch,
-    dateFilter,
-    serviceType: serviceTypeFilter,
-  })
+  filters: { serviceType?: 'ALL' | string | string[]; parentProductLine?: 'ALL' | string } = {},
+): Promise<FilteredJcChassisRow[]> {
+  const serviceTypeFilter = filters.serviceType ?? 'ALL'
+  const parentProductLineFilter = filters.parentProductLine ?? 'ALL'
 
-  const unique = new Map<string, ServiceTypeJcChassisRow>()
+  const data = await fetchJobCardWithEmployeeData(
+    'branch, invoice_date, sr_type, sr_assigned_to, parent_product_line, job_card_number, chassis_number',
+    {
+      branch,
+      dateFilter,
+      serviceType: serviceTypeFilter,
+      parentProductLine: parentProductLineFilter,
+    },
+  )
+
+  const unique = new Map<string, FilteredJcChassisRow>()
 
   for (const row of data ?? []) {
     const typedRow = row as {
+      branch?: unknown
+      invoice_date?: unknown
       sr_type?: unknown
+      sr_assigned_to?: unknown
+      parent_product_line?: unknown
       job_card_number?: unknown
       chassis_number?: unknown
     }
 
+    const branchName = typedRow.branch == null ? '' : String(typedRow.branch).trim()
     const serviceType = normalizeServiceType(typedRow.sr_type)
+    const manpowerLabel = normalizeManpowerName(typedRow.sr_assigned_to)
+    const parentProductLine = normalizeParentProductLine(typedRow.parent_product_line)
+    const invoiceDate = toIsoDate(typedRow.invoice_date, 'day')
     const jobCardNumber =
       typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
     const chassisNumber =
@@ -977,21 +1005,52 @@ export async function getServiceTypeJcChassisRows(
 
     if (!jobCardNumber || !chassisNumber) continue
 
-    const key = `${serviceType}__${jobCardNumber}__${chassisNumber}`
+    const key = `${branchName}__${invoiceDate ?? ''}__${jobCardNumber}__${chassisNumber}`
     if (unique.has(key)) continue
 
     unique.set(key, {
+      branch: branchName,
+      invoiceDate,
       serviceType,
+      manpowerLabel,
+      parentProductLine,
       jobCardNumber,
       chassisNumber,
     })
   }
 
   return [...unique.values()].sort((a, b) => {
+    if (a.branch !== b.branch) return a.branch.localeCompare(b.branch)
+    if ((a.invoiceDate ?? '') !== (b.invoiceDate ?? '')) {
+      return (a.invoiceDate ?? '').localeCompare(b.invoiceDate ?? '')
+    }
     if (a.serviceType !== b.serviceType) return a.serviceType.localeCompare(b.serviceType)
     if (a.chassisNumber !== b.chassisNumber) return a.chassisNumber.localeCompare(b.chassisNumber)
     return a.jobCardNumber.localeCompare(b.jobCardNumber)
   })
+}
+
+export async function getServiceTypeJcChassisRows(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
+): Promise<ServiceTypeJcChassisRow[]> {
+  const data = await getFilteredJcChassisRows(branch, dateFilter, {
+    serviceType: serviceTypeFilter,
+    parentProductLine: 'ALL',
+  })
+
+  return data
+    .map((row) => ({
+      serviceType: row.serviceType,
+      jobCardNumber: row.jobCardNumber,
+      chassisNumber: row.chassisNumber,
+    }))
+    .sort((a, b) => {
+      if (a.serviceType !== b.serviceType) return a.serviceType.localeCompare(b.serviceType)
+      if (a.chassisNumber !== b.chassisNumber) return a.chassisNumber.localeCompare(b.chassisNumber)
+      return a.jobCardNumber.localeCompare(b.jobCardNumber)
+    })
 }
 
 export async function getLabourKpiSummary(
@@ -1045,7 +1104,7 @@ export async function getManpowerWiseLabourRevenue(
   filters: ManpowerWiseFilters = { serviceType: 'ALL', parentProductLine: 'ALL' },
 ): Promise<ManpowerLabourRevenue[]> {
   const data = await fetchJobCardWithEmployeeData(
-    'branch, employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount, job_card_number, employee_location, employee_fuel_type',
+    'branch, employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount, job_card_number',
     {
       branch,
       dateFilter,
@@ -1530,7 +1589,7 @@ export async function getDailyRevenueReport(
 
   interface DailyGrouping {
     vehicleNumbers: Set<string>
-    jobCardNumbers: Set<string>
+    invoiceCount: number
     labourRevenue: number
     partsRevenue: number
   }
@@ -1559,18 +1618,16 @@ export async function getDailyRevenueReport(
 
     if (existing) {
       if (vehicleNum) existing.vehicleNumbers.add(vehicleNum)
-      if (jobCardNum) existing.jobCardNumbers.add(jobCardNum)
+      existing.invoiceCount += 1
       existing.labourRevenue += labourAmount
       existing.partsRevenue += partsAmount
     } else {
       const vehicleNumbers = new Set<string>()
-      const jobCardNumbers = new Set<string>()
       if (vehicleNum) vehicleNumbers.add(vehicleNum)
-      if (jobCardNum) jobCardNumbers.add(jobCardNum)
 
       dailyByDate.set(dateStr, {
         vehicleNumbers,
-        jobCardNumbers,
+        invoiceCount: 1,
         labourRevenue: labourAmount,
         partsRevenue: partsAmount,
       })
@@ -1586,7 +1643,7 @@ export async function getDailyRevenueReport(
     rows.push({
       date,
       vehicleCount: grouping.vehicleNumbers.size,
-      invoiceCount: grouping.jobCardNumbers.size,
+      invoiceCount: grouping.invoiceCount,
       labourRevenue: grouping.labourRevenue,
       partsRevenue: grouping.partsRevenue,
       vasRevenue: 0,
@@ -2140,7 +2197,7 @@ export async function getLabourSparesMixByServiceType(
 
   interface WorkingMix {
     serviceType: string
-    jobCards: Set<string>
+    jobCardCount: number
     labourRevenue: number
     sparesRevenue: number
   }
@@ -2164,18 +2221,15 @@ export async function getLabourSparesMixByServiceType(
     const existing = grouped.get(serviceTypeKey)
 
     if (existing) {
-      if (jobCardNumber) existing.jobCards.add(jobCardNumber)
+      existing.jobCardCount += 1
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       continue
     }
 
-    const jobCards = new Set<string>()
-    if (jobCardNumber) jobCards.add(jobCardNumber)
-
     grouped.set(serviceTypeKey, {
       serviceType,
-      jobCards,
+      jobCardCount: 1,
       labourRevenue,
       sparesRevenue,
     })
@@ -2188,7 +2242,7 @@ export async function getLabourSparesMixByServiceType(
 
     rows.push({
       serviceType: group.serviceType,
-      jobCardCount: group.jobCards.size,
+      jobCardCount: group.jobCardCount,
       labourRevenue: group.labourRevenue,
       sparesRevenue: group.sparesRevenue,
       vasRevenue: 0,
@@ -2221,7 +2275,7 @@ export async function getProductLinePerformance(
   interface WorkingProductLinePerformance {
     parentProductLine: string
     productLine: string
-    jobCards: Set<string>
+    jobCardCount: number
     labourRevenue: number
     sparesRevenue: number
   }
@@ -2247,19 +2301,16 @@ export async function getProductLinePerformance(
     const existing = grouped.get(groupKey)
 
     if (existing) {
-      if (jobCardNumber) existing.jobCards.add(jobCardNumber)
+      existing.jobCardCount += 1
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       continue
     }
 
-    const jobCards = new Set<string>()
-    if (jobCardNumber) jobCards.add(jobCardNumber)
-
     grouped.set(groupKey, {
       parentProductLine,
       productLine,
-      jobCards,
+      jobCardCount: 1,
       labourRevenue,
       sparesRevenue,
     })
@@ -2269,7 +2320,7 @@ export async function getProductLinePerformance(
 
   for (const group of grouped.values()) {
     const totalRevenue = group.labourRevenue + group.sparesRevenue
-    const jobCardCount = group.jobCards.size
+    const jobCardCount = group.jobCardCount
 
     rows.push({
       parentProductLine: group.parentProductLine,
@@ -2308,7 +2359,7 @@ export async function getModelWiseRevenue(
 
   interface WorkingModelRevenue {
     model: string
-    jobCards: Set<string>
+    jobCardCount: number
     labourRevenue: number
     sparesRevenue: number
     totalRevenue: number
@@ -2343,9 +2394,7 @@ export async function getModelWiseRevenue(
     const existing = grouped.get(modelKey)
 
     if (existing) {
-      if (jobCardKey) {
-        existing.jobCards.add(jobCardKey)
-      }
+      existing.jobCardCount += 1
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       existing.totalRevenue += totalRevenue
@@ -2358,7 +2407,7 @@ export async function getModelWiseRevenue(
 
     grouped.set(modelKey, {
       model,
-      jobCards: new Set(jobCardKey ? [jobCardKey] : []),
+      jobCardCount: 1,
       labourRevenue,
       sparesRevenue,
       totalRevenue,
@@ -2379,7 +2428,7 @@ export async function getModelWiseRevenue(
       }
     }
 
-    const jobCardCount = group.jobCards.size
+    const jobCardCount = group.jobCardCount
 
     rows.push({
       model: group.model,
@@ -2961,8 +3010,11 @@ export async function getVehicleWiseRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<VehicleWiseRevenueRow[]> {
+  const invoiceDateField =
+    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    'vehicle_registration_number, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
+    `${dateColumnSelection}vehicle_registration_number, job_card_number, closed_date_time, final_labour_amount, final_spares_amount`,
     {
       branch,
       dateFilter,
@@ -2971,7 +3023,7 @@ export async function getVehicleWiseRevenue(
 
   interface WorkingVehicleRevenue {
     vehicleRegistrationNumber: string
-    visits: Set<string>
+    visitCount: number
     labourRevenue: number
     sparesRevenue: number
     firstVisitDate: string | null
@@ -2985,31 +3037,23 @@ export async function getVehicleWiseRevenue(
       vehicle_registration_number?: unknown
       job_card_number?: unknown
       closed_date_time?: unknown
+      invoice_date?: unknown
+      Invoice_date?: unknown
       final_labour_amount?: unknown
       final_spares_amount?: unknown
     }
 
     const vehicleRegistrationNumber = normalizeVehicleRegistration(typedRow.vehicle_registration_number)
     const vehicleKey = vehicleRegistrationNumber.toLowerCase()
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const visitKey = jobCardNumber
     const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
-
-    let closedDate: string | null = null
-    if (typedRow.closed_date_time != null) {
-      const parsed = new Date(String(typedRow.closed_date_time))
-      if (!Number.isNaN(parsed.getTime())) {
-        closedDate = parsed.toISOString().slice(0, 10)
-      }
-    }
+    const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
+    const closedDate = toIsoDate(reportDate, 'day')
 
     const existing = grouped.get(vehicleKey)
 
     if (existing) {
-      if (visitKey) {
-        existing.visits.add(visitKey)
-      }
+      existing.visitCount += 1
       existing.labourRevenue += labourRevenue
       existing.sparesRevenue += sparesRevenue
       if (closedDate) {
@@ -3023,14 +3067,9 @@ export async function getVehicleWiseRevenue(
       continue
     }
 
-    const visits = new Set<string>()
-    if (visitKey) {
-      visits.add(visitKey)
-    }
-
     grouped.set(vehicleKey, {
       vehicleRegistrationNumber,
-      visits,
+      visitCount: 1,
       labourRevenue,
       sparesRevenue,
       firstVisitDate: closedDate,
@@ -3041,7 +3080,7 @@ export async function getVehicleWiseRevenue(
   const rows: VehicleWiseRevenueRow[] = []
 
   for (const vehicle of grouped.values()) {
-    const visitCount = vehicle.visits.size
+    const visitCount = vehicle.visitCount
     const totalRevenue = vehicle.labourRevenue + vehicle.sparesRevenue
 
     rows.push({
