@@ -1294,11 +1294,8 @@ export async function getDuplicateChassisSameMonthReport(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<DuplicateChassisSameMonthRow[]> {
-  const invoiceDateField =
-    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
-  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    `${dateColumnSelection}chassis_number, branch, job_card_number, sr_type, sr_assigned_to, closed_date_time, final_labour_amount, final_spares_amount`,
+    'chassis_number, branch, job_card_number, sr_type, sr_assigned_to, closed_date_time, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
@@ -1620,11 +1617,10 @@ export async function getDailyRevenueReport(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<DailyRevenueReport[]> {
-  const invoiceDateField =
-    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
-  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
+  // For daily revenue, always use closed_date_time as the report date
+  // Invoice date column is optional and only needed for filtering
   const data = await fetchAllJobCardClosedRows(
-    `${dateColumnSelection}closed_date_time, vehicle_registration_number, job_card_number, final_labour_amount, final_spares_amount`,
+    'closed_date_time, vehicle_registration_number, job_card_number, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
@@ -1795,11 +1791,8 @@ export async function getMonthlyRevenuesTrend(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<MonthlyTrendRevenue[]> {
-  const invoiceDateField =
-    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
-  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    `${dateColumnSelection}closed_date_time, final_labour_amount, final_spares_amount`,
+    'closed_date_time, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
@@ -2636,11 +2629,8 @@ export async function getEmployeeUtilizationReport(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<EmployeeUtilizationRow[]> {
-  const invoiceDateField =
-    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
-  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    `${dateColumnSelection}employee_code, sr_assigned_to, job_card_number, closed_date_time, final_labour_amount, final_spares_amount`,
+    'employee_code, sr_assigned_to, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
@@ -3049,11 +3039,8 @@ export async function getVehicleWiseRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<VehicleWiseRevenueRow[]> {
-  const invoiceDateField =
-    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
-  const dateColumnSelection = invoiceDateField ? `${invoiceDateField}, ` : ''
   const data = await fetchAllJobCardClosedRows(
-    `${dateColumnSelection}vehicle_registration_number, job_card_number, closed_date_time, final_labour_amount, final_spares_amount`,
+    'vehicle_registration_number, job_card_number, closed_date_time, final_labour_amount, final_spares_amount',
     {
       branch,
       dateFilter,
