@@ -28,7 +28,15 @@ export interface ServiceTypeLabourRevenue {
 }
 
 export interface ServiceTypeJcChassisRow {
+  branch: string
+  invoiceDate: string | null
   serviceType: string
+  assignedTo: string
+  serviceAdvisorName: string
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  invoiceAmount: number
   jobCardNumber: string
   chassisNumber: string
 }
@@ -38,6 +46,12 @@ export interface FilteredJcChassisRow {
   invoiceDate: string | null
   serviceType: string
   manpowerLabel: string
+  assignedTo: string
+  serviceAdvisorName: string
+  labourRevenue: number
+  sparesRevenue: number
+  totalRevenue: number
+  invoiceAmount: number
   parentProductLine: string
   jobCardNumber: string
   chassisNumber: string
@@ -625,12 +639,17 @@ async function fetchJobCardWithEmployeeData(
     const codesArray = Array.from(employeeCodes)
     const { data: employees } = await supabase
       .from('employee_master')
-      .select('employee_code, location, fuel_type')
+      .select('employee_code, employee_name, location, fuel_type')
       .in('employee_code', codesArray)
 
     if (employees && Array.isArray(employees)) {
       for (const emp of employees) {
-        const typedEmp = emp as { employee_code?: unknown; location?: unknown; fuel_type?: unknown }
+        const typedEmp = emp as {
+          employee_code?: unknown
+          employee_name?: unknown
+          location?: unknown
+          fuel_type?: unknown
+        }
         const code = normalizeEmployeeCode(typedEmp.employee_code)
         if (code && code !== 'Unknown') {
           employeeMap.set(code, typedEmp)
@@ -648,6 +667,7 @@ async function fetchJobCardWithEmployeeData(
 
     const mergedRow = {
       ...row,
+      employee_name: employeeData ? (employeeData as { employee_name?: unknown }).employee_name : null,
       employee_location: employeeData ? (employeeData as { location?: unknown }).location : null,
       employee_fuel_type: employeeData ? (employeeData as { fuel_type?: unknown }).fuel_type : null,
     }
@@ -971,7 +991,7 @@ export async function getFilteredJcChassisRows(
   const parentProductLineFilter = filters.parentProductLine ?? 'ALL'
 
   const data = await fetchJobCardWithEmployeeData(
-    'branch, invoice_date, sr_type, sr_assigned_to, parent_product_line, job_card_number, chassis_number',
+    'branch, invoice_date, sr_type, sr_assigned_to, parent_product_line, final_labour_amount, final_spares_amount, total_invoice_amount, job_card_number, chassis_number',
     {
       branch,
       dateFilter,
@@ -989,6 +1009,10 @@ export async function getFilteredJcChassisRows(
       sr_type?: unknown
       sr_assigned_to?: unknown
       parent_product_line?: unknown
+      final_labour_amount?: unknown
+      final_spares_amount?: unknown
+      total_invoice_amount?: unknown
+      employee_name?: unknown
       job_card_number?: unknown
       chassis_number?: unknown
     }
@@ -996,8 +1020,14 @@ export async function getFilteredJcChassisRows(
     const branchName = typedRow.branch == null ? '' : String(typedRow.branch).trim()
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const manpowerLabel = normalizeManpowerName(typedRow.sr_assigned_to)
+    const assignedTo = manpowerLabel
+    const serviceAdvisorName = typedRow.employee_name == null ? '' : String(typedRow.employee_name).trim()
     const parentProductLine = normalizeParentProductLine(typedRow.parent_product_line)
     const invoiceDate = toIsoDate(typedRow.invoice_date, 'day')
+    const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
+    const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
+    const invoiceAmount = parseRevenueExcludingGst(typedRow.total_invoice_amount)
+    const totalRevenue = labourRevenue + sparesRevenue
     const jobCardNumber =
       typedRow.job_card_number == null ? '' : String(typedRow.job_card_number).trim().toUpperCase()
     const chassisNumber =
@@ -1013,6 +1043,12 @@ export async function getFilteredJcChassisRows(
       invoiceDate,
       serviceType,
       manpowerLabel,
+      assignedTo,
+      serviceAdvisorName,
+      labourRevenue,
+      sparesRevenue,
+      totalRevenue,
+      invoiceAmount,
       parentProductLine,
       jobCardNumber,
       chassisNumber,
@@ -1042,7 +1078,15 @@ export async function getServiceTypeJcChassisRows(
 
   return data
     .map((row) => ({
+      branch: row.branch,
+      invoiceDate: row.invoiceDate,
       serviceType: row.serviceType,
+      assignedTo: row.assignedTo,
+      serviceAdvisorName: row.serviceAdvisorName,
+      labourRevenue: row.labourRevenue,
+      sparesRevenue: row.sparesRevenue,
+      totalRevenue: row.totalRevenue,
+      invoiceAmount: row.invoiceAmount,
       jobCardNumber: row.jobCardNumber,
       chassisNumber: row.chassisNumber,
     }))

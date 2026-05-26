@@ -130,7 +130,15 @@ export default function ServiceTypeLabourRevenueReport({
     if (jcChassisRows.length === 0) return
 
     const exportData = jcChassisRows.map((row) => ({
+      Branch: row.branch,
+      'Invoice Date': row.invoiceDate ?? '',
       'Service Type': row.serviceType,
+      'Assigned To': row.assignedTo,
+      'Service Advisor Name': row.serviceAdvisorName,
+      'Labour Revenue': formatCurrencyForExport(row.labourRevenue),
+      'Spares Revenue': formatCurrencyForExport(row.sparesRevenue),
+      'Total Revenue': formatCurrencyForExport(row.totalRevenue),
+      Invoice: formatCurrencyForExport(row.invoiceAmount),
       'Job Card Number': row.jobCardNumber,
       'Chassis Number': row.chassisNumber,
     }))

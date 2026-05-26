@@ -137,13 +137,30 @@ export function parseDatetime(
       throw new Error(`Invalid Excel serial datetime: "${trimmed}"`);
     }
 
-    // Match DD/MM/YY[YY] HH:MM[:SS] [AM/PM] format
-    const match = trimmed.match(
+    // Match DD/MM/YY[YY] HH:MM[:SS] [AM/PM] format OR YY-MM-DD HH:MM[:SS] format
+    let match = trimmed.match(
       /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?$/
     );
+    
+    // If no slash format match, try dash format: YY-MM-DD HH:MM[:SS]
+    if (!match) {
+      match = trimmed.match(
+        /^(\d{2})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/
+      );
+      if (match) {
+        // Convert YY-MM-DD to DD/MM/YY format for consistent parsing
+        const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr] = match;
+        const convertedFormat = `${dayStr}/${monthStr}/${yearStr} ${hourStr}:${minuteStr}${secondStr ? `:${secondStr}` : ''}`;
+        // Re-parse with the standard format
+        match = convertedFormat.match(
+          /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/
+        );
+      }
+    }
+    
     if (!match) {
       throw new Error(
-        `Invalid format. Expected DD/MM/YY[YY] HH:MM[:SS] with optional AM/PM, got: "${trimmed}"`
+        `Invalid format. Expected DD/MM/YY[YY] HH:MM[:SS] or YY-MM-DD HH:MM[:SS], got: "${trimmed}"`
       );
     }
 

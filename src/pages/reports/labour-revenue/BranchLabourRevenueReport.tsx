@@ -7,7 +7,7 @@ import {
   getFilteredJcChassisRows,
   type FilteredJcChassisRow,
 } from '../../../lib/reportQueries'
-import { exportToCSV, generateExportFilename } from '../../../lib/exportUtils'
+import { exportToCSV, generateExportFilename, formatCurrencyForExport } from '../../../lib/exportUtils'
 
 interface BranchLabourRevenueReportProps {
   branch: BranchFilter
@@ -168,6 +168,12 @@ export default function BranchLabourRevenueReport({
       Branch: row.branch,
       'Invoice Date': row.invoiceDate ?? '',
       'Service Type': row.serviceType,
+      'Assigned To': row.assignedTo,
+      'Service Advisor Name': row.serviceAdvisorName,
+      'Labour Revenue': formatCurrencyForExport(row.labourRevenue),
+      'Spares Revenue': formatCurrencyForExport(row.sparesRevenue),
+      'Total Revenue': formatCurrencyForExport(row.totalRevenue),
+      Invoice: formatCurrencyForExport(row.invoiceAmount),
       'Job Card Number': row.jobCardNumber,
       'Chassis Number': row.chassisNumber,
     }))
