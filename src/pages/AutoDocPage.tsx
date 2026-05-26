@@ -529,27 +529,37 @@ export default function AutoDocPage() {
     }))
   }
 
-  function addEstimateRow() {
-    setEstimateRows((prev) => ([
-      ...prev,
-      {
-        id: `row-${Date.now()}`,
-        panel: selectedPanels.find((panel) => !prev.some((row) => row.panel === panel))
-          ?? damagePanelOptions.find((panel) => !prev.some((row) => row.panel === panel))
-          ?? 'Selected Panel',
-        action: '',
-        partNo: '',
-        defect: '',
-        partsPrice: '',
-        paintPrice: '',
-        labourPrice: '',
-      },
-    ]))
-  }
+  useEffect(() => {
+    const panels = sanitizePanelList(selectedPanels)
+    if (panels.length === 0) {
+      setEstimateRows([])
+      return
+    }
 
-  function removeEstimateRow(id: string) {
-    setEstimateRows((prev) => prev.filter((row) => row.id !== id))
-  }
+    setEstimateRows((prev) => {
+      const byPanel = new Map<string, EstimateLineItem>()
+      prev.forEach((row) => {
+        const key = row.panel.trim()
+        if (!key || byPanel.has(key)) return
+        byPanel.set(key, row)
+      })
+
+      return panels.map((panel) => {
+        const existing = byPanel.get(panel)
+        if (existing) return { ...existing, panel }
+        return {
+          id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          panel,
+          action: '',
+          partNo: '',
+          defect: '',
+          partsPrice: '',
+          paintPrice: '',
+          labourPrice: '',
+        }
+      })
+    })
+  }, [selectedPanels])
 
   function openDamagePhotoPicker(panel: string, stage: DamageStage, replacePhotoId?: string) {
     if (!selectedPanels.includes(panel)) {
@@ -736,11 +746,6 @@ export default function AutoDocPage() {
       grand: acc.grand + parts + paint + labour,
     }
   }, { parts: 0, paint: 0, labour: 0, grand: 0 })
-
-  const estimatePanelOptions = useMemo(() => {
-    if (selectedPanels.length > 0) return selectedPanels
-    return damagePanelOptions
-  }, [damagePanelOptions, selectedPanels])
 
   const damageStages: DamageStage[] = ['pre-repair', 'under-repair', 'post-repair']
 
@@ -2880,7 +2885,6 @@ export default function AutoDocPage() {
                   <th className="px-2 py-2">Paint Price (Rs) <span className="text-red-600">*</span></th>
                   <th className="px-2 py-2">Labour (Rs)</th>
                   <th className="px-2 py-2">Total (Rs)</th>
-                  <th className="px-2 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -2890,15 +2894,9 @@ export default function AutoDocPage() {
                   return (
                     <tr key={row.id} className="rounded-lg bg-white shadow-[0_0_0_1px_rgba(229,231,235,1)]">
                       <td className="px-2 py-2">
-                        <select
-                          value={row.panel}
-                          onChange={(e) => updateEstimateRow(row.id, { panel: e.target.value })}
-                          className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        >
-                          {[...new Set([row.panel, ...estimatePanelOptions].filter(Boolean))].map((panel) => (
-                            <option key={panel} value={panel}>{panel}</option>
-                          ))}
-                        </select>
+                        <div className="flex h-10 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-900">
+                          {row.panel}
+                        </div>
                       </td>
                       <td className="px-2 py-2">
                         <select
@@ -2965,18 +2963,6 @@ export default function AutoDocPage() {
                         />
                       </td>
                       <td className="px-2 py-2 text-base font-semibold text-gray-900">Rs {total.toLocaleString('en-IN')}</td>
-                      <td className="px-2 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => removeEstimateRow(row.id)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                          aria-label="Remove row"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </td>
                     </tr>
                   )
                 })}
@@ -3003,33 +2989,11 @@ export default function AutoDocPage() {
               const isRepaint = isRepaintAction(row.action)
               return (
                 <div key={row.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-base font-semibold text-gray-900">Estimate Row</p>
-                    <button
-                      type="button"
-                      onClick={() => removeEstimateRow(row.id)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                      aria-label="Remove row"
-                    >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                  <div className="mb-3">
+                    <p className="text-base font-semibold text-gray-900">{row.panel}</p>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <label className="text-xs font-medium text-gray-600">
-                      Panel
-                      <select
-                        value={row.panel}
-                        onChange={(e) => updateEstimateRow(row.id, { panel: e.target.value })}
-                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      >
-                        {[...new Set([row.panel, ...estimatePanelOptions].filter(Boolean))].map((panel) => (
-                          <option key={panel} value={panel}>{panel}</option>
-                        ))}
-                      </select>
-                    </label>
                     <label className="text-xs font-medium text-gray-600">
                       Action
                       <select
@@ -3110,18 +3074,7 @@ export default function AutoDocPage() {
             })}
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={addEstimateRow}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Add Panel
-            </button>
-
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
             <div className="grid grid-cols-2 gap-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-right sm:grid-cols-4">
               <div>
                 <p className="text-xs text-gray-500">Parts Total</p>
