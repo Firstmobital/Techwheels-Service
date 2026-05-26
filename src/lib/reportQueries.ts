@@ -560,7 +560,7 @@ function matchesFuelSelectionByBranchLabel(rawBranch: unknown, fuelType: 'PV' | 
 
 function applyDateFilterToQuery(
   query: any,
-  dateFilter: DateRangeFilter,
+
   bounds: { from: string; toExclusive: string } | null,
   options: { closedDateField?: string; invoiceDateField?: string | null } = {},
 ): any {
@@ -690,7 +690,7 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
     }
 
     const bounds = getDateRangeBounds(filters.dateFilter)
-    query = applyDateFilterToQuery(query, filters.dateFilter, bounds, {
+    query = applyDateFilterToQuery(query, bounds, {
       closedDateField: 'closed_date_time',
       invoiceDateField,
     })
@@ -752,7 +752,7 @@ async function fetchAllJobCardClosedRows(
     }
 
     const bounds = getDateRangeBounds(filters.dateFilter)
-    query = applyDateFilterToQuery(query, filters.dateFilter, bounds, {
+    query = applyDateFilterToQuery(query, bounds, {
       closedDateField: 'closed_date_time',
       invoiceDateField,
     })
@@ -1432,7 +1432,7 @@ export async function getBranchLabourRevenueComparison(
 
       query = applyBranchFilterToQuery(query, branch)
 
-      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+      query = applyDateFilterToQuery(query, bounds, {
         closedDateField: 'closed_date_time',
         invoiceDateField,
       })
@@ -1773,7 +1773,7 @@ export async function getVasJobPerformance(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+      query = applyDateFilterToQuery(query, bounds, {
         closedDateField: 'jc_closed_date_time',
       })
     }
@@ -1886,7 +1886,7 @@ export async function getVasJobPerformanceDashboard(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+      query = applyDateFilterToQuery(query, bounds, {
         closedDateField: 'jc_closed_date_time',
       })
     }
@@ -2030,7 +2030,7 @@ export async function getVasBillingHoursEfficiency(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+      query = applyDateFilterToQuery(query, bounds, {
         closedDateField: 'jc_closed_date_time',
       })
     }
@@ -3551,7 +3551,7 @@ export async function getNetPriceFinalRevenueVariance(
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
-      query = applyDateFilterToQuery(query, dateFilter, bounds, {
+      query = applyDateFilterToQuery(query, bounds, {
         closedDateField: 'jc_closed_date_time',
       })
     }
