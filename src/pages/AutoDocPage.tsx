@@ -1652,6 +1652,28 @@ export default function AutoDocPage() {
     }))
   }
 
+  function hasMeaningfulVehicleMasterDetails(vehicle: {
+    vin?: string | null
+    model?: string | null
+    year?: number | null
+    colour?: string | null
+    paint_type?: string | null
+    owner_name?: string | null
+    owner_phone?: string | null
+    date_of_sale?: string | null
+  }): boolean {
+    return Boolean(
+      (vehicle.vin ?? '').trim()
+      || (vehicle.model ?? '').trim()
+      || vehicle.year != null
+      || (vehicle.colour ?? '').trim()
+      || (vehicle.paint_type ?? '').trim()
+      || (vehicle.owner_name ?? '').trim()
+      || (vehicle.owner_phone ?? '').trim()
+      || (vehicle.date_of_sale ?? '').trim(),
+    )
+  }
+
   async function handleVehicleLookup() {
     const ref = form.regNumber.trim()
     if (!ref) return
@@ -1717,18 +1739,7 @@ export default function AutoDocPage() {
       }
 
       const vehicle = res.data
-      const hasVehicleMasterDetails = Boolean(
-        (vehicle.vin ?? '').trim()
-        || (vehicle.model ?? '').trim()
-        || vehicle.year != null
-        || (vehicle.colour ?? '').trim()
-        || (vehicle.paint_type ?? '').trim()
-        || (vehicle.dealer_city ?? '').trim()
-        || (vehicle.bp_city_category ?? '').trim()
-        || (vehicle.owner_name ?? '').trim()
-        || (vehicle.owner_phone ?? '').trim()
-        || (vehicle.date_of_sale ?? '').trim(),
-      )
+      const hasVehicleMasterDetails = hasMeaningfulVehicleMasterDetails(vehicle)
 
       // If the vehicle row exists but only as a minimal placeholder, continue with RC fallback.
       if (!hasVehicleMasterDetails) {
@@ -1840,8 +1851,6 @@ export default function AutoDocPage() {
       form.year,
       form.colour,
       form.paintType,
-      form.dealerCity,
-      form.bpCityCategory,
       form.ownerName,
       form.ownerPhone,
       form.dateOfSale,

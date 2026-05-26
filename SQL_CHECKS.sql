@@ -26,9 +26,9 @@ ORDER BY cached_at DESC
 LIMIT 10;
 
 -- 4. CHECK IF SPECIFIC REGISTRATION EXISTS IN VEHICLES
--- (Replace 'DL01AB1234' with your test registration)
+-- (Replace 'RJ14CY8838' with your test registration)
 WITH probe AS (
-  SELECT UPPER(REGEXP_REPLACE('DL01AB1234', '[^A-Za-z0-9]', '', 'g')) AS normalized_reg
+  SELECT UPPER(REGEXP_REPLACE('RJ14CY8838', '[^A-Za-z0-9]', '', 'g')) AS normalized_reg
 )
 SELECT v.*
 FROM public.vehicles v
@@ -36,7 +36,7 @@ CROSS JOIN probe p
 WHERE UPPER(REGEXP_REPLACE(v.reg_number, '[^A-Za-z0-9]', '', 'g')) = p.normalized_reg;
 
 -- 5. CHECK QUERY NORMALIZATION (portable; does not require DB function)
-SELECT UPPER(REGEXP_REPLACE('DL 01 AB 1234', '[^A-Za-z0-9]', '', 'g')) AS normalized;
+SELECT UPPER(REGEXP_REPLACE('RJ14CY8838', '[^A-Za-z0-9]', '', 'g')) AS normalized;
 
 -- 6. CHECK ALL REGISTRATIONS IN VEHICLES TABLE
 SELECT DISTINCT reg_number, vin, model FROM public.vehicles 
