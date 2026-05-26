@@ -912,7 +912,6 @@ export default function AutoDocPage() {
     if (activeJobCardId) return activeJobCardId
     const jobCardId = await persistDraftJobCard(false)
     if (!jobCardId) {
-      showToast('Save draft first before uploading files.', false)
       return null
     }
     return jobCardId
@@ -1677,7 +1676,10 @@ export default function AutoDocPage() {
     const jobCardId = jcRes.data.id
     setActiveJobCardId(jobCardId)
     const synced = await syncEstimateRows(jobCardId)
-    if (!synced) return null
+    if (!synced) {
+      // Job card is already created; allow downstream flows like uploads to proceed.
+      return jobCardId
+    }
     await fetchRows(true)
 
     if (showSuccessToast) showToast('Draft created and saved.', true)
