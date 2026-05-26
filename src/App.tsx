@@ -163,6 +163,7 @@ function RequireAccess({
 // ─── Auth wrapper ─────────────────────────────────────────────────────────────
 
 function AuthGate({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
   const [user, setUser] = useState<User | null | undefined>(undefined)
   const [authView, setAuthView] = useState<'login' | 'signup'>('login')
 
@@ -188,7 +189,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   const mustChangePassword = Boolean(user.user_metadata?.force_password_change)
-  const onResetPasswordPage = window.location.pathname === '/reset-password'
+  const onResetPasswordPage = location.pathname === '/reset-password'
 
   if (mustChangePassword && !onResetPasswordPage) {
     return <Navigate to="/reset-password" replace />
@@ -313,7 +314,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
     )
   }
 
-  if (window.location.pathname === '/auth/callback') return <AuthCallback />
+  if (location.pathname === '/auth/callback') return <AuthCallback />
 
   if (permissionsLoading) {
     return (

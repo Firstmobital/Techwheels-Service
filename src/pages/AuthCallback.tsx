@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function AuthCallback() {
@@ -53,9 +53,9 @@ export default function AuthCallback() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Confirmation failed</h2>
           <p className="text-sm text-gray-500 mb-6">{error}</p>
-          <a href="/" className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition">
+          <Link to="/" className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition">
             Back to Sign in
-          </a>
+          </Link>
         </div>
       </div>
     )
