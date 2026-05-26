@@ -133,6 +133,8 @@ const DEFAULT_FORM_LOOKUPS: AutoDocFormLookupState = {
   yearOptions: defaultYearOptions(),
 }
 
+const FALLBACK_CLAIM_TYPE_OPTIONS = ['Warranty', 'Insurance', 'Goodwill', 'Policy', 'Campaign']
+
 const SESSION_KEYS = {
   activeTab: 'autodoc_active_tab',
   activeJobCardId: 'autodoc_active_job_card_id',
@@ -766,6 +768,21 @@ export default function AutoDocPage() {
   const currentVehicleReg = ((activeJobCardId ? activeSummary?.reg_number : null) ?? form.regNumber.trim()) || 'Not selected'
   const currentVehicleModel = ((activeJobCardId ? activeSummary?.model : null) ?? form.model.trim()) || 'Model NA'
   const currentVehicleJc = ((activeJobCardId ? activeSummary?.jc_number : null) ?? form.jcNumber.trim()) || 'JC NA'
+  const claimTypeOptions = useMemo(() => {
+    const values = new Set(formLookups.claimTypeOptions.map((value) => value.trim()).filter((value) => value.length > 0))
+    const selectedValue = form.claimType.trim()
+    if (selectedValue) values.add(selectedValue)
+    if (values.size === 0) {
+      FALLBACK_CLAIM_TYPE_OPTIONS.forEach((value) => values.add(value))
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b))
+  }, [form.claimType, formLookups.claimTypeOptions])
+  const lookupReady = Boolean(
+    form.regNumber.trim()
+    && form.jcNumber.trim()
+    && form.kmReading.trim()
+    && walkaroundVideoName.trim(),
+  )
   const hasVehicleDraftFields = [
     form.vin,
     form.model,
@@ -1175,6 +1192,10 @@ export default function AutoDocPage() {
         ...prev,
         regNumber: activeSummary.reg_number ?? prev.regNumber,
         jcNumber: activeSummary.jc_number ?? prev.jcNumber,
+        complaintDate: activeSummary.complaint_date ?? prev.complaintDate,
+        kmReading: activeSummary.km_reading != null ? String(activeSummary.km_reading) : prev.kmReading,
+        claimType: activeSummary.claim_type ?? prev.claimType,
+        complaintText: activeSummary.complaint_text ?? prev.complaintText,
         vin: vehicle.vin ?? prev.vin,
         model: vehicle.model ?? activeSummary.model ?? prev.model,
         year: vehicle.year != null ? String(vehicle.year) : prev.year,
@@ -2400,27 +2421,83 @@ export default function AutoDocPage() {
               </svg>
               Vehicle Lookup
             </h3>
+            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Registration No <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.regNumber}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))
+                    setActiveJobCardId(null)
+                    setActiveSummary(null)
+                    setVehicleFound(false)
+                    setVehicleLookupStatus('idle')
+                    setCreateError(null)
+                  }}
+                  onBlur={() => {
+                    setForm((prev) => ({ ...prev, regNumber: formatRegistrationNumber(prev.regNumber) }))
+                  }}
+                  placeholder="RJ-14-YH-7659"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium tracking-widest text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Job Card Number <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. JC-2026-042"
+                  value={form.jcNumber}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, jcNumber: e.target.value }))
+                    setActiveJobCardId(null)
+                    setActiveSummary(null)
+                  }}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  KM Reading <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 18420"
+                  value={form.kmReading}
+                  onChange={(e) => setForm((prev) => ({ ...prev, kmReading: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Vehicle Walkaround Video <span className="text-red-600">*</span>
+                </label>
+                <label className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:bg-blue-50">
+                  <span className="truncate">{walkaroundVideoName || 'Choose video file'}</span>
+                  <span className="ml-3 shrink-0 rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">Browse</span>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      if (!file) return
+                      setWalkaroundVideoName(file.name)
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-              <input
-                type="text"
-                value={form.regNumber}
-                onChange={(e) => {
-                  setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))
-                  setActiveJobCardId(null)
-                  setActiveSummary(null)
-                  setVehicleFound(false)
-                  setVehicleLookupStatus('idle')
-                  setCreateError(null)
-                }}
-                onBlur={() => {
-                  setForm((prev) => ({ ...prev, regNumber: formatRegistrationNumber(prev.regNumber) }))
-                }}
-                placeholder="RJ-14-YH-7659"
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-base font-medium tracking-widest text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              />
               <button
                 onClick={() => void handleVehicleLookup()}
-                disabled={lookupBusy || creating || !form.regNumber.trim()}
+                disabled={lookupBusy || creating || !lookupReady}
                 className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 justify-center whitespace-nowrap"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -2429,7 +2506,7 @@ export default function AutoDocPage() {
                 {lookupBusy ? 'Fetching…' : 'Fetch from DB'}
               </button>
             </div>
-            <p className="mt-2 text-xs text-gray-500">Auto-fills VIN, model, owner & dealer from your Supabase database</p>
+            <p className="mt-2 text-xs text-gray-500">Enter Registration No, Job Card Number, KM Reading, and select Vehicle Walkaround Video to enable fetch.</p>
             {vehicleLookupStatus === 'loading' && <p className="mt-2 text-sm text-blue-600">Searching vehicle in database...</p>}
             {vehicleLookupStatus === 'found' && <p className="mt-2 text-sm text-green-600">✓ Vehicle found and prefilled.</p>}
             {vehicleLookupStatus === 'not_found' && (
@@ -2622,7 +2699,7 @@ export default function AutoDocPage() {
                     </label>
                     <select value={form.claimType} onChange={(e) => setForm(prev => ({ ...prev, claimType: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       <option value="">Select</option>
-                      {formLookups.claimTypeOptions.map((option) => (
+                      {claimTypeOptions.map((option) => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
