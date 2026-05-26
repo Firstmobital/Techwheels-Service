@@ -19,7 +19,7 @@ export async function createPanelPhoto(input: {
   photoType: PhotoType
   storagePath: string
   fileSizeMb?: number
-  repairStage?: 'pre-repair' | 'post-repair'
+  repairStage?: 'pre-repair' | 'under-repair' | 'post-repair'
 }): Promise<ApiResult<PanelPhotoRow>> {
   const payload: PanelPhotoInsert & { repair_stage?: string } = {
     job_card_id: input.jobCardId,

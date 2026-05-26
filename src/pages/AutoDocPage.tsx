@@ -92,13 +92,15 @@ interface DamagePhotoItem {
   id: string
   panelId: string
   panel: string
-  stage: string
+  stage: DamageStage
   photoType: PhotoType
   url: string
   name: string
   uploadedAtLabel: string
   storagePath: string
 }
+
+type DamageStage = 'pre-repair' | 'under-repair' | 'post-repair'
 
 interface AutoDocFormLookupState {
   modelOptions: string[]
@@ -242,12 +244,23 @@ function formatEstimateActionLabel(value: string): string {
   return value
 }
 
-function stageToRepairStage(value: string): 'pre-repair' | 'post-repair' {
-  return value === 'post-repair' ? 'post-repair' : 'pre-repair'
+function normalizeDamageStage(value: string | null | undefined): DamageStage {
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/_/g, '-')
+  if (normalized === 'post-repair') return 'post-repair'
+  if (normalized === 'under-repair') return 'under-repair'
+  return 'pre-repair'
 }
 
-function stageToPhotoType(value: string): PhotoType {
-  return value === 'post-repair' ? 'paint' : 'defect'
+function stageToPhotoType(value: DamageStage): PhotoType {
+  if (value === 'post-repair') return 'paint'
+  if (value === 'under-repair') return 'primer'
+  return 'defect'
+}
+
+function stageLabel(value: DamageStage): string {
+  if (value === 'post-repair') return 'Post Repair Stage'
+  if (value === 'under-repair') return 'Under Repair Stage'
+  return 'Pre Repair Stage'
 }
 
 function toTimeLabel(value: string | null): string {
@@ -276,7 +289,6 @@ export default function AutoDocPage() {
   const [vehicleLookupStatus, setVehicleLookupStatus] = useState<VehicleLookupStatus>('idle')
   const [formLookups, setFormLookups] = useState<AutoDocFormLookupState>(DEFAULT_FORM_LOOKUPS)
   const [statusOptions, setStatusOptions] = useState<string[]>([])
-  const [photoStageOptions, setPhotoStageOptions] = useState<string[]>([])
   const [estimateActionOptions, setEstimateActionOptions] = useState<string[]>([])
   const [estimateDefectOptions, setEstimateDefectOptions] = useState<string[]>([])
   const [panelMasterOptions, setPanelMasterOptions] = useState<string[]>([])
@@ -301,6 +313,11 @@ export default function AutoDocPage() {
   const [activePanel, setActivePanel] = useState(() => readSessionValue(SESSION_KEYS.activePanel) || '')
   const [damagePhotoType, setDamagePhotoType] = useState(() => readSessionValue(SESSION_KEYS.damagePhotoType) || '')
   const [damagePhotos, setDamagePhotos] = useState<DamagePhotoItem[]>([])
+  const [damageUploadContext, setDamageUploadContext] = useState<{
+    panel: string
+    stage: DamageStage
+    replacePhotoId?: string
+  } | null>(null)
   const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>(() => readSessionJSON<EstimateLineItem[]>(SESSION_KEYS.estimateRows, []))
@@ -318,7 +335,7 @@ export default function AutoDocPage() {
       deliveryVideo: jobDocuments.some((doc) => doc.doc_type === 'video_delivery'),
     }
 
-    const composeReady = readiness.prePpt && readiness.excel
+    const composeReady = readiness.prePpt && readiness.excel && readiness.walkaroundVideo
     const submitReady = readiness.postPpt
 
   const damagePanelOptions = useMemo(
@@ -375,7 +392,6 @@ export default function AutoDocPage() {
       .then((res) => {
         if (cancelled || res.error || !res.data) return
         setStatusOptions(res.data.statusOptions)
-        setPhotoStageOptions(res.data.photoStageOptions)
         const normalizedActions = Array.from(new Set(
           res.data.estimateActionOptions
             .map((action) => canonicalizeEstimateAction(action))
@@ -535,15 +551,12 @@ export default function AutoDocPage() {
     setEstimateRows((prev) => prev.filter((row) => row.id !== id))
   }
 
-  function openDamagePhotoPicker() {
-    if (!activePanel) {
-      showToast('Select a panel first before uploading photos.', false)
+  function openDamagePhotoPicker(panel: string, stage: DamageStage, replacePhotoId?: string) {
+    if (!selectedPanels.includes(panel)) {
+      showToast(`Select panel ${panel} first before uploading photos.`, false)
       return
     }
-    if (!damagePhotoType) {
-      showToast('Select photo stage before uploading photos.', false)
-      return
-    }
+    setDamageUploadContext({ panel, stage, replacePhotoId })
     damageUploadInputRef.current?.click()
   }
 
@@ -551,40 +564,37 @@ export default function AutoDocPage() {
     const files = event.target.files
     if (!files || files.length === 0) return
 
-    if (!activePanel) {
-      showToast('Select a panel first before uploading photos.', false)
-      event.target.value = ''
-      return
-    }
-    if (!damagePhotoType) {
-      showToast('Select photo stage before uploading photos.', false)
+    if (!damageUploadContext) {
+      showToast('Select a panel card and stage section before uploading photos.', false)
       event.target.value = ''
       return
     }
 
-    if (!activeJobCardId) {
-      showToast('Select a job card first from dashboard.', false)
+    const jobCardId = activeJobCardId ?? await ensureJobCardReadyForUpload()
+    if (!jobCardId) {
       event.target.value = ''
       return
     }
 
-    const repairStage = stageToRepairStage(damagePhotoType)
-    const photoType = stageToPhotoType(damagePhotoType)
-    const panelId = await ensurePanelIdForName(activeJobCardId, activePanel)
+    const panelId = await ensurePanelIdForName(jobCardId, damageUploadContext.panel)
     if (!panelId) {
       showToast('Unable to resolve selected panel. Please reselect panel and retry.', false)
       event.target.value = ''
       return
     }
 
+    const photoType = stageToPhotoType(damageUploadContext.stage)
     const dealerCode = (activeSummary as { dealer_code?: string | null } | null)?.dealer_code?.trim() || 'unknown'
-    const filesArray = Array.from(files)
-    let uploadedCount = 0
+    const replaceTarget = damageUploadContext.replacePhotoId
+      ? damagePhotos.find((photo) => photo.id === damageUploadContext.replacePhotoId)
+      : null
+    const filesArray = replaceTarget ? [files[0]] : Array.from(files)
 
+    let uploadedCount = 0
     for (const file of filesArray) {
       const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
       const safeExt = (ext ?? 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg'
-      const storagePath = `${dealerCode}/${activeJobCardId}/${panelId}/${photoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${safeExt}`
+      const storagePath = `${dealerCode}/${jobCardId}/${panelId}/${photoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${safeExt}`
 
       const storageRes = await supabase.storage.from(AUTODOC_BUCKET).upload(storagePath, file, {
         cacheControl: '3600',
@@ -598,12 +608,12 @@ export default function AutoDocPage() {
       }
 
       const photoRes = await createPanelPhoto({
-        jobCardId: activeJobCardId,
+        jobCardId,
         panelId,
         photoType,
         storagePath,
         fileSizeMb: Number((file.size / (1024 * 1024)).toFixed(3)),
-        repairStage,
+        repairStage: damageUploadContext.stage,
       })
 
       if (photoRes.error) {
@@ -615,15 +625,25 @@ export default function AutoDocPage() {
       uploadedCount += 1
     }
 
-    await refreshDamagePhotos(activeJobCardId)
-    if (uploadedCount > 0) {
-      showToast(`${uploadedCount} photo${uploadedCount > 1 ? 's' : ''} uploaded.`, true)
+    if (replaceTarget && uploadedCount > 0) {
+      await removeDamagePhoto(replaceTarget.id, { silent: true })
     }
 
+    await refreshDamagePhotos(jobCardId)
+    if (uploadedCount > 0) {
+      showToast(
+        replaceTarget
+          ? `Photo replaced for ${damageUploadContext.panel} (${stageLabel(damageUploadContext.stage)}).`
+          : `${uploadedCount} photo${uploadedCount > 1 ? 's' : ''} uploaded for ${damageUploadContext.panel} (${stageLabel(damageUploadContext.stage)}).`,
+        true,
+      )
+    }
+
+    setDamageUploadContext(null)
     event.target.value = ''
   }
 
-  async function removeDamagePhoto(photoId: string) {
+  async function removeDamagePhoto(photoId: string, options?: { silent?: boolean }) {
     const target = damagePhotos.find((photo) => photo.id === photoId)
     if (!target) return
 
@@ -639,7 +659,9 @@ export default function AutoDocPage() {
     }
 
     setDamagePhotos((prev) => prev.filter((photo) => photo.id !== photoId))
-    showToast('Photo removed.', true)
+    if (!options?.silent) {
+      showToast('Photo removed.', true)
+    }
   }
 
   function openDeliveryVideoPicker() {
@@ -720,11 +742,17 @@ export default function AutoDocPage() {
     return damagePanelOptions
   }, [damagePanelOptions, selectedPanels])
 
-  const visibleDamagePhotos = damagePhotos.filter((photo) => {
-    const panelMatches = !activePanel || photo.panel === activePanel
-    const stageMatches = !damagePhotoType || photo.stage === damagePhotoType
-    return panelMatches && stageMatches
-  })
+  const damageStages: DamageStage[] = ['pre-repair', 'under-repair', 'post-repair']
+
+  const damagePhotosByPanelStage = useMemo(() => {
+    const grouped: Record<string, DamagePhotoItem[]> = {}
+    damagePhotos.forEach((photo) => {
+      const key = `${photo.stage}::${photo.panel}`
+      if (!grouped[key]) grouped[key] = []
+      grouped[key].push(photo)
+    })
+    return grouped
+  }, [damagePhotos])
   const currentVehicleReg = ((activeJobCardId ? activeSummary?.reg_number : null) ?? form.regNumber.trim()) || 'Not selected'
   const currentVehicleModel = ((activeJobCardId ? activeSummary?.model : null) ?? form.model.trim()) || 'Model NA'
   const currentVehicleJc = ((activeJobCardId ? activeSummary?.jc_number : null) ?? form.jcNumber.trim()) || 'JC NA'
@@ -889,7 +917,7 @@ export default function AutoDocPage() {
         const resolvedUrl = driveUrl || signedUrlMap[storagePath]
         if (!resolvedUrl) return null
         const photoStage = (photo as { repair_stage?: string | null }).repair_stage
-        const stage = photoStage === 'post-repair' ? 'post-repair' : 'pre-repair'
+        const stage = normalizeDamageStage(photoStage)
         const panelName = nextPanelNameById[photo.panel_id] ?? 'Selected Panel'
         const fileName = storagePath.split('/').pop() ?? 'uploaded-photo'
         return {
@@ -1649,7 +1677,8 @@ export default function AutoDocPage() {
 
     const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
     const excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
-    if (!preDoc || !excelDoc) {
+    const walkaroundDoc = jobDocuments.find((doc) => doc.doc_type === 'video_job_card')
+    if (!preDoc || !excelDoc || !walkaroundDoc) {
       showToast('Required attachments are missing in document store.', false)
       return
     }
@@ -1673,6 +1702,13 @@ export default function AutoDocPage() {
           bucket: AUTODOC_BUCKET,
           driveFileId: excelDoc.drive_file_id,
           driveUrl: excelDoc.drive_url,
+        },
+        {
+          filename: storageFileName(walkaroundDoc.storage_path, 'vehicle-walkaround.mp4'),
+          storagePath: walkaroundDoc.storage_path,
+          bucket: AUTODOC_BUCKET,
+          driveFileId: walkaroundDoc.drive_file_id,
+          driveUrl: walkaroundDoc.drive_url,
         },
       ],
     })
@@ -2636,12 +2672,7 @@ export default function AutoDocPage() {
             {loadingModelRates && (
               <p className="mt-2 text-xs text-gray-500">Loading model-wise panels...</p>
             )}
-            {damagePhotoType === 'post-repair' && preRepairPanelsForActiveJob.length === 0 && (
-              <p className="mt-2 text-xs font-medium text-amber-700">Select panels in pre-repair first, then switch to post-repair.</p>
-            )}
-            {damagePhotoType === 'post-repair' && preRepairPanelsForActiveJob.length > 0 && (
-              <p className="mt-2 text-xs font-medium text-blue-700">Pre-repair panels stay selected. You can add extra panels for post-repair if needed.</p>
-            )}
+            <p className="mt-2 text-xs font-medium text-blue-700">Each selected panel appears under all three stage sections below for direct uploads.</p>
 
             <p className="mt-4 text-sm font-medium text-blue-700">
               Selected: {selectedPanels.length > 0 ? selectedPanels.join(', ') : 'none'}
@@ -2649,112 +2680,118 @@ export default function AutoDocPage() {
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-col gap-1">
-                <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                  <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  </svg>
-                  Damage Photo Upload <span className="text-sm font-medium text-red-600">* mandatory per panel</span>
-                </h3>
-                <p className="text-xs font-medium text-gray-600">Uploading for registration: <span className="text-blue-700">{currentVehicleReg}</span></p>
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <select
-                  value={activePanel}
-                  onChange={(e) => setActivePanel(e.target.value)}
-                  className="h-10 min-w-[180px] rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">Select panel</option>
-                  {selectedPanels.map((panel) => (
-                    <option key={panel} value={panel}>{panel}</option>
-                  ))}
-                </select>
-                <select
-                  value={damagePhotoType}
-                  onChange={(e) => {
-                    const nextStage = e.target.value
-                    if (nextStage === 'post-repair' && preRepairPanelsForActiveJob.length === 0) {
-                      showToast('Select and save pre-repair panels first.', false)
-                      return
-                    }
-                    setDamagePhotoType(nextStage)
-                  }}
-                  className="h-10 min-w-[180px] rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">Select stage</option>
-                  {photoStageOptions.map((stage) => (
-                    <option key={stage} value={stage}>{stage.replace(/_/g, ' ')}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="mb-4 flex flex-col gap-1">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                </svg>
+                Stage-wise Damage Photo Upload
+              </h3>
+              <p className="text-xs font-medium text-gray-600">Uploading for registration: <span className="text-blue-700">{currentVehicleReg}</span></p>
             </div>
 
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={openDamagePhotoPicker}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  openDamagePhotoPicker()
-                }
-              }}
-              className="relative cursor-pointer rounded-xl border-2 border-dashed border-red-300 bg-red-50 p-8 text-center"
-            >
-              <input
-                ref={damageUploadInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleDamagePhotoUpload}
-                className="hidden"
-              />
-              <span className="absolute right-4 top-3 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Required</span>
-              <svg className="mx-auto mb-2 h-9 w-9 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              </svg>
-              <p className="text-xl font-medium text-gray-900">Tap to capture / upload panel photo</p>
-              <p className="mt-1 text-sm text-gray-600">GPS - timestamp - panel name auto-tagged</p>
-              {!damagePhotoType && (
-                <p className="mt-2 text-xs font-medium text-amber-700">Select photo stage before uploading.</p>
-              )}
-              <button
-                type="button"
-                onClick={openDamagePhotoPicker}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-              >
-                Upload photo
-              </button>
-            </div>
+            <input
+              ref={damageUploadInputRef}
+              type="file"
+              accept="image/*"
+              multiple={!damageUploadContext?.replacePhotoId}
+              onChange={handleDamagePhotoUpload}
+              className="hidden"
+            />
 
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {visibleDamagePhotos.map((photo) => (
-                <div key={photo.id} className="relative overflow-hidden rounded-lg border border-gray-300 bg-gray-100">
-                  <img src={photo.url} alt={photo.name} className="h-40 w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => removeDamagePhoto(photo.id)}
-                    className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white"
-                    aria-label="Remove uploaded photo"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] text-white">
-                    {photo.panel} - {photo.stage === 'post-repair' ? 'Post' : 'Pre'} - {photo.uploadedAtLabel}
+            {selectedPanels.length === 0 && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                Select at least one panel in "Select Affected Panels" to start uploading stage photos.
+              </p>
+            )}
+
+            <div className="space-y-5">
+              {damageStages.map((stage) => (
+                <div key={stage} className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-gray-700">
+                      Damage Photo Upload
+                      <span className="ml-2 text-red-600">* mandatory per panel - {stageLabel(stage)}</span>
+                    </p>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 ring-1 ring-gray-200">
+                      {selectedPanels.length} panel{selectedPanels.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                    {selectedPanels.map((panel) => {
+                      const key = `${stage}::${panel}`
+                      const photosForCard = damagePhotosByPanelStage[key] ?? []
+
+                      return (
+                        <div key={key} className="rounded-lg border border-gray-300 bg-white p-3">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-gray-900">{panel}</p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openDamagePhotoPicker(panel, stage)}
+                                className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                              >
+                                Upload
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openDamagePhotoPicker(panel, stage)}
+                                className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {photosForCard.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-red-300 bg-red-50 px-3 py-4 text-center text-xs font-medium text-red-700">
+                              No photo uploaded yet for this panel in {stageLabel(stage)}.
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {photosForCard.map((photo) => (
+                                <div key={photo.id} className="overflow-hidden rounded-md border border-gray-300">
+                                  <img src={photo.url} alt={photo.name} className="h-40 w-full object-cover" />
+                                  <div className="flex items-center justify-between gap-2 bg-gray-50 px-2 py-2 text-[11px] text-gray-700">
+                                    <span className="truncate" title={photo.name}>{photo.name}</span>
+                                    <span>{photo.uploadedAtLabel}</span>
+                                  </div>
+                                  <div className="flex gap-2 border-t border-gray-200 bg-white px-2 py-2">
+                                    <a
+                                      href={photo.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center rounded-md border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                    >
+                                      View
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => openDamagePhotoPicker(panel, stage, photo.id)}
+                                      className="inline-flex items-center rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                    >
+                                      Replace
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeDamagePhoto(photo.id)}
+                                      className="inline-flex items-center rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
-
-              <button
-                type="button"
-                onClick={openDamagePhotoPicker}
-                className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm font-medium text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-              >
-                Add more
-              </button>
             </div>
 
             <div className="my-4 h-px bg-gray-200" />
@@ -3180,7 +3217,7 @@ export default function AutoDocPage() {
                 Compose and Send
               </button>
               {!composeReady && (
-                <p className="mt-2 text-xs font-medium text-amber-700">Generate and upload Pre-repair PPT and Excel first.</p>
+                <p className="mt-2 text-xs font-medium text-amber-700">Upload Pre-repair PPT, Excel, and Vehicle Walkaround Video first.</p>
               )}
             </div>
           </div>
