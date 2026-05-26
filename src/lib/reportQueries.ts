@@ -591,6 +591,7 @@ function applyDateFilterToQuery(
   if (!bounds) return query
 
   const invoiceDateField = options.invoiceDateField
+  const dateField = invoiceDateField ?? options.closedDateField ?? 'closed_date_time'
 
   const toLocalDateString = (isoDateTime: string): string => {
     const date = new Date(isoDateTime)
@@ -603,7 +604,7 @@ function applyDateFilterToQuery(
   // Always use invoice_date with >= from and <= to (inclusive)
   const fromDate = toLocalDateString(bounds.from)
   const toDate = toLocalDateString(bounds.toExclusive)
-  return query.gte(invoiceDateField, fromDate).lte(invoiceDateField, toDate)
+  return query.gte(dateField, fromDate).lte(dateField, toDate)
 }
 
 async function fetchJobCardWithEmployeeData(
