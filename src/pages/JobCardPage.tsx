@@ -41,6 +41,8 @@ interface PanelPhoto {
   id: string; panel_id: string
   photo_type: 'defect' | 'primer' | 'paint'
   repair_stage?: 'pre-repair' | 'post-repair'
+  drive_url?: string | null
+  drive_file_id?: string | null
   storage_path: string; gps_city: string | null; captured_at: string | null
 }
 
@@ -209,6 +211,15 @@ export default function JobCardPage() {
     if (pnls.length && !initedPanel.current) { setSelPanel(pnls[0].id); initedPanel.current = true }
     const phts = (photoRes.data ?? []) as unknown as PanelPhoto[]
     setPhotos(phts)
+
+    const photoDriveUrls: Record<string, string> = {}
+    phts.forEach((photo) => {
+      if (photo.drive_url) photoDriveUrls[photo.storage_path] = photo.drive_url
+    })
+    const photosNeedingSignedUrls = phts
+      .filter((photo) => !photo.drive_url)
+      .map((photo) => photo.storage_path)
+
     setEstRows((estRes.data ?? []) as unknown as EstRow[])
     const docs = (docRes.data ?? []) as unknown as DocRow[]
     setDocuments(docs)
@@ -224,10 +235,13 @@ export default function JobCardPage() {
       .map((doc) => doc.storage_path)
 
     const [photoUrlRes, docUrlRes] = await Promise.all([
-      createAutodocSignedUrlMap(phts.map((p) => p.storage_path)),
+      createAutodocSignedUrlMap(photosNeedingSignedUrls),
       createAutodocSignedUrlMap(docsNeedingSignedUrls),
     ])
-    setPhotoUrls(photoUrlRes.data ?? {})
+    setPhotoUrls({
+      ...(photoUrlRes.data ?? {}),
+      ...photoDriveUrls,
+    })
     setDocUrls({
       ...(docUrlRes.data ?? {}),
       ...docDriveUrls,
@@ -269,11 +283,14 @@ export default function JobCardPage() {
 
     if (upErr) { setUploadErr(e => ({ ...e, [key]: upErr })); return }
 
+    const sizeMb = Number((file.size / (1024 * 1024)).toFixed(3))
+
     const dbRes = await createPanelPhoto({
       jobCardId: id ?? '',
       panelId,
       photoType,
       storagePath: path,
+      fileSizeMb: sizeMb,
       repairStage,
     })
     if (dbRes.error) { setUploadErr(e => ({ ...e, [key]: dbRes.error as string })); return }
@@ -282,8 +299,20 @@ export default function JobCardPage() {
     if (listRes.error) { setUploadErr(e => ({ ...e, [key]: listRes.error as string })); return }
     const phts = (listRes.data ?? []) as unknown as PanelPhoto[]
     setPhotos(phts)
-    const urlRes = await createAutodocSignedUrlMap(phts.map((p) => p.storage_path))
-    if (urlRes.data) setPhotoUrls(urlRes.data)
+
+    const photoDriveUrls: Record<string, string> = {}
+    phts.forEach((photo) => {
+      if (photo.drive_url) photoDriveUrls[photo.storage_path] = photo.drive_url
+    })
+    const photosNeedingSignedUrls = phts
+      .filter((photo) => !photo.drive_url)
+      .map((photo) => photo.storage_path)
+
+    const urlRes = await createAutodocSignedUrlMap(photosNeedingSignedUrls)
+    setPhotoUrls({
+      ...(urlRes.data ?? {}),
+      ...photoDriveUrls,
+    })
     
     // Log activity
     await logActivity('photo_uploaded', {

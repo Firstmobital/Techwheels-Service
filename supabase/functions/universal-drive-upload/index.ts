@@ -2,6 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
 
 type UploadBody = {
+  resource_type?: 'document' | 'panel_photo'
+  resourceType?: 'document' | 'panel_photo'
   bucket_id?: string
   bucketId?: string
   object_name?: string
@@ -10,6 +12,8 @@ type UploadBody = {
   jobCardId?: string
   doc_type?: string
   docType?: string
+  file_type?: string
+  fileType?: string
   file_size_mb?: number
   fileSizeMb?: number
 }
@@ -29,6 +33,12 @@ const DOC_TYPES = new Set([
   'video_delivery',
 ])
 
+const PHOTO_TYPES = new Set([
+  'defect',
+  'primer',
+  'paint',
+])
+
 // Techwheels canonical Drive root: all registration subfolders must be created only under this folder.
 const TECHWHEELS_ROOT_FOLDER_ID = '1qbNABzrPC1OdqAFtPhJ6HZHpEOT7hWCQ'
 
@@ -43,12 +53,15 @@ function json(status: number, body: unknown): Response {
 }
 
 function normalizeBody(body: UploadBody) {
+  const resourceType = String(body.resource_type ?? body.resourceType ?? 'document').trim().toLowerCase() === 'panel_photo'
+    ? 'panel_photo'
+    : 'document'
   const bucketId = String(body.bucket_id ?? body.bucketId ?? 'autodoc').trim()
   const objectName = String(body.object_name ?? body.objectName ?? '').trim().replace(/^\/+/, '')
   const jobCardId = String(body.job_card_id ?? body.jobCardId ?? '').trim()
-  const docType = String(body.doc_type ?? body.docType ?? '').trim()
+  const fileType = String(body.file_type ?? body.fileType ?? body.doc_type ?? body.docType ?? '').trim()
   const fileSizeMb = Number(body.file_size_mb ?? body.fileSizeMb ?? 0)
-  return { bucketId, objectName, jobCardId, docType, fileSizeMb }
+  return { resourceType, bucketId, objectName, jobCardId, fileType, fileSizeMb }
 }
 
 function toYmd(input: string | null | undefined): string {
@@ -241,7 +254,7 @@ async function patchDriveFileContent(input: {
         Authorization: `Bearer ${input.accessToken}`,
         'Content-Type': input.mimeType,
       },
-      body: new Blob([input.bytes]),
+      body: input.bytes as unknown as BodyInit,
     },
   )
 
@@ -292,7 +305,7 @@ async function createDriveFile(input: {
       Authorization: `Bearer ${input.accessToken}`,
       'Content-Type': `multipart/related; boundary=${boundary}`,
     },
-    body: new Blob([body]),
+    body: body as unknown as BodyInit,
   })
 
   if (!createRes.ok) {
@@ -354,10 +367,26 @@ Deno.serve(async (req) => {
     if (!body.objectName) {
       return json(400, { ok: false, error: 'object_name is required', error_code: 'VALIDATION_ERROR' })
     }
-    if (!body.docType || !DOC_TYPES.has(body.docType)) {
+    if (!body.fileType) {
       return json(400, {
         ok: false,
-        error: 'doc_type is required and must be a valid document type',
+        error: 'file_type is required',
+        error_code: 'VALIDATION_ERROR',
+      })
+    }
+
+    if (body.resourceType === 'document' && !DOC_TYPES.has(body.fileType)) {
+      return json(400, {
+        ok: false,
+        error: 'file_type must be a valid document type',
+        error_code: 'VALIDATION_ERROR',
+      })
+    }
+
+    if (body.resourceType === 'panel_photo' && !PHOTO_TYPES.has(body.fileType)) {
+      return json(400, {
+        ok: false,
+        error: 'file_type must be one of defect|primer|paint for panel_photo resource',
         error_code: 'VALIDATION_ERROR',
       })
     }
@@ -412,26 +441,64 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { data: docRows, error: docQueryErr } = await supabase
-      .from('documents')
-      .select('id, created_at, drive_file_id')
-      .eq('job_card_id', body.jobCardId)
-      .eq('doc_type', body.docType)
-      .eq('storage_path', body.objectName)
-      .order('created_at', { ascending: false })
-      .limit(1)
+    let rowId = ''
+    let rowCreatedAt: string | null = null
+    let existingDriveFileId = ''
+    let effectiveFileType = body.fileType
 
-    if (docQueryErr) {
-      return json(500, { ok: false, error: docQueryErr.message, error_code: 'DB_ERROR' })
-    }
+    if (body.resourceType === 'document') {
+      const { data: docRows, error: docQueryErr } = await supabase
+        .from('documents')
+        .select('id, created_at, drive_file_id, doc_type')
+        .eq('job_card_id', body.jobCardId)
+        .eq('doc_type', body.fileType)
+        .eq('storage_path', body.objectName)
+        .order('created_at', { ascending: false })
+        .limit(1)
 
-    const docRow = docRows?.[0]
-    if (!docRow?.id) {
-      return json(404, {
-        ok: false,
-        error: 'Document row not found for upload payload',
-        error_code: 'DOCUMENT_NOT_FOUND',
-      })
+      if (docQueryErr) {
+        return json(500, { ok: false, error: docQueryErr.message, error_code: 'DB_ERROR' })
+      }
+
+      const docRow = docRows?.[0]
+      if (!docRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Document row not found for upload payload',
+          error_code: 'DOCUMENT_NOT_FOUND',
+        })
+      }
+
+      rowId = docRow.id
+      rowCreatedAt = docRow.created_at
+      existingDriveFileId = String(docRow.drive_file_id ?? '').trim()
+      effectiveFileType = String(docRow.doc_type ?? body.fileType)
+    } else {
+      const { data: photoRows, error: photoQueryErr } = await supabase
+        .from('panel_photos')
+        .select('id, created_at, drive_file_id, photo_type')
+        .eq('job_card_id', body.jobCardId)
+        .eq('storage_path', body.objectName)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (photoQueryErr) {
+        return json(500, { ok: false, error: photoQueryErr.message, error_code: 'DB_ERROR' })
+      }
+
+      const photoRow = photoRows?.[0]
+      if (!photoRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Panel photo row not found for upload payload',
+          error_code: 'PHOTO_NOT_FOUND',
+        })
+      }
+
+      rowId = photoRow.id
+      rowCreatedAt = photoRow.created_at
+      existingDriveFileId = String(photoRow.drive_file_id ?? '').trim()
+      effectiveFileType = String(photoRow.photo_type ?? body.fileType)
     }
 
     const { data: blob, error: dlErr } = await supabase.storage
@@ -449,9 +516,11 @@ Deno.serve(async (req) => {
     const fileBytes = new Uint8Array(await blob.arrayBuffer())
     const ext = extFromPath(body.objectName)
     const normalizedReg = sanitizeFilenamePart(registrationNo)
-    const normalizedDocType = sanitizeFilenamePart(body.docType)
-    const datePart = toYmd(docRow.created_at)
-    const driveFileName = `${normalizedReg}_${normalizedDocType}_${datePart}.${ext}`
+    const normalizedFileType = sanitizeFilenamePart(effectiveFileType)
+    const datePart = toYmd(rowCreatedAt)
+    const driveFileName = body.resourceType === 'document'
+      ? `${normalizedReg}_${normalizedFileType}_${datePart}.${ext}`
+      : `${normalizedReg}_PANEL_${normalizedFileType}_${datePart}_${rowId.slice(0, 8)}.${ext}`
 
     const privateKeyPem = serviceAccountPrivateKeyBase64
       ? decodeServiceAccountKey(serviceAccountPrivateKeyBase64)
@@ -478,7 +547,7 @@ Deno.serve(async (req) => {
       cache: folderCache,
     })
 
-    let fileId = String(docRow.drive_file_id ?? '').trim()
+    let fileId = existingDriveFileId
     let wasReplaced = false
     const mimeType = blob.type || 'application/octet-stream'
 
@@ -508,20 +577,21 @@ Deno.serve(async (req) => {
       await makeDriveFilePublic({ accessToken, fileId })
     }
 
+    const targetTable = body.resourceType === 'document' ? 'documents' : 'panel_photos'
     const { error: updateErr } = await supabase
-      .from('documents')
+      .from(targetTable)
       .update({
         drive_url: driveUrl,
         drive_file_id: fileId,
       })
-      .eq('id', docRow.id)
+      .eq('id', rowId)
 
     if (updateErr) {
       await logPendingUpload(supabase, {
         resource_type: 'document',
-        resource_id: docRow.id,
+        resource_id: rowId,
         job_card_id: body.jobCardId,
-        doc_type: body.docType,
+        doc_type: effectiveFileType,
         registration_no: normalizedReg,
         storage_bucket: body.bucketId,
         storage_path: body.objectName,
@@ -533,7 +603,7 @@ Deno.serve(async (req) => {
 
       return json(500, {
         ok: false,
-        error: 'Drive upload succeeded but documents table update failed',
+        error: `Drive upload succeeded but ${targetTable} table update failed`,
         error_code: 'DB_ERROR',
         db_update_error: updateErr.message,
       })
@@ -550,10 +620,10 @@ Deno.serve(async (req) => {
     }
 
     await logPendingUpload(supabase, {
-      resource_type: 'document',
-      resource_id: docRow.id,
+      resource_type: body.resourceType,
+      resource_id: rowId,
       job_card_id: body.jobCardId,
-      doc_type: body.docType,
+      doc_type: effectiveFileType,
       registration_no: normalizedReg,
       storage_bucket: body.bucketId,
       storage_path: body.objectName,
@@ -572,10 +642,12 @@ Deno.serve(async (req) => {
     return json(200, {
       ok: true,
       link: driveUrl,
+      resource_type: body.resourceType,
+      file_type: effectiveFileType,
       drive_file_id: fileId,
       drive_url: driveUrl,
       storage_path: body.objectName,
-      doc_type: body.docType,
+      doc_type: effectiveFileType,
       registration_no: normalizedReg,
       cleanup_performed: deleteFromStorage && !storageDeleteError,
       result,

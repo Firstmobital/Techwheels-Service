@@ -433,6 +433,8 @@ export type Database = {
         Row: {
           captured_at: string | null
           created_at: string
+          drive_file_id: string | null
+          drive_url: string | null
           gps_city: string | null
           gps_lat: number | null
           gps_lng: number | null
@@ -445,6 +447,8 @@ export type Database = {
         Insert: {
           captured_at?: string | null
           created_at?: string
+          drive_file_id?: string | null
+          drive_url?: string | null
           gps_city?: string | null
           gps_lat?: number | null
           gps_lng?: number | null
@@ -457,6 +461,8 @@ export type Database = {
         Update: {
           captured_at?: string | null
           created_at?: string
+          drive_file_id?: string | null
+          drive_url?: string | null
           gps_city?: string | null
           gps_lat?: number | null
           gps_lng?: number | null

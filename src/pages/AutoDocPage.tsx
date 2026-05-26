@@ -596,6 +596,7 @@ export default function AutoDocPage() {
         panelId,
         photoType,
         storagePath,
+        fileSizeMb: Number((file.size / (1024 * 1024)).toFixed(3)),
         repairStage,
       })
 
@@ -796,8 +797,9 @@ export default function AutoDocPage() {
       .map((photo) => {
         const storagePath = photo.storage_path?.trim()
         if (!storagePath) return null
-        const signedUrl = signedUrlMap[storagePath]
-        if (!signedUrl) return null
+        const driveUrl = (photo as { drive_url?: string | null }).drive_url ?? null
+        const resolvedUrl = driveUrl || signedUrlMap[storagePath]
+        if (!resolvedUrl) return null
         const photoStage = (photo as { repair_stage?: string | null }).repair_stage
         const stage = photoStage === 'post-repair' ? 'post-repair' : 'pre-repair'
         const panelName = nextPanelNameById[photo.panel_id] ?? 'Selected Panel'
@@ -808,7 +810,7 @@ export default function AutoDocPage() {
           panel: panelName,
           stage,
           photoType: photo.photo_type,
-          url: signedUrl,
+          url: resolvedUrl,
           name: fileName,
           uploadedAtLabel: toTimeLabel(photo.captured_at) || '--',
           storagePath,

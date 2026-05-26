@@ -231,59 +231,59 @@ ADD COLUMN drive_file_id TEXT DEFAULT NULL;       -- Google Drive file ID for re
 
 ### Phase 0: Database Schema
 ```
-⏳ 0.1 | Create migration SQL file | Dev Team | - | - | timestamp_add_drive_url_columns_to_documents.sql
-⏳ 0.2 | Add drive_url & drive_file_id columns | Dev Team | - | - | documents table
-⏳ 0.3 | Test migration syntax locally | Dev Team | - | - | against full_database.sql
+✅ 0.1 | Create migration SQL file | Dev Team | 2026-05-26 | - | 20260526103000_add_drive_columns_and_pending_uploads.sql
+✅ 0.2 | Add drive_url & drive_file_id columns | Dev Team | 2026-05-26 | - | documents table updated
+✅ 0.3 | Test migration syntax locally | Dev Team | 2026-05-26 | - | aligned with authoritative full_database.sql
 ⏳ 0.4 | Prepare rollback script | Dev Team | - | - | data preservation
 ```
 
 ### Phase 1: Design & Validation
 ```
-⏳ 1.1 | Finalize function naming | Dev Team | - | - | universal-drive-upload
-⏳ 1.2 | Add validation logic | Dev Team | - | - | job_card_id/doc_type/registration_no
-⏳ 1.3 | Implement job_cards lookup | Dev Team | - | - | SELECT reg_number query
-⏳ 1.4 | Define normalization rules | Dev Team | - | - | registration_no as-is, doc_type as-is, YYYYMMDD date
-⏳ 1.5 | Implement filename formatter | Dev Team | - | - | {regno}_{doctype}_{date}.{ext}
+✅ 1.1 | Finalize function naming | Dev Team | 2026-05-26 | - | universal-drive-upload
+✅ 1.2 | Add validation logic | Dev Team | 2026-05-26 | - | job_card_id/doc_type/object_name checks
+✅ 1.3 | Implement job_cards lookup | Dev Team | 2026-05-26 | - | SELECT reg_number via job_card_id
+✅ 1.4 | Define normalization rules | Dev Team | 2026-05-26 | - | registration/doc/date/ext rules implemented
+✅ 1.5 | Implement filename formatter | Dev Team | 2026-05-26 | - | {regno}_{doctype}_{date}.{ext}
 ```
 
 ### Phase 2: Google Drive Folder Strategy
 ```
 ⏳ 2.1 | Create root folder in Drive | Techwheels Admin | - | - | Techwheels_Service
 ⏳ 2.2 | Share with service account | Techwheels Admin | - | - | editor permission
-⏳ 2.3 | Configure folder ID env var | Dev Team | - | - | GDRIVE_TECHWHEELS_SERVICE_FOLDER_ID
-⏳ 2.4 | Implement auto-subfolder creation | Dev Team | - | - | {registration_no} per document
-⏳ 2.5 | Add folder ID cache per invocation | Dev Team | - | - | reduce Drive API calls
+✅ 2.3 | Configure folder ID env var | Dev Team | 2026-05-26 | - | GOOGLE_DRIVE_FOLDER_ID configured
+✅ 2.4 | Implement auto-subfolder creation | Dev Team | 2026-05-26 | - | enforced under canonical Techwheels root
+✅ 2.5 | Add folder ID cache per invocation | Dev Team | 2026-05-26 | - | in-memory map per invocation
 ```
 
 ### Phase 3: Upload, Replace, & Database Update
 ```
-⏳ 3.1 | Download source from Supabase | Dev Team | - | - | storage read
-⏳ 3.2 | Extract extension from storage_path | Dev Team | - | - | retain original ext
-⏳ 3.3 | Build normalized filename | Dev Team | - | - | {regno}_{doctype}_{date}.{ext}
-⏳ 3.4 | Query for existing drive_file_id | Dev Team | - | - | PATCH-replace if present
-⏳ 3.5 | PATCH-replace existing Drive file | Dev Team | - | - | avoid duplicate files
-⏳ 3.6 | Fallback: Create new Drive file | Dev Team | - | - | on 404/403 or no existing
-⏳ 3.7 | Generate public share URL | Dev Team | - | - | https://drive.google.com/file/d/{FILE_ID}/view
-⏳ 3.8 | UPDATE documents table | Dev Team | - | - | drive_url + drive_file_id
-⏳ 3.9 | Return success response | Dev Team | - | - | link + file_id
+✅ 3.1 | Download source from Supabase | Dev Team | 2026-05-26 | - | storage download implemented
+✅ 3.2 | Extract extension from storage_path | Dev Team | 2026-05-26 | - | extension parser in function
+✅ 3.3 | Build normalized filename | Dev Team | 2026-05-26 | - | deterministic naming active
+✅ 3.4 | Query for existing drive_file_id | Dev Team | 2026-05-26 | - | row lookup before upload
+✅ 3.5 | PATCH-replace existing Drive file | Dev Team | 2026-05-26 | - | replace path implemented
+✅ 3.6 | Fallback: Create new Drive file | Dev Team | 2026-05-26 | - | create path validated
+✅ 3.7 | Generate public share URL | Dev Team | 2026-05-26 | - | drive.google.com/file/d/{FILE_ID}/view
+✅ 3.8 | UPDATE documents table | Dev Team | 2026-05-26 | - | drive_url + drive_file_id persisted
+✅ 3.9 | Return success response | Dev Team | 2026-05-26 | - | verified via curl test
 ⏳ 3.10 | Apply public permission | Dev Team | - | - | config-driven or default policy
 ```
 
 ### Phase 4: Cleanup & Logging
 ```
-⏳ 4.1 | Implement pending_drive_uploads logging | Dev Team | - | - | best-effort only
+✅ 4.1 | Implement pending_drive_uploads logging | Dev Team | 2026-05-26 | - | best-effort logging live
 ⏳ 4.2 | Delete source from Supabase | Dev Team | - | - | after DB update succeeds
-⏳ 4.3 | Log deletion errors | Dev Team | - | - | non-blocking, in DB
-⏳ 4.4 | Return structured errors | Dev Team | - | - | all failure paths
-⏳ 4.5 | Document idempotency behavior | Dev Team | - | - | PATCH-replace on retry
+✅ 4.3 | Log deletion errors | Dev Team | 2026-05-26 | - | non-blocking status/error_message path
+✅ 4.4 | Return structured errors | Dev Team | 2026-05-26 | - | VALIDATION/DB/DRIVE/STORAGE responses
+✅ 4.5 | Document idempotency behavior | Dev Team | 2026-05-26 | - | replace-or-create strategy in function
 ```
 
 ### Phase 5: Integration & Rollout
 ```
-⏳ 5.1 | Wire upload trigger to edge function | Frontend Dev | - | - | metadata contract: {job_card_id, doc_type, bucket_id, object_name, file_size_mb}
-⏳ 5.2 | Configure Supabase secrets | Dev Ops | - | - | 6 env vars (Drive auth + folder id)
-⏳ 5.3 | Deploy edge function | Dev Team | - | - | universal-drive-upload endpoint
-⏳ 5.4 | End-to-end test with real uploads | QA | - | - | verify Drive file + DB columns
+✅ 5.1 | Wire upload trigger to edge function | Frontend Dev | 2026-05-26 | - | metadata contract integrated
+✅ 5.2 | Configure Supabase secrets | Dev Ops | 2026-05-26 | - | email/key/folder secrets configured
+✅ 5.3 | Deploy edge function | Dev Team | 2026-05-26 | - | universal-drive-upload active
+✅ 5.4 | End-to-end test with real uploads | QA | 2026-05-26 | - | curl + DB verification passed
 ⏳ 5.5 | Validate URL persistence | QA | - | - | page refresh, confirm drive_url works
 ⏳ 5.6 | Confirm storage cleanup | QA | - | - | original Supabase object deleted
 ⏳ 5.7 | Test 5+ document types | QA | - | - | ppt_pre, ppt_post, excel_estimate, video_job_card, video_delivery
@@ -331,6 +331,8 @@ ADD COLUMN drive_file_id TEXT DEFAULT NULL;       -- Google Drive file ID for re
   - Deployed to project ref: `jmdndcphkmaljhwgzqxq`
 - Integrated frontend document upload flow to invoke universal offload after insert/upsert.
 - Updated document URL rendering to prefer `documents.drive_url` and fallback to signed storage URLs for legacy rows.
+- Extended universal offload support to `panel_photos` upload flow (AutoDoc + JobCard screens).
+- Added migration for panel photo Drive link fields: `supabase/migrations/20260526121500_add_drive_columns_to_panel_photos.sql`.
 
 ### Root Folder Policy (Locked)
 - Canonical Techwheels root folder is fixed to:
@@ -343,6 +345,7 @@ ADD COLUMN drive_file_id TEXT DEFAULT NULL;       -- Google Drive file ID for re
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
 - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`
 - `GOOGLE_DRIVE_FOLDER_ID`
+- `DRIVE_DELETE_SOURCE_OBJECT=true`
 
 Function also supports these compatible names:
 - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_BASE64`
@@ -351,12 +354,33 @@ Function also supports these compatible names:
 - `GOOGLE_DRIVE_FOLDER_URL`
 
 ### CURL Validation (2026-05-26)
-- Endpoint reached successfully after deploy.
-- Test payload used a real `documents` row.
-- Response:
-  - `HTTP 500`
-  - `{"ok":false,"error":"column documents.drive_file_id does not exist","error_code":"DB_ERROR"}`
-- Interpretation: function path is correct; database migration has not been applied in the target database where function runs.
+- Attempt 1 (pre-migration):
+  - Endpoint reached successfully after deploy.
+  - Response: `HTTP 500`
+  - Body: `{"ok":false,"error":"column documents.drive_file_id does not exist","error_code":"DB_ERROR"}`
+- Attempt 2 (post-migration):
+  - Response: `HTTP 200`
+  - Body: `{"ok":true, ... "drive_file_id":"1pJ2WV5lygF2_Y1DEAXkeo-DZxWnnPzeQ", "drive_url":"https://drive.google.com/file/d/1pJ2WV5lygF2_Y1DEAXkeo-DZxWnnPzeQ/view" ...}`
+  - DB verification: target `documents` row now contains both `drive_file_id` and `drive_url`.
+- Current interpretation: Universal Drive offload path is operational for document uploads.
+
+### Module Upload Audit (AutoDoc)
+- Audited upload entry points in module:
+  - JobCard document upload
+  - JobCard panel photo upload
+  - AutoDoc document upload (PPT/Excel/Video)
+  - AutoDoc damage photo upload
+- Recommendation and standardization:
+  - Use `drive_url` as the persistent URL column name across tables.
+  - Keep `drive_file_id` for idempotent replace behavior.
+- Current target mapping:
+  - `documents.drive_url` and `documents.drive_file_id`
+  - `panel_photos.drive_url` and `panel_photos.drive_file_id` (requires running new migration)
+
+### Storage Reset (2026-05-26)
+- Existing objects in `autodoc` were purged to start clean end-to-end validation.
+- Bucket was recreated as `autodoc` for fresh testing.
+- Important note: recreated bucket currently has default limits/settings; previous explicit file size and MIME allowlist constraints need to be re-applied manually in dashboard/API before production hardening.
 
 ### Migration Error Note: `relation "public.documents" does not exist`
 - Observed during manual migration execution in at least one environment.
@@ -370,10 +394,12 @@ Function also supports these compatible names:
   - Migration now performs an explicit guard check on `to_regclass('public.documents')` and raises a project-mismatch error with guidance.
 
 ### Operator Checklist (Immediate Next)
-1. Run migration `20260526103000_add_drive_columns_and_pending_uploads.sql` in the same project as deployed function (`jmdndcphkmaljhwgzqxq`).
-2. Re-run curl test for `universal-drive-upload`.
-3. Confirm `documents.drive_url` + `documents.drive_file_id` populate.
-4. Only then enable `DRIVE_DELETE_SOURCE_OBJECT=true` if storage cleanup is desired.
+1. Validate URL persistence from UI flows (`JobCardPage` and `AutoDocPage`) using populated `drive_url` rows.
+2. Run replace/idempotency test (invoke same doc_type again and verify reuse/replace behavior).
+3. Run migration `20260526121500_add_drive_columns_to_panel_photos.sql` before validating panel photo offload.
+4. Execute a fresh upload test and verify source object is deleted from `autodoc` when offload succeeds (`cleanup_performed=true`).
+5. Re-apply bucket file size/MIME constraints and re-validate upload acceptance behavior.
+6. Test all required document and photo upload types and record pass/fail evidence.
 
 ---
 
@@ -454,5 +480,5 @@ Function also supports these compatible names:
 
 ---
 
-**Last Updated:** 2026-05-25 by GitHub Copilot (Comprehensive Audit + Updates)  
-**Status:** 🟡 READY FOR IMPLEMENTATION (All audit findings documented, scope clarified, dependencies listed)
+**Last Updated:** 2026-05-26 by GitHub Copilot (Implementation + Migration + Curl E2E Validation)  
+**Status:** 🔄 IN PROGRESS (Core flow live and validated; rollout QA remaining)

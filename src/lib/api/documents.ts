@@ -7,15 +7,18 @@ const DOCUMENT_SELECT = 'id, job_card_id, doc_type, storage_path, drive_url, dri
 type UniversalDriveResponse = {
   ok?: boolean
   error?: string
+  resource_type?: 'document' | 'panel_photo'
+  file_type?: string
   drive_url?: string
   drive_file_id?: string
 }
 
 export async function invokeUniversalDriveUpload(input: {
   jobCardId: string
-  docType: DocType
+  fileType: string
   storagePath: string
   fileSizeMb: number
+  resourceType?: 'document' | 'panel_photo'
   bucketId?: string
 }): Promise<ApiResult<UniversalDriveResponse>> {
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
@@ -32,10 +35,12 @@ export async function invokeUniversalDriveUpload(input: {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        resource_type: input.resourceType ?? 'document',
         bucket_id: input.bucketId ?? AUTODOC_BUCKET,
         object_name: input.storagePath,
         job_card_id: input.jobCardId,
-        doc_type: input.docType,
+        file_type: input.fileType,
+        doc_type: input.fileType,
         file_size_mb: input.fileSizeMb,
       }),
     })
@@ -87,9 +92,10 @@ export async function addDocument(input: {
   // Offload to Drive asynchronously after DB insert so UI flow is not blocked by external API latency.
   void invokeUniversalDriveUpload({
     jobCardId: input.jobCardId,
-    docType: input.docType,
+    fileType: input.docType,
     storagePath: input.storagePath,
     fileSizeMb: input.fileSizeMb,
+    resourceType: 'document',
   })
 
   return ok(data)
@@ -196,9 +202,10 @@ export async function uploadDocumentFile(input: {
       if (res.ok && payload?.data) {
         void invokeUniversalDriveUpload({
           jobCardId: input.jobCardId,
-          docType: input.docType,
+          fileType: input.docType,
           storagePath,
           fileSizeMb: sizeMb,
+          resourceType: 'document',
         })
         return ok(payload.data as DocumentRow)
       }
