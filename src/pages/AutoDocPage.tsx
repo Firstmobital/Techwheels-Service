@@ -332,6 +332,7 @@ export default function AutoDocPage() {
   const [walkaroundVideoName, setWalkaroundVideoName] = useState(() => readSessionValue(SESSION_KEYS.walkaroundVideoName) || '')
   const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
   const [uploadingWalkaround, setUploadingWalkaround] = useState(false)
+  const suppressNextVehicleHydrationRef = useRef(false)
   const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
   const [loadingModelRates, setLoadingModelRates] = useState(false)
     const readiness = {
@@ -995,6 +996,7 @@ export default function AutoDocPage() {
       return
     }
 
+    suppressNextVehicleHydrationRef.current = true
     await uploadWalkaroundVideoFile(file, 'Vehicle walkaround video uploaded. Fetch is now enabled.')
     event.target.value = ''
   }
@@ -1200,6 +1202,11 @@ export default function AutoDocPage() {
   useEffect(() => {
     async function hydrateVehicleContextForSelectedJob() {
       if (!activeJobCardId || !activeSummary?.reg_number) return
+
+      if (suppressNextVehicleHydrationRef.current) {
+        suppressNextVehicleHydrationRef.current = false
+        return
+      }
 
       const vehicleRes = await fetchVehicleByReg(activeSummary.reg_number)
       if (vehicleRes.error || !vehicleRes.data) {
