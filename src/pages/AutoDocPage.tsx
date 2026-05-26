@@ -1508,6 +1508,39 @@ export default function AutoDocPage() {
     }
 
     const vehicle = res.data
+    const hasVehicleMasterDetails = Boolean(
+      (vehicle.vin ?? '').trim()
+      || (vehicle.model ?? '').trim()
+      || vehicle.year != null
+      || (vehicle.colour ?? '').trim()
+      || (vehicle.paint_type ?? '').trim()
+      || (vehicle.dealer_city ?? '').trim()
+      || (vehicle.bp_city_category ?? '').trim()
+      || (vehicle.owner_name ?? '').trim()
+      || (vehicle.owner_phone ?? '').trim()
+      || (vehicle.date_of_sale ?? '').trim(),
+    )
+
+    // If the vehicle row exists but only as a minimal placeholder, continue with RC fallback.
+    if (!hasVehicleMasterDetails) {
+      const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
+      if (rcLookupRes.error) {
+        setVehicleFound(false)
+        setVehicleLookupStatus('error')
+        setCreateError(rcLookupRes.error)
+        return
+      }
+
+      if (rcLookupRes.data) {
+        applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
+        setVehicleFound(true)
+        setVehicleLookupStatus('found')
+        setCreateError(null)
+        showToast('Vehicle found via RC lookup and prefilled from RTO cache.', true)
+        return
+      }
+    }
+
     setVehicleFound(true)
     setVehicleLookupStatus('found')
     setForm((prev) => ({
