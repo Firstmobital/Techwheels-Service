@@ -165,7 +165,25 @@ export async function createJobCard(input: CreateJobCardInput): Promise<ApiResul
     .select('*')
     .single<JobCardRow>()
 
-  if (error) return fail(error)
+  if (error) {
+    const err = error as {
+      code?: string
+      message?: string
+      details?: string
+      hint?: string
+    }
+
+    const isRlsDenied = err.code === '42501' || /row-level security|permission denied|forbidden/i.test(err.message ?? '')
+    if (isRlsDenied) {
+      return fail('Unable to create draft job card due to access policy. Ensure this registration exists in vehicle master for your dealer, then retry.')
+    }
+
+    const composed = [err.message, err.details, err.hint]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .join(' | ')
+
+    return fail(composed || error, 'Unable to create draft job card')
+  }
   return ok(data)
 }
 

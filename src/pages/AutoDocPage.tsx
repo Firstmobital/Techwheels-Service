@@ -1592,7 +1592,8 @@ export default function AutoDocPage() {
       form.dateOfSale,
     ].some((value) => value.trim().length > 0)
 
-    // Avoid overwriting existing vehicle master data with empty values during prefetch draft creation.
+    // Ensure a vehicle row exists before creating a job card because job_cards RLS insert policy
+    // allows insert only when reg_number belongs to the current dealer's vehicles table.
     if (hasVehicleDetailsToSave) {
       console.log('[autodoc-upload-debug] Persisting vehicle master fields before draft save', {
         regNumber: form.regNumber,
@@ -1624,6 +1625,38 @@ export default function AutoDocPage() {
       console.log('[autodoc-upload-debug] Vehicle upsert succeeded during draft save', {
         regNumber: form.regNumber,
       })
+    } else {
+      const existingVehicleRes = await fetchVehicleByReg(form.regNumber)
+      if (existingVehicleRes.error) {
+        console.error('[autodoc-upload-debug] Vehicle existence check failed during draft save', {
+          regNumber: form.regNumber,
+          error: existingVehicleRes.error,
+        })
+        showToast(existingVehicleRes.error, false)
+        return null
+      }
+
+      if (!existingVehicleRes.data) {
+        console.log('[autodoc-upload-debug] No vehicle row found; creating minimal vehicle row before draft save', {
+          regNumber: form.regNumber,
+        })
+        const minimalVehicleRes = await upsertVehicle({
+          regNumber: form.regNumber,
+        })
+
+        if (minimalVehicleRes.error) {
+          console.error('[autodoc-upload-debug] Minimal vehicle upsert failed during draft save', {
+            regNumber: form.regNumber,
+            error: minimalVehicleRes.error,
+          })
+          showToast(minimalVehicleRes.error, false)
+          return null
+        }
+
+        console.log('[autodoc-upload-debug] Minimal vehicle upsert succeeded during draft save', {
+          regNumber: form.regNumber,
+        })
+      }
     }
 
     const normalizedReg = regNumber.toUpperCase()
