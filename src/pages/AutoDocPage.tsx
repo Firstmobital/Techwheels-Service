@@ -8,6 +8,7 @@ import {
   createJobCard,
   createPanelPhoto,
   fetchVehicleByReg,
+  fetchVehicleFromRcLookup,
   generateClaimEmailContent,
   getAutoDocLookupOptions,
   getAutoDocWorkflowOptions,
@@ -31,6 +32,7 @@ import {
   type JobDashboardSummaryRow,
   type JobSummaryRow,
   type PhotoType,
+  type RtoCacheLookupRow,
 } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 
@@ -1332,6 +1334,82 @@ export default function AutoDocPage() {
     return `${cleaned.slice(0, 2)}-${cleaned.slice(2, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 10)}`
   }
 
+  function pickFirstText(...values: Array<string | null | undefined>): string {
+    for (const value of values) {
+      if (typeof value !== 'string') continue
+      const trimmed = value.trim()
+      if (trimmed) return trimmed
+    }
+    return ''
+  }
+
+  function inferYearFromRto(row: RtoCacheLookupRow): string {
+    const yearCandidate = pickFirstText(
+      row.api_rc_vehicle_manufacturing_month_year,
+      row.api_rc_reg_date,
+    )
+    const matches = yearCandidate.match(/(19|20)\d{2}/g)
+    return matches?.[0] ?? ''
+  }
+
+  function toDateInputValue(rawDate: string): string {
+    const value = rawDate.trim()
+    if (!value) return ''
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+
+    const slashFormat = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (slashFormat) {
+      const [, day, month, year] = slashFormat
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    }
+
+    const dashFormat = value.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+    if (dashFormat) {
+      const [, day, month, year] = dashFormat
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    }
+
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10)
+    }
+
+    return ''
+  }
+
+  function applyRtoCacheToForm(row: RtoCacheLookupRow, resolvedReg: string) {
+    setForm((prev) => {
+      const regFromRto = pickFirstText(
+        row.registration_no,
+        row.api_rc_reg_no,
+        row.api_rc_vehicle_number,
+      )
+      const vinFromRto = pickFirstText(row.api_rc_chassis, row.api_rc_chassis_number)
+      const modelFromRto = pickFirstText(
+        row.api_rc_model,
+        row.api_rc_vehicle_class,
+        row.api_rc_vehicle_manufacturer_name,
+      )
+      const dealerCityFromRto = pickFirstText(row.api_rc_reg_authority)
+      const dateOfSaleFromRto = toDateInputValue(pickFirstText(row.api_rc_reg_date))
+      const ownerPhoneFromRto = pickFirstText(row.api_rc_mobile_number).replace(/[^0-9]/g, '').slice(0, 10)
+
+      return {
+        ...prev,
+        regNumber: formatRegistrationNumber(regFromRto || resolvedReg || prev.regNumber),
+        vin: vinFromRto || prev.vin,
+        model: modelFromRto || prev.model,
+        year: inferYearFromRto(row) || prev.year,
+        colour: pickFirstText(row.api_rc_vehicle_colour) || prev.colour,
+        dealerCity: dealerCityFromRto || prev.dealerCity,
+        ownerName: pickFirstText(row.api_rc_owner) || prev.ownerName,
+        ownerPhone: ownerPhoneFromRto || prev.ownerPhone,
+        dateOfSale: dateOfSaleFromRto || prev.dateOfSale,
+      }
+    })
+  }
+
   async function handleVehicleLookup() {
     const ref = form.regNumber.trim()
     if (!ref) return
@@ -1360,23 +1438,40 @@ export default function AutoDocPage() {
     }
 
     if (!res.data) {
-      setVehicleFound(false)
-      setVehicleLookupStatus('not_found')
+      const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
+      if (rcLookupRes.error) {
+        setVehicleFound(false)
+        setVehicleLookupStatus('error')
+        setCreateError(rcLookupRes.error)
+        return
+      }
+
+      if (!rcLookupRes.data) {
+        setVehicleFound(false)
+        setVehicleLookupStatus('not_found')
+        setCreateError(null)
+        // Clear auto-filled fields when both DB and RC lookup fail so user can manually enter data.
+        setForm((prev) => ({
+          ...prev,
+          vin: '',
+          model: '',
+          year: '',
+          colour: '',
+          paintType: '',
+          dealerCity: '',
+          bpCityCategory: '',
+          ownerName: '',
+          ownerPhone: '',
+          dateOfSale: '',
+        }))
+        return
+      }
+
+      applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
+      setVehicleFound(true)
+      setVehicleLookupStatus('found')
       setCreateError(null)
-      // Clear auto-filled fields when lookup fails so user can manually enter data
-      setForm((prev) => ({
-        ...prev,
-        vin: '',
-        model: '',
-        year: '',
-        colour: '',
-        paintType: '',
-        dealerCity: '',
-        bpCityCategory: '',
-        ownerName: '',
-        ownerPhone: '',
-        dateOfSale: '',
-      }))
+      showToast('Vehicle found via RC lookup and prefilled from RTO cache.', true)
       return
     }
 

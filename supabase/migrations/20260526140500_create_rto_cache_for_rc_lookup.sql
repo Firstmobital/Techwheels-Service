@@ -1,4 +1,4 @@
--- Create rto_cache for RC lookup edge function portability.
+-- Create rto_cache for RC lookup edge function integration.
 -- Source schema: authoritative full dump chunk mirror from this repo.
 
 BEGIN;
@@ -153,26 +153,26 @@ BEGIN
             ON public.rto_cache
             FOR SELECT
             TO authenticated
-            USING ((public.is_super_admin() OR public.has_rbac_right('admin.used-car-evaluations'::text, 'view'::text)));
+            USING ((public.is_super_admin() OR public.has_rbac_right('autodoc'::text, 'view'::text)));
 
         CREATE POLICY rto_cache_insert
             ON public.rto_cache
             FOR INSERT
             TO authenticated
-            WITH CHECK ((public.is_super_admin() OR public.has_rbac_right('admin.used-car-evaluations'::text, 'create'::text)));
+            WITH CHECK ((public.is_super_admin() OR public.has_rbac_right('autodoc'::text, 'create'::text)));
 
         CREATE POLICY rto_cache_update
             ON public.rto_cache
             FOR UPDATE
             TO authenticated
-            USING ((public.is_super_admin() OR public.has_rbac_right('admin.used-car-evaluations'::text, 'edit'::text)))
-            WITH CHECK ((public.is_super_admin() OR public.has_rbac_right('admin.used-car-evaluations'::text, 'edit'::text)));
+            USING ((public.is_super_admin() OR public.has_rbac_right('autodoc'::text, 'edit'::text)))
+            WITH CHECK ((public.is_super_admin() OR public.has_rbac_right('autodoc'::text, 'edit'::text)));
 
         CREATE POLICY rto_cache_delete
             ON public.rto_cache
             FOR DELETE
             TO authenticated
-            USING ((public.is_super_admin() OR public.has_rbac_right('admin.used-car-evaluations'::text, 'delete'::text)));
+            USING ((public.is_super_admin() OR public.has_rbac_right('autodoc'::text, 'delete'::text)));
     ELSE
         CREATE POLICY rto_cache_select
             ON public.rto_cache
@@ -192,18 +192,12 @@ BEGIN
             TO authenticated
             USING (true)
             WITH CHECK (true);
-
-        CREATE POLICY rto_cache_delete
-            ON public.rto_cache
-            FOR DELETE
-            TO authenticated
-            USING (true);
     END IF;
 END;
 $$;
 
-GRANT ALL ON TABLE public.rto_cache TO anon;
-GRANT ALL ON TABLE public.rto_cache TO authenticated;
+REVOKE ALL ON TABLE public.rto_cache FROM anon;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.rto_cache TO authenticated;
 GRANT ALL ON TABLE public.rto_cache TO service_role;
 
 COMMIT;
