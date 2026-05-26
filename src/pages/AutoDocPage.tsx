@@ -101,7 +101,7 @@ interface DamagePhotoItem {
 }
 
 type DamageStage = 'pre-repair' | 'under-repair' | 'post-repair'
-type WorkflowStage = 'documentation_pre_repair' | 'pre_submit_pending' | 'pre_submit_done' | 'post_repair_ppt' | 'claim_submitted'
+type WorkflowStage = 'active_intake' | 'documentation_pre_repair' | 'pre_submit_pending' | 'pre_submit_done' | 'post_repair_ppt' | 'claim_submitted'
 type DashboardCardFilter = 'active_vehicles' | 'today' | WorkflowStage
 
 interface AutoDocFormLookupState {
@@ -297,6 +297,7 @@ export default function AutoDocPage() {
   const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
   const [kpis, setKpis] = useState({
     totalToday: 0,
+    activeIntake: 0,
     documentationPreRepair: 0,
     preSubmitPending: 0,
     preSubmitDone: 0,
@@ -1241,15 +1242,16 @@ export default function AutoDocPage() {
     today.setHours(0, 0, 0, 0)
     const totalToday = rows.filter(r => new Date(r.complaint_date) >= today).length
 
-    function deriveWorkflowStage(row: JobRow): WorkflowStage | null {
+    function deriveWorkflowStage(row: JobRow): WorkflowStage {
       if (row.status === 'completed') return 'claim_submitted'
       if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
       if (row.status === 'submitted') return 'pre_submit_done'
       if (row.status === 'approved') return 'pre_submit_pending'
       if (row.status === 'in_work') return 'documentation_pre_repair'
-      return null
+      return 'active_intake'
     }
 
+    const activeIntake = rows.filter((r) => deriveWorkflowStage(r) === 'active_intake').length
     const documentationPreRepair = rows.filter((r) => deriveWorkflowStage(r) === 'documentation_pre_repair').length
     const preSubmitPending = rows.filter((r) => deriveWorkflowStage(r) === 'pre_submit_pending').length
     const preSubmitDone = rows.filter((r) => deriveWorkflowStage(r) === 'pre_submit_done').length
@@ -1258,6 +1260,7 @@ export default function AutoDocPage() {
 
     setKpis({
       totalToday,
+      activeIntake,
       documentationPreRepair,
       preSubmitPending,
       preSubmitDone,
@@ -1904,18 +1907,19 @@ export default function AutoDocPage() {
     return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`
   }
 
-  function workflowStageForRow(row: JobRow): WorkflowStage | null {
+  function workflowStageForRow(row: JobRow): WorkflowStage {
     if (row.status === 'completed') return 'claim_submitted'
     if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
     if (row.status === 'submitted') return 'pre_submit_done'
     if (row.status === 'approved') return 'pre_submit_pending'
     if (row.status === 'in_work') return 'documentation_pre_repair'
-    return null
+    return 'active_intake'
   }
 
   function cardFilterLabel(filter: DashboardCardFilter): string {
     if (filter === 'active_vehicles') return 'Active Vehicles'
     if (filter === 'today') return "Today's Cars"
+    if (filter === 'active_intake') return 'Active Intake'
     if (filter === 'documentation_pre_repair') return 'Documentation Pre-Repair'
     if (filter === 'pre_submit_pending') return 'Pre Submit Pending'
     if (filter === 'pre_submit_done') return 'Pre Submit Done'
@@ -1950,6 +1954,7 @@ export default function AutoDocPage() {
   })
 
   const stagePriority: Record<WorkflowStage, number> = {
+    active_intake: -1,
     documentation_pre_repair: 0,
     pre_submit_pending: 1,
     pre_submit_done: 2,
