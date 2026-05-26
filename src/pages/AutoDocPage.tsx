@@ -898,18 +898,18 @@ export default function AutoDocPage() {
     return () => {
       cancelled = true
     }
-  }, [rows])
+  }, [activeTab, damagePhotos, rows])
 
   useEffect(() => {
     let cancelled = false
 
     async function computeEstimatePendingJobs() {
-      const approvedJobCardIds = rows
-        .filter((row) => row.status === 'approved')
+      const estimateCandidateJobCardIds = rows
+        .filter((row) => row.status === 'in_work' || row.status === 'approved')
         .map((row) => row.job_card_id)
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
 
-      if (approvedJobCardIds.length === 0) {
+      if (estimateCandidateJobCardIds.length === 0) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
         return
       }
@@ -918,16 +918,16 @@ export default function AutoDocPage() {
         supabase
           .from('panels')
           .select('id, job_card_id, panel_name')
-          .in('job_card_id', approvedJobCardIds),
+          .in('job_card_id', estimateCandidateJobCardIds),
         supabase
           .from('panel_photos')
           .select('job_card_id, panel_id')
-          .in('job_card_id', approvedJobCardIds)
+          .in('job_card_id', estimateCandidateJobCardIds)
           .eq('repair_stage', 'pre-repair'),
         supabase
           .from('estimate_rows')
           .select('job_card_id, panel_name, action, defect, part_number')
-          .in('job_card_id', approvedJobCardIds),
+          .in('job_card_id', estimateCandidateJobCardIds),
       ])
 
       if (cancelled || panelsRes.error || preRepairPhotosRes.error || estimateRowsRes.error) {
@@ -980,7 +980,7 @@ export default function AutoDocPage() {
       }
 
       const pendingSet = new Set<string>()
-      for (const jobCardId of approvedJobCardIds) {
+      for (const jobCardId of estimateCandidateJobCardIds) {
         const selectedPanelIds = selectedPanelIdsByJob.get(jobCardId) ?? new Set<string>()
         if (selectedPanelIds.size === 0) continue
 
@@ -1007,7 +1007,7 @@ export default function AutoDocPage() {
     return () => {
       cancelled = true
     }
-  }, [rows])
+  }, [activeTab, damagePhotos, rows])
 
   const refreshDocuments = useCallback(async (jobCardId: string) => {
     const res = await listDocuments(jobCardId)
@@ -1460,7 +1460,7 @@ export default function AutoDocPage() {
       if (row.status === 'completed') return 'claim_submitted'
       if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
       if (row.status === 'submitted') return 'pre_submit_done'
-      if (row.status === 'approved' && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
+      if ((row.status === 'in_work' || row.status === 'approved') && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
       if (row.status === 'approved') return 'pre_submit_pending'
       if (row.status === 'in_work') return 'documentation_pre_repair'
       return 'active_intake'
@@ -2357,7 +2357,7 @@ export default function AutoDocPage() {
     if (row.status === 'completed') return 'claim_submitted'
     if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
     if (row.status === 'submitted') return 'pre_submit_done'
-    if (row.status === 'approved' && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
+    if ((row.status === 'in_work' || row.status === 'approved') && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
     if (row.status === 'approved') return 'pre_submit_pending'
     if (row.status === 'in_work') return 'documentation_pre_repair'
     return 'active_intake'
