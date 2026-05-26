@@ -102,6 +102,7 @@ interface DamagePhotoItem {
 
 type DamageStage = 'pre-repair' | 'under-repair' | 'post-repair'
 type WorkflowStage = 'documentation_pre_repair' | 'pre_submit_pending' | 'pre_submit_done' | 'post_repair_ppt' | 'claim_submitted'
+type DashboardCardFilter = 'active_vehicles' | 'today' | WorkflowStage
 
 interface AutoDocFormLookupState {
   modelOptions: string[]
@@ -302,6 +303,7 @@ export default function AutoDocPage() {
     postRepairPpt: 0,
     claimSubmitted: 0,
   })
+  const [dashboardCardFilter, setDashboardCardFilter] = useState<DashboardCardFilter>('active_vehicles')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [form, setForm] = useState<CreateJobCardForm>(() => readSessionJSON<CreateJobCardForm>(SESSION_KEYS.formDraft, createInitialForm()))
   const [activeJobCardId, setActiveJobCardId] = useState<string | null>(() => readSessionValue(SESSION_KEYS.activeJobCardId))
@@ -1911,14 +1913,40 @@ export default function AutoDocPage() {
     return null
   }
 
+  function cardFilterLabel(filter: DashboardCardFilter): string {
+    if (filter === 'active_vehicles') return 'Active Vehicles'
+    if (filter === 'today') return "Today's Cars"
+    if (filter === 'documentation_pre_repair') return 'Documentation Pre-Repair'
+    if (filter === 'pre_submit_pending') return 'Pre Submit Pending'
+    if (filter === 'pre_submit_done') return 'Pre Submit Done'
+    if (filter === 'post_repair_ppt') return 'Post Repair PPT'
+    return 'Claim Submitted'
+  }
+
+  function matchesCardFilter(row: JobRow): boolean {
+    if (dashboardCardFilter === 'active_vehicles') {
+      return workflowStageForRow(row) !== 'claim_submitted'
+    }
+    if (dashboardCardFilter === 'today') {
+      return toComplaintYmd(row.complaint_date) === todayYmd
+    }
+    return workflowStageForRow(row) === dashboardCardFilter
+  }
+
+  function kpiCardClass(filter: DashboardCardFilter): string {
+    const active = dashboardCardFilter === filter
+    if (active) return 'rounded-2xl border-2 border-blue-500 bg-blue-50 p-4 text-left shadow-sm transition'
+    return 'rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4 text-left transition hover:border-blue-300 hover:bg-white'
+  }
+
   const displayed = rows.filter(r => {
-    const isToday = toComplaintYmd(r.complaint_date) === todayYmd
+    const matchCard = matchesCardFilter(r)
     const matchStatus = !statusFilter || r.status === statusFilter
     const matchSearch = !q
       || r.reg_number.toLowerCase().includes(q)
       || r.jc_number.toLowerCase().includes(q)
       || (r.model ?? '').toLowerCase().includes(q)
-    return isToday && matchStatus && matchSearch
+    return matchCard && matchStatus && matchSearch
   })
 
   const stagePriority: Record<WorkflowStage, number> = {
@@ -1957,7 +1985,7 @@ export default function AutoDocPage() {
     if (stage === 'pre_submit_done') return 'Pre Submit Done'
     if (stage === 'pre_submit_pending') return 'Pre Submit Pending'
     if (stage === 'documentation_pre_repair') return 'Documentation Pre-Repair'
-    return 'Today\'s Cars'
+    return 'Active Intake'
   }
 
   function queueStatusClass(row: JobRow): string {
@@ -2066,41 +2094,65 @@ export default function AutoDocPage() {
       {/* KPI Cards */}
       {activeTab === 'dashboard' && (
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('today')}
+          className={kpiCardClass('today')}
+        >
           <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Today's Cars</p>
           <p className="mt-2 text-4xl font-semibold leading-none text-gray-900">{kpis.totalToday}</p>
           <p className="mt-2 text-xs text-gray-500">Job cards opened today only</p>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('documentation_pre_repair')}
+          className={kpiCardClass('documentation_pre_repair')}
+        >
           <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Documentation Pre-Repair</p>
           <p className="mt-2 text-4xl font-semibold leading-none text-orange-700">{kpis.documentationPreRepair}</p>
           <p className="mt-2 text-xs text-gray-500">After Next: Document Damage</p>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('pre_submit_pending')}
+          className={kpiCardClass('pre_submit_pending')}
+        >
           <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pre Submit Pending</p>
           <p className="mt-2 text-4xl font-semibold leading-none text-amber-700">{kpis.preSubmitPending}</p>
           <p className="mt-2 text-xs text-gray-500">After Next: Submit Reports</p>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('pre_submit_done')}
+          className={kpiCardClass('pre_submit_done')}
+        >
           <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pre Submit Done</p>
           <p className="mt-2 text-4xl font-semibold leading-none text-emerald-700">{kpis.preSubmitDone}</p>
           <p className="mt-2 text-xs text-gray-500">After Compose and Send</p>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('post_repair_ppt')}
+          className={kpiCardClass('post_repair_ppt')}
+        >
           <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Post Repair PPT</p>
           <p className="mt-2 text-4xl font-semibold leading-none text-indigo-700">{kpis.postRepairPpt}</p>
           <p className="mt-2 text-xs text-gray-500">Post-repair photo complete by selected panels</p>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4">
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('claim_submitted')}
+          className={kpiCardClass('claim_submitted')}
+        >
           <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Claim Submitted</p>
           <p className="mt-2 text-4xl font-semibold leading-none text-blue-700">{kpis.claimSubmitted}</p>
           <p className="mt-2 text-xs text-gray-500">After Submit Claim email sent</p>
-        </div>
+        </button>
       </div>
       )}
 
@@ -2108,6 +2160,14 @@ export default function AutoDocPage() {
       <>
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('active_vehicles')}
+          className={`h-9 rounded-lg border px-3 text-xs font-semibold transition ${dashboardCardFilter === 'active_vehicles' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50'}`}
+        >
+          Active Vehicles (Default)
+        </button>
+
         <input
           type="search"
           placeholder="Search by Reg No, JC No, or Model…"
@@ -2127,7 +2187,7 @@ export default function AutoDocPage() {
         </select>
         {!loading && (
           <span className="ml-auto text-xs text-gray-400">
-            {dashboardDisplayed.length} job card{dashboardDisplayed.length !== 1 ? 's' : ''}
+            {dashboardDisplayed.length} job card{dashboardDisplayed.length !== 1 ? 's' : ''} • {cardFilterLabel(dashboardCardFilter)}
           </span>
         )}
       </div>
@@ -2174,7 +2234,7 @@ export default function AutoDocPage() {
       {/* Empty state */}
       {!loading && !error && dashboardDisplayed.length === 0 && (
         <div className="py-16 text-center text-sm text-gray-400">
-          No job cards found for today.{q || statusFilter ? ' Try clearing the filters.' : ''}
+          No job cards found for this dashboard filter.{q || statusFilter ? ' Try clearing the filters.' : ''}
         </div>
       )}
 
@@ -2186,7 +2246,7 @@ export default function AutoDocPage() {
               <svg className="h-7 w-7 text-gray-800" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
               </svg>
-              Active Vehicles
+              {cardFilterLabel(dashboardCardFilter)}
             </h3>
             <button
               type="button"
