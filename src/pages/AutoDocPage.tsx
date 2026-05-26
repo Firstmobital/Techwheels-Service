@@ -16,6 +16,7 @@ import {
   getJobCardSummary,
   listActivePanelLabels,
   listDocuments,
+  listEstimateRows,
   listJobCardSummaries,
   listPanelPhotos,
   listPanels,
@@ -31,6 +32,7 @@ import {
   type ModelPanelRate,
   type JobDashboardSummaryRow,
   type JobSummaryRow,
+  type EstimateRow,
   type PhotoType,
   type RtoCacheLookupRow,
 } from '../lib/api'
@@ -276,6 +278,29 @@ function toTimeLabel(value: string | null): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return ''
   return parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function numberToInputString(value: number | null | undefined): string {
+  if (value == null) return ''
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return ''
+  return String(numeric)
+}
+
+function mapEstimateRowToLineItem(row: EstimateRow): EstimateLineItem | null {
+  const panel = row.panel_name?.trim() ?? ''
+  if (!panel) return null
+
+  return {
+    id: `db-${row.id}`,
+    panel,
+    action: canonicalizeEstimateAction(String(row.action ?? '')),
+    defect: String(row.defect ?? '').trim(),
+    partNo: String(row.part_number ?? '').trim(),
+    partsPrice: numberToInputString(row.ndp_value),
+    paintPrice: numberToInputString(row.paint_charges),
+    labourPrice: numberToInputString(row.labour_charges),
+  }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -1297,6 +1322,7 @@ export default function AutoDocPage() {
         setPanelIdByName({})
         setPanelNameById({})
         setSelectedPanels([])
+        setEstimateRows([])
         setDamagePhotos([])
         setActivePanel('')
         return
@@ -1304,10 +1330,15 @@ export default function AutoDocPage() {
 
       const jobCardId = activeJobCardId
       setPanelsHydratedForJobId(null)
+      setEstimateRows([])
 
       const fromMap = sanitizePanelList(readPanelsByJobMap()[jobCardId])
 
-      const panelRes = await listPanels(jobCardId)
+      const [panelRes, estimateRes] = await Promise.all([
+        listPanels(jobCardId),
+        listEstimateRows(jobCardId),
+      ])
+
       if (!panelRes.error && panelRes.data) {
         const nextPanelIdByName: Record<string, string> = {}
         const nextPanelNameById: Record<string, string> = {}
@@ -1326,8 +1357,40 @@ export default function AutoDocPage() {
           .map((panel) => panel.panel_name?.trim() ?? '')
           .filter((name) => name.length > 0)
 
-      const rehydratedPanels = Array.from(new Set(fromDb.length > 0 ? fromDb : fromMap))
+      const estimateLineItems = estimateRes.error || !estimateRes.data
+        ? []
+        : estimateRes.data
+          .map((row) => mapEstimateRowToLineItem(row))
+          .filter((row): row is EstimateLineItem => row !== null)
+
+      const estimatePanelsFromDb = estimateLineItems.map((row) => row.panel)
+
+      const basePanels = fromDb.length > 0 ? fromDb : fromMap
+      const rehydratedPanels = Array.from(new Set([...basePanels, ...estimatePanelsFromDb]))
       setSelectedPanels(rehydratedPanels)
+      setEstimateRows(() => {
+        const byPanel = new Map<string, EstimateLineItem>()
+        estimateLineItems.forEach((row) => {
+          const key = normalizeText(row.panel)
+          if (!key || byPanel.has(key)) return
+          byPanel.set(key, row)
+        })
+
+        return rehydratedPanels.map((panel) => {
+          const existing = byPanel.get(normalizeText(panel))
+          if (existing) return { ...existing, panel }
+          return {
+            id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            panel,
+            action: '',
+            partNo: '',
+            defect: '',
+            partsPrice: '',
+            paintPrice: '',
+            labourPrice: '',
+          }
+        })
+      })
       setPreRepairPanelsByJob((prev) => {
         const existing = sanitizePanelList(prev[jobCardId])
         if (existing.length > 0) return prev
