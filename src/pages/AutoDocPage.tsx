@@ -1445,23 +1445,39 @@ export default function AutoDocPage() {
       return null
     }
 
-    const vehicleRes = await upsertVehicle({
-      regNumber: form.regNumber,
-      vin: form.vin,
-      model: form.model,
-      year,
-      colour: form.colour,
-      paintType: form.paintType,
-      dealerCity: form.dealerCity,
-      bpCityCategory: form.bpCityCategory,
-      ownerName: form.ownerName,
-      ownerPhone: form.ownerPhone,
-      dateOfSale: form.dateOfSale || null,
-    })
+    const hasVehicleDetailsToSave = [
+      form.vin,
+      form.model,
+      form.year,
+      form.colour,
+      form.paintType,
+      form.dealerCity,
+      form.bpCityCategory,
+      form.ownerName,
+      form.ownerPhone,
+      form.dateOfSale,
+    ].some((value) => value.trim().length > 0)
 
-    if (vehicleRes.error) {
-      showToast(vehicleRes.error, false)
-      return null
+    // Avoid overwriting existing vehicle master data with empty values during prefetch draft creation.
+    if (hasVehicleDetailsToSave) {
+      const vehicleRes = await upsertVehicle({
+        regNumber: form.regNumber,
+        vin: form.vin,
+        model: form.model,
+        year,
+        colour: form.colour,
+        paintType: form.paintType,
+        dealerCity: form.dealerCity,
+        bpCityCategory: form.bpCityCategory,
+        ownerName: form.ownerName,
+        ownerPhone: form.ownerPhone,
+        dateOfSale: form.dateOfSale || null,
+      })
+
+      if (vehicleRes.error) {
+        showToast(vehicleRes.error, false)
+        return null
+      }
     }
 
     const normalizedReg = regNumber.toUpperCase()
