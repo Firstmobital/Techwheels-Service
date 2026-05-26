@@ -2405,13 +2405,15 @@ export default function AutoDocPage() {
                 type="text"
                 value={form.regNumber}
                 onChange={(e) => {
-                  const formatted = formatRegistrationNumber(e.target.value)
-                  setForm((prev) => ({ ...prev, regNumber: formatted }))
+                  setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))
                   setActiveJobCardId(null)
                   setActiveSummary(null)
                   setVehicleFound(false)
                   setVehicleLookupStatus('idle')
                   setCreateError(null)
+                }}
+                onBlur={() => {
+                  setForm((prev) => ({ ...prev, regNumber: formatRegistrationNumber(prev.regNumber) }))
                 }}
                 placeholder="RJ-14-YH-7659"
                 className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-base font-medium tracking-widest text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
