@@ -151,6 +151,13 @@ export async function uploadDocumentFile(input: {
   fileName: string
   contentType?: string
 }): Promise<ApiResult<DocumentRow>> {
+  console.log('[autodoc-upload-debug] uploadDocumentFile start', {
+    jobCardId: input.jobCardId,
+    docType: input.docType,
+    fileName: input.fileName,
+    fileType: input.file.type,
+    fileSizeBytes: input.file.size,
+  })
   const cleanName = (input.fileName.trim() || `${input.docType}.bin`)
     .replace(/\s+/g, '_')
     .replace(/[^a-zA-Z0-9._-]/g, '')
@@ -165,6 +172,12 @@ export async function uploadDocumentFile(input: {
   ).trim() || 'unknown'
 
   const storagePath = `${dealerCode}/${input.jobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
+  console.log('[autodoc-upload-debug] Computed storage path for document upload', {
+    jobCardId: input.jobCardId,
+    docType: input.docType,
+    storagePath,
+    dealerCode,
+  })
 
   const effectiveContentType = input.contentType || input.file.type || 'application/octet-stream'
 
@@ -175,7 +188,21 @@ export async function uploadDocumentFile(input: {
       upsert: false,
     })
 
-  if (uploadError) return fail(uploadError)
+  if (uploadError) {
+    console.error('[autodoc-upload-debug] Storage upload failed', {
+      jobCardId: input.jobCardId,
+      docType: input.docType,
+      storagePath,
+      error: uploadError,
+    })
+    return fail(uploadError)
+  }
+
+  console.log('[autodoc-upload-debug] Storage upload succeeded', {
+    jobCardId: input.jobCardId,
+    docType: input.docType,
+    storagePath,
+  })
 
   const sizeMb = Number((input.file.size / (1024 * 1024)).toFixed(3))
 
@@ -199,6 +226,13 @@ export async function uploadDocumentFile(input: {
       })
 
       const payload = await res.json().catch(() => ({}))
+      console.log('[autodoc-upload-debug] document-link-upsert response', {
+        jobCardId: input.jobCardId,
+        docType: input.docType,
+        status: res.status,
+        ok: res.ok,
+        payload,
+      })
       if (res.ok && payload?.data) {
         void invokeUniversalDriveUpload({
           jobCardId: input.jobCardId,
@@ -209,7 +243,17 @@ export async function uploadDocumentFile(input: {
         })
         return ok(payload.data as DocumentRow)
       }
+      console.error('[autodoc-upload-debug] document-link-upsert did not return usable data; falling back to client upsert', {
+        jobCardId: input.jobCardId,
+        docType: input.docType,
+        status: res.status,
+        payload,
+      })
     } catch {
+      console.error('[autodoc-upload-debug] document-link-upsert request threw; falling back to client upsert', {
+        jobCardId: input.jobCardId,
+        docType: input.docType,
+      })
       // fallback to client-side upsert below
     }
   }
@@ -222,6 +266,13 @@ export async function uploadDocumentFile(input: {
   })
 
   if (upsertRes.error || !upsertRes.data) return upsertRes
+
+  console.log('[autodoc-upload-debug] Client-side document upsert succeeded', {
+    jobCardId: input.jobCardId,
+    docType: input.docType,
+    docId: upsertRes.data.id,
+    storagePath: upsertRes.data.storage_path,
+  })
 
   return ok(upsertRes.data)
 }

@@ -909,15 +909,36 @@ export default function AutoDocPage() {
   }, [])
 
   async function ensureJobCardReadyForUpload(): Promise<string | null> {
-    if (activeJobCardId) return activeJobCardId
+    if (activeJobCardId) {
+      console.log('[autodoc-upload-debug] Reusing active job card for upload', {
+        activeJobCardId,
+      })
+      return activeJobCardId
+    }
+
+    console.log('[autodoc-upload-debug] No active job card, attempting draft persistence before upload', {
+      regNumber: form.regNumber,
+      jcNumber: form.jcNumber,
+      kmReading: form.kmReading,
+    })
     const jobCardId = await persistDraftJobCard(false)
     if (!jobCardId) {
+      console.error('[autodoc-upload-debug] Draft persistence failed; upload blocked', {
+        regNumber: form.regNumber,
+        jcNumber: form.jcNumber,
+      })
       return null
     }
+    console.log('[autodoc-upload-debug] Draft persistence succeeded', { jobCardId })
     return jobCardId
   }
 
   async function uploadWalkaroundVideoFile(file: File, successMessage = 'Vehicle walkaround video uploaded.'): Promise<boolean> {
+    console.log('[autodoc-upload-debug] Walkaround upload requested', {
+      fileName: file.name,
+      fileType: file.type,
+      fileSizeBytes: file.size,
+    })
     const jobCardId = await ensureJobCardReadyForUpload()
     if (!jobCardId) return false
 
@@ -932,9 +953,21 @@ export default function AutoDocPage() {
     setUploadingWalkaround(false)
 
     if (uploadRes.error) {
+      console.error('[autodoc-upload-debug] Walkaround upload failed', {
+        jobCardId,
+        fileName: file.name,
+        error: uploadRes.error,
+      })
       showToast(uploadRes.error, false)
       return false
     }
+
+    console.log('[autodoc-upload-debug] Walkaround upload succeeded', {
+      jobCardId,
+      fileName: file.name,
+      docId: uploadRes.data?.id,
+      storagePath: uploadRes.data?.storage_path,
+    })
 
     setWalkaroundVideoName(file.name)
     await refreshDocuments(jobCardId)
@@ -1561,6 +1594,10 @@ export default function AutoDocPage() {
 
     // Avoid overwriting existing vehicle master data with empty values during prefetch draft creation.
     if (hasVehicleDetailsToSave) {
+      console.log('[autodoc-upload-debug] Persisting vehicle master fields before draft save', {
+        regNumber: form.regNumber,
+        hasVehicleDetailsToSave,
+      })
       const vehicleRes = await upsertVehicle({
         regNumber: form.regNumber,
         vin: form.vin,
@@ -1576,9 +1613,17 @@ export default function AutoDocPage() {
       })
 
       if (vehicleRes.error) {
+        console.error('[autodoc-upload-debug] Vehicle upsert failed during draft save', {
+          regNumber: form.regNumber,
+          error: vehicleRes.error,
+        })
         showToast(vehicleRes.error, false)
         return null
       }
+
+      console.log('[autodoc-upload-debug] Vehicle upsert succeeded during draft save', {
+        regNumber: form.regNumber,
+      })
     }
 
     const normalizedReg = regNumber.toUpperCase()
@@ -1637,14 +1682,27 @@ export default function AutoDocPage() {
         if (!response.ok) {
           const message = typeof result?.error === 'string' ? result.error : `HTTP ${response.status}`
           console.error('[persistDraftJobCard] estimate row sync failed:', result)
+          console.error('[autodoc-upload-debug] Estimate sync failed after draft save', {
+            jobCardId,
+            responseStatus: response.status,
+            result,
+          })
           showToast(`Failed to save estimate rows: ${message}`, false)
           return false
         }
 
         console.log(`[persistDraftJobCard] Synced estimate rows: ${result.count ?? 0}`)
+        console.log('[autodoc-upload-debug] Estimate sync succeeded after draft save', {
+          jobCardId,
+          rowCount: result.count ?? 0,
+        })
         return true
       } catch (err) {
         console.error('[persistDraftJobCard] estimate row sync exception:', err)
+        console.error('[autodoc-upload-debug] Estimate sync exception after draft save', {
+          jobCardId,
+          error: err,
+        })
         showToast(`Error saving estimate rows: ${(err as Error).message}`, false)
         return false
       }
@@ -1659,6 +1717,12 @@ export default function AutoDocPage() {
     }
 
     const complaintDate = form.complaintDate || new Date().toISOString().slice(0, 10)
+    console.log('[autodoc-upload-debug] Creating new draft job card', {
+      regNumber: form.regNumber,
+      jcNumber: form.jcNumber,
+      complaintDate,
+      kmReading,
+    })
     const jcRes = await createJobCard({
       regNumber: form.regNumber,
       jcNumber: form.jcNumber,
@@ -1669,11 +1733,21 @@ export default function AutoDocPage() {
     })
 
     if (jcRes.error || !jcRes.data) {
+      console.error('[autodoc-upload-debug] createJobCard failed during draft save', {
+        regNumber: form.regNumber,
+        jcNumber: form.jcNumber,
+        error: jcRes.error,
+      })
       showToast(jcRes.error ?? 'Unable to create draft job card.', false)
       return null
     }
 
     const jobCardId = jcRes.data.id
+    console.log('[autodoc-upload-debug] createJobCard succeeded during draft save', {
+      jobCardId,
+      regNumber: jcRes.data.reg_number,
+      jcNumber: jcRes.data.jc_number,
+    })
     setActiveJobCardId(jobCardId)
     const synced = await syncEstimateRows(jobCardId)
     if (!synced) {
