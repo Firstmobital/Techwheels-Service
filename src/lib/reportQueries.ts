@@ -1610,7 +1610,6 @@ export async function getDailyRevenueReport(
     const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
     const dateStr = toIsoDate(reportDate, 'day') ?? 'Unknown'
     const vehicleNum = typedRow.vehicle_registration_number ? String(typedRow.vehicle_registration_number).trim() : null
-    const jobCardNum = normalizeJobCardNumber(typedRow.job_card_number)
     const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const partsAmount = parseRevenueExcludingGst(typedRow.final_spares_amount)
 
@@ -2216,7 +2215,6 @@ export async function getLabourSparesMixByServiceType(
     const serviceTypeKey = serviceTypeGroupKey(serviceType)
     const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
 
     const existing = grouped.get(serviceTypeKey)
 
@@ -2294,7 +2292,6 @@ export async function getProductLinePerformance(
     const parentProductLine = normalizeParentProductLine(typedRow.parent_product_line) || 'Unknown'
     const productLine = normalizeParentProductLine(typedRow.product_line) || 'Unknown'
     const groupKey = `${parentProductLine.toLowerCase()}__${productLine.toLowerCase()}`
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
     const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
 
@@ -2388,8 +2385,6 @@ export async function getModelWiseRevenue(
     const totalRevenue = hasInvoiceAmount
       ? parseRevenueExcludingGst(typedRow.total_invoice_amount)
       : labourRevenue + sparesRevenue
-    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber
 
     const existing = grouped.get(modelKey)
 
