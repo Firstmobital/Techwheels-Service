@@ -1269,6 +1269,16 @@ export default function AutoDocPage() {
     })
   }, [postRepairReadyJobIds, rows])
 
+  function formatRegistrationNumber(input: string): string {
+    // Remove all non-alphanumeric characters and convert to uppercase
+    const cleaned = input.replace(/[^A-Z0-9]/g, '').toUpperCase()
+    // Format as XX-DD-XX-DDDD (Indian registration format)
+    if (cleaned.length <= 2) return cleaned
+    if (cleaned.length <= 4) return `${cleaned.slice(0, 2)}-${cleaned.slice(2)}`
+    if (cleaned.length <= 6) return `${cleaned.slice(0, 2)}-${cleaned.slice(2, 4)}-${cleaned.slice(4)}`
+    return `${cleaned.slice(0, 2)}-${cleaned.slice(2, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 10)}`
+  }
+
   async function handleVehicleLookup() {
     const ref = form.regNumber.trim()
     if (!ref) return
@@ -2395,7 +2405,8 @@ export default function AutoDocPage() {
                 type="text"
                 value={form.regNumber}
                 onChange={(e) => {
-                  setForm((prev) => ({ ...prev, regNumber: e.target.value.toUpperCase() }))
+                  const formatted = formatRegistrationNumber(e.target.value)
+                  setForm((prev) => ({ ...prev, regNumber: formatted }))
                   setActiveJobCardId(null)
                   setActiveSummary(null)
                   setVehicleFound(false)
