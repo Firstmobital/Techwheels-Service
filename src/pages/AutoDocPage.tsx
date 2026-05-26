@@ -133,7 +133,7 @@ const DEFAULT_FORM_LOOKUPS: AutoDocFormLookupState = {
   yearOptions: defaultYearOptions(),
 }
 
-const FALLBACK_CLAIM_TYPE_OPTIONS = ['Warranty', 'Insurance', 'Goodwill', 'Policy', 'Campaign']
+const FALLBACK_CLAIM_TYPE_OPTIONS = ['Body & Paint', 'Warranty', 'Insurance', 'Goodwill', 'Policy', 'Campaign']
 
 const SESSION_KEYS = {
   activeTab: 'autodoc_active_tab',
@@ -188,7 +188,7 @@ function createInitialForm(): CreateJobCardForm {
     jcNumber: '',
     complaintDate: new Date().toISOString().slice(0, 10),
     kmReading: '',
-    claimType: '',
+    claimType: 'Body & Paint',
     complaintText: '',
     vin: '',
     model: '',
@@ -331,6 +331,7 @@ export default function AutoDocPage() {
   const [serviceHistoryName, setServiceHistoryName] = useState(() => readSessionValue(SESSION_KEYS.serviceHistoryName) || '')
   const [walkaroundVideoName, setWalkaroundVideoName] = useState(() => readSessionValue(SESSION_KEYS.walkaroundVideoName) || '')
   const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
+  const [uploadingWalkaround, setUploadingWalkaround] = useState(false)
   const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
   const [loadingModelRates, setLoadingModelRates] = useState(false)
     const readiness = {
@@ -782,7 +783,7 @@ export default function AutoDocPage() {
     && form.jcNumber.trim()
     && form.kmReading.trim()
     && walkaroundVideoName.trim(),
-  )
+  ) && !uploadingWalkaround
   const hasVehicleDraftFields = [
     form.vin,
     form.model,
@@ -914,6 +915,31 @@ export default function AutoDocPage() {
     return jobCardId
   }
 
+  async function uploadWalkaroundVideoFile(file: File, successMessage = 'Vehicle walkaround video uploaded.'): Promise<boolean> {
+    const jobCardId = await ensureJobCardReadyForUpload()
+    if (!jobCardId) return false
+
+    setUploadingWalkaround(true)
+    const uploadRes = await uploadDocumentFile({
+      jobCardId,
+      docType: 'video_job_card',
+      file,
+      fileName: file.name,
+      contentType: file.type || 'video/mp4',
+    })
+    setUploadingWalkaround(false)
+
+    if (uploadRes.error) {
+      showToast(uploadRes.error, false)
+      return false
+    }
+
+    setWalkaroundVideoName(file.name)
+    await refreshDocuments(jobCardId)
+    showToast(successMessage, true)
+    return true
+  }
+
   async function handleServiceHistoryUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -948,29 +974,28 @@ export default function AutoDocPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    const jobCardId = await ensureJobCardReadyForUpload()
-    if (!jobCardId) {
+    await uploadWalkaroundVideoFile(file)
+    event.target.value = ''
+  }
+
+  async function handlePreFetchWalkaroundVideoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!form.regNumber.trim() || !form.jcNumber.trim() || !form.kmReading.trim()) {
+      showToast('Enter Registration No, Job Card Number, and KM Reading before uploading walkaround video.', false)
       event.target.value = ''
       return
     }
 
-    const uploadRes = await uploadDocumentFile({
-      jobCardId,
-      docType: 'video_job_card',
-      file,
-      fileName: file.name,
-      contentType: file.type || 'video/mp4',
-    })
-
-    if (uploadRes.error) {
-      showToast(uploadRes.error, false)
+    const kmReading = Number(form.kmReading)
+    if (!Number.isFinite(kmReading) || kmReading < 0) {
+      showToast('KM reading must be a positive number.', false)
       event.target.value = ''
       return
     }
 
-    setWalkaroundVideoName(file.name)
-    await refreshDocuments(jobCardId)
-    showToast('Vehicle walkaround video uploaded.', true)
+    await uploadWalkaroundVideoFile(file, 'Vehicle walkaround video uploaded. Fetch is now enabled.')
     event.target.value = ''
   }
 
@@ -2478,16 +2503,13 @@ export default function AutoDocPage() {
                   Vehicle Walkaround Video <span className="text-red-600">*</span>
                 </label>
                 <label className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:bg-blue-50">
-                  <span className="truncate">{walkaroundVideoName || 'Choose video file'}</span>
-                  <span className="ml-3 shrink-0 rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">Browse</span>
+                  <span className="truncate">{uploadingWalkaround ? 'Uploading video...' : (walkaroundVideoName || 'Choose video file')}</span>
+                  <span className="ml-3 shrink-0 rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">{uploadingWalkaround ? 'Uploading...' : 'Browse'}</span>
                   <input
                     type="file"
                     accept="video/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0]
-                      if (!file) return
-                      setWalkaroundVideoName(file.name)
-                    }}
+                    onChange={(event) => { void handlePreFetchWalkaroundVideoUpload(event) }}
+                    disabled={uploadingWalkaround}
                     className="hidden"
                   />
                 </label>
@@ -2497,7 +2519,7 @@ export default function AutoDocPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
               <button
                 onClick={() => void handleVehicleLookup()}
-                disabled={lookupBusy || creating || !lookupReady}
+                disabled={lookupBusy || creating || uploadingWalkaround || !lookupReady}
                 className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 justify-center whitespace-nowrap"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
