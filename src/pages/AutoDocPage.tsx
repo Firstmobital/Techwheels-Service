@@ -360,6 +360,7 @@ export default function AutoDocPage() {
 
     const composeReady = readiness.prePpt && readiness.excel && readiness.walkaroundVideo
     const submitReady = readiness.postPpt
+    const postRepairPptReady = Boolean(activeJobCardId && postRepairReadyJobIds.has(activeJobCardId))
 
   const damagePanelOptions = useMemo(
     () => (
@@ -3900,11 +3901,14 @@ export default function AutoDocPage() {
               <button
                 type="button"
                 onClick={() => void handleSubmitGeneratePpt('post-repair')}
-                disabled={!activeJobCardId}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                disabled={!activeJobCardId || !postRepairPptReady}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Generate PPT
               </button>
+              {!postRepairPptReady && (
+                <p className="mt-2 text-xs font-medium text-amber-700">Upload at least one Post-repair image for every selected panel first.</p>
+              )}
               <p className={`mt-2 text-xs font-medium ${readiness.postPpt ? 'text-green-600' : 'text-gray-500'}`}>
                 {readiness.postPpt ? 'Uploaded' : 'Not uploaded'}
               </p>
