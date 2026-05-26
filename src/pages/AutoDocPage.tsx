@@ -139,6 +139,8 @@ const SESSION_KEYS = {
   activePanel: 'autodoc_active_panel',
   damagePhotoType: 'autodoc_damage_photo_type',
   estimateRows: 'autodoc_estimate_rows',
+  serviceHistoryName: 'autodoc_service_history_name',
+  walkaroundVideoName: 'autodoc_walkaround_video_name',
   deliveryVideoName: 'autodoc_delivery_video_name',
 } as const
 
@@ -302,10 +304,14 @@ export default function AutoDocPage() {
   const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>(() => readSessionJSON<EstimateLineItem[]>(SESSION_KEYS.estimateRows, []))
+  const [serviceHistoryName, setServiceHistoryName] = useState(() => readSessionValue(SESSION_KEYS.serviceHistoryName) || '')
+  const [walkaroundVideoName, setWalkaroundVideoName] = useState(() => readSessionValue(SESSION_KEYS.walkaroundVideoName) || '')
   const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
   const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
   const [loadingModelRates, setLoadingModelRates] = useState(false)
     const readiness = {
+      serviceHistory: jobDocuments.some((doc) => doc.doc_type === 'service_history'),
+      walkaroundVideo: jobDocuments.some((doc) => doc.doc_type === 'video_job_card'),
       prePpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_pre'),
       postPpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_post'),
       excel: jobDocuments.some((doc) => doc.doc_type === 'excel_estimate'),
@@ -760,12 +766,94 @@ export default function AutoDocPage() {
       return
     }
     setJobDocuments(res.data)
+    const serviceHistoryDoc = res.data.find((doc) => doc.doc_type === 'service_history')
+    if (serviceHistoryDoc?.storage_path) {
+      const fileName = serviceHistoryDoc.storage_path.split('/').pop() ?? 'service-history.pdf'
+      setServiceHistoryName(fileName)
+    }
+
+    const walkaroundDoc = res.data.find((doc) => doc.doc_type === 'video_job_card')
+    if (walkaroundDoc?.storage_path) {
+      const fileName = walkaroundDoc.storage_path.split('/').pop() ?? 'walkaround-video'
+      setWalkaroundVideoName(fileName)
+    }
+
     const deliveryDoc = res.data.find((doc) => doc.doc_type === 'video_delivery')
     if (deliveryDoc?.storage_path) {
       const fileName = deliveryDoc.storage_path.split('/').pop() ?? 'uploaded-video'
       setDeliveryVideoName(fileName)
     }
   }, [])
+
+  async function ensureJobCardReadyForUpload(): Promise<string | null> {
+    if (activeJobCardId) return activeJobCardId
+    const jobCardId = await persistDraftJobCard(false)
+    if (!jobCardId) {
+      showToast('Save draft first before uploading files.', false)
+      return null
+    }
+    return jobCardId
+  }
+
+  async function handleServiceHistoryUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const jobCardId = await ensureJobCardReadyForUpload()
+    if (!jobCardId) {
+      event.target.value = ''
+      return
+    }
+
+    const uploadRes = await uploadDocumentFile({
+      jobCardId,
+      docType: 'service_history',
+      file,
+      fileName: file.name,
+      contentType: file.type || 'application/pdf',
+    })
+
+    if (uploadRes.error) {
+      showToast(uploadRes.error, false)
+      event.target.value = ''
+      return
+    }
+
+    setServiceHistoryName(file.name)
+    await refreshDocuments(jobCardId)
+    showToast('Service history uploaded.', true)
+    event.target.value = ''
+  }
+
+  async function handleWalkaroundVideoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const jobCardId = await ensureJobCardReadyForUpload()
+    if (!jobCardId) {
+      event.target.value = ''
+      return
+    }
+
+    const uploadRes = await uploadDocumentFile({
+      jobCardId,
+      docType: 'video_job_card',
+      file,
+      fileName: file.name,
+      contentType: file.type || 'video/mp4',
+    })
+
+    if (uploadRes.error) {
+      showToast(uploadRes.error, false)
+      event.target.value = ''
+      return
+    }
+
+    setWalkaroundVideoName(file.name)
+    await refreshDocuments(jobCardId)
+    showToast('Vehicle walkaround video uploaded.', true)
+    event.target.value = ''
+  }
 
   const refreshDamagePhotos = useCallback(async (jobCardId: string) => {
     const [panelsRes, photosRes] = await Promise.all([
@@ -890,6 +978,8 @@ export default function AutoDocPage() {
   useEffect(() => { writeSessionValue(SESSION_KEYS.activePanel, activePanel) }, [activePanel])
   useEffect(() => { writeSessionValue(SESSION_KEYS.damagePhotoType, damagePhotoType) }, [damagePhotoType])
   useEffect(() => { writeSessionValue(SESSION_KEYS.estimateRows, JSON.stringify(estimateRows)) }, [estimateRows])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.serviceHistoryName, serviceHistoryName) }, [serviceHistoryName])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.walkaroundVideoName, walkaroundVideoName) }, [walkaroundVideoName])
   useEffect(() => { writeSessionValue(SESSION_KEYS.deliveryVideoName, deliveryVideoName) }, [deliveryVideoName])
 
   useEffect(() => {
@@ -1154,6 +1244,8 @@ export default function AutoDocPage() {
     setDamagePhotoType('')
     setPreRepairPanelsByJob({})
     setEstimateRows([])
+    setServiceHistoryName('')
+    setWalkaroundVideoName('')
     setDeliveryVideoName('')
     setActiveJobCardId(null)
     setActiveSummary(null)
@@ -2376,7 +2468,15 @@ export default function AutoDocPage() {
                       </svg>
                       <p className="text-sm font-medium text-gray-900">Upload Service History PDF</p>
                       <p className="text-xs text-gray-600 mt-1">PDF format only</p>
-                      <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" />
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleServiceHistoryUpload}
+                        className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                      />
+                      <p className={`mt-2 text-xs font-medium ${readiness.serviceHistory ? 'text-green-600' : 'text-gray-500'}`}>
+                        {serviceHistoryName ? `Selected: ${serviceHistoryName}` : 'No file selected'}
+                      </p>
                     </div>
                   </div>
                   <div>
@@ -2405,7 +2505,15 @@ export default function AutoDocPage() {
                       </svg>
                       <p className="text-sm font-medium text-gray-900">Upload Vehicle Video</p>
                       <p className="text-xs text-gray-600 mt-1">MP4 / MOV — auto-compressed to &lt;15MB</p>
-                      <input type="file" accept="video/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleWalkaroundVideoUpload}
+                        className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                      />
+                      <p className={`mt-2 text-xs font-medium ${readiness.walkaroundVideo ? 'text-green-600' : 'text-gray-500'}`}>
+                        {walkaroundVideoName ? `Selected: ${walkaroundVideoName}` : 'No file selected'}
+                      </p>
                     </div>
                     <div className="mt-3 hidden bg-gray-100 border border-gray-300 rounded-lg p-2 text-xs text-gray-700">
                       <div className="flex items-center gap-2 mb-1">
