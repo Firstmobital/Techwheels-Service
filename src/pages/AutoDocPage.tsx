@@ -103,7 +103,7 @@ interface DamagePhotoItem {
 }
 
 type DamageStage = 'pre-repair' | 'under-repair' | 'post-repair'
-type WorkflowStage = 'active_intake' | 'documentation_pre_repair' | 'pre_submit_pending' | 'pre_submit_done' | 'post_repair_ppt' | 'claim_submitted'
+type WorkflowStage = 'active_intake' | 'documentation_pre_repair' | 'estimate' | 'pre_submit_pending' | 'pre_submit_done' | 'post_repair_ppt' | 'claim_submitted'
 type DashboardCardFilter = 'active_vehicles' | 'today' | WorkflowStage
 
 interface AutoDocFormLookupState {
@@ -305,6 +305,7 @@ export default function AutoDocPage() {
     totalToday: 0,
     activeIntake: 0,
     documentationPreRepair: 0,
+    estimate: 0,
     preSubmitPending: 0,
     preSubmitDone: 0,
     postRepairPpt: 0,
@@ -312,6 +313,7 @@ export default function AutoDocPage() {
   })
   const [dashboardCardFilter, setDashboardCardFilter] = useState<DashboardCardFilter>('active_vehicles')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
+  const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
   const [form, setForm] = useState<CreateJobCardForm>(() => {
     const initial = createInitialForm()
     const draft = readSessionJSON<CreateJobCardForm>(SESSION_KEYS.formDraft, initial)
@@ -898,6 +900,115 @@ export default function AutoDocPage() {
     }
   }, [rows])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function computeEstimatePendingJobs() {
+      const approvedJobCardIds = rows
+        .filter((row) => row.status === 'approved')
+        .map((row) => row.job_card_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+      if (approvedJobCardIds.length === 0) {
+        if (!cancelled) setEstimatePendingJobIds(new Set())
+        return
+      }
+
+      const [panelsRes, preRepairPhotosRes, estimateRowsRes] = await Promise.all([
+        supabase
+          .from('panels')
+          .select('id, job_card_id, panel_name')
+          .in('job_card_id', approvedJobCardIds),
+        supabase
+          .from('panel_photos')
+          .select('job_card_id, panel_id')
+          .in('job_card_id', approvedJobCardIds)
+          .eq('repair_stage', 'pre-repair'),
+        supabase
+          .from('estimate_rows')
+          .select('job_card_id, panel_name, action, defect, part_number')
+          .in('job_card_id', approvedJobCardIds),
+      ])
+
+      if (cancelled || panelsRes.error || preRepairPhotosRes.error || estimateRowsRes.error) {
+        if (!cancelled) setEstimatePendingJobIds(new Set())
+        return
+      }
+
+      const selectedPanelIdsByJob = new Map<string, Set<string>>()
+      const selectedPanelNamesByJob = new Map<string, Set<string>>()
+
+      for (const panel of panelsRes.data ?? []) {
+        if (!panel.job_card_id || !panel.id) continue
+        const panelIds = selectedPanelIdsByJob.get(panel.job_card_id) ?? new Set<string>()
+        panelIds.add(panel.id)
+        selectedPanelIdsByJob.set(panel.job_card_id, panelIds)
+
+        const panelName = panel.panel_name?.trim().toLowerCase()
+        if (!panelName) continue
+        const panelNames = selectedPanelNamesByJob.get(panel.job_card_id) ?? new Set<string>()
+        panelNames.add(panelName)
+        selectedPanelNamesByJob.set(panel.job_card_id, panelNames)
+      }
+
+      const preRepairPanelIdsByJob = new Map<string, Set<string>>()
+      for (const photo of preRepairPhotosRes.data ?? []) {
+        if (!photo.job_card_id || !photo.panel_id) continue
+        const panelIds = preRepairPanelIdsByJob.get(photo.job_card_id) ?? new Set<string>()
+        panelIds.add(photo.panel_id)
+        preRepairPanelIdsByJob.set(photo.job_card_id, panelIds)
+      }
+
+      const completedEstimatePanelsByJob = new Map<string, Set<string>>()
+      for (const row of estimateRowsRes.data ?? []) {
+        const jobCardId = row.job_card_id
+        const panelName = row.panel_name?.trim().toLowerCase()
+        if (!jobCardId || !panelName) continue
+
+        const action = canonicalizeEstimateAction(String(row.action ?? ''))
+        const defect = String(row.defect ?? '').trim()
+        const partNumber = String(row.part_number ?? '').trim()
+        const hasBaseRequiredFields = Boolean(action && defect)
+        const needsPartNumber = action === 'replace'
+        const hasPartNumber = !needsPartNumber || Boolean(partNumber)
+        const isComplete = hasBaseRequiredFields && hasPartNumber
+        if (!isComplete) continue
+
+        const completedPanels = completedEstimatePanelsByJob.get(jobCardId) ?? new Set<string>()
+        completedPanels.add(panelName)
+        completedEstimatePanelsByJob.set(jobCardId, completedPanels)
+      }
+
+      const pendingSet = new Set<string>()
+      for (const jobCardId of approvedJobCardIds) {
+        const selectedPanelIds = selectedPanelIdsByJob.get(jobCardId) ?? new Set<string>()
+        if (selectedPanelIds.size === 0) continue
+
+        const preRepairPanelIds = preRepairPanelIdsByJob.get(jobCardId) ?? new Set<string>()
+        const hasAllPreRepairPanels = Array.from(selectedPanelIds).every((panelId) => preRepairPanelIds.has(panelId))
+        if (!hasAllPreRepairPanels) continue
+
+        const selectedPanelNames = selectedPanelNamesByJob.get(jobCardId) ?? new Set<string>()
+        if (selectedPanelNames.size === 0) continue
+
+        const completedEstimatePanels = completedEstimatePanelsByJob.get(jobCardId) ?? new Set<string>()
+        const hasCompleteEstimateForAllPanels = Array.from(selectedPanelNames).every((panelName) => completedEstimatePanels.has(panelName))
+
+        if (!hasCompleteEstimateForAllPanels) {
+          pendingSet.add(jobCardId)
+        }
+      }
+
+      if (!cancelled) setEstimatePendingJobIds(pendingSet)
+    }
+
+    void computeEstimatePendingJobs()
+
+    return () => {
+      cancelled = true
+    }
+  }, [rows])
+
   const refreshDocuments = useCallback(async (jobCardId: string) => {
     const res = await listDocuments(jobCardId)
     if (res.error || !res.data) {
@@ -1349,6 +1460,7 @@ export default function AutoDocPage() {
       if (row.status === 'completed') return 'claim_submitted'
       if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
       if (row.status === 'submitted') return 'pre_submit_done'
+      if (row.status === 'approved' && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
       if (row.status === 'approved') return 'pre_submit_pending'
       if (row.status === 'in_work') return 'documentation_pre_repair'
       return 'active_intake'
@@ -1356,6 +1468,7 @@ export default function AutoDocPage() {
 
     const activeIntake = rows.filter((r) => deriveWorkflowStage(r) === 'active_intake').length
     const documentationPreRepair = rows.filter((r) => deriveWorkflowStage(r) === 'documentation_pre_repair').length
+    const estimate = rows.filter((r) => deriveWorkflowStage(r) === 'estimate').length
     const preSubmitPending = rows.filter((r) => deriveWorkflowStage(r) === 'pre_submit_pending').length
     const preSubmitDone = rows.filter((r) => deriveWorkflowStage(r) === 'pre_submit_done').length
     const postRepairPpt = rows.filter((r) => deriveWorkflowStage(r) === 'post_repair_ppt').length
@@ -1365,12 +1478,13 @@ export default function AutoDocPage() {
       totalToday,
       activeIntake,
       documentationPreRepair,
+      estimate,
       preSubmitPending,
       preSubmitDone,
       postRepairPpt,
       claimSubmitted,
     })
-  }, [postRepairReadyJobIds, rows])
+  }, [estimatePendingJobIds, postRepairReadyJobIds, rows])
 
   function formatRegistrationNumber(input: string): string {
     // Remove all non-alphanumeric characters and convert to uppercase
@@ -2243,6 +2357,7 @@ export default function AutoDocPage() {
     if (row.status === 'completed') return 'claim_submitted'
     if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
     if (row.status === 'submitted') return 'pre_submit_done'
+    if (row.status === 'approved' && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
     if (row.status === 'approved') return 'pre_submit_pending'
     if (row.status === 'in_work') return 'documentation_pre_repair'
     return 'active_intake'
@@ -2253,6 +2368,7 @@ export default function AutoDocPage() {
     if (filter === 'today') return "Today's Cars"
     if (filter === 'active_intake') return 'Active Intake'
     if (filter === 'documentation_pre_repair') return 'Documentation Pre-Repair'
+    if (filter === 'estimate') return 'Estimate'
     if (filter === 'pre_submit_pending') return 'Pre Submit Pending'
     if (filter === 'pre_submit_done') return 'Pre Submit Done'
     if (filter === 'post_repair_ppt') return 'Post Repair PPT'
@@ -2288,10 +2404,11 @@ export default function AutoDocPage() {
   const stagePriority: Record<WorkflowStage, number> = {
     active_intake: -1,
     documentation_pre_repair: 0,
-    pre_submit_pending: 1,
-    pre_submit_done: 2,
-    post_repair_ppt: 3,
-    claim_submitted: 4,
+    estimate: 1,
+    pre_submit_pending: 2,
+    pre_submit_done: 3,
+    post_repair_ppt: 4,
+    claim_submitted: 5,
   }
 
   const dashboardDisplayed = displayed
@@ -2321,6 +2438,7 @@ export default function AutoDocPage() {
     if (stage === 'post_repair_ppt') return 'Post Repair PPT'
     if (stage === 'pre_submit_done') return 'Pre Submit Done'
     if (stage === 'pre_submit_pending') return 'Pre Submit Pending'
+    if (stage === 'estimate') return 'Estimate'
     if (stage === 'documentation_pre_repair') return 'Documentation Pre-Repair'
     return 'Active Intake'
   }
@@ -2331,6 +2449,7 @@ export default function AutoDocPage() {
     if (stage === 'post_repair_ppt') return 'border border-indigo-200 bg-indigo-50 text-indigo-700'
     if (stage === 'pre_submit_done') return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
     if (stage === 'pre_submit_pending') return 'border border-amber-200 bg-amber-50 text-amber-700'
+    if (stage === 'estimate') return 'border border-violet-200 bg-violet-50 text-violet-700'
     if (stage === 'documentation_pre_repair') return 'border border-orange-200 bg-orange-50 text-orange-700'
     return 'border border-slate-200 bg-slate-100 text-slate-600'
   }
@@ -2341,6 +2460,7 @@ export default function AutoDocPage() {
     if (stage === 'post_repair_ppt') return 'bg-indigo-50 text-indigo-700'
     if (stage === 'pre_submit_done') return 'bg-emerald-50 text-emerald-700'
     if (stage === 'pre_submit_pending') return 'bg-amber-50 text-amber-700'
+    if (stage === 'estimate') return 'bg-violet-50 text-violet-700'
     if (stage === 'documentation_pre_repair') return 'bg-orange-50 text-orange-700'
     return 'bg-slate-50 text-slate-700'
   }
@@ -2350,6 +2470,7 @@ export default function AutoDocPage() {
     if (stage === 'claim_submitted') return 'View Claim'
     if (stage === 'post_repair_ppt') return 'Open Submit'
     if (stage === 'pre_submit_done' || stage === 'pre_submit_pending') return 'Open Submit'
+    if (stage === 'estimate') return 'Complete Estimate'
     if (stage === 'documentation_pre_repair') return 'Under Repair'
     return 'Continue Job Card'
   }
@@ -2360,6 +2481,11 @@ export default function AutoDocPage() {
     if (stage === 'pre_submit_done' || stage === 'pre_submit_pending' || stage === 'post_repair_ppt' || stage === 'claim_submitted') {
       setActiveTab('submit')
       showToast(`Opened submit stage for ${row.jc_number}.`, true)
+      return
+    }
+    if (stage === 'estimate') {
+      setActiveTab('estimate')
+      showToast(`Opened estimate stage for ${row.jc_number}.`, true)
       return
     }
     if (stage === 'documentation_pre_repair') {
@@ -2443,12 +2569,32 @@ export default function AutoDocPage() {
 
         <button
           type="button"
+          onClick={() => setDashboardCardFilter('active_intake')}
+          className={kpiCardClass('active_intake')}
+        >
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Active Intake</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-slate-700">{kpis.activeIntake}</p>
+          <p className="mt-2 text-xs text-gray-500">Before Next: Document Damage</p>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setDashboardCardFilter('documentation_pre_repair')}
           className={kpiCardClass('documentation_pre_repair')}
         >
           <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Documentation Pre-Repair</p>
           <p className="mt-2 text-4xl font-semibold leading-none text-orange-700">{kpis.documentationPreRepair}</p>
           <p className="mt-2 text-xs text-gray-500">After Next: Document Damage</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDashboardCardFilter('estimate')}
+          className={kpiCardClass('estimate')}
+        >
+          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Estimate</p>
+          <p className="mt-2 text-4xl font-semibold leading-none text-violet-700">{kpis.estimate}</p>
+          <p className="mt-2 text-xs text-gray-500">Pre-repair images done, estimate pending</p>
         </button>
 
         <button
