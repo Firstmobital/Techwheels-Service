@@ -1639,12 +1639,18 @@ export default function AutoDocPage() {
   async function handleVehicleLookup() {
     const ref = form.regNumber.trim()
     if (!ref) return
+    
+    console.log('[DEBUG] ========== VEHICLE LOOKUP START ==========')
+    console.log('[DEBUG] Step 1: User input reg number:', ref)
+    
     setLookupBusy(true)
     setVehicleLookupStatus('loading')
     setCreateError(null)
 
     const resolveRes = await resolveRegNumberFromReference(ref)
+    console.log('[DEBUG] Step 2: Resolved reg number result:', resolveRes)
     if (resolveRes.error) {
+      console.error('[DEBUG] ERROR at resolveRegNumber:', resolveRes.error)
       setLookupBusy(false)
       setVehicleFound(false)
       setVehicleLookupStatus('error')
@@ -1653,10 +1659,13 @@ export default function AutoDocPage() {
     }
 
     const resolvedReg = resolveRes.data ?? ref
+    console.log('[DEBUG] Step 3: Final resolved reg:', resolvedReg)
 
     const res = await fetchVehicleByReg(resolvedReg)
+    console.log('[DEBUG] Step 4: DB lookup result:', { error: res.error, data: res.data ? 'HAS_DATA' : 'NO_DATA', vehicleData: res.data })
     setLookupBusy(false)
     if (res.error) {
+      console.error('[DEBUG] ERROR at fetchVehicleByReg:', res.error)
       setVehicleFound(false)
       setVehicleLookupStatus('error')
       setCreateError(res.error)
@@ -1664,8 +1673,11 @@ export default function AutoDocPage() {
     }
 
     if (!res.data) {
+      console.log('[DEBUG] Step 5: No local vehicle found, calling RC API lookup...')
       const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
+      console.log('[DEBUG] Step 6: RC Lookup result:', { error: rcLookupRes.error, data: rcLookupRes.data ? 'HAS_RTO_DATA' : 'NO_RTO_DATA', rtoData: rcLookupRes.data })
       if (rcLookupRes.error) {
+        console.error('[DEBUG] ERROR at fetchVehicleFromRcLookup:', rcLookupRes.error)
         setVehicleFound(false)
         setVehicleLookupStatus('error')
         setCreateError(rcLookupRes.error)
@@ -1673,6 +1685,7 @@ export default function AutoDocPage() {
       }
 
       if (!rcLookupRes.data) {
+        console.log('[DEBUG] Step 7: RC lookup returned no data')
         setVehicleFound(false)
         setVehicleLookupStatus('not_found')
         setCreateError(null)
@@ -1734,6 +1747,61 @@ export default function AutoDocPage() {
         return
       }
     }
+            }))
+            console.log('[DEBUG] Step 7b: RC lookup returned NO data, cleared form')
+            return
+          }
+
+          console.log('[DEBUG] Step 7c: RC lookup returned RTO data, applying to form')
+          applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
+          setVehicleFound(true)
+          setVehicleLookupStatus('found')
+          setCreateError(null)
+          showToast('Vehicle found via RC lookup and prefilled from RTO cache.', true)
+          console.log('[DEBUG] ========== VEHICLE LOOKUP SUCCESS (RC) ==========')
+          return
+        }
+
+        const vehicle = res.data
+        console.log('[DEBUG] Step 8: Local vehicle found:', vehicle)
+        const hasVehicleMasterDetails = Boolean(
+          (vehicle.vin ?? '').trim()
+          || (vehicle.model ?? '').trim()
+          || vehicle.year != null
+          || (vehicle.colour ?? '').trim()
+          || (vehicle.paint_type ?? '').trim()
+          || (vehicle.dealer_city ?? '').trim()
+          || (vehicle.bp_city_category ?? '').trim()
+          || (vehicle.owner_name ?? '').trim()
+          || (vehicle.owner_phone ?? '').trim()
+          || (vehicle.date_of_sale ?? '').trim(),
+        )
+        console.log('[DEBUG] Step 9: Vehicle has master details?', hasVehicleMasterDetails)
+
+        // If the vehicle row exists but only as a minimal placeholder, continue with RC fallback.
+        if (!hasVehicleMasterDetails) {
+          console.log('[DEBUG] Step 10: Local vehicle is placeholder, trying RC lookup for details...')
+          const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
+          console.log('[DEBUG] Step 11: RC Lookup result (from placeholder):', { error: rcLookupRes.error, hasData: !!rcLookupRes.data })
+          if (rcLookupRes.error) {
+            console.error('[DEBUG] ERROR at fetchVehicleFromRcLookup (placeholder):', rcLookupRes.error)
+            setVehicleFound(false)
+            setVehicleLookupStatus('error')
+            setCreateError(rcLookupRes.error)
+            return
+          }
+
+          if (rcLookupRes.data) {
+            console.log('[DEBUG] Step 12: Applying RC data to form (from placeholder)')
+            applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
+            setVehicleFound(true)
+            setVehicleLookupStatus('found')
+            setCreateError(null)
+            showToast('Vehicle found via RC lookup and prefilled from RTO cache.', true)
+            console.log('[DEBUG] ========== VEHICLE LOOKUP SUCCESS (RC from placeholder) ==========')
+            return
+          }
+        }
 
     setVehicleFound(true)
     setVehicleLookupStatus('found')

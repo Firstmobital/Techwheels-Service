@@ -97,4 +97,33 @@ export async function fetchVehicleFromRcLookup(reference: string): Promise<ApiRe
   } catch (error) {
     return fail(error, 'Unable to call RC lookup service')
   }
+  export async function fetchVehicleFromRcLookup(reference: string): Promise<ApiResult<RtoCacheLookupRow | null>> {
+    const normalizedVehicleNumber = normalizeRegNumber(reference)
+    console.log('[RC-LOOKUP] normalized input:', reference, 'result:', normalizedVehicleNumber)
+    if (!normalizedVehicleNumber) return fail('Registration number is required for RC lookup')
+
+    const rcLookupFunctionName = ((import.meta.env.VITE_RC_LOOKUP_FUNCTION_NAME as string | undefined) || 'invoke-ocean025').trim()
+    console.log('[RC-LOOKUP] Calling edge function:', rcLookupFunctionName)
+
+    try {
+      console.log('[RC-LOOKUP] Invoking with body:', { vehicleNumber: normalizedVehicleNumber, consent: 'Y' })
+      const { data: payload, error } = await supabase.functions.invoke(rcLookupFunctionName, {
+        body: { vehicleNumber: normalizedVehicleNumber, consent: 'Y' },
+      })
+      console.log('[RC-LOOKUP] Response received:', { error: error?.message, payloadType: typeof payload, payload })
+
+      if (error) {
+        console.error('[RC-LOOKUP] Function error:', error)
+        return fail(error.message || 'RC lookup failed')
+      }
+
+      const rtoRecord = findRtoCacheRecord(payload)
+      console.log('[RC-LOOKUP] RTO record found?', !!rtoRecord, rtoRecord)
+      if (!rtoRecord) return ok(null)
+      return ok(rtoRecord)
+    } catch (error) {
+      console.error('[RC-LOOKUP] Exception caught:', error)
+      return fail(error, 'Unable to call RC lookup service')
+    }
+  }
 }
