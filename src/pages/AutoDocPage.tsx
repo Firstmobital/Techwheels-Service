@@ -1664,11 +1664,15 @@ export default function AutoDocPage() {
           filename: storageFileName(preDoc.storage_path, 'pre-repair.pptx'),
           storagePath: preDoc.storage_path,
           bucket: AUTODOC_BUCKET,
+          driveFileId: preDoc.drive_file_id,
+          driveUrl: preDoc.drive_url,
         },
         {
           filename: storageFileName(excelDoc.storage_path, 'estimate.xlsx'),
           storagePath: excelDoc.storage_path,
           bucket: AUTODOC_BUCKET,
+          driveFileId: excelDoc.drive_file_id,
+          driveUrl: excelDoc.drive_url,
         },
       ],
     })
@@ -1718,21 +1722,29 @@ export default function AutoDocPage() {
         filename: storageFileName(postDoc.storage_path, 'post-repair.pptx'),
         storagePath: postDoc.storage_path,
         bucket: AUTODOC_BUCKET,
+        driveFileId: postDoc.drive_file_id,
+        driveUrl: postDoc.drive_url,
       },
       ...(excelDoc ? [{
         filename: storageFileName(excelDoc.storage_path, 'estimate.xlsx'),
         storagePath: excelDoc.storage_path,
         bucket: AUTODOC_BUCKET,
+        driveFileId: excelDoc.drive_file_id,
+        driveUrl: excelDoc.drive_url,
       }] : []),
       ...(preDoc ? [{
         filename: storageFileName(preDoc.storage_path, 'pre-repair.pptx'),
         storagePath: preDoc.storage_path,
         bucket: AUTODOC_BUCKET,
+        driveFileId: preDoc.drive_file_id,
+        driveUrl: preDoc.drive_url,
       }] : []),
       ...(deliveryDoc ? [{
         filename: storageFileName(deliveryDoc.storage_path, 'delivery-video.mp4'),
         storagePath: deliveryDoc.storage_path,
         bucket: AUTODOC_BUCKET,
+        driveFileId: deliveryDoc.drive_file_id,
+        driveUrl: deliveryDoc.drive_url,
       }] : []),
     ]
 

@@ -16,6 +16,8 @@ export interface EmailAttachmentRef {
   filename: string
   storagePath: string
   bucket?: string
+  driveFileId?: string | null
+  driveUrl?: string | null
 }
 
 /**
