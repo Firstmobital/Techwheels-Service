@@ -86,8 +86,12 @@ export default function ReportsPage() {
   const isManpowerReportSelected = selectedReport?.id === 'manpower-wise-labour-revenue'
   const isServiceTypeWiseReportSelected = selectedReport?.id === 'service-type-labour-revenue'
   const isBranchLabourRevenueReportSelected = selectedReport?.id === 'branch-labour-revenue'
+  const isVasRevenueReportSelected = selectedReport?.id === 'vas-revenue-report'
   const shouldShowServiceTypeFilter =
-    isManpowerReportSelected || isServiceTypeWiseReportSelected || isBranchLabourRevenueReportSelected
+    isManpowerReportSelected ||
+    isServiceTypeWiseReportSelected ||
+    isBranchLabourRevenueReportSelected ||
+    isVasRevenueReportSelected
 
   const canApplyFuelTypeFilter = branch === 'Sitapura' || branch === 'ALL'
 

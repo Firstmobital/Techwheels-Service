@@ -115,6 +115,20 @@ export interface BranchLabourRevenueComparison {
   percentageChange: number | null
 }
 
+export interface VasRevenueByServiceTypeRow {
+  serviceType: string
+  totalVasRevenue: number
+  jobCount: number
+  avgVasRevenue: number
+}
+
+export interface VasRevenueReportData {
+  totalVasRevenue: number
+  totalJobs: number
+  avgVasRevenue: number
+  rows: VasRevenueByServiceTypeRow[]
+}
+
 export interface DailyRevenueReport {
   date: string
   vehicleCount: number
@@ -1682,6 +1696,161 @@ export async function getBranchLabourRevenueComparison(
     }
     return a.branch.localeCompare(b.branch)
   })
+}
+
+export async function getVasRevenueReport(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
+): Promise<VasRevenueReportData> {
+  const bounds = getDateRangeBounds(dateFilter)
+  const fuelSelection = parseFuelSelectionFromBranch(branch)
+  const queryBranch: BranchFilter = fuelSelection ? 'Sitapura' : branch
+
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+
+  while (true) {
+    let query = supabase
+      .from('service_vas_jc_data')
+      .select('branch, sr_type, net_price, job_value, employee_code')
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    query = applyBranchFilterToQuery(query, queryBranch)
+
+    if (Array.isArray(serviceTypeFilter)) {
+      if (serviceTypeFilter.length > 0) {
+        query = query.in('sr_type', serviceTypeFilter)
+      }
+    } else if (serviceTypeFilter !== 'ALL') {
+      query = query.eq('sr_type', serviceTypeFilter)
+    }
+
+    if (bounds) {
+      query = applyDateFilterToQuery(query, bounds, {
+        closedDateField: 'jc_closed_date_time',
+      })
+    }
+
+    const { data, error } = await query
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) break
+    from += QUERY_PAGE_SIZE
+  }
+
+  let filteredRows = allRows
+
+  if (fuelSelection) {
+    const employeeCodes = new Set<string>()
+
+    for (const row of allRows) {
+      const code = normalizeEmployeeCode((row as { employee_code?: unknown }).employee_code)
+      if (code !== 'Unknown') {
+        employeeCodes.add(code.toUpperCase())
+      }
+    }
+
+    const employeeFuelByCode = new Map<string, string>()
+    const codeList = [...employeeCodes]
+
+    for (let i = 0; i < codeList.length; i += 500) {
+      const chunk = codeList.slice(i, i + 500)
+      const { data: employees, error: empError } = await supabase
+        .from('employee_master')
+        .select('employee_code, fuel_type')
+        .in('employee_code', chunk)
+
+      if (empError) {
+        throw new Error(empError.message)
+      }
+
+      const employeeRows =
+        (employees as Array<{ employee_code?: unknown; fuel_type?: unknown }> | null) ?? []
+
+      for (const emp of employeeRows) {
+        const code = normalizeEmployeeCode(emp.employee_code)
+        if (code === 'Unknown') continue
+        const fuelType = emp.fuel_type == null ? '' : String(emp.fuel_type).trim().toUpperCase()
+        employeeFuelByCode.set(code.toUpperCase(), fuelType)
+      }
+    }
+
+    filteredRows = allRows.filter((row) => {
+      const code = normalizeEmployeeCode((row as { employee_code?: unknown }).employee_code)
+      if (code !== 'Unknown') {
+        return (employeeFuelByCode.get(code.toUpperCase()) ?? '') === fuelSelection
+      }
+
+      return matchesFuelSelectionByBranchLabel((row as { branch?: unknown }).branch, fuelSelection)
+    })
+  }
+
+  interface WorkingVasRevenue {
+    serviceType: string
+    totalVasRevenue: number
+    jobCount: number
+  }
+
+  const grouped = new Map<string, WorkingVasRevenue>()
+  let totalVasRevenue = 0
+  let totalJobs = 0
+
+  for (const row of filteredRows) {
+    const typedRow = row as {
+      sr_type?: unknown
+      net_price?: unknown
+      job_value?: unknown
+    }
+
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const key = serviceTypeGroupKey(serviceType)
+    const netPrice = parseRevenue(typedRow.net_price)
+    const jobValue = parseRevenue(typedRow.job_value)
+    const revenue = netPrice > 0 ? netPrice : jobValue
+
+    totalVasRevenue += revenue
+    totalJobs += 1
+
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.totalVasRevenue += revenue
+      existing.jobCount += 1
+      continue
+    }
+
+    grouped.set(key, {
+      serviceType,
+      totalVasRevenue: revenue,
+      jobCount: 1,
+    })
+  }
+
+  const rows: VasRevenueByServiceTypeRow[] = [...grouped.values()]
+    .map((item) => ({
+      serviceType: item.serviceType,
+      totalVasRevenue: item.totalVasRevenue,
+      jobCount: item.jobCount,
+      avgVasRevenue: item.jobCount > 0 ? item.totalVasRevenue / item.jobCount : 0,
+    }))
+    .sort((a, b) => {
+      if (b.totalVasRevenue !== a.totalVasRevenue) {
+        return b.totalVasRevenue - a.totalVasRevenue
+      }
+      return a.serviceType.localeCompare(b.serviceType)
+    })
+
+  return {
+    totalVasRevenue,
+    totalJobs,
+    avgVasRevenue: totalJobs > 0 ? totalVasRevenue / totalJobs : 0,
+    rows,
+  }
 }
 
 export async function getDailyRevenueReport(

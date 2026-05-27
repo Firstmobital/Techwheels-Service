@@ -867,7 +867,7 @@ export default function ImportPage() {
               'part_number,branch,order_date',
             ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
           : []
-        const CHUNK = 2000
+        const CHUNK = isVasTable ? 5000 : 2000  // Larger chunks for VAS (faster, uses batch upsert)
         let totalInserted = 0
         const allParseErrors: VasParseError[] = []
         const mappingIssues: MappingIssueInsert[] = []
