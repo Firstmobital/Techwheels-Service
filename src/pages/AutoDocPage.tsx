@@ -1439,6 +1439,7 @@ export default function AutoDocPage() {
           jcNumber: activeSummary.jc_number ?? prev.jcNumber,
           model: activeSummary.model ?? prev.model,
         }))
+        setVehicleLookupStatus('found')
         return
       }
 
@@ -1462,6 +1463,7 @@ export default function AutoDocPage() {
         ownerPhone: vehicle.owner_phone ?? prev.ownerPhone,
         dateOfSale: vehicle.date_of_sale ?? prev.dateOfSale,
       }))
+      setVehicleLookupStatus('found')
     }
 
     void hydrateVehicleContextForSelectedJob()
