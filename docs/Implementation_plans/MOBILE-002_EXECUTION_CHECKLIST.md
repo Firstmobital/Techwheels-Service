@@ -40,6 +40,53 @@
 
 ---
 
+## Pre-APK/IPA Native Readiness Gate (Mandatory)
+
+Use this section right before running any Android APK or iOS IPA build. The goal is to include all planned native capabilities in the binary once, so future functional changes can go through OTA updates.
+
+### A) Future-Safe Native Modules Included In Base Binary
+
+- [x] Camera capability included
+- [x] Media/photo library capability included
+- [x] Location (foreground + background) capability included
+- [x] Notifications capability included
+- [x] Biometric capability included
+- [x] Document picker capability included
+- [x] Background fetch/task-manager capability included
+
+### B) app.json Native Hardening Verification
+
+- [x] iOS permission strings configured for camera/photos/location/Face ID
+- [x] Android permissions explicitly configured for camera/media/location/notifications/biometric
+- [x] Expo plugins configured for `expo-camera`, `expo-image-picker`, `expo-location`, `expo-notifications`, `expo-local-authentication`, `expo-document-picker`
+- [x] iOS bundle identifier set
+- [x] Android package name set
+
+### C) Push Notification Native Prerequisites (Before First Build With Push)
+
+- [ ] `mobile/google-services.json` present and valid
+- [ ] `mobile/GoogleService-Info.plist` present and valid (if iOS push is enabled)
+- [ ] `npx expo config --type public` shows expected push-related native config
+
+### D) Build Gate Commands (Run In Order)
+
+```bash
+cd mobile
+npx expo config --type public
+npx tsc --noEmit -p tsconfig.json
+npx expo-doctor
+eas build --platform android --profile preview
+eas build --platform ios --profile preview
+```
+
+### E) OTA vs Rebuild Rulebook
+
+- OTA-safe changes (no rebuild): JS/TS logic, UI, routing, business rules, API calls, report templates, validation rules.
+- Rebuild required: adding new native library, changing native permissions, changing config plugins, changing bundle/package identifier, changing notification native setup/certificates.
+- Rule: if `app.json` native sections or native dependency set changes, do at least one fresh APK/IPA build before relying on OTA updates.
+
+---
+
 ## Current Execution Snapshot (2026-05-27)
 
 - [x] Expo mobile app initialized and running via Expo Router

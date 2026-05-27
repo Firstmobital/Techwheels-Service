@@ -1,0 +1,19 @@
+# Default owners
+* @vkbin
+
+# Parity-sensitive paths (web business logic that may require mobile sync)
+/src/pages/ReportsPage.tsx @vkbin
+/src/pages/reports/** @vkbin
+/src/lib/reportQueries.ts @vkbin
+/src/lib/partsReportQueries.ts @vkbin
+/src/lib/branches.ts @vkbin
+
+# Mobile reports implementation
+/mobile/src/app/(tabs)/reports.tsx @vkbin
+/mobile/src/components/reports/** @vkbin
+/mobile/src/lib/reportQueries.ts @vkbin
+/mobile/src/lib/partsReportQueries.ts @vkbin
+
+# Governance docs
+/CONTRIBUTING.md @vkbin
+/docs/Project_Handbook/SYNC_PROTOCOL.md @vkbin

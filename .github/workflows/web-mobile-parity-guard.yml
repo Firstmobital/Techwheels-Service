@@ -1,0 +1,77 @@
+name: Web-Mobile Parity Guard
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  parity-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce parity section for web business-logic changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request
+            if (!pr) {
+              core.info('No pull_request payload. Skipping.')
+              return
+            }
+
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner,
+                repo,
+                pull_number: pr.number,
+                per_page: 100,
+              },
+              (response) => response.data.map((f) => f.filename),
+            )
+
+            const paritySensitive = [
+              /^src\/pages\/ReportsPage\.tsx$/,
+              /^src\/pages\/reports\//,
+              /^src\/lib\/reportQueries\.ts$/,
+              /^src\/lib\/partsReportQueries\.ts$/,
+              /^src\/lib\/branches\.ts$/,
+            ]
+
+            const touchedSensitive = files.filter((file) =>
+              paritySensitive.some((pattern) => pattern.test(file)),
+            )
+
+            if (touchedSensitive.length === 0) {
+              core.info('No parity-sensitive web files changed. Guard passed.')
+              return
+            }
+
+            const body = (pr.body || '').toLowerCase()
+            const hasSection = body.includes('web-mobile parity')
+            const hasImpact = body.includes('impact:')
+            const hasMobileStatus = body.includes('mobile status:')
+
+            if (!hasSection || !hasImpact || !hasMobileStatus) {
+              core.setFailed(
+                [
+                  'Web-Mobile parity declaration is required for this PR.',
+                  'Changed parity-sensitive files:',
+                  ...touchedSensitive.map((f) => `- ${f}`),
+                  '',
+                  'Please update PR description with:',
+                  '- Web-Mobile Parity',
+                  '- Impact:',
+                  '- Mobile status:',
+                ].join('\n'),
+              )
+              return
+            }
+
+            core.info('Parity declaration found. Guard passed.')

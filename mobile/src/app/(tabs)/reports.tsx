@@ -40,6 +40,14 @@ import DuplicateChassisSameMonthMobile from '../../components/reports/DuplicateC
 import EmployeeUtilizationMobile from '../../components/reports/EmployeeUtilizationMobile'
 import LabourSparesMixMobile from '../../components/reports/LabourSparesMixMobile'
 import PartsConsumptionMobile from '../../components/reports/PartsConsumptionMobile'
+import VasJobPerformanceMobile from '../../components/reports/VasJobPerformanceMobile'
+import ProductLinePerformanceMobile from '../../components/reports/ProductLinePerformanceMobile'
+import PartsBackorderMobile from '../../components/reports/PartsBackorderMobile'
+import PartsOrderJustificationMobile from '../../components/reports/PartsOrderJustificationMobile'
+import TatDurationBucketsMobile from '../../components/reports/TatDurationBucketsMobile'
+import ModelWiseRevenueMobile from '../../components/reports/ModelWiseRevenueMobile'
+import PartsValuationMobile from '../../components/reports/PartsValuationMobile'
+import PartsInventoryTurnoverMobile from '../../components/reports/PartsInventoryTurnoverMobile'
 
 export default function ReportsScreen() {
   const [selectedCategoryId, setSelectedCategoryId] =
@@ -430,6 +438,16 @@ export default function ReportsScreen() {
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
               />
+            ) : selectedReportId === 'vas-job-performance' ? (
+              <VasJobPerformanceMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
+            ) : selectedReportId === 'tat-duration-buckets' ? (
+              <TatDurationBucketsMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
             ) : selectedReportId === 'employee-utilization' ? (
               <EmployeeUtilizationMobile
                 branch={effectiveBranchFilter}
@@ -455,6 +473,16 @@ export default function ReportsScreen() {
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
               />
+            ) : selectedReportId === 'product-line-performance' ? (
+              <ProductLinePerformanceMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
+            ) : selectedReportId === 'model-wise-revenue' ? (
+              <ModelWiseRevenueMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
             ) : selectedReportId === 'parts-monthly-consumption' ? (
               <PartsMonthlyConsumptionMobile
                 branch={effectiveBranchFilter}
@@ -469,6 +497,23 @@ export default function ReportsScreen() {
               />
             ) : selectedReportId === 'parts-consumption' ? (
               <PartsConsumptionMobile
+                branch={effectiveBranchFilter}
+              />
+            ) : selectedReportId === 'parts-backorder' ? (
+              <PartsBackorderMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
+            ) : selectedReportId === 'parts-order-justification' ? (
+              <PartsOrderJustificationMobile
+                branch={effectiveBranchFilter}
+              />
+            ) : selectedReportId === 'parts-valuation' ? (
+              <PartsValuationMobile
+                branch={effectiveBranchFilter}
+              />
+            ) : selectedReportId === 'parts-inventory-turnover' ? (
+              <PartsInventoryTurnoverMobile
                 branch={effectiveBranchFilter}
               />
             ) : (

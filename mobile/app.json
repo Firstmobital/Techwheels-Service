@@ -7,17 +7,71 @@
     "scheme": "techwheelsservice",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTabletMode": true
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.techwheels.service",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Techwheels Service to access your camera for job card photos and document scans.",
+        "NSPhotoLibraryUsageDescription": "Allow Techwheels Service to access your photos to attach media to job cards and reports.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Techwheels Service to save generated reports and exported media to your photo library.",
+        "NSLocationWhenInUseUsageDescription": "Allow Techwheels Service to access your location to geotag job activity and reports.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Techwheels Service to access your location in the background for field-service continuity.",
+        "NSFaceIDUsageDescription": "Allow Techwheels Service to use Face ID for secure sign-in and sensitive actions."
+      }
     },
     "android": {
       "predictiveBackGestureEnabled": false,
-      "package": "com.techwheels.service"
+      "package": "com.techwheels.service",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_AUDIO",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
     },
     "web": {
       "output": "static"
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Techwheels Service to access your camera for job card photos and document scans.",
+          "microphonePermission": "Allow Techwheels Service to use your microphone while recording service videos.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Techwheels Service to access your photos to attach media to job cards and reports.",
+          "cameraPermission": "Allow Techwheels Service to use your camera to capture photos and videos.",
+          "microphonePermission": "Allow Techwheels Service to use your microphone while recording videos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Techwheels Service to access your location to geotag job activity and reports.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Techwheels Service to access your location in the background for route and field-service continuity.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Techwheels Service to use Face ID for secure sign-in and sensitive actions."
+        }
+      ],
+      "expo-document-picker",
       [
         "expo-build-properties",
         {

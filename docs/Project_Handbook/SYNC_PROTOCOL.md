@@ -33,6 +33,34 @@ Update docs when any of these happen:
 - Import formats/column mappings changed.
 - Export format/flow changed.
 
+## Cross-Platform Parity Protocol (Web <-> Mobile)
+
+For any web change that touches business logic, parity review with mobile is
+mandatory before merge.
+
+### Parity-Sensitive Changes
+
+- Query/aggregation logic changes in reports and analytics
+- New or changed calculations/formulas
+- Filter/date/range behavior changes
+- New report IDs/components/routes, or removed/deprecated ones
+- Empty/loading/error UX that changes user interpretation of data
+- CSV/export schema changes
+
+### Required Workflow (In Addition to Docs Sync)
+
+1. Detect parity impact during implementation.
+2. If impact exists, update mobile implementation in the same PR whenever possible.
+3. If same-PR update is not possible, create a follow-up task with owner + due date.
+4. Add `Web-Mobile Parity` section in PR notes with status and affected files.
+5. Run mobile validation (`npx --prefix mobile tsc --noEmit -p mobile/tsconfig.json`) for impacted changes.
+6. Do not mark task complete until parity status is explicit.
+
+### Merge Guard
+
+Business-logic changes without explicit parity declaration are considered incomplete
+and should not be merged.
+
 ## Required Update Workflow
 
 1. Implement code/schema change.

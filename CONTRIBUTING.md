@@ -7,6 +7,38 @@
 - Add comments for non-obvious logic
 - Test your changes before submitting
 
+## Web-Mobile Parity Policy - Mandatory
+
+Techwheels has parallel web and mobile implementations. To prevent product drift,
+any business logic change in web must be reviewed for mobile impact in the same
+change set.
+
+This includes (non-exhaustive):
+
+- Report calculation formulas and aggregation logic
+- Query behavior, filters, grouping, sorting, and date handling
+- Component behavior, state transitions, and empty/error states
+- Export fields and data format
+- Any new/removed report IDs, routes, or feature flags
+
+### Required for Every PR touching web logic
+
+Add a section named `Web-Mobile Parity` in PR description with:
+
+1. `Impact`: `No impact` or `Impact`
+2. `Mobile status`: `Updated in same PR` or `Tracked separately`
+3. `Mobile files changed`: explicit list (if applicable)
+4. `Validation`: mobile type-check/test command output summary
+
+If `Tracked separately` is chosen, PR must include:
+
+- Linked mobile follow-up task/ID
+- Owner name
+- Due date
+- Reason same-PR update is not possible
+
+PRs that change business logic and skip parity declaration should not be merged.
+
 ---
 
 ## Admin Operations - CRITICAL SECURITY PATTERN
@@ -86,6 +118,14 @@ SELECT * FROM audit_logs WHERE action = 'email_confirmed'
 - [ ] Tested with non-admin account (should fail)
 - [ ] Error messages don't leak sensitive data
 - [ ] Documentation updated
+
+## Web-Mobile Parity Checklist Before PR
+
+- [ ] I checked whether web logic changes affect mobile behavior.
+- [ ] If affected, mobile app was updated in the same PR.
+- [ ] Report IDs/routes/components remain aligned between web and mobile.
+- [ ] Mobile validation run (type-check at minimum).
+- [ ] If deferred, follow-up task, owner, and due date are documented.
 
 ---
 
