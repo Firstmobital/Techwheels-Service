@@ -23,6 +23,7 @@ import {
   createPanel,
   deletePanel,
   deleteEstimateRowsByPanels,
+  syncDamagePanels,
   deletePanelPhotosByPanelId,
   deletePanelPhoto,
   logActivity,
@@ -2027,112 +2028,30 @@ export default function AutoDocPage() {
         jobCardId,
         selected,
       })
-      const existingRes = await listPanels(jobCardId)
-      if (existingRes.error || !existingRes.data) {
-        console.error('[autodoc-panel-debug] syncPanels:listPanelsError', {
+      const syncRes = await syncDamagePanels(jobCardId, selected)
+      if (syncRes.error || !syncRes.data) {
+        console.error('[autodoc-panel-debug] syncPanels:serverSyncError', {
           jobCardId,
-          error: existingRes.error,
+          selected,
+          error: syncRes.error,
         })
-        showToast(existingRes.error ?? 'Unable to sync selected panels.', false)
+        showToast(syncRes.error ?? 'Unable to sync selected panels.', false)
         return false
       }
 
-      const existingByName = new Map<string, string>()
-      existingRes.data.forEach((panel) => {
-        const name = panel.panel_name?.trim()
-        if (!name) return
-        existingByName.set(name, panel.id)
-      })
-
       const nextPanelIdByName: Record<string, string> = {}
       const nextPanelNameById: Record<string, string> = {}
-      const removedPanelNames: string[] = []
+      syncRes.data.panels.forEach((panel) => {
+        const name = panel.panel_name?.trim()
+        if (!name) return
+        nextPanelIdByName[name] = panel.id
+        nextPanelNameById[panel.id] = name
+      })
 
-      for (const [name, panelId] of existingByName.entries()) {
-        if (selected.includes(name)) {
-          nextPanelIdByName[name] = panelId
-          nextPanelNameById[panelId] = name
-          continue
-        }
-
-        removedPanelNames.push(name)
-        console.log('[autodoc-panel-debug] syncPanels:removePanel', {
-          jobCardId,
-          name,
-          panelId,
-        })
-
-        const deletePhotosRes = await deletePanelPhotosByPanelId(panelId)
-        if (deletePhotosRes.error) {
-          console.error('[autodoc-panel-debug] syncPanels:removePhotosError', {
-            jobCardId,
-            name,
-            panelId,
-            error: deletePhotosRes.error,
-          })
-          showToast(`Unable to remove photos for panel "${name}": ${deletePhotosRes.error}`, false)
-          return false
-        }
-
-        const deleteRes = await deletePanel(panelId)
-        if (deleteRes.error) {
-          console.error('[autodoc-panel-debug] syncPanels:removePanelError', {
-            jobCardId,
-            name,
-            panelId,
-            error: deleteRes.error,
-          })
-          showToast(`Unable to remove panel "${name}": ${deleteRes.error}`, false)
-          return false
-        }
-      }
-
-      if (removedPanelNames.length > 0) {
-        console.log('[autodoc-panel-debug] syncPanels:removeEstimateRows', {
-          jobCardId,
-          removedPanelNames,
-        })
-        const deleteEstimateRes = await deleteEstimateRowsByPanels(jobCardId, removedPanelNames)
-        if (deleteEstimateRes.error) {
-          console.error('[autodoc-panel-debug] syncPanels:removeEstimateRowsError', {
-            jobCardId,
-            removedPanelNames,
-            error: deleteEstimateRes.error,
-          })
-          showToast(`Unable to remove estimate rows for deselected panel(s): ${deleteEstimateRes.error}`, false)
-          return false
-        }
-
-        const removedKeys = new Set(removedPanelNames.map((name) => normalizeText(name)))
+      if (syncRes.data.removedPanelNames.length > 0) {
+        const removedKeys = new Set(syncRes.data.removedPanelNames.map((name) => normalizeText(name)))
         setEstimateRows((prev) => prev.filter((row) => !removedKeys.has(normalizeText(row.panel))))
         setDamagePhotos((prev) => prev.filter((photo) => !removedKeys.has(normalizeText(photo.panel))))
-      }
-
-      for (const name of selected) {
-        const existingPanelId = existingByName.get(name)
-        if (existingPanelId) {
-          nextPanelIdByName[name] = existingPanelId
-          nextPanelNameById[existingPanelId] = name
-          continue
-        }
-
-        console.log('[autodoc-panel-debug] syncPanels:createPanel', {
-          jobCardId,
-          name,
-        })
-        const createRes = await createPanel(jobCardId, name)
-        if (createRes.error || !createRes.data) {
-          console.error('[autodoc-panel-debug] syncPanels:createPanelError', {
-            jobCardId,
-            name,
-            error: createRes.error,
-          })
-          showToast(`Unable to save panel "${name}": ${createRes.error}`, false)
-          return false
-        }
-
-        nextPanelIdByName[name] = createRes.data.id
-        nextPanelNameById[createRes.data.id] = name
       }
 
       setPanelIdByName(nextPanelIdByName)
@@ -2140,6 +2059,7 @@ export default function AutoDocPage() {
       console.log('[autodoc-panel-debug] syncPanels:done', {
         jobCardId,
         finalPanels: Object.keys(nextPanelIdByName),
+        removedPanelNames: syncRes.data.removedPanelNames,
       })
       return true
     }
