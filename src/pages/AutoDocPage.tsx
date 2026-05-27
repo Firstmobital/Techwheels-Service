@@ -185,10 +185,21 @@ function readPanelsByJobMap(): Record<string, string[]> {
 
 function sanitizePanelList(value: unknown): string[] {
   if (!Array.isArray(value)) return []
-  return value
+  const seen = new Set<string>()
+  const sanitized: string[] = []
+
+  value
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
+    .forEach((item) => {
+      const key = normalizeText(item)
+      if (seen.has(key)) return
+      seen.add(key)
+      sanitized.push(item)
+    })
+
+  return sanitized
 }
 
 const DEFAULT_BP_CITY_CATEGORY = 'A'
@@ -1356,9 +1367,11 @@ export default function AutoDocPage() {
       }
       const fromDb = panelRes.error || !panelRes.data
         ? []
-        : panelRes.data
-          .map((panel) => panel.panel_name?.trim() ?? '')
-          .filter((name) => name.length > 0)
+        : sanitizePanelList(
+          panelRes.data
+            .map((panel) => panel.panel_name?.trim() ?? '')
+            .filter((name) => name.length > 0),
+        )
 
       const estimateLineItems = estimateRes.error || !estimateRes.data
         ? []
@@ -1366,7 +1379,7 @@ export default function AutoDocPage() {
           .map((row) => mapEstimateRowToLineItem(row))
           .filter((row): row is EstimateLineItem => row !== null)
 
-      const estimatePanelsFromDb = estimateLineItems.map((row) => row.panel)
+      const estimatePanelsFromDb = sanitizePanelList(estimateLineItems.map((row) => row.panel))
 
       const basePanels = fromDb.length > 0 ? fromDb : fromMap
       const rehydratedPanels = basePanels.length > 0
@@ -2028,6 +2041,85 @@ export default function AutoDocPage() {
         jobCardId,
         selected,
       })
+
+      async function syncPanelsClientFallback(): Promise<boolean> {
+        const existingRes = await listPanels(jobCardId)
+        if (existingRes.error || !existingRes.data) {
+          showToast(existingRes.error ?? 'Unable to sync selected panels.', false)
+          return false
+        }
+
+        const selectedKeySet = new Set(selected.map((name) => normalizeText(name)))
+        const existingByKey = new Map<string, { id: string; name: string }>()
+
+        existingRes.data.forEach((panel) => {
+          const name = panel.panel_name?.trim()
+          if (!name) return
+          const key = normalizeText(name)
+          if (!existingByKey.has(key)) {
+            existingByKey.set(key, { id: panel.id, name })
+          }
+        })
+
+        const nextPanelIdByName: Record<string, string> = {}
+        const nextPanelNameById: Record<string, string> = {}
+        const removedPanelNames: string[] = []
+
+        for (const [key, panel] of existingByKey.entries()) {
+          if (selectedKeySet.has(key)) {
+            nextPanelIdByName[panel.name] = panel.id
+            nextPanelNameById[panel.id] = panel.name
+            continue
+          }
+
+          removedPanelNames.push(panel.name)
+
+          const deletePhotosRes = await deletePanelPhotosByPanelId(panel.id)
+          if (deletePhotosRes.error) {
+            showToast(`Unable to remove photos for panel "${panel.name}": ${deletePhotosRes.error}`, false)
+            return false
+          }
+
+          const deleteRes = await deletePanel(panel.id)
+          if (deleteRes.error) {
+            showToast(`Unable to remove panel "${panel.name}": ${deleteRes.error}`, false)
+            return false
+          }
+        }
+
+        if (removedPanelNames.length > 0) {
+          const deleteEstimateRes = await deleteEstimateRowsByPanels(jobCardId, removedPanelNames)
+          if (deleteEstimateRes.error) {
+            showToast(`Unable to remove estimate rows for deselected panel(s): ${deleteEstimateRes.error}`, false)
+            return false
+          }
+
+          const removedKeys = new Set(removedPanelNames.map((name) => normalizeText(name)))
+          setEstimateRows((prev) => prev.filter((row) => !removedKeys.has(normalizeText(row.panel))))
+          setDamagePhotos((prev) => prev.filter((photo) => !removedKeys.has(normalizeText(photo.panel))))
+        }
+
+        for (const panelName of selected) {
+          const key = normalizeText(panelName)
+          const existing = existingByKey.get(key)
+          if (existing) continue
+
+          const createRes = await createPanel(jobCardId, panelName)
+          if (createRes.error || !createRes.data) {
+            showToast(`Unable to save panel "${panelName}": ${createRes.error}`, false)
+            return false
+          }
+
+          nextPanelIdByName[panelName] = createRes.data.id
+          nextPanelNameById[createRes.data.id] = panelName
+          existingByKey.set(key, { id: createRes.data.id, name: panelName })
+        }
+
+        setPanelIdByName(nextPanelIdByName)
+        setPanelNameById(nextPanelNameById)
+        return true
+      }
+
       const syncRes = await syncDamagePanels(jobCardId, selected)
       if (syncRes.error || !syncRes.data) {
         console.error('[autodoc-panel-debug] syncPanels:serverSyncError', {
@@ -2035,15 +2127,18 @@ export default function AutoDocPage() {
           selected,
           error: syncRes.error,
         })
-        showToast(syncRes.error ?? 'Unable to sync selected panels.', false)
-        return false
+        return syncPanelsClientFallback()
       }
 
       const nextPanelIdByName: Record<string, string> = {}
       const nextPanelNameById: Record<string, string> = {}
+      const seenKeys = new Set<string>()
       syncRes.data.panels.forEach((panel) => {
         const name = panel.panel_name?.trim()
         if (!name) return
+        const key = normalizeText(name)
+        if (seenKeys.has(key)) return
+        seenKeys.add(key)
         nextPanelIdByName[name] = panel.id
         nextPanelNameById[panel.id] = name
       })
