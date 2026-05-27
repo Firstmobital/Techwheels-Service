@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Techwheels",
+    "slug": "techwheels-service",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "techwheelsservice",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTabletMode": true
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false,
+      "package": "com.techwheels.service"
+    },
+    "web": {
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          },
+          "android": {}
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "updates": {
+      "url": "https://u.expo.dev/techwheels-service",
+      "fallbackToCacheTimeout": 0,
+      "codegenMode": "partial"
+    },
+    "eas": {
+      "build": {
+        "experimental": {
+          "prebuildCommand": "echo 'prebuild'"
+        }
+      }
+    }
+  }
+}
+
