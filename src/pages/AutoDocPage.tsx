@@ -22,6 +22,7 @@ import {
   listPanels,
   createPanel,
   deletePanel,
+  deleteEstimateRowsByPanels,
   deletePanelPhotosByPanelId,
   deletePanelPhoto,
   logActivity,
@@ -1478,7 +1479,6 @@ export default function AutoDocPage() {
       if (panelsHydratedForJobId !== activeJobCardId) return
 
       const sanitized = sanitizePanelList(selectedPanels)
-      if (sanitized.length === 0) return
 
       const existingRes = await listPanels(activeJobCardId)
       if (existingRes.error || !existingRes.data) return
@@ -1498,8 +1498,11 @@ export default function AutoDocPage() {
         nextPanelNameById[panel.id] = name
       })
 
+      const removedPanelNames: string[] = []
+
       for (const [panelName, panelId] of Object.entries(nextPanelIdByName)) {
         if (sanitized.includes(panelName)) continue
+        removedPanelNames.push(panelName)
         const deletePhotosRes = await deletePanelPhotosByPanelId(panelId)
         if (deletePhotosRes.error) {
           showToast(`Unable to remove photos for panel "${panelName}": ${deletePhotosRes.error}`, false)
@@ -1513,6 +1516,18 @@ export default function AutoDocPage() {
         existing.delete(panelName)
         delete nextPanelIdByName[panelName]
         delete nextPanelNameById[panelId]
+      }
+
+      if (removedPanelNames.length > 0) {
+        const deleteEstimateRes = await deleteEstimateRowsByPanels(activeJobCardId, removedPanelNames)
+        if (deleteEstimateRes.error) {
+          showToast(`Unable to remove estimate rows for deselected panel(s): ${deleteEstimateRes.error}`, false)
+          return
+        }
+
+        const removedKeys = new Set(removedPanelNames.map((name) => normalizeText(name)))
+        setEstimateRows((prev) => prev.filter((row) => !removedKeys.has(normalizeText(row.panel))))
+        setDamagePhotos((prev) => prev.filter((photo) => !removedKeys.has(normalizeText(photo.panel))))
       }
 
       for (const panelName of sanitized) {
@@ -1965,6 +1980,7 @@ export default function AutoDocPage() {
 
       const nextPanelIdByName: Record<string, string> = {}
       const nextPanelNameById: Record<string, string> = {}
+      const removedPanelNames: string[] = []
 
       for (const [name, panelId] of existingByName.entries()) {
         if (selected.includes(name)) {
@@ -1972,6 +1988,8 @@ export default function AutoDocPage() {
           nextPanelNameById[panelId] = name
           continue
         }
+
+        removedPanelNames.push(name)
 
         const deletePhotosRes = await deletePanelPhotosByPanelId(panelId)
         if (deletePhotosRes.error) {
@@ -1984,6 +2002,18 @@ export default function AutoDocPage() {
           showToast(`Unable to remove panel "${name}": ${deleteRes.error}`, false)
           return false
         }
+      }
+
+      if (removedPanelNames.length > 0) {
+        const deleteEstimateRes = await deleteEstimateRowsByPanels(jobCardId, removedPanelNames)
+        if (deleteEstimateRes.error) {
+          showToast(`Unable to remove estimate rows for deselected panel(s): ${deleteEstimateRes.error}`, false)
+          return false
+        }
+
+        const removedKeys = new Set(removedPanelNames.map((name) => normalizeText(name)))
+        setEstimateRows((prev) => prev.filter((row) => !removedKeys.has(normalizeText(row.panel))))
+        setDamagePhotos((prev) => prev.filter((photo) => !removedKeys.has(normalizeText(photo.panel))))
       }
 
       for (const name of selected) {

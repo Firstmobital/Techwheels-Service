@@ -68,3 +68,18 @@ export async function deleteEstimateRow(rowId: string): Promise<ApiResult<true>>
   if (error) return fail(error)
   return ok(true)
 }
+
+export async function deleteEstimateRowsByPanels(jobCardId: string, panelNames: string[]): Promise<ApiResult<true>> {
+  const names = Array.from(new Set(panelNames.map((name) => name.trim()).filter((name) => name.length > 0)))
+  if (!jobCardId.trim()) return fail('Job card id is required')
+  if (names.length === 0) return ok(true)
+
+  const { error } = await supabase
+    .from('estimate_rows')
+    .delete()
+    .eq('job_card_id', jobCardId)
+    .in('panel_name', names)
+
+  if (error) return fail(error)
+  return ok(true)
+}
