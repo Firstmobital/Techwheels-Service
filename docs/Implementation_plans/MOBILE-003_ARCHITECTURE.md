@@ -246,10 +246,12 @@ graph TB
 
 | File | Web Version | Mobile Version | Changes |
 |------|------------|-----------------|---------|
-| `supabase.ts` | localStorage + cookies | AsyncStorage | Session persistence |
+| `supabase.ts` | localStorage + cookies | AsyncStorage (mobile-optimized) | Session persistence |
 | `autodocStorage.ts` | IndexedDB | AsyncStorage | Offline caching |
 | `useReportData.ts` | React hooks | Adapted hooks | Mobile data fetching |
 | `useOnline.ts` | Web APIs | React Native APIs | Network detection |
+| **NEW: `utils/`** | Web calculation utils | Same + mobile upload | Zustand stores, Drive uploads |
+| **NEW: `store/`** | N/A | Zustand with persist | State management (from ref project) |
 
 ---
 
@@ -365,27 +367,37 @@ App.tsx (Router + Navigation)
 └── (nested pages + components)
 ```
 
-### Mobile (Expo + React Native)
+### Mobile (Expo + React Native - Reference Project Pattern)
 ```
-RootLayout (Router + Auth Check)
-├── (auth)
-│   ├── login
-│   ├── signup
-│   └── password-reset
-└── (tabs) (Bottom Tab Navigator)
-    ├── import
-    │   └── [ImportTypeSelector → FileUpload]
-    ├── reports
-    │   ├── [ReportCard → ChartComponent (Victory)]
-    │   └── [ReportDetail]
-    ├── autodoc
-    │   ├── [JobCardList → JobCardDetail]
-    │   └── [JobCardDetail → PanelCarousel/PhotoUpload/Docs]
-    ├── settings
-    │   └── [EmployeeList → EmployeeDetail]
-    └── admin
-        └── [AdminDashboard]
+_layout.tsx (Root Layout + Auth Wrapper)
+├── (auth) [Auth Group]
+│   ├── _layout.tsx
+│   ├── login.tsx
+│   ├── signup.tsx
+│   └── reset-password.tsx
+├── (main) [Authenticated Group]
+│   ├── _layout.tsx (Bottom tabs navigation)
+│   ├── index.tsx (Dashboard)
+│   ├── import/
+│   │   ├── index.tsx
+│   │   └── [type].tsx
+│   ├── reports/
+│   │   ├── index.tsx
+│   │   └── [id].tsx
+│   ├── autodoc/
+│   │   ├── index.tsx (Job card list)
+│   │   └── [id]/ (Job card detail group)
+│   │       ├── index.tsx
+│   │       ├── panels.tsx
+│   │       ├── photos.tsx
+│   │       ├── documents.tsx
+│   │       └── estimate.tsx
+│   ├── settings/index.tsx
+│   └── admin/index.tsx
+└── Providers (Zustand stores, Auth context, Supabase client)
 ```
+
+**Pattern Benefit**: Grouped routes `(auth)` and `(main)` provide clean layout nesting (from reference project).
 
 ---
 

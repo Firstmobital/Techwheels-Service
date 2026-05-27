@@ -220,14 +220,25 @@ Job Card List (API call) → Infinite scroll / Filter/Search → Tap JC → Load
 - Reference stored in `documents` table
 - Size: Up to 50 MB per file
 
-**Mobile**:
-- User chooses: Camera OR Gallery
+**Mobile** (Reference Project Pattern):
+- User chooses: Camera OR Gallery (Expo Camera, Expo ImagePicker)
 - If Camera: Expo Camera captures photo
 - If Gallery: Expo ImagePicker selects image
 - **Image Compression**: Resize to max 2000x2000px, quality 80% (mobile optimization)
-- File uploaded to Supabase Storage
-- Reference stored in `documents` table
-- Size: Compressed typically 200-500 KB per photo
+- Upload to **Supabase Storage** (temp)
+- **Trigger Edge Function**: `universal-document-upload` (from reference project)
+- Edge Function:
+  - Downloads from Supabase Storage
+  - Uploads to **Google Drive** (document offload)
+  - Returns Google Drive URL → Store in `documents` table
+  - Cleans up Supabase Storage (no duplication)
+- Final size: 200-500 KB locally, stored in Google Drive (scalable)
+
+**Why Google Drive Offload?** (Reference Project Pattern)
+- Supabase Storage quota preserved for code/assets
+- Google Drive provides unlimited storage
+- Users can access documents from web console
+- Automatic backup and recovery
 
 **Compression Logic** (new for mobile):
 ```ts

@@ -40,12 +40,15 @@
 
 ### 1.3 Install Mobile-Specific Dependencies
 ```
-[ ] npm install expo-router expo-font expo-splash-screen expo-status-bar
-[ ] npm install expo-file-system expo-image-picker expo-camera expo-document-picker
-[ ] npm install expo-av
+[ ] npm install expo@~54.0.33 expo-router~6.0.23  (Proven versions from ref)
+[ ] npm install expo-camera expo-image-picker expo-document-picker
+[ ] npm install expo-sharing expo-local-authentication
+[ ] npm install @react-native-async-storage/async-storage
+[ ] npm install react-native-gesture-handler react-native-reanimated
+[ ] npm install react-native-safe-area-context
 [ ] npm install nativewind tailwindcss
-[ ] npm install victory-native
-[ ] npm install @react-navigation/native @react-navigation/bottom-tabs
+[ ] npm install zustand@^5.0.8  (State management, ref project pattern)
+[ ] npm install dotenv patch-package  (Environment + node_modules patching)
 [ ] npm install --save-dev typescript @types/react @types/react-native
 ```
 
@@ -56,11 +59,14 @@
 [ ] Create expo-env.d.ts for type safety
 ```
 
-### 1.5 Configure Tailwind + NativeWind
+### 1.5 Configure Dynamic Environment & Tailwind
 ```
+[ ] Create app.config.js (from reference project pattern)
+[ ] Configure with EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
 [ ] npx tailwindcss init
 [ ] Configure tailwind.config.ts for mobile
 [ ] Create babel.config.js with NativeWind plugin
+[ ] Create metro.config.js for optimization
 ```
 
 ### 1.6 Create .env.local
@@ -89,9 +95,14 @@
 
 ## PHASE 2: Shared Code Layer (Checklist)
 
-### 2.1 Create Symlinks (macOS/Linux)
+### 2.1 Create Project Structure
 ```
-[ ] mkdir -p mobile/lib
+[ ] mkdir -p mobile/{lib,store,hooks,utils,context,components}
+[ ] mkdir -p mobile/lib/api  (for symlinks)
+```
+
+### 2.2 Create Symlinks (macOS/Linux)
+```
 [ ] cd mobile/lib
 [ ] ln -s ../../src/lib/api ./api
 [ ] ln -s ../../src/lib/supabase.ts ./supabase.ts.web
@@ -119,15 +130,22 @@
 [ ] Export both from mobile/lib/index.ts
 ```
 
-### 2.3 Create Shared Contexts
+### 2.3 Create Zustand State Stores (Reference Project Pattern)
+```
+[ ] Create mobile/store/jobCardStore.ts  (with persist middleware)
+[ ] Create mobile/store/authStore.ts  (session state)
+[ ] Create mobile/store/index.ts (export all stores)
+```
+
+### 2.4 Create Shared Contexts
 ```
 [ ] Copy src/context/DirtyContext.tsx → mobile/context/
 [ ] Create mobile/context/AuthContext.tsx
-[ ] Create mobile/context/PermissionContext.tsx
+[ ] Create mobile/context/PermissionContext.tsx  (from RBAC in ref project)
 [ ] Create mobile/context/index.ts (export all contexts)
 ```
 
-### 2.4 Create Custom Hooks
+### 2.5 Create Custom Hooks
 ```
 [ ] Create mobile/hooks/useCamera.ts
 [ ] Create mobile/hooks/useMediaLibrary.ts
@@ -138,13 +156,15 @@
 [ ] Create mobile/hooks/index.ts (export all hooks)
 ```
 
-### 2.5 Create Utility Exports
+### 2.6 Create Utils Layer (Reference Project Pattern)
 ```
-[ ] Create mobile/lib/utils.ts (export shared utilities)
-[ ] Test symlink resolution in dev mode
+[ ] Create mobile/lib/utils/ folder
+[ ] Copy web utils: insuranceCalculations.ts, pricingHelpers.ts, etc.
+[ ] Create mobile-specific: uploadToGoogleDrive.ts (Edge Function integration)
+[ ] Create mobile/lib/index.ts (export all utilities)
 ```
 
-### 2.6 Verify Imports Work
+### 2.7 Verify Imports Work
 ```
 [ ] Create test component importing from mobile/lib/api
 [ ] Verify column mappers import correctly

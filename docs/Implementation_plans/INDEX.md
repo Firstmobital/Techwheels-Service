@@ -50,7 +50,9 @@
   - [MOBILE-003_ARCHITECTURE.md](MOBILE-003_ARCHITECTURE.md) - Technical architecture & code structure
   - [MOBILE-004_FEATURE_MAPPING.md](MOBILE-004_FEATURE_MAPPING.md) - Feature specifications & user flows
   - [MOBILE-QUICK_REFERENCE.md](MOBILE-QUICK_REFERENCE.md) - Visual summary & key decisions
-- **Risk Level:** 🟡 MEDIUM (tight 7-10 day timeline, new platform for team)
+  - [REFERENCE_PROJECT_INTEGRATION.md](REFERENCE_PROJECT_INTEGRATION.md) ⭐ **NEW** - Reference project insights & patterns (12 proven patterns integrated)
+- **Reference Project Used:** `local_folder/Reference/OtherGithubRepo/TECHWHEELS-WEB-(OtherProject)` (production-deployed, proven patterns)
+- **Risk Level:** 🟢 LOW → MEDIUM (Reference project patterns reduce risk significantly)
 - **Status:** Ready for execution (awaiting Expo credentials & go-signal)
 - **Timeline:** 7-10 days for complete implementation (Phase 1: Setup → Phase 7: Deployment)
 - **Scope:** 100% feature parity with web v1.0 + mobile-optimized UI/UX

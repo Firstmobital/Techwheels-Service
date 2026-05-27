@@ -431,7 +431,55 @@ export const autodocStorage = {
 }
 ```
 
-#### 2.4 Create Context Layer (Auth, Dirty Tracking)
+#### 2.4 Create State Management Layer (Zustand - from Reference Project)
+Reference project uses **Zustand with persist middleware** (proven pattern):
+
+```bash
+mkdir -p mobile/store
+```
+
+Create `mobile/store/jobCardStore.ts` (Zustand with persistence):
+```ts
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+interface JobCardState {
+  selectedJobCardId: string | null
+  draftJobCards: Record<string, any>
+  setSelectedJobCard: (id: string) => void
+  saveDraft: (id: string, data: any) => void
+  clearDraft: (id: string) => void
+}
+
+export const useJobCardStore = create<JobCardState>(
+  persist(
+    (set) => ({
+      selectedJobCardId: null,
+      draftJobCards: {},
+      setSelectedJobCard: (id) => set({ selectedJobCardId: id }),
+      saveDraft: (id, data) =>
+        set((state) => ({
+          draftJobCards: { ...state.draftJobCards, [id]: data },
+        })),
+      clearDraft: (id) =>
+        set((state) => {
+          const drafts = { ...state.draftJobCards }
+          delete drafts[id]
+          return { draftJobCards: drafts }
+        }),
+    }),
+    {
+      name: 'job-card-store',
+      storage: AsyncStorage, // Mobile persistence
+    }
+  )
+)
+```
+
+**Pattern Rationale**: Zustand is lighter than Redux, easier to type with TypeScript, and persist middleware survives app restarts (from ref project).
+
+#### 2.5 Create Context Layer (Auth, Permissions)
 ```bash
 mkdir -p mobile/context
 cp ../src/context/DirtyContext.tsx ./context/
@@ -880,7 +928,28 @@ Create `mobile/app/(tabs)/admin/index.tsx`:
 
 ### Phase 7: APK Bundling & Deployment (2-3 days)
 
-#### 7.1 Pre-Bundling Dependencies
+#### 7.1 OTA Release Guide (Reference Project Pattern)
+Create `mobile/OTA_RELEASE_GUIDE.md` (from ref project):
+
+**Rule**: 
+- OTA update when: Only JS/TS/UI changed
+- Fresh APK when: Native layer or plugins changed
+
+**Daily OTA Commands**:
+```bash
+# Android production
+npm run ota:prod -- --message "Fix import duplicate"
+
+# Android preview (QA)
+npm run ota:preview -- --message "Test new charts"
+
+# iOS
+npm run ota:prod:ios -- --message "Fix import duplicate"
+
+# User instruction: Close app → Reopen with internet → Update on next launch
+```
+
+#### 7.2 Pre-Bundling Dependencies
 Ensure `package.json` includes **all required modules by default**:
 ```json
 {
@@ -905,35 +974,31 @@ Ensure `package.json` includes **all required modules by default**:
 ```
 
 #### 7.2 Create EAS Configuration
-Create `eas.json`:
+Create `eas.json` (proven from ref project):
 ```json
 {
-  "cli": {
-    "version": ">= 8.0.0"
-  },
+  "cli": { "version": ">= 18.3.0" },
   "build": {
-    "production": {
-      "node": "20.19.0",
-      "npm": "10.x"
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
     },
     "preview": {
-      "android": {
-        "buildType": "apk"
-      }
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "autoIncrement": true
     }
   },
-  "submit": {
-    "production": {
-      "android": {
-        "track": "internal"
-      },
-      "ios": {
-        "testflight": true
-      }
-    }
-  }
+  "submit": { "production": {} }
 }
 ```
+
+**Profiles**:
+- **development**: Local testing with development client
+- **preview**: Internal QA builds, APK for testing
+- **production**: App store submissions
 
 #### 7.3 Configure Expo Project
 ```bash
