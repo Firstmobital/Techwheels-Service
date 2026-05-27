@@ -36,6 +36,10 @@ import ManpowerWiseLabourRevenueMobile from '../../components/reports/ManpowerWi
 import AdvisorPerformanceMobile from '../../components/reports/AdvisorPerformanceMobile'
 import MonthlyRevenueTrendMobile from '../../components/reports/MonthlyRevenueTrendMobile'
 import PartsStockPlanningMobile from '../../components/reports/PartsStockPlanningMobile'
+import DuplicateChassisSameMonthMobile from '../../components/reports/DuplicateChassisSameMonthMobile'
+import EmployeeUtilizationMobile from '../../components/reports/EmployeeUtilizationMobile'
+import LabourSparesMixMobile from '../../components/reports/LabourSparesMixMobile'
+import PartsConsumptionMobile from '../../components/reports/PartsConsumptionMobile'
 
 export default function ReportsScreen() {
   const [selectedCategoryId, setSelectedCategoryId] =
@@ -407,6 +411,11 @@ export default function ReportsScreen() {
                 serviceTypeFilter="ALL"
                 parentProductLineFilter="ALL"
               />
+            ) : selectedReportId === 'duplicate-chassis-same-month' ? (
+              <DuplicateChassisSameMonthMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
             ) : selectedReportId === 'customer-retention' ? (
               <CustomerRetentionMobile
                 branch={effectiveBranchFilter}
@@ -418,6 +427,11 @@ export default function ReportsScreen() {
               />
             ) : selectedReportId === 'advisor-performance' ? (
               <AdvisorPerformanceMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
+            ) : selectedReportId === 'employee-utilization' ? (
+              <EmployeeUtilizationMobile
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
               />
@@ -436,6 +450,11 @@ export default function ReportsScreen() {
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
               />
+            ) : selectedReportId === 'labour-spares-mix' ? (
+              <LabourSparesMixMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
             ) : selectedReportId === 'parts-monthly-consumption' ? (
               <PartsMonthlyConsumptionMobile
                 branch={effectiveBranchFilter}
@@ -446,6 +465,10 @@ export default function ReportsScreen() {
               />
             ) : selectedReportId === 'parts-stock-planning' ? (
               <PartsStockPlanningMobile
+                branch={effectiveBranchFilter}
+              />
+            ) : selectedReportId === 'parts-consumption' ? (
+              <PartsConsumptionMobile
                 branch={effectiveBranchFilter}
               />
             ) : (
