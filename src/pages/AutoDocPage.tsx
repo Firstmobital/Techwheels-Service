@@ -21,6 +21,7 @@ import {
   listPanelPhotos,
   listPanels,
   createPanel,
+  deletePanel,
   deletePanelPhoto,
   logActivity,
   resolveRegNumberFromReference,
@@ -1495,6 +1496,18 @@ export default function AutoDocPage() {
         nextPanelIdByName[name] = panel.id
         nextPanelNameById[panel.id] = name
       })
+
+      for (const [panelName, panelId] of Object.entries(nextPanelIdByName)) {
+        if (sanitized.includes(panelName)) continue
+        const deleteRes = await deletePanel(panelId)
+        if (deleteRes.error) {
+          showToast(`Unable to remove panel "${panelName}": ${deleteRes.error}`, false)
+          return
+        }
+        existing.delete(panelName)
+        delete nextPanelIdByName[panelName]
+        delete nextPanelNameById[panelId]
+      }
 
       for (const panelName of sanitized) {
         if (existing.has(panelName)) continue

@@ -25,3 +25,15 @@ export async function createPanel(jobCardId: string, panelName: string): Promise
   if (error) return fail(error)
   return ok(data)
 }
+
+export async function deletePanel(panelId: string): Promise<ApiResult<true>> {
+  if (!panelId.trim()) return fail('Panel id is required')
+
+  const { error } = await supabase
+    .from('panels')
+    .delete()
+    .eq('id', panelId)
+
+  if (error) return fail(error)
+  return ok(true)
+}
