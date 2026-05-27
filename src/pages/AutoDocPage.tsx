@@ -831,18 +831,6 @@ export default function AutoDocPage() {
     && form.kmReading.trim()
     && walkaroundVideoName.trim(),
   ) && !uploadingWalkaround
-  const hasVehicleDraftFields = [
-    form.vin,
-    form.model,
-    form.year,
-    form.colour,
-    form.paintType,
-    form.dealerCity,
-    form.bpCityCategory,
-    form.ownerName,
-    form.ownerPhone,
-    form.dateOfSale,
-  ].some((value) => value.trim().length > 0)
   const showVehicleDetailsForm = vehicleLookupStatus !== 'idle'
 
   // ── Fetch ──────────────────────────────────────────────────────────────────

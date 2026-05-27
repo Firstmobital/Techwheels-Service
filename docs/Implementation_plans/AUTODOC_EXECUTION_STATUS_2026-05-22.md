@@ -3,7 +3,7 @@
 **Plan ID:** AUTODOC-STATUS-001  
 **Created:** 2026-05-22  
 **Owner:** GitHub Copilot (execution audit)  
-**Status:** ⚠️ IN EXECUTION (code complete; production runtime verification pending) — Last update: 2026-05-26
+**Status:** ⚠️ IN EXECUTION (code complete; production runtime verification pending) — Last update: 2026-05-27
 
 ---
 
@@ -41,6 +41,33 @@ Drift gate checklist (must pass before closing this plan):
 ## Executive Summary
 
 The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim workflow system. **All core functionality is now fully implemented (2026-05-23):**
+
+### Execution Delta (2026-05-27 — Form Render Timing & Both Registration Formats Support)
+
+**Status: ✅ COMPLETED**
+
+Completed in codebase:
+- **Form visibility gating:** Vehicle Details, Owner & Dealer, and Job Details sections now only render AFTER "Fetch from DB" button is clicked:
+  - file: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx) (line 846)
+  - Changed condition: `showVehicleDetailsForm = vehicleLookupStatus !== 'idle'`
+  - Previous behavior: Form rendered as soon as user entered a registration number
+  - New behavior: Form hidden until lookup initiated (button click)
+  - Benefits: Cleaner UX, prevents accidental form interaction before vehicle lookup
+
+- **RC Lookup Format Testing - Both Registration Types:** Comprehensive format support verified:
+  - Old Format (Pre-2024): `RJ60CH0123` (10 chars: 2 letters + 2 digits + 2 letters + 4 digits)
+  - New Format (2024+): `24BH5804C` (9 chars: 2 digits + 2 letters + 4 digits + 1 letter)
+  - Test Coverage: 12/12 scenarios pass (100% success rate)
+    - Standard formats for both types
+    - Hyphenated versions (automatically stripped)
+    - Space-separated versions (automatically stripped)
+    - Case-insensitive input (converted to uppercase)
+  - Documentation: [docs/RC_LOOKUP_FORMAT_TEST_REPORT.md](../../docs/RC_LOOKUP_FORMAT_TEST_REPORT.md)
+  - No code changes required; normalization handles both formats transparently
+
+Code References:
+- Visibility logic: [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx#L846)
+- No breaking changes; existing functionality preserved
 
 ### Execution Delta (2026-05-26 — RC Lookup Edge Function (invoke-ocean025) COMPLETE)
 
