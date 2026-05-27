@@ -11,15 +11,38 @@ type PanelRow = {
   action: string | null
 }
 
-Deno.serve(async (req) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
+function allowedOrigins(): string[] {
+  return (Deno.env.get('ALLOWED_ORIGINS') ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+}
+
+function buildHeaders(origin: string | null): HeadersInit {
+  const allowList = allowedOrigins()
+  const allowOrigin = allowList.length === 0
+    ? '*'
+    : origin && allowList.includes(origin)
+      ? origin
+      : allowList[0]
+
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
   }
+}
+
+Deno.serve(async (req) => {
+  const headers = buildHeaders(req.headers.get('origin'))
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers })
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers })
   }
 
   try {
