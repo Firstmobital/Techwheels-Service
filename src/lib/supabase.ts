@@ -1,7 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+type EnvBag = Record<string, string | undefined>
+
+const viteEnv: EnvBag =
+	typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined'
+		? (import.meta.env as EnvBag)
+		: {}
+
+const processEnv: EnvBag =
+	typeof process !== 'undefined' && process.env
+		? (process.env as EnvBag)
+		: {}
+
+const supabaseUrl =
+	viteEnv.VITE_SUPABASE_URL ?? processEnv.EXPO_PUBLIC_SUPABASE_URL ?? ''
+const supabaseAnonKey =
+	viteEnv.VITE_SUPABASE_ANON_KEY ?? processEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 export const hasSupabaseEnv = Boolean(supabaseUrl && supabaseAnonKey)
 

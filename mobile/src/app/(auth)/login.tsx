@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { View, TextInput, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '../../context/AuthContext'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')

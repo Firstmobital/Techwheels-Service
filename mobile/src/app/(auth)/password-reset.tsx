@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { View, TextInput, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native'
 import { useRouter } from 'expo-router'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../../lib/supabase'
 
 export default function PasswordResetScreen() {
   const [email, setEmail] = useState('')

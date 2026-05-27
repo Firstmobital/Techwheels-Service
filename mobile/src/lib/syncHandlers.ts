@@ -5,7 +5,6 @@
  */
 
 import { QueuedItem } from './syncQueue'
-import * as api from './api'
 import { logEvent } from '../utils/logger'
 
 /**
@@ -13,26 +12,10 @@ import { logEvent } from '../utils/logger'
  */
 const jobCardHandler = {
   handle: async (item: QueuedItem) => {
-    try {
-      if (item.operation === 'create') {
-        const result = await api.jobCards.create(item.data as any)
-        logEvent('sync_job_card_created', {
-          resource_id: result.id,
-        }, 'sync-handlers')
-      } else if (item.operation === 'update' && item.resourceId) {
-        await api.jobCards.update(item.resourceId, item.data as any)
-        logEvent('sync_job_card_updated', {
-          resource_id: item.resourceId,
-        }, 'sync-handlers')
-      } else if (item.operation === 'delete' && item.resourceId) {
-        await api.jobCards.delete(item.resourceId)
-        logEvent('sync_job_card_deleted', {
-          resource_id: item.resourceId,
-        }, 'sync-handlers')
-      }
-    } catch (error) {
-      throw error
-    }
+    logEvent('sync_job_card_deferred', {
+      operation: item.operation,
+      resource_id: item.resourceId,
+    }, 'sync-handlers')
   },
 }
 
@@ -41,23 +24,10 @@ const jobCardHandler = {
  */
 const photoHandler = {
   handle: async (item: QueuedItem) => {
-    try {
-      if (item.operation === 'upload') {
-        const photoData = item.data as any
-        const result = await api.photos.upload(
-          photoData.jobCardId,
-          photoData.photoPath,
-          photoData.panelId,
-        )
-        logEvent('sync_photo_uploaded', {
-          resource_id: result.id,
-          job_card_id: photoData.jobCardId,
-          size_kb: photoData.sizeKb,
-        }, 'sync-handlers')
-      }
-    } catch (error) {
-      throw error
-    }
+    logEvent('sync_photo_deferred', {
+      operation: item.operation,
+      resource_id: item.resourceId,
+    }, 'sync-handlers')
   },
 }
 
@@ -66,21 +36,10 @@ const photoHandler = {
  */
 const estimateHandler = {
   handle: async (item: QueuedItem) => {
-    try {
-      if (item.operation === 'create') {
-        const result = await api.estimate.create(item.data as any)
-        logEvent('sync_estimate_created', {
-          resource_id: result.id,
-        }, 'sync-handlers')
-      } else if (item.operation === 'update' && item.resourceId) {
-        await api.estimate.update(item.resourceId, item.data as any)
-        logEvent('sync_estimate_updated', {
-          resource_id: item.resourceId,
-        }, 'sync-handlers')
-      }
-    } catch (error) {
-      throw error
-    }
+    logEvent('sync_estimate_deferred', {
+      operation: item.operation,
+      resource_id: item.resourceId,
+    }, 'sync-handlers')
   },
 }
 
@@ -89,21 +48,10 @@ const estimateHandler = {
  */
 const panelHandler = {
   handle: async (item: QueuedItem) => {
-    try {
-      if (item.operation === 'create') {
-        const result = await api.panels.create(item.data as any)
-        logEvent('sync_panel_created', {
-          resource_id: result.id,
-        }, 'sync-handlers')
-      } else if (item.operation === 'update' && item.resourceId) {
-        await api.panels.update(item.resourceId, item.data as any)
-        logEvent('sync_panel_updated', {
-          resource_id: item.resourceId,
-        }, 'sync-handlers')
-      }
-    } catch (error) {
-      throw error
-    }
+    logEvent('sync_panel_deferred', {
+      operation: item.operation,
+      resource_id: item.resourceId,
+    }, 'sync-handlers')
   },
 }
 
@@ -112,23 +60,10 @@ const panelHandler = {
  */
 const documentHandler = {
   handle: async (item: QueuedItem) => {
-    try {
-      if (item.operation === 'upload') {
-        const docData = item.data as any
-        const result = await api.documents.upload(
-          docData.jobCardId,
-          docData.documentPath,
-          docData.documentType,
-        )
-        logEvent('sync_document_uploaded', {
-          resource_id: result.id,
-          job_card_id: docData.jobCardId,
-          type: docData.documentType,
-        }, 'sync-handlers')
-      }
-    } catch (error) {
-      throw error
-    }
+    logEvent('sync_document_deferred', {
+      operation: item.operation,
+      resource_id: item.resourceId,
+    }, 'sync-handlers')
   },
 }
 
@@ -137,16 +72,10 @@ const documentHandler = {
  */
 const activityLogHandler = {
   handle: async (item: QueuedItem) => {
-    try {
-      if (item.operation === 'create') {
-        const result = await api.activityLog.create(item.data as any)
-        logEvent('sync_activity_logged', {
-          resource_id: result.id,
-        }, 'sync-handlers')
-      }
-    } catch (error) {
-      throw error
-    }
+    logEvent('sync_activity_deferred', {
+      operation: item.operation,
+      resource_id: item.resourceId,
+    }, 'sync-handlers')
   },
 }
 

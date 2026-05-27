@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
 
 interface ReportCard {
   title: string

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '../../context/AuthContext'
 import { useRouter } from 'expo-router'
 
 interface SettingItem {

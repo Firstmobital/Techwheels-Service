@@ -5,7 +5,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import * as Device from 'expo-device'
 import { supabase } from '../lib/supabase'
 
@@ -37,6 +37,7 @@ interface LogEntry {
 let deviceId: string | null = null
 let logBuffer: LogEntry[] = []
 let isUploading = false
+const FILE_LOGGING_ENABLED = false
 
 /**
  * Initialize logger
@@ -52,14 +53,16 @@ export const initializeLogger = async () => {
       await AsyncStorage.setItem('tw_device_id', deviceId)
     }
 
-    // Create logs directory if it doesn't exist
-    const dirInfo = await FileSystem.getInfoAsync(LOGS_DIR)
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(LOGS_DIR, { intermediates: true })
-    }
+    if (FILE_LOGGING_ENABLED) {
+      // Create logs directory if it doesn't exist
+      const dirInfo = await FileSystem.getInfoAsync(LOGS_DIR)
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(LOGS_DIR, { intermediates: true })
+      }
 
-    // Cleanup old logs (keep only today's IST logs)
-    await cleanupOldLogs()
+      // Cleanup old logs (keep only today's IST logs)
+      await cleanupOldLogs()
+    }
   } catch (error) {
     console.error('Logger initialization error:', error)
   }
@@ -106,6 +109,10 @@ export const logEvent = (
  * Write logs to local file
  */
 const writeLogsToFile = async (entries: LogEntry[]) => {
+  if (!FILE_LOGGING_ENABLED) {
+    return
+  }
+
   try {
     const today = new Date().toISOString().split('T')[0]
     const fileName = `${deviceId}__${today}.log`
@@ -181,6 +188,10 @@ export const flushPendingLogsToS3 = async (options?: { reason?: string }) => {
  * Get current log file
  */
 export const getCurrentLogFile = async (): Promise<string | null> => {
+  if (!FILE_LOGGING_ENABLED) {
+    return null
+  }
+
   try {
     const today = new Date().toISOString().split('T')[0]
     const fileName = `${deviceId}__${today}.log`
@@ -201,6 +212,10 @@ export const getCurrentLogFile = async (): Promise<string | null> => {
  * Cleanup old log files (keep only today's IST logs)
  */
 export const cleanupOldLogs = async () => {
+  if (!FILE_LOGGING_ENABLED) {
+    return
+  }
+
   try {
     const today = new Date().toISOString().split('T')[0]
     const files = await FileSystem.readDirectoryAsync(LOGS_DIR)
@@ -230,6 +245,15 @@ export const getDeviceId = (): string => {
  * Get log statistics
  */
 export const getLogStats = async () => {
+  if (!FILE_LOGGING_ENABLED) {
+    return {
+      files: 0,
+      totalSize: 0,
+      bufferSize: logBuffer.length,
+      deviceId: deviceId || 'unknown',
+    }
+  }
+
   try {
     const files = await FileSystem.readDirectoryAsync(LOGS_DIR)
     let totalSize = 0

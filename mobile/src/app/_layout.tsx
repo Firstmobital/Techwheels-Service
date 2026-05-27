@@ -1,16 +1,13 @@
-import '@/env-compat'
+import '../env-compat'
+import '../global.css'
 import { Stack } from 'expo-router'
-import { useColorScheme } from 'react-native'
-import { AuthProvider } from '@/context/AuthContext'
-import { OfflineProvider } from '@/context/OfflineContext'
-import { syncHandlers } from '@/lib/syncHandlers'
+import { AuthProvider } from '../context/AuthContext'
+import { OfflineProvider } from '../context/OfflineContext'
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme()
-
   return (
     <AuthProvider>
-      <OfflineProvider syncHandlers={syncHandlers}>
+      <OfflineProvider>
         <Stack>
           <Stack.Screen
             name="(auth)"

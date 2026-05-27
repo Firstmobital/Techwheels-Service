@@ -1,141 +1,160 @@
-import { useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, Alert, Switch } from 'react-native'
-
-interface MenuOption {
-  title: string
-  icon: string
-  description: string
-  color: string
-  onPress: () => void
-}
+import { useCallback, useEffect, useState } from 'react'
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
+import { useRouter } from 'expo-router'
+import {
+  listJobCardSummaries,
+  type JobDashboardSummaryRow,
+  updateJobCardStatus,
+} from '../../lib/api/jobCards'
 
 export default function AutoDocScreen() {
-  const [syncEnabled, setSyncEnabled] = useState(true)
+  const router = useRouter()
+  const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const menuOptions: MenuOption[] = [
-    {
-      title: 'Active Jobs',
-      icon: '📋',
-      description: '0 job cards in progress',
-      color: 'blue',
-      onPress: () => Alert.alert('Active Jobs', 'Feature coming soon'),
-    },
-    {
-      title: 'Create Job Card',
-      icon: '✏️',
-      description: 'Start a new job card',
-      color: 'green',
-      onPress: () => Alert.alert('Create Job Card', 'Feature coming soon'),
-    },
-    {
-      title: 'Photo Capture',
-      icon: '📷',
-      description: 'Attach photos to jobs',
-      color: 'purple',
-      onPress: () => Alert.alert('Photo Capture', 'Feature coming soon'),
-    },
-    {
-      title: 'Estimates',
-      icon: '💵',
-      description: 'Create and manage estimates',
-      color: 'orange',
-      onPress: () => Alert.alert('Estimates', 'Feature coming soon'),
-    },
-    {
-      title: 'Vehicle Lookup',
-      icon: '🚗',
-      description: 'Search registration details',
-      color: 'red',
-      onPress: () => Alert.alert('Vehicle Lookup', 'Feature coming soon'),
-    },
-    {
-      title: 'AutoDoc Rate Lookup',
-      icon: '📊',
-      description: 'Get repair rates and time',
-      color: 'indigo',
-      onPress: () => Alert.alert('Rate Lookup', 'Feature coming soon'),
-    },
-  ]
-
-  const getColorClasses = (color: string) => {
-    const colors: { [key: string]: string } = {
-      blue: 'bg-blue-50 border-blue-200',
-      green: 'bg-green-50 border-green-200',
-      purple: 'bg-purple-50 border-purple-200',
-      orange: 'bg-orange-50 border-orange-200',
-      red: 'bg-red-50 border-red-200',
-      indigo: 'bg-indigo-50 border-indigo-200',
+  const loadJobCards = useCallback(async () => {
+    try {
+      setError(null)
+      const result = await listJobCardSummaries()
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setJobCards(result.data ?? [])
+    } catch (err: any) {
+      setError(err.message || 'Failed to load AutoDoc job cards')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    return colors[color] || colors.blue
+  }, [])
+
+  useEffect(() => {
+    loadJobCards()
+  }, [loadJobCards])
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    loadJobCards()
   }
 
-  const getTextColorClasses = (color: string) => {
-    const colors: { [key: string]: string } = {
-      blue: 'text-blue-700',
-      green: 'text-green-700',
-      purple: 'text-purple-700',
-      orange: 'text-orange-700',
-      red: 'text-red-700',
-      indigo: 'text-indigo-700',
+  const moveToInWork = async (item: JobDashboardSummaryRow) => {
+    if (!item.job_card_id) {
+      Alert.alert('Action Unavailable', 'This job card is missing an identifier.')
+      return
     }
-    return colors[color] || colors.blue
+
+    setUpdatingId(item.job_card_id)
+    try {
+      const result = await updateJobCardStatus(item.job_card_id, 'in_work')
+      if (result.error) {
+        Alert.alert('Update Failed', result.error)
+      } else {
+        Alert.alert('Updated', `${item.jc_number ?? 'Job card'} moved to in_work.`)
+        loadJobCards()
+      }
+    } catch (err: any) {
+      Alert.alert('Update Failed', err.message || 'Unknown error')
+    } finally {
+      setUpdatingId(null)
+    }
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      {/* Header */}
+    <View className="flex-1 bg-gray-50">
       <View className="bg-white border-b border-gray-200 px-4 pt-4 pb-3">
-        <Text className="text-2xl font-bold text-gray-800 mb-1">Job Cards</Text>
-        <Text className="text-sm text-gray-600">Manage job cards and estimates</Text>
+        <Text className="text-2xl font-bold text-gray-800 mb-1">AutoDoc</Text>
+        <Text className="text-sm text-gray-600">Live job cards and status workflow</Text>
       </View>
 
-      {/* Sync Status */}
-      <View className="bg-white border-b border-gray-200 px-4 py-4 flex-row items-center justify-between">
-        <View>
-          <Text className="text-sm font-semibold text-gray-800">Auto Sync</Text>
-          <Text className="text-xs text-gray-500 mt-1">Sync changes to cloud</Text>
+      {loading && !refreshing ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <ActivityIndicator size="large" color="#2563eb" />
+          <Text className="text-sm text-gray-500 mt-3">Loading job cards...</Text>
         </View>
-        <Switch
-          value={syncEnabled}
-          onValueChange={setSyncEnabled}
-          trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-          thumbColor={syncEnabled ? '#2563eb' : '#f3f4f6'}
-        />
-      </View>
-
-      {/* Menu Grid */}
-      <View className="p-4">
-        {menuOptions.map((option, idx) => (
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-lg font-semibold text-red-700 mb-1">Unable to load AutoDoc</Text>
+          <Text className="text-sm text-red-600 text-center mb-4">{error}</Text>
           <TouchableOpacity
-            key={idx}
-            className={`${getColorClasses(option.color)} rounded-lg mb-3 p-4 border active:opacity-75`}
-            onPress={option.onPress}
+            className="bg-blue-600 rounded-lg px-4 py-3"
+            onPress={onRefresh}
           >
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <View className="flex-row items-center mb-2">
-                  <Text className="text-2xl mr-3">{option.icon}</Text>
-                  <Text className={`text-lg font-semibold ${getTextColorClasses(option.color)}`}>
-                    {option.title}
-                  </Text>
-                </View>
-                <Text className="text-sm text-gray-600">{option.description}</Text>
-              </View>
-              <Text className="text-lg text-gray-400">→</Text>
-            </View>
+            <Text className="text-white font-semibold">Retry</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Information Box */}
-      <View className="px-4 pb-6">
-        <View className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <Text className="font-semibold text-blue-700 mb-2">💡 Pro Tip</Text>
-          <Text className="text-sm text-blue-600">
-            Enable Auto Sync to automatically upload job card changes when you're online. Offline changes will sync automatically when connection is restored.
-          </Text>
         </View>
-      </View>
-    </ScrollView>
+      ) : (
+        <FlatList
+          data={jobCards}
+          keyExtractor={(item, index) => `${item.job_card_id ?? item.jc_number ?? 'job'}-${index}`}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          ListEmptyComponent={
+            <View className="bg-white border border-gray-200 rounded-xl p-6 items-center mt-4">
+              <Text className="text-base font-semibold text-gray-800">No job cards found</Text>
+              <Text className="text-sm text-gray-500 text-center mt-1">
+                Once records are available, they will appear here.
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const busy = updatingId === item.job_card_id
+            return (
+              <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
+                <View className="flex-row items-start justify-between">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-base font-bold text-gray-900">
+                      {item.jc_number ?? 'Unknown JC'}
+                    </Text>
+                    <Text className="text-sm text-gray-600 mt-1">
+                      {item.reg_number ?? 'Unknown registration'}
+                    </Text>
+                    <Text className="text-xs text-gray-500 mt-2">
+                      Status: {item.status ?? 'draft'} | Panels: {item.panel_count ?? 0}
+                    </Text>
+                  </View>
+
+                  <View>
+                    <TouchableOpacity
+                      className="rounded-lg px-3 py-2 mb-2 bg-slate-200"
+                      onPress={() => {
+                        if (!item.job_card_id) {
+                          Alert.alert('Action Unavailable', 'This job card is missing an identifier.')
+                          return
+                        }
+                        router.push(`/job-cards/${item.job_card_id}`)
+                      }}
+                    >
+                      <Text className="text-slate-700 text-xs font-semibold">Open</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      className={`rounded-lg px-3 py-2 ${busy ? 'bg-blue-300' : 'bg-blue-600'}`}
+                      onPress={() => moveToInWork(item)}
+                      disabled={busy}
+                    >
+                      <Text className="text-white text-xs font-semibold">
+                        {busy ? 'Updating...' : 'Set in_work'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )
+          }}
+        />
+      )}
+    </View>
   )
 }

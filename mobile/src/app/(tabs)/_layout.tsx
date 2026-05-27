@@ -1,10 +1,9 @@
-import { Tabs, useRouter } from 'expo-router'
-import { useAuth } from '@/context/AuthContext'
-import { ActivityIndicator, View } from 'react-native'
+import { Redirect, Tabs } from 'expo-router'
+import { useAuth } from '../../context/AuthContext'
+import { ActivityIndicator, Text, View } from 'react-native'
 
 export default function TabsLayout() {
   const { loading, session } = useAuth()
-  const router = useRouter()
 
   if (loading) {
     return (
@@ -15,8 +14,7 @@ export default function TabsLayout() {
   }
 
   if (!session) {
-    router.replace('/(auth)/login')
-    return null
+    return <Redirect href="/(auth)/login" />
   }
 
   return (
@@ -102,5 +100,3 @@ export default function TabsLayout() {
     </Tabs>
   )
 }
-
-import { Text } from 'react-native'

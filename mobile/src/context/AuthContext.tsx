@@ -1,11 +1,10 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { Session } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
-import { secureStorage } from '@/lib/secureStorage'
+import type { Session, User } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
 
 interface AuthContextType {
   session: Session | null
-  user: Session['user'] | null
+  user: User | null
   loading: boolean
   signOut: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error?: Error }>
@@ -17,98 +16,64 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
-  const [user, setUser] = useState<Session['user'] | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Token refresh logic
   const refreshSession = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.auth.refreshSession()
-      if (error) {
-        console.error('Session refresh failed:', error.message)
-        // If refresh fails, clear session
-        await supabase.auth.signOut()
-        setSession(null)
-        setUser(null)
-      } else if (data.session) {
-        setSession(data.session)
-        setUser(data.session.user)
-        // Save the new token securely
-        if (data.session.access_token) {
-          await secureStorage.saveAuthToken(data.session.access_token)
-        }
-      }
-    } catch (error) {
-      console.error('Token refresh error:', error)
+    const { data, error } = await supabase.auth.getSession()
+    if (error) {
+      throw error
     }
+
+    setSession(data.session)
+    setUser(data.session?.user ?? null)
   }, [])
 
   useEffect(() => {
-    // Check initial session
-    const initSession = async () => {
+    let mounted = true
+
+    const bootstrap = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          setSession(session)
-          setUser(session.user)
-          // Save token for recovery
-          if (session.access_token) {
-            await secureStorage.saveAuthToken(session.access_token)
-          }
-          if (session.user.id) {
-            await secureStorage.saveUserId(session.user.id)
-          }
+        const { data } = await supabase.auth.getSession()
+        if (!mounted) {
+          return
         }
+        setSession(data.session)
+        setUser(data.session?.user ?? null)
       } catch (error) {
-        console.error('Failed to retrieve initial session:', error)
+        console.error('Failed to restore session:', error)
       } finally {
-        setLoading(false)
+        if (mounted) {
+          setLoading(false)
+        }
       }
     }
 
-    initSession()
+    bootstrap()
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-
-        // Save/clear tokens based on auth state
-        if (session?.access_token) {
-          await secureStorage.saveAuthToken(session.access_token)
-          if (session.user.id) {
-            await secureStorage.saveUserId(session.user.id)
-          }
-        } else {
-          await secureStorage.clearAuthData()
-        }
-
-        setLoading(false)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) {
+        return
       }
-    )
+      setSession(nextSession)
+      setUser(nextSession?.user ?? null)
+      setLoading(false)
+    })
 
-    return () => subscription?.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
-
-  // Auto-refresh token every 5 minutes
-  useEffect(() => {
-    if (!session) return
-
-    const interval = setInterval(async () => {
-      await refreshSession()
-    }, 5 * 60 * 1000) // 5 minutes
-
-    return () => clearInterval(interval)
-  }, [session, refreshSession])
 
   const signOut = async () => {
     try {
       const { error } = await supabase.auth.signOut()
       if (error) {
-        console.error('Sign out error:', error.message)
+        throw error
       }
-      await secureStorage.clearAuthData()
       setSession(null)
       setUser(null)
     } catch (error) {
@@ -119,23 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(
     async (email: string, password: string) => {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) {
           return { error }
         }
-        if (data.session) {
-          setSession(data.session)
-          setUser(data.session.user)
-          if (data.session.access_token) {
-            await secureStorage.saveAuthToken(data.session.access_token)
-          }
-          if (data.session.user.id) {
-            await secureStorage.saveUserId(data.session.user.id)
-          }
-        }
+
+        setSession(data.session)
+        setUser(data.user)
         return { error: undefined }
       } catch (error) {
         return { error: error as Error }
@@ -147,14 +102,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = useCallback(
     async (email: string, password: string) => {
       try {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        })
+        const { error } = await supabase.auth.signUp({ email, password })
         if (error) {
           return { error }
         }
-        // Note: User won't be logged in until email is confirmed
+
         return { error: undefined }
       } catch (error) {
         return { error: error as Error }

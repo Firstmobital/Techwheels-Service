@@ -4,6 +4,8 @@
  */
 
 const { getDefaultConfig } = require('expo/metro-config')
+const { withNativeWind } = require('nativewind/metro')
+const path = require('path')
 
 const config = getDefaultConfig(__dirname)
 
@@ -13,18 +15,18 @@ config.resolver.extraNodeModules = {
 }
 
 // Add alias resolution for @ imports
-const path = require('path')
-config.resolver.sourceExts = [
-  'tsx',
-  'ts',
-  'jsx',
-  'js',
-  'json',
-  'native',
-]
 
 // Map @ to ./src
 config.projectRoot = __dirname
-config.watchFolders = [__dirname]
+config.watchFolders = [
+  __dirname,
+  path.resolve(__dirname, '..'),
+]
 
-module.exports = config
+// Several files in mobile/src/lib are symlinks into the repo root.
+// Enable symlink traversal so Metro can resolve those modules reliably.
+config.resolver.unstable_enableSymlinks = true
+
+module.exports = withNativeWind(config, {
+  input: './src/global.css',
+})

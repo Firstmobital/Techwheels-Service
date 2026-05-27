@@ -1,25 +1,13 @@
 import { useState, useEffect } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, RefreshControl, Alert } from 'react-native'
+import { View, Text, TouchableOpacity, ActivityIndicator, FlatList, RefreshControl, Alert, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useAuth } from '@/context/AuthContext'
-import { listJobCardSummaries } from '@/lib/api/jobCards'
-import type { Database } from '@/lib/database.types'
-
-interface JobCardItem {
-  job_card_id: string
-  jc_number: string
-  reg_number: string
-  model?: string
-  vehicle_year?: number
-  status?: string
-  total_estimate_amount?: number
-  panel_count?: number
-}
+import { useAuth } from '../../context/AuthContext'
+import { listJobCardSummaries, type JobDashboardSummaryRow } from '../../lib/api/jobCards'
 
 export default function ImportScreen() {
   const router = useRouter()
   const { signOut, user } = useAuth()
-  const [jobCards, setJobCards] = useState<JobCardItem[]>([])
+  const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,10 +19,8 @@ export default function ImportScreen() {
       
       if (result.error) {
         setError(result.error)
-      } else if (result.data) {
-        setJobCards(result.data as JobCardItem[])
       } else {
-        setError('Failed to load job cards')
+        setJobCards(result.data ?? [])
       }
     } catch (err: any) {
       setError(err.message || 'Error loading job cards')
@@ -62,27 +48,28 @@ export default function ImportScreen() {
     Alert.alert('Create Job Card', 'Feature coming soon')
   }
 
-  const renderJobCard = ({ item }: { item: JobCardItem }) => (
+  const renderJobCard = ({ item }: { item: JobDashboardSummaryRow }) => (
     <TouchableOpacity
-      className="bg-white rounded-lg p-4 mb-3 border border-gray-200 active:bg-gray-50"
+      style={styles.jobCard}
+      activeOpacity={0.85}
       onPress={() => Alert.alert('Job Card', `${item.jc_number} - ${item.reg_number}`)}
     >
-      <View className="flex-row justify-between items-start mb-2">
-        <View className="flex-1">
-          <Text className="text-lg font-semibold text-gray-800">{item.jc_number}</Text>
-          <Text className="text-sm text-gray-600">{item.reg_number}</Text>
-          {item.model && <Text className="text-xs text-gray-500 mt-1">{item.model} ({item.vehicle_year})</Text>}
+      <View style={styles.jobCardTopRow}>
+        <View style={styles.jobCardMain}>
+          <Text style={styles.jobCardTitle}>{item.jc_number}</Text>
+          <Text style={styles.jobCardSubtitle}>{item.reg_number}</Text>
+          {item.model && <Text style={styles.jobCardMeta}>{item.model} ({item.vehicle_year})</Text>}
         </View>
-        <View className="bg-blue-100 rounded px-2 py-1">
-          <Text className="text-xs font-semibold text-blue-700">{item.status || 'draft'}</Text>
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillText}>{item.status || 'draft'}</Text>
         </View>
       </View>
       
-      <View className="flex-row justify-between">
-        <Text className="text-sm text-gray-600">
+      <View style={styles.jobCardBottomRow}>
+        <Text style={styles.jobCardLabel}>
           Panels: {item.panel_count || 0}
         </Text>
-        <Text className="text-sm font-semibold text-gray-800">
+        <Text style={styles.jobCardAmount}>
           ₹{(item.total_estimate_amount || 0).toFixed(2)}
         </Text>
       </View>
@@ -90,64 +77,278 @@ export default function ImportScreen() {
   )
 
   return (
-    <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white border-b border-gray-200 px-4 pt-4 pb-3">
-        <Text className="text-2xl font-bold text-gray-800 mb-1">Job Cards</Text>
-        <Text className="text-sm text-gray-600">{user?.email}</Text>
+    <View style={styles.container}>
+      <View style={styles.headerCard}>
+        <View style={styles.headerTopRow}>
+          <Text style={styles.headerTitle}>Import Data</Text>
+          <View style={styles.liveChip}>
+            <Text style={styles.liveChipText}>LIVE</Text>
+          </View>
+        </View>
+        <Text style={styles.headerSubtitle}>Job Cards</Text>
+        <Text style={styles.userEmail}>{user?.email}</Text>
       </View>
 
-      {/* Content */}
       {loading && !refreshing ? (
-        <View className="flex-1 justify-center items-center">
+        <View style={styles.centerState}>
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text className="text-gray-600 mt-2">Loading job cards...</Text>
+          <Text style={styles.loadingText}>Loading premium dashboard...</Text>
         </View>
       ) : error ? (
-        <View className="flex-1 justify-center items-center px-4">
-          <Text className="text-red-600 text-center font-semibold mb-4">{error}</Text>
+        <View style={styles.centerState}>
+          <Text style={styles.errorTitle}>Unable to Load Data</Text>
+          <Text style={styles.errorBody}>{error}</Text>
           <TouchableOpacity
-            className="bg-blue-600 rounded-lg px-6 py-3"
+            style={styles.primaryButton}
             onPress={onRefresh}
+            activeOpacity={0.85}
           >
-            <Text className="text-white font-semibold">Retry</Text>
+            <Text style={styles.primaryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <FlatList
           data={jobCards}
           renderItem={renderJobCard}
-          keyExtractor={(item) => item.job_card_id}
-          contentContainerStyle={{ padding: 16 }}
+          keyExtractor={(item, index) => `${item.job_card_id ?? item.jc_number ?? 'job'}-${index}`}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center py-12">
-              <Text className="text-2xl mb-2">📋</Text>
-              <Text className="text-gray-600">No job cards yet</Text>
-              <Text className="text-xs text-gray-500 mt-1">Pull to refresh</Text>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyTitle}>No Job Cards Yet</Text>
+              <Text style={styles.emptyBody}>Create your first job card to get started.</Text>
             </View>
           }
         />
       )}
 
-      {/* Footer Actions */}
-      <View className="border-t border-gray-200 bg-white px-4 py-4">
+      <View style={styles.footerActions}>
         <TouchableOpacity
-          className="bg-blue-600 rounded-lg py-3 mb-2"
+          style={styles.primaryButton}
           onPress={handleCreateJobCard}
+          activeOpacity={0.9}
         >
-          <Text className="text-white text-center font-semibold">+ New Job Card</Text>
+          <Text style={styles.primaryButtonText}>+ New Job Card</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          className="bg-red-500 rounded-lg py-3"
+          style={styles.secondaryButton}
           onPress={handleLogout}
+          activeOpacity={0.9}
         >
-          <Text className="text-white text-center font-semibold">Logout</Text>
+          <Text style={styles.secondaryButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f4f7ff',
+  },
+  headerCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#e7ecff',
+    shadowColor: '#1f3b8f',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  headerSubtitle: {
+    fontSize: 17,
+    color: '#334155',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: '#64748b',
+  },
+  liveChip: {
+    borderRadius: 999,
+    backgroundColor: '#dbeafe',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  liveChipText: {
+    color: '#1d4ed8',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingTop: 8,
+  },
+  jobCard: {
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    marginBottom: 12,
+  },
+  jobCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  jobCardMain: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  jobCardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  jobCardSubtitle: {
+    marginTop: 2,
+    fontSize: 14,
+    color: '#475569',
+  },
+  jobCardMeta: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#64748b',
+  },
+  statusPill: {
+    borderRadius: 999,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusPillText: {
+    color: '#1d4ed8',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  jobCardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  jobCardLabel: {
+    fontSize: 13,
+    color: '#475569',
+  },
+  jobCardAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#64748b',
+    fontSize: 14,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#991b1b',
+    marginBottom: 6,
+  },
+  errorBody: {
+    textAlign: 'center',
+    color: '#b91c1c',
+    fontSize: 14,
+    marginBottom: 14,
+  },
+  emptyCard: {
+    marginTop: 24,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    backgroundColor: '#f8fbff',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    fontSize: 34,
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  emptyBody: {
+    color: '#64748b',
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  footerActions: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderTopColor: '#dbe3f4',
+    backgroundColor: '#ffffff',
+  },
+  primaryButton: {
+    backgroundColor: '#2563eb',
+    borderRadius: 14,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  secondaryButton: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  secondaryButtonText: {
+    color: '#334155',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+})
