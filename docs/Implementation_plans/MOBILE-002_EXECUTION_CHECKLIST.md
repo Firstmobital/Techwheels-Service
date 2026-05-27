@@ -29,28 +29,60 @@
 [ ] npx create-expo-app@latest techwheels-service
 ```
 
-### 1.2 Install Core Dependencies
+### 1.2 Install Core Dependencies (Web + Mobile Essentials)
 ```
 [ ] npm install @supabase/supabase-js@^2.103.3
 [ ] npm install exceljs@^4.4.0 papaparse@^5.5.3 pptxgenjs@^4.0.1
-[ ] npm install react@^19.2.5 react-native@0.76.x
+[ ] npm install react@^19.2.5 react-dom@^19.2.5 react-native@0.81.5
 [ ] npm install recharts@^3.8.1 xlsx@^0.18.5
-[ ] npm install react-native-gesture-handler react-native-reanimated
+[ ] npm install react-native-gesture-handler@2.28.0 react-native-reanimated@4.1.6
+[ ] npm install react-native-safe-area-context@5.6.2 react-native-screens@4.16.0
 ```
 
-### 1.3 Install Mobile-Specific Dependencies
+### 1.3 Install Mobile-Specific Dependencies (UI/Storage/Auth)
 ```
-[ ] npm install expo@~54.0.33 expo-router~6.0.23  (Proven versions from ref)
-[ ] npm install expo-camera expo-image-picker expo-document-picker
-[ ] npm install expo-sharing expo-local-authentication
-[ ] npm install @react-native-async-storage/async-storage
-[ ] npm install react-native-gesture-handler react-native-reanimated
-[ ] npm install react-native-safe-area-context
-[ ] npm install nativewind tailwindcss
-[ ] npm install zustand@^5.0.8  (State management, ref project pattern)
-[ ] npm install dotenv patch-package  (Environment + node_modules patching)
-[ ] npm install --save-dev typescript @types/react @types/react-native
+[ ] npm install expo@~54.0.33 expo-router@~6.0.23
+[ ] npm install expo-camera@~17.0.10 expo-image-picker@~17.0.10 expo-document-picker@14.0.8
+[ ] npm install expo-sharing@~14.0.7 expo-print@~15.0.7
+[ ] npm install expo-local-authentication@~17.0.8 expo-location@~19.0.8
+[ ] npm install expo-notifications@~0.32.16 expo-background-fetch@~14.0.9
+[ ] npm install expo-file-system@19.0.21 expo-constants@18.0.13 expo-device@~8.0.10
+[ ] npm install @react-native-async-storage/async-storage@2.2.0
+[ ] npm install @react-native-picker/picker@^2.11.1 @react-native-community/datetimepicker@8.4.4
+[ ] npm install nativewind@^4.x tailwindcss@^4.1.13
+[ ] npm install zustand@^5.0.8 dotenv@^17.3.1 patch-package@^8.0.1
+[ ] npm install --save-dev typescript@~5.9.2 @types/react@~19.1.10 @types/react-native@^0.81.0
 ```
+
+### 1.4 Install Utilities & Document Generation (Export/PDF/QR)
+```
+[ ] npm install jspdf@^2.5.1 jspdf-autotable@^3.8.2 html2canvas@^1.4.1
+[ ] npm install qrcode@^1.5.4 classnames@^2.5.1
+[ ] npm install date-fns@^4.1.0 zod@^3.23.8
+[ ] npm install csv-parse@^6.1.0 iconv-lite@^0.7.0
+[ ] npm install lucide-react@^0.544.0
+[ ] npm install --save-dev @babel/core@^7.26.0 babel-plugin-module-resolver@^5.0.2
+[ ] npm install --save-dev babel-plugin-transform-import-meta@^2.3.3 eslint@^8.57.0
+```
+
+### 1.5 Comprehensive Dependency List (FULL INSTALL)
+**Alternative: Install ALL at once** (copy-paste the complete package.json from MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md Phase 1.3 and run):
+```
+[ ] npm install
+```
+
+**Verification**:
+```
+[ ] node_modules contains 500+ packages (from reference project pattern)
+[ ] package-lock.json created
+[ ] Zero critical peer dependency errors
+[ ] ALL web + mobile dependencies bundled in APK
+```
+
+**Result**: ✅ ALL dependencies pre-bundled in APK (~150 MB compressed)
+- No npm downloads on device
+- OTA updates only push app code (~50-200 KB)
+- First install is complete and self-contained
 
 ### 1.4 Initialize TypeScript
 ```

@@ -254,43 +254,110 @@ npm install --save-dev typescript @types/react @types/react-native
 npx tsc --init
 ```
 
-#### 1.3 Install Core Dependencies
-All packages from web `package.json` + mobile essentials:
+#### 1.3 Install Core Dependencies (COMPREHENSIVE - ALL by default)
+Create `mobile/package.json` with ALL required modules pre-bundled:
 
-**From Web**:
 ```json
 {
-  "@supabase/supabase-js": "^2.103.3",
-  "exceljs": "^4.4.0",
-  "papaparse": "^5.5.3",
-  "pptxgenjs": "^4.0.1",
-  "react": "^19.2.5",
-  "react-native": "0.76.x",  // Add for Expo
-  "recharts": "^3.8.1",
-  "xlsx": "^0.18.5"
+  "name": "techwheels-service-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build:prod:apk": "eas build -p android --profile production",
+    "build:preview:apk": "eas build -p android --profile preview",
+    "ota:prod": "CI=1 eas update --branch production --platform android --message",
+    "ota:preview": "CI=1 eas update --branch preview --platform android --message"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-picker/picker": "^2.11.1",
+    "@react-native-community/datetimepicker": "8.4.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "2.28.0",
+    "react-native-reanimated": "4.1.6",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-screens": "4.16.0",
+    "react-native-web": "^0.21.0",
+    "expo": "~54.0.33",
+    "expo-router": "~6.0.23",
+    "expo-constants": "18.0.13",
+    "expo-device": "~8.0.10",
+    "expo-file-system": "19.0.21",
+    "expo-camera": "~17.0.10",
+    "expo-image-picker": "~17.0.10",
+    "expo-document-picker": "14.0.8",
+    "expo-sharing": "~14.0.7",
+    "expo-print": "~15.0.7",
+    "expo-linking": "~8.0.11",
+    "expo-local-authentication": "~17.0.8",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.16",
+    "expo-background-fetch": "~14.0.9",
+    "expo-task-manager": "~14.0.9",
+    "expo-updates": "~29.0.16",
+    "expo-build-properties": "~1.0.10",
+    "expo-application": "~7.0.8",
+    "expo-secure-store": "15.0.8",
+    "exceljs": "^4.4.0",
+    "papaparse": "^5.5.3",
+    "pptxgenjs": "^4.0.1",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
+    "html2canvas": "^1.4.1",
+    "qrcode": "^1.5.4",
+    "classnames": "^2.5.1",
+    "zustand": "^5.0.8",
+    "dotenv": "^17.3.1",
+    "date-fns": "^4.1.0",
+    "nativewind": "^4.x",
+    "tailwindcss": "^4.1.13",
+    "zod": "^3.23.8",
+    "csv-parse": "^6.1.0",
+    "iconv-lite": "^0.7.0",
+    "lucide-react": "^0.544.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@types/react": "~19.1.10",
+    "@types/react-native": "^0.81.0",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "babel-plugin-transform-import-meta": "^2.3.3",
+    "typescript": "~5.9.2",
+    "patch-package": "^8.0.1",
+    "eslint": "^8.57.0"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10.x"
+  }
 }
 ```
 
-**Mobile-Specific**:
-```json
-{
-  "expo": "^52.0.0",
-  "expo-router": "^3.x",
-  "expo-font": "^13.x",
-  "expo-splash-screen": "^0.x",
-  "expo-status-bar": "^2.x",
-  "expo-file-system": "^17.x",
-  "expo-image-picker": "^15.x",
-  "expo-camera": "^15.x",
-  "expo-document-picker": "^12.x",
-  "expo-av": "^14.x",  // For audio/video playback
-  "react-native-gesture-handler": "^2.x",
-  "react-native-reanimated": "^3.x",
-  "nativewind": "^4.x",
-  "tailwindcss": "^4.2.2",
-  "victory-native": "^38.x"  // Charting for mobile
-}
-```
+**Key Points**:
+- ✅ ALL web dependencies included (Supabase, ExcelJS, PapaParse, etc.)
+- ✅ ALL mobile-specific packages (Expo, Camera, ImagePicker, etc.)
+- ✅ State management (Zustand)
+- ✅ Styling (TailwindCSS, NativeWind)
+- ✅ Document generation (jsPDF, html2canvas)
+- ✅ Data parsing (CSV, PapaParse, XLSX)
+- ✅ Storage & Auth (AsyncStorage, Secure Store, Supabase)
+- ✅ Utilities (date-fns, classnames, qrcode, zod)
+- ✅ Proven versions from reference project
+
+**Bundle Result**:
+- APK includes ALL dependencies (~150 MB compressed)
+- No npm downloads needed on device
+- OTA updates only push app code changes (~50-200 KB)
 
 #### 1.4 Set Up Routing (Expo Router)
 ```bash
@@ -949,29 +1016,101 @@ npm run ota:prod:ios -- --message "Fix import duplicate"
 # User instruction: Close app → Reopen with internet → Update on next launch
 ```
 
-#### 7.2 Pre-Bundling Dependencies
-Ensure `package.json` includes **all required modules by default**:
+#### 7.2 Pre-Bundling Dependencies (COMPREHENSIVE - ALL modules included by default)
+Ensure `package.json` includes **ALL required modules by default** (no selective bundling):
+
 ```json
 {
+  "name": "techwheels-service-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "build:prod:apk": "eas build -p android --profile production",
+    "build:preview:apk": "eas build -p android --profile preview",
+    "ota:prod": "CI=1 eas update --branch production --platform android",
+    "ota:preview": "CI=1 eas update --branch preview --platform android"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-picker/picker": "^2.11.1",
+    "@react-native-community/datetimepicker": "8.4.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "2.28.0",
+    "react-native-reanimated": "4.1.6",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-screens": "4.16.0",
+    "expo": "~54.0.33",
+    "expo-router": "~6.0.23",
+    "expo-constants": "18.0.13",
+    "expo-device": "~8.0.10",
+    "expo-file-system": "19.0.21",
+    "expo-camera": "~17.0.10",
+    "expo-image-picker": "~17.0.10",
+    "expo-document-picker": "14.0.8",
+    "expo-sharing": "~14.0.7",
+    "expo-print": "~15.0.7",
+    "expo-linking": "~8.0.11",
+    "expo-local-authentication": "~17.0.8",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.16",
+    "expo-background-fetch": "~14.0.9",
+    "expo-task-manager": "~14.0.9",
+    "expo-updates": "~29.0.16",
+    "expo-build-properties": "~1.0.10",
+    "expo-application": "~7.0.8",
+    "expo-secure-store": "15.0.8",
     "exceljs": "^4.4.0",
     "papaparse": "^5.5.3",
     "pptxgenjs": "^4.0.1",
-    "react": "^19.2.5",
-    "react-native": "0.76.x",
     "recharts": "^3.8.1",
     "xlsx": "^0.18.5",
-    "expo": "^52.0.0",
-    "expo-router": "^3.x",
-    "expo-camera": "^15.x",
-    "expo-file-system": "^17.x",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
+    "html2canvas": "^1.4.1",
+    "qrcode": "^1.5.4",
+    "classnames": "^2.5.1",
+    "zustand": "^5.0.8",
+    "dotenv": "^17.3.1",
+    "date-fns": "^4.1.0",
     "nativewind": "^4.x",
-    "tailwindcss": "^4.2.2",
-    "victory-native": "^38.x"
+    "tailwindcss": "^4.1.13",
+    "zod": "^3.23.8",
+    "csv-parse": "^6.1.0",
+    "iconv-lite": "^0.7.0",
+    "lucide-react": "^0.544.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@types/react": "~19.1.10",
+    "@types/react-native": "^0.81.0",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "babel-plugin-transform-import-meta": "^2.3.3",
+    "typescript": "~5.9.2",
+    "patch-package": "^8.0.1",
+    "eslint": "^8.57.0"
   }
 }
 ```
+
+**Coverage Analysis**:
+- ✅ **Web Business Logic**: Supabase, ExcelJS, PapaParse, XLSX, jsPDF (report export)
+- ✅ **Mobile File Ops**: Expo File System, Document Picker, Image Picker, Camera
+- ✅ **Authentication**: AsyncStorage (session), Secure Store (credentials), Supabase Auth
+- ✅ **State Management**: Zustand (with persist)
+- ✅ **Styling**: TailwindCSS + NativeWind
+- ✅ **UI Components**: React Native core + gesture handlers
+- ✅ **Data Processing**: CSV Parse, PapaParse, XLSX, date-fns
+- ✅ **Utilities**: Zod (validation), classnames, qrcode, Lucide icons
+- ✅ **Notifications**: Expo Notifications, Location, Local Auth
+- ✅ **Development**: TypeScript, Babel, ESLint, patch-package
+
+**Bundle Size**: ~150 MB compressed (all dependencies included)  
+**OTA Updates**: Only app code changes (~50-200 KB per update)
 
 #### 7.2 Create EAS Configuration
 Create `eas.json` (proven from ref project):
