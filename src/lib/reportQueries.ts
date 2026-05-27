@@ -1520,6 +1520,9 @@ export async function getBranchLabourRevenueComparison(
 
   const invoiceDateField =
     dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+  const fuelSelection = parseFuelSelectionFromBranch(branch)
+  const fuelColumn = fuelSelection ? await getJobCardFuelColumn() : null
+  const queryBranch: BranchFilter = fuelSelection ? 'Sitapura' : branch
 
   const fetchWindowRows = async (bounds: { from: string; toExclusive: string }): Promise<Record<string, unknown>[]> => {
     let from = 0
@@ -1531,7 +1534,11 @@ export async function getBranchLabourRevenueComparison(
         .select('branch, final_labour_amount, job_card_number')
         .range(from, from + QUERY_PAGE_SIZE - 1)
 
-      query = applyBranchFilterToQuery(query, branch)
+      query = applyBranchFilterToQuery(query, queryBranch)
+
+      if (fuelSelection && fuelColumn) {
+        query = query.eq(fuelColumn, fuelSelection)
+      }
 
       query = applyDateFilterToQuery(query, bounds, {
         closedDateField: 'closed_date_time',
@@ -1552,7 +1559,15 @@ export async function getBranchLabourRevenueComparison(
         throw new Error(error.message)
       }
 
-      const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+      let batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+
+      // Fallback for schemas without dedicated fuel column.
+      if (fuelSelection && !fuelColumn) {
+        batch = batch.filter((row) =>
+          matchesFuelSelectionByBranchLabel((row as { branch?: unknown }).branch, fuelSelection),
+        )
+      }
+
       allRows.push(...batch)
 
       if (batch.length < QUERY_PAGE_SIZE) {
