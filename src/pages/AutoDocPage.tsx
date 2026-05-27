@@ -378,6 +378,7 @@ export default function AutoDocPage() {
   const [activeSummary, setActiveSummary] = useState<JobSummaryRow | null>(null)
   const [jobDocuments, setJobDocuments] = useState<DocumentRow[]>([])
   const [selectedPanels, setSelectedPanels] = useState<string[]>(() => readSessionJSON<string[]>(SESSION_KEYS.selectedPanels, []))
+  const selectedPanelsRef = useRef<string[]>(selectedPanels)
   const [panelsHydratedForJobId, setPanelsHydratedForJobId] = useState<string | null>(null)
   const [panelIdByName, setPanelIdByName] = useState<Record<string, string>>({})
   const [, setPanelNameById] = useState<Record<string, string>>({})
@@ -533,6 +534,10 @@ export default function AutoDocPage() {
       setActivePanel(selectedPanels[0] ?? '')
     }
   }, [activePanel, selectedPanels])
+
+  useEffect(() => {
+    selectedPanelsRef.current = selectedPanels
+  }, [selectedPanels])
 
   function toggleDamagePanel(panel: string) {
     if (damagePhotoType === 'post-repair') {
@@ -1917,6 +1922,7 @@ export default function AutoDocPage() {
 
   async function persistDraftJobCard(showSuccessToast: boolean): Promise<string | null> {
     setCreateError(null)
+    const selectedPanelsSnapshot = sanitizePanelList(selectedPanelsRef.current)
 
     const regNumber = form.regNumber.trim()
     const jcNumber = form.jcNumber.trim()
@@ -2036,7 +2042,7 @@ export default function AutoDocPage() {
     const persistedActiveJobCardId = isDifferentFromActiveSummary ? null : activeJobCardId
 
     async function syncPanels(jobCardId: string): Promise<boolean> {
-      const selected = sanitizePanelList(selectedPanels)
+      const selected = selectedPanelsSnapshot
       console.log('[autodoc-panel-debug] syncPanels:start', {
         jobCardId,
         selected,
@@ -2144,7 +2150,7 @@ export default function AutoDocPage() {
           return false
         }
 
-        const activePanels = sanitizePanelList(selectedPanels)
+        const activePanels = selectedPanelsSnapshot
         const estimateByPanel = new Map<string, EstimateLineItem>()
         estimateRows.forEach((row) => {
           const key = normalizeText(row.panel)
