@@ -542,39 +542,38 @@ export default function AutoDocPage() {
   function toggleDamagePanel(panel: string) {
     if (damagePhotoType === 'post-repair') {
       const isPreRepairPanel = preRepairPanelsForActiveJob.includes(panel)
-      setSelectedPanels((prev) => {
-        const next = Array.from(new Set([...preRepairPanelsForActiveJob, ...prev]))
+      const base = Array.from(new Set([...preRepairPanelsForActiveJob, ...selectedPanels]))
+      let next = base
 
-        if (isPreRepairPanel) {
-          // Keep pre-repair panels always selected in post-repair.
-          return next
-        }
+      if (!isPreRepairPanel) {
+        next = base.includes(panel)
+          ? base.filter((item) => item !== panel)
+          : [...base, panel]
+      }
 
-        if (next.includes(panel)) {
-          return next.filter((item) => item !== panel)
-        }
-
-        return [...next, panel]
-      })
+      selectedPanelsRef.current = next
+      setSelectedPanels(next)
       setActivePanel(panel)
       return
     }
 
-    setSelectedPanels((prev) => {
-      if (prev.includes(panel)) {
-        const next = prev.filter((p) => p !== panel)
-        if (activePanel === panel) {
-          setActivePanel(next[0] ?? '')
-        }
-        return next
-      }
+    const next = selectedPanels.includes(panel)
+      ? selectedPanels.filter((p) => p !== panel)
+      : [...selectedPanels, panel]
 
-      const next = [...prev, panel]
-      if (!activePanel) {
-        setActivePanel(panel)
+    selectedPanelsRef.current = next
+    setSelectedPanels(next)
+
+    if (selectedPanels.includes(panel)) {
+      if (activePanel === panel) {
+        setActivePanel(next[0] ?? '')
       }
-      return next
-    })
+      return
+    }
+
+    if (!activePanel) {
+      setActivePanel(panel)
+    }
   }
 
   function updateEstimateRow(id: string, patch: Partial<EstimateLineItem>) {
