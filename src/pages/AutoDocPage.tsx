@@ -26,6 +26,7 @@ import {
   resolveRegNumberFromReference,
   sendClaimEmail,
   uploadDocumentFile,
+  updateJobCard,
   updateJobCardStatus,
   upsertVehicle,
   type DocumentRow,
@@ -1996,6 +1997,19 @@ export default function AutoDocPage() {
     }
 
     if (persistedActiveJobCardId) {
+      const complaintDate = form.complaintDate || new Date().toISOString().slice(0, 10)
+      const updateRes = await updateJobCard(persistedActiveJobCardId, {
+        jcNumber: form.jcNumber,
+        complaintDate,
+        kmReading,
+        claimType: form.claimType,
+        complaintText: form.complaintText,
+      })
+      if (updateRes.error) {
+        showToast(updateRes.error, false)
+        return null
+      }
+
       const synced = await syncEstimateRows(persistedActiveJobCardId)
       if (!synced) return null
       await fetchRows(true)

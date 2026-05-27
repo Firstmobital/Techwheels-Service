@@ -10,6 +10,14 @@ export type CreateJobCardInput = {
   complaintText?: string
 }
 
+export type UpdateJobCardInput = {
+  jcNumber: string
+  complaintDate: string
+  kmReading?: number | null
+  claimType?: string
+  complaintText?: string
+}
+
 export type JobCardStatus = 'draft' | 'submitted' | 'approved' | 'in_work' | 'completed'
 export type JobDashboardSummaryRow = JobSummaryRow & {
   panel_names?: string[]
@@ -193,6 +201,32 @@ export async function updateJobCardStatus(jobCardId: string, status: JobCardStat
   const { data, error } = await supabase
     .from('job_cards')
     .update({ status })
+    .eq('id', jobCardId)
+    .select('*')
+    .single<JobCardRow>()
+
+  if (error) return fail(error)
+  return ok(data)
+}
+
+export async function updateJobCard(jobCardId: string, input: UpdateJobCardInput): Promise<ApiResult<JobCardRow>> {
+  if (!jobCardId.trim()) return fail('Job card id is required')
+
+  const jcNumber = input.jcNumber.trim()
+  if (!jcNumber) return fail('Job card number is required')
+  if (!input.complaintDate) return fail('Complaint date is required')
+
+  const payload = {
+    jc_number: jcNumber,
+    complaint_date: input.complaintDate,
+    km_reading: input.kmReading ?? null,
+    claim_type: input.claimType?.trim() || null,
+    complaint_text: input.complaintText?.trim() || null,
+  }
+
+  const { data, error } = await supabase
+    .from('job_cards')
+    .update(payload)
     .eq('id', jobCardId)
     .select('*')
     .single<JobCardRow>()
