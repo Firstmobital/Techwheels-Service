@@ -6,6 +6,16 @@
 
 ---
 
+## 🎯 START HERE: Implementation Tracker
+
+**→ [IMPLEMENTATION_TRACKER.md](IMPLEMENTATION_TRACKER.md)** ⭐ **MAIN REFERENCE**
+- **Purpose**: Track progress across all 7 implementation phases
+- **Updated**: After each phase completion
+- **Use**: Daily reference for task status, blockers, and next steps
+- **Workflow**: Mark tasks ✅ as complete, move docs to `/completed` folder
+
+---
+
 ## Quick Status Overview
 
 | Plan ID | Title | Priority | Status | Owner | Start | End | Progress |
