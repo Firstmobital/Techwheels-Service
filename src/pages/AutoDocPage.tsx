@@ -1368,7 +1368,16 @@ export default function AutoDocPage() {
       const estimatePanelsFromDb = estimateLineItems.map((row) => row.panel)
 
       const basePanels = fromDb.length > 0 ? fromDb : fromMap
-      const rehydratedPanels = Array.from(new Set([...basePanels, ...estimatePanelsFromDb]))
+      const rehydratedPanels = basePanels.length > 0
+        ? basePanels
+        : Array.from(new Set(estimatePanelsFromDb))
+      console.log('[autodoc-panel-debug] rehydratePanelsForActiveJobCard', {
+        jobCardId,
+        fromDb,
+        fromMap,
+        estimatePanelsFromDb,
+        rehydratedPanels,
+      })
       setSelectedPanels(rehydratedPanels)
       setEstimateRows(() => {
         const byPanel = new Map<string, EstimateLineItem>()
@@ -1479,9 +1488,19 @@ export default function AutoDocPage() {
       if (panelsHydratedForJobId !== activeJobCardId) return
 
       const sanitized = sanitizePanelList(selectedPanels)
+      console.log('[autodoc-panel-debug] persistSelectedPanelsToDb:start', {
+        activeJobCardId,
+        sanitized,
+      })
 
       const existingRes = await listPanels(activeJobCardId)
-      if (existingRes.error || !existingRes.data) return
+      if (existingRes.error || !existingRes.data) {
+        console.error('[autodoc-panel-debug] persistSelectedPanelsToDb:listPanelsError', {
+          activeJobCardId,
+          error: existingRes.error,
+        })
+        return
+      }
 
       const existing = new Set(
         existingRes.data
@@ -1503,13 +1522,30 @@ export default function AutoDocPage() {
       for (const [panelName, panelId] of Object.entries(nextPanelIdByName)) {
         if (sanitized.includes(panelName)) continue
         removedPanelNames.push(panelName)
+        console.log('[autodoc-panel-debug] persistSelectedPanelsToDb:removePanel', {
+          activeJobCardId,
+          panelName,
+          panelId,
+        })
         const deletePhotosRes = await deletePanelPhotosByPanelId(panelId)
         if (deletePhotosRes.error) {
+          console.error('[autodoc-panel-debug] persistSelectedPanelsToDb:removePhotosError', {
+            activeJobCardId,
+            panelName,
+            panelId,
+            error: deletePhotosRes.error,
+          })
           showToast(`Unable to remove photos for panel "${panelName}": ${deletePhotosRes.error}`, false)
           return
         }
         const deleteRes = await deletePanel(panelId)
         if (deleteRes.error) {
+          console.error('[autodoc-panel-debug] persistSelectedPanelsToDb:removePanelError', {
+            activeJobCardId,
+            panelName,
+            panelId,
+            error: deleteRes.error,
+          })
           showToast(`Unable to remove panel "${panelName}": ${deleteRes.error}`, false)
           return
         }
@@ -1519,8 +1555,17 @@ export default function AutoDocPage() {
       }
 
       if (removedPanelNames.length > 0) {
+        console.log('[autodoc-panel-debug] persistSelectedPanelsToDb:removeEstimateRows', {
+          activeJobCardId,
+          removedPanelNames,
+        })
         const deleteEstimateRes = await deleteEstimateRowsByPanels(activeJobCardId, removedPanelNames)
         if (deleteEstimateRes.error) {
+          console.error('[autodoc-panel-debug] persistSelectedPanelsToDb:removeEstimateRowsError', {
+            activeJobCardId,
+            removedPanelNames,
+            error: deleteEstimateRes.error,
+          })
           showToast(`Unable to remove estimate rows for deselected panel(s): ${deleteEstimateRes.error}`, false)
           return
         }
@@ -1532,8 +1577,17 @@ export default function AutoDocPage() {
 
       for (const panelName of sanitized) {
         if (existing.has(panelName)) continue
+        console.log('[autodoc-panel-debug] persistSelectedPanelsToDb:createPanel', {
+          activeJobCardId,
+          panelName,
+        })
         const createRes = await createPanel(activeJobCardId, panelName)
         if (createRes.error || !createRes.data) {
+          console.error('[autodoc-panel-debug] persistSelectedPanelsToDb:createPanelError', {
+            activeJobCardId,
+            panelName,
+            error: createRes.error,
+          })
           showToast(`Unable to save panel \"${panelName}\": ${createRes.error}`, false)
           return
         }
@@ -1544,6 +1598,10 @@ export default function AutoDocPage() {
 
       setPanelIdByName(nextPanelIdByName)
       setPanelNameById(nextPanelNameById)
+      console.log('[autodoc-panel-debug] persistSelectedPanelsToDb:done', {
+        activeJobCardId,
+        finalPanels: Object.keys(nextPanelIdByName),
+      })
     }
 
     void persistSelectedPanelsToDb()
@@ -1965,8 +2023,16 @@ export default function AutoDocPage() {
 
     async function syncPanels(jobCardId: string): Promise<boolean> {
       const selected = sanitizePanelList(selectedPanels)
+      console.log('[autodoc-panel-debug] syncPanels:start', {
+        jobCardId,
+        selected,
+      })
       const existingRes = await listPanels(jobCardId)
       if (existingRes.error || !existingRes.data) {
+        console.error('[autodoc-panel-debug] syncPanels:listPanelsError', {
+          jobCardId,
+          error: existingRes.error,
+        })
         showToast(existingRes.error ?? 'Unable to sync selected panels.', false)
         return false
       }
@@ -1990,23 +2056,49 @@ export default function AutoDocPage() {
         }
 
         removedPanelNames.push(name)
+        console.log('[autodoc-panel-debug] syncPanels:removePanel', {
+          jobCardId,
+          name,
+          panelId,
+        })
 
         const deletePhotosRes = await deletePanelPhotosByPanelId(panelId)
         if (deletePhotosRes.error) {
+          console.error('[autodoc-panel-debug] syncPanels:removePhotosError', {
+            jobCardId,
+            name,
+            panelId,
+            error: deletePhotosRes.error,
+          })
           showToast(`Unable to remove photos for panel "${name}": ${deletePhotosRes.error}`, false)
           return false
         }
 
         const deleteRes = await deletePanel(panelId)
         if (deleteRes.error) {
+          console.error('[autodoc-panel-debug] syncPanels:removePanelError', {
+            jobCardId,
+            name,
+            panelId,
+            error: deleteRes.error,
+          })
           showToast(`Unable to remove panel "${name}": ${deleteRes.error}`, false)
           return false
         }
       }
 
       if (removedPanelNames.length > 0) {
+        console.log('[autodoc-panel-debug] syncPanels:removeEstimateRows', {
+          jobCardId,
+          removedPanelNames,
+        })
         const deleteEstimateRes = await deleteEstimateRowsByPanels(jobCardId, removedPanelNames)
         if (deleteEstimateRes.error) {
+          console.error('[autodoc-panel-debug] syncPanels:removeEstimateRowsError', {
+            jobCardId,
+            removedPanelNames,
+            error: deleteEstimateRes.error,
+          })
           showToast(`Unable to remove estimate rows for deselected panel(s): ${deleteEstimateRes.error}`, false)
           return false
         }
@@ -2024,8 +2116,17 @@ export default function AutoDocPage() {
           continue
         }
 
+        console.log('[autodoc-panel-debug] syncPanels:createPanel', {
+          jobCardId,
+          name,
+        })
         const createRes = await createPanel(jobCardId, name)
         if (createRes.error || !createRes.data) {
+          console.error('[autodoc-panel-debug] syncPanels:createPanelError', {
+            jobCardId,
+            name,
+            error: createRes.error,
+          })
           showToast(`Unable to save panel "${name}": ${createRes.error}`, false)
           return false
         }
@@ -2036,6 +2137,10 @@ export default function AutoDocPage() {
 
       setPanelIdByName(nextPanelIdByName)
       setPanelNameById(nextPanelNameById)
+      console.log('[autodoc-panel-debug] syncPanels:done', {
+        jobCardId,
+        finalPanels: Object.keys(nextPanelIdByName),
+      })
       return true
     }
 
@@ -2073,6 +2178,12 @@ export default function AutoDocPage() {
           no_off: 1,
           labour_charges: Number(existing?.labourPrice ?? '') || 0,
           }
+        })
+        console.log('[autodoc-panel-debug] syncEstimateRows:payload', {
+          jobCardId,
+          activePanels,
+          rowsToInsertCount: rowsToInsert.length,
+          panelNames: rowsToInsert.map((row) => row.panel_name),
         })
 
         const session = await supabase.auth.getSession()
