@@ -14,6 +14,7 @@ import JobCardPage from './pages/JobCardPage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
 import { useOnline } from './hooks/useOnline'
+import { usePreventAutoRefresh } from './hooks/usePreventAutoRefresh'
 import type { User } from '@supabase/supabase-js'
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -217,6 +218,8 @@ function AppInner() {
   const [user,          setUser]          = useState<User | null>(null)
   const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set())
   const [permissionsLoading, setPermissionsLoading] = useState(true)
+
+  usePreventAutoRefresh()
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
