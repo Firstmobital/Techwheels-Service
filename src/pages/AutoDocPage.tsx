@@ -843,7 +843,7 @@ export default function AutoDocPage() {
     form.ownerPhone,
     form.dateOfSale,
   ].some((value) => value.trim().length > 0)
-  const showVehicleDetailsForm = Boolean(form.regNumber.trim()) && (vehicleLookupStatus !== 'idle' || hasVehicleDraftFields)
+  const showVehicleDetailsForm = vehicleLookupStatus !== 'idle'
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async (isRefresh = false) => {
