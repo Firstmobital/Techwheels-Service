@@ -1,7 +1,8 @@
 # Implementation Plans Index
 
-**Last Updated:** 2026-05-23  
-**Total Active Plans:** 4
+**Last Updated:** 2026-05-27  
+**Total Active Plans:** 5
+**Mobile App Plans Added:** 2026-05-27
 
 ---
 
@@ -14,6 +15,7 @@
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
 | BODYSHOP-001 | Bodyshop Module End-to-End Workflow and Live Dashboard | 🔴 CRITICAL | 🔴 PENDING | Techwheels Product + Dev Team | 2026-05-22 | 2026-05-30 | 0% |
 | DRIVE-001 | Universal Drive Upload and Storage Offload | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-23 | 2026-05-24 | 0% |
+| MOBILE-001 | Techwheels Mobile App - Expo Implementation | 🟡 HIGH | 🟡 READY FOR EXECUTION | Development Team | 2026-05-27 | 2026-06-10 | 0% |
 
 ---
 
@@ -39,6 +41,33 @@
 - **Status:** Pending kickoff
 - **Latest Update:** 2026-05-23 - Plan created for Drive offload pipeline with Techwheels_Service root, registration foldering, and regno_doctype_date.ext naming.
 - **Next Step:** Complete Phase 2.1/2.2 by creating and sharing Techwheels_Service Drive root folder to service account
+
+### MOBILE-001: Techwheels Mobile App - Expo Implementation
+- **Files:** 
+  - [MOBILE-000_OVERVIEW.md](MOBILE-000_OVERVIEW.md) - Executive summary & quick reference
+  - [MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md) - Main implementation roadmap (7 phases)
+  - [MOBILE-002_EXECUTION_CHECKLIST.md](MOBILE-002_EXECUTION_CHECKLIST.md) - Daily task checklist
+  - [MOBILE-003_ARCHITECTURE.md](MOBILE-003_ARCHITECTURE.md) - Technical architecture & code structure
+  - [MOBILE-004_FEATURE_MAPPING.md](MOBILE-004_FEATURE_MAPPING.md) - Feature specifications & user flows
+  - [MOBILE-QUICK_REFERENCE.md](MOBILE-QUICK_REFERENCE.md) - Visual summary & key decisions
+- **Risk Level:** 🟡 MEDIUM (tight 7-10 day timeline, new platform for team)
+- **Status:** Ready for execution (awaiting Expo credentials & go-signal)
+- **Timeline:** 7-10 days for complete implementation (Phase 1: Setup → Phase 7: Deployment)
+- **Scope:** 100% feature parity with web v1.0 + mobile-optimized UI/UX
+- **Architecture:** Monorepo with symlinked shared code (0% duplication), Expo Router, React Native, NativeWind
+- **Target Platforms:** Android (primary) + iOS (secondary)
+- **Key Features:**
+  - Authentication (login/signup/password reset)
+  - Import (8 CSV types with column mapping)
+  - Reports (4 categories with Victory Native charts)
+  - AutoDoc (job cards, camera photos, documents, estimates)
+  - Admin (user/permission management)
+  - Settings (employee management)
+- **Prerequisites:**
+  - Expo account credentials
+  - Node.js 20.19.0+
+  - 7-10 days development time
+- **Next Step:** Collect Expo credentials → Start Phase 1 (Setup)
 
 ---
 

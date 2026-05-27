@@ -1,0 +1,1143 @@
+# Techwheels Service - Mobile App Implementation Plan
+
+**Document Date**: May 27, 2026  
+**Target Platforms**: Android & iOS via Expo  
+**Parity Goal**: 100% feature parity with web version (v1.0)  
+**UI Strategy**: Mobile-centric design (NOT web UI copy)
+
+---
+
+## Table of Contents
+1. [Executive Summary](#executive-summary)
+2. [Project Audit Summary](#project-audit-summary)
+3. [Architecture Decision](#architecture-decision)
+4. [Phase-Wise Implementation Plan](#phase-wise-implementation-plan)
+5. [Shared Code Layer Strategy](#shared-code-layer-strategy)
+6. [Module Bundling Strategy](#module-bundling-strategy)
+7. [Risk Mitigation](#risk-mitigation)
+8. [Success Criteria](#success-criteria)
+
+---
+
+## Executive Summary
+
+Techwheels Service is a React + TypeScript + Vite web application serving automotive dealership operations with 8 core pages and 5 major domains (Import, Reports, AutoDoc, Admin, Settings). The task is to create a **fully native mobile app via Expo** with identical business logic but **mobile-centric UI/UX**.
+
+### Key Principles
+- **Code Reuse**: Shared business logic layer (API, mappers, queries, utilities)
+- **Native Mobile**: Expo-managed workflow for iOS & Android
+- **Feature Parity**: All web domains + reports + AutoDoc features on mobile
+- **Bundle Optimization**: Pre-bundle all dependencies in APK to minimize OTA updates
+- **Authentication**: Same Supabase Auth (JWT, RLS, module permissions)
+
+---
+
+## Project Audit Summary
+
+### Web Stack
+| Component | Technology |
+|-----------|------------|
+| UI Framework | React 19 + TypeScript |
+| Build Tool | Vite |
+| Styling | TailwindCSS v4 |
+| Routing | React Router v7 |
+| Backend | Supabase (Auth, Postgres, Storage) |
+| Charts | Recharts v3 |
+| Data Exchange | ExcelJS, XLSX, PapaParse |
+| Presentation | PPTXGenJS |
+
+### Core Domains & Pages
+
+#### Domain 1: Authentication
+- **Pages**: LoginPage, SignUpPage, PasswordUpdatePage, AuthCallback
+- **Logic**: Supabase Auth + JWT token management
+- **Mobile Adaptation**: Bottom-sheet or full-screen auth flows
+
+#### Domain 2: Import
+- **Page**: ImportPage
+- **Capacity**: Multi-file CSV ingest (job cards, parts, invoices)
+- **Logic Files**: 
+  - `openJobCardsColumnMapper.ts`
+  - `cancelJobCardColumnMapper.ts`
+  - `closedButNotInvoicedColumnMapper.ts`
+  - `invoiceColumnMapper.ts`
+  - `partsConsumptionColumnMapper.ts`
+  - `partsOrderColumnMapper.ts`
+  - `partsStockColumnMapper.ts`
+  - `vasColumnMapper.ts`
+- **Mobile Adaptation**: 
+  - File picker from device storage
+  - Real-time upload progress indicator
+  - Duplicate detection UI
+  - Conflict resolution inline
+
+#### Domain 3: Reports
+- **Page**: ReportsPage + category-based report components
+- **Report Categories**: Labour, Revenue, Performance, Parts
+- **Logic Files**:
+  - `reportQueries.ts` (general queries)
+  - `partsReportQueries.ts` (parts-specific)
+  - `generateExcel.ts` (export to Excel)
+  - `generatePPT.ts` (export to PowerPoint)
+- **Mobile Adaptation**:
+  - Replace Recharts with lightweight charting (Victory Native or custom SVG)
+  - Responsive chart sizing
+  - Export options adapted (PDF instead of PPT for better mobile support)
+
+#### Domain 4: AutoDoc (Job Card Management)
+- **Pages**: AutoDocPage, JobCardPage
+- **Capacity**: Full job card lifecycle + vehicle lookup + panel management + photo/document storage
+- **Logic Files**:
+  - `jobCards.ts` (API)
+  - `vehicles.ts` (API)
+  - `panels.ts` (API)
+  - `photos.ts` (API)
+  - `documents.ts` (API)
+  - `estimate.ts` (API)
+  - `activityLog.ts` (API)
+- **Mobile Adaptation**:
+  - Camera integration for panel photos
+  - Gallery picker for attachments
+  - Photo compression before upload
+  - Offline document caching
+  - Swipeable panel carousel
+
+#### Domain 5: Admin
+- **Page**: AdminPage
+- **Capacity**: User/dealer/module/permission CRUD
+- **Mobile Adaptation**: Simplified admin dashboard, delegated to web for complex tasks
+
+#### Domain 6: Settings
+- **Page**: SettingsPage
+- **Capacity**: Employee data management
+- **Mobile Adaptation**: Mobile-first employee list with search
+
+### Database Schema (Key Tables)
+| Table | Purpose |
+|-------|---------|
+| `documents` | Job card attachments, photos, estimates |
+| `employee_master` | Employee roster with fuel type, department |
+| `job_cards` | Core job card records |
+| `panels` | Vehicle panels linked to job cards |
+| `estimate_rows` | Estimate line items |
+| `invoices` | Invoice records with status tracking |
+| `parts_inventory`, `parts_orders`, `parts_consumption` | Parts lifecycle |
+| `vehicles` | Vehicle master with RC lookup |
+
+### API Layer (12 API Modules)
+1. `auth.ts` - Login, signup, password reset
+2. `vehicles.ts` - Vehicle CRUD, RC lookup
+3. `jobCards.ts` - Job card CRUD, status transitions
+4. `panels.ts` - Panel management per job card
+5. `photos.ts` - Photo upload, retrieval
+6. `estimate.ts` - Estimate creation, updates
+7. `documents.ts` - Document storage, retrieval
+8. `activityLog.ts` - Activity audit trail
+9. `email.ts` - Email notifications
+10. `autodocRates.ts` - Rate lookup
+11. `rcLookup.ts` - RC validation
+12. `types.ts` - Shared TS types
+
+### Key Utilities & Helpers
+- `columnMatcher.ts` - Infer column headers from CSV
+- `employeeMatcher.ts` - Match employee data
+- `exportUtils.ts` - Excel/PDF export helpers
+- `autodocStorage.ts` - IndexedDB for offline caching
+- `reportQueries.ts` & `partsReportQueries.ts` - Dynamic SQL query builders
+- `database.types.ts` - Supabase-generated TypeScript types
+
+### Access Control
+- **Auth Gate**: Supabase JWT with role labels (admin, manager, staff, viewer)
+- **Module Permissions**: `public.modules` table + frontend `ROUTE_MODULE_MAP`
+- **Row-Level Security**: RLS policies enforce dealer scoping
+- **Dealer Code**: Resolved from JWT metadata
+
+---
+
+## Architecture Decision
+
+### Why Expo Managed Workflow?
+- ✅ **Managed Hosting**: EAS Build + EAS Submit handle compilation & signing
+- ✅ **Over-the-Air Updates**: Push fixes without app store resubmission
+- ✅ **Shared JS Codebase**: React + TypeScript directly (not React Native rewrite)
+- ✅ **Rapid Iteration**: Hot reload + same dev experience as web
+- ✅ **Production Ready**: Used by Fortune 500 companies
+
+### Code Structure (Monorepo Approach)
+
+```
+techwheels-service/
+├── web/                          # Existing web app (React + Vite)
+│   ├── src/
+│   │   ├── pages/               # Web pages
+│   │   ├── App.tsx              # Web routing
+│   │   └── ... (current structure)
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── mobile/                        # New Expo app
+│   ├── app/                      # Expo Router (file-based routing)
+│   │   ├── (auth)/               # Auth screens group
+│   │   │   ├── login.tsx
+│   │   │   ├── signup.tsx
+│   │   │   └── password-reset.tsx
+│   │   ├── (tabs)/               # Authenticated screens group
+│   │   │   ├── _layout.tsx       # Bottom tab navigation
+│   │   │   ├── import/index.tsx
+│   │   │   ├── reports/[id].tsx
+│   │   │   ├── autodoc/[id].tsx
+│   │   │   ├── admin/index.tsx
+│   │   │   └── settings/index.tsx
+│   │   └── _layout.tsx           # Root layout
+│   ├── components/               # Mobile-specific components
+│   │   ├── auth/
+│   │   ├── import/
+│   │   ├── reports/
+│   │   ├── autodoc/
+│   │   ├── common/               # Shared UI components
+│   │   └── ...
+│   ├── lib/                      # **SHARED CODE** (symlinked from web)
+│   │   ├── api/                  # 1:1 from web/src/lib/api
+│   │   ├── *ColumnMapper.ts      # 1:1 from web
+│   │   ├── reportQueries.ts      # 1:1 from web
+│   │   ├── database.types.ts     # 1:1 from web
+│   │   ├── supabase.ts           # Adapted for mobile
+│   │   ├── autodocStorage.ts     # AsyncStorage instead of localStorage
+│   │   └── ...
+│   ├── hooks/                    # Mobile-specific hooks
+│   │   ├── useCamera.ts
+│   │   ├── useMediaLibrary.ts
+│   │   ├── useDocumentPicker.ts
+│   │   └── ...
+│   ├── context/                  # 1:1 from web + mobile-specific
+│   │   ├── DirtyContext.tsx      # Shared
+│   │   └── AuthContext.tsx
+│   ├── package.json              # Includes all web dependencies
+│   ├── app.json                  # Expo config
+│   └── expo-env.d.ts             # TypeScript definitions
+│
+└── shared/                        # **OPTIONAL**: If symlinks not viable
+    ├── api/                      # Shared API layer
+    ├── mappers/                  # Column mappers
+    ├── queries/                  # Report queries
+    ├── types/                    # Database types
+    └── utils/                    # Utilities
+
+```
+
+### Why This Structure?
+1. **Monorepo = Single Source of Truth** for business logic
+2. **`mobile/lib/` symlinked to `web/src/lib/`** = Zero duplication
+3. **Expo Router** provides web-like file-based routing without React Router
+4. **Group layouts** enable shared UI (auth flows, authenticated tabs)
+5. **Easy dependency management**: All web packages pre-included in mobile `package.json`
+
+---
+
+## Phase-Wise Implementation Plan
+
+### Phase 1: Project Initialization & Setup (1-2 days)
+
+#### 1.1 Create Expo Project
+```bash
+cd /Users/vkbin/Techwheels-Service
+mkdir mobile
+cd mobile
+expo init --template bare-minimum techwheels-service
+# or use: npx create-expo-app@latest techwheels-service
+cd techwheels-service
+```
+
+#### 1.2 Configure TypeScript
+```bash
+npm install --save-dev typescript @types/react @types/react-native
+npx tsc --init
+```
+
+#### 1.3 Install Core Dependencies
+All packages from web `package.json` + mobile essentials:
+
+**From Web**:
+```json
+{
+  "@supabase/supabase-js": "^2.103.3",
+  "exceljs": "^4.4.0",
+  "papaparse": "^5.5.3",
+  "pptxgenjs": "^4.0.1",
+  "react": "^19.2.5",
+  "react-native": "0.76.x",  // Add for Expo
+  "recharts": "^3.8.1",
+  "xlsx": "^0.18.5"
+}
+```
+
+**Mobile-Specific**:
+```json
+{
+  "expo": "^52.0.0",
+  "expo-router": "^3.x",
+  "expo-font": "^13.x",
+  "expo-splash-screen": "^0.x",
+  "expo-status-bar": "^2.x",
+  "expo-file-system": "^17.x",
+  "expo-image-picker": "^15.x",
+  "expo-camera": "^15.x",
+  "expo-document-picker": "^12.x",
+  "expo-av": "^14.x",  // For audio/video playback
+  "react-native-gesture-handler": "^2.x",
+  "react-native-reanimated": "^3.x",
+  "nativewind": "^4.x",
+  "tailwindcss": "^4.2.2",
+  "victory-native": "^38.x"  // Charting for mobile
+}
+```
+
+#### 1.4 Set Up Routing (Expo Router)
+```bash
+npm install expo-router expo-font expo-splash-screen
+```
+
+Create `app/_layout.tsx`:
+```tsx
+import { Stack } from 'expo-router'
+import * as SplashScreen from 'expo-splash-screen'
+
+SplashScreen.preventAutoHideAsync()
+
+export default function RootLayout() {
+  return (
+    <Stack>
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    </Stack>
+  )
+}
+```
+
+#### 1.5 Set Up TypeScript + NativeWind (Tailwind for React Native)
+```bash
+npm install nativewind tailwindcss
+npx tailwindcss init
+```
+
+Create `tailwind.config.ts`:
+```ts
+import type { Config } from 'tailwindcss'
+
+export default {
+  content: ['./app/**/*.{js,jsx,ts,tsx}', './components/**/*.{js,jsx,ts,tsx}'],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+} satisfies Config
+```
+
+#### 1.6 Configure Supabase Environment Variables
+Create `.env.local`:
+```env
+EXPO_PUBLIC_SUPABASE_URL=<your_supabase_url>
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<your_anon_key>
+```
+
+#### 1.7 Copy Database Types
+```bash
+cp ../src/lib/database.types.ts ./lib/
+```
+
+#### 1.8 Initialize APK Pre-Bundling
+Add to `app.json`:
+```json
+{
+  "expo": {
+    "name": "Techwheels",
+    "slug": "techwheels-service",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "plugins": [
+      ["expo-build-properties", {
+        "ios": { "useFrameworks": "static" },
+        "android": {}
+      }]
+    ],
+    "eas": {
+      "build": {
+        "experimental": {
+          "prebuildCommand": "echo 'prebuild'"
+        }
+      }
+    }
+  }
+}
+```
+
+**Deliverable**: Expo project structure ready, all dependencies installed
+
+---
+
+### Phase 2: Shared Code Layer Setup (1-2 days)
+
+#### 2.1 Create Symlinks for Shared Code
+```bash
+cd mobile/lib
+ln -s ../../src/lib/api ./api
+ln -s ../../src/lib/*ColumnMapper.ts .
+ln -s ../../src/lib/reportQueries.ts .
+ln -s ../../src/lib/partsReportQueries.ts .
+ln -s ../../src/lib/database.types.ts .
+ln -s ../../src/lib/columnMatcher.ts .
+ln -s ../../src/lib/employeeMatcher.ts .
+ln -s ../../src/lib/branches.ts .
+ln -s ../../src/lib/getTableColumns.ts .
+```
+
+#### 2.2 Adapt Supabase Client for Mobile
+Create `mobile/lib/supabase.ts` (adapts web version):
+```tsx
+import { createClient } from '@supabase/supabase-js'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import type { Database } from './database.types'
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+})
+
+export const hasSupabaseEnv = !!supabaseUrl && !!supabaseKey
+```
+
+#### 2.3 Adapt Local Storage (IndexedDB → AsyncStorage)
+Create `mobile/lib/autodocStorage.ts` (mobile version):
+```tsx
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+export const autodocStorage = {
+  getItem: (key: string) => AsyncStorage.getItem(key),
+  setItem: (key: string, value: string) => AsyncStorage.setItem(key, value),
+  removeItem: (key: string) => AsyncStorage.removeItem(key),
+}
+```
+
+#### 2.4 Create Context Layer (Auth, Dirty Tracking)
+```bash
+mkdir -p mobile/context
+cp ../src/context/DirtyContext.tsx ./context/
+```
+
+Create `mobile/context/AuthContext.tsx`:
+```tsx
+import { createContext, useContext, useEffect, useState } from 'react'
+import { Session } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
+
+interface AuthContextType {
+  session: Session | null
+  user: Session['user'] | null
+  loading: boolean
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      setLoading(false)
+    })
+
+    return () => subscription?.unsubscribe()
+  }, [])
+
+  return (
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
+  return context
+}
+```
+
+#### 2.5 Create Custom Hooks for Mobile
+Create `mobile/hooks/` folder:
+
+**`useCamera.ts`**:
+```tsx
+import * as ImagePicker from 'expo-image-picker'
+
+export const useCamera = () => {
+  const takePicture = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
+    if (status !== 'granted') throw new Error('Camera permission denied')
+    
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      aspect: [4, 3],
+      quality: 0.8,
+    })
+    return result
+  }
+  return { takePicture }
+}
+```
+
+**`useMediaLibrary.ts`**:
+```tsx
+import * as ImagePicker from 'expo-image-picker'
+
+export const useMediaLibrary = () => {
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') throw new Error('Media library permission denied')
+    
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      aspect: [4, 3],
+      quality: 0.8,
+    })
+    return result
+  }
+  return { pickImage }
+}
+```
+
+**`useDocumentPicker.ts`**:
+```tsx
+import * as DocumentPicker from 'expo-document-picker'
+
+export const useDocumentPicker = () => {
+  const pickDocument = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['text/csv', 'application/vnd.ms-excel'],
+    })
+    return result
+  }
+  return { pickDocument }
+}
+```
+
+#### 2.6 Create Mobile-Safe Utility Exports
+Create `mobile/lib/utils.ts`:
+```tsx
+// Re-export shared utilities
+export * from './columnMatcher'
+export * from './employeeMatcher'
+export * from './exportUtils'
+export * from './reportQueries'
+export * from './partsReportQueries'
+export * from './branches'
+export * from './getTableColumns'
+```
+
+**Deliverable**: Shared code layer integrated, mobile-safe adapters created
+
+---
+
+### Phase 3: Authentication Screens (1-2 days)
+
+#### 3.1 Create Auth Group Layout
+Create `mobile/app/(auth)/_layout.tsx`:
+```tsx
+import { Stack } from 'expo-router'
+
+export default function AuthLayout() {
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animationEnabled: true,
+      }}
+    >
+      <Stack.Screen name="login" />
+      <Stack.Screen name="signup" />
+      <Stack.Screen name="password-reset" />
+    </Stack>
+  )
+}
+```
+
+#### 3.2 Create Login Screen
+Create `mobile/app/(auth)/login.tsx`:
+```tsx
+import { useState } from 'react'
+import { View, TextInput, TouchableOpacity, Text, Alert } from 'react-native'
+import { useRouter } from 'expo-router'
+import { supabase } from '../../lib/supabase'
+
+export default function LoginScreen() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
+
+  const handleLogin = async () => {
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+      router.replace('/(tabs)/import')
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <View className="flex-1 justify-center px-4 bg-white">
+      <Text className="text-3xl font-bold mb-8 text-center">Techwheels</Text>
+      <TextInput
+        className="border border-gray-300 rounded px-4 py-3 mb-4"
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        editable={!loading}
+      />
+      <TextInput
+        className="border border-gray-300 rounded px-4 py-3 mb-6"
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        editable={!loading}
+      />
+      <TouchableOpacity
+        className="bg-blue-600 rounded py-3 mb-4"
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        <Text className="text-white text-center font-semibold">
+          {loading ? 'Signing in...' : 'Sign In'}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
+        <Text className="text-center text-gray-600">Don't have an account? <Text className="text-blue-600 font-semibold">Sign Up</Text></Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+```
+
+#### 3.3 Create Sign Up & Password Reset Screens
+(Similar pattern for `signup.tsx` and `password-reset.tsx`)
+
+**Deliverable**: Auth flow screens created, Supabase Auth integrated
+
+---
+
+### Phase 4: Main Navigation & Tab Screens (2-3 days)
+
+#### 4.1 Create Tab Navigation Layout
+Create `mobile/app/(tabs)/_layout.tsx`:
+```tsx
+import { Tabs } from 'expo-router'
+import { useAuth } from '../../context/AuthContext'
+
+export default function TabsLayout() {
+  const { loading } = useAuth()
+
+  if (loading) return null
+
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: true,
+        tabBarActiveTintColor: '#2563eb',
+      }}
+    >
+      <Tabs.Screen
+        name="import/index"
+        options={{
+          title: 'Import',
+          tabBarLabel: 'Import',
+        }}
+      />
+      <Tabs.Screen
+        name="reports/index"
+        options={{
+          title: 'Reports',
+          tabBarLabel: 'Reports',
+        }}
+      />
+      <Tabs.Screen
+        name="autodoc/index"
+        options={{
+          title: 'AutoDoc',
+          tabBarLabel: 'AutoDoc',
+        }}
+      />
+      <Tabs.Screen
+        name="settings/index"
+        options={{
+          title: 'Settings',
+          tabBarLabel: 'Settings',
+        }}
+      />
+      <Tabs.Screen
+        name="admin/index"
+        options={{
+          title: 'Admin',
+          tabBarLabel: 'Admin',
+        }}
+      />
+    </Tabs>
+  )
+}
+```
+
+#### 4.2 Create Import Screen (Mobile-Centric)
+Create `mobile/app/(tabs)/import/index.tsx`:
+```tsx
+import { useState } from 'react'
+import { View, Text, TouchableOpacity, FlatList, Alert } from 'react-native'
+import { useDocumentPicker } from '../../../hooks/useDocumentPicker'
+import * as Papa from 'papaparse'
+
+const IMPORT_TYPES = [
+  { id: 'job_cards', label: 'Job Cards', mapper: 'openJobCardsColumnMapper' },
+  { id: 'invoices', label: 'Invoices', mapper: 'invoiceColumnMapper' },
+  { id: 'parts_order', label: 'Parts Orders', mapper: 'partsOrderColumnMapper' },
+]
+
+export default function ImportScreen() {
+  const [selectedType, setSelectedType] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const { pickDocument } = useDocumentPicker()
+
+  const handleSelectFile = async () => {
+    try {
+      const result = await pickDocument()
+      if (result.canceled) return
+
+      const file = result.assets[0]
+      // Parse CSV and upload
+      Alert.alert('Success', 'File uploaded successfully')
+    } catch (error: any) {
+      Alert.alert('Error', error.message)
+    }
+  }
+
+  return (
+    <View className="flex-1 bg-gray-50 p-4">
+      <Text className="text-2xl font-bold mb-6">Import Data</Text>
+
+      <FlatList
+        data={IMPORT_TYPES}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            className={`p-4 mb-3 rounded-lg ${
+              selectedType === item.id ? 'bg-blue-600' : 'bg-white border border-gray-200'
+            }`}
+            onPress={() => setSelectedType(item.id)}
+          >
+            <Text className={selectedType === item.id ? 'text-white font-semibold' : 'text-gray-800'}>
+              {item.label}
+            </Text>
+          </TouchableOpacity>
+        )}
+        keyExtractor={(item) => item.id}
+        scrollEnabled={false}
+      />
+
+      {selectedType && (
+        <TouchableOpacity
+          className="bg-blue-600 rounded-lg py-3 mt-6"
+          onPress={handleSelectFile}
+        >
+          <Text className="text-white text-center font-semibold">Select File</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  )
+}
+```
+
+#### 4.3 Create Reports Screen
+Create `mobile/app/(tabs)/reports/index.tsx`:
+(Use Victory Native for lightweight charts instead of Recharts)
+
+```tsx
+import { View, Text, ScrollView } from 'react-native'
+import { useReportData } from '../../../hooks/useReportData'
+
+export default function ReportsScreen() {
+  const { data, loading } = useReportData()
+
+  if (loading) return <Text>Loading...</Text>
+
+  return (
+    <ScrollView className="flex-1 bg-gray-50 p-4">
+      <Text className="text-2xl font-bold mb-6">Reports</Text>
+      {/* Victory Native charts here */}
+    </ScrollView>
+  )
+}
+```
+
+#### 4.4 Create AutoDoc Screen
+Create `mobile/app/(tabs)/autodoc/index.tsx`:
+(List of job cards with actions)
+
+#### 4.5 Create Settings Screen
+Create `mobile/app/(tabs)/settings/index.tsx`:
+
+#### 4.6 Create Admin Screen
+Create `mobile/app/(tabs)/admin/index.tsx`:
+
+**Deliverable**: Main navigation + 5 core screens scaffolded
+
+---
+
+### Phase 5: Feature Implementation (3-5 days)
+
+#### 5.1 Import Feature
+- CSV file picker integration
+- Column mapper application
+- Duplicate detection
+- Conflict resolution UI
+- Upload progress tracking
+- Error handling & retry logic
+
+#### 5.2 Reports Feature
+- Report query execution (shared queries)
+- Chart rendering (Victory Native)
+- Export to PDF
+- Filter UI (date range, branch, etc.)
+
+#### 5.3 AutoDoc Feature
+- Job card list (infinite scroll)
+- Job card detail view
+- Panel carousel (swipeable)
+- Photo capture (camera)
+- Photo gallery picker
+- Document upload
+- Estimate entry
+- Activity log
+- Status transitions (with permissions check)
+
+#### 5.4 Settings Feature
+- Employee list (search, pagination)
+- User settings
+- Logout
+
+#### 5.5 Admin Feature
+- User CRUD (if permissions allow)
+- Module permissions
+- Dealer assignment
+
+**Deliverable**: All features working end-to-end with mobile UI/UX
+
+---
+
+### Phase 6: Testing & Optimization (2-3 days)
+
+#### 6.1 Testing Strategy
+- **Unit Tests**: Shared business logic (mappers, queries)
+- **Integration Tests**: API layer with Supabase
+- **E2E Tests**: Critical user flows (login → import → report)
+- **Device Testing**: Android emulator + iOS simulator + real devices
+
+#### 6.2 Performance Optimization
+- Image compression before upload
+- Lazy loading for reports
+- Memoization of expensive calculations
+- Code splitting for routes
+
+#### 6.3 Offline Support
+- AsyncStorage caching for frequently accessed data
+- IndexedDB-like database for offline job card drafts
+- Sync queue for pending uploads
+
+**Deliverable**: All tests passing, app optimized for mobile
+
+---
+
+### Phase 7: APK Bundling & Deployment (2-3 days)
+
+#### 7.1 Pre-Bundling Dependencies
+Ensure `package.json` includes **all required modules by default**:
+```json
+{
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.3",
+    "exceljs": "^4.4.0",
+    "papaparse": "^5.5.3",
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.2.5",
+    "react-native": "0.76.x",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5",
+    "expo": "^52.0.0",
+    "expo-router": "^3.x",
+    "expo-camera": "^15.x",
+    "expo-file-system": "^17.x",
+    "nativewind": "^4.x",
+    "tailwindcss": "^4.2.2",
+    "victory-native": "^38.x"
+  }
+}
+```
+
+#### 7.2 Create EAS Configuration
+Create `eas.json`:
+```json
+{
+  "cli": {
+    "version": ">= 8.0.0"
+  },
+  "build": {
+    "production": {
+      "node": "20.19.0",
+      "npm": "10.x"
+    },
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "track": "internal"
+      },
+      "ios": {
+        "testflight": true
+      }
+    }
+  }
+}
+```
+
+#### 7.3 Configure Expo Project
+```bash
+eas init
+eas build --platform android --profile preview  # Build APK
+eas build --platform ios --profile preview       # Build iOS
+```
+
+#### 7.4 Over-the-Air Updates
+Configure `app.json` for EAS Updates:
+```json
+{
+  "expo": {
+    "updates": {
+      "url": "https://u.expo.dev/<PROJECT_ID>",
+      "fallbackToCacheTimeout": 0,
+      "codegenMode": "partial"
+    }
+  }
+}
+```
+
+#### 7.5 Deployment
+- Build APK via EAS Build
+- Deploy via Expo Go (for internal testing)
+- Submit to Google Play & Apple App Store (optional)
+
+**Deliverable**: APK ready for production deployment
+
+---
+
+## Shared Code Layer Strategy
+
+### File Synchronization
+
+#### Approach 1: Symlinks (Recommended for monorepo)
+```bash
+cd mobile/lib
+ln -s ../../src/lib/api ./api
+ln -s ../../src/lib/*ColumnMapper.ts .
+# ... etc
+```
+
+**Pros**: Zero duplication, updates automatically  
+**Cons**: Windows compatibility issues
+
+#### Approach 2: npm Workspace
+```json
+{
+  "workspaces": [
+    ".",
+    "mobile"
+  ]
+}
+```
+
+Create `packages.json` in `mobile/`:
+```json
+{
+  "name": "@techwheels/mobile",
+  "dependencies": {
+    "@techwheels/shared": "workspace:*"
+  }
+}
+```
+
+**Pros**: Works on all OS, proper dependency management  
+**Cons**: Requires refactoring to `shared/` folder
+
+#### Approach 3: Manual Copy with CI/CD
+Copy shared files on build:
+```bash
+npm run prebuild:mobile  # Copies files from src/lib
+```
+
+**Pros**: Simple, no symlinks  
+**Cons**: Manual sync required
+
+### Recommendation
+**Use Symlinks initially** → Easy to test → Migrate to workspace if needed
+
+---
+
+## Module Bundling Strategy
+
+### Objective
+Minimize OTA update size by pre-including all dependencies in APK
+
+### Implementation
+
+#### 1. **Include all dependencies by default in `package.json`**
+```json
+{
+  "dependencies": {
+    // All 20+ packages included
+  }
+}
+```
+
+#### 2. **Configure webpack/metro to bundle everything**
+Expo automatically bundles all installed modules → No extra config needed
+
+#### 3. **Disable remote OTA updates for major dependencies**
+```json
+{
+  "expo": {
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
+  }
+}
+```
+
+#### 4. **OTA Updates Only for App Code**
+Only push updates to `app/` folder, not `node_modules/`
+
+---
+
+## Risk Mitigation
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| **Symlink breaking on Windows** | Development blocked | Use npm workspace alternative |
+| **APK size bloat** | Long download time | Pre-bundle, enable ProGuard on Android |
+| **Offline sync conflicts** | Data inconsistency | Queue + conflict resolution logic |
+| **RLS policy misalignment** | Unauthorized access | Test every API call with dummy credentials |
+| **Charting library incompatibility** | Reports broken on mobile | Use Victory Native (React Native compatible) |
+| **Camera/file permissions** | Feature not working | Request permissions early, provide fallback |
+| **Supabase session expiry** | User logged out mid-session | Auto-refresh token on every API call |
+
+---
+
+## Success Criteria
+
+### Phase-Gate Checkpoints
+
+| Phase | Checkpoint | Status |
+|-------|-----------|--------|
+| 1 | Expo project initialized, all dependencies installed | 🟡 Pending |
+| 2 | Shared code layer integrated, symlinks working | 🟡 Pending |
+| 3 | Auth flow end-to-end (login → dashboard) | 🟡 Pending |
+| 4 | Main navigation + 5 core screens functioning | 🟡 Pending |
+| 5 | All features working (import, reports, autodoc, admin, settings) | 🟡 Pending |
+| 6 | 100% test coverage for shared logic, E2E tests passing | 🟡 Pending |
+| 7 | APK built & deployable via EAS, OTA updates configured | 🟡 Pending |
+
+### Feature Parity Checklist
+
+- ✅ **Authentication**: Login, signup, password reset (same as web)
+- ✅ **Import**: CSV file picker, duplicate detection, conflict resolution
+- ✅ **Reports**: All report types, charts, export to PDF
+- ✅ **AutoDoc**: Job card CRUD, panel management, photo/document upload
+- ✅ **Admin**: User CRUD, module permissions (if role permits)
+- ✅ **Settings**: Employee management, user settings
+- ✅ **Offline Support**: Draft job cards, sync queue
+- ✅ **Access Control**: Module permissions, RLS enforcement
+
+### Performance Targets
+
+- APK size: < 150 MB (compressed)
+- App startup time: < 3 seconds
+- Report load time: < 2 seconds
+- Photo upload: < 10 seconds (with compression)
+- OTA update size: < 10 MB
+
+---
+
+## Next Steps
+
+1. **Collect Expo credentials** from your Expo Go account
+2. **Create new project** in Expo Go: `techwheels-service`
+3. **Execute Phase 1**: Initialize Expo project
+4. **Execute Phase 2**: Set up shared code layer
+5. **Iterate through phases 3-7** with testing at each gate
+
+---
+
+## Appendix: Expo Go Credentials Setup
+
+### Prerequisites
+- Expo account: https://expo.dev
+- EAS CLI: `npm install -g eas-cli`
+- Existing project with Android & iOS published (reference)
+
+### Create New Expo Project
+```bash
+eas init --id techwheels-service  # Use your organization slug
+```
+
+### Configure EAS Build
+```bash
+eas build --platform android --profile preview
+eas build --platform ios --profile preview
+```
+
+### Test on Device
+```bash
+expo start
+# Scan QR code with Expo Go app
+```
+
+---
+
+**Document Status**: DRAFT  
+**Last Updated**: 2026-05-27  
+**Next Review**: After Phase 1 completion
