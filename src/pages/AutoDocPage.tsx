@@ -280,6 +280,16 @@ function toTimeLabel(value: string | null): string {
   return parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
 }
 
+function calculateCarAgeing(dateOfSale: string | null | undefined, complaintDate: string | null | undefined): number | null {
+  if (!dateOfSale || !complaintDate) return null
+  const sale = new Date(dateOfSale)
+  const complaint = new Date(complaintDate)
+  if (Number.isNaN(sale.getTime()) || Number.isNaN(complaint.getTime())) return null
+  const diffMs = complaint.getTime() - sale.getTime()
+  if (diffMs < 0) return null
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
 function numberToInputString(value: number | null | undefined): string {
   if (value == null) return ''
   const numeric = Number(value)
@@ -3127,13 +3137,13 @@ export default function AutoDocPage() {
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
                       Car Ageing
-                      <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto-calc</span>
+                      {(activeSummary?.warranty_age_days ?? calculateCarAgeing(form.dateOfSale, form.complaintDate)) !== null && <span className="inline-block bg-green-100 text-green-700 text-[9px] font-semibold px-2 py-0.5 rounded">auto-calc</span>}
                     </label>
                     <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-900 font-medium flex items-center gap-2">
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      — days
+                      {activeSummary?.warranty_age_days ?? calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '—'} days
                     </div>
                   </div>
                 </div>
