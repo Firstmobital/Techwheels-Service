@@ -86,3 +86,15 @@ export async function deletePanelPhoto(photoId: string): Promise<ApiResult<null>
   if (error) return fail(error)
   return ok(null)
 }
+
+export async function deletePanelPhotosByPanelId(panelId: string): Promise<ApiResult<true>> {
+  if (!panelId.trim()) return fail('Panel id is required')
+
+  const { error } = await supabase
+    .from('panel_photos')
+    .delete()
+    .eq('panel_id', panelId)
+
+  if (error) return fail(error)
+  return ok(true)
+}

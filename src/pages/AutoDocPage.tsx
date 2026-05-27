@@ -22,6 +22,7 @@ import {
   listPanels,
   createPanel,
   deletePanel,
+  deletePanelPhotosByPanelId,
   deletePanelPhoto,
   logActivity,
   resolveRegNumberFromReference,
@@ -1499,6 +1500,11 @@ export default function AutoDocPage() {
 
       for (const [panelName, panelId] of Object.entries(nextPanelIdByName)) {
         if (sanitized.includes(panelName)) continue
+        const deletePhotosRes = await deletePanelPhotosByPanelId(panelId)
+        if (deletePhotosRes.error) {
+          showToast(`Unable to remove photos for panel "${panelName}": ${deletePhotosRes.error}`, false)
+          return
+        }
         const deleteRes = await deletePanel(panelId)
         if (deleteRes.error) {
           showToast(`Unable to remove panel "${panelName}": ${deleteRes.error}`, false)
@@ -3610,10 +3616,21 @@ export default function AutoDocPage() {
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
-                onClick={() => setActiveTab('estimate')}
+                onClick={async () => {
+                  setSavingDraft(true)
+                  try {
+                    const ok = await persistDraftJobCard(false)
+                    if (ok) {
+                      setActiveTab('estimate')
+                    }
+                  } finally {
+                    setSavingDraft(false)
+                  }
+                }}
+                disabled={savingDraft}
                 className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
               >
-                Next: Estimate
+                {savingDraft ? 'Saving...' : 'Next: Estimate'}
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
