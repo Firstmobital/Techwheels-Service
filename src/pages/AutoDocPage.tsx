@@ -1956,22 +1956,33 @@ export default function AutoDocPage() {
           return false
         }
 
-        const rowsToInsert = estimateRows.map((row, idx) => ({
+        const activePanels = sanitizePanelList(selectedPanels)
+        const estimateByPanel = new Map<string, EstimateLineItem>()
+        estimateRows.forEach((row) => {
+          const key = normalizeText(row.panel)
+          if (!key || estimateByPanel.has(key)) return
+          estimateByPanel.set(key, row)
+        })
+
+        const rowsToInsert = activePanels.map((panel, idx) => {
+          const existing = estimateByPanel.get(normalizeText(panel))
+          return {
           job_card_id: jobCardId,
           sr_no: idx + 1,
-          panel_name: row.panel || null,
-          part_number: row.partNo || null,
-          part_description: row.panel || null,
-          defect: row.defect || null,
-          action: row.action || null,
+          panel_name: panel || null,
+          part_number: existing?.partNo || null,
+          part_description: panel || null,
+          defect: existing?.defect || null,
+          action: existing?.action || null,
           qty: 1,
-          ndp_value: Number(row.partsPrice) || 0,
+          ndp_value: Number(existing?.partsPrice ?? '') || 0,
           cut_weld_charges: 0,
-          paint_charges: Number(row.paintPrice) || 0,
+          paint_charges: Number(existing?.paintPrice ?? '') || 0,
           total_special_charges: 0,
           no_off: 1,
-          labour_charges: Number(row.labourPrice) || 0,
-        }))
+          labour_charges: Number(existing?.labourPrice ?? '') || 0,
+          }
+        })
 
         const session = await supabase.auth.getSession()
         const token = session.data.session?.access_token
