@@ -166,68 +166,132 @@ Techwheels Service is a React + TypeScript + Vite web application serving automo
 ### Code Structure (Monorepo Approach)
 
 ```
-techwheels-service/
-├── web/                          # Existing web app (React + Vite)
-│   ├── src/
-│   │   ├── pages/               # Web pages
-│   │   ├── App.tsx              # Web routing
-│   │   └── ... (current structure)
-│   ├── package.json
-│   └── vite.config.ts
+/Users/vkbin/Techwheels-Service/          # PROJECT ROOT = WEB APP
+├── src/                                    # ✅ EXISTING WEB APP (React + Vite)
+│   ├── pages/                              # Web pages
+│   │   ├── LoginPage.tsx
+│   │   ├── ImportPage.tsx
+│   │   ├── ReportsPage.tsx
+│   │   ├── AutoDocPage.tsx
+│   │   ├── AdminPage.tsx
+│   │   ├── SettingsPage.tsx
+│   │   └── ...
+│   ├── components/                         # Web components
+│   ├── lib/                                # **SHARED BUSINESS LOGIC**
+│   │   ├── api/                            # 12 API modules
+│   │   │   ├── auth.ts
+│   │   │   ├── vehicles.ts
+│   │   │   ├── jobCards.ts
+│   │   │   ├── panels.ts
+│   │   │   ├── photos.ts
+│   │   │   ├── documents.ts
+│   │   │   ├── estimate.ts
+│   │   │   ├── activityLog.ts
+│   │   │   ├── email.ts
+│   │   │   ├── autodocRates.ts
+│   │   │   ├── rcLookup.ts
+│   │   │   └── index.ts
+│   │   ├── *ColumnMapper.ts                # 8 column mappers
+│   │   ├── reportQueries.ts                # Report queries
+│   │   ├── partsReportQueries.ts           # Parts queries
+│   │   ├── database.types.ts               # TS types (from Supabase)
+│   │   ├── supabase.ts                     # Supabase client
+│   │   ├── autodocStorage.ts               # Storage layer
+│   │   ├── columnMatcher.ts                # CSV utilities
+│   │   ├── employeeMatcher.ts              # Employee matching
+│   │   ├── branches.ts                     # Branch utilities
+│   │   ├── exportUtils.ts                  # Export helpers
+│   │   ├── getTableColumns.ts              # Column utilities
+│   │   └── generators/                     # Report generators
+│   ├── context/                            # React context
+│   │   ├── DirtyContext.tsx                # Form state
+│   │   └── ...
+│   ├── hooks/                              # React hooks
+│   ├── App.tsx                             # Web routing
+│   ├── main.tsx                            # Entry point
+│   └── ...
 │
-├── mobile/                        # New Expo app
-│   ├── app/                      # Expo Router (file-based routing)
-│   │   ├── (auth)/               # Auth screens group
+├── mobile/                                 # 🆕 NEW MOBILE APP (Expo)
+│   ├── app/                                # Expo Router (file-based routing)
+│   │   ├── _layout.tsx                     # Root layout
+│   │   ├── (auth)/                         # Auth screens group
+│   │   │   ├── _layout.tsx
 │   │   │   ├── login.tsx
 │   │   │   ├── signup.tsx
 │   │   │   └── password-reset.tsx
-│   │   ├── (tabs)/               # Authenticated screens group
-│   │   │   ├── _layout.tsx       # Bottom tab navigation
+│   │   ├── (tabs)/                         # Authenticated screens group
+│   │   │   ├── _layout.tsx                 # Bottom tab navigation
 │   │   │   ├── import/index.tsx
 │   │   │   ├── reports/[id].tsx
 │   │   │   ├── autodoc/[id].tsx
 │   │   │   ├── admin/index.tsx
 │   │   │   └── settings/index.tsx
-│   │   └── _layout.tsx           # Root layout
-│   ├── components/               # Mobile-specific components
+│   │   └── ...
+│   ├── components/                         # Mobile-specific components
 │   │   ├── auth/
 │   │   ├── import/
 │   │   ├── reports/
 │   │   ├── autodoc/
-│   │   ├── common/               # Shared UI components
-│   │   └── ...
-│   ├── lib/                      # **SHARED CODE** (symlinked from web)
-│   │   ├── api/                  # 1:1 from web/src/lib/api
-│   │   ├── *ColumnMapper.ts      # 1:1 from web
-│   │   ├── reportQueries.ts      # 1:1 from web
-│   │   ├── database.types.ts     # 1:1 from web
-│   │   ├── supabase.ts           # Adapted for mobile
-│   │   ├── autodocStorage.ts     # AsyncStorage instead of localStorage
-│   │   └── ...
-│   ├── hooks/                    # Mobile-specific hooks
+│   │   ├── settings/
+│   │   ├── admin/
+│   │   └── common/                         # Shared UI components
+│   ├── lib/                                # **SYMLINKED TO ../src/lib/**
+│   │   ├── api/                            # 🔗 Symlink to ../../src/lib/api
+│   │   ├── *ColumnMapper.ts                # 🔗 Symlinks
+│   │   ├── reportQueries.ts                # 🔗 Symlink
+│   │   ├── partsReportQueries.ts           # 🔗 Symlink
+│   │   ├── database.types.ts               # 🔗 Symlink
+│   │   ├── columnMatcher.ts                # 🔗 Symlink
+│   │   ├── employeeMatcher.ts              # 🔗 Symlink
+│   │   ├── branches.ts                     # 🔗 Symlink
+│   │   ├── exportUtils.ts                  # 🔗 Symlink
+│   │   ├── getTableColumns.ts              # 🔗 Symlink
+│   │   ├── supabase.ts                     # Mobile adaptation (AsyncStorage)
+│   │   └── autodocStorage.ts               # Mobile adaptation (AsyncStorage)
+│   ├── hooks/                              # Mobile-specific hooks
 │   │   ├── useCamera.ts
 │   │   ├── useMediaLibrary.ts
 │   │   ├── useDocumentPicker.ts
+│   │   ├── useReportData.ts                # Adapted from web
+│   │   ├── useOnline.ts                    # Adapted from web
+│   │   ├── useLastUpdated.ts               # Adapted from web
+│   │   ├── useOfflineQueue.ts
 │   │   └── ...
-│   ├── context/                  # 1:1 from web + mobile-specific
-│   │   ├── DirtyContext.tsx      # Shared
-│   │   └── AuthContext.tsx
-│   ├── package.json              # Includes all web dependencies
-│   ├── app.json                  # Expo config
-│   └── expo-env.d.ts             # TypeScript definitions
+│   ├── context/                            # Mobile context
+│   │   ├── AuthContext.tsx
+│   │   ├── DirtyContext.tsx                # 🔗 Symlinked from web
+│   │   ├── PermissionContext.tsx
+│   │   └── ...
+│   ├── app.config.js                       # Dynamic Expo configuration
+│   ├── eas.json                            # EAS build profiles
+│   ├── package.json                        # All dependencies pre-bundled
+│   ├── babel.config.js                     # Babel configuration
+│   └── metro.config.js                     # Metro bundler config
 │
-└── shared/                        # **OPTIONAL**: If symlinks not viable
-    ├── api/                      # Shared API layer
-    ├── mappers/                  # Column mappers
-    ├── queries/                  # Report queries
-    ├── types/                    # Database types
-    └── utils/                    # Utilities
-
+├── package.json                            # Web project config
+├── tsconfig.json
+├── vite.config.ts
+├── supabase/                               # Shared backend config
+│   ├── migrations/
+│   ├── functions/
+│   └── ...
+├── docs/
+├── scripts/
+└── ... (other root files)
 ```
 
-### Why This Structure?
+### Key Points:
+✅ **NO `/web` folder** - Project root IS the web application  
+✅ **`src/` at root** - Contains all web code (existing structure)  
+✅ **`mobile/` folder** - New mobile app, symlinks to `../src/lib/` for shared logic  
+✅ **Monorepo benefits**: Single source of truth for API logic, types, queries  
+✅ **Zero duplication**: Same 12 API modules used by both web & mobile  
+
+---
+
+## Why This Structure?
 1. **Monorepo = Single Source of Truth** for business logic
-2. **`mobile/lib/` symlinked to `web/src/lib/`** = Zero duplication
+2. **`mobile/lib/` symlinked to `src/lib/`** = Zero duplication
 3. **Expo Router** provides web-like file-based routing without React Router
 4. **Group layouts** enable shared UI (auth flows, authenticated tabs)
 5. **Easy dependency management**: All web packages pre-included in mobile `package.json`

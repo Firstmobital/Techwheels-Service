@@ -47,6 +47,21 @@ graph TB
 
 ---
 
+## 🎯 Project Structure (IMPORTANT CLARIFICATION)
+
+**Your Project Root** = `/Users/vkbin/Techwheels-Service/`
+- This is the **WEB APPLICATION** (existing React + Vite project)
+- Web code lives in: `src/` (pages, components, routing, etc.)
+- Web shared logic lives in: `src/lib/` (API modules, mappers, queries, types)
+
+**Mobile Application** = New `/Users/vkbin/Techwheels-Service/mobile/` folder
+- Mobile code will live in: `mobile/app/` (screens, components)
+- Mobile will **SYMLINK** to web's shared logic: `mobile/lib/ → ../src/lib/`
+
+**NO SEPARATE `/web` FOLDER** ✅ (root itself is the web version)
+
+---
+
 ## Directory Structure
 
 ### Root Level
