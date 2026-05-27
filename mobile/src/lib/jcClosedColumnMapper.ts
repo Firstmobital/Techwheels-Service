@@ -1,0 +1,1 @@
+../../../src/lib/jcClosedColumnMapper.ts

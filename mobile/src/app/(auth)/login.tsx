@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { View, TextInput, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native'
 import { useRouter } from 'expo-router'
-import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const { signIn } = useAuth()
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -17,10 +18,7 @@ export default function LoginScreen() {
 
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      const { error } = await signIn(email, password)
 
       if (error) {
         Alert.alert('Login Failed', error.message)

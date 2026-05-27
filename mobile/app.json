@@ -43,7 +43,12 @@
           "prebuildCommand": "echo 'prebuild'"
         }
       }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "techwheels-service"
+      }
     }
   }
 }
-

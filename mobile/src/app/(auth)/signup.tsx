@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { View, TextInput, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native'
 import { useRouter } from 'expo-router'
-import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 export default function SignUpScreen() {
   const [email, setEmail] = useState('')
@@ -9,6 +9,7 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const { signUp } = useAuth()
 
   const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
@@ -23,10 +24,7 @@ export default function SignUpScreen() {
 
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      })
+      const { error } = await signUp(email, password)
 
       if (error) {
         Alert.alert('Sign Up Failed', error.message)
