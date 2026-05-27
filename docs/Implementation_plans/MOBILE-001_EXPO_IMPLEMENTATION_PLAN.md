@@ -1341,24 +1341,24 @@ Only push updates to `app/` folder, not `node_modules/`
 
 | Phase | Checkpoint | Status |
 |-------|-----------|--------|
-| 1 | Expo project initialized, all dependencies installed | 🟡 Pending |
-| 2 | Shared code layer integrated, symlinks working | 🟡 Pending |
-| 3 | Auth flow end-to-end (login → dashboard) | 🟡 Pending |
-| 4 | Main navigation + 5 core screens functioning | 🟡 Pending |
-| 5 | All features working (import, reports, autodoc, admin, settings) | 🟡 Pending |
+| 1 | Expo project initialized, all dependencies installed | 🟢 Complete |
+| 2 | Shared code layer integrated, symlinks working | 🟢 Complete |
+| 3 | Auth flow end-to-end (login → dashboard) | 🟢 Complete |
+| 4 | Main navigation + 5 core screens functioning | 🟠 In Progress |
+| 5 | All features working (import, reports, autodoc, admin, settings) | 🟠 In Progress |
 | 6 | 100% test coverage for shared logic, E2E tests passing | 🟡 Pending |
 | 7 | APK built & deployable via EAS, OTA updates configured | 🟡 Pending |
 
 ### Feature Parity Checklist
 
-- ✅ **Authentication**: Login, signup, password reset (same as web)
-- ✅ **Import**: CSV file picker, duplicate detection, conflict resolution
-- ✅ **Reports**: All report types, charts, export to PDF
-- ✅ **AutoDoc**: Job card CRUD, panel management, photo/document upload
-- ✅ **Admin**: User CRUD, module permissions (if role permits)
-- ✅ **Settings**: Employee management, user settings
-- ✅ **Offline Support**: Draft job cards, sync queue
-- ✅ **Access Control**: Module permissions, RLS enforcement
+- 🟢 **Authentication**: Login/signup/password reset wired to Supabase, session restore and route guards active
+- 🟠 **Import**: Live job card list integrated; advanced file import flows pending
+- 🟠 **Reports**: Screen scaffold exists; live report queries and exports pending
+- 🟠 **AutoDoc**: Live list, detail route, and status updates working; panel/photo/document workflows pending
+- 🟠 **Admin**: Basic screen and gating in place; full CRUD workflows pending
+- 🟠 **Settings**: Screen and logout flow working; full settings coverage pending
+- 🟡 **Offline Support**: Framework exists; type/runtime stabilization and sync validation pending
+- 🟢 **Access Control**: Auth group and tabs group redirect guards active
 
 ### Performance Targets
 
@@ -1372,11 +1372,13 @@ Only push updates to `app/` folder, not `node_modules/`
 
 ## Next Steps
 
-1. **Collect Expo credentials** from your Expo Go account
-2. **Create new project** in Expo Go: `techwheels-service`
-3. **Execute Phase 1**: Initialize Expo project
-4. **Execute Phase 2**: Set up shared code layer
-5. **Iterate through phases 3-7** with testing at each gate
+1. **Phase 4 completion pass**: Validate all tab routes, headers, empty/error/loading states, and back navigation consistency.
+2. **Import module completion**: Implement device file picker flows (CSV), mapper binding, duplicate/conflict handling, and success/failure UX.
+3. **AutoDoc module completion**: Add panel selection, photo/document capture/upload, and estimate row workflows beyond status transitions.
+4. **Reports module completion**: Connect report query hooks, add mobile chart components, and implement export behavior for mobile.
+5. **Stabilize offline stack**: Resolve existing offline/logger/background-sync type issues, then run end-to-end offline/online sync validation.
+6. **Phase 6 test gate**: Execute auth, import, autodoc, reports, admin, and settings validation checklist on real devices.
+7. **Phase 7 delivery prep**: Finalize EAS preview/production profiles and produce installable preview builds.
 
 ---
 
@@ -1406,6 +1408,6 @@ expo start
 
 ---
 
-**Document Status**: DRAFT  
+**Document Status**: IN PROGRESS  
 **Last Updated**: 2026-05-27  
-**Next Review**: After Phase 1 completion
+**Next Review**: After Phase 4 completion

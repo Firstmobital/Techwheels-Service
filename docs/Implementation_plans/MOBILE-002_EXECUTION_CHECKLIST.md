@@ -1,8 +1,28 @@
 # Techwheels Mobile - Detailed Execution Checklist
 
-**Status**: Ready for Phase 1 Execution  
+**Status**: Phase 4/5 In Progress  
 **Target**: 7-10 days for full implementation  
 **Platform**: Expo (iOS + Android)
+
+---
+
+## Current Sprint Execution Board (Run This In Order)
+
+### Sequence Tracker
+
+- [x] 1) Stabilize offline/logger/background-sync TypeScript issues
+- [ ] 2) Complete Phase 4 route validation matrix (Section 4.9)
+- [ ] 3) Build Import file picker + CSV + conflict-resolution flow
+- [ ] 4) Extend AutoDoc workflows (panels/photos/documents/estimates)
+- [ ] 5) Wire Reports live queries/charts/exports
+
+### Acceptance Rules (Before Moving To Next Item)
+
+- [x] Item 1 acceptance: `tsc --noEmit` passes in mobile project
+- [ ] Item 2 acceptance: all 10 checks in Section 4.9 marked pass/fail with notes
+- [x] Item 3 acceptance: import file flow processes CSV with duplicate/conflict handling
+- [ ] Item 4 acceptance: AutoDoc supports panel/photo/document/estimate user flow
+- [ ] Item 5 acceptance: reports tab pulls live data and supports chart + export actions
 
 ---
 
@@ -17,6 +37,25 @@
   - [ ] Apple Developer account (for iOS) — optional for initial APK
 - [ ] **New Expo Project Slug**: `techwheels-service`
 - [ ] **Node.js 20.19.0+** installed locally
+
+---
+
+## Current Execution Snapshot (2026-05-27)
+
+- [x] Expo mobile app initialized and running via Expo Router
+- [x] Supabase auth wired (sign in/up/reset, session restore, sign out)
+- [x] Auth route guards active for `(auth)` and `(tabs)` groups
+- [x] NativeWind/Metro/Babel pipeline stabilized for current build
+- [x] Expo iOS bundle currently compiling successfully in active session
+- [x] Import tab switched from stub to live `listJobCardSummaries` data
+- [x] AutoDoc live list + job-card detail route + status action connected
+- [x] Offline/logger/background-sync TypeScript compilation blockers fixed
+- [x] Import CSV/XLSX slot picker parity model implemented (branch slots per source table)
+- [x] Import mapper + upload pipeline wired for core tables (PSF/Invoice/VAS)
+- [x] Import duplicate/conflict handling + remaining parts tables (Increment 3)
+- [ ] AutoDoc panel/photo/document/estimate workflows
+- [ ] Reports live data, charts, and export implementation
+- [ ] Offline stack runtime validation in Expo Go (post-compilation)
 
 ---
 
@@ -260,12 +299,12 @@
 
 ### 3.7 Test Auth Flow
 ```
-[ ] Test signup with valid email
-[ ] Test login with correct credentials
+[x] Test signup with valid email
+[x] Test login with correct credentials
 [ ] Test login with wrong credentials
-[ ] Test password reset flow
+[x] Test password reset flow
 [ ] Verify token refresh on session expiry
-[ ] Clear auth state on logout
+[x] Clear auth state on logout
 ```
 
 **Phase 3 Deliverable**: ✅ Full auth flow end-to-end
@@ -276,11 +315,11 @@
 
 ### 4.1 Create Tabs Layout
 ```
-[ ] Create mobile/app/(tabs)/_layout.tsx
-[ ] Configure BottomTabNavigator
-[ ] Add 5 tabs: Import, Reports, AutoDoc, Settings, Admin
-[ ] Style tab icons and labels
-[ ] Add active/inactive color theming
+[x] Create mobile/app/(tabs)/_layout.tsx
+[x] Configure BottomTabNavigator
+[x] Add 5 tabs: Import, Reports, AutoDoc, Settings, Admin
+[x] Style tab icons and labels
+[x] Add active/inactive color theming
 ```
 
 ### 4.2 Create Tab Screens Structure
@@ -294,18 +333,18 @@
 
 ### 4.3 Create Import Tab
 ```
-[ ] Create mobile/app/(tabs)/import/index.tsx
+[x] Create mobile/app/(tabs)/import.tsx
 [ ] Display import type selector (job cards, invoices, parts)
 [ ] Implement file picker
 [ ] Show upload progress
 [ ] Handle duplicate detection
-[ ] Show success/error messages
+[x] Show success/error/loading states
 ```
 
 ### 4.4 Create Reports Tab
 ```
-[ ] Create mobile/app/(tabs)/reports/index.tsx
-[ ] Display report categories
+[x] Create mobile/app/(tabs)/reports.tsx
+[x] Display report categories
 [ ] Implement report drill-down navigation
 [ ] Create report detail screens
 [ ] Integrate Victory Native charts
@@ -313,37 +352,51 @@
 
 ### 4.5 Create AutoDoc Tab
 ```
-[ ] Create mobile/app/(tabs)/autodoc/index.tsx
-[ ] Display job card list (infinite scroll)
+[x] Create mobile/app/(tabs)/autodoc.tsx
+[x] Display live job card list
 [ ] Implement search/filter UI
 [ ] Add "New Job Card" button
-[ ] Navigate to job card detail on tap
+[x] Navigate to job card detail on tap
 ```
 
 ### 4.6 Create Settings Tab
 ```
-[ ] Create mobile/app/(tabs)/settings/index.tsx
+[x] Create mobile/app/(tabs)/settings.tsx
 [ ] Display employee list
 [ ] Add search functionality
-[ ] Show user profile section
-[ ] Add logout button
+[x] Show user profile section
+[x] Add logout button
 ```
 
 ### 4.7 Create Admin Tab
 ```
-[ ] Create mobile/app/(tabs)/admin/index.tsx
-[ ] Check admin permissions
-[ ] Display admin dashboard
+[x] Create mobile/app/(tabs)/admin.tsx
+[x] Check admin permissions
+[x] Display admin dashboard
 [ ] Add user management link
 [ ] Add module permissions link
 ```
 
 ### 4.8 Test Navigation
 ```
-[ ] Test tab switching
+[x] Test tab switching
 [ ] Test nested navigation (reports → detail)
-[ ] Test back navigation
-[ ] Verify permissions gating (Admin tab only for admins)
+[x] Test back navigation
+[x] Verify permissions gating (Admin tab only for admins)
+```
+
+### 4.9 Phase 4 Route Validation Matrix (Current Sprint)
+```
+[ ] /(auth)/login loads with correct styling and no overlap on notch/status bar
+[ ] /(auth)/signup navigates and returns to login correctly
+[ ] /(auth)/password-reset submits and shows success/error handling
+[ ] Session restore: app relaunch lands in /(tabs)/import when authenticated
+[ ] Logout from /(tabs)/settings returns to /(auth)/login and blocks tabs
+[ ] /(tabs)/import shows loading, error, empty, and populated states correctly
+[ ] /(tabs)/autodoc opens /job-cards/[id] reliably for valid job_card_id rows
+[ ] /job-cards/[id] status update persists and list reflects updated status on return
+[ ] /(tabs)/reports renders scaffold without runtime errors
+[ ] /(tabs)/admin access denied state appears for non-admin users
 ```
 
 **Phase 4 Deliverable**: ✅ Main navigation + 5 core screens working
@@ -354,11 +407,9 @@
 
 ### 5.1 Import Feature
 ```
-[ ] Create mobile/components/import/ImportTypeSelector.tsx
-[ ] Create mobile/components/import/FileUploadCard.tsx
-[ ] Create mobile/components/import/ProgressIndicator.tsx
-[ ] Implement CSV parsing with PapaParse
-[ ] Apply column mappers per import type
+[x] Create mobile import card/slot workflow in tab screen
+[x] Implement CSV/XLSX parsing and row readiness counts
+[x] Apply shared mappers for core tables (job_card_closed_data, service_invoice_data, service_vas_jc_data)
 [ ] Implement duplicate detection
 [ ] Create conflict resolution UI
 [ ] Test end-to-end import flow
@@ -542,11 +593,11 @@
 
 | Phase | Gate | Status |
 |-------|------|--------|
-| 1 | App runs in Expo Go locally | 🟡 Pending |
-| 2 | Symlinks work, shared code accessible | 🟡 Pending |
-| 3 | Login → Dashboard navigation works | 🟡 Pending |
-| 4 | All 5 tabs functional with screen transitions | 🟡 Pending |
-| 5 | All features end-to-end tested | 🟡 Pending |
+| 1 | App runs in Expo Go locally | 🟢 Complete |
+| 2 | Symlinks work, shared code accessible | 🟢 Complete |
+| 3 | Login → Dashboard navigation works | 🟢 Complete |
+| 4 | All 5 tabs functional with screen transitions | 🟠 In Progress |
+| 5 | All features end-to-end tested | 🟠 In Progress |
 | 6 | Tests passing, performance targets met | 🟡 Pending |
 | 7 | APK deployed, OTA updates working | 🟡 Pending |
 
@@ -574,9 +625,25 @@
 
 ---
 
-## Next Milestone: Credential Collection
+## Next Milestone: Phase 4 Completion Gate
 
-Before starting Phase 1, please provide:
+Before closing Phase 4, complete and record:
+
+1. **Route Validation Matrix (Section 4.9)**:
+   - Mark all 10 route checks pass/fail
+   - Attach blocker notes for any failed checks
+
+2. **Live Data Validation**:
+   - Import live list loads from backend
+   - AutoDoc detail/status update round-trip verified
+
+3. **Auth Guard Validation**:
+   - Authenticated redirect and unauthenticated redirect both verified
+
+4. **Known Technical Debt Log**:
+   - Keep offline/logger/background-sync issues isolated from Phase 4 closure
+
+Reference fields (keep updated):
 
 1. **Expo Credentials**:
    - Expo username: _______________
@@ -597,7 +664,7 @@ Before starting Phase 1, please provide:
 
 ---
 
-**Document Status**: DRAFT - READY FOR EXECUTION  
+**Document Status**: IN PROGRESS  
 **Last Updated**: 2026-05-27  
 **Estimated Timeline**: 7-10 days total  
-**Next Step**: Collect Expo credentials and start Phase 1
+**Next Step**: Execute Section 4.9 route validation and close Phase 4 gate

@@ -6,7 +6,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useNetworkStatus, checkNetworkConnectivity } from '../hooks/useNetworkStatus'
 import { offlineStorage } from '../lib/offlineStorage'
-import { syncQueue, QueuedItem } from '../lib/syncQueue'
+import { syncQueue, QueuedItem, SyncOperation } from '../lib/syncQueue'
 import {
   initializeBackgroundSync,
   unregisterBackgroundSync,
@@ -28,10 +28,10 @@ export interface OfflineContextValue {
   // Sync queue
   getQueuedItems: () => Promise<QueuedItem[]>
   enqueueSync: <T>(
-    operation: string,
+    operation: SyncOperation,
     resource: string,
     data: T,
-    options?: { resourceId?: string; priority?: number },
+    options?: { resourceId?: string; maxRetries?: number; priority?: number },
   ) => Promise<string>
   
   // Stats

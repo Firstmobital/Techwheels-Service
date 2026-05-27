@@ -49,7 +49,7 @@ export const initializeLogger = async () => {
     if (stored) {
       deviceId = stored
     } else {
-      deviceId = Device.deviceId || `device_${Date.now()}`
+      deviceId = `device_${Date.now()}`
       await AsyncStorage.setItem('tw_device_id', deviceId)
     }
 
@@ -132,11 +132,13 @@ const writeLogsToFile = async (entries: LogEntry[]) => {
       })
     }
 
-    // Append new logs
+    const existing = fileInfo.exists
+      ? await FileSystem.readAsStringAsync(filePath)
+      : ''
+
     await FileSystem.writeAsStringAsync(
       filePath,
-      `${logLines}\n`,
-      { append: true },
+      `${existing}${logLines}\n`,
     )
   } catch (error) {
     console.error('Error writing logs to file:', error)
@@ -260,7 +262,7 @@ export const getLogStats = async () => {
 
     for (const file of files) {
       const fileInfo = await FileSystem.getInfoAsync(`${LOGS_DIR}/${file}`)
-      if (fileInfo.size) {
+      if (fileInfo.exists && 'size' in fileInfo && typeof fileInfo.size === 'number') {
         totalSize += fileInfo.size
       }
     }

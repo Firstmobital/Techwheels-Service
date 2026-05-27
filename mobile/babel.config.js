@@ -12,6 +12,7 @@ module.exports = function (api) {
           unstable_transformImportMeta: true,
         },
       ],
+      'nativewind/babel',
     ],
     plugins: [
       [
@@ -23,7 +24,6 @@ module.exports = function (api) {
           },
         },
       ],
-      'nativewind/babel',
       'react-native-reanimated/plugin',
     ],
   }

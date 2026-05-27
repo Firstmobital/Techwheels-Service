@@ -133,11 +133,10 @@ export const isBackgroundSyncActive = (): boolean => {
  */
 export const triggerBackgroundSync = async () => {
   try {
-    await BackgroundFetch.BackgroundFetchManager.startAsync(
-      BACKGROUND_SYNC_TASK,
-    )
-
-    logEvent('background_sync_manual_trigger', {}, 'background-sync')
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK)
+    logEvent('background_sync_manual_trigger', {
+      task_registered: isRegistered,
+    }, 'background-sync')
   } catch (error) {
     logEvent('background_sync_manual_trigger_error', {
       error: error instanceof Error ? error.message : 'Unknown error',

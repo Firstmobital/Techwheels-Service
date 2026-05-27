@@ -29,7 +29,7 @@ export const useOfflineSync = (handlers: Record<string, SyncHandler>) => {
   })
 
   const { isConnected } = useNetworkStatus()
-  const syncTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const syncTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const unsubscribeRef = useRef<(() => void) | null>(null)
 
   // Update stats

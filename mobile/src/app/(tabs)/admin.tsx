@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native'
+import { useAuth } from '../../context/AuthContext'
 
 interface AdminMenuItem {
   title: string
@@ -11,7 +11,11 @@ interface AdminMenuItem {
 }
 
 export default function AdminScreen() {
-  const [adminMode] = useState(true) // Would check user role in real app
+  const { user } = useAuth()
+  const role =
+    (user?.app_metadata?.role as string | undefined) ??
+    (user?.user_metadata?.role as string | undefined)
+  const adminMode = typeof role === 'string' && ['admin', 'super_admin'].includes(role.toLowerCase())
 
   const menuItems: AdminMenuItem[] = [
     {

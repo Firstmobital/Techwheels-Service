@@ -21,14 +21,22 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: true,
+        sceneStyle: {
+          backgroundColor: '#f8fafc',
+        },
         headerTintColor: '#2563eb',
         tabBarActiveTintColor: '#2563eb',
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {
+          position: 'relative',
+          zIndex: 100,
+          elevation: 20,
           borderTopColor: '#e5e7eb',
           borderTopWidth: 1,
-          paddingBottom: 8,
-          paddingTop: 8,
+          paddingBottom: 6,
+          paddingTop: 6,
+          height: 64,
+          backgroundColor: '#ffffff',
         },
       }}
     >
