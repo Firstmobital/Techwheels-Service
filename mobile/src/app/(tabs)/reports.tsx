@@ -48,6 +48,10 @@ import TatDurationBucketsMobile from '../../components/reports/TatDurationBucket
 import ModelWiseRevenueMobile from '../../components/reports/ModelWiseRevenueMobile'
 import PartsValuationMobile from '../../components/reports/PartsValuationMobile'
 import PartsInventoryTurnoverMobile from '../../components/reports/PartsInventoryTurnoverMobile'
+import VasBillingHoursEfficiencyMobile from '../../components/reports/VasBillingHoursEfficiencyMobile'
+import VehicleWiseRevenueMobile from '../../components/reports/VehicleWiseRevenueMobile'
+import PartsFastMovingMobile from '../../components/reports/PartsFastMovingMobile'
+import PartsInTransitMobile from '../../components/reports/PartsInTransitMobile'
 
 export default function ReportsScreen() {
   const [selectedCategoryId, setSelectedCategoryId] =
@@ -448,6 +452,11 @@ export default function ReportsScreen() {
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
               />
+            ) : selectedReportId === 'vas-billing-hours-efficiency' ? (
+              <VasBillingHoursEfficiencyMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
             ) : selectedReportId === 'employee-utilization' ? (
               <EmployeeUtilizationMobile
                 branch={effectiveBranchFilter}
@@ -483,6 +492,11 @@ export default function ReportsScreen() {
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
               />
+            ) : selectedReportId === 'vehicle-wise-revenue' ? (
+              <VehicleWiseRevenueMobile
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
             ) : selectedReportId === 'parts-monthly-consumption' ? (
               <PartsMonthlyConsumptionMobile
                 branch={effectiveBranchFilter}
@@ -514,6 +528,14 @@ export default function ReportsScreen() {
               />
             ) : selectedReportId === 'parts-inventory-turnover' ? (
               <PartsInventoryTurnoverMobile
+                branch={effectiveBranchFilter}
+              />
+            ) : selectedReportId === 'parts-fast-moving' ? (
+              <PartsFastMovingMobile
+                branch={effectiveBranchFilter}
+              />
+            ) : selectedReportId === 'parts-in-transit' ? (
+              <PartsInTransitMobile
                 branch={effectiveBranchFilter}
               />
             ) : (

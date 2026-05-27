@@ -1550,16 +1550,6 @@ export default function AutoDocPage() {
     })
   }, [estimatePendingJobIds, postRepairReadyJobIds, rows])
 
-  function formatRegistrationNumber(input: string): string {
-    // Remove all non-alphanumeric characters and convert to uppercase
-    const cleaned = input.replace(/[^A-Z0-9]/g, '').toUpperCase()
-    // Format as XX-DD-XX-DDDD (Indian registration format)
-    if (cleaned.length <= 2) return cleaned
-    if (cleaned.length <= 4) return `${cleaned.slice(0, 2)}-${cleaned.slice(2)}`
-    if (cleaned.length <= 6) return `${cleaned.slice(0, 2)}-${cleaned.slice(2, 4)}-${cleaned.slice(4)}`
-    return `${cleaned.slice(0, 2)}-${cleaned.slice(2, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 10)}`
-  }
-
   function pickFirstText(...values: Array<string | null | undefined>): string {
     for (const value of values) {
       if (typeof value !== 'string') continue
@@ -1623,7 +1613,7 @@ export default function AutoDocPage() {
 
       return {
         ...prev,
-        regNumber: formatRegistrationNumber(regFromRto || resolvedReg || prev.regNumber),
+        regNumber: (regFromRto || resolvedReg || prev.regNumber).toUpperCase(),
         vin: vinFromRto || prev.vin,
         model: modelFromRto || prev.model,
         year: inferYearFromRto(row) || prev.year,
@@ -2986,9 +2976,9 @@ export default function AutoDocPage() {
                     setCreateError(null)
                   }}
                   onBlur={() => {
-                    setForm((prev) => ({ ...prev, regNumber: formatRegistrationNumber(prev.regNumber) }))
+                    setForm((prev) => ({ ...prev, regNumber: prev.regNumber.toUpperCase() }))
                   }}
-                  placeholder="RJ-14-YH-7659"
+                  placeholder="RJ14YH7659"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium tracking-widest text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
