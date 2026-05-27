@@ -24,6 +24,7 @@ import {
   deletePanel,
   deleteEstimateRowsByPanels,
   deletePanelPhotosByPanelId,
+  movePanelPhotos,
   deletePanelPhoto,
   logActivity,
   resolveRegNumberFromReference,
@@ -2048,39 +2049,56 @@ export default function AutoDocPage() {
       }
 
       const selectedKeySet = new Set(selected.map((name) => normalizeText(name)))
-      const existingByKey = new Map<string, { id: string; name: string }>()
+      const existingByKey = new Map<string, Array<{ id: string; name: string }>>()
 
       existingRes.data.forEach((panel) => {
         const name = panel.panel_name?.trim()
         if (!name) return
         const key = normalizeText(name)
-        if (!existingByKey.has(key)) {
-          existingByKey.set(key, { id: panel.id, name })
-        }
+        const list = existingByKey.get(key) ?? []
+        list.push({ id: panel.id, name })
+        existingByKey.set(key, list)
       })
 
       const nextPanelIdByName: Record<string, string> = {}
       const nextPanelNameById: Record<string, string> = {}
       const removedPanelNames: string[] = []
 
-      for (const [key, panel] of existingByKey.entries()) {
+      for (const [key, panelsForKey] of existingByKey.entries()) {
+        const [canonical, ...duplicates] = panelsForKey
+        if (!canonical) continue
+
+        for (const dup of duplicates) {
+          const moveRes = await movePanelPhotos(dup.id, canonical.id)
+          if (moveRes.error) {
+            showToast(`Unable to merge duplicate panel photos for "${canonical.name}": ${moveRes.error}`, false)
+            return false
+          }
+
+          const deleteDupRes = await deletePanel(dup.id)
+          if (deleteDupRes.error) {
+            showToast(`Unable to remove duplicate panel "${dup.name}": ${deleteDupRes.error}`, false)
+            return false
+          }
+        }
+
         if (selectedKeySet.has(key)) {
-          nextPanelIdByName[panel.name] = panel.id
-          nextPanelNameById[panel.id] = panel.name
+          nextPanelIdByName[canonical.name] = canonical.id
+          nextPanelNameById[canonical.id] = canonical.name
           continue
         }
 
-        removedPanelNames.push(panel.name)
+        removedPanelNames.push(canonical.name)
 
-        const deletePhotosRes = await deletePanelPhotosByPanelId(panel.id)
+        const deletePhotosRes = await deletePanelPhotosByPanelId(canonical.id)
         if (deletePhotosRes.error) {
-          showToast(`Unable to remove photos for panel "${panel.name}": ${deletePhotosRes.error}`, false)
+          showToast(`Unable to remove photos for panel "${canonical.name}": ${deletePhotosRes.error}`, false)
           return false
         }
 
-        const deleteRes = await deletePanel(panel.id)
+        const deleteRes = await deletePanel(canonical.id)
         if (deleteRes.error) {
-          showToast(`Unable to remove panel "${panel.name}": ${deleteRes.error}`, false)
+          showToast(`Unable to remove panel "${canonical.name}": ${deleteRes.error}`, false)
           return false
         }
       }
@@ -2099,7 +2117,7 @@ export default function AutoDocPage() {
 
       for (const panelName of selected) {
         const key = normalizeText(panelName)
-        const existing = existingByKey.get(key)
+        const existing = existingByKey.get(key)?.[0]
         if (existing) continue
 
         const createRes = await createPanel(jobCardId, panelName)
@@ -2110,7 +2128,7 @@ export default function AutoDocPage() {
 
         nextPanelIdByName[panelName] = createRes.data.id
         nextPanelNameById[createRes.data.id] = panelName
-        existingByKey.set(key, { id: createRes.data.id, name: panelName })
+        existingByKey.set(key, [{ id: createRes.data.id, name: panelName }])
       }
 
       setPanelIdByName(nextPanelIdByName)

@@ -98,3 +98,17 @@ export async function deletePanelPhotosByPanelId(panelId: string): Promise<ApiRe
   if (error) return fail(error)
   return ok(true)
 }
+
+export async function movePanelPhotos(fromPanelId: string, toPanelId: string): Promise<ApiResult<true>> {
+  if (!fromPanelId.trim()) return fail('Source panel id is required')
+  if (!toPanelId.trim()) return fail('Target panel id is required')
+  if (fromPanelId === toPanelId) return ok(true)
+
+  const { error } = await supabase
+    .from('panel_photos')
+    .update({ panel_id: toPanelId })
+    .eq('panel_id', fromPanelId)
+
+  if (error) return fail(error)
+  return ok(true)
+}
