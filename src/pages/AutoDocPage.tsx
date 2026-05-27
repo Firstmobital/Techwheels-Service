@@ -1948,6 +1948,67 @@ export default function AutoDocPage() {
 
     const persistedActiveJobCardId = isDifferentFromActiveSummary ? null : activeJobCardId
 
+    async function syncPanels(jobCardId: string): Promise<boolean> {
+      const selected = sanitizePanelList(selectedPanels)
+      const existingRes = await listPanels(jobCardId)
+      if (existingRes.error || !existingRes.data) {
+        showToast(existingRes.error ?? 'Unable to sync selected panels.', false)
+        return false
+      }
+
+      const existingByName = new Map<string, string>()
+      existingRes.data.forEach((panel) => {
+        const name = panel.panel_name?.trim()
+        if (!name) return
+        existingByName.set(name, panel.id)
+      })
+
+      const nextPanelIdByName: Record<string, string> = {}
+      const nextPanelNameById: Record<string, string> = {}
+
+      for (const [name, panelId] of existingByName.entries()) {
+        if (selected.includes(name)) {
+          nextPanelIdByName[name] = panelId
+          nextPanelNameById[panelId] = name
+          continue
+        }
+
+        const deletePhotosRes = await deletePanelPhotosByPanelId(panelId)
+        if (deletePhotosRes.error) {
+          showToast(`Unable to remove photos for panel "${name}": ${deletePhotosRes.error}`, false)
+          return false
+        }
+
+        const deleteRes = await deletePanel(panelId)
+        if (deleteRes.error) {
+          showToast(`Unable to remove panel "${name}": ${deleteRes.error}`, false)
+          return false
+        }
+      }
+
+      for (const name of selected) {
+        const existingPanelId = existingByName.get(name)
+        if (existingPanelId) {
+          nextPanelIdByName[name] = existingPanelId
+          nextPanelNameById[existingPanelId] = name
+          continue
+        }
+
+        const createRes = await createPanel(jobCardId, name)
+        if (createRes.error || !createRes.data) {
+          showToast(`Unable to save panel "${name}": ${createRes.error}`, false)
+          return false
+        }
+
+        nextPanelIdByName[name] = createRes.data.id
+        nextPanelNameById[createRes.data.id] = name
+      }
+
+      setPanelIdByName(nextPanelIdByName)
+      setPanelNameById(nextPanelNameById)
+      return true
+    }
+
     async function syncEstimateRows(jobCardId: string): Promise<boolean> {
       try {
         const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
@@ -2040,6 +2101,9 @@ export default function AutoDocPage() {
         return null
       }
 
+      const panelsSynced = await syncPanels(persistedActiveJobCardId)
+      if (!panelsSynced) return null
+
       const synced = await syncEstimateRows(persistedActiveJobCardId)
       if (!synced) return null
       await fetchRows(true)
@@ -2080,6 +2144,8 @@ export default function AutoDocPage() {
       jcNumber: jcRes.data.jc_number,
     })
     setActiveJobCardId(jobCardId)
+    const panelsSynced = await syncPanels(jobCardId)
+    if (!panelsSynced) return jobCardId
     const synced = await syncEstimateRows(jobCardId)
     if (!synced) {
       // Job card is already created; allow downstream flows like uploads to proceed.
