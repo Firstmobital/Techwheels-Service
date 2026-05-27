@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
-import { useLastUpdated } from '../hooks/useLastUpdated'
+import { broadcastLastUpdated, useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
 import {
   mapVasHeaders,
@@ -1469,9 +1469,15 @@ export default function ImportPage() {
 
         // Upsert import_metadata
         const now = new Date().toISOString()
-        await supabase
+        const { error: importMetadataError } = await supabase
           .from('import_metadata')
           .upsert({ table_name: tableName, last_updated_at: now }, { onConflict: 'table_name' })
+
+        if (importMetadataError) {
+          console.warn(`import_metadata upsert failed for ${tableName}: ${importMetadataError.message}`)
+        }
+
+        broadcastLastUpdated(tableName, now)
 
         updateCard(tableName, { status: 'success', insertedCount: totalInserted })
       } catch (err) {

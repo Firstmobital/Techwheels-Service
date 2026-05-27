@@ -170,7 +170,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null)
+      const nextUser = session?.user ?? null
+      setUser((prev) => (prev?.id === nextUser?.id ? prev : nextUser))
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -220,16 +221,19 @@ function AppInner() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null)
+      const nextUser = session?.user ?? null
+      setUser((prev) => (prev?.id === nextUser?.id ? prev : nextUser))
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  const userId = user?.id ?? null
 
   useEffect(() => {
     let mounted = true
 
     async function loadAccess() {
-      if (!user) {
+      if (!userId) {
         if (mounted) {
           setAllowedModules(new Set())
           setPermissionsLoading(false)
@@ -240,7 +244,7 @@ function AppInner() {
       setPermissionsLoading(true)
 
       const [{ data: profile }, { data: permissionRows }] = await Promise.all([
-        supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
+        supabase.from('users').select('role').eq('id', userId).maybeSingle(),
         supabase.rpc('get_all_my_permissions'),
       ])
 
@@ -269,7 +273,7 @@ function AppInner() {
     return () => {
       mounted = false
     }
-  }, [user])
+  }, [userId])
 
   useEffect(() => {
     if (location.pathname.startsWith('/reports')) setIsReportsOpen(true)
