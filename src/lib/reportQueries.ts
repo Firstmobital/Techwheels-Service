@@ -1523,6 +1523,43 @@ export async function getBranchLabourRevenueComparison(
   const fuelSelection = parseFuelSelectionFromBranch(branch)
   const fuelColumn = fuelSelection ? await getJobCardFuelColumn() : null
   const queryBranch: BranchFilter = fuelSelection ? 'Sitapura' : branch
+  const employeeFuelByCode = new Map<string, string>()
+
+  const loadEmployeeFuelTypes = async (codes: string[]): Promise<void> => {
+    if (codes.length === 0) return
+
+    const missingCodes = codes
+      .map((code) => code.trim())
+      .filter((code) => code && !employeeFuelByCode.has(code.toUpperCase()))
+
+    if (missingCodes.length === 0) return
+
+    const { data, error } = await supabase
+      .from('employee_master')
+      .select('employee_code, fuel_type')
+      .in('employee_code', missingCodes)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const rows = (data as Array<{ employee_code?: unknown; fuel_type?: unknown }> | null) ?? []
+    for (const row of rows) {
+      const code = normalizeEmployeeCode(row.employee_code)
+      if (code === 'Unknown') continue
+      const normalizedCode = code.toUpperCase()
+      const normalizedFuel = row.fuel_type == null ? '' : String(row.fuel_type).trim().toUpperCase()
+      employeeFuelByCode.set(normalizedCode, normalizedFuel)
+    }
+
+    // Prevent refetch loops for unknown/missing codes in future batches.
+    for (const code of missingCodes) {
+      const normalizedCode = code.toUpperCase()
+      if (!employeeFuelByCode.has(normalizedCode)) {
+        employeeFuelByCode.set(normalizedCode, '')
+      }
+    }
+  }
 
   const fetchWindowRows = async (bounds: { from: string; toExclusive: string }): Promise<Record<string, unknown>[]> => {
     let from = 0
@@ -1531,7 +1568,7 @@ export async function getBranchLabourRevenueComparison(
     while (true) {
       let query = supabase
         .from('job_card_closed_data')
-        .select('branch, final_labour_amount, job_card_number')
+        .select('branch, final_labour_amount, job_card_number, employee_code')
         .range(from, from + QUERY_PAGE_SIZE - 1)
 
       query = applyBranchFilterToQuery(query, queryBranch)
@@ -1563,9 +1600,27 @@ export async function getBranchLabourRevenueComparison(
 
       // Fallback for schemas without dedicated fuel column.
       if (fuelSelection && !fuelColumn) {
-        batch = batch.filter((row) =>
-          matchesFuelSelectionByBranchLabel((row as { branch?: unknown }).branch, fuelSelection),
-        )
+        const employeeCodes = new Set<string>()
+        for (const row of batch) {
+          const code = normalizeEmployeeCode((row as { employee_code?: unknown }).employee_code)
+          if (code !== 'Unknown') {
+            employeeCodes.add(code.toUpperCase())
+          }
+        }
+
+        await loadEmployeeFuelTypes([...employeeCodes])
+
+        batch = batch.filter((row) => {
+          const code = normalizeEmployeeCode((row as { employee_code?: unknown }).employee_code)
+
+          // Last fallback if employee code is missing: infer from branch label.
+          if (code === 'Unknown') {
+            return matchesFuelSelectionByBranchLabel((row as { branch?: unknown }).branch, fuelSelection)
+          }
+
+          const fuelType = employeeFuelByCode.get(code.toUpperCase()) ?? ''
+          return fuelType === fuelSelection
+        })
       }
 
       allRows.push(...batch)
