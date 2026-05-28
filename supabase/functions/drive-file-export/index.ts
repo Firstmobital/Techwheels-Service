@@ -12,8 +12,11 @@ interface RequestBody {
 }
 
 Deno.serve(async (req) => {
+  console.log(`[drive-file-export] ${req.method} request received`)
+  
   // CORS
   if (req.method === 'OPTIONS') {
+    console.log('[drive-file-export] Responding to CORS preflight')
     return new Response(null, {
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -24,6 +27,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== 'POST') {
+    console.warn('[drive-file-export] Invalid method:', req.method)
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
       headers: { 'Content-Type': 'application/json' },
@@ -32,7 +36,10 @@ Deno.serve(async (req) => {
 
   // Verify auth
   const authHeader = req.headers.get('Authorization')
+  console.log('[drive-file-export] Auth header present:', !!authHeader)
+  
   if (!authHeader?.startsWith('Bearer ')) {
+    console.warn('[drive-file-export] Missing or invalid Authorization header')
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -40,79 +47,80 @@ Deno.serve(async (req) => {
   }
 
   const token = authHeader.slice(7)
+  console.log('[drive-file-export] Token extracted, length:', token.length)
 
   try {
     // Verify JWT with Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     
+    console.log('[drive-file-export] Supabase URL configured:', !!supabaseUrl)
+    console.log('[drive-file-export] Service role key configured:', !!supabaseKey)
+    
     if (!supabaseUrl || !supabaseKey) {
+      console.error('[drive-file-export] Missing Supabase credentials')
       throw new Error('Missing Supabase credentials')
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
     
     // Verify the token
+    console.log('[drive-file-export] Verifying token...')
     const { data, error: verifyError } = await supabase.auth.getUser(token)
+    
+    if (verifyError) {
+      console.error('[drive-file-export] Token verification failed:', verifyError)
+    }
+    if (!data.user) {
+      console.error('[drive-file-export] User not found in token')
+    }
+    
     if (verifyError || !data.user) {
+      console.warn('[drive-file-export] Invalid token, user:', data.user?.email)
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    
+    console.log('[drive-file-export] Token verified for user:', data.user.email)
 
     // Parse request body
     const body: RequestBody = await req.json()
     const { driveFileId } = body
+    
+    console.log('[drive-file-export] Drive file ID:', driveFileId?.substring(0, 10) + '...')
 
     if (!driveFileId) {
+      console.warn('[drive-file-export] Missing driveFileId in request body')
       return new Response(JSON.stringify({ error: 'driveFileId required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    // Get Google credentials from service role
-    const googleServiceAccount = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-    if (!googleServiceAccount) {
-      return new Response(JSON.stringify({ error: 'Google credentials not configured' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-
-    const credentials = JSON.parse(googleServiceAccount)
-
-    // Generate JWT for service account
-    const header = {
-      alg: 'RS256',
-      typ: 'JWT',
-    }
-
-    const now = Math.floor(Date.now() / 1000)
-    const payload = {
-      iss: credentials.client_email,
-      sub: credentials.client_email,
-      scope: 'https://www.googleapis.com/auth/drive.readonly',
-      aud: 'https://oauth2.googleapis.com/token',
-      exp: now + 3600,
-      iat: now,
-    }
-
-    // For simplicity, use public URL format (files shared with anyone with link can be downloaded)
-    // This avoids needing JWT token generation
+    // Try public download URL first
     const publicDownloadUrl = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`
+    console.log('[drive-file-export] Attempting public download from Google Drive...')
 
     const driveRes = await fetch(publicDownloadUrl, {
       method: 'GET',
     })
 
+    console.log('[drive-file-export] Public download response status:', driveRes.status)
+
     if (!driveRes.ok) {
-      // Try API endpoint as fallback
+      console.warn('[drive-file-export] Public download failed, trying API endpoint...')
       const apiUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media&supportsAllDrives=true`
       const apiRes = await fetch(apiUrl)
       
+      console.log('[drive-file-export] API response status:', apiRes.status)
+      
       if (!apiRes.ok) {
+        console.error('[drive-file-export] API fetch failed with status', apiRes.status)
+        const errText = await apiRes.text()
+        console.error('[drive-file-export] API error:', errText.substring(0, 200))
+        
         return new Response(JSON.stringify({ error: `Failed to fetch file from Drive: ${apiRes.status}` }), {
           status: 502,
           headers: { 'Content-Type': 'application/json' },
@@ -120,6 +128,8 @@ Deno.serve(async (req) => {
       }
 
       const buffer = await apiRes.arrayBuffer()
+      console.log('[drive-file-export] Successfully fetched from API, size:', buffer.byteLength, 'bytes')
+      
       return new Response(buffer, {
         status: 200,
         headers: {
@@ -131,6 +141,8 @@ Deno.serve(async (req) => {
     }
 
     const buffer = await driveRes.arrayBuffer()
+    console.log('[drive-file-export] Successfully fetched from public URL, size:', buffer.byteLength, 'bytes')
+    
     return new Response(buffer, {
       status: 200,
       headers: {
@@ -140,8 +152,10 @@ Deno.serve(async (req) => {
       },
     })
   } catch (err) {
-    console.error('drive-file-export error:', err)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    console.error('[drive-file-export] Caught error:', err)
+    console.error('[drive-file-export] Error stack:', err instanceof Error ? err.stack : 'N/A')
+    
+    return new Response(JSON.stringify({ error: 'Internal server error', details: err instanceof Error ? err.message : String(err) }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })

@@ -101,13 +101,19 @@ function inr(n: number): string {
 /** Download image from Google Drive (via edge function) or Supabase Storage and return data-URL. */
 async function toDataURL(storagePath: string, driveFileId: string | null): Promise<string | null> {
   try {
+    console.log(`[PPT] toDataURL called: storage_path=${storagePath}, has_drive_id=${!!driveFileId}`)
+    
     // Try Google Drive first if driveFileId available
     if (driveFileId) {
       try {
+        console.log(`[PPT] Attempting Google Drive download for file ID: ${driveFileId.substring(0, 10)}...`)
         const { data: auth } = await supabase.auth.getSession()
         const token = auth?.session?.access_token
 
-        if (token) {
+        if (!token) {
+          console.warn('[PPT] No auth token available, falling back to Supabase Storage')
+        } else {
+          console.log('[PPT] Auth token obtained, calling drive-file-export edge function')
           const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
           const res = await fetch(`${SUPABASE_URL}/functions/v1/drive-file-export`, {
             method: 'POST',
@@ -118,33 +124,65 @@ async function toDataURL(storagePath: string, driveFileId: string | null): Promi
             body: JSON.stringify({ driveFileId }),
           })
 
+          console.log(`[PPT] Drive export response status: ${res.status}`)
+
           if (res.ok) {
+            console.log('[PPT] ✓ Successfully fetched from Google Drive')
             const blob = await res.blob()
+            console.log(`[PPT] Blob size: ${blob.size} bytes, type: ${blob.type}`)
+            
             return new Promise<string | null>((resolve) => {
               const reader = new FileReader()
-              reader.onloadend = () => resolve(reader.result as string)
-              reader.onerror  = () => resolve(null)
+              reader.onloadend = () => {
+                console.log('[PPT] ✓ Converted to data URL')
+                resolve(reader.result as string)
+              }
+              reader.onerror  = () => {
+                console.error('[PPT] ✗ FileReader error')
+                resolve(null)
+              }
               reader.readAsDataURL(blob)
             })
+          } else {
+            const errText = await res.text()
+            console.warn(`[PPT] Drive export failed (${res.status}):`, errText.substring(0, 100))
           }
         }
       } catch (driveErr) {
-        console.warn('Drive download failed, trying Supabase Storage:', driveErr)
+        console.warn('[PPT] Drive download exception:', driveErr)
       }
     }
     
     // Fallback to Supabase Storage
+    console.log('[PPT] Attempting Supabase Storage download:', storagePath)
     const { data, error } = await supabase.storage
       .from(AUTODOC_BUCKET)
       .download(storagePath)
-    if (error || !data) return null
+    
+    if (error) {
+      console.error('[PPT] Supabase Storage error:', error.message)
+    }
+    if (!data) {
+      console.warn('[PPT] No data from Supabase Storage')
+      return null
+    }
+    
+    console.log(`[PPT] ✓ Successfully fetched from Supabase Storage, size: ${data.size}`)
+    
     return new Promise<string | null>((resolve) => {
       const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror  = () => resolve(null)
+      reader.onloadend = () => {
+        console.log('[PPT] ✓ Converted Supabase blob to data URL')
+        resolve(reader.result as string)
+      }
+      reader.onerror  = () => {
+        console.error('[PPT] ✗ FileReader error converting Supabase blob')
+        resolve(null)
+      }
       reader.readAsDataURL(data)
     })
-  } catch {
+  } catch (err) {
+    console.error('[PPT] toDataURL fatal error:', err)
     return null
   }
 }
@@ -595,11 +633,18 @@ export async function generateRepairPPT(
   type: 'pre-repair' | 'post-repair',
   options?: { download?: boolean; fileName?: string },
 ): Promise<Blob> {
+  console.log(`[PPT] Starting PPT generation for job card: ${jobCardId}, type: ${type}`)
+  
   // 1. Fetch all Supabase data in parallel
+  console.log('[PPT] Fetching data from Supabase...')
   const { summary, panels, photos, estRows, carImageDoc } = await fetchAll(jobCardId)
+  
+  console.log(`[PPT] Fetched: ${panels.length} panels, ${photos.length} photos, car_image: ${!!carImageDoc}`)
 
   // 2. Download car image for cover slide
+  console.log('[PPT] Downloading car image...')
   const carImageDataURL = carImageDoc ? (await toDataURL(carImageDoc.storage_path, carImageDoc.drive_file_id)) : null
+  console.log(`[PPT] Car image data URL ready: ${!!carImageDataURL}`)
 
   // 3. Organize photos by repair stage and photo type
   const stageOrder: Array<'pre-repair' | 'under-repair' | 'post-repair'> =
@@ -613,15 +658,22 @@ export async function generateRepairPPT(
   const renderPhotos = photos.filter(
     p => stageOrder.includes(p.repair_stage),
   )
+  
+  console.log(`[PPT] Processing ${renderPhotos.length} photos for rendering (stages: ${stageOrder.join(', ')})`)
 
   const imgMap = new Map<string, string | null>()
+  console.log('[PPT] Starting parallel photo downloads...')
   await Promise.all(
     renderPhotos.map(async (p) => {
       imgMap.set(p.id, await toDataURL(p.storage_path, p.drive_file_id))
     }),
   )
+  
+  const loadedCount = Array.from(imgMap.values()).filter(v => v).length
+  console.log(`[PPT] ✓ Photo downloads complete: ${loadedCount}/${renderPhotos.length} loaded`)
 
   // 5. Build the presentation
+  console.log('[PPT] Building PowerPoint presentation...')
   const prs = new PptxGenJS()
   prs.layout  = 'LAYOUT_16x9'
   prs.author  = summary.dealer_name ?? 'Tata Motors Dealership'
@@ -630,9 +682,12 @@ export async function generateRepairPPT(
   prs.title   = 'RUSTING VEHICLE DETAIL'
 
   // Slide 1 — Cover with Car Image (GPS-stamped vehicle photo)
+  console.log('[PPT] Adding cover slide...')
   addCoverSlide(prs, summary, type, carImageDataURL)
 
   // Slides 2…N — Photos organized by repair stage, then by panel, then by photo type
+  console.log('[PPT] Adding photo slides...')
+  let slideCount = 1
   for (const stage of stageOrder) {
     for (const panel of panels) {
       for (const pType of TYPE_ORDER) {
@@ -640,6 +695,7 @@ export async function generateRepairPPT(
           p => p.panel_id === panel.id && p.photo_type === pType && p.repair_stage === stage,
         )
         for (const photo of panelPhotos) {
+          slideCount++
           addPhotoSlide(
             prs,
             summary,
@@ -653,12 +709,16 @@ export async function generateRepairPPT(
       }
     }
   }
+  console.log(`[PPT] Added ${slideCount - 1} photo slides`)
 
   // Last slide — Expenses summary
+  console.log('[PPT] Adding summary slide...')
   addSummarySlide(prs, summary, estRows)
 
   // 5. Build PPT blob
+  console.log('[PPT] Generating PPTX file...')
   const blob = await prs.write({ outputType: 'blob' }) as Blob
+  console.log(`[PPT] ✓ PPTX generated, size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`)
 
   // 6. Optional browser download
   const slug     = (summary.reg_number ?? jobCardId).replace(/\s+/g, '_')
@@ -666,6 +726,7 @@ export async function generateRepairPPT(
   const fileName = options?.fileName || defaultName
 
   if (options?.download !== false) {
+    console.log(`[PPT] Downloading as: ${fileName}`)
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -674,7 +735,9 @@ export async function generateRepairPPT(
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+    console.log('[PPT] ✓ Download complete')
   }
 
+  console.log('[PPT] ✓ PPT generation complete')
   return blob
 }
