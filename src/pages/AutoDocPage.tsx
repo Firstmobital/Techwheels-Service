@@ -679,6 +679,8 @@ export default function AutoDocPage() {
     let gpsLat: number | undefined
     let gpsLng: number | undefined
     let gpsCity: string | null | undefined
+    let gpsState: string | null | undefined
+    let gpsCountry: string | null | undefined
     let gpsAddressLine: string | null | undefined
     let gpsPlaceName: string | null | undefined
     let capturedAtIso: string | undefined
@@ -697,10 +699,12 @@ export default function AutoDocPage() {
         damageUploadContext.panel
       )
       gpsCity = gpsMetadata.city
+      gpsState = gpsMetadata.state
+      gpsCountry = gpsMetadata.country
       gpsAddressLine = gpsMetadata.addressLine
       gpsPlaceName = gpsMetadata.placeName
       capturedAtIso = gpsMetadata.capturedAtIso
-      console.log('[AutoDoc-GPS] GPS metadata assembled:', { city: gpsCity, timestamp: capturedAtIso })
+      console.log('[AutoDoc-GPS] GPS metadata assembled:', { city: gpsCity, state: gpsState, country: gpsCountry, timestamp: capturedAtIso })
     } catch (gpsErr) {
       const errorMsg = gpsErr instanceof Error ? gpsErr.message : 'Unknown GPS error'
       console.error('[AutoDoc-GPS] GPS capture failed:', errorMsg)
@@ -732,6 +736,8 @@ export default function AutoDocPage() {
               lat: gpsLat!,
               lng: gpsLng!,
               city: gpsCity || null,
+              state: gpsState || null,
+              country: gpsCountry || null,
               addressLine: gpsAddressLine || null,
               placeName: gpsPlaceName || null,
               capturedAtIso: capturedAtIso!,

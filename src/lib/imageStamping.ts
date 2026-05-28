@@ -42,43 +42,67 @@ function fitLine(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
   return trimmed.length > 0 ? trimmed + ellipsis : ellipsis
 }
 
-async function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(blob)
-    const image = new Image()
-    image.onload = () => {
-      URL.revokeObjectURL(objectUrl)
-      resolve(image)
-    }
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl)
-      reject(new Error('Failed to decode image blob'))
-    }
-    image.src = objectUrl
-  })
-}
+function drawMapThumbnail(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  lat: number,
+  lng: number,
+): void {
+  const bg = ctx.createLinearGradient(x, y, x + width, y + height)
+  bg.addColorStop(0, 'rgba(230, 236, 242, 0.94)')
+  bg.addColorStop(1, 'rgba(198, 210, 222, 0.94)')
+  ctx.fillStyle = bg
+  ctx.fillRect(x, y, width, height)
 
-async function loadStaticMapPreview(lat: number, lng: number, width: number, height: number): Promise<HTMLImageElement | null> {
-  const size = `${Math.max(120, Math.round(width))}x${Math.max(90, Math.round(height))}`
-  const encodedCenter = `${lat},${lng}`
-
-  const candidates = [
-    `https://staticmap.openstreetmap.de/staticmap.php?center=${encodedCenter}&zoom=16&size=${size}&markers=${encodedCenter},red-pushpin`,
-    `https://maps.wikimedia.org/img/osm-intl,16,${lng},${lat},${Math.max(120, Math.round(width))}x${Math.max(90, Math.round(height))}.png`,
-  ]
-
-  for (const url of candidates) {
-    try {
-      const res = await fetch(url, { method: 'GET', mode: 'cors' })
-      if (!res.ok) continue
-      const blob = await res.blob()
-      return await loadImageFromBlob(blob)
-    } catch {
-      // Try next provider.
-    }
+  // Draw a subtle street grid to resemble a static map.
+  ctx.strokeStyle = 'rgba(120, 138, 156, 0.34)'
+  ctx.lineWidth = 1
+  const cols = 6
+  const rows = 4
+  for (let col = 1; col < cols; col += 1) {
+    const gridX = x + (width / cols) * col
+    ctx.beginPath()
+    ctx.moveTo(gridX, y)
+    ctx.lineTo(gridX, y + height)
+    ctx.stroke()
+  }
+  for (let row = 1; row < rows; row += 1) {
+    const gridY = y + (height / rows) * row
+    ctx.beginPath()
+    ctx.moveTo(x, gridY)
+    ctx.lineTo(x + width, gridY)
+    ctx.stroke()
   }
 
-  return null
+  // Water/park style accent shape for richer map feel.
+  ctx.fillStyle = 'rgba(120, 177, 234, 0.36)'
+  ctx.beginPath()
+  ctx.ellipse(x + width * 0.28, y + height * 0.62, width * 0.2, height * 0.14, 0.35, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Deterministic pin placement from coordinates.
+  const normX = ((Math.abs(lng) * 1000) % 1000) / 1000
+  const normY = ((Math.abs(lat) * 1000) % 1000) / 1000
+  const pinX = x + width * (0.2 + normX * 0.6)
+  const pinY = y + height * (0.25 + normY * 0.5)
+  const pinRadius = Math.max(5, Math.round(width * 0.055))
+
+  ctx.fillStyle = '#e53935'
+  ctx.beginPath()
+  ctx.arc(pinX, pinY, pinRadius, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = 'white'
+  ctx.beginPath()
+  ctx.arc(pinX, pinY, Math.max(2, Math.round(pinRadius * 0.42)), 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.72)'
+  ctx.font = `700 ${Math.max(11, Math.round(width * 0.12))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+  ctx.textBaseline = 'bottom'
+  ctx.fillText('Map', x + 8, y + height - 6)
 }
 
 /**
@@ -182,26 +206,10 @@ export async function stampImageWithGps(
           const mapX = cardX + cardPaddingX
           const mapY = cardY + Math.round((computedCardHeight - mapHeight) / 2)
           const mapRadius = Math.max(8, Math.round(mapWidth * 0.08))
-          const mapPreview = await loadStaticMapPreview(metadata.lat, metadata.lng, mapWidth, mapHeight)
-
           drawRoundedRect(ctx, mapX, mapY, mapWidth, mapHeight, mapRadius)
           ctx.save()
           ctx.clip()
-          if (mapPreview) {
-            ctx.drawImage(mapPreview, mapX, mapY, mapWidth, mapHeight)
-          } else {
-            const fallbackGradient = ctx.createLinearGradient(mapX, mapY, mapX, mapY + mapHeight)
-            fallbackGradient.addColorStop(0, 'rgba(255, 255, 255, 0.16)')
-            fallbackGradient.addColorStop(1, 'rgba(255, 255, 255, 0.08)')
-            ctx.fillStyle = fallbackGradient
-            ctx.fillRect(mapX, mapY, mapWidth, mapHeight)
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-            ctx.font = `600 ${Math.max(12, Math.round(bodySize * 0.82))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
-            ctx.textBaseline = 'middle'
-            const fallbackText = 'Map preview unavailable'
-            const fallbackTextWidth = ctx.measureText(fallbackText).width
-            ctx.fillText(fallbackText, mapX + Math.max(8, (mapWidth - fallbackTextWidth) / 2), mapY + mapHeight / 2)
-          }
+          drawMapThumbnail(ctx, mapX, mapY, mapWidth, mapHeight, metadata.lat, metadata.lng)
           ctx.restore()
 
           drawRoundedRect(ctx, mapX, mapY, mapWidth, mapHeight, mapRadius)

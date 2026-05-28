@@ -7,6 +7,8 @@ export interface GpsMetadata {
   lat: number
   lng: number
   city: string | null
+  state: string | null
+  country: string | null
   addressLine: string | null
   placeName: string | null
   capturedAtIso: string
@@ -17,6 +19,8 @@ export interface GpsMetadata {
 
 type ReverseGeocodeInfo = {
   city: string | null
+  state: string | null
+  country: string | null
   addressLine: string | null
   placeName: string | null
 }
@@ -91,7 +95,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      return { city: null, addressLine: null, placeName: null }
+      return { city: null, state: null, country: null, addressLine: null, placeName: null }
     }
 
     const data = (await response.json()) as {
@@ -116,7 +120,15 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
 
     // Extract city name from address hierarchy
     const address = data.address
-    if (!address) return { city: null, addressLine: data.display_name ?? null, placeName: null }
+    if (!address) {
+      return {
+        city: null,
+        state: null,
+        country: null,
+        addressLine: data.display_name ?? null,
+        placeName: null,
+      }
+    }
 
     const city = address.city || address.town || address.village || address.county || null
     const region = address.state ?? null
@@ -135,12 +147,14 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
 
     return {
       city,
+      state: region,
+      country,
       addressLine,
       placeName,
     }
   } catch {
     // Graceful fallback - return null if reverse geocoding fails
-    return { city: null, addressLine: null, placeName: null }
+    return { city: null, state: null, country: null, addressLine: null, placeName: null }
   }
 }
 
@@ -180,6 +194,8 @@ export async function assembleGpsMetadata(
     lat,
     lng,
     city: locationInfo.city,
+    state: locationInfo.state,
+    country: locationInfo.country,
     addressLine: locationInfo.addressLine,
     placeName: locationInfo.placeName,
     capturedAtIso,
@@ -194,13 +210,23 @@ export async function assembleGpsMetadata(
  * Returns multi-line text ready for canvas rendering
  */
 export function formatGpsStampText(metadata: GpsMetadata): {
-  line1: string // Place/entity
-  line2: string // Full address
+  line1: string // City/State/Country heading
+  line2: string // Entity/place + address
   line3: string // Lat, Lng
   line4: string // Date/Time, Timezone and workflow stage
 } {
-  const placeDisplay = metadata.placeName || metadata.city || 'Unknown Location'
-  const addressDisplay = metadata.addressLine || metadata.city || 'Address unavailable'
+  const headingParts = [metadata.city, metadata.state, metadata.country]
+    .map((part) => (part ?? '').trim())
+    .filter((part) => part.length > 0)
+  const locationHeading = headingParts.length > 0
+    ? headingParts.filter((value, index) => headingParts.indexOf(value) === index).join(', ')
+    : (metadata.placeName || 'Unknown Location')
+
+  const entityAndAddress = [metadata.placeName, metadata.addressLine]
+    .map((part) => (part ?? '').trim())
+    .filter((part) => part.length > 0)
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .join(' • ') || 'Address unavailable'
 
   const latDisplay = metadata.lat.toFixed(6)
   const lngDisplay = metadata.lng.toFixed(6)
@@ -219,8 +245,8 @@ export function formatGpsStampText(metadata: GpsMetadata): {
   const stageLabel = metadata.stage.replace('-', ' ')
 
   return {
-    line1: placeDisplay,
-    line2: addressDisplay,
+    line1: locationHeading,
+    line2: entityAndAddress,
     line3: `Lat: ${latDisplay}°, Lng: ${lngDisplay}°`,
     line4: `${timeStr} (${metadata.timezone}) • ${stageLabel} • ${metadata.panelName}`,
   }
