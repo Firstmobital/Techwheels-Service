@@ -86,12 +86,10 @@ export default function ReportsPage() {
   const isManpowerReportSelected = selectedReport?.id === 'manpower-wise-labour-revenue'
   const isServiceTypeWiseReportSelected = selectedReport?.id === 'service-type-labour-revenue'
   const isBranchLabourRevenueReportSelected = selectedReport?.id === 'branch-labour-revenue'
-  const isVasRevenueReportSelected = selectedReport?.id === 'vas-revenue-report'
   const shouldShowServiceTypeFilter =
     isManpowerReportSelected ||
     isServiceTypeWiseReportSelected ||
-    isBranchLabourRevenueReportSelected ||
-    isVasRevenueReportSelected
+    isBranchLabourRevenueReportSelected
 
   const canApplyFuelTypeFilter = branch === 'Sitapura' || branch === 'ALL'
 
@@ -108,17 +106,12 @@ export default function ReportsPage() {
   }, [branch, fuelType])
 
   const effectiveDateFieldType = useMemo<DateFieldType>(() => {
-    // VAS report uses closed_date (jc_closed_date_time), not invoice_date
-    if (isVasRevenueReportSelected) {
-      return 'closed_date'
-    }
-
     if (resolvedCategoryId === 'labour-revenue') {
       return 'invoice_date'
     }
 
     return dateFieldType
-  }, [dateFieldType, resolvedCategoryId, isVasRevenueReportSelected])
+  }, [dateFieldType, resolvedCategoryId])
 
   const showDateFieldTypeFilter = resolvedCategoryId !== 'labour-revenue'
 

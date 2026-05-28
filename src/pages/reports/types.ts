@@ -6,7 +6,6 @@ export type ReportId =
   | 'service-type-labour-revenue'
   | 'branch-labour-revenue'
   | 'manpower-wise-labour-revenue'
-  | 'vas-revenue-report'
   | 'customer-retention'
   | 'service-due'
   | 'advisor-performance'

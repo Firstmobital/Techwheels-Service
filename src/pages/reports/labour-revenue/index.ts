@@ -1,7 +1,6 @@
 import BranchLabourRevenueReport from './BranchLabourRevenueReport'
 import ManpowerWiseLabourRevenueReport from './ManpowerWiseLabourRevenueReport'
 import ServiceTypeLabourRevenueReport from './ServiceTypeLabourRevenueReport'
-import VasRevenueReport from './VasRevenueReport'
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
 export const LABOUR_REVENUE_CATEGORY: ReportCategoryDefinition = {
@@ -34,13 +33,5 @@ export const LABOUR_REVENUE_REPORTS: ReportDefinition[] = [
     description: 'Labour revenue and job count by manpower with service-type breakup.',
     cardHint: 'Best for advisor-level revenue contribution with category breakdown.',
     Component: ManpowerWiseLabourRevenueReport,
-  },
-  {
-    id: 'vas-revenue-report',
-    categoryId: 'labour-revenue',
-    label: 'VAS Revenue Report',
-    description: 'VAS revenue summary by service type with job count and average realization.',
-    cardHint: 'Best for tracking VAS collections and service-type contribution.',
-    Component: VasRevenueReport,
   },
 ]
