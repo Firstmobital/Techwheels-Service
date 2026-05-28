@@ -19,7 +19,26 @@ export type UpdateJobCardInput = {
 }
 
 export type JobCardStatus = 'draft' | 'submitted' | 'approved' | 'in_work' | 'completed'
-export type JobDashboardSummaryRow = JobSummaryRow & {
+export type JobDashboardSummaryRow = Pick<
+  JobSummaryRow,
+  | 'job_card_id'
+  | 'jc_number'
+  | 'reg_number'
+  | 'model'
+  | 'vehicle_year'
+  | 'colour'
+  | 'complaint_date'
+  | 'status'
+  | 'warranty_age_days'
+  | 'tml_share_percent'
+  | 'total_estimate_amount'
+  | 'panel_count'
+  | 'photo_count'
+  | 'has_ppt_pre'
+  | 'has_ppt_post'
+  | 'owner_name'
+  | 'km_reading'
+> & {
   panel_names?: string[]
 }
 

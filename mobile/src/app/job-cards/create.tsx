@@ -8,9 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import * as DocumentPicker from 'expo-document-picker'
 import { Stack, useRouter } from 'expo-router'
 import { createJobCard } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
+import { fetchVehicleByReg } from '../../lib/api/vehicles'
 
 type FormState = {
   regNumber: string
@@ -37,6 +39,10 @@ export default function CreateJobCardScreen() {
 
   const [form, setForm] = useState<FormState>(initialForm)
   const [saving, setSaving] = useState(false)
+  const [lookupBusy, setLookupBusy] = useState(false)
+  const [vehicleLookupStatus, setVehicleLookupStatus] = useState<'idle' | 'found' | 'not_found' | 'error'>('idle')
+  const [walkaroundVideoName, setWalkaroundVideoName] = useState('')
+  const [carImageName, setCarImageName] = useState('')
   const [loadingLookups, setLoadingLookups] = useState(true)
   const [claimTypeOptions, setClaimTypeOptions] = useState<string[]>([])
 
@@ -72,9 +78,79 @@ export default function CreateJobCardScreen() {
       form.regNumber.trim().length > 0
       && form.jcNumber.trim().length > 0
       && form.complaintDate.trim().length > 0
+      && walkaroundVideoName.trim().length > 0
+      && carImageName.trim().length > 0
+      && vehicleLookupStatus !== 'idle'
       && !saving
     )
-  }, [form, saving])
+  }, [carImageName, form, saving, vehicleLookupStatus, walkaroundVideoName])
+
+  const onPickWalkaround = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['video/*'],
+      multiple: false,
+      copyToCacheDirectory: true,
+    })
+
+    if (result.canceled) return
+    setWalkaroundVideoName(result.assets?.[0]?.name ?? 'walkaround-video')
+  }
+
+  const onPickCarImage = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['image/*'],
+      multiple: false,
+      copyToCacheDirectory: true,
+    })
+
+    if (result.canceled) return
+    setCarImageName(result.assets?.[0]?.name ?? 'car-image')
+  }
+
+  const onFetchFromDb = async () => {
+    if (!form.regNumber.trim() || !form.jcNumber.trim() || !form.kmReading.trim()) {
+      Alert.alert('Missing Required Fields', 'Enter Registration No, Job Card Number, and KM Reading before fetch.')
+      return
+    }
+
+    if (!walkaroundVideoName.trim() || !carImageName.trim()) {
+      Alert.alert('Uploads Required', 'Select Vehicle Walkaround Video and Car Image before fetch.')
+      return
+    }
+
+    const kmReading = Number(form.kmReading)
+    if (!Number.isFinite(kmReading) || kmReading < 0) {
+      Alert.alert('Invalid KM', 'KM reading must be a non-negative number.')
+      return
+    }
+
+    setLookupBusy(true)
+    setVehicleLookupStatus('idle')
+
+    const result = await fetchVehicleByReg(form.regNumber)
+
+    if (result.error) {
+      setVehicleLookupStatus('error')
+      setLookupBusy(false)
+      Alert.alert('Fetch Failed', result.error)
+      return
+    }
+
+    if (result.data) {
+      setForm((prev) => ({
+        ...prev,
+        regNumber: result.data?.reg_number ?? prev.regNumber,
+      }))
+      setVehicleLookupStatus('found')
+      setLookupBusy(false)
+      Alert.alert('Vehicle Found', 'Vehicle details found in DB. Continue with job card creation.')
+      return
+    }
+
+    setVehicleLookupStatus('not_found')
+    setLookupBusy(false)
+    Alert.alert('Not Found', 'Vehicle not found in DB. You can still proceed and create draft if allowed by policy.')
+  }
 
   const onCreate = async () => {
     if (!canSubmit) return
@@ -117,7 +193,7 @@ export default function CreateJobCardScreen() {
       <Stack.Screen options={{ title: 'New Job Card' }} />
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
         <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-          <Text className="text-xs uppercase tracking-wide text-gray-500">Vehicle & Job Details</Text>
+          <Text className="text-xs uppercase tracking-wide text-gray-500">Vehicle Lookup</Text>
 
           <Text className="text-xs text-gray-600 mt-3 mb-1">Registration Number *</Text>
           <TextInput
@@ -136,20 +212,54 @@ export default function CreateJobCardScreen() {
             className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
           />
 
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Complaint Date (YYYY-MM-DD) *</Text>
-          <TextInput
-            value={form.complaintDate}
-            onChangeText={(value) => setForm((prev) => ({ ...prev, complaintDate: value }))}
-            placeholder="2026-05-28"
-            className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
-          />
-
-          <Text className="text-xs text-gray-600 mt-3 mb-1">KM Reading</Text>
+          <Text className="text-xs text-gray-600 mt-3 mb-1">KM Reading *</Text>
           <TextInput
             value={form.kmReading}
             onChangeText={(value) => setForm((prev) => ({ ...prev, kmReading: value }))}
             placeholder="18420"
             keyboardType="number-pad"
+            className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+          />
+
+          <Text className="text-xs text-gray-600 mt-3 mb-1">Vehicle Walkaround Video *</Text>
+          <TouchableOpacity className="border border-gray-300 rounded-lg px-3 py-3 bg-white" onPress={onPickWalkaround}>
+            <Text className="text-sm text-gray-700">{walkaroundVideoName || 'Choose video file'}</Text>
+          </TouchableOpacity>
+
+          <Text className="text-xs text-gray-600 mt-3 mb-1">Car Image *</Text>
+          <TouchableOpacity className="border border-gray-300 rounded-lg px-3 py-3 bg-white" onPress={onPickCarImage}>
+            <Text className="text-sm text-gray-700">{carImageName || 'Choose car image'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className={`mt-3 rounded-lg py-3 items-center ${lookupBusy ? 'bg-blue-300' : 'bg-blue-600'}`}
+            onPress={onFetchFromDb}
+            disabled={lookupBusy}
+          >
+            <Text className="text-white font-semibold">{lookupBusy ? 'Fetching...' : 'Fetch from DB'}</Text>
+          </TouchableOpacity>
+
+          {vehicleLookupStatus === 'found' ? (
+            <Text className="text-xs text-emerald-700 mt-2">Vehicle found. Continue creating draft job card.</Text>
+          ) : null}
+
+          {vehicleLookupStatus === 'not_found' ? (
+            <Text className="text-xs text-amber-700 mt-2">Vehicle not found. Proceed if your policy allows new vehicle draft flow.</Text>
+          ) : null}
+
+          {vehicleLookupStatus === 'error' ? (
+            <Text className="text-xs text-red-700 mt-2">Fetch failed due to DB or access error.</Text>
+          ) : null}
+        </View>
+
+        <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
+          <Text className="text-xs uppercase tracking-wide text-gray-500">Job Card Details</Text>
+
+          <Text className="text-xs text-gray-600 mt-3 mb-1">Complaint Date (YYYY-MM-DD) *</Text>
+          <TextInput
+            value={form.complaintDate}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, complaintDate: value }))}
+            placeholder="2026-05-28"
             className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
           />
 

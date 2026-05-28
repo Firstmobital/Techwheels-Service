@@ -17,6 +17,7 @@ import {
   updateJobCardStatus,
 } from '../../lib/api/jobCards'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../context/AuthContext'
 
 type WorkflowStage =
   | 'active_intake'
@@ -100,6 +101,7 @@ function isTodayComplaintDate(value: string | null | undefined): boolean {
 
 export default function AutoDocScreen() {
   const router = useRouter()
+  const { session } = useAuth()
   const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -108,12 +110,27 @@ export default function AutoDocScreen() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sessionEmail, setSessionEmail] = useState<string>('')
+  const [sessionDealerCode, setSessionDealerCode] = useState<string>('')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
 
   const loadJobCards = useCallback(async () => {
+    if (!session) {
+      setJobCards([])
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
+
     try {
       setError(null)
+
+      const currentSession = await supabase.auth.getSession()
+      const refreshToken = currentSession.data.session?.refresh_token
+      if (refreshToken) {
+        await supabase.auth.refreshSession({ refresh_token: refreshToken })
+      }
+
       const result = await listJobCardSummaries()
       if (result.error) {
         setError(result.error)
@@ -126,10 +143,13 @@ export default function AutoDocScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [session])
 
   useEffect(() => {
-    loadJobCards()
+    if (session) {
+      setLoading(true)
+      void loadJobCards()
+    }
   }, [loadJobCards])
 
   useEffect(() => {
@@ -139,7 +159,9 @@ export default function AutoDocScreen() {
       const { data } = await supabase.auth.getUser()
       if (!mounted) return
       const email = data.user?.email ?? ''
+      const dealerCode = String(data.user?.user_metadata?.dealer_code ?? '').trim()
       setSessionEmail(email)
+      setSessionDealerCode(dealerCode)
     }
 
     void loadSessionEmail()
@@ -436,18 +458,18 @@ export default function AutoDocScreen() {
           />
         </View>
 
-        <View className="mt-3 flex-row flex-wrap -mx-1">
+        <View className="mt-2 flex-row flex-wrap -mx-1">
           {statusCards.map((entry) => {
             const active = stageFilter === entry.key
             return (
               <TouchableOpacity
                 key={entry.key}
-                className="w-1/2 px-1 mb-2"
+                className="w-1/2 px-1 mb-1.5"
                 onPress={() => setStageFilter(entry.key)}
               >
-                <View className={`rounded-xl border px-3 py-2 min-h-[104px] ${entry.colorClass} ${active ? 'border-2 border-blue-600' : ''}`}>
-                  <Text className="text-[11px] font-semibold uppercase tracking-wide">{entry.label}</Text>
-                  <Text className="text-4xl font-bold mt-3">{entry.value}</Text>
+                <View className={`rounded-xl border px-3 py-2 min-h-[82px] ${entry.colorClass} ${active ? 'border-2 border-blue-600' : ''}`}>
+                  <Text className="text-[10px] font-semibold uppercase tracking-wide">{entry.label}</Text>
+                  <Text className="text-3xl font-bold mt-1">{entry.value}</Text>
                 </View>
               </TouchableOpacity>
             )
@@ -479,7 +501,7 @@ export default function AutoDocScreen() {
 
         {jobCards.length === 0 && !loading && !error ? (
           <Text className="mt-2 text-[10px] text-gray-500">
-            Connected to live DB. No job cards are visible for current account scope{sessionEmail ? ` (${sessionEmail})` : ''}.
+            Connected to live DB. No job cards are visible for current account scope{sessionEmail ? ` (${sessionEmail}` : ''}{sessionDealerCode ? ` | dealer ${sessionDealerCode}` : ' | dealer missing'}{sessionEmail ? ')' : ''}.
           </Text>
         ) : null}
       </View>

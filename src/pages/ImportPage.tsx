@@ -145,6 +145,12 @@ const CARDS: CardConfig[] = [
   },
 ]
 
+const REVENUE_REPORT_TABLES = new Set([
+  'job_card_closed_data',
+  'service_invoice_data',
+  'service_vas_jc_data',
+])
+
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -761,6 +767,8 @@ export default function ImportPage() {
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
     Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(PORTAL_BRANCHES)])),
   )
+  const revenueReportCards = CARDS.filter((config) => REVENUE_REPORT_TABLES.has(config.tableName))
+  const standaloneCards = CARDS.filter((config) => !REVENUE_REPORT_TABLES.has(config.tableName))
 
   const updateCard = useCallback(
     (tableName: string, update: Partial<CardState> | ((prev: CardState) => CardState)) => {
@@ -1596,7 +1604,33 @@ export default function ImportPage() {
           </p>
         </div>
 
-        {CARDS.map((config) => (
+        {revenueReportCards.length > 0 && (
+          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h2 className="text-sm font-semibold text-gray-900">Revenue Report</h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Upload PSF Revenue Report, Invoice Data, and VAS Data in one grouped section to reduce confusion.
+              </p>
+            </div>
+
+            <div className="space-y-4 bg-gray-50/40 px-4 py-4">
+              {revenueReportCards.map((config) => (
+                <ImportCard
+                  key={config.tableName}
+                  config={config}
+                  state={cards[config.tableName]}
+                  branches={PORTAL_BRANCHES}
+                  onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
+                  onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
+                  onUpload={() => handleUpload(config)}
+                  onReset={() => handleReset(config.tableName)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {standaloneCards.map((config) => (
           <ImportCard
             key={config.tableName}
             config={config}
