@@ -106,6 +106,7 @@ interface DamagePhotoItem {
   stage: DamageStage
   photoType: PhotoType
   url: string
+  driveUrl?: string
   name: string
   uploadedAtLabel: string
   storagePath: string
@@ -825,6 +826,45 @@ export default function AutoDocPage() {
     }
   }
 
+  async function openDamagePhotoInBrowser(photo: DamagePhotoItem) {
+    const popup = window.open('', '_blank', 'noopener,noreferrer')
+
+    const openTarget = (targetUrl: string) => {
+      if (popup) {
+        popup.location.href = targetUrl
+      } else {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer')
+      }
+    }
+
+    const immediateDriveUrl = photo.driveUrl?.trim()
+    if (immediateDriveUrl) {
+      openTarget(immediateDriveUrl)
+      return
+    }
+
+    if (!activeJobCardId) {
+      openTarget(photo.url)
+      return
+    }
+
+    try {
+      const latestPhotosRes = await listPanelPhotos(activeJobCardId)
+      if (!latestPhotosRes.error && latestPhotosRes.data) {
+        const latestPhoto = latestPhotosRes.data.find((item) => item.id === photo.id)
+        const latestDriveUrl = (latestPhoto as { drive_url?: string | null } | undefined)?.drive_url?.trim()
+        if (latestDriveUrl) {
+          openTarget(latestDriveUrl)
+          return
+        }
+      }
+    } catch {
+      // Fall through to existing URL fallback.
+    }
+
+    openTarget(photo.url)
+  }
+
   function openDeliveryVideoPicker() {
     if (!activeJobCardId) {
       showToast('Select a job card first from dashboard.', false)
@@ -1322,6 +1362,7 @@ export default function AutoDocPage() {
           stage,
           photoType: photo.photo_type,
           url: resolvedUrl,
+          driveUrl: driveUrl ?? undefined,
           name: fileName,
           uploadedAtLabel: toTimeLabel(photo.captured_at) || '--',
           storagePath,
@@ -3860,14 +3901,15 @@ export default function AutoDocPage() {
                                       </div>
 
                                       <div className="flex flex-wrap gap-2">
-                                        <a
-                                          href={photo.url}
-                                          target="_blank"
-                                          rel="noreferrer"
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            void openDamagePhotoInBrowser(photo)
+                                          }}
                                           className="inline-flex items-center rounded-md border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                                         >
                                           View
-                                        </a>
+                                        </button>
                                         <button
                                           type="button"
                                           onClick={() => openDamagePhotoPicker(panel, stage, photo.id)}
