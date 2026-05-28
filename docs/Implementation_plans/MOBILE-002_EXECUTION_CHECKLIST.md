@@ -54,8 +54,8 @@ Code fixes executed in this cycle:
 - [x] Panel selector now computes and shows per-panel photo counts.
 
 Remaining parity backlog (must complete for full closure):
-- [ ] Mobile New Job Card full creation/edit workflow (currently button present, create form parity pending).
-- [ ] Mobile estimate editor parity with web validation rules (`action/defect/part_number` completeness and per-panel readiness UI).
+- [x] Mobile New Job Card full creation/edit workflow (create route + edit route + navigation wiring completed).
+- [x] Mobile estimate editor parity with web validation rules (`action/defect/part_number` completeness and per-panel readiness UI).
 - [ ] Mobile document workflow parity (`service_history`, `walkaround`, `car_image`, `delivery`, `ppt_pre`, `ppt_post`, `excel_estimate`, claim-email flow).
 - [ ] Mobile workflow actions parity (`Compose and Send`, `Submit Claim`, and document readiness gating).
 - [ ] Full Section 4.9 route matrix re-run after parity merge and record pass/fail evidence.
@@ -146,6 +146,8 @@ eas build --platform ios --profile preview
 - [x] AutoDoc mobile stage derivation aligned with web workflow model for dashboard filtering/KPIs
 - [x] AutoDoc mobile capture flow writes real photo uploads to Storage + `panel_photos` with GPS fields
 - [x] AutoDoc mobile panel photo replace/remove flow and focus-refresh behavior wired
+- [x] AutoDoc mobile New Job Card create/edit flow implemented and linked from tab/detail
+- [x] AutoDoc mobile estimate editor implemented with panel readiness and row-level validation parity
 - [x] Expo mobile app initialized and running via Expo Router
 - [x] Supabase auth wired (sign in/up/reset, session restore, sign out)
 - [x] Auth route guards active for `(auth)` and `(tabs)` groups

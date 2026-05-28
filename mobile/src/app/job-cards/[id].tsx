@@ -129,6 +129,20 @@ export default function JobCardDetailScreen() {
               <Text className="text-white font-semibold">📸 Upload Damage Photos</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              className="mt-3 bg-indigo-600 rounded-lg py-3 items-center"
+              onPress={() => router.push(`/job-cards/${jobCardId}/estimate`)}
+            >
+              <Text className="text-white font-semibold">Estimate Editor</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="mt-3 bg-slate-700 rounded-lg py-3 items-center"
+              onPress={() => router.push(`/job-cards/${jobCardId}/edit`)}
+            >
+              <Text className="text-white font-semibold">Edit Job Card</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity className="mt-4 py-3 items-center" onPress={() => router.back()}>
               <Text className="text-blue-600 font-semibold">Back</Text>
             </TouchableOpacity>

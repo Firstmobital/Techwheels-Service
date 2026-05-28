@@ -4,8 +4,8 @@ import {
   Alert,
   FlatList,
   RefreshControl,
-  ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
@@ -27,17 +27,14 @@ type WorkflowStage =
   | 'post_repair_ppt'
   | 'claim_submitted'
 
-type DashboardCardFilter = 'active_vehicles' | WorkflowStage
+type DashboardCardFilter = 'active_vehicles' | 'today' | WorkflowStage
 
-const STAGE_FILTERS: Array<{ key: DashboardCardFilter; label: string }> = [
-  { key: 'active_vehicles', label: 'Active Vehicles' },
-  { key: 'active_intake', label: 'Active Intake' },
-  { key: 'documentation_pre_repair', label: 'Pre-Repair' },
+const QUICK_WORKFLOW_NAV: Array<{ label: string; key?: DashboardCardFilter; route?: string }> = [
+  { key: 'active_vehicles', label: 'Dashboard' },
+  { label: 'Job Card', route: '/job-cards/create' },
+  { key: 'documentation_pre_repair', label: 'Damage' },
   { key: 'estimate', label: 'Estimate' },
-  { key: 'pre_submit_pending', label: 'Pre Submit Pending' },
-  { key: 'pre_submit_done', label: 'Pre Submit Done' },
-  { key: 'post_repair_ppt', label: 'Post Repair PPT' },
-  { key: 'claim_submitted', label: 'Claim Submitted' },
+  { key: 'pre_submit_pending', label: 'Submit' },
 ]
 
 function canonicalizeEstimateAction(value: string): string {
@@ -92,6 +89,15 @@ function stageLabel(stage: WorkflowStage): string {
   return 'Active Intake'
 }
 
+function isTodayComplaintDate(value: string | null | undefined): boolean {
+  if (!value) return false
+  const dt = new Date(value)
+  if (Number.isNaN(dt.getTime())) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return dt >= today
+}
+
 export default function AutoDocScreen() {
   const router = useRouter()
   const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
@@ -101,6 +107,7 @@ export default function AutoDocScreen() {
   const [stageFilter, setStageFilter] = useState<DashboardCardFilter>('active_vehicles')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [sessionEmail, setSessionEmail] = useState<string>('')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
 
@@ -124,6 +131,23 @@ export default function AutoDocScreen() {
   useEffect(() => {
     loadJobCards()
   }, [loadJobCards])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadSessionEmail() {
+      const { data } = await supabase.auth.getUser()
+      if (!mounted) return
+      const email = data.user?.email ?? ''
+      setSessionEmail(email)
+    }
+
+    void loadSessionEmail()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -340,13 +364,7 @@ export default function AutoDocScreen() {
   const kpis = useMemo(() => {
     const count = (stage: WorkflowStage) => rowsWithStage.filter((entry) => entry.stage === stage).length
     return {
-      totalToday: rowsWithStage.filter((entry) => {
-        const dt = entry.row.complaint_date ? new Date(entry.row.complaint_date) : null
-        if (!dt || Number.isNaN(dt.getTime())) return false
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        return dt >= today
-      }).length,
+      totalToday: rowsWithStage.filter((entry) => isTodayComplaintDate(entry.row.complaint_date)).length,
       activeIntake: count('active_intake'),
       documentationPreRepair: count('documentation_pre_repair'),
       estimate: count('estimate'),
@@ -361,7 +379,9 @@ export default function AutoDocScreen() {
     const q = search.trim().toLowerCase()
 
     return rowsWithStage.filter(({ row, stage }) => {
-      if (stageFilter === 'active_vehicles') {
+      if (stageFilter === 'today') {
+        if (!isTodayComplaintDate(row.complaint_date)) return false
+      } else if (stageFilter === 'active_vehicles') {
         if (stage === 'claim_submitted') return false
       } else if (stage !== stageFilter) {
         return false
@@ -376,12 +396,21 @@ export default function AutoDocScreen() {
     })
   }, [rowsWithStage, search, stageFilter])
 
-  const renderKpiCard = (label: string, value: number, colorClass: string) => (
-    <View className={`rounded-xl border px-3 py-2 mr-2 min-w-[120px] ${colorClass}`}>
-      <Text className="text-xs font-semibold uppercase tracking-wide">{label}</Text>
-      <Text className="text-2xl font-bold mt-1">{value}</Text>
-    </View>
-  )
+  const statusCards: Array<{
+    key: DashboardCardFilter
+    label: string
+    value: number
+    colorClass: string
+  }> = [
+    { key: 'today', label: "Today's Cars", value: kpis.totalToday, colorClass: 'border-slate-200 bg-slate-50 text-slate-800' },
+    { key: 'active_intake', label: 'Active Intake', value: kpis.activeIntake, colorClass: 'border-cyan-200 bg-cyan-50 text-cyan-800' },
+    { key: 'documentation_pre_repair', label: 'Documentation Pre-Repair', value: kpis.documentationPreRepair, colorClass: 'border-orange-200 bg-orange-50 text-orange-800' },
+    { key: 'estimate', label: 'Estimate', value: kpis.estimate, colorClass: 'border-violet-200 bg-violet-50 text-violet-800' },
+    { key: 'pre_submit_pending', label: 'Pre Submit Pending', value: kpis.preSubmitPending, colorClass: 'border-amber-200 bg-amber-50 text-amber-800' },
+    { key: 'pre_submit_done', label: 'Pre Submit Done', value: kpis.preSubmitDone, colorClass: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+    { key: 'post_repair_ppt', label: 'Post Repair PPT', value: kpis.postRepairPpt, colorClass: 'border-indigo-200 bg-indigo-50 text-indigo-800' },
+    { key: 'claim_submitted', label: 'Claim Submitted', value: kpis.claimSubmitted, colorClass: 'border-blue-200 bg-blue-50 text-blue-800' },
+  ]
 
   return (
     <View className="flex-1 bg-gray-50">
@@ -391,57 +420,68 @@ export default function AutoDocScreen() {
 
         <TouchableOpacity
           className="mt-3 rounded-lg border border-blue-300 bg-blue-50 py-2 items-center"
-          onPress={() => Alert.alert('Create Job Card', 'New Job Card creation is available in web AutoDoc. Mobile creation is part of the next parity increment.')}
+          onPress={() => router.push('/job-cards/create')}
         >
           <Text className="text-blue-700 font-semibold">New Job Card</Text>
         </TouchableOpacity>
 
         <View className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
           <Text className="text-xs text-gray-500">Search by JC / Reg / Model</Text>
-          <TouchableOpacity
-            className="mt-1"
-            onPress={() => {
-              Alert.prompt?.(
-                'Search AutoDoc',
-                'Enter JC, registration, or model',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Apply', onPress: (value) => setSearch((value ?? '').trim()) },
-                ],
-                'plain-text',
-                search
-              )
-            }}
-          >
-            <Text className="text-sm text-gray-800">{search || 'Tap to enter search term'}</Text>
-          </TouchableOpacity>
+          <TextInput
+            className="mt-1 text-sm text-gray-800"
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Enter search term"
+            placeholderTextColor="#6b7280"
+          />
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3">
-          {renderKpiCard('Today', kpis.totalToday, 'bg-slate-50 border-slate-200 text-slate-700')}
-          {renderKpiCard('Intake', kpis.activeIntake, 'bg-cyan-50 border-cyan-200 text-cyan-700')}
-          {renderKpiCard('Pre-Repair', kpis.documentationPreRepair, 'bg-orange-50 border-orange-200 text-orange-700')}
-          {renderKpiCard('Estimate', kpis.estimate, 'bg-violet-50 border-violet-200 text-violet-700')}
-          {renderKpiCard('Pre Submit', kpis.preSubmitPending, 'bg-amber-50 border-amber-200 text-amber-700')}
-          {renderKpiCard('Submitted', kpis.preSubmitDone, 'bg-emerald-50 border-emerald-200 text-emerald-700')}
-          {renderKpiCard('Post PPT', kpis.postRepairPpt, 'bg-indigo-50 border-indigo-200 text-indigo-700')}
-          {renderKpiCard('Claim', kpis.claimSubmitted, 'bg-blue-50 border-blue-200 text-blue-700')}
-        </ScrollView>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3">
-          {STAGE_FILTERS.map((entry) => {
+        <View className="mt-3 flex-row flex-wrap -mx-1">
+          {statusCards.map((entry) => {
             const active = stageFilter === entry.key
             return (
               <TouchableOpacity
                 key={entry.key}
-                className={`mr-2 rounded-full border px-3 py-2 ${active ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}
+                className="w-1/2 px-1 mb-2"
                 onPress={() => setStageFilter(entry.key)}
               >
-                <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{entry.label}</Text>
+                <View className={`rounded-xl border px-3 py-2 min-h-[104px] ${entry.colorClass} ${active ? 'border-2 border-blue-600' : ''}`}>
+                  <Text className="text-[11px] font-semibold uppercase tracking-wide">{entry.label}</Text>
+                  <Text className="text-4xl font-bold mt-3">{entry.value}</Text>
+                </View>
               </TouchableOpacity>
             )
           })}
-        </ScrollView>
+        </View>
+
+        <View className="mt-1 flex-row flex-wrap -mx-1">
+          {QUICK_WORKFLOW_NAV.map((item) => {
+            const active = Boolean(item.key && stageFilter === item.key)
+            return (
+              <TouchableOpacity
+                key={item.label}
+                className="w-1/5 px-1"
+                onPress={() => {
+                  if (item.route) {
+                    router.push(item.route as any)
+                    return
+                  }
+                  if (item.key) setStageFilter(item.key)
+                }}
+              >
+                <View className={`rounded-lg border py-2 items-center ${active ? 'border-blue-600 bg-blue-600' : 'border-gray-300 bg-white'}`}>
+                  <Text className={`text-[10px] font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        {jobCards.length === 0 && !loading && !error ? (
+          <Text className="mt-2 text-[10px] text-gray-500">
+            Connected to live DB. No job cards are visible for current account scope{sessionEmail ? ` (${sessionEmail})` : ''}.
+          </Text>
+        ) : null}
       </View>
 
       {loading && !refreshing ? (
