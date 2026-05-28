@@ -129,6 +129,21 @@ export interface VasRevenueReportData {
   rows: VasRevenueByServiceTypeRow[]
 }
 
+export interface VasRevenueDataRow {
+  jobCardNumber: string
+  srType: string
+  netPrice: number
+  employeeCode: string
+  employeeName: string | null
+  employeeLocation: string | null
+}
+
+export interface VasRevenueDataReport {
+  totalNetPrice: number
+  jobCount: number
+  rows: VasRevenueDataRow[]
+}
+
 export interface DailyRevenueReport {
   date: string
   vehicleCount: number
@@ -1897,6 +1912,53 @@ export async function getVasRevenueReport(
     totalJobs,
     avgVasRevenue: totalJobs > 0 ? totalVasRevenue / totalJobs : 0,
     rows,
+  }
+}
+
+export async function getVasRevenueData(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+): Promise<VasRevenueDataReport> {
+  const rows = await fetchVasRowsWithEmployeeData(
+    'job_card_number, sr_type, net_price, jc_closed_date_time',
+    {
+      branch,
+      dateFilter,
+    },
+  )
+
+  const mappedRows: VasRevenueDataRow[] = rows.map((row) => {
+    const typedRow = row as {
+      job_card_number?: unknown
+      sr_type?: unknown
+      net_price?: unknown
+      employee_code?: unknown
+      employee_name?: unknown
+      employee_location?: unknown
+    }
+
+    return {
+      jobCardNumber: String(typedRow.job_card_number ?? '').trim(),
+      srType: normalizeServiceType(typedRow.sr_type),
+      netPrice: parseRevenue(typedRow.net_price),
+      employeeCode: normalizeEmployeeCode(typedRow.employee_code),
+      employeeName:
+        typedRow.employee_name == null || String(typedRow.employee_name).trim() === ''
+          ? null
+          : String(typedRow.employee_name),
+      employeeLocation:
+        typedRow.employee_location == null || String(typedRow.employee_location).trim() === ''
+          ? null
+          : String(typedRow.employee_location),
+    }
+  })
+
+  const totalNetPrice = mappedRows.reduce((sum, row) => sum + row.netPrice, 0)
+
+  return {
+    totalNetPrice,
+    jobCount: mappedRows.length,
+    rows: mappedRows,
   }
 }
 

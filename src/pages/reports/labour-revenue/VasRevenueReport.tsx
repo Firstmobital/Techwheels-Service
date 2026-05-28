@@ -38,7 +38,7 @@ export default function VasRevenueReport({
     setError(null)
 
     getVasRevenueReport(branch, dateFilter, serviceTypeFilter)
-      .then((result) => {
+      .then((result: VasRevenueReportData) => {
         if (!active) return
         setData(result)
       })
