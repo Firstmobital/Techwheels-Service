@@ -159,6 +159,7 @@ const SESSION_KEYS = {
   estimateRows: 'autodoc_estimate_rows',
   serviceHistoryName: 'autodoc_service_history_name',
   walkaroundVideoName: 'autodoc_walkaround_video_name',
+  carImageName: 'autodoc_car_image_name',
   deliveryVideoName: 'autodoc_delivery_video_name',
 } as const
 
@@ -399,14 +400,17 @@ export default function AutoDocPage() {
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>(() => readSessionJSON<EstimateLineItem[]>(SESSION_KEYS.estimateRows, []))
   const [serviceHistoryName, setServiceHistoryName] = useState(() => readSessionValue(SESSION_KEYS.serviceHistoryName) || '')
   const [walkaroundVideoName, setWalkaroundVideoName] = useState(() => readSessionValue(SESSION_KEYS.walkaroundVideoName) || '')
+  const [carImageName, setCarImageName] = useState(() => readSessionValue(SESSION_KEYS.carImageName) || '')
   const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
   const [uploadingWalkaround, setUploadingWalkaround] = useState(false)
+  const [uploadingCarImage, setUploadingCarImage] = useState(false)
   const suppressNextVehicleHydrationRef = useRef(false)
   const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
   const [loadingModelRates, setLoadingModelRates] = useState(false)
     const readiness = {
       serviceHistory: jobDocuments.some((doc) => doc.doc_type === 'service_history'),
       walkaroundVideo: jobDocuments.some((doc) => doc.doc_type === 'video_job_card'),
+      carImage: jobDocuments.some((doc) => doc.doc_type === 'car_image'),
       prePpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_pre'),
       postPpt: jobDocuments.some((doc) => doc.doc_type === 'ppt_post'),
       excel: jobDocuments.some((doc) => doc.doc_type === 'excel_estimate'),
@@ -983,8 +987,9 @@ export default function AutoDocPage() {
     form.regNumber.trim()
     && form.jcNumber.trim()
     && form.kmReading.trim()
-    && walkaroundVideoName.trim(),
-  ) && !uploadingWalkaround
+    && walkaroundVideoName.trim()
+    && carImageName.trim(),
+  ) && !uploadingWalkaround && !uploadingCarImage
   const showVehicleDetailsForm = vehicleLookupStatus !== 'idle'
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -1194,6 +1199,16 @@ export default function AutoDocPage() {
     if (walkaroundDoc?.storage_path) {
       const fileName = walkaroundDoc.storage_path.split('/').pop() ?? 'walkaround-video'
       setWalkaroundVideoName(fileName)
+    } else {
+      setWalkaroundVideoName('')
+    }
+
+    const carImageDoc = res.data.find((doc) => doc.doc_type === 'car_image')
+    if (carImageDoc?.storage_path) {
+      const fileName = carImageDoc.storage_path.split('/').pop() ?? 'car-image'
+      setCarImageName(fileName)
+    } else {
+      setCarImageName('')
     }
 
     const deliveryDoc = res.data.find((doc) => doc.doc_type === 'video_delivery')
@@ -1330,6 +1345,91 @@ export default function AutoDocPage() {
     event.target.value = ''
   }
 
+  async function uploadCarImageWithGps(file: File, successMessage = 'Car image uploaded with GPS stamp.'): Promise<boolean> {
+    const jobCardId = await ensureJobCardReadyForUpload()
+    if (!jobCardId) return false
+
+    setUploadingCarImage(true)
+    try {
+      const location = await getCurrentLocation()
+      const gpsMetadata = await assembleGpsMetadata(
+        location.lat,
+        location.lng,
+        'pre-repair',
+        'Car Image',
+      )
+
+      const stampedBlob = await stampImageWithGps(file, {
+        lat: gpsMetadata.lat,
+        lng: gpsMetadata.lng,
+        city: gpsMetadata.city,
+        state: gpsMetadata.state,
+        country: gpsMetadata.country,
+        addressLine: gpsMetadata.addressLine,
+        placeName: gpsMetadata.placeName,
+        capturedAtIso: gpsMetadata.capturedAtIso,
+        timezone: gpsMetadata.timezone,
+        stage: gpsMetadata.stage,
+        panelName: gpsMetadata.panelName,
+      })
+
+      const baseName = file.name.includes('.')
+        ? file.name.slice(0, Math.max(1, file.name.lastIndexOf('.')))
+        : file.name
+      const stampedName = `${baseName}_gps.jpg`
+
+      const uploadRes = await uploadDocumentFile({
+        jobCardId,
+        docType: 'car_image',
+        file: stampedBlob,
+        fileName: stampedName,
+        contentType: 'image/jpeg',
+        gpsLat: gpsMetadata.lat,
+        gpsLng: gpsMetadata.lng,
+        gpsCity: gpsMetadata.city,
+        capturedAt: gpsMetadata.capturedAtIso,
+      })
+
+      if (uploadRes.error) {
+        showToast(uploadRes.error, false)
+        return false
+      }
+
+      setCarImageName(stampedName)
+      await refreshDocuments(jobCardId)
+      showToast(successMessage, true)
+      return true
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload Car Image.'
+      showToast(`Car Image upload failed: ${msg}`, false)
+      return false
+    } finally {
+      setUploadingCarImage(false)
+    }
+  }
+
+  async function handlePreFetchCarImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!form.regNumber.trim() || !form.jcNumber.trim() || !form.kmReading.trim()) {
+      showToast('Enter Registration No, Job Card Number, and KM Reading before uploading Car Image.', false)
+      event.target.value = ''
+      return
+    }
+
+    const kmReading = Number(form.kmReading)
+    if (!Number.isFinite(kmReading) || kmReading < 0) {
+      showToast('KM reading must be a positive number.', false)
+      event.target.value = ''
+      return
+    }
+
+    suppressNextVehicleHydrationRef.current = true
+    await uploadCarImageWithGps(file, 'Car image uploaded with GPS stamp. Fetch is now enabled when all required fields are completed.')
+    event.target.value = ''
+  }
+
   const refreshDamagePhotos = useCallback(async (jobCardId: string) => {
     const [panelsRes, photosRes] = await Promise.all([
       listPanels(jobCardId),
@@ -1456,6 +1556,7 @@ export default function AutoDocPage() {
   useEffect(() => { writeSessionValue(SESSION_KEYS.estimateRows, JSON.stringify(estimateRows)) }, [estimateRows])
   useEffect(() => { writeSessionValue(SESSION_KEYS.serviceHistoryName, serviceHistoryName) }, [serviceHistoryName])
   useEffect(() => { writeSessionValue(SESSION_KEYS.walkaroundVideoName, walkaroundVideoName) }, [walkaroundVideoName])
+  useEffect(() => { writeSessionValue(SESSION_KEYS.carImageName, carImageName) }, [carImageName])
   useEffect(() => { writeSessionValue(SESSION_KEYS.deliveryVideoName, deliveryVideoName) }, [deliveryVideoName])
 
   useEffect(() => {
@@ -2033,6 +2134,7 @@ export default function AutoDocPage() {
     setEstimateRows([])
     setServiceHistoryName('')
     setWalkaroundVideoName('')
+    setCarImageName('')
     setDeliveryVideoName('')
     setActiveJobCardId(null)
     setActiveSummary(null)
@@ -3342,7 +3444,7 @@ export default function AutoDocPage() {
               </svg>
               Vehicle Lookup
             </h3>
-            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">
                   Registration No <span className="text-red-600">*</span>
@@ -3405,7 +3507,23 @@ export default function AutoDocPage() {
                     type="file"
                     accept="video/*"
                     onChange={(event) => { void handlePreFetchWalkaroundVideoUpload(event) }}
-                    disabled={uploadingWalkaround}
+                    disabled={uploadingWalkaround || uploadingCarImage}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  Car Image <span className="text-red-600">*</span>
+                </label>
+                <label className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:bg-blue-50">
+                  <span className="truncate">{uploadingCarImage ? 'Capturing GPS & uploading...' : (carImageName || 'Choose car image')}</span>
+                  <span className="ml-3 shrink-0 rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">{uploadingCarImage ? 'Uploading...' : 'Browse'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => { void handlePreFetchCarImageUpload(event) }}
+                    disabled={uploadingWalkaround || uploadingCarImage}
                     className="hidden"
                   />
                 </label>
@@ -3415,7 +3533,7 @@ export default function AutoDocPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
               <button
                 onClick={() => void handleVehicleLookup()}
-                disabled={lookupBusy || creating || uploadingWalkaround || !lookupReady}
+                disabled={lookupBusy || creating || uploadingWalkaround || uploadingCarImage || !lookupReady}
                 className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 justify-center whitespace-nowrap"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -3424,7 +3542,7 @@ export default function AutoDocPage() {
                 {lookupBusy ? 'Fetching…' : 'Fetch from DB'}
               </button>
             </div>
-            <p className="mt-2 text-xs text-gray-500">Enter Registration No, Job Card Number, KM Reading, and select Vehicle Walkaround Video to enable fetch.</p>
+            <p className="mt-2 text-xs text-gray-500">Enter Registration No, Job Card Number, KM Reading, then upload Vehicle Walkaround Video and Car Image (GPS tagged) to enable fetch.</p>
             {vehicleLookupStatus === 'loading' && <p className="mt-2 text-sm text-blue-600">Searching vehicle in database...</p>}
             {vehicleLookupStatus === 'found' && <p className="mt-2 text-sm text-green-600">✓ Vehicle found and prefilled.</p>}
             {vehicleLookupStatus === 'not_found' && (

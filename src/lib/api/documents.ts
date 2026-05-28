@@ -2,7 +2,7 @@ import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
 import { fail, ok, type ApiResult, type DocType, type DocumentInsert, type DocumentRow } from './types'
 
-const DOCUMENT_SELECT = 'id, job_card_id, doc_type, storage_path, drive_url, drive_file_id, file_size_mb, created_at'
+const DOCUMENT_SELECT = 'id, job_card_id, doc_type, storage_path, drive_url, drive_file_id, file_size_mb, gps_lat, gps_lng, gps_city, captured_at, created_at'
 
 type UniversalDriveResponse = {
   ok?: boolean
@@ -73,12 +73,20 @@ export async function addDocument(input: {
   docType: DocType
   storagePath: string
   fileSizeMb: number
+  gpsLat?: number | null
+  gpsLng?: number | null
+  gpsCity?: string | null
+  capturedAt?: string | null
 }): Promise<ApiResult<DocumentRow>> {
   const payload: DocumentInsert = {
     job_card_id: input.jobCardId,
     doc_type: input.docType,
     storage_path: input.storagePath,
     file_size_mb: Number.isFinite(input.fileSizeMb) ? input.fileSizeMb : 0,
+    gps_lat: Number.isFinite(Number(input.gpsLat)) ? Number(input.gpsLat) : null,
+    gps_lng: Number.isFinite(Number(input.gpsLng)) ? Number(input.gpsLng) : null,
+    gps_city: input.gpsCity?.trim() ? input.gpsCity.trim() : null,
+    captured_at: input.capturedAt?.trim() ? input.capturedAt : null,
   }
 
   const { data, error } = await supabase
@@ -106,6 +114,10 @@ export async function upsertDocumentByType(input: {
   docType: DocType
   storagePath: string
   fileSizeMb: number
+  gpsLat?: number | null
+  gpsLng?: number | null
+  gpsCity?: string | null
+  capturedAt?: string | null
 }): Promise<ApiResult<DocumentRow>> {
   const { data: existing, error: existingError } = await supabase
     .from('documents')
@@ -137,6 +149,10 @@ export async function upsertDocumentByType(input: {
     docType: input.docType,
     storagePath: input.storagePath,
     fileSizeMb: input.fileSizeMb,
+    gpsLat: input.gpsLat,
+    gpsLng: input.gpsLng,
+    gpsCity: input.gpsCity,
+    capturedAt: input.capturedAt,
   })
 
   if (created.error || !created.data) return created
@@ -150,6 +166,10 @@ export async function uploadDocumentFile(input: {
   file: Blob
   fileName: string
   contentType?: string
+  gpsLat?: number | null
+  gpsLng?: number | null
+  gpsCity?: string | null
+  capturedAt?: string | null
 }): Promise<ApiResult<DocumentRow>> {
   console.log('[autodoc-upload-debug] uploadDocumentFile start', {
     jobCardId: input.jobCardId,
@@ -222,6 +242,10 @@ export async function uploadDocumentFile(input: {
           docType: input.docType,
           storagePath,
           fileSizeMb: sizeMb,
+          gpsLat: input.gpsLat,
+          gpsLng: input.gpsLng,
+          gpsCity: input.gpsCity,
+          capturedAt: input.capturedAt,
         }),
       })
 
@@ -263,6 +287,10 @@ export async function uploadDocumentFile(input: {
     docType: input.docType,
     storagePath,
     fileSizeMb: sizeMb,
+    gpsLat: input.gpsLat,
+    gpsLng: input.gpsLng,
+    gpsCity: input.gpsCity,
+    capturedAt: input.capturedAt,
   })
 
   if (upsertRes.error || !upsertRes.data) return upsertRes

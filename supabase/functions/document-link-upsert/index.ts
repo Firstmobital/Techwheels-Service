@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json()
-    const { jobCardId, docType, storagePath, fileSizeMb } = body ?? {}
+    const { jobCardId, docType, storagePath, fileSizeMb, gpsLat, gpsLng, gpsCity, capturedAt } = body ?? {}
 
     if (!jobCardId || typeof jobCardId !== 'string') {
       return new Response(JSON.stringify({ error: 'jobCardId is required' }), { status: 400, headers })
@@ -76,12 +76,16 @@ Deno.serve(async (req) => {
       doc_type: docType,
       storage_path: storagePath,
       file_size_mb: Number.isFinite(Number(fileSizeMb)) ? Number(fileSizeMb) : 0,
+      gps_lat: Number.isFinite(Number(gpsLat)) ? Number(gpsLat) : null,
+      gps_lng: Number.isFinite(Number(gpsLng)) ? Number(gpsLng) : null,
+      gps_city: typeof gpsCity === 'string' && gpsCity.trim().length > 0 ? gpsCity.trim() : null,
+      captured_at: typeof capturedAt === 'string' && capturedAt.trim().length > 0 ? capturedAt : null,
     }
 
     const { data: inserted, error: insertError } = await supabase
       .from('documents')
       .insert(payload)
-      .select('id, job_card_id, doc_type, storage_path, file_size_mb, created_at')
+      .select('id, job_card_id, doc_type, storage_path, file_size_mb, gps_lat, gps_lng, gps_city, captured_at, created_at')
       .single()
 
     if (insertError) {

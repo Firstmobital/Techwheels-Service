@@ -30,6 +30,7 @@ const DOC_TYPES = new Set([
   'excel_estimate',
   'service_history',
   'video_job_card',
+  'car_image',
   'video_delivery',
 ])
 

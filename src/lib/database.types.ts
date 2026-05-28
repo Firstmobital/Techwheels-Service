@@ -16,31 +16,43 @@ export type Database = {
     Tables: {
       documents: {
         Row: {
+          captured_at: string | null
           created_at: string
           doc_type: Database["public"]["Enums"]["doc_type"]
           drive_file_id: string | null
           drive_url: string | null
           file_size_mb: number | null
+          gps_city: string | null
+          gps_lat: number | null
+          gps_lng: number | null
           id: string
           job_card_id: string
           storage_path: string
         }
         Insert: {
+          captured_at?: string | null
           created_at?: string
           doc_type: Database["public"]["Enums"]["doc_type"]
           drive_file_id?: string | null
           drive_url?: string | null
           file_size_mb?: number | null
+          gps_city?: string | null
+          gps_lat?: number | null
+          gps_lng?: number | null
           id?: string
           job_card_id: string
           storage_path: string
         }
         Update: {
+          captured_at?: string | null
           created_at?: string
           doc_type?: Database["public"]["Enums"]["doc_type"]
           drive_file_id?: string | null
           drive_url?: string | null
           file_size_mb?: number | null
+          gps_city?: string | null
+          gps_lat?: number | null
+          gps_lng?: number | null
           id?: string
           job_card_id?: string
           storage_path?: string
@@ -1267,6 +1279,7 @@ export type Database = {
         | "service_history"
         | "video_job_card"
         | "video_delivery"
+        | "car_image"
         | "ppt_pre"
         | "ppt_post"
         | "excel_estimate"
@@ -1409,6 +1422,7 @@ export const Constants = {
         "service_history",
         "video_job_card",
         "video_delivery",
+        "car_image",
         "ppt_pre",
         "ppt_post",
         "excel_estimate",
