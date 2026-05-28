@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
 **Last Updated:** 2026-05-28  
-**Total Active Plans:** 6
+**Total Active Plans:** 7
 **Mobile App Plans Added:** 2026-05-27
 
 ---
@@ -27,6 +27,7 @@
 | DRIVE-001 | Universal Drive Upload and Storage Offload | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-23 | 2026-05-24 | 0% |
 | MOBILE-001 | Techwheels Mobile App - Expo Implementation | 🟡 HIGH | 🟠 IN PROGRESS | Development Team | 2026-05-27 | 2026-06-10 | 45% |
 | MOBILE-005 | AutoDoc Mobile Parity with Mandatory GPS-Stamped Damage Photos | 🟡 HIGH | 🔴 PENDING | Techwheels Product + Mobile Dev Team | 2026-05-28 | 2026-06-05 | 0% |
+| MOBILE-006 | Google Satellite Hybrid GPS Stamp Plan | 🟡 HIGH | 🔴 PENDING | Techwheels Product + Mobile/Web Dev Team | 2026-05-28 | 2026-06-06 | 0% |
 
 ---
 
@@ -88,6 +89,13 @@
 - **Status:** Pending kickoff
 - **Latest Update:** 2026-05-28 - Dedicated implementation plan created covering mobile AutoDoc stage-photo parity with mandatory GPS card stamping and DB metadata persistence.
 - **Next Step:** Approve policy decisions (camera-only vs gallery allowed, strict block behavior), then start Phase 0 and Phase 1 tasks.
+
+### MOBILE-006: Google Satellite Hybrid GPS Stamp Plan
+- **File:** [MOBILE-006_GOOGLE_SATELLITE_HYBRID_STAMP_PLAN.md](MOBILE-006_GOOGLE_SATELLITE_HYBRID_STAMP_PLAN.md)
+- **Risk Level:** 🟡 MEDIUM (external map API dependency + cost/rate-limit governance)
+- **Status:** Pending kickoff
+- **Latest Update:** 2026-05-28 - Hybrid implementation plan documented for server-side Google satellite imagery with mandatory fallback tile, caching, and billing guardrails.
+- **Next Step:** Execute Phase 0 prerequisites (billing/quota/alerts/key restrictions), then start backend proxy implementation.
 
 ---
 
