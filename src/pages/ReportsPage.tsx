@@ -93,9 +93,22 @@ export default function ReportsPage() {
     isServiceTypeWiseReportSelected ||
     isBranchLabourRevenueReportSelected
 
-  const canApplyFuelTypeFilter = branch === 'Sitapura' || branch === 'ALL'
+  const canApplyFuelTypeFilter =
+    branch === 'Sitapura' ||
+    branch === 'ALL' ||
+    (resolvedCategoryId === 'warranty' && branch === 'Ajmer Road')
 
   const effectiveBranchFilter = useMemo<BranchFilter>(() => {
+    if (resolvedCategoryId === 'warranty' && fuelType !== 'ALL') {
+      if (branch === 'ALL') {
+        return `ALL_${fuelType}`
+      }
+
+      if (branch === 'Sitapura' || branch === 'Ajmer Road') {
+        return `${branch} ${fuelType}`
+      }
+    }
+
     if (branch === 'ALL' && fuelType !== 'ALL') {
       return `Sitapura ${fuelType}`
     }
@@ -105,7 +118,7 @@ export default function ReportsPage() {
     }
 
     return branch
-  }, [branch, fuelType])
+  }, [branch, fuelType, resolvedCategoryId])
 
   const effectiveDateFieldType = useMemo<DateFieldType>(() => {
     if (resolvedCategoryId === 'labour-revenue') {
@@ -405,6 +418,7 @@ export default function ReportsPage() {
               <selectedReport.Component
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
+                fuelType={fuelType}
                 serviceTypeFilter={serviceTypeFilter}
                 parentProductLineFilter={parentProductLineFilter}
               />

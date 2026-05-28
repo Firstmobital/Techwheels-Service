@@ -46,6 +46,7 @@ export type ReportId =
 export interface ReportViewProps {
   branch: BranchFilter
   dateFilter: DateRangeFilter
+  fuelType?: 'ALL' | 'PV' | 'EV'
   serviceTypeFilter?: 'ALL' | string | string[]
   parentProductLineFilter?: 'ALL' | string
 }

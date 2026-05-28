@@ -33,6 +33,8 @@ interface WarrantyRecord {
   model: string
   jobCardNumber: string
   createdAt: string
+  invoiceDate: string | null
+  closedDate: string | null
   ageDays: number
 }
 
@@ -113,6 +115,8 @@ const SPECIAL_AMOUNT_KEYS = ['980016', '980019', '980025', 'special', 'loaner', 
 const MISC_AMOUNT_KEYS = ['misc', '980001', '980002', '980003', '980004']
 const MODEL_KEYS = ['model', 'product', 'vehicle_model', 'model_name', 'chassis_type']
 const JC_KEYS = ['job_card_number', 'job_card_no', 'jc_no', 'jc_number']
+const INVOICE_DATE_KEYS = ['invoice_date', 'invoice_dt', 'invoice date', 'inv_date']
+const CLOSED_DATE_KEYS = ['closed_date', 'job_closed_date', 'close_date', 'compl_report_date', 'repair_date']
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -192,6 +196,9 @@ function matchesBranchFilter(recordBranch: string, branchFilter: string): boolea
   const normalized = recordBranch.toLowerCase()
   const selected = branchFilter.toLowerCase()
 
+  if (selected === 'all_pv') return normalized.endsWith('pv')
+  if (selected === 'all_ev') return normalized.endsWith('ev')
+
   if (selected === 'ajmer road') return normalized.startsWith('ajmer road')
   if (selected === 'sitapura') return normalized.startsWith('sitapura')
 
@@ -218,6 +225,34 @@ function derivePipelineStage(statusRaw: string): string {
 
 function sortByCountDesc<T extends { count: number }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => b.count - a.count)
+}
+
+function parsePotentialDate(value: string): string | null {
+  const text = value.trim()
+  if (!text) return null
+
+  const numericDate = Number(text)
+  if (Number.isFinite(numericDate) && numericDate > 30000 && numericDate < 80000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30)).getTime()
+    const date = new Date(epoch + numericDate * 24 * 60 * 60 * 1000)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+
+  const direct = new Date(text)
+  if (!Number.isNaN(direct.getTime())) {
+    return direct.toISOString()
+  }
+
+  const ddmmyyyy = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
+  if (ddmmyyyy) {
+    const day = Number(ddmmyyyy[1])
+    const month = Number(ddmmyyyy[2]) - 1
+    const year = Number(ddmmyyyy[3].length === 2 ? `20${ddmmyyyy[3]}` : ddmmyyyy[3])
+    const parsed = new Date(Date.UTC(year, month, day))
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+  }
+
+  return null
 }
 
 export default function WarrantyOverviewReport({ branch, dateFilter }: ReportViewProps) {
@@ -265,6 +300,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             const status = extractByPreferredKeys(source, STATUS_KEYS)
             const rejectionReason = extractByPreferredKeys(source, REJECTION_REASON_KEYS)
             const postingDocNo = extractByPreferredKeys(source, POSTING_DOC_KEYS)
+            const invoiceDateRaw = extractByPreferredKeys(source, INVOICE_DATE_KEYS)
+            const closedDateRaw = extractByPreferredKeys(source, CLOSED_DATE_KEYS)
             const partsAmount = sumByKeys(source, PARTS_AMOUNT_KEYS)
             const labourAmount = sumByKeys(source, LABOUR_AMOUNT_KEYS)
             const specialAmount = sumByKeys(source, SPECIAL_AMOUNT_KEYS)
@@ -294,6 +331,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               model: extractByPreferredKeys(source, MODEL_KEYS),
               jobCardNumber: extractByPreferredKeys(source, JC_KEYS),
               createdAt: row.created_at,
+              invoiceDate: parsePotentialDate(invoiceDateRaw),
+              closedDate: parsePotentialDate(closedDateRaw),
               ageDays,
             })
           }
@@ -321,10 +360,17 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   const filteredRecords = useMemo(() => {
     const { from, to } = parseDateRange(dateFilter)
+    const dateFieldType = dateFilter.dateFieldType ?? 'closed_date'
     return records.filter((record) => {
       if (!matchesBranchFilter(record.branch, branch)) return false
-      const createdAt = new Date(record.createdAt)
-      return createdAt >= from && createdAt <= to
+
+      const eventDateIso =
+        dateFieldType === 'invoice_date'
+          ? record.invoiceDate ?? record.closedDate ?? record.createdAt
+          : record.closedDate ?? record.invoiceDate ?? record.createdAt
+
+      const eventDate = new Date(eventDateIso)
+      return eventDate >= from && eventDate <= to
     })
   }, [records, branch, dateFilter])
 
