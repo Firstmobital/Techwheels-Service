@@ -42,6 +42,45 @@ function fitLine(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
   return trimmed.length > 0 ? trimmed + ellipsis : ellipsis
 }
 
+async function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob)
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(image)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('Failed to decode image blob'))
+    }
+    image.src = objectUrl
+  })
+}
+
+async function loadStaticMapPreview(lat: number, lng: number, width: number, height: number): Promise<HTMLImageElement | null> {
+  const size = `${Math.max(120, Math.round(width))}x${Math.max(90, Math.round(height))}`
+  const encodedCenter = `${lat},${lng}`
+
+  const candidates = [
+    `https://staticmap.openstreetmap.de/staticmap.php?center=${encodedCenter}&zoom=16&size=${size}&markers=${encodedCenter},red-pushpin`,
+    `https://maps.wikimedia.org/img/osm-intl,16,${lng},${lat},${Math.max(120, Math.round(width))}x${Math.max(90, Math.round(height))}.png`,
+  ]
+
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, { method: 'GET', mode: 'cors' })
+      if (!res.ok) continue
+      const blob = await res.blob()
+      return await loadImageFromBlob(blob)
+    } catch {
+      // Try next provider.
+    }
+  }
+
+  return null
+}
+
 /**
  * Stamp an image with GPS metadata using Canvas
  * Returns a Blob of the stamped JPEG image
@@ -71,7 +110,7 @@ export async function stampImageWithGps(
       try {
         const img = new Image()
 
-        img.onload = () => {
+        img.onload = async () => {
           // Create canvas matching original image size.
           // The location card is rendered as an in-image translucent overlay.
           const canvas = document.createElement('canvas')
@@ -103,9 +142,13 @@ export async function stampImageWithGps(
           ctx.fillRect(0, gradientTop, canvas.width, gradientHeight)
 
           // Responsive overlay card sizing.
-          const cardWidth = Math.max(340, Math.min(Math.round(canvas.width * 0.72), canvas.width - 32))
+          const cardWidth = Math.max(360, Math.min(Math.round(canvas.width * 0.86), canvas.width - 32))
           const cardPaddingX = Math.max(14, Math.round(cardWidth * 0.03))
           const cardPaddingY = Math.max(10, Math.round(canvas.height * 0.012))
+          const mapWidth = Math.max(120, Math.min(Math.round(cardWidth * 0.26), 210))
+          const mapHeight = Math.max(96, Math.round(mapWidth * 0.72))
+          const contentGap = Math.max(12, Math.round(cardWidth * 0.018))
+          const textZoneWidth = cardWidth - (cardPaddingX * 2) - mapWidth - contentGap
 
           const titleSize = Math.max(18, Math.min(Math.round(canvas.width * 0.04), fontSize + 4))
           const bodySize = Math.max(13, Math.min(Math.round(canvas.width * 0.028), fontSize))
@@ -117,7 +160,7 @@ export async function stampImageWithGps(
           const badgeHeight = Math.round(badgeSize * 1.7)
           const computedCardHeight = Math.max(
             cardHeight,
-            cardPaddingY * 2 + textBlockHeight + badgeHeight + 8,
+            cardPaddingY * 2 + Math.max(textBlockHeight + badgeHeight + 8, mapHeight),
           )
 
           const cardX = 16
@@ -135,8 +178,39 @@ export async function stampImageWithGps(
           ctx.lineWidth = 1.25
           ctx.stroke()
 
+          // Draw mini-map preview on the left, matching reference style.
+          const mapX = cardX + cardPaddingX
+          const mapY = cardY + Math.round((computedCardHeight - mapHeight) / 2)
+          const mapRadius = Math.max(8, Math.round(mapWidth * 0.08))
+          const mapPreview = await loadStaticMapPreview(metadata.lat, metadata.lng, mapWidth, mapHeight)
+
+          drawRoundedRect(ctx, mapX, mapY, mapWidth, mapHeight, mapRadius)
+          ctx.save()
+          ctx.clip()
+          if (mapPreview) {
+            ctx.drawImage(mapPreview, mapX, mapY, mapWidth, mapHeight)
+          } else {
+            const fallbackGradient = ctx.createLinearGradient(mapX, mapY, mapX, mapY + mapHeight)
+            fallbackGradient.addColorStop(0, 'rgba(255, 255, 255, 0.16)')
+            fallbackGradient.addColorStop(1, 'rgba(255, 255, 255, 0.08)')
+            ctx.fillStyle = fallbackGradient
+            ctx.fillRect(mapX, mapY, mapWidth, mapHeight)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+            ctx.font = `600 ${Math.max(12, Math.round(bodySize * 0.82))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+            ctx.textBaseline = 'middle'
+            const fallbackText = 'Map preview unavailable'
+            const fallbackTextWidth = ctx.measureText(fallbackText).width
+            ctx.fillText(fallbackText, mapX + Math.max(8, (mapWidth - fallbackTextWidth) / 2), mapY + mapHeight / 2)
+          }
+          ctx.restore()
+
+          drawRoundedRect(ctx, mapX, mapY, mapWidth, mapHeight, mapRadius)
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)'
+          ctx.lineWidth = 1
+          ctx.stroke()
+
           // Small location badge line.
-          const badgeX = cardX + cardPaddingX
+          const badgeX = mapX + mapWidth + contentGap
           const badgeY = cardY + cardPaddingY
           ctx.font = `600 ${badgeSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
           const badgeText = 'LOCATION VERIFIED'
@@ -156,9 +230,9 @@ export async function stampImageWithGps(
           ctx.textBaseline = 'top'
 
           // Calculate text layout.
-          const textX = cardX + cardPaddingX
+          const textX = mapX + mapWidth + contentGap
           const textY = badgeY + badgeHeight + 8
-          const textMaxWidth = cardWidth - cardPaddingX * 2
+          const textMaxWidth = textZoneWidth
 
           ctx.font = `700 ${titleSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
           const line1 = fitLine(ctx, lines[0], textMaxWidth)

@@ -8,10 +8,17 @@ export interface GpsMetadata {
   lng: number
   city: string | null
   addressLine: string | null
+  placeName: string | null
   capturedAtIso: string
   timezone: string
   stage: 'pre-repair' | 'under-repair' | 'post-repair'
   panelName: string
+}
+
+type ReverseGeocodeInfo = {
+  city: string | null
+  addressLine: string | null
+  placeName: string | null
 }
 
 /**
@@ -64,17 +71,17 @@ export async function getCurrentLocation(
 }
 
 /**
- * Reverse geocode coordinates to get city name (best-effort)
+ * Reverse geocode coordinates to get city, full address and place label (best-effort)
  * Uses public geolocation APIs with graceful fallback
  */
-export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+export async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodeInfo> {
   try {
     // Try using Nominatim (OpenStreetMap) for reverse geocoding
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 8000)
 
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&zoom=18`,
       {
         headers: { 'Accept-Language': 'en' },
         signal: controller.signal,
@@ -84,27 +91,56 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      return null
+      return { city: null, addressLine: null, placeName: null }
     }
 
     const data = (await response.json()) as {
+      display_name?: string
+      name?: string
       address?: {
         city?: string
         town?: string
         village?: string
         county?: string
         state?: string
+        country?: string
+        suburb?: string
+        neighbourhood?: string
+        road?: string
+      }
+      namedetails?: {
+        name?: string
+        [key: string]: string | undefined
       }
     }
 
     // Extract city name from address hierarchy
     const address = data.address
-    if (!address) return null
+    if (!address) return { city: null, addressLine: data.display_name ?? null, placeName: null }
 
-    return address.city || address.town || address.village || address.county || null
+    const city = address.city || address.town || address.village || address.county || null
+    const region = address.state ?? null
+    const country = address.country ?? null
+
+    const placeName = data.namedetails?.name
+      || data.name
+      || [city, region, country].filter((value) => Boolean(value)).join(', ')
+      || null
+
+    const addressLine = data.display_name
+      || [address.road, address.suburb || address.neighbourhood, city, region, country]
+        .filter((value) => Boolean(value))
+        .join(', ')
+      || null
+
+    return {
+      city,
+      addressLine,
+      placeName,
+    }
   } catch {
     // Graceful fallback - return null if reverse geocoding fails
-    return null
+    return { city: null, addressLine: null, placeName: null }
   }
 }
 
@@ -136,15 +172,16 @@ export async function assembleGpsMetadata(
     throw new Error('Invalid longitude')
   }
 
-  const city = await reverseGeocode(lat, lng)
+  const locationInfo = await reverseGeocode(lat, lng)
   const capturedAtIso = new Date().toISOString()
   const timezone = getTimezone()
 
   return {
     lat,
     lng,
-    city,
-    addressLine: null,
+    city: locationInfo.city,
+    addressLine: locationInfo.addressLine,
+    placeName: locationInfo.placeName,
     capturedAtIso,
     timezone,
     stage,
@@ -157,12 +194,13 @@ export async function assembleGpsMetadata(
  * Returns multi-line text ready for canvas rendering
  */
 export function formatGpsStampText(metadata: GpsMetadata): {
-  line1: string // Location/City
-  line2: string // Lat, Lng
-  line3: string // Date/Time and Timezone
-  line4: string // Stage and Panel
+  line1: string // Place/entity
+  line2: string // Full address
+  line3: string // Lat, Lng
+  line4: string // Date/Time, Timezone and workflow stage
 } {
-  const cityDisplay = metadata.city || 'Unknown Location'
+  const placeDisplay = metadata.placeName || metadata.city || 'Unknown Location'
+  const addressDisplay = metadata.addressLine || metadata.city || 'Address unavailable'
 
   const latDisplay = metadata.lat.toFixed(6)
   const lngDisplay = metadata.lng.toFixed(6)
@@ -181,9 +219,9 @@ export function formatGpsStampText(metadata: GpsMetadata): {
   const stageLabel = metadata.stage.replace('-', ' ')
 
   return {
-    line1: cityDisplay,
-    line2: `Lat: ${latDisplay}°, Lng: ${lngDisplay}°`,
-    line3: `${timeStr} (${metadata.timezone})`,
-    line4: `${stageLabel} • ${metadata.panelName}`,
+    line1: placeDisplay,
+    line2: addressDisplay,
+    line3: `Lat: ${latDisplay}°, Lng: ${lngDisplay}°`,
+    line4: `${timeStr} (${metadata.timezone}) • ${stageLabel} • ${metadata.panelName}`,
   }
 }

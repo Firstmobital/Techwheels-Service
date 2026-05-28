@@ -679,6 +679,8 @@ export default function AutoDocPage() {
     let gpsLat: number | undefined
     let gpsLng: number | undefined
     let gpsCity: string | null | undefined
+    let gpsAddressLine: string | null | undefined
+    let gpsPlaceName: string | null | undefined
     let capturedAtIso: string | undefined
 
     try {
@@ -695,6 +697,8 @@ export default function AutoDocPage() {
         damageUploadContext.panel
       )
       gpsCity = gpsMetadata.city
+      gpsAddressLine = gpsMetadata.addressLine
+      gpsPlaceName = gpsMetadata.placeName
       capturedAtIso = gpsMetadata.capturedAtIso
       console.log('[AutoDoc-GPS] GPS metadata assembled:', { city: gpsCity, timestamp: capturedAtIso })
     } catch (gpsErr) {
@@ -728,7 +732,8 @@ export default function AutoDocPage() {
               lat: gpsLat!,
               lng: gpsLng!,
               city: gpsCity || null,
-              addressLine: null,
+              addressLine: gpsAddressLine || null,
+              placeName: gpsPlaceName || null,
               capturedAtIso: capturedAtIso!,
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               stage: damageUploadContext.stage,
