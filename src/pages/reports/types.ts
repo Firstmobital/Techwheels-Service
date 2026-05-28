@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
 import type { BranchFilter, DateRangeFilter } from '../../lib/reportQueries'
 
-export type ReportCategoryId = 'labour-revenue' | 'performance' | 'revenue' | 'parts'
+export type ReportCategoryId = 'labour-revenue' | 'performance' | 'revenue' | 'parts' | 'warranty'
 export type ReportId =
   | 'service-type-labour-revenue'
   | 'branch-labour-revenue'
@@ -41,6 +41,7 @@ export type ReportId =
   | 'parts-vendor-performance'
   | 'parts-valuation'
   | 'parts-abc-classification'
+  | 'warranty-overview'
 
 export interface ReportViewProps {
   branch: BranchFilter

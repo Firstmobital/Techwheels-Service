@@ -27,6 +27,7 @@ const CATEGORY_TABS: Array<{ id: ReportCategoryId; label: string }> = [
   { id: 'performance', label: 'Performance' },
   { id: 'revenue', label: 'Revenue' },
   { id: 'parts', label: 'Parts' },
+  { id: 'warranty', label: 'Warranty' },
 ]
 
 interface HeaderStats {

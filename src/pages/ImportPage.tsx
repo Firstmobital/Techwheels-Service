@@ -46,11 +46,11 @@ import {
   formatPartsStockParseErrors,
   type PartsStockParseError,
 } from '../lib/partsStockColumnMapper'
-import { PORTAL_BRANCHES, type PortalBranch } from '../lib/branches'
+import { PORTAL_BRANCHES } from '../lib/branches'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Branch = PortalBranch
+type Branch = string
 type Portal = 'EV' | 'PV'
 type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
 
@@ -79,6 +79,7 @@ interface CardConfig {
   tableName: string
   title: string
   description: string
+  branches?: readonly Branch[]
 }
 
 interface MappingIssueInsert {
@@ -143,6 +144,48 @@ const CARDS: CardConfig[] = [
     title: 'Parts In Stock',
     description: 'On-hand inventory snapshot by part number across all branches.',
   },
+  {
+    tableName: 'warranty_claim_settlement_report_data',
+    title: 'Claim-Settlement-Report',
+    description: 'Warranty claim settlement report uploads across all warranty branches.',
+    branches: ['Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'],
+  },
+  {
+    tableName: 'warranty_part_wc_data',
+    title: 'Part WC',
+    description: 'Part WC report uploads across all warranty branches.',
+    branches: ['Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'],
+  },
+  {
+    tableName: 'warranty_updation_claim_data',
+    title: 'Updation Claim',
+    description: 'Updation Claim uploads across all warranty branches.',
+    branches: ['Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'],
+  },
+  {
+    tableName: 'warranty_goodwill_data',
+    title: 'Goodwill',
+    description: 'Goodwill report uploads across all warranty branches.',
+    branches: ['Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'],
+  },
+  {
+    tableName: 'warranty_amc_data',
+    title: 'AMC',
+    description: 'AMC report uploads across all warranty branches.',
+    branches: ['Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'],
+  },
+  {
+    tableName: 'warranty_fsb_data',
+    title: 'FSB',
+    description: 'FSB report uploads across all warranty branches.',
+    branches: ['Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'],
+  },
+  {
+    tableName: 'warranty_wc_data',
+    title: 'WC',
+    description: 'WC report uploads across all warranty branches.',
+    branches: ['Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'],
+  },
 ]
 
 const REVENUE_REPORT_TABLES = new Set([
@@ -155,6 +198,16 @@ const PARTS_REPORT_TABLES = new Set([
   'service_parts_consumption_data',
   'service_parts_order_data',
   'service_parts_stock_snapshot_data',
+])
+
+const WARRANTY_REPORT_TABLES = new Set([
+  'warranty_claim_settlement_report_data',
+  'warranty_part_wc_data',
+  'warranty_updation_claim_data',
+  'warranty_goodwill_data',
+  'warranty_amc_data',
+  'warranty_fsb_data',
+  'warranty_wc_data',
 ])
 
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
@@ -518,6 +571,53 @@ function buildPartsSourceRowHash(
   return raw.replace(/\s+/g, ' ').trim()
 }
 
+function toWarrantyColumnKey(input: string): string {
+  return input
+    .replace(/^[\uFEFF\s]+/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function normalizeWarrantyRow(row: Record<string, unknown>): Record<string, string> {
+  const normalized: Record<string, string> = {}
+  const usedKeys = new Map<string, number>()
+
+  for (const [rawKey, rawValue] of Object.entries(row)) {
+    const baseKey = toWarrantyColumnKey(rawKey) || 'column'
+    const currentCount = usedKeys.get(baseKey) ?? 0
+    const key = currentCount === 0 ? baseKey : `${baseKey}_${currentCount + 1}`
+    usedKeys.set(baseKey, currentCount + 1)
+
+    const value = rawValue == null ? '' : String(rawValue).trim()
+    normalized[key] = value
+  }
+
+  return normalized
+}
+
+function hashWarrantyRow(payload: Record<string, string>): string {
+  const canonical = Object.entries(payload)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('|')
+
+  let hash = 2166136261
+  for (let i = 0; i < canonical.length; i++) {
+    hash ^= canonical.charCodeAt(i)
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
+  }
+
+  return (hash >>> 0).toString(16)
+}
+
+function resolveWarrantyLocationAndPortal(branch: string): { location: 'Ajmer Road' | 'Sitapura'; portal: Portal } {
+  const portal: Portal = branch.endsWith('EV') ? 'EV' : 'PV'
+  const location = branch.startsWith('Ajmer Road') ? 'Ajmer Road' : 'Sitapura'
+  return { location, portal }
+}
+
 // ─── SlotDropzone ──────────────────────────────────────────────────────────────
 
 interface SlotDropzoneProps {
@@ -664,7 +764,12 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       </div>
 
       {/* Slot grid */}
-      <div className="grid grid-cols-3 gap-3 px-5 py-4">
+      <div
+        className={[
+          'grid gap-3 px-5 py-4',
+          branches.length === 4 ? 'grid-cols-2 xl:grid-cols-4' : 'grid-cols-1 md:grid-cols-3',
+        ].join(' ')}
+      >
         {branches.map((branch) => (
           <SlotDropzone
             key={branch}
@@ -771,16 +876,21 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
 
 export default function ImportPage() {
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
-    Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(PORTAL_BRANCHES)])),
+    Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(c.branches ?? PORTAL_BRANCHES)])),
   )
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     revenue_report: false,
     parts_report: false,
+    warranty_report: false,
   })
   const revenueReportCards = CARDS.filter((config) => REVENUE_REPORT_TABLES.has(config.tableName))
   const partsReportCards = CARDS.filter((config) => PARTS_REPORT_TABLES.has(config.tableName))
+  const warrantyReportCards = CARDS.filter((config) => WARRANTY_REPORT_TABLES.has(config.tableName))
   const standaloneCards = CARDS.filter(
-    (config) => !REVENUE_REPORT_TABLES.has(config.tableName) && !PARTS_REPORT_TABLES.has(config.tableName),
+    (config) =>
+      !REVENUE_REPORT_TABLES.has(config.tableName) &&
+      !PARTS_REPORT_TABLES.has(config.tableName) &&
+      !WARRANTY_REPORT_TABLES.has(config.tableName),
   )
 
   const toggleGroup = useCallback((groupKey: string) => {
@@ -860,7 +970,8 @@ export default function ImportPage() {
     async (config: CardConfig) => {
       const { tableName } = config
       const cardState = cards[tableName]
-      const readyBranches = PORTAL_BRANCHES.filter((branch) => {
+      const branchesForCard = config.branches ?? PORTAL_BRANCHES
+      const readyBranches = branchesForCard.filter((branch) => {
         const slot = cardState.slots[branch]
         return !!slot.file && !slot.parseError && slot.rowCount !== null
       })
@@ -883,13 +994,15 @@ export default function ImportPage() {
         const isPartsConsumptionTable = tableName === 'service_parts_consumption_data'
         const isPartsOrderTable = tableName === 'service_parts_order_data'
         const isPartsStockTable = tableName === 'service_parts_stock_snapshot_data'
+        const isWarrantyTable = WARRANTY_REPORT_TABLES.has(tableName)
         const isSpecialMappedTable =
           isVasTable ||
           isInvoiceTable ||
           isJcClosedTable ||
           isPartsConsumptionTable ||
           isPartsOrderTable ||
-          isPartsStockTable
+          isPartsStockTable ||
+          isWarrantyTable
         const tableColumns = isSpecialMappedTable ? [] : await getTableColumns(tableName)
         const jcClosedColumns = isJcClosedTable ? await getTableColumns(tableName) : []
         const jcClosedColumnSet = new Set(jcClosedColumns)
@@ -941,7 +1054,7 @@ export default function ImportPage() {
         const employeeLookup = requiresEmployeeLookup ? await getEmployeeLookupIndex() : null
 
         const getFirstAvailableHeaders = async (): Promise<string[]> => {
-          for (const branch of PORTAL_BRANCHES) {
+          for (const branch of branchesForCard) {
             const slot = cardState.slots[branch]
             if (slot.file && !slot.parseError && slot.rowCount !== null) {
               const rows = await parseWorkbook(slot.file, tableName)
@@ -1544,6 +1657,22 @@ export default function ImportPage() {
                 'part_number,branch,portal,snapshot_date',
               ],
             )
+          } else if (isWarrantyTable) {
+            const { location, portal } = resolveWarrantyLocationAndPortal(branch)
+            const insertRows = rawRows.map((rawRow, rowIdx) => {
+              const sourceRowData = normalizeWarrantyRow(rawRow)
+              return {
+                branch,
+                location,
+                portal,
+                source_row_number: rowIdx + 2,
+                source_file_name: slot.file!.name,
+                source_row_hash: hashWarrantyRow(sourceRowData),
+                source_row_data: sourceRowData,
+              }
+            })
+
+            totalInserted += await upsertOrInsertRows(insertRows, ['branch,source_row_hash'])
           } else {
             // Other tables: use original logic
             const insertRows = buildInsertRows(rawRows, tableColumns, branch)
@@ -1610,7 +1739,9 @@ export default function ImportPage() {
   )
 
   const handleReset = useCallback((tableName: string) => {
-    setCards((prev) => ({ ...prev, [tableName]: emptyCard(PORTAL_BRANCHES) }))
+    const config = CARDS.find((card) => card.tableName === tableName)
+    const branches = config?.branches ?? PORTAL_BRANCHES
+    setCards((prev) => ({ ...prev, [tableName]: emptyCard(branches) }))
   }, [])
 
   return (
@@ -1721,6 +1852,60 @@ export default function ImportPage() {
                     config={config}
                     state={cards[config.tableName]}
                     branches={PORTAL_BRANCHES}
+                    onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
+                    onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
+                    onUpload={() => handleUpload(config)}
+                    onReset={() => handleReset(config.tableName)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {warrantyReportCards.length > 0 && (
+          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={() => toggleGroup('warranty_report')}
+              className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+              aria-expanded={!!expandedGroups.warranty_report}
+              aria-controls="warranty-report-group-content"
+            >
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Warranty Report</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Upload Claim-Settlement-Report, Part WC, Updation Claim, Goodwill, AMC, FSB, and WC across four branches.
+                </p>
+              </div>
+
+              <div className="mt-0.5 flex shrink-0 items-center gap-2 text-xs text-gray-500">
+                <span className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5">
+                  {warrantyReportCards.length} cards
+                </span>
+                <svg
+                  className={[
+                    'h-4 w-4 text-gray-400 transition-transform duration-200',
+                    expandedGroups.warranty_report ? 'rotate-180' : 'rotate-0',
+                  ].join(' ')}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {expandedGroups.warranty_report && (
+              <div id="warranty-report-group-content" className="space-y-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4">
+                {warrantyReportCards.map((config) => (
+                  <ImportCard
+                    key={config.tableName}
+                    config={config}
+                    state={cards[config.tableName]}
+                    branches={config.branches ?? PORTAL_BRANCHES}
                     onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
                     onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
                     onUpload={() => handleUpload(config)}
