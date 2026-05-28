@@ -70,13 +70,18 @@ export async function getCurrentLocation(
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
     // Try using Nominatim (OpenStreetMap) for reverse geocoding
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
+
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
       {
         headers: { 'Accept-Language': 'en' },
-        timeout: 8000,
+        signal: controller.signal,
       }
     )
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       return null

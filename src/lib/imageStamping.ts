@@ -3,7 +3,8 @@
  * Uses HTML5 Canvas to add GPS information card to damage photos
  */
 
-import { GpsMetadata, formatGpsStampText } from './gpsUtils'
+import type { GpsMetadata } from './gpsUtils'
+import { formatGpsStampText } from './gpsUtils'
 
 export interface StampOptions {
   cardHeight?: number // Height of bottom card in pixels, default: 120
