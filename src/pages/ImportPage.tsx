@@ -151,6 +151,12 @@ const REVENUE_REPORT_TABLES = new Set([
   'service_vas_jc_data',
 ])
 
+const PARTS_REPORT_TABLES = new Set([
+  'service_parts_consumption_data',
+  'service_parts_order_data',
+  'service_parts_stock_snapshot_data',
+])
+
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -769,9 +775,13 @@ export default function ImportPage() {
   )
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     revenue_report: false,
+    parts_report: false,
   })
   const revenueReportCards = CARDS.filter((config) => REVENUE_REPORT_TABLES.has(config.tableName))
-  const standaloneCards = CARDS.filter((config) => !REVENUE_REPORT_TABLES.has(config.tableName))
+  const partsReportCards = CARDS.filter((config) => PARTS_REPORT_TABLES.has(config.tableName))
+  const standaloneCards = CARDS.filter(
+    (config) => !REVENUE_REPORT_TABLES.has(config.tableName) && !PARTS_REPORT_TABLES.has(config.tableName),
+  )
 
   const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroups((prev) => ({
@@ -1652,6 +1662,60 @@ export default function ImportPage() {
             {expandedGroups.revenue_report && (
               <div id="revenue-report-group-content" className="space-y-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4">
                 {revenueReportCards.map((config) => (
+                  <ImportCard
+                    key={config.tableName}
+                    config={config}
+                    state={cards[config.tableName]}
+                    branches={PORTAL_BRANCHES}
+                    onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
+                    onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
+                    onUpload={() => handleUpload(config)}
+                    onReset={() => handleReset(config.tableName)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {partsReportCards.length > 0 && (
+          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={() => toggleGroup('parts_report')}
+              className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+              aria-expanded={!!expandedGroups.parts_report}
+              aria-controls="parts-report-group-content"
+            >
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Parts Report</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Upload Parts Consumption, Parts Order, and Parts In Stock in one grouped section.
+                </p>
+              </div>
+
+              <div className="mt-0.5 flex shrink-0 items-center gap-2 text-xs text-gray-500">
+                <span className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5">
+                  {partsReportCards.length} cards
+                </span>
+                <svg
+                  className={[
+                    'h-4 w-4 text-gray-400 transition-transform duration-200',
+                    expandedGroups.parts_report ? 'rotate-180' : 'rotate-0',
+                  ].join(' ')}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {expandedGroups.parts_report && (
+              <div id="parts-report-group-content" className="space-y-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4">
+                {partsReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
                     config={config}
