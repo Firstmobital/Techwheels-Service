@@ -98,21 +98,38 @@ function inr(n: number): string {
   return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2 })
 }
 
-/** Download image from Google Drive or Supabase Storage and return data-URL. */
+/** Download image from Google Drive (via edge function) or Supabase Storage and return data-URL. */
 async function toDataURL(storagePath: string, driveFileId: string | null): Promise<string | null> {
   try {
     // Try Google Drive first if driveFileId available
     if (driveFileId) {
-      const driveUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media&supportsAllDrives=true`
-      const res = await fetch(driveUrl)
-      if (res.ok) {
-        const blob = await res.blob()
-        return new Promise<string | null>((resolve) => {
-          const reader = new FileReader()
-          reader.onloadend = () => resolve(reader.result as string)
-          reader.onerror  = () => resolve(null)
-          reader.readAsDataURL(blob)
-        })
+      try {
+        const { data: auth } = await supabase.auth.getSession()
+        const token = auth?.session?.access_token
+
+        if (token) {
+          const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/drive-file-export`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ driveFileId }),
+          })
+
+          if (res.ok) {
+            const blob = await res.blob()
+            return new Promise<string | null>((resolve) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.onerror  = () => resolve(null)
+              reader.readAsDataURL(blob)
+            })
+          }
+        }
+      } catch (driveErr) {
+        console.warn('Drive download failed, trying Supabase Storage:', driveErr)
       }
     }
     
