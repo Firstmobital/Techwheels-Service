@@ -62,6 +62,7 @@ interface PanelPhoto {
   photo_type:    'defect' | 'primer' | 'paint'
   repair_stage:  'pre-repair' | 'under-repair' | 'post-repair'
   storage_path:  string
+  drive_file_id: string | null
   gps_city:      string | null
   captured_at:   string | null
 }
@@ -70,6 +71,7 @@ interface Document {
   id:            string
   doc_type:      string
   storage_path:  string
+  drive_file_id: string | null
 }
 
 interface EstimateRow {
@@ -96,9 +98,25 @@ function inr(n: number): string {
   return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2 })
 }
 
-/** Download a Supabase Storage object and return a data-URL string. */
-async function toDataURL(storagePath: string): Promise<string | null> {
+/** Download image from Google Drive or Supabase Storage and return data-URL. */
+async function toDataURL(storagePath: string, driveFileId: string | null): Promise<string | null> {
   try {
+    // Try Google Drive first if driveFileId available
+    if (driveFileId) {
+      const driveUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media&supportsAllDrives=true`
+      const res = await fetch(driveUrl)
+      if (res.ok) {
+        const blob = await res.blob()
+        return new Promise<string | null>((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result as string)
+          reader.onerror  = () => resolve(null)
+          reader.readAsDataURL(blob)
+        })
+      }
+    }
+    
+    // Fallback to Supabase Storage
     const { data, error } = await supabase.storage
       .from(AUTODOC_BUCKET)
       .download(storagePath)
@@ -159,13 +177,13 @@ async function fetchAll(jobCardId: string) {
 
     supabase
       .from('panel_photos')
-      .select('id, panel_id, photo_type, repair_stage, storage_path, gps_city, captured_at')
+      .select('id, panel_id, photo_type, repair_stage, storage_path, drive_file_id, gps_city, captured_at')
       .eq('job_card_id', jobCardId)
       .order('captured_at'),
 
     supabase
       .from('documents')
-      .select('id, doc_type, storage_path')
+      .select('id, doc_type, storage_path, drive_file_id')
       .eq('job_card_id', jobCardId)
       .eq('doc_type', 'car_image')
       .limit(1),
@@ -362,7 +380,7 @@ function addPhotoSlide(
     x: LEFT_X, y: CONTENT_Y, w: LEFT_W, h: CONTENT_H, fill: { color: LGRAY },
   })
 
-  // Panel section
+  // Panel section (left column: panel name only, no vehicle details)
   let detailY = CONTENT_Y + 0.2
   slide.addText('PANEL', {
     x: LEFT_X + 0.15, y: detailY, w: LEFT_W - 0.3, h: 0.2,
@@ -371,28 +389,6 @@ function addPhotoSlide(
   slide.addText(panelName.toUpperCase(), {
     x: LEFT_X + 0.15, y: detailY + 0.2, w: LEFT_W - 0.3, h: 0.35,
     fontSize: 13, bold: true, color: DGRAY, fontFace: 'Calibri',
-  })
-
-  // Vehicle details section
-  detailY += 0.7
-  const detailFields = [
-    { label: 'REG NO.', value: summary.reg_number ?? '—' },
-    { label: 'VIN', value: summary.vin ?? '—' },
-    { label: 'MODEL', value: summary.model ?? '—' },
-    { label: 'COLOUR', value: summary.colour ?? '—' },
-    { label: 'JC NO.', value: summary.jc_number ?? '—' },
-  ]
-
-  detailFields.forEach(({ label, value }) => {
-    slide.addText(label, {
-      x: LEFT_X + 0.15, y: detailY, w: LEFT_W - 0.3, h: 0.18,
-      fontSize: 8, bold: true, color: GOLD, fontFace: 'Calibri',
-    })
-    slide.addText(value, {
-      x: LEFT_X + 0.15, y: detailY + 0.18, w: LEFT_W - 0.3, h: 0.25,
-      fontSize: 10, color: DGRAY, fontFace: 'Calibri',
-    })
-    detailY += 0.48
   })
 
   // Right column: Image (60% width)
@@ -586,7 +582,7 @@ export async function generateRepairPPT(
   const { summary, panels, photos, estRows, carImageDoc } = await fetchAll(jobCardId)
 
   // 2. Download car image for cover slide
-  const carImageDataURL = carImageDoc ? (await toDataURL(carImageDoc.storage_path)) : null
+  const carImageDataURL = carImageDoc ? (await toDataURL(carImageDoc.storage_path, carImageDoc.drive_file_id)) : null
 
   // 3. Organize photos by repair stage and photo type
   const stageOrder: Array<'pre-repair' | 'under-repair' | 'post-repair'> =
@@ -604,7 +600,7 @@ export async function generateRepairPPT(
   const imgMap = new Map<string, string | null>()
   await Promise.all(
     renderPhotos.map(async (p) => {
-      imgMap.set(p.id, await toDataURL(p.storage_path))
+      imgMap.set(p.id, await toDataURL(p.storage_path, p.drive_file_id))
     }),
   )
 
