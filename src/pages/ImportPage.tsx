@@ -767,8 +767,18 @@ export default function ImportPage() {
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
     Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(PORTAL_BRANCHES)])),
   )
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    revenue_report: false,
+  })
   const revenueReportCards = CARDS.filter((config) => REVENUE_REPORT_TABLES.has(config.tableName))
   const standaloneCards = CARDS.filter((config) => !REVENUE_REPORT_TABLES.has(config.tableName))
+
+  const toggleGroup = useCallback((groupKey: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }))
+  }, [])
 
   const updateCard = useCallback(
     (tableName: string, update: Partial<CardState> | ((prev: CardState) => CardState)) => {
@@ -1606,27 +1616,55 @@ export default function ImportPage() {
 
         {revenueReportCards.length > 0 && (
           <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-100 px-5 py-4">
-              <h2 className="text-sm font-semibold text-gray-900">Revenue Report</h2>
-              <p className="mt-0.5 text-xs text-gray-500">
-                Upload PSF Revenue Report, Invoice Data, and VAS Data in one grouped section to reduce confusion.
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={() => toggleGroup('revenue_report')}
+              className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+              aria-expanded={!!expandedGroups.revenue_report}
+              aria-controls="revenue-report-group-content"
+            >
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Revenue Report</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Upload PSF Revenue Report, Invoice Data, and VAS Data in one grouped section to reduce confusion.
+                </p>
+              </div>
 
-            <div className="space-y-4 bg-gray-50/40 px-4 py-4">
-              {revenueReportCards.map((config) => (
-                <ImportCard
-                  key={config.tableName}
-                  config={config}
-                  state={cards[config.tableName]}
-                  branches={PORTAL_BRANCHES}
-                  onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
-                  onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
-                  onUpload={() => handleUpload(config)}
-                  onReset={() => handleReset(config.tableName)}
-                />
-              ))}
-            </div>
+              <div className="mt-0.5 flex shrink-0 items-center gap-2 text-xs text-gray-500">
+                <span className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5">
+                  {revenueReportCards.length} cards
+                </span>
+                <svg
+                  className={[
+                    'h-4 w-4 text-gray-400 transition-transform duration-200',
+                    expandedGroups.revenue_report ? 'rotate-180' : 'rotate-0',
+                  ].join(' ')}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {expandedGroups.revenue_report && (
+              <div id="revenue-report-group-content" className="space-y-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4">
+                {revenueReportCards.map((config) => (
+                  <ImportCard
+                    key={config.tableName}
+                    config={config}
+                    state={cards[config.tableName]}
+                    branches={PORTAL_BRANCHES}
+                    onSlotFile={(branch, file) => handleSlotFile(config.tableName, branch, file)}
+                    onSlotClear={(branch) => handleSlotClear(config.tableName, branch)}
+                    onUpload={() => handleUpload(config)}
+                    onReset={() => handleReset(config.tableName)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         )}
 
