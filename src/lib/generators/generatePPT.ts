@@ -430,56 +430,35 @@ function addPhotoSlide(
     x: 0, y: TITLE_H, w: W, h: STRIPE_H, fill: { color: GOLD },
   })
 
-  // ── Two-column layout ───────────────────────────────────────────────────
+  // ── Full-width image layout (no left column, panel name already in header) ───────────────────────────────────────────────────────────
 
   const CONTENT_Y  = TITLE_H + STRIPE_H
   const CONTENT_H  = H - CONTENT_Y - FOOT_H
 
-  // Left column: Vehicle details (40% width)
-  const LEFT_W = W * 0.4
-  const LEFT_X = 0
-
-  slide.addShape(prs.ShapeType.rect, {
-    x: LEFT_X, y: CONTENT_Y, w: LEFT_W, h: CONTENT_H, fill: { color: LGRAY },
-  })
-
-  // Panel section (left column: panel name only, no vehicle details)
-  let detailY = CONTENT_Y + 0.2
-  slide.addText('PANEL', {
-    x: LEFT_X + 0.15, y: detailY, w: LEFT_W - 0.3, h: 0.2,
-    fontSize: 9, bold: true, color: GOLD, fontFace: 'Calibri',
-  })
-  slide.addText(panelName.toUpperCase(), {
-    x: LEFT_X + 0.15, y: detailY + 0.2, w: LEFT_W - 0.3, h: 0.35,
-    fontSize: 13, bold: true, color: DGRAY, fontFace: 'Calibri',
-  })
-
-  // Right column: Image (60% width)
-  const RIGHT_W = W * 0.6
-  const RIGHT_X = LEFT_W
+  // Full width image with geotag at bottom
   const IMG_H   = CONTENT_H - 0.35  // Space for geotag at bottom
 
   // Image area or placeholder
   if (dataURL) {
     slide.addImage({
       data: dataURL,
-      x: RIGHT_X, y: CONTENT_Y, w: RIGHT_W, h: IMG_H,
-      sizing: { type: 'contain', w: RIGHT_W, h: IMG_H },
+      x: 0, y: CONTENT_Y, w: W, h: IMG_H,
+      sizing: { type: 'contain', w: W, h: IMG_H },
     })
   } else {
     slide.addShape(prs.ShapeType.rect, {
-      x: RIGHT_X, y: CONTENT_Y, w: RIGHT_W, h: IMG_H, fill: { color: LGRAY },
+      x: 0, y: CONTENT_Y, w: W, h: IMG_H, fill: { color: LGRAY },
     })
     slide.addText('Photo not available', {
-      x: RIGHT_X, y: CONTENT_Y + IMG_H / 2 - 0.2, w: RIGHT_W, h: 0.4,
+      x: 0.2, y: CONTENT_Y + IMG_H / 2 - 0.2, w: W - 0.4, h: 0.4,
       fontSize: 14, color: DGRAY, align: 'center', fontFace: 'Calibri',
     })
   }
 
-  // Geotag strip at bottom of right column
+  // Geotag strip at bottom (full width)
   const geoStripY = CONTENT_Y + IMG_H
   slide.addShape(prs.ShapeType.rect, {
-    x: RIGHT_X, y: geoStripY, w: RIGHT_W, h: 0.35, fill: { color: DGRAY },
+    x: 0, y: geoStripY, w: W, h: 0.35, fill: { color: DGRAY },
   })
 
   const geoTag  = gpsCity ? `📍 ${gpsCity}` : ''
@@ -488,7 +467,7 @@ function addPhotoSlide(
 
   if (geoInfo) {
     slide.addText(geoInfo, {
-      x: RIGHT_X + 0.1, y: geoStripY, w: RIGHT_W - 0.2, h: 0.35,
+      x: 0.25, y: geoStripY, w: W - 0.5, h: 0.35,
       fontSize: 9, color: WHITE, fontFace: 'Calibri', valign: 'middle',
     })
   }
