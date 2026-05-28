@@ -827,42 +827,43 @@ export default function AutoDocPage() {
   }
 
   async function openDamagePhotoInBrowser(photo: DamagePhotoItem) {
-    const popup = window.open('', '_blank', 'noopener,noreferrer')
-
-    const openTarget = (targetUrl: string) => {
-      if (popup) {
-        popup.location.href = targetUrl
-      } else {
-        window.open(targetUrl, '_blank', 'noopener,noreferrer')
-      }
-    }
-
     const immediateDriveUrl = photo.driveUrl?.trim()
     if (immediateDriveUrl) {
-      openTarget(immediateDriveUrl)
+      window.open(immediateDriveUrl, '_blank', 'noopener,noreferrer')
       return
     }
 
-    if (!activeJobCardId) {
-      openTarget(photo.url)
-      return
-    }
+    let fallbackUrl = photo.url?.trim() || ''
 
-    try {
-      const latestPhotosRes = await listPanelPhotos(activeJobCardId)
-      if (!latestPhotosRes.error && latestPhotosRes.data) {
-        const latestPhoto = latestPhotosRes.data.find((item) => item.id === photo.id)
-        const latestDriveUrl = (latestPhoto as { drive_url?: string | null } | undefined)?.drive_url?.trim()
-        if (latestDriveUrl) {
-          openTarget(latestDriveUrl)
-          return
+    if (activeJobCardId) {
+      try {
+        const latestPhotosRes = await listPanelPhotos(activeJobCardId)
+        if (!latestPhotosRes.error && latestPhotosRes.data) {
+          const latestPhoto = latestPhotosRes.data.find((item) => item.id === photo.id)
+          const latestDriveUrl = (latestPhoto as { drive_url?: string | null } | undefined)?.drive_url?.trim()
+          if (latestDriveUrl) {
+            window.open(latestDriveUrl, '_blank', 'noopener,noreferrer')
+            return
+          }
+
+          const latestStoragePath = latestPhoto?.storage_path?.trim()
+          if (latestStoragePath && latestStoragePath !== photo.storagePath) {
+            const latestSignedRes = await createAutodocSignedUrlMap([latestStoragePath])
+            const nextFallback = latestSignedRes.data?.[latestStoragePath]?.trim()
+            if (nextFallback) fallbackUrl = nextFallback
+          }
         }
+      } catch {
+        // Keep fallback behavior below.
       }
-    } catch {
-      // Fall through to existing URL fallback.
     }
 
-    openTarget(photo.url)
+    if (fallbackUrl) {
+      window.open(fallbackUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    showToast('Drive link is not ready yet. Please retry in a few seconds.', false)
   }
 
   function openDeliveryVideoPicker() {
