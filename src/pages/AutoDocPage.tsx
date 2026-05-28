@@ -681,7 +681,9 @@ export default function AutoDocPage() {
     let capturedAtIso: string | undefined
 
     try {
+      console.log('[AutoDoc-GPS] Starting GPS capture...')
       const location = await getCurrentLocation()
+      console.log('[AutoDoc-GPS] Location captured:', { lat: location.lat, lng: location.lng, accuracy: location.accuracy })
       gpsLat = location.lat
       gpsLng = location.lng
 
@@ -693,8 +695,10 @@ export default function AutoDocPage() {
       )
       gpsCity = gpsMetadata.city
       capturedAtIso = gpsMetadata.capturedAtIso
+      console.log('[AutoDoc-GPS] GPS metadata assembled:', { city: gpsCity, timestamp: capturedAtIso })
     } catch (gpsErr) {
       const errorMsg = gpsErr instanceof Error ? gpsErr.message : 'Unknown GPS error'
+      console.error('[AutoDoc-GPS] GPS capture failed:', errorMsg)
       showToast(
         `GPS capture failed: ${errorMsg}. Enable location permission and try again.`,
         false
@@ -716,6 +720,7 @@ export default function AutoDocPage() {
         // Stamp image with GPS metadata (Phase 3 gate requirement)
         let stampedBlob: Blob
         try {
+          console.log('[AutoDoc-GPS] Stamping image with GPS metadata...')
           stampedBlob = await stampImageWithGps(
             file,
             {
@@ -729,8 +734,10 @@ export default function AutoDocPage() {
               panelName: damageUploadContext.panel,
             }
           )
+          console.log('[AutoDoc-GPS] Image stamped successfully')
         } catch (stampErr) {
           const stampMsg = stampErr instanceof Error ? stampErr.message : 'Unknown stamping error'
+          console.error('[AutoDoc-GPS] Stamping failed:', stampMsg)
           showToast(`Failed to stamp image: ${stampMsg}. Retrying...`, false)
           continue
         }

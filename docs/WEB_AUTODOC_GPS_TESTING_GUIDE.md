@@ -78,6 +78,24 @@ The web AutoDocPage.tsx has **complete end-to-end GPS workflow**:
 
 ---
 
+### ⚠️ CRITICAL: File Offload Behavior
+
+**Important:** After photo upload, an automatic Edge Function offload runs:
+1. File uploaded to Supabase Storage ✅
+2. DB record created with `storage_path` ✅
+3. Universal Drive upload Edge Function automatically triggers
+4. File downloaded from Storage → uploaded to Google Drive
+5. `drive_url` and `drive_file_id` populated in DB ✅
+6. **Original file DELETED from Storage** (to save costs)
+
+**Consequence:** Clicking "View" after offload completes shows 404 because the original Storage file was deleted. This is **EXPECTED BEHAVIOR**.
+
+**To View the GPS-Stamped Photo:**
+- Use the `drive_url` column from the database (Links to Google Drive)
+- OR access file directly in Google Drive: `Techwheels_Service/{registration_number}/`
+
+---
+
 ### Test Case 2: Permission Denied Flow
 **Goal:** Verify handling when user denies location
 
@@ -161,14 +179,21 @@ The web AutoDocPage.tsx has **complete end-to-end GPS workflow**:
 
 ---
 
-### Test Case 6: Image Quality & Stamping Verification
+### Test Case 6: Image Quality & Stamping Verification (via Google Drive)
 **Goal:** Verify stamped image quality and card visibility
 
 **Steps:**
-1. Upload a photo
-2. In photo grid, right-click → "Open image in new tab"
-3. View full-resolution stamped image
-4. Observe:
+1. Upload a photo and wait 5-10 seconds for Drive offload to complete
+2. Query database to get `drive_url`:
+   ```sql
+   SELECT drive_url, gps_lat, gps_lng, gps_city, captured_at
+   FROM panel_photos
+   WHERE job_card_id = 'YOUR_JC'
+   ORDER BY created_at DESC LIMIT 1;
+   ```
+3. Click the `drive_url` to open in Google Drive
+4. View full-resolution stamped image
+5. Observe:
    - [ ] GPS card visible at image bottom
    - [ ] Text readable (white on dark background)
    - [ ] Latitude/Longitude to 6 decimals
@@ -178,9 +203,11 @@ The web AutoDocPage.tsx has **complete end-to-end GPS workflow**:
    - [ ] Image quality acceptable (not blurry/compressed)
 
 **Expected Result:**
-- ✅ GPS card clearly visible and readable
-- ✅ All required fields present
+- ✅ GPS card clearly visible and readable on Drive image
+- ✅ All required fields present in stamped card
 - ✅ Image quality suitable for insurance claims
+- ✅ File successfully offloaded to Google Drive
+- ✅ Original Storage file deleted (expected behavior)
 
 ---
 
