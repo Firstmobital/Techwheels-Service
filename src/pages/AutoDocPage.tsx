@@ -2104,10 +2104,11 @@ export default function AutoDocPage() {
       }
 
       if (panelIdsToDelete.length > 0) {
-        console.log('[autodoc-panel-debug] Bulk deleting panel IDs', { panelIdsToDelete })
+        console.log('[autodoc-panel-debug] Bulk deleting panel IDs', { panelIdsToDelete, jobCardId })
         const { error: bulkDeleteError } = await supabase
           .from('panels')
           .delete()
+          .eq('job_card_id', jobCardId)
           .in('id', panelIdsToDelete)
 
         if (bulkDeleteError) {
