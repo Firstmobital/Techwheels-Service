@@ -129,21 +129,6 @@ export interface VasRevenueReportData {
   rows: VasRevenueByServiceTypeRow[]
 }
 
-export interface VasRevenueDataRow {
-  jobCardNumber: string
-  srType: string
-  netPrice: number
-  employeeCode: string
-  employeeName: string | null
-  employeeLocation: string | null
-}
-
-export interface VasRevenueDataReport {
-  totalNetPrice: number
-  jobCount: number
-  rows: VasRevenueDataRow[]
-}
-
 export interface DailyRevenueReport {
   date: string
   vehicleCount: number
@@ -843,6 +828,130 @@ async function fetchAllJobCardClosedRows(
   }
 
   return finalRows
+}
+
+async function fetchVasRowsWithEmployeeData(
+  selectColumns: string,
+  filters: JobCardClosedFetchFilters,
+): Promise<Record<string, unknown>[]> {
+  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
+  const vasFilters = fuelSelection
+    ? { ...filters, branch: 'Sitapura' as BranchFilter }
+    : filters
+
+  const vasRows = await fetchAllVasRowsWithoutFuelFilter(`${selectColumns}, employee_code`, vasFilters)
+
+  const employeeCodes = new Set<string>()
+  for (const row of vasRows) {
+    const typedRow = row as { employee_code?: unknown }
+    const code = normalizeEmployeeCode(typedRow.employee_code)
+    if (code && code !== 'Unknown') {
+      employeeCodes.add(code)
+    }
+  }
+
+  const employeeMap = new Map<string, Record<string, unknown>>()
+  if (employeeCodes.size > 0) {
+    const codesArray = Array.from(employeeCodes)
+    const { data: employees, error } = await supabase
+      .from('employee_master')
+      .select('employee_code, employee_name, location, fuel_type')
+      .in('employee_code', codesArray)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    if (employees && Array.isArray(employees)) {
+      for (const emp of employees) {
+        const typedEmp = emp as {
+          employee_code?: unknown
+          employee_name?: unknown
+          location?: unknown
+          fuel_type?: unknown
+        }
+        const code = normalizeEmployeeCode(typedEmp.employee_code)
+        if (code && code !== 'Unknown') {
+          employeeMap.set(code, typedEmp)
+        }
+      }
+    }
+  }
+
+  let mergedData = vasRows.map((row) => {
+    const typedRow = row as { employee_code?: unknown }
+    const code = normalizeEmployeeCode(typedRow.employee_code)
+    const employeeData = code && code !== 'Unknown' ? employeeMap.get(code) : null
+
+    return {
+      ...row,
+      employee_name: employeeData ? (employeeData as { employee_name?: unknown }).employee_name : null,
+      employee_location: employeeData ? (employeeData as { location?: unknown }).location : null,
+      employee_fuel_type: employeeData ? (employeeData as { fuel_type?: unknown }).fuel_type : null,
+    }
+  })
+
+  if (fuelSelection) {
+    mergedData = mergedData.filter((row) => {
+      const typedRow = row as { employee_fuel_type?: unknown; branch?: unknown }
+      const empFuelType = typedRow.employee_fuel_type
+      if (empFuelType != null && String(empFuelType).trim() !== '') {
+        return String(empFuelType).trim().toUpperCase() === fuelSelection
+      }
+
+      // Fallback for rows where employee fuel type is not available in employee_master.
+      return matchesFuelSelectionByBranchLabel(typedRow.branch, fuelSelection)
+    })
+  }
+
+  return mergedData
+}
+
+async function fetchAllVasRowsWithoutFuelFilter(
+  selectColumns: string,
+  filters: JobCardClosedFetchFilters,
+): Promise<Record<string, unknown>[]> {
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+
+  while (true) {
+    let query = supabase
+      .from('service_vas_jc_data')
+      .select(selectColumns)
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    query = applyBranchFilterToQuery(query, filters.branch)
+
+    if (Array.isArray(filters.serviceType)) {
+      if (filters.serviceType.length > 0) {
+        query = query.in('sr_type', filters.serviceType)
+      }
+    } else if (filters.serviceType && filters.serviceType !== 'ALL') {
+      query = query.eq('sr_type', filters.serviceType)
+    }
+
+    const bounds = getDateRangeBounds(filters.dateFilter)
+    query = applyDateFilterToQuery(query, bounds, {
+      closedDateField: 'jc_closed_date_time',
+    })
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
+
+  return allRows
 }
 
 function normalizeLookupValue(raw: unknown): string {
@@ -1713,7 +1822,83 @@ export async function getBranchLabourRevenueComparison(
   })
 }
 
-// VAS Revenue Report has been removed
+export async function getVasRevenueReport(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
+): Promise<VasRevenueReportData> {
+  const filteredRows = await fetchVasRowsWithEmployeeData(
+    'branch, sr_type, net_price, job_value',
+    {
+      branch,
+      dateFilter,
+      serviceType: serviceTypeFilter,
+    },
+  )
+
+  interface WorkingVasRevenue {
+    serviceType: string
+    totalVasRevenue: number
+    jobCount: number
+  }
+
+  const grouped = new Map<string, WorkingVasRevenue>()
+  let totalVasRevenue = 0
+  let totalJobs = 0
+
+  for (const row of filteredRows) {
+    const typedRow = row as {
+      sr_type?: unknown
+      net_price?: unknown
+      job_value?: unknown
+    }
+
+    const serviceType = normalizeServiceType(typedRow.sr_type)
+    const key = serviceTypeGroupKey(serviceType)
+    const jobValue = parseRevenue(typedRow.job_value)
+    const netPrice = parseRevenue(typedRow.net_price)
+    // Use labour value first for VAS revenue; fallback to net price when labour is blank/zero.
+    // Count every row as-is so duplicate job cards are fully included in totals.
+    const revenue = jobValue > 0 ? jobValue : netPrice
+
+    totalVasRevenue += revenue
+    totalJobs += 1
+
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.totalVasRevenue += revenue
+      existing.jobCount += 1
+      continue
+    }
+
+    grouped.set(key, {
+      serviceType,
+      totalVasRevenue: revenue,
+      jobCount: 1,
+    })
+  }
+
+  const rows: VasRevenueByServiceTypeRow[] = [...grouped.values()]
+    .map((item) => ({
+      serviceType: item.serviceType,
+      totalVasRevenue: item.totalVasRevenue,
+      jobCount: item.jobCount,
+      avgVasRevenue: item.jobCount > 0 ? item.totalVasRevenue / item.jobCount : 0,
+    }))
+    .sort((a, b) => {
+      if (b.totalVasRevenue !== a.totalVasRevenue) {
+        return b.totalVasRevenue - a.totalVasRevenue
+      }
+      return a.serviceType.localeCompare(b.serviceType)
+    })
+
+  return {
+    totalVasRevenue,
+    totalJobs,
+    avgVasRevenue: totalJobs > 0 ? totalVasRevenue / totalJobs : 0,
+    rows,
+  }
+}
 
 export async function getDailyRevenueReport(
   branch: BranchFilter,
@@ -4618,117 +4803,4 @@ export async function getPartsOrderJustification(
       if (b.shortageQuantity !== a.shortageQuantity) return b.shortageQuantity - a.shortageQuantity
       return a.partNumber.localeCompare(b.partNumber)
     })
-}
-
-export async function getVasRevenueData(
-  branch: BranchFilter,
-  dateFilter: DateRangeFilter,
-): Promise<VasRevenueDataReport> {
-  let from = 0
-  const allRows: Record<string, unknown>[] = []
-
-  // Fetch all VAS records from service_vas_jc_data
-  while (true) {
-    let query = supabase
-      .from('service_vas_jc_data')
-      .select('job_card_number, sr_type, net_price, employee_code, jc_closed_date_time')
-      .range(from, from + QUERY_PAGE_SIZE - 1)
-
-    query = applyBranchFilterToQuery(query, branch)
-
-    const bounds = getDateRangeBounds(dateFilter)
-    query = applyDateFilterToQuery(query, bounds, {
-      closedDateField: 'jc_closed_date_time',
-    })
-
-    const { data, error } = await query
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
-    allRows.push(...batch)
-
-    if (batch.length < QUERY_PAGE_SIZE) {
-      break
-    }
-
-    from += QUERY_PAGE_SIZE
-  }
-
-  // Extract unique employee codes
-  const employeeCodes = new Set<string>()
-  for (const row of allRows) {
-    const typedRow = row as { employee_code?: unknown }
-    const code = normalizeEmployeeCode(typedRow.employee_code)
-    if (code && code !== 'Unknown') {
-      employeeCodes.add(code)
-    }
-  }
-
-  // Fetch employee data from employee_master
-  const employeeMap = new Map<string, Record<string, unknown>>()
-  if (employeeCodes.size > 0) {
-    const codesArray = Array.from(employeeCodes)
-    const { data: employees, error } = await supabase
-      .from('employee_master')
-      .select('employee_code, employee_name, location')
-      .in('employee_code', codesArray)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    if (employees && Array.isArray(employees)) {
-      for (const emp of employees) {
-        const typedEmp = emp as {
-          employee_code?: unknown
-          employee_name?: unknown
-          location?: unknown
-        }
-        const code = normalizeEmployeeCode(typedEmp.employee_code)
-        if (code && code !== 'Unknown') {
-          employeeMap.set(code, typedEmp)
-        }
-      }
-    }
-  }
-
-  // Build report rows with employee data
-  const rows: VasRevenueDataRow[] = []
-  let totalNetPrice = 0
-
-  for (const row of allRows) {
-    const typedRow = row as {
-      job_card_number?: unknown
-      sr_type?: unknown
-      net_price?: unknown
-      employee_code?: unknown
-    }
-
-    const jobCardNumber = String(typedRow.job_card_number || '').trim()
-    const srType = normalizeServiceType(typedRow.sr_type)
-    const netPrice = parseRevenue(typedRow.net_price)
-    const employeeCode = normalizeEmployeeCode(typedRow.employee_code)
-
-    const employeeData = employeeCode && employeeCode !== 'Unknown' ? employeeMap.get(employeeCode) : null
-
-    totalNetPrice += netPrice
-
-    rows.push({
-      jobCardNumber,
-      srType,
-      netPrice,
-      employeeCode: employeeCode || 'Unknown',
-      employeeName: employeeData ? (employeeData as { employee_name?: unknown }).employee_name as string | null : null,
-      employeeLocation: employeeData ? (employeeData as { location?: unknown }).location as string | null : null,
-    })
-  }
-
-  return {
-    totalNetPrice,
-    jobCount: rows.length,
-    rows,
-  }
 }
