@@ -30,6 +30,31 @@ Techwheels Service is a React + TypeScript + Vite web application serving automo
 - **Bundle Optimization**: Pre-bundle all dependencies in APK to minimize OTA updates
 - **Authentication**: Same Supabase Auth (JWT, RLS, module permissions)
 
+### Backend Function Deployment Dependency (Critical)
+
+Web/mobile frontend deploys and Supabase Edge Function deploys are independent release tracks. For any AutoDoc upload contract change, deploy functions before parity QA.
+
+Mandatory deploy commands (project: `jmdndcphkmaljhwgzqxq`):
+
+```bash
+supabase functions deploy universal-drive-upload --project-ref jmdndcphkmaljhwgzqxq
+supabase functions deploy document-link-upsert --project-ref jmdndcphkmaljhwgzqxq
+```
+
+Required verification for `car_image` flow:
+- `universal-drive-upload` accepts `car_image` as valid `file_type`
+- successful upload sets Drive link fields and creates/updates Drive artifact
+- source object cleanup follows server flag behavior (`DRIVE_DELETE_SOURCE_OBJECT=true` in target project env)
+
+### Mobile Upload Observability Policy
+
+All mobile upload flows must emit structured logs and flush on terminal outcomes.
+
+- Use `mobile/src/utils/logger.ts` with `logEvent(eventName, metadata, module)`
+- Required metadata: `stage`, `duration_ms`, `error_code`, `error_message`, `employee_id`, `provider`
+- For push-related traces use module `push-registration`; for upload traces use module `autodoc-upload`
+- Call `flushPendingLogsToS3({ reason })` on upload success/failure terminal states
+
 ---
 
 ## Project Audit Summary

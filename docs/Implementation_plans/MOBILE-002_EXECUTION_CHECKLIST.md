@@ -24,6 +24,28 @@
 - [ ] Item 4 acceptance: AutoDoc supports panel/photo/document/estimate user flow
 - [ ] Item 5 acceptance: reports tab pulls live data and supports chart + export actions
 
+### Pre-Mobile Parity Baseline Update (2026-05-28)
+
+- [x] Web AutoDoc baseline validated on production web: `https://techwheels-service.vercel.app/autodoc`
+- [x] `car_image` upload path verified end-to-end on web after backend function rollout
+- [x] Supabase functions deployed to project `jmdndcphkmaljhwgzqxq`:
+   - [x] `universal-drive-upload`
+   - [x] `document-link-upsert`
+- [x] Known stale-backend signature documented: `file_type must be a valid document type`
+
+### Backend Function Deployment Gate (Before Mobile QA)
+
+Run when AutoDoc upload contracts, file type validation, or Drive offload behavior changes.
+
+```bash
+supabase functions deploy universal-drive-upload --project-ref jmdndcphkmaljhwgzqxq
+supabase functions deploy document-link-upsert --project-ref jmdndcphkmaljhwgzqxq
+```
+
+Pass criteria:
+- Target function code includes `car_image` in allowed document types.
+- Mobile/web frontend QA starts only after successful function deploy.
+
 ---
 
 ## Pre-Execution Requirements
@@ -84,6 +106,7 @@ eas build --platform ios --profile preview
 - OTA-safe changes (no rebuild): JS/TS logic, UI, routing, business rules, API calls, report templates, validation rules.
 - Rebuild required: adding new native library, changing native permissions, changing config plugins, changing bundle/package identifier, changing notification native setup/certificates.
 - Rule: if `app.json` native sections or native dependency set changes, do at least one fresh APK/IPA build before relying on OTA updates.
+- Important: Supabase Edge Function changes always require explicit function deployment; OTA updates do not deploy backend code.
 
 ---
 
@@ -103,6 +126,18 @@ eas build --platform ios --profile preview
 - [ ] AutoDoc panel/photo/document/estimate workflows
 - [ ] Reports live data, charts, and export implementation
 - [ ] Offline stack runtime validation in Expo Go (post-compilation)
+
+### Upload Verification Matrix (Mandatory for AutoDoc Parity)
+
+- [ ] Panel photo upload: DB row created
+- [ ] Panel photo upload: Drive fields populated (`drive_url`, `drive_file_id`)
+- [ ] Panel photo upload: file appears in registration Drive folder
+- [ ] Panel photo upload: source object removed from Supabase bucket (when delete flag enabled)
+- [ ] Car image upload: DB row created (`doc_type=car_image`)
+- [ ] Car image upload: Drive fields populated (`drive_url`, `drive_file_id`)
+- [ ] Car image upload: file appears in registration Drive folder
+- [ ] Car image upload: source object removed from Supabase bucket (when delete flag enabled)
+- [ ] Failure mode: explicit user toast appears when Drive sync fails
 
 ---
 

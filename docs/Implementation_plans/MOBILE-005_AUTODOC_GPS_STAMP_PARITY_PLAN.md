@@ -158,6 +158,7 @@ eas build --platform ios --profile preview
 - OTA-safe: JS/TS logic updates, UI changes, workflow validation updates.
 - Rebuild required: adding/changing native dependency or plugin, native permission changes, app.json native config changes.
 - If this plan introduces any new native dependency for stamping or media processing, do one fresh APK build before relying on OTA updates.
+- Supabase Edge Function updates are separate from OTA/native app release tracks and must be deployed explicitly.
 
 ### Web-First Gate (✅ COMPLETE - MOBILE UNBLOCKED)
 
@@ -180,6 +181,27 @@ eas build --platform ios --profile preview
 - [x] Product + QA sign off web behavior as parity source of truth
   - **STATUS**: Web implementation is source of truth for mobile parity
   - **NOTE**: Mobile will follow identical GPS/persistence logic
+
+### Web Baseline Freeze (2026-05-28)
+
+- [x] Production web baseline validated at `https://techwheels-service.vercel.app/autodoc`
+- [x] `car_image` web upload validated end-to-end after backend rollout
+- [x] Drive offload + source cleanup behavior confirmed in production path
+- [x] Frozen parity reference for mobile implementation and QA comparison
+
+### Backend Contract Checkpoint (Car Image + Drive)
+
+Mandatory before mobile parity QA:
+
+```bash
+supabase functions deploy universal-drive-upload --project-ref jmdndcphkmaljhwgzqxq
+supabase functions deploy document-link-upsert --project-ref jmdndcphkmaljhwgzqxq
+```
+
+Validation criteria:
+- `universal-drive-upload` accepts `car_image` in document file type allow-list.
+- Known stale-function failure signature: `file_type must be a valid document type`.
+- QA execution for mobile upload flows starts only after this checkpoint passes.
 
 ---
 
