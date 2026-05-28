@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
+import { getCurrentLocation, assembleGpsMetadata } from '../lib/gpsUtils'
+import { stampImageWithGps } from '../lib/imageStamping'
 import {
   createAutodocSignedUrlMap,
   createJobCard,
@@ -672,6 +674,35 @@ export default function AutoDocPage() {
       return
     }
 
+    // Capture GPS location (MANDATORY for Phase 2 gate)
+    let gpsLat: number | undefined
+    let gpsLng: number | undefined
+    let gpsCity: string | null | undefined
+    let capturedAtIso: string | undefined
+
+    try {
+      const location = await getCurrentLocation()
+      gpsLat = location.lat
+      gpsLng = location.lng
+
+      const gpsMetadata = await assembleGpsMetadata(
+        location.lat,
+        location.lng,
+        damageUploadContext.stage,
+        damageUploadContext.panel
+      )
+      gpsCity = gpsMetadata.city
+      capturedAtIso = gpsMetadata.capturedAtIso
+    } catch (gpsErr) {
+      const errorMsg = gpsErr instanceof Error ? gpsErr.message : 'Unknown GPS error'
+      showToast(
+        `GPS capture failed: ${errorMsg}. Enable location permission and try again.`,
+        false
+      )
+      event.target.value = ''
+      return
+    }
+
     const photoType = stageToPhotoType(damageUploadContext.stage)
     const dealerCode = (activeSummary as { dealer_code?: string | null } | null)?.dealer_code?.trim() || 'unknown'
     const replaceTarget = damageUploadContext.replacePhotoId
@@ -681,37 +712,71 @@ export default function AutoDocPage() {
 
     let uploadedCount = 0
     for (const file of filesArray) {
-      const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
-      const safeExt = (ext ?? 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg'
-      const storagePath = `${dealerCode}/${jobCardId}/${panelId}/${photoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${safeExt}`
+      try {
+        // Stamp image with GPS metadata (Phase 3 gate requirement)
+        let stampedBlob: Blob
+        try {
+          stampedBlob = await stampImageWithGps(
+            file,
+            {
+              lat: gpsLat!,
+              lng: gpsLng!,
+              city: gpsCity || null,
+              addressLine: null,
+              capturedAtIso: capturedAtIso!,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              stage: damageUploadContext.stage,
+              panelName: damageUploadContext.panel,
+            }
+          )
+        } catch (stampErr) {
+          const stampMsg = stampErr instanceof Error ? stampErr.message : 'Unknown stamping error'
+          showToast(`Failed to stamp image: ${stampMsg}. Retrying...`, false)
+          continue
+        }
 
-      const storageRes = await supabase.storage.from(AUTODOC_BUCKET).upload(storagePath, file, {
-        cacheControl: '3600',
-        contentType: file.type || 'image/jpeg',
-        upsert: false,
-      })
+        // Upload STAMPED image only (Phase 4 requirement: no unstamped artifact)
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
+        const safeExt = (ext ?? 'jpg').replace(/[^a-zA-Z0-9]/g, '') || 'jpg'
+        const storagePath = `${dealerCode}/${jobCardId}/${panelId}/${photoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${safeExt}`
 
-      if (storageRes.error) {
-        showToast(storageRes.error.message || 'Failed to upload photo to storage.', false)
+        const storageRes = await supabase.storage.from(AUTODOC_BUCKET).upload(storagePath, stampedBlob, {
+          cacheControl: '3600',
+          contentType: 'image/jpeg',
+          upsert: false,
+        })
+
+        if (storageRes.error) {
+          showToast(storageRes.error.message || 'Failed to upload photo to storage.', false)
+          continue
+        }
+
+        // Create DB record with GPS fields (Phase 4 requirement)
+        const photoRes = await createPanelPhoto({
+          jobCardId,
+          panelId,
+          photoType,
+          storagePath,
+          fileSizeMb: Number((stampedBlob.size / (1024 * 1024)).toFixed(3)),
+          repairStage: damageUploadContext.stage,
+          gpsLat,
+          gpsLng,
+          gpsCity: gpsCity || null,
+          capturedAt: capturedAtIso,
+        })
+
+        if (photoRes.error) {
+          await supabase.storage.from(AUTODOC_BUCKET).remove([storagePath])
+          showToast(photoRes.error, false)
+          continue
+        }
+
+        uploadedCount += 1
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error during upload'
+        showToast(`Upload error: ${msg}`, false)
         continue
       }
-
-      const photoRes = await createPanelPhoto({
-        jobCardId,
-        panelId,
-        photoType,
-        storagePath,
-        fileSizeMb: Number((file.size / (1024 * 1024)).toFixed(3)),
-        repairStage: damageUploadContext.stage,
-      })
-
-      if (photoRes.error) {
-        await supabase.storage.from(AUTODOC_BUCKET).remove([storagePath])
-        showToast(photoRes.error, false)
-        continue
-      }
-
-      uploadedCount += 1
     }
 
     if (replaceTarget && uploadedCount > 0) {

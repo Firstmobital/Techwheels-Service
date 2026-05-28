@@ -119,6 +119,16 @@ export default function JobCardDetailScreen() {
               ))}
             </View>
 
+            <TouchableOpacity 
+              className="mt-4 bg-green-600 rounded-lg py-3 items-center"
+              onPress={() => router.push({
+                pathname: '/job-cards/[id]/panel-selector',
+                params: { jobCardId }
+              })}
+            >
+              <Text className="text-white font-semibold">📸 Upload Damage Photos</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity className="mt-4 py-3 items-center" onPress={() => router.back()}>
               <Text className="text-blue-600 font-semibold">Back</Text>
             </TouchableOpacity>

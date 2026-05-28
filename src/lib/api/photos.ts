@@ -20,14 +20,24 @@ export async function createPanelPhoto(input: {
   storagePath: string
   fileSizeMb?: number
   repairStage?: 'pre-repair' | 'under-repair' | 'post-repair'
+  gpsLat?: number
+  gpsLng?: number
+  gpsCity?: string | null
+  capturedAt?: string
 }): Promise<ApiResult<PanelPhotoRow>> {
-  const payload: PanelPhotoInsert & { repair_stage?: string } = {
+  const payload: PanelPhotoInsert & { repair_stage?: string; gps_lat?: number; gps_lng?: number; gps_city?: string | null; captured_at?: string } = {
     job_card_id: input.jobCardId,
     panel_id: input.panelId,
     photo_type: input.photoType,
     storage_path: input.storagePath,
     repair_stage: input.repairStage || 'pre-repair',
   }
+
+  // Add GPS fields if provided (backward compatible)
+  if (typeof input.gpsLat === 'number') payload.gps_lat = input.gpsLat
+  if (typeof input.gpsLng === 'number') payload.gps_lng = input.gpsLng
+  if (input.gpsCity !== undefined) payload.gps_city = input.gpsCity
+  if (input.capturedAt) payload.captured_at = input.capturedAt
 
   const { data, error } = await supabase
     .from('panel_photos')
