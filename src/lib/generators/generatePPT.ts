@@ -127,22 +127,30 @@ async function toDataURL(storagePath: string, driveFileId: string | null): Promi
           console.log(`[PPT] Drive export response status: ${res.status}`)
 
           if (res.ok) {
-            console.log('[PPT] ✓ Successfully fetched from Google Drive')
             const blob = await res.blob()
-            console.log(`[PPT] Blob size: ${blob.size} bytes, type: ${blob.type}`)
+            const contentType = blob.type
+            console.log(`[PPT] Blob size: ${blob.size} bytes, type: ${contentType}`)
             
-            return new Promise<string | null>((resolve) => {
-              const reader = new FileReader()
-              reader.onloadend = () => {
-                console.log('[PPT] ✓ Converted to data URL')
-                resolve(reader.result as string)
-              }
-              reader.onerror  = () => {
-                console.error('[PPT] ✗ FileReader error')
-                resolve(null)
-              }
-              reader.readAsDataURL(blob)
-            })
+            // IMPORTANT: Check if we got HTML (error) instead of image
+            if (contentType.includes('text/html') || contentType === 'text/html' || blob.size > 900000) {
+              console.warn(`[PPT] ✗ Got HTML/error response (size: ${blob.size}, type: ${contentType}), falling back to Supabase Storage`)
+            } else if (contentType.includes('image')) {
+              console.log('[PPT] ✓ Successfully fetched image from Google Drive')
+              return new Promise<string | null>((resolve) => {
+                const reader = new FileReader()
+                reader.onloadend = () => {
+                  console.log('[PPT] ✓ Converted to data URL')
+                  resolve(reader.result as string)
+                }
+                reader.onerror  = () => {
+                  console.error('[PPT] ✗ FileReader error')
+                  resolve(null)
+                }
+                reader.readAsDataURL(blob)
+              })
+            } else {
+              console.warn(`[PPT] Unexpected content type: ${contentType}, trying Supabase Storage`)
+            }
           } else {
             const errText = await res.text()
             console.warn(`[PPT] Drive export failed (${res.status}):`, errText.substring(0, 100))
@@ -154,7 +162,7 @@ async function toDataURL(storagePath: string, driveFileId: string | null): Promi
     }
     
     // Fallback to Supabase Storage
-    console.log('[PPT] Attempting Supabase Storage download:', storagePath)
+    console.log('[PPT] Falling back to Supabase Storage:', storagePath)
     const { data, error } = await supabase.storage
       .from(AUTODOC_BUCKET)
       .download(storagePath)
