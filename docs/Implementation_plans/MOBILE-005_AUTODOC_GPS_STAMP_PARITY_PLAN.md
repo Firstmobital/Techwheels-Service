@@ -41,6 +41,19 @@ Program-level constraints inherited from existing plans:
 
 ---
 
+## Execution Order (Mandatory)
+
+This plan follows strict sequencing to protect parity and reduce rework:
+
+1. Implement web version GPS workflow first.
+2. Complete web testing and signoff (functional + regression).
+3. Freeze shared contract and acceptance criteria.
+4. Start mobile implementation only after web signoff is complete.
+
+Mobile work in this plan is blocked until web-first signoff checklist is marked complete.
+
+---
+
 ## Current State (As-Is)
 
 ### Mobile currently available
@@ -78,6 +91,7 @@ Program-level constraints inherited from existing plans:
 - Depends on MOBILE-002 route-validation baseline being stable.
 - Depends on existing mobile auth/session guards already completed in MOBILE-002.
 - Assumes mobile API layer remains compatible with shared web/mobile contracts from MOBILE-001.
+- Depends on web GPS stamping implementation and QA signoff being completed first.
 
 ---
 
@@ -112,6 +126,14 @@ eas build --platform ios --profile preview
 - OTA-safe: JS/TS logic updates, UI changes, workflow validation updates.
 - Rebuild required: adding/changing native dependency or plugin, native permission changes, app.json native config changes.
 - If this plan introduces any new native dependency for stamping or media processing, do one fresh APK build before relying on OTA updates.
+
+### Web-First Gate (Must Pass Before Mobile Start)
+
+- [ ] Web image upload path stamps GPS card before upload.
+- [ ] Web non-image upload path stores GPS metadata in DB/audit fields.
+- [ ] Web API payload for GPS metadata is finalized and backward-compatible.
+- [ ] Web regression tests pass for upload, replace, remove flows.
+- [ ] Product + QA sign off web behavior as parity source of truth.
 
 ---
 
@@ -519,10 +541,20 @@ Day 8 (buffer, if needed):
 - ⏳ PENDING
 - ❌ BLOCKED
 
+### Phase W - Web-First Baseline (Mandatory Before Mobile)
+
+```
+⏳ W.1 | Finalize web image stamping behavior | Web Dev | - | - | Browser geolocation + canvas stamped blob
+⏳ W.2 | Finalize web non-image GPS metadata behavior | Web Dev | - | - | PDF/Excel/ZIP metadata-only path
+⏳ W.3 | Freeze shared API contract for gps fields | Web Dev + Mobile Dev | - | - | Backward-compatible contract
+⏳ W.4 | Complete web regression and QA signoff | QA + Product | - | - | Upload/replace/remove validated
+⏳ W.5 | Approve mobile start gate | Product + QA + Eng Lead | - | - | Required before Phase 0 starts
+```
+
 ### Phase 0 - Prep and Decisions
 
 ```
-⏳ 0.1 | Confirm camera-only vs camera+gallery policy | Product + Ops | - | - | Compliance decision pending
+⏳ 0.1 | Confirm camera-only vs camera+gallery policy | Product + Ops | - | - | Starts only after Phase W.5
 ⏳ 0.2 | Confirm strict GPS block behavior | Product + Ops | - | - | Denied/timeout policy
 ⏳ 0.3 | Finalize stamp text format and language | Product + UX | - | - | Include stage/panel/timestamp standards
 ⏳ 0.4 | Add MOBILE_AUTODOC_GPS_STAMP_REQUIRED flag | Mobile Dev | - | - | Default off for pilot rollout
@@ -585,21 +617,21 @@ Day 8 (buffer, if needed):
 ⏳ 6.5 | Complete production sign-off | Product + QA + Ops | - | - | No P0/P1 blockers
 ```
 
-### Phase 7 - Web Follow-up Tracker (Do Not Miss)
+### Phase 7 - Web and Mobile Parity Audit
 
 ```
-⏳ 7.1 | Define web GPS stamping scope by file type | Product + Web Dev | - | - | Images vs non-images policy
-⏳ 7.2 | Implement image stamping in web uploads | Web Dev | - | - | Geolocation + canvas + stamped blob
-⏳ 7.3 | Persist GPS metadata for stamped image uploads | Web Dev | - | - | panel_photos and audit alignment
-⏳ 7.4 | Add non-image metadata-only GPS handling | Web Dev | - | - | PDF/Excel/ZIP cannot in-image stamp
-⏳ 7.5 | Add web QA matrix and rollout checks | QA + Web Dev | - | - | Regression + policy validation
+⏳ 7.1 | Verify mobile matches signed-off web behavior | QA + Product | - | - | Web remains source of truth
+⏳ 7.2 | Run cross-platform parity checklist | QA | - | - | Web/mobile outputs and metadata match
+⏳ 7.3 | Publish final parity signoff | Product + QA + Eng Lead | - | - | Completion gate for rollout closure
 ```
 
 ---
 
-## Web Version Follow-up (Planned, Not in Current Mobile Delivery)
+## Web Version Baseline (Must Be Completed First)
 
-To avoid missing parity later, capture this caveat as a formal follow-up requirement:
+This is a mandatory precondition for mobile execution in this plan.
+
+Caveat and policy baseline:
 
 - Image files: feasible and straightforward for web. Use browser geolocation + canvas stamp + upload stamped blob + save GPS fields.
 - Any uploaded file type: not always feasible in the same way. Non-image files (PDF/Excel/ZIP) cannot get an in-image GPS card; for those, store GPS metadata in DB/audit fields instead.
@@ -614,11 +646,12 @@ Suggested web target areas:
 - src/pages/JobCardPage.tsx
 - src/lib/api/photos.ts
 
-Web acceptance checklist:
+Web-first completion checklist:
 - [ ] Image uploads are stamped before storage upload.
 - [ ] Non-image uploads save GPS metadata without attempting visual stamp.
 - [ ] No regression in existing upload/replace/remove UX.
 - [ ] DB/audit fields are populated per policy.
+- [ ] Product + QA web signoff is recorded before mobile Phase 0 starts.
 
 ---
 
