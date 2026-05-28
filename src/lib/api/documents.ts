@@ -13,6 +13,38 @@ type UniversalDriveResponse = {
   drive_file_id?: string
 }
 
+async function offloadToDriveWithRetry(input: {
+  jobCardId: string
+  fileType: string
+  storagePath: string
+  fileSizeMb: number
+  resourceType: 'document' | 'panel_photo'
+  attempts?: number
+}): Promise<ApiResult<UniversalDriveResponse>> {
+  const maxAttempts = Math.max(1, input.attempts ?? 3)
+  let lastErr: string | null = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const res = await invokeUniversalDriveUpload({
+      jobCardId: input.jobCardId,
+      fileType: input.fileType,
+      storagePath: input.storagePath,
+      fileSizeMb: input.fileSizeMb,
+      resourceType: input.resourceType,
+    })
+
+    if (!res.error) return res
+
+    lastErr = res.error
+    if (attempt < maxAttempts) {
+      const backoffMs = 500 * attempt
+      await new Promise((resolve) => setTimeout(resolve, backoffMs))
+    }
+  }
+
+  return fail(lastErr ?? 'Universal drive upload failed')
+}
+
 export async function invokeUniversalDriveUpload(input: {
   jobCardId: string
   fileType: string
@@ -258,13 +290,22 @@ export async function uploadDocumentFile(input: {
         payload,
       })
       if (res.ok && payload?.data) {
-        void invokeUniversalDriveUpload({
+        const driveOffloadRes = await offloadToDriveWithRetry({
           jobCardId: input.jobCardId,
           fileType: input.docType,
           storagePath,
           fileSizeMb: sizeMb,
           resourceType: 'document',
         })
+        if (driveOffloadRes.error) {
+          console.error('[autodoc-upload-debug] Drive offload failed after retries', {
+            jobCardId: input.jobCardId,
+            docType: input.docType,
+            storagePath,
+            error: driveOffloadRes.error,
+          })
+          return fail(`File uploaded, but Drive sync failed: ${driveOffloadRes.error}`)
+        }
         return ok(payload.data as DocumentRow)
       }
       console.error('[autodoc-upload-debug] document-link-upsert did not return usable data; falling back to client upsert', {
@@ -301,6 +342,24 @@ export async function uploadDocumentFile(input: {
     docId: upsertRes.data.id,
     storagePath: upsertRes.data.storage_path,
   })
+
+  const fallbackDriveOffloadRes = await offloadToDriveWithRetry({
+    jobCardId: input.jobCardId,
+    fileType: input.docType,
+    storagePath,
+    fileSizeMb: sizeMb,
+    resourceType: 'document',
+  })
+
+  if (fallbackDriveOffloadRes.error) {
+    console.error('[autodoc-upload-debug] Drive offload failed after retries (client fallback path)', {
+      jobCardId: input.jobCardId,
+      docType: input.docType,
+      storagePath,
+      error: fallbackDriveOffloadRes.error,
+    })
+    return fail(`File uploaded, but Drive sync failed: ${fallbackDriveOffloadRes.error}`)
+  }
 
   return ok(upsertRes.data)
 }
