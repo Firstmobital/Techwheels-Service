@@ -6,6 +6,8 @@
 **Priority:** High  
 **Status:** In Progress
 
+**Audited Reference:** https://claude.ai/share/3ec32255-d0d4-46a6-8090-66d7ed2a6d7b
+
 ---
 
 ## Objective
@@ -29,6 +31,26 @@ Implement a new Warranty Report flow end-to-end:
 4. Persist uploads in dedicated warranty tables.
 5. Ensure future uploads update existing rows first and insert new rows.
 6. Expose Warranty Report inside Reports sidebar/category for analytics rollout.
+7. Build a full warranty dashboard with easy navigation and aligned visual language from audited reference.
+
+---
+
+## Claude Audit Summary (2026-05-28)
+
+The audited shared thread repeatedly converges on these required dashboard blocks:
+
+1. KPI strip: total claims, settlement rate, rejection rate, stuck/pending indicators.
+2. Claim pipeline flow: Initial -> Submission -> Review -> Approval -> Settled, with Rejected separate.
+3. Critical alerts: SLA breach buckets (24h, 48h, 3-day, 5-day style), missing rejection reasons, pending upload/payment actions.
+4. Financial summary: claimed vs approved/settled style rollups and risk amount.
+5. Category- and month-wise views: WC, Updation, AMC, Goodwill, FSB, Settlement with trend matrix.
+6. Parts margin view: 20% parts revenue projection and leakage visibility.
+7. Action-oriented operations view: pending upload backlog, pending settlement, rejection root-cause focus.
+
+Notes from audit:
+
+1. Dataset narratives are operationally valuable but not all formulas are verifiable unless source column contracts are fixed per report type.
+2. UI expectation is dense-but-readable management dashboard, not a placeholder or single-table report.
 
 ---
 
@@ -48,6 +70,8 @@ All schema changes are delivered as migration SQL files and must be run manually
 3. Upsert-ready import behavior with stable dedupe key.
 4. Warranty Reports category and starter report surface.
 5. Tracker for iterative enhancement.
+6. Full Warranty Overview dashboard sections and easy in-page navigation tabs.
+7. Visual alignment to existing app plus audited dashboard tone (blue for primary flow, red/amber for risk, green for settled).
 
 ### Out of Scope (Next Iterations)
 
@@ -56,6 +80,7 @@ All schema changes are delivered as migration SQL files and must be run manually
 3. Historical reconciliation and backfill scripts.
 4. Production alerting and anomaly detection.
 5. Strict RBAC/RLS policies for all 7 warranty import tables (explicitly deferred to later phase).
+6. Hard lock of OEM-specific business formulas until column mapping contracts are signed off.
 
 ---
 
@@ -94,6 +119,34 @@ Upload strategy:
 
 ---
 
+## Dashboard IA and UX Contract
+
+Primary page: Reports -> Warranty -> Warranty Report
+
+Navigation inside dashboard:
+
+1. Overview
+2. Critical Alerts
+3. Financial
+4. Operations
+
+Visual system contract (aligned to audited intent and existing app style):
+
+1. Primary workflow: blue.
+2. Success/settled: green.
+3. Risk and rejection: red.
+4. Warning and pending backlog: amber.
+5. Financial emphasis: indigo/sapphire accents for totals.
+
+Readability rules:
+
+1. KPI first, then action blocks.
+2. Tables should keep key columns visible without clipping in common laptop width.
+3. Every alert card must expose count and value impact.
+4. Every operational backlog table must support clear next action ownership.
+
+---
+
 ## Implementation Tracker
 
 | Phase | Task | Status | Owner | Notes |
@@ -106,11 +159,11 @@ Upload strategy:
 | P2 | Register warranty tables in import_metadata | Done | Copilot | Included in migration |
 | P3 | Add warranty upload upsert behavior | Done | Copilot | branch+hash conflict key used for update/insert |
 | P4 | Add Reports sidebar category "Warranty Reports" | Done | Copilot | Added category + starter report entry |
-| P4 | Add first functional warranty KPI report | Pending | Dev Team | Define KPI contract from uploaded datasets |
-| P5 | Define column mapping specs per warranty source | Pending | Product + Dev | Needed for structured metrics beyond raw json |
+| P4 | Build full Warranty Overview dashboard shell | Done | Copilot | Implemented KPI strip + tabs + pipeline + alerts + financial + operations |
+| P5 | Lock per-source metric formulas and column contract | Pending | Product + Dev | Convert heuristic extraction to explicit formula map per source file type |
 | P5 | Add data quality validation rules | Pending | Dev Team | Mandatory columns, date/amount parsing, branch mismatch checks |
-| P6 | UAT with real branch files | Pending | Ops + Product | Validate import speed, correctness, and upsert behavior |
-| P6 | Production rollout checklist | Pending | Dev Team | Migrations, smoke tests, rollback plan |
+| P6 | UAT with real branch files and role workflows | Pending | Ops + Product | Validate values against OEM sheets and action flow usability |
+| P6 | Production rollout checklist | Pending | Dev Team | Smoke tests, performance checks, rollback plan |
 | P7 | Add strict RBAC/RLS policies for all 7 warranty tables | Deferred | Dev Team | Intentionally postponed; execute after current import/report stabilization |
 
 ---
@@ -124,8 +177,9 @@ Upload strategy:
    - src/pages/reports/index.ts
    - src/pages/ReportsPage.tsx
    - src/pages/reports/warranty/index.ts
+3. Warranty dashboard implementation:
    - src/pages/reports/warranty/WarrantyOverviewReport.tsx
-3. Schema migration:
+4. Schema migration:
    - supabase/migrations/20260528155000_create_warranty_import_tables.sql
 
 ---
@@ -134,14 +188,15 @@ Upload strategy:
 
 1. Run migration manually in target Supabase project before using Warranty uploads.
 2. First release stores normalized raw rows in jsonb for all seven sources.
-3. KPI-grade report modeling should be added in next iteration after mapping lock.
-4. RBAC/RLS hardening for warranty tables is planned later and not part of current release scope.
+3. Warranty dashboard is now live with heuristic metric extraction from normalized source_row_data.
+4. KPI-grade formula hardening is required after mapping lock to eliminate ambiguity.
+5. RBAC/RLS hardening for warranty tables is planned later and not part of current release scope.
 
 ---
 
 ## Next Immediate Steps
 
-1. Execute migration in staging and production.
-2. Upload sample files for all 7 cards across 4 tabs.
-3. Confirm upsert behavior by re-uploading same file and validating updates.
-4. Finalize Warranty KPI contract and implement first analytics report.
+1. Validate dashboard totals against sample source files (category-wise and month-wise).
+2. Freeze column mapping contract for each of the 7 warranty source report formats.
+3. Replace heuristic value parsing with explicit formula mapping per source table.
+4. Add owner/action columns in critical alert rows for daily operations handoff.
