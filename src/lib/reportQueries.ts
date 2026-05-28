@@ -1827,63 +1827,97 @@ export async function getVasRevenueReport(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<VasRevenueReportData> {
-  const filteredRows = await fetchVasRowsWithEmployeeData(
-    'branch, sr_type, net_price, job_value',
-    {
-      branch,
-      dateFilter,
-      serviceType: serviceTypeFilter,
-    },
-  )
+  // Fetch directly from service_vas_jc_data table only
+  let from = 0
+  const allRows: Record<string, unknown>[] = []
+
+  while (true) {
+    let query = supabase
+      .from('service_vas_jc_data')
+      .select('branch, sr_type, net_price, job_card_number, jc_closed_date_time')
+      .range(from, from + QUERY_PAGE_SIZE - 1)
+
+    query = applyBranchFilterToQuery(query, branch)
+
+    if (Array.isArray(serviceTypeFilter)) {
+      if (serviceTypeFilter.length > 0) {
+        query = query.in('sr_type', serviceTypeFilter)
+      }
+    } else if (serviceTypeFilter && serviceTypeFilter !== 'ALL') {
+      query = query.eq('sr_type', serviceTypeFilter)
+    }
+
+    const bounds = getDateRangeBounds(dateFilter)
+    query = applyDateFilterToQuery(query, bounds, {
+      closedDateField: 'jc_closed_date_time',
+    })
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const batch = (data as unknown as Record<string, unknown>[] | null) ?? []
+    allRows.push(...batch)
+
+    if (batch.length < QUERY_PAGE_SIZE) {
+      break
+    }
+
+    from += QUERY_PAGE_SIZE
+  }
 
   interface WorkingVasRevenue {
     serviceType: string
     totalVasRevenue: number
-    jobCount: number
   }
 
-  const grouped = new Map<string, WorkingVasRevenue>()
+  // Track unique job card numbers to exclude duplicates
+  const uniqueJobCardSet = new Set<string>()
+  const serviceTypeMap = new Map<string, WorkingVasRevenue>()
   let totalVasRevenue = 0
-  let totalJobs = 0
 
-  for (const row of filteredRows) {
+  for (const row of allRows) {
     const typedRow = row as {
       sr_type?: unknown
       net_price?: unknown
-      job_value?: unknown
+      job_card_number?: unknown
     }
 
     const serviceType = normalizeServiceType(typedRow.sr_type)
-    const key = serviceTypeGroupKey(serviceType)
-    const jobValue = parseRevenue(typedRow.job_value)
     const netPrice = parseRevenue(typedRow.net_price)
-    // Use labour value first for VAS revenue; fallback to net price when labour is blank/zero.
-    // Count every row as-is so duplicate job cards are fully included in totals.
-    const revenue = jobValue > 0 ? jobValue : netPrice
+    const jobCardNumber = String(typedRow.job_card_number || '').trim()
 
-    totalVasRevenue += revenue
-    totalJobs += 1
+    // Sum all net_price values
+    totalVasRevenue += netPrice
 
-    const existing = grouped.get(key)
-    if (existing) {
-      existing.totalVasRevenue += revenue
-      existing.jobCount += 1
-      continue
+    // Track unique job card numbers
+    if (jobCardNumber) {
+      uniqueJobCardSet.add(jobCardNumber)
     }
 
-    grouped.set(key, {
-      serviceType,
-      totalVasRevenue: revenue,
-      jobCount: 1,
-    })
+    // Group by service type for breakdown
+    const key = serviceTypeGroupKey(serviceType)
+    const existing = serviceTypeMap.get(key)
+    if (existing) {
+      existing.totalVasRevenue += netPrice
+    } else {
+      serviceTypeMap.set(key, {
+        serviceType,
+        totalVasRevenue: netPrice,
+      })
+    }
   }
 
-  const rows: VasRevenueByServiceTypeRow[] = [...grouped.values()]
+  const totalJobs = uniqueJobCardSet.size
+
+  const rows: VasRevenueByServiceTypeRow[] = [...serviceTypeMap.values()]
     .map((item) => ({
       serviceType: item.serviceType,
       totalVasRevenue: item.totalVasRevenue,
-      jobCount: item.jobCount,
-      avgVasRevenue: item.jobCount > 0 ? item.totalVasRevenue / item.jobCount : 0,
+      jobCount: totalJobs,
+      avgVasRevenue: totalJobs > 0 ? item.totalVasRevenue / totalJobs : 0,
     }))
     .sort((a, b) => {
       if (b.totalVasRevenue !== a.totalVasRevenue) {

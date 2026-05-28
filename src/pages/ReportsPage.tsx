@@ -108,12 +108,17 @@ export default function ReportsPage() {
   }, [branch, fuelType])
 
   const effectiveDateFieldType = useMemo<DateFieldType>(() => {
+    // VAS report uses closed_date (jc_closed_date_time), not invoice_date
+    if (isVasRevenueReportSelected) {
+      return 'closed_date'
+    }
+
     if (resolvedCategoryId === 'labour-revenue') {
       return 'invoice_date'
     }
 
     return dateFieldType
-  }, [dateFieldType, resolvedCategoryId])
+  }, [dateFieldType, resolvedCategoryId, isVasRevenueReportSelected])
 
   const showDateFieldTypeFilter = resolvedCategoryId !== 'labour-revenue'
 
