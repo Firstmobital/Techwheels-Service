@@ -6,11 +6,10 @@
 
 import { useCallback, useState } from 'react'
 import * as FileSystem from 'expo-file-system/legacy'
-import * as ImageManipulator from 'expo-image-manipulator'
 import { supabase } from '../lib/supabase'
 import { createPanelPhoto, type PhotoType } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
-import { logEvent } from './logger'
+import { logEvent } from '../utils/logger'
 
 export interface UploadProgress {
   stage: 'preparing' | 'reading' | 'stamping' | 'uploading' | 'persisting' | 'complete'

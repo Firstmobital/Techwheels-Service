@@ -4,7 +4,7 @@
  * Mobile-optimized UI with inline photo capture/replace/remove actions
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -15,7 +15,8 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { listPanelPhotos, createAutodocSignedUrlMap, type PanelPhotoRow } from '../../../lib/api'
+import { useFocusEffect } from '@react-navigation/native'
+import { listPanelPhotos, createAutodocSignedUrlMap, deletePanelPhoto, type PanelPhotoRow } from '../../../lib/api'
 import { logEvent } from '../../../utils/logger'
 
 type Params = {
@@ -51,6 +52,7 @@ export default function PanelPhotosScreen() {
   const [error, setError] = useState<string | null>(null)
   const [allPhotos, setAllPhotos] = useState<PanelPhotoRow[]>([])
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null)
 
   const stagePhotos: StagePhotos[] = useMemo(
     () => [
@@ -131,9 +133,11 @@ export default function PanelPhotosScreen() {
     }
   }
 
-  useEffect(() => {
-    loadPhotos()
-  }, [jobCardId])
+  useFocusEffect(
+    useCallback(() => {
+      loadPhotos()
+    }, [jobCardId, panelId])
+  )
 
   const handleAddPhoto = (stage: 'pre-repair' | 'under-repair' | 'post-repair') => {
     logEvent('photo_add_pressed', { stage, panel_id: panelId }, 'panel-photos')
@@ -169,9 +173,16 @@ export default function PanelPhotosScreen() {
       { text: 'Cancel', onPress: () => {}, style: 'cancel' },
       {
         text: 'Remove',
-        onPress: () => {
+        onPress: async () => {
           logEvent('photo_remove_confirmed', { photo_id: photoId }, 'panel-photos')
-          // TODO: Call delete API and refresh
+          setDeletingPhotoId(photoId)
+          const result = await deletePanelPhoto(photoId)
+          setDeletingPhotoId(null)
+          if (result.error) {
+            Alert.alert('Delete Failed', result.error)
+            return
+          }
+          await loadPhotos()
         },
         style: 'destructive',
       },
@@ -195,24 +206,24 @@ export default function PanelPhotosScreen() {
           </View>
         )}
 
-        {/* Overlay actions */}
-        <View className="absolute inset-0 rounded-lg bg-black/20 opacity-0 hover:opacity-100 flex items-center justify-center">
-          <View className="flex-row gap-2">
-            <TouchableOpacity
-              className="bg-blue-600 rounded-full w-10 h-10 items-center justify-center"
-              onPress={() =>
-                handleReplacePhoto(photo.id, ((photo as any).repair_stage as any) || 'pre-repair')
-              }
-            >
-              <Text className="text-white text-lg">↻</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="bg-red-600 rounded-full w-10 h-10 items-center justify-center"
-              onPress={() => handleRemovePhoto(photo.id)}
-            >
-              <Text className="text-white text-lg">✕</Text>
-            </TouchableOpacity>
-          </View>
+        <View className="flex-row gap-2 mt-2">
+          <TouchableOpacity
+            className="flex-1 bg-blue-600 rounded-lg py-2 items-center"
+            onPress={() =>
+              handleReplacePhoto(photo.id, ((photo as any).repair_stage as any) || 'pre-repair')
+            }
+          >
+            <Text className="text-white text-sm font-semibold">Replace</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className={`flex-1 rounded-lg py-2 items-center ${deletingPhotoId === photo.id ? 'bg-red-300' : 'bg-red-600'}`}
+            onPress={() => handleRemovePhoto(photo.id)}
+            disabled={deletingPhotoId === photo.id}
+          >
+            <Text className="text-white text-sm font-semibold">
+              {deletingPhotoId === photo.id ? 'Removing...' : 'Remove'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     )

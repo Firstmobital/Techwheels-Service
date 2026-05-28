@@ -7,15 +7,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
-  ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { listPanels, type PanelRow } from '../../../lib/api'
+import { listPanels, listPanelPhotos, type PanelRow } from '../../../lib/api'
 import { logEvent } from '../../../utils/logger'
 
 type Params = {
@@ -52,23 +50,42 @@ export default function PanelSelectorScreen() {
       setError(null)
       logEvent('panel_list_load_start', { job_card_id: jobCardId }, 'panel-selector')
 
-      const result = await listPanels(jobCardId)
+      const [panelsResult, photosResult] = await Promise.all([
+        listPanels(jobCardId),
+        listPanelPhotos(jobCardId),
+      ])
 
-      if (result.error) {
-        setError(result.error)
+      if (panelsResult.error) {
+        setError(panelsResult.error)
         logEvent(
           'panel_list_load_failed',
-          { job_card_id: jobCardId, error: result.error },
+          { job_card_id: jobCardId, error: panelsResult.error },
           'panel-selector'
         )
         return
       }
 
+      if (photosResult.error) {
+        setError(photosResult.error)
+        logEvent(
+          'panel_photos_count_load_failed',
+          { job_card_id: jobCardId, error: photosResult.error },
+          'panel-selector'
+        )
+        return
+      }
+
+      const photoCountByPanelId = new Map<string, number>()
+      for (const photo of photosResult.data ?? []) {
+        if (!photo.panel_id) continue
+        photoCountByPanelId.set(photo.panel_id, (photoCountByPanelId.get(photo.panel_id) ?? 0) + 1)
+      }
+
       // Convert to tile data
-      const panelData = (result.data ?? []).map((p: PanelRow) => ({
+      const panelData = (panelsResult.data ?? []).map((p: PanelRow) => ({
         id: p.id,
         name: p.panel_name || 'Unknown Panel',
-        photoCount: 0, // Will be loaded separately if needed
+        photoCount: photoCountByPanelId.get(p.id) ?? 0,
       }))
 
       setPanels(panelData)

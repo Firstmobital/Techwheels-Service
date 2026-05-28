@@ -33,6 +33,37 @@
    - [x] `document-link-upsert`
 - [x] Known stale-backend signature documented: `file_type must be a valid document type`
 
+### Mobile vs Web AutoDoc Parity Audit (2026-05-28)
+
+Authority used for audit:
+- Web parity source: `https://techwheels-service.vercel.app/autodoc`
+- DB source of truth: `local_folder/backups/full_database.sql` (authority never downgrades)
+
+Root-cause findings for parity gap:
+- [x] Mobile AutoDoc tab was using a simplified list/status flow, while web derives workflow stages from `job_cards + panels + panel_photos + estimate_rows`.
+- [x] Mobile capture screen had placeholder upload behavior (no real Storage + DB persistence).
+- [x] Mobile panel photo remove/replace flow was incomplete (remove TODO and stale screen state after return).
+- [x] Mobile panel selector did not surface panel-wise photo counts.
+- [x] DB truth confirms `panel_photos.repair_stage` supports `pre-repair`, `under-repair`, `post-repair`; mismatch was frontend implementation, not schema.
+
+Code fixes executed in this cycle:
+- [x] AutoDoc workflow-stage parity logic added to mobile list screen (same derivation model as web dashboard cards).
+- [x] Mobile AutoDoc tab now has stage filters, KPI strip, and stage-aware quick actions.
+- [x] Camera/gallery capture now performs real upload to Supabase Storage + `panel_photos` insert with GPS metadata.
+- [x] Replace/remove photo actions implemented in panel photo screen, with reload on screen focus.
+- [x] Panel selector now computes and shows per-panel photo counts.
+
+Remaining parity backlog (must complete for full closure):
+- [ ] Mobile New Job Card full creation/edit workflow (currently button present, create form parity pending).
+- [ ] Mobile estimate editor parity with web validation rules (`action/defect/part_number` completeness and per-panel readiness UI).
+- [ ] Mobile document workflow parity (`service_history`, `walkaround`, `car_image`, `delivery`, `ppt_pre`, `ppt_post`, `excel_estimate`, claim-email flow).
+- [ ] Mobile workflow actions parity (`Compose and Send`, `Submit Claim`, and document readiness gating).
+- [ ] Full Section 4.9 route matrix re-run after parity merge and record pass/fail evidence.
+
+Execution order for docs (start here and proceed):
+- [x] 1) `docs/Implementation_plans/MOBILE-002_EXECUTION_CHECKLIST.md` (daily command sheet and acceptance gates)
+- [ ] 2) `docs/Implementation_plans/MOBILE-005_AUTODOC_GPS_STAMP_PARITY_PLAN.md` (AutoDoc deep parity execution)
+- [ ] 3) `docs/Implementation_plans/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md` (Drive/link-offload edge behavior validation)
 ### Backend Function Deployment Gate (Before Mobile QA)
 
 Run when AutoDoc upload contracts, file type validation, or Drive offload behavior changes.
@@ -112,6 +143,9 @@ eas build --platform ios --profile preview
 
 ## Current Execution Snapshot (2026-05-27)
 
+- [x] AutoDoc mobile stage derivation aligned with web workflow model for dashboard filtering/KPIs
+- [x] AutoDoc mobile capture flow writes real photo uploads to Storage + `panel_photos` with GPS fields
+- [x] AutoDoc mobile panel photo replace/remove flow and focus-refresh behavior wired
 - [x] Expo mobile app initialized and running via Expo Router
 - [x] Supabase auth wired (sign in/up/reset, session restore, sign out)
 - [x] Auth route guards active for `(auth)` and `(tabs)` groups
@@ -436,8 +470,8 @@ eas build --platform ios --profile preview
 ```
 [x] Create mobile/app/(tabs)/autodoc.tsx
 [x] Display live job card list
-[ ] Implement search/filter UI
-[ ] Add "New Job Card" button
+[x] Implement search/filter UI
+[x] Add "New Job Card" button
 [x] Navigate to job card detail on tap
 ```
 

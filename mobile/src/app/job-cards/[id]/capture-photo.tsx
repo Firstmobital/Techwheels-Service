@@ -18,6 +18,9 @@ import * as ImagePicker from 'expo-image-picker'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { logEvent } from '../../../utils/logger'
 import { getMobileLocation, isLocationPermissionGranted } from '../../../utils/locationService'
+import { createPanelPhoto, deletePanelPhoto } from '../../../lib/api/photos'
+import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
+import { supabase } from '../../../lib/supabase'
 
 type Params = {
   jobCardId?: string | string[]
@@ -110,12 +113,18 @@ export default function CapturePhotoScreen() {
       setState((s) => ({ ...s, error: null }))
       logEvent('photo_capture_start', { source, stage }, 'capture-photo')
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        aspect: [4, 3],
-        quality: 0.8,
-      })
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            quality: 0.8,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            aspect: [4, 3],
+            quality: 0.8,
+          })
 
       if (result.canceled) {
         logEvent('photo_capture_cancelled', { source }, 'capture-photo')
@@ -199,20 +208,62 @@ export default function CapturePhotoScreen() {
       return
     }
 
+    if (!jobCardId || !panelId) {
+      setState((s) => ({ ...s, error: 'Missing job card or panel context for upload' }))
+      return
+    }
+
     setState((s) => ({ ...s, uploading: true, error: null }))
 
     try {
       logEvent('photo_upload_start', { stage, has_gps: true }, 'capture-photo')
 
-      // TODO: Implement upload logic
-      // 1. Read image file from URI
-      // 2. Create stamped image using react-native-view-shot or canvas
-      // 3. Upload to Supabase storage
-      // 4. Create panel_photos DB record with GPS metadata
-      // 5. Trigger offload flow if configured
+      const fetched = await fetch(state.imageUri)
+      const imageBlob = await fetched.blob()
 
-      // Placeholder for now - just simulate success
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const stageToPhotoType = stage === 'post-repair'
+        ? 'paint'
+        : stage === 'under-repair'
+          ? 'primer'
+          : 'defect'
+
+      const ext = (state.imageMimeType ?? '').toLowerCase().includes('png') ? 'png' : 'jpg'
+      const fileName = `${stageToPhotoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
+      const storagePath = `mobile/${jobCardId}/${panelId}/${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from(AUTODOC_BUCKET)
+        .upload(storagePath, imageBlob, {
+          cacheControl: '3600',
+          contentType: state.imageMimeType ?? 'image/jpeg',
+          upsert: false,
+        })
+
+      if (uploadError) {
+        throw new Error(`Storage upload failed: ${uploadError.message}`)
+      }
+
+      if (mode === 'replace' && replacePhotoId) {
+        await deletePanelPhoto(replacePhotoId)
+      }
+
+      const photoResult = await createPanelPhoto({
+        jobCardId,
+        panelId,
+        photoType: stageToPhotoType,
+        storagePath,
+        fileSizeMb: Number((imageBlob.size / (1024 * 1024)).toFixed(3)),
+        repairStage: stage,
+        gpsLat: state.gpsLat,
+        gpsLng: state.gpsLng,
+        gpsCity: state.gpsCity,
+        capturedAt: state.capturedAt ?? new Date().toISOString(),
+      })
+
+      if (photoResult.error) {
+        await supabase.storage.from(AUTODOC_BUCKET).remove([storagePath])
+        throw new Error(photoResult.error)
+      }
 
       logEvent('photo_upload_success', { stage, panel_id: panelId }, 'capture-photo')
 
