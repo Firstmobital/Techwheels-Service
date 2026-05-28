@@ -343,7 +343,7 @@ function parseWorkbook(file: File, tableName?: string): Promise<Record<string, u
         } catch {
           // Fall through to user-friendly parse error below.
         }
-        reject(new Error('Failed to parse the file. Make sure it is a valid .xlsx or .csv file.'))
+        reject(new Error('Failed to parse the file. Make sure it is a valid .xlsx, .xls, or .csv file.'))
       }
     }
     reader.onerror = () => reject(new Error('Could not read the file.'))
@@ -634,7 +634,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
   const handleFile = useCallback(
     (file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase()
-      if (ext !== 'xlsx' && ext !== 'csv') return
+      if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') return
       onFile(branch, file)
     },
     [branch, onFile],
@@ -714,7 +714,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
           <input
             ref={inputRef}
             type="file"
-            accept=".xlsx,.csv"
+            accept=".xlsx,.xls,.csv"
             className="sr-only"
             onChange={(e) => {
               const file = e.target.files?.[0]
@@ -916,7 +916,10 @@ export default function ImportPage() {
   const handleSlotFile = useCallback(
     (tableName: string, branch: Branch, file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase()
-      const parseError = ext !== 'xlsx' && ext !== 'csv' ? 'Only .xlsx and .csv files are accepted.' : null
+      const parseError =
+        ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv'
+          ? 'Only .xlsx, .xls, and .csv files are accepted.'
+          : null
 
       updateCard(tableName, (prev) => ({
         ...prev,
@@ -1750,7 +1753,7 @@ export default function ImportPage() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Import Data</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Upload .xlsx or .csv files for each portal ID. Column names are matched
+            Upload .xlsx, .xls, or .csv files for each portal ID. Column names are matched
             case-insensitively to the target table.
           </p>
         </div>

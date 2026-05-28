@@ -55,6 +55,7 @@ All schema changes are delivered as migration SQL files and must be run manually
 2. Advanced column-level normalization per file type.
 3. Historical reconciliation and backfill scripts.
 4. Production alerting and anomaly detection.
+5. Strict RBAC/RLS policies for all 7 warranty import tables (explicitly deferred to later phase).
 
 ---
 
@@ -110,6 +111,7 @@ Upload strategy:
 | P5 | Add data quality validation rules | Pending | Dev Team | Mandatory columns, date/amount parsing, branch mismatch checks |
 | P6 | UAT with real branch files | Pending | Ops + Product | Validate import speed, correctness, and upsert behavior |
 | P6 | Production rollout checklist | Pending | Dev Team | Migrations, smoke tests, rollback plan |
+| P7 | Add strict RBAC/RLS policies for all 7 warranty tables | Deferred | Dev Team | Intentionally postponed; execute after current import/report stabilization |
 
 ---
 
@@ -133,6 +135,7 @@ Upload strategy:
 1. Run migration manually in target Supabase project before using Warranty uploads.
 2. First release stores normalized raw rows in jsonb for all seven sources.
 3. KPI-grade report modeling should be added in next iteration after mapping lock.
+4. RBAC/RLS hardening for warranty tables is planned later and not part of current release scope.
 
 ---
 
