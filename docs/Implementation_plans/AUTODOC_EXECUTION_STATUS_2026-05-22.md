@@ -3,7 +3,7 @@
 **Plan ID:** AUTODOC-STATUS-001  
 **Created:** 2026-05-22  
 **Owner:** GitHub Copilot (execution audit)  
-**Status:** ⚠️ IN EXECUTION (code complete; production runtime verification pending) — Last update: 2026-05-27
+**Status:** ⚠️ IN EXECUTION (code complete; production runtime verification pending) — Last update: 2026-05-28
 
 ---
 
@@ -41,6 +41,132 @@ Drift gate checklist (must pass before closing this plan):
 ## Executive Summary
 
 The AutoDoc Warranty Repair Manager is a multi-step Tata Motors warranty claim workflow system. **All core functionality is now fully implemented (2026-05-23):**
+
+### Execution Delta (2026-05-28 — Car Image Mandatory Upload + Google Drive PPT Integration)
+
+**Status: ✅ COMPLETED (deployed; runtime UAT pending)**
+
+**Summary:**
+Added mandatory Car Image upload with GPS tagging as gate for AutoDoc vehicle lookup Fetch button. Integrated Car Image into PPT generation with stage-organized photo slides. Fixed photo rendering to use Google Drive downloads instead of Supabase Storage. Added comprehensive debug logging for troubleshooting.
+
+**Database Changes:**
+- Migration created/executed: [supabase/migrations/20260528123000_add_car_image_doc_type_and_gps_columns.sql](../../supabase/migrations/20260528123000_add_car_image_doc_type_and_gps_columns.sql)
+  - Added `'car_image'` value to `public.doc_type` enum
+  - Added GPS columns to `documents` table: `gps_lat`, `gps_lng`, `gps_city`, `captured_at`
+  - Added GPS columns to `panel_photos` table (already present for photos, normalized in documents)
+  - Constraints: gps_lat ∈ [-90, 90], gps_lng ∈ [-180, 180]
+  - Updated in authoritative [local_folder/backups/full_database.sql](../../local_folder/backups/full_database.sql)
+
+**Frontend Changes — AutoDoc Job Card Form:**
+- **File:** [src/pages/AutoDocPage.tsx](../../src/pages/AutoDocPage.tsx)
+  - Added Car Image upload field with GPS capture integration
+  - Session persistence: `SESSION_KEYS.carImageName` for maintaining state across page reloads
+  - `uploadCarImageWithGps()` handler: Captures location, stamps GPS on image, uploads as `doc_type='car_image'`
+  - `handlePreFetchCarImageUpload()`: Pre-fetch validation ensuring Car Image is uploaded before vehicle lookup
+  - Updated Fetch button gating logic to require: regNumber, jcNumber, kmReading, walkaroundVideoName, **carImageName**, plus pending upload flags
+  - UI grid expanded from 4 to 5 columns to accommodate Car Image field
+
+**API Layer Changes — Document Handling:**
+- **File:** [src/lib/api/documents.ts](../../src/lib/api/documents.ts)
+  - Extended function signatures to accept and persist GPS metadata: `gps_lat`, `gps_lng`, `gps_city`, `captured_at`
+  - `DOCUMENT_SELECT` now includes all GPS columns
+  - `addDocument()`, `upsertDocumentByType()`, `uploadDocumentFile()` all pass GPS fields through to edge function
+  - `invokeUniversalDriveUpload()` whitelists all doc types including `car_image` for Google Drive offload
+
+**Edge Functions — Google Drive + GPS Metadata:**
+- **File:** [supabase/functions/document-link-upsert/index.ts](../../supabase/functions/document-link-upsert/index.ts)
+  - Service-role function for safe document row creation
+  - Accepts GPS fields: `gpsLat`, `gpsLng`, `gpsCity`, `capturedAt`
+  - Type checking: `Number.isFinite()` for numeric GPS values, null coalescing for strings
+  - SELECT response includes all GPS columns
+
+- **File:** [supabase/functions/universal-drive-upload/index.ts](../../supabase/functions/universal-drive-upload/index.ts)
+  - Whitelisted `'car_image'` in `DOC_TYPES` set for offload eligibility
+
+- **File (NEW):** [supabase/functions/drive-file-export/index.ts](../../supabase/functions/drive-file-export/index.ts) — **CREATED & DEPLOYED**
+  - Proxy edge function to download files from Google Drive and serve to frontend
+  - Avoids CORS issues by fetching server-side
+  - Requires authenticated JWT bearer token
+  - Tries public download URL (`https://drive.google.com/uc?export=download`) first, falls back to API endpoint
+  - Returns binary blob with proper MIME type and cache headers
+  - Comprehensive console logging for debugging:
+    - Request auth validation
+    - Token verification
+    - Drive download attempts
+    - Error stack traces
+  - Status: **Deployed to Supabase** via `supabase functions deploy drive-file-export`
+
+**TypeScript Type Updates:**
+- **Files:** [src/lib/database.types.ts](../../src/lib/database.types.ts), [mobile/src/lib/database.types.ts](../../mobile/src/lib/database.types.ts)
+  - Added `'car_image'` to `doc_type` enum
+  - Added optional GPS columns (`gps_lat`, `gps_lng`, `gps_city`, `captured_at`) to `documents` Row/Insert/Update
+  - Added `drive_file_id` field to `panel_photos` interface for Google Drive tracking
+
+**PPT Generator Refactoring — Car Image + Stage-Based Organization:**
+- **File:** [src/lib/generators/generatePPT.ts](../../src/lib/generators/generatePPT.ts)
+  - Updated interfaces:
+    - `PanelPhoto`: Added `drive_file_id` field for Google Drive storage
+    - `Document`: Added `drive_file_id` field for Google Drive tracking
+  
+  - Updated `toDataURL(storagePath, driveFileId)` helper to handle both sources:
+    - Tries Google Drive via `drive-file-export` edge function first (via authenticated POST)
+    - Falls back to Supabase Storage via bucket download
+    - Converts blob to data URL for PPT embedding
+    - Comprehensive debug logs: `[PPT] toDataURL called`, download status, blob size, conversion status
+  
+  - Updated `fetchAll(jobCardId)` to fetch `drive_file_id`:
+    - SELECT queries now include `drive_file_id` from `panel_photos` and `documents` tables
+    - Returns `carImageDoc` with both `storage_path` and `drive_file_id`
+  
+  - Reorganized photo slide layout:
+    - **Removed:** Car details (Reg No, VIN, Model, Colour) from left column of photo slides
+    - **Kept:** Panel name and repair stage header only
+    - **Result:** Cleaner visual focus on panel/photo with reduced cognitive load
+  
+  - Enhanced `generateRepairPPT()` with comprehensive debug logging:
+    - `[PPT] Starting PPT generation for job card: X, type: pre/post-repair`
+    - `[PPT] Fetched: N panels, M photos, car_image: true/false`
+    - `[PPT] Downloading car image...` and readiness status
+    - `[PPT] Processing K photos for rendering (stages: pre-repair, under-repair, post-repair)`
+    - `[PPT] Starting parallel photo downloads...`
+    - `[PPT] ✓ Photo downloads complete: L/M loaded` (with count of successfully loaded vs. total)
+    - `[PPT] Adding N photo slides` and individual slide progress
+    - `[PPT] ✓ PPTX generated, size: X.XX MB`
+    - Per-photo logs via `toDataURL()` helper
+
+  - **Cover Slide:** Car Image (GPS-stamped vehicle photo) now used instead of first defect photo
+    - Fetch: `carImageDoc where doc_type='car_image'` with `drive_file_id` support
+    - Download: `toDataURL(carImageDoc.storage_path, carImageDoc.drive_file_id)`
+    - Display: Right column of two-column layout (vehicle details left, image right)
+
+  - **Photo Slide Organization (Stage-Based):**
+    - Pre-repair PPT: `['pre-repair']` stage order
+    - Post-repair PPT: `['pre-repair', 'under-repair', 'post-repair']` stage order
+    - Triple nested loop: `for (stage) → for (panel) → for (photoType)` ensures consistent ordering
+    - Each photo slide now shows panel name + repair stage label (e.g., "ENGINE HOOD — PRE-REPAIR")
+
+**Build & Deployment:**
+- ✅ `npm run build` passes without TypeScript errors
+- ✅ Edge function deployed: `supabase functions deploy drive-file-export` (project jmdndcphkmaljhwgzqxq)
+- ✅ Frontend deployed to Vercel (commits: `4b70365`, `ffa6255`, `3f93dc0`)
+
+**Code Commits:**
+- `d3c8a49` — Initial Car Image + DB migration + API updates
+- `e1e5926` — PPT generator refactoring for Car Image + stage-organized photos
+- `4b70365` — Fix PPT photo loading (Google Drive instead of Supabase Storage)
+- `ffa6255` — Add drive-file-export edge function for CORS-safe downloads
+- `3f93dc0` — Add comprehensive debug logging to PPT generator + edge function
+
+**Pending UAT (production validation required):**
+- [ ] Generate Pre-Repair PPT in live app → verify Car Image appears on cover slide (right column)
+- [ ] Generate Pre-Repair PPT → verify all panel pre-repair photos load with stage labels
+- [ ] Generate Post-Repair PPT → verify pre-repair + under-repair + post-repair photos all render in correct order
+- [ ] Check browser DevTools Console → verify `[PPT]` debug logs show successful downloads and counts
+- [ ] Check Supabase Edge Function logs → verify `[drive-file-export]` logs show token verification and Drive requests
+- [ ] Verify photo slides show only panel name + stage (no car details like Reg No, VIN)
+- [ ] Test fallback: One photo missing from Drive → verify Supabase Storage fallback works
+
+---
 
 ### Execution Delta (2026-05-27 — Form Render Timing & Both Registration Formats Support)
 

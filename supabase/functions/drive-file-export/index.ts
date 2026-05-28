@@ -105,16 +105,27 @@ Deno.serve(async (req) => {
 
     const driveRes = await fetch(publicDownloadUrl, {
       method: 'GET',
+      redirect: 'follow', // Follow redirect to actual download
+      headers: {
+        'User-Agent': 'Mozilla/5.0', // Some servers block requests without User-Agent
+      },
     })
 
     console.log('[drive-file-export] Public download response status:', driveRes.status)
+    console.log('[drive-file-export] Response content-type:', driveRes.headers.get('content-type'))
 
     if (!driveRes.ok) {
       console.warn('[drive-file-export] Public download failed, trying API endpoint...')
       const apiUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media&supportsAllDrives=true`
-      const apiRes = await fetch(apiUrl)
+      const apiRes = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+        },
+      })
       
       console.log('[drive-file-export] API response status:', apiRes.status)
+      console.log('[drive-file-export] API response content-type:', apiRes.headers.get('content-type'))
       
       if (!apiRes.ok) {
         console.error('[drive-file-export] API fetch failed with status', apiRes.status)
@@ -141,12 +152,13 @@ Deno.serve(async (req) => {
     }
 
     const buffer = await driveRes.arrayBuffer()
-    console.log('[drive-file-export] Successfully fetched from public URL, size:', buffer.byteLength, 'bytes')
+    const contentType = driveRes.headers.get('content-type') || 'application/octet-stream'
+    console.log('[drive-file-export] Successfully fetched from public URL, size:', buffer.byteLength, 'bytes, type:', contentType)
     
     return new Response(buffer, {
       status: 200,
       headers: {
-        'Content-Type': driveRes.headers.get('content-type') || 'application/octet-stream',
+        'Content-Type': contentType,
         'Cache-Control': 'public, max-age=86400',
         'Access-Control-Allow-Origin': '*',
       },
