@@ -11,6 +11,7 @@ import {
   getServiceTypeCounts,
 } from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
+import VasRevenueDataCard from './reports/labour-revenue/VasRevenueDataCard'
 import {
   getReportById,
   getReportsByCategory,
@@ -390,17 +391,28 @@ export default function ReportsPage() {
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700 shadow-sm">
             Fix the date range validation to view the selected report.
           </div>
-        ) : selectedReport ? (
-          <selectedReport.Component
-            branch={effectiveBranchFilter}
-            dateFilter={dateFilter}
-            serviceTypeFilter={serviceTypeFilter}
-            parentProductLineFilter={parentProductLineFilter}
-          />
         ) : (
-          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-            <p className="text-sm font-semibold text-gray-800">No reports configured for this category.</p>
-          </div>
+          <>
+            {resolvedCategoryId === 'labour-revenue' && (
+              <VasRevenueDataCard
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+              />
+            )}
+
+            {selectedReport ? (
+              <selectedReport.Component
+                branch={effectiveBranchFilter}
+                dateFilter={dateFilter}
+                serviceTypeFilter={serviceTypeFilter}
+                parentProductLineFilter={parentProductLineFilter}
+              />
+            ) : (
+              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                <p className="text-sm font-semibold text-gray-800">No reports configured for this category.</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
