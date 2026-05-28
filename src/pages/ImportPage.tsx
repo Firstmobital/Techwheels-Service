@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
-import { broadcastLastUpdated, useLastUpdated } from '../hooks/useLastUpdated'
+import { broadcastLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
 import {
   mapVasHeaders,
@@ -60,11 +60,18 @@ interface SlotState {
   parseError: string | null
 }
 
+interface UploadProgressState {
+  processedBranches: number
+  totalBranches: number
+  currentBranch: Branch | null
+}
+
 interface CardState {
   slots: Record<Branch, SlotState>
   status: CardStatus
   uploadError: string | null
   insertedCount: number
+  uploadProgress: UploadProgressState
   portal?: Portal
 }
 
@@ -156,6 +163,11 @@ function emptyCard(branches: readonly Branch[]): CardState {
     status: 'idle',
     uploadError: null,
     insertedCount: 0,
+    uploadProgress: {
+      processedBranches: 0,
+      totalBranches: 0,
+      currentBranch: null,
+    },
     portal: 'EV',
   }
 }
@@ -470,16 +482,6 @@ function buildInsertRows(
   })
 }
 
-function formatDate(date: Date): string {
-  return date.toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function buildPartsSourceRowHash(
   tableName: string,
   branch: Branch,
@@ -629,13 +631,10 @@ interface ImportCardProps {
 function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload, onReset }: ImportCardProps) {
   const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
   const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
-
-  const { lastUpdated, refresh } = useLastUpdated(config.tableName)
-  const prevStatus = useRef(state.status)
-  useEffect(() => {
-    if (prevStatus.current !== 'success' && state.status === 'success') refresh()
-    prevStatus.current = state.status
-  }, [state.status, refresh])
+  const progressPercent =
+    state.uploadProgress.totalBranches > 0
+      ? Math.round((state.uploadProgress.processedBranches / state.uploadProgress.totalBranches) * 100)
+      : 0
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -650,12 +649,6 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
             {config.tableName}
           </span>
         </div>
-        <p className="mt-2 text-xs text-gray-400">
-          Last updated:{' '}
-          <span className="font-medium text-gray-600">
-            {lastUpdated ? formatDate(lastUpdated) : 'Never'}
-          </span>
-        </p>
       </div>
 
       {/* Slot grid */}
@@ -714,6 +707,28 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
         </div>
       </div>
 
+      {state.status === 'uploading' && state.uploadProgress.totalBranches > 0 && (
+        <div className="border-t border-gray-100 px-5 py-3">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>Upload progress</span>
+            <span>
+              {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          {state.uploadProgress.currentBranch && (
+            <p className="mt-2 text-[11px] text-gray-400">
+              Uploading {state.uploadProgress.currentBranch}…
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Error banner */}
       {state.status === 'error' && state.uploadError && (
         <div className="mx-5 mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
@@ -769,6 +784,11 @@ export default function ImportPage() {
         ...prev,
         status: 'idle',
         uploadError: null,
+        uploadProgress: {
+          processedBranches: 0,
+          totalBranches: 0,
+          currentBranch: null,
+        },
         slots: { ...prev.slots, [branch]: { file, rowCount: null, parseError } },
       }))
 
@@ -797,6 +817,11 @@ export default function ImportPage() {
         ...prev,
         status: 'idle',
         uploadError: null,
+        uploadProgress: {
+          processedBranches: 0,
+          totalBranches: 0,
+          currentBranch: null,
+        },
         slots: { ...prev.slots, [branch]: emptySlot() },
       }))
     },
@@ -807,8 +832,21 @@ export default function ImportPage() {
     async (config: CardConfig) => {
       const { tableName } = config
       const cardState = cards[tableName]
+      const readyBranches = PORTAL_BRANCHES.filter((branch) => {
+        const slot = cardState.slots[branch]
+        return !!slot.file && !slot.parseError && slot.rowCount !== null
+      })
 
-      updateCard(tableName, { status: 'uploading', uploadError: null })
+      updateCard(tableName, {
+        status: 'uploading',
+        uploadError: null,
+        insertedCount: 0,
+        uploadProgress: {
+          processedBranches: 0,
+          totalBranches: readyBranches.length,
+          currentBranch: readyBranches[0] ?? null,
+        },
+      })
 
       try {
         const isVasTable = tableName === 'service_vas_jc_data'
@@ -1075,7 +1113,17 @@ export default function ImportPage() {
           }
         }
 
-        for (const branch of PORTAL_BRANCHES) {
+        let processedBranches = 0
+
+        for (const branch of readyBranches) {
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            uploadProgress: {
+              ...prev.uploadProgress,
+              currentBranch: branch,
+            },
+          }))
+
           const slot = cardState.slots[branch]
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
 
@@ -1084,6 +1132,18 @@ export default function ImportPage() {
           if (isVasTable && vasHeaderMapping) {
             // VAS table: use special parsing with numeric and date conversion
             const insertRows: Record<string, unknown>[] = []
+
+            // Replace mode for VAS: clear current branch data, then insert full file rows.
+            // This ensures Supabase reflects all uploaded rows instead of silently skipping duplicates.
+            const { error: deleteExistingError } = await supabase
+              .from(tableName)
+              .delete()
+              .eq('branch', branch)
+
+            if (deleteExistingError) {
+              throw new Error(`Failed to clear existing VAS rows for ${branch}: ${deleteExistingError.message}`)
+            }
+
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildVasInsertRow(rawRows[rowIdx], branch, vasHeaderMapping, rowIdx + 2) // +2 because row 1 is header
               if (errors.length > 0) {
@@ -1093,8 +1153,6 @@ export default function ImportPage() {
                   const srAssignedTo = row.sr_assigned_to
                   const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
                   row.employee_code = matched.employeeCode
-                  // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
-                  row.branch = matched.employeeBranch ?? branch
 
                   if (matched.reason === 'no_employee_match') {
                     mappingIssues.push({
@@ -1121,8 +1179,8 @@ export default function ImportPage() {
               )
             }
 
-            // Use insert for VAS table (line items, multiple rows per job card allowed)
-            totalInserted += await insertRowsWithDuplicateSkip(insertRows)
+            // Use direct insert for VAS table after branch clear (keeps all uploaded rows).
+            totalInserted += await insertRowsInChunks(insertRows)
           } else if (isJcClosedTable && jcHeaderMapping) {
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
@@ -1463,6 +1521,16 @@ export default function ImportPage() {
             const insertRows = buildInsertRows(rawRows, tableColumns, branch)
             totalInserted += await insertRowsWithDuplicateSkip(insertRows)
           }
+
+          processedBranches += 1
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            uploadProgress: {
+              ...prev.uploadProgress,
+              processedBranches,
+              currentBranch: processedBranches < readyBranches.length ? readyBranches[processedBranches] : null,
+            },
+          }))
         }
 
         await insertMappingIssues(mappingIssues)
@@ -1479,7 +1547,16 @@ export default function ImportPage() {
 
         broadcastLastUpdated(tableName, now)
 
-        updateCard(tableName, { status: 'success', insertedCount: totalInserted })
+        updateCard(tableName, (prev) => ({
+          ...prev,
+          status: 'success',
+          insertedCount: totalInserted,
+          uploadProgress: {
+            ...prev.uploadProgress,
+            processedBranches: prev.uploadProgress.totalBranches,
+            currentBranch: null,
+          },
+        }))
       } catch (err) {
         const message = (err as Error).message
         const isSchemaCacheIssue =
@@ -1490,7 +1567,15 @@ export default function ImportPage() {
           ? `Database schema is not in sync for table ${tableName}. Please run the latest Supabase migrations on the same project used by this app and retry. Original error: ${message}`
           : message
 
-        updateCard(tableName, { status: 'error', uploadError })
+        updateCard(tableName, (prev) => ({
+          ...prev,
+          status: 'error',
+          uploadError,
+          uploadProgress: {
+            ...prev.uploadProgress,
+            currentBranch: null,
+          },
+        }))
       }
     },
     [cards, updateCard],
