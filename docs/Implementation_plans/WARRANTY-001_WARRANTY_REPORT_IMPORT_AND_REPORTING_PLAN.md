@@ -8,6 +8,11 @@
 
 **Audited Reference:** https://claude.ai/share/3ec32255-d0d4-46a6-8090-66d7ed2a6d7b
 
+**Reference Lock (Do Not Remove):**
+1. Primary external reference for this plan remains fixed: https://claude.ai/share/3ec32255-d0d4-46a6-8090-66d7ed2a6d7b
+2. Any new requirement from chat must be added to this plan before implementation.
+3. If a requirement is not represented in the traceability matrix below, it is considered out of scope until added.
+
 ---
 
 ## Objective
@@ -144,6 +149,53 @@ Readability rules:
 2. Tables should keep key columns visible without clipping in common laptop width.
 3. Every alert card must expose count and value impact.
 4. Every operational backlog table must support clear next action ownership.
+
+---
+
+## Traceability Matrix (Zero-Miss Checklist)
+
+Execution rule:
+
+1. Do not mark this plan complete until every row is either Done or explicitly Deferred with owner and date.
+2. Every Done row must have file path coverage and a validation method.
+
+| Ref ID | Claude Requirement | Techwheels Target (Report/Widget) | File Path(s) | Status | Validation Method |
+|---|---|---|---|---|---|
+| TR-001 | KPI strip with total claims, settlement rate, rejection rate, stuck/pending | Warranty Dashboard KPI strip | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done | UI check + row counts from warranty tables |
+| TR-002 | Claim pipeline flow (Initial -> Submission -> Review -> Approval -> Settled + Rejected) | Claim Pipeline Flow card | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done | Status bucketing sanity check vs sample records |
+| TR-003 | Critical alerts buckets (24h/48h/3-day/5-day style) | Critical Alerts tab | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done (v1 heuristic) | Alert count audit against filtered records |
+| TR-004 | Top rejection reasons with actionability | Top Rejection Reasons card | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done (v1 heuristic) | Rejection reason frequency cross-check |
+| TR-005 | Financial summary (claimed/settled/risk) | Financial tab summary cards + category table | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done (v1 heuristic) | Totals vs aggregated table-level sums |
+| TR-006 | Category-wise claim analysis (WC, Updation, AMC, Goodwill, FSB, Settlement, Part WC) | Category matrix + financial category table | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done | Category totals validation |
+| TR-007 | Month-wise category matrix | Month-wise Category Matrix | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done | Month bucket validation by created/invoice/closed date |
+| TR-008 | Pending upload visibility | Pending Upload Backlog table | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done | Missing posting doc rows sample audit |
+| TR-009 | Payment/pending settlement visibility | Pending settlement-focused alert and financial exposure | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Partial | Add dedicated settlement aging report |
+| TR-010 | 20% parts revenue inclusion | 20% Parts Revenue KPI in Financial tab | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done (v1) | 0.2 x parts total verification |
+| TR-011 | PV/EV separated analysis | Branch+Fuel wiring and portal-level filtering | src/pages/ReportsPage.tsx; src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done | Filter matrix test (ALL/PV/EV + Ajmer/Sitapura) |
+| TR-012 | Full easy navigation | Warranty tabs: Overview/Alerts/Financial/Operations | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done | UX walkthrough |
+| TR-013 | Reports sidebar warranty module | Warranty Reports category and report route | src/pages/reports/index.ts; src/pages/reports/warranty/index.ts; src/pages/ReportsPage.tsx | Done | Route navigation test |
+| TR-014 | Source upload groups and 7 report inputs | Warranty Import group + 7 sub-cards + 4 branch tabs | src/pages/ImportPage.tsx | Done | Upload smoke test all seven cards |
+| TR-015 | Upsert behavior (update existing + insert new) | branch+source_row_hash upsert strategy | src/pages/ImportPage.tsx; supabase/migrations/20260528155000_create_warranty_import_tables.sql | Done | Re-upload same file and compare counts |
+| TR-016 | Dedicated DB foundation for warranty sources | 7 warranty import tables + triggers + metadata | supabase/migrations/20260528155000_create_warranty_import_tables.sql | Done | Schema audit in full_database.sql |
+| TR-017 | Dashboard UI/UX aligned with audited reference | Color semantics + dense management layout | src/pages/reports/warranty/WarrantyOverviewReport.tsx | Done (v1 aligned) | Visual QA against audited sections |
+| TR-018 | Exact formula parity from source sheets | Explicit per-source metric formula map | docs/Implementation_plans/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md (planned), future code files | Pending | Signed formula sheet + unit checks |
+| TR-019 | Rejection corrective-action report | Dedicated root-cause + owner/action report | Future: src/pages/reports/warranty/* | Pending | Rejection reason to action mapping audit |
+| TR-020 | Invoice pending upload report | Dedicated report page with invoice/doc granularity | Future: src/pages/reports/warranty/* | Pending | Invoice status reconciliation |
+| TR-021 | Pending settlement report | Dedicated settlement aging report | Future: src/pages/reports/warranty/* | Pending | Approved-not-settled amount reconciliation |
+| TR-022 | Advisor-wise quality and model loss risk | Advisor/model deep-dive reports | Future: src/pages/reports/warranty/* | Pending | Advisor/model pivot validation |
+| TR-023 | Strict RBAC/RLS for 7 warranty tables | Security hardening phase | Future migration file | Deferred | Policy tests once phase starts |
+
+---
+
+## Phase Sign-Off Gates
+
+Use this for closure control per phase:
+
+1. Data correctness gate: computed totals reconcile with sampled source files.
+2. Filter wiring gate: Branch, Fuel, Filter By, Date Range behave as expected.
+3. UX gate: no clipped tables, clear hierarchy, quick drill path.
+4. Operations gate: alerts are actionable and not purely informational.
+5. Performance gate: dashboard loads within acceptable latency under current data volume.
 
 ---
 
