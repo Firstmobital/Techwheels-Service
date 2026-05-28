@@ -99,62 +99,88 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Try public download URL first
-    const publicDownloadUrl = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`
-    console.log('[drive-file-export] Attempting public download from Google Drive...')
+    // Try multiple download strategies
+    let buffer: ArrayBuffer | null = null
+    let contentType = 'application/octet-stream'
 
-    const driveRes = await fetch(publicDownloadUrl, {
+    // Strategy 1: Direct API download (requires auth, but most reliable)
+    console.log('[drive-file-export] Strategy 1: Trying Google Drive API with alt=media...')
+    const apiUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media&supportsAllDrives=true`
+    let apiRes = await fetch(apiUrl, {
       method: 'GET',
-      redirect: 'follow', // Follow redirect to actual download
       headers: {
-        'User-Agent': 'Mozilla/5.0', // Some servers block requests without User-Agent
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
     })
 
-    console.log('[drive-file-export] Public download response status:', driveRes.status)
-    console.log('[drive-file-export] Response content-type:', driveRes.headers.get('content-type'))
+    console.log('[drive-file-export] API response status:', apiRes.status)
+    console.log('[drive-file-export] API response content-type:', apiRes.headers.get('content-type'))
 
-    if (!driveRes.ok) {
-      console.warn('[drive-file-export] Public download failed, trying API endpoint...')
-      const apiUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?alt=media&supportsAllDrives=true`
-      const apiRes = await fetch(apiUrl, {
+    if (apiRes.ok && apiRes.headers.get('content-type')?.includes('image')) {
+      buffer = await apiRes.arrayBuffer()
+      contentType = apiRes.headers.get('content-type') || 'application/octet-stream'
+      console.log('[drive-file-export] ✓ Strategy 1 succeeded, size:', buffer.byteLength, 'bytes')
+    } else {
+      // Strategy 2: Public download URL with confirm parameter
+      console.log('[drive-file-export] Strategy 1 failed, trying Strategy 2: Public download with confirm parameter...')
+      const publicUrl = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}&confirm=t`
+      const publicRes = await fetch(publicUrl, {
         method: 'GET',
         headers: {
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
+        redirect: 'follow',
       })
-      
-      console.log('[drive-file-export] API response status:', apiRes.status)
-      console.log('[drive-file-export] API response content-type:', apiRes.headers.get('content-type'))
-      
-      if (!apiRes.ok) {
-        console.error('[drive-file-export] API fetch failed with status', apiRes.status)
-        const errText = await apiRes.text()
-        console.error('[drive-file-export] API error:', errText.substring(0, 200))
-        
-        return new Response(JSON.stringify({ error: `Failed to fetch file from Drive: ${apiRes.status}` }), {
-          status: 502,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      }
 
-      const buffer = await apiRes.arrayBuffer()
-      console.log('[drive-file-export] Successfully fetched from API, size:', buffer.byteLength, 'bytes')
-      
-      return new Response(buffer, {
-        status: 200,
-        headers: {
-          'Content-Type': apiRes.headers.get('content-type') || 'application/octet-stream',
-          'Cache-Control': 'public, max-age=86400',
-          'Access-Control-Allow-Origin': '*',
-        },
+      console.log('[drive-file-export] Public download response status:', publicRes.status)
+      console.log('[drive-file-export] Public download content-type:', publicRes.headers.get('content-type'))
+
+      if (publicRes.ok && publicRes.headers.get('content-type')?.includes('image')) {
+        buffer = await publicRes.arrayBuffer()
+        contentType = publicRes.headers.get('content-type') || 'image/jpeg'
+        console.log('[drive-file-export] ✓ Strategy 2 succeeded, size:', buffer.byteLength, 'bytes')
+      } else {
+        // Strategy 3: Alternate public URL without export parameter
+        console.log('[drive-file-export] Strategy 2 failed, trying Strategy 3: Alternate public URL...')
+        const altUrl = `https://drive.google.com/uc?id=${encodeURIComponent(driveFileId)}`
+        const altRes = await fetch(altUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+          redirect: 'follow',
+        })
+
+        console.log('[drive-file-export] Alt URL response status:', altRes.status)
+        console.log('[drive-file-export] Alt URL content-type:', altRes.headers.get('content-type'))
+
+        if (altRes.ok) {
+          buffer = await altRes.arrayBuffer()
+          contentType = altRes.headers.get('content-type') || 'image/jpeg'
+          
+          // Check if we got HTML (error page)
+          if (contentType.includes('text/html')) {
+            console.warn('[drive-file-export] Got HTML response, size:', buffer.byteLength)
+            buffer = null
+          } else {
+            console.log('[drive-file-export] ✓ Strategy 3 succeeded, size:', buffer.byteLength, 'bytes')
+          }
+        }
+      }
+    }
+
+    if (!buffer) {
+      console.error('[drive-file-export] All strategies failed to retrieve image data')
+      return new Response(JSON.stringify({ 
+        error: 'Failed to fetch file from Google Drive', 
+        driveFileId: driveFileId.substring(0, 10) + '...',
+        details: 'File may not be publicly accessible or permission denied'
+      }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    const buffer = await driveRes.arrayBuffer()
-    const contentType = driveRes.headers.get('content-type') || 'application/octet-stream'
-    console.log('[drive-file-export] Successfully fetched from public URL, size:', buffer.byteLength, 'bytes, type:', contentType)
-    
     return new Response(buffer, {
       status: 200,
       headers: {
