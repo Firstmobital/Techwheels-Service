@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
-**Last Updated:** 2026-05-27  
-**Total Active Plans:** 5
+**Last Updated:** 2026-05-28  
+**Total Active Plans:** 6
 **Mobile App Plans Added:** 2026-05-27
 
 ---
@@ -26,6 +26,7 @@
 | BODYSHOP-001 | Bodyshop Module End-to-End Workflow and Live Dashboard | 🔴 CRITICAL | 🔴 PENDING | Techwheels Product + Dev Team | 2026-05-22 | 2026-05-30 | 0% |
 | DRIVE-001 | Universal Drive Upload and Storage Offload | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-23 | 2026-05-24 | 0% |
 | MOBILE-001 | Techwheels Mobile App - Expo Implementation | 🟡 HIGH | 🟠 IN PROGRESS | Development Team | 2026-05-27 | 2026-06-10 | 45% |
+| MOBILE-005 | AutoDoc Mobile Parity with Mandatory GPS-Stamped Damage Photos | 🟡 HIGH | 🔴 PENDING | Techwheels Product + Mobile Dev Team | 2026-05-28 | 2026-06-05 | 0% |
 
 ---
 
@@ -80,6 +81,13 @@
   - Node.js 20.19.0+
   - 7-10 days development time
 - **Next Step:** Execute Phase 4 route validation matrix and close navigation gate
+
+### MOBILE-005: AutoDoc Mobile Parity with Mandatory GPS-Stamped Damage Photos
+- **File:** [MOBILE-005_AUTODOC_GPS_STAMP_PARITY_PLAN.md](MOBILE-005_AUTODOC_GPS_STAMP_PARITY_PLAN.md)
+- **Risk Level:** 🟡 MEDIUM (camera/location permission dependency + image stamping runtime reliability)
+- **Status:** Pending kickoff
+- **Latest Update:** 2026-05-28 - Dedicated implementation plan created covering mobile AutoDoc stage-photo parity with mandatory GPS card stamping and DB metadata persistence.
+- **Next Step:** Approve policy decisions (camera-only vs gallery allowed, strict block behavior), then start Phase 0 and Phase 1 tasks.
 
 ---
 
