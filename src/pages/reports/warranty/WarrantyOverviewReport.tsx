@@ -124,10 +124,6 @@ function toNumber(value: unknown): number {
   return Number.isFinite(num) ? num : 0
 }
 
-function toText(value: unknown): string {
-  return String(value ?? '').trim()
-}
-
 function extractByPreferredKeys(row: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
     const exact = row[key]
