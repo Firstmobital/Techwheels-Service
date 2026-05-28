@@ -7,10 +7,39 @@ import type { GpsMetadata } from './gpsUtils'
 import { formatGpsStampText } from './gpsUtils'
 
 export interface StampOptions {
-  cardHeight?: number // Height of bottom card in pixels, default: 120
-  backgroundColor?: string // RGBA for card background, default: 'rgba(0, 0, 0, 0.8)'
+  cardHeight?: number // Preferred overlay card height in pixels, default: 150
+  backgroundColor?: string // RGBA for card background, default: 'rgba(0, 0, 0, 0.56)'
   textColor?: string // Text color, default: 'white'
-  fontSize?: number // Base font size in pixels, default: 14
+  fontSize?: number // Base font size in pixels, default: 24
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const r = Math.min(radius, width / 2, height / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + width, y, x + width, y + height, r)
+  ctx.arcTo(x + width, y + height, x, y + height, r)
+  ctx.arcTo(x, y + height, x, y, r)
+  ctx.arcTo(x, y, x + width, y, r)
+  ctx.closePath()
+}
+
+function fitLine(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text
+
+  const ellipsis = '...'
+  let trimmed = text
+  while (trimmed.length > 0 && ctx.measureText(trimmed + ellipsis).width > maxWidth) {
+    trimmed = trimmed.slice(0, -1)
+  }
+  return trimmed.length > 0 ? trimmed + ellipsis : ellipsis
 }
 
 /**
@@ -28,10 +57,10 @@ export async function stampImageWithGps(
   options: StampOptions = {}
 ): Promise<Blob> {
   const {
-    cardHeight = 120,
-    backgroundColor = 'rgba(0, 0, 0, 0.8)',
+    cardHeight = 150,
+    backgroundColor = 'rgba(0, 0, 0, 0.56)',
     textColor = 'white',
-    fontSize = 14,
+    fontSize = 24,
   } = options
 
   return new Promise((resolve, reject) => {
@@ -43,7 +72,8 @@ export async function stampImageWithGps(
         const img = new Image()
 
         img.onload = () => {
-          // Create canvas with stamped area
+          // Create canvas matching original image size.
+          // The location card is rendered as an in-image translucent overlay.
           const canvas = document.createElement('canvas')
           const ctx = canvas.getContext('2d')
 
@@ -52,44 +82,98 @@ export async function stampImageWithGps(
             return
           }
 
-          // Set canvas size to match image + card height
+          // Keep dimensions unchanged to preserve framing.
           canvas.width = img.width
-          canvas.height = img.height + cardHeight
+          canvas.height = img.height
 
           // Draw original image
           ctx.drawImage(img, 0, 0)
 
-          // Draw semi-transparent background card
-          ctx.fillStyle = backgroundColor
-          ctx.fillRect(0, img.height, img.width, cardHeight)
-
-          // Add border/accent line
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
-          ctx.lineWidth = 2
-          ctx.beginPath()
-          ctx.moveTo(0, img.height)
-          ctx.lineTo(img.width, img.height)
-          ctx.stroke()
-
           // Prepare text
           const stampText = formatGpsStampText(metadata)
+          const lines = [stampText.line1, stampText.line2, stampText.line3, stampText.line4]
+
+          // Add a bottom gradient for readability on bright photos.
+          const gradientHeight = Math.max(220, Math.round(canvas.height * 0.28))
+          const gradientTop = canvas.height - gradientHeight
+          const gradient = ctx.createLinearGradient(0, gradientTop, 0, canvas.height)
+          gradient.addColorStop(0, 'rgba(0, 0, 0, 0)')
+          gradient.addColorStop(1, 'rgba(0, 0, 0, 0.38)')
+          ctx.fillStyle = gradient
+          ctx.fillRect(0, gradientTop, canvas.width, gradientHeight)
+
+          // Responsive overlay card sizing.
+          const cardWidth = Math.max(340, Math.min(Math.round(canvas.width * 0.72), canvas.width - 32))
+          const cardPaddingX = Math.max(14, Math.round(cardWidth * 0.03))
+          const cardPaddingY = Math.max(10, Math.round(canvas.height * 0.012))
+
+          const titleSize = Math.max(18, Math.min(Math.round(canvas.width * 0.04), fontSize + 4))
+          const bodySize = Math.max(13, Math.min(Math.round(canvas.width * 0.028), fontSize))
+          const titleLineHeight = Math.round(titleSize * 1.2)
+          const bodyLineHeight = Math.round(bodySize * 1.2)
+          const badgeSize = Math.max(11, Math.round(bodySize * 0.72))
+
+          const textBlockHeight = titleLineHeight + bodyLineHeight * 3
+          const badgeHeight = Math.round(badgeSize * 1.7)
+          const computedCardHeight = Math.max(
+            cardHeight,
+            cardPaddingY * 2 + textBlockHeight + badgeHeight + 8,
+          )
+
+          const cardX = 16
+          const cardY = canvas.height - computedCardHeight - 16
+          const cardRadius = Math.max(10, Math.round(canvas.width * 0.012))
+
+          // Draw translucent card background.
+          drawRoundedRect(ctx, cardX, cardY, cardWidth, computedCardHeight, cardRadius)
+          ctx.fillStyle = backgroundColor
+          ctx.fill()
+
+          // Subtle border for contrast.
+          drawRoundedRect(ctx, cardX, cardY, cardWidth, computedCardHeight, cardRadius)
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)'
+          ctx.lineWidth = 1.25
+          ctx.stroke()
+
+          // Small location badge line.
+          const badgeX = cardX + cardPaddingX
+          const badgeY = cardY + cardPaddingY
+          ctx.font = `600 ${badgeSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+          const badgeText = 'LOCATION VERIFIED'
+          const badgeTextWidth = ctx.measureText(badgeText).width
+          const badgeWidth = badgeTextWidth + 16
+          drawRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, Math.round(badgeHeight / 2))
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.16)'
+          ctx.fill()
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(badgeText, badgeX + 8, badgeY + badgeHeight / 2)
 
           // Configure text
           ctx.fillStyle = textColor
-          ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.42)'
+          ctx.shadowBlur = 4
           ctx.textBaseline = 'top'
 
-          // Calculate layout with safe margins
-          const marginLeft = 12
-          const marginTop = 8
-          const lineHeight = fontSize + 3
+          // Calculate text layout.
+          const textX = cardX + cardPaddingX
+          const textY = badgeY + badgeHeight + 8
+          const textMaxWidth = cardWidth - cardPaddingX * 2
 
-          // Draw text lines
-          const lines = [stampText.line1, stampText.line2, stampText.line3, stampText.line4]
-          lines.forEach((line, index) => {
-            const y = img.height + marginTop + index * lineHeight
-            ctx.fillText(line, marginLeft, y)
+          ctx.font = `700 ${titleSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+          const line1 = fitLine(ctx, lines[0], textMaxWidth)
+          ctx.fillText(line1, textX, textY)
+
+          ctx.font = `500 ${bodySize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+          lines.slice(1).forEach((line, index) => {
+            const y = textY + titleLineHeight + index * bodyLineHeight
+            const fitted = fitLine(ctx, line, textMaxWidth)
+            ctx.fillText(fitted, textX, y)
           })
+
+          // Reset shadow so it does not affect future drawing operations.
+          ctx.shadowBlur = 0
+          ctx.shadowColor = 'transparent'
 
           // Convert canvas to blob
           canvas.toBlob(

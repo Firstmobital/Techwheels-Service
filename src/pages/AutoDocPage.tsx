@@ -106,7 +106,7 @@ interface DamagePhotoItem {
   stage: DamageStage
   photoType: PhotoType
   url: string
-  driveUrl?: string
+  driveUrl: string | undefined
   name: string
   uploadedAtLabel: string
   storagePath: string
@@ -1368,7 +1368,7 @@ export default function AutoDocPage() {
           storagePath,
         }
       })
-      .filter((photo): photo is DamagePhotoItem => Boolean(photo))
+      .filter((photo): photo is DamagePhotoItem => photo !== null)
 
     setDamagePhotos(mapped)
   }, [])
