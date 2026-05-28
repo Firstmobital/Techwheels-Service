@@ -60,10 +60,16 @@ interface PanelPhoto {
   id:            string
   panel_id:      string
   photo_type:    'defect' | 'primer' | 'paint'
-  repair_stage:  'pre-repair' | 'post-repair'
+  repair_stage:  'pre-repair' | 'under-repair' | 'post-repair'
   storage_path:  string
   gps_city:      string | null
   captured_at:   string | null
+}
+
+interface Document {
+  id:            string
+  doc_type:      string
+  storage_path:  string
 }
 
 interface EstimateRow {
@@ -108,10 +114,6 @@ async function toDataURL(storagePath: string): Promise<string | null> {
   }
 }
 
-function photoTypeLabel(t: 'defect' | 'primer' | 'paint'): string {
-  return { defect: 'DEFECT PHOTO', primer: 'PRIMER PHOTO', paint: 'FINAL PAINT PHOTO' }[t]
-}
-
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchAll(jobCardId: string) {
@@ -146,7 +148,7 @@ async function fetchAll(jobCardId: string) {
     return { summary: result.jc, estRows: result.rows }
   })()
 
-  const [estimateData, panelsRes, photosRes] = await Promise.all([
+  const [estimateData, panelsRes, photosRes, docsRes] = await Promise.all([
     estimateDataPromise,
 
     supabase
@@ -160,6 +162,13 @@ async function fetchAll(jobCardId: string) {
       .select('id, panel_id, photo_type, repair_stage, storage_path, gps_city, captured_at')
       .eq('job_card_id', jobCardId)
       .order('captured_at'),
+
+    supabase
+      .from('documents')
+      .select('id, doc_type, storage_path')
+      .eq('job_card_id', jobCardId)
+      .eq('doc_type', 'car_image')
+      .limit(1),
   ])
 
   if (!estimateData.summary)
@@ -168,12 +177,15 @@ async function fetchAll(jobCardId: string) {
     throw new Error(`Panels fetch failed: ${panelsRes.error.message}`)
   if (photosRes.error)
     throw new Error(`Photos fetch failed: ${photosRes.error.message}`)
+  if (docsRes.error)
+    throw new Error(`Documents fetch failed: ${docsRes.error.message}`)
 
   return {
     summary:  estimateData.summary as JobSummary,
     panels:   (panelsRes.data  ?? []) as Panel[],
     photos:   (photosRes.data  ?? []) as PanelPhoto[],
     estRows:  (estimateData.estRows ?? []) as EstimateRow[],
+    carImageDoc: (docsRes.data?.[0] ?? null) as Document | null,
   }
 }
 
@@ -295,11 +307,19 @@ const TITLE_H  = 0.68
 const STRIPE_H = 0.06
 const FOOT_H   = 0.42
 
+function stageLabel(stage: 'pre-repair' | 'under-repair' | 'post-repair'): string {
+  return {
+    'pre-repair': 'PRE-REPAIR',
+    'under-repair': 'UNDER-REPAIR',
+    'post-repair': 'POST-REPAIR',
+  }[stage]
+}
+
 function addPhotoSlide(
   prs:        PptxGenJS,
   summary:    JobSummary,
   panelName:  string,
-  pType:      'defect' | 'primer' | 'paint',
+  repairStage: 'pre-repair' | 'under-repair' | 'post-repair',
   dataURL:    string | null,
   gpsCity:    string | null,
   capturedAt: string | null,
@@ -316,9 +336,7 @@ function addPhotoSlide(
     x: 0, y: 0, w: W, h: TITLE_H, fill: { color: NAVY },
   })
 
-  const titleText = pType === 'defect'
-    ? panelName.toUpperCase()
-    : `${panelName.toUpperCase()}  —  ${photoTypeLabel(pType)}`
+  const titleText = `${panelName.toUpperCase()}  —  ${stageLabel(repairStage)}`
 
   slide.addText(titleText, {
     x: 0.25, y: 0, w: W - 0.5, h: TITLE_H,
@@ -565,19 +583,24 @@ export async function generateRepairPPT(
   options?: { download?: boolean; fileName?: string },
 ): Promise<Blob> {
   // 1. Fetch all Supabase data in parallel
-  const { summary, panels, photos, estRows } = await fetchAll(jobCardId)
+  const { summary, panels, photos, estRows, carImageDoc } = await fetchAll(jobCardId)
 
-  // 2. Decide which photo types to render based on repair stage
-  // Pre-repair: defect & primer photos only, from pre-repair stage
-  // Post-repair: all photo types, from post-repair stage
-  const allowedTypes: Array<'defect' | 'primer' | 'paint'> =
-    type === 'pre-repair' ? ['defect', 'primer'] : ['defect', 'primer', 'paint']
+  // 2. Download car image for cover slide
+  const carImageDataURL = carImageDoc ? (await toDataURL(carImageDoc.storage_path)) : null
 
+  // 3. Organize photos by repair stage and photo type
+  const stageOrder: Array<'pre-repair' | 'under-repair' | 'post-repair'> =
+    type === 'pre-repair'
+      ? ['pre-repair']
+      : ['pre-repair', 'under-repair', 'post-repair']
+
+  const TYPE_ORDER: Array<'defect' | 'primer' | 'paint'> = ['defect', 'primer', 'paint']
+
+  // 4. Collect all photos to download (skip download for video/non-image docs)
   const renderPhotos = photos.filter(
-    p => allowedTypes.includes(p.photo_type) && p.repair_stage === type,
+    p => stageOrder.includes(p.repair_stage),
   )
 
-  // 3. Download all photos concurrently
   const imgMap = new Map<string, string | null>()
   await Promise.all(
     renderPhotos.map(async (p) => {
@@ -585,7 +608,7 @@ export async function generateRepairPPT(
     }),
   )
 
-  // 4. Build the presentation
+  // 5. Build the presentation
   const prs = new PptxGenJS()
   prs.layout  = 'LAYOUT_16x9'
   prs.author  = summary.dealer_name ?? 'Tata Motors Dealership'
@@ -593,32 +616,27 @@ export async function generateRepairPPT(
   prs.subject = `Warranty Repair — ${summary.reg_number}`
   prs.title   = 'RUSTING VEHICLE DETAIL'
 
-  // Get first defect photo for cover slide (vehicle front image)
-  const firstDefectPhoto = renderPhotos.find(p => p.photo_type === 'defect')
-  const vehiclePhotoDataURL = firstDefectPhoto ? (imgMap.get(firstDefectPhoto.id) ?? null) : null
+  // Slide 1 — Cover with Car Image (GPS-stamped vehicle photo)
+  addCoverSlide(prs, summary, type, carImageDataURL)
 
-  // Slide 1 — Cover with vehicle front image
-  addCoverSlide(prs, summary, type, vehiclePhotoDataURL)
-
-  // Slides 2…N — Photos grouped by panel, ordered defect → primer → paint
-  const TYPE_ORDER: Array<'defect' | 'primer' | 'paint'> = ['defect', 'primer', 'paint']
-
-  for (const panel of panels) {
-    for (const pType of TYPE_ORDER) {
-      if (!allowedTypes.includes(pType)) continue
-      const panelPhotos = renderPhotos.filter(
-        p => p.panel_id === panel.id && p.photo_type === pType,
-      )
-      for (const photo of panelPhotos) {
-        addPhotoSlide(
-          prs,
-          summary,
-          panel.panel_name,
-          photo.photo_type,
-          imgMap.get(photo.id) ?? null,
-          photo.gps_city,
-          photo.captured_at,
+  // Slides 2…N — Photos organized by repair stage, then by panel, then by photo type
+  for (const stage of stageOrder) {
+    for (const panel of panels) {
+      for (const pType of TYPE_ORDER) {
+        const panelPhotos = renderPhotos.filter(
+          p => p.panel_id === panel.id && p.photo_type === pType && p.repair_stage === stage,
         )
+        for (const photo of panelPhotos) {
+          addPhotoSlide(
+            prs,
+            summary,
+            panel.panel_name,
+            photo.repair_stage,
+            imgMap.get(photo.id) ?? null,
+            photo.gps_city,
+            photo.captured_at,
+          )
+        }
       }
     }
   }
