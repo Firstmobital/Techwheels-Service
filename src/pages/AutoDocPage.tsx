@@ -2055,10 +2055,12 @@ export default function AutoDocPage() {
 
       const selectedKeySet = new Set(selected.map((name) => normalizeText(name)))
       const existingByKey = new Map<string, Array<{ id: string; name: string }>>()
+      const allPanelIds: string[] = []
 
       existingRes.data.forEach((panel) => {
         const name = panel.panel_name?.trim()
         if (!name) return
+        allPanelIds.push(panel.id)
         const key = normalizeText(name)
         const list = existingByKey.get(key) ?? []
         list.push({ id: panel.id, name })
@@ -2068,6 +2070,7 @@ export default function AutoDocPage() {
       const nextPanelIdByName: Record<string, string> = {}
       const nextPanelNameById: Record<string, string> = {}
       const removedPanelNames: string[] = []
+      const panelIdsToDelete: string[] = []
 
       for (const [key, panelsForKey] of existingByKey.entries()) {
         const [canonical, ...duplicates] = panelsForKey
@@ -2079,12 +2082,7 @@ export default function AutoDocPage() {
             showToast(`Unable to merge duplicate panel photos for "${canonical.name}": ${moveRes.error}`, false)
             return false
           }
-
-          const deleteDupRes = await deletePanel(dup.id)
-          if (deleteDupRes.error) {
-            showToast(`Unable to remove duplicate panel "${dup.name}": ${deleteDupRes.error}`, false)
-            return false
-          }
+          panelIdsToDelete.push(dup.id)
         }
 
         if (selectedKeySet.has(key)) {
@@ -2094,16 +2092,27 @@ export default function AutoDocPage() {
         }
 
         removedPanelNames.push(canonical.name)
+        panelIdsToDelete.push(canonical.id)
 
         const deletePhotosRes = await deletePanelPhotosByPanelId(canonical.id)
         if (deletePhotosRes.error) {
-          showToast(`Unable to remove photos for panel "${canonical.name}": ${deletePhotosRes.error}`, false)
-          return false
+          console.error('[autodoc-panel-debug] Failed to delete photos for deselected panel', {
+            canonical,
+            error: deletePhotosRes.error,
+          })
         }
+      }
 
-        const deleteRes = await deletePanel(canonical.id)
-        if (deleteRes.error) {
-          showToast(`Unable to remove panel "${canonical.name}": ${deleteRes.error}`, false)
+      if (panelIdsToDelete.length > 0) {
+        console.log('[autodoc-panel-debug] Bulk deleting panel IDs', { panelIdsToDelete })
+        const { error: bulkDeleteError } = await supabase
+          .from('panels')
+          .delete()
+          .in('id', panelIdsToDelete)
+
+        if (bulkDeleteError) {
+          showToast(`Unable to remove panels: ${bulkDeleteError.message}`, false)
+          console.error('[autodoc-panel-debug] Bulk panel delete failed', { bulkDeleteError })
           return false
         }
       }
