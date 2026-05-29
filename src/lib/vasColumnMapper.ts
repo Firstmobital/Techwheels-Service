@@ -137,75 +137,120 @@ export function parseDatetime(
       throw new Error(`Invalid Excel serial datetime: "${trimmed}"`);
     }
 
-    // Match DD/MM/YY[YY] HH:MM[:SS] [AM/PM] format OR YY-MM-DD HH:MM[:SS] format
-    let match = trimmed.match(
-      /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?$/
+    const normalizeTwoDigitYear = (year: number): number => {
+      return year > 50 ? 1900 + year : 2000 + year;
+    };
+
+    const buildIsoFromParts = (
+      year: number,
+      month: number,
+      day: number,
+      parsedHour: number,
+      minute: number,
+      second: number,
+      meridiem?: string,
+    ): string => {
+      let hour = parsedHour;
+
+      if (meridiem) {
+        if (parsedHour < 1 || parsedHour > 12) {
+          throw new Error(`Invalid 12-hour time hour: ${parsedHour}`);
+        }
+
+        const upperMeridiem = meridiem.toUpperCase();
+        if (upperMeridiem === 'AM') {
+          hour = parsedHour === 12 ? 0 : parsedHour;
+        } else {
+          hour = parsedHour === 12 ? 12 : parsedHour + 12;
+        }
+      }
+
+      // Validate ranges
+      if (day < 1 || day > 31) throw new Error(`Invalid day: ${day}`);
+      if (month < 1 || month > 12) throw new Error(`Invalid month: ${month}`);
+      if (hour < 0 || hour > 23) throw new Error(`Invalid hour: ${hour}`);
+      if (minute < 0 || minute > 59) throw new Error(`Invalid minute: ${minute}`);
+      if (second < 0 || second > 59) throw new Error(`Invalid second: ${second}`);
+
+      const date = new Date(year, month - 1, day, hour, minute, second);
+
+      if (
+        date.getDate() !== day ||
+        date.getMonth() !== month - 1 ||
+        date.getFullYear() !== year
+      ) {
+        throw new Error(`Invalid date: ${day}/${month}/${year}`);
+      }
+
+      return date.toISOString();
+    };
+
+    // Preferred: Indian-style DD/MM/YY[YY] HH:MM[:SS] [AM/PM]
+    const dmyMatch = trimmed.match(
+      /^(\d{1,2})([\/:\-])(\d{1,2})\2(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?$/,
     );
-    
-    // If no slash format match, try dash format: YY-MM-DD HH:MM[:SS]
-    if (!match) {
-      match = trimmed.match(
-        /^(\d{2})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/
-      );
-      if (match) {
-        // Convert YY-MM-DD to DD/MM/YY format for consistent parsing
-        const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr] = match;
-        const convertedFormat = `${dayStr}/${monthStr}/${yearStr} ${hourStr}:${minuteStr}${secondStr ? `:${secondStr}` : ''}`;
-        // Re-parse with the standard format
-        match = convertedFormat.match(
-          /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/
-        );
+
+    if (dmyMatch) {
+      const [, dayStr, , monthStr, yearStr, hourStr, minuteStr, secondStr, meridiem] = dmyMatch;
+      const day = parseInt(dayStr, 10);
+      const month = parseInt(monthStr, 10);
+      const yearRaw = parseInt(yearStr, 10);
+      const year = yearStr.length === 2 ? normalizeTwoDigitYear(yearRaw) : yearRaw;
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr, 10);
+      const second = secondStr == null ? 0 : parseInt(secondStr, 10);
+
+      return buildIsoFromParts(year, month, day, hour, minute, second, meridiem);
+    }
+
+    // ISO-like YYYY-MM-DD HH:MM[:SS]
+    const ymdMatch = trimmed.match(
+      /^(\d{4})([\/:\-])(\d{1,2})\2(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?$/,
+    );
+
+    if (ymdMatch) {
+      const [, yearStr, , monthStr, dayStr, hourStr, minuteStr, secondStr, meridiem] = ymdMatch;
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+      const day = parseInt(dayStr, 10);
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr, 10);
+      const second = secondStr == null ? 0 : parseInt(secondStr, 10);
+
+      return buildIsoFromParts(year, month, day, hour, minute, second, meridiem);
+    }
+
+    // Backward-compat fallback for ambiguous YY-MM-DD HH:MM[:SS]
+    const ymdShortMatch = trimmed.match(
+      /^(\d{2})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([AaPp][Mm]))?$/,
+    );
+
+    if (ymdShortMatch) {
+      const [, yStr, monthStr, dayStr, hourStr, minuteStr, secondStr, meridiem] = ymdShortMatch;
+      const yy = parseInt(yStr, 10);
+      const month = parseInt(monthStr, 10);
+      const day = parseInt(dayStr, 10);
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr, 10);
+      const second = secondStr == null ? 0 : parseInt(secondStr, 10);
+
+      const currentYear = new Date().getFullYear();
+      const asDayMonthYear = normalizeTwoDigitYear(day);
+      const asYearMonthDay = normalizeTwoDigitYear(yy);
+
+      const dayMonthYearDistance = Math.abs(asDayMonthYear - currentYear);
+      const yearMonthDayDistance = Math.abs(asYearMonthDay - currentYear);
+
+      if (dayMonthYearDistance < yearMonthDayDistance) {
+        return buildIsoFromParts(asDayMonthYear, month, yy, hour, minute, second, meridiem);
       }
-    }
-    
-    if (!match) {
-      throw new Error(
-        `Invalid format. Expected DD/MM/YY[YY] HH:MM[:SS] or YY-MM-DD HH:MM[:SS], got: "${trimmed}"`
-      );
+
+      return buildIsoFromParts(asYearMonthDay, month, day, hour, minute, second, meridiem);
     }
 
-    const [, dayStr, monthStr, yearStr, hourStr, minuteStr, secondStr, meridiem] = match;
-    const day = parseInt(dayStr, 10);
-    const month = parseInt(monthStr, 10);
-    const year = yearStr.length === 2 ? 2000 + parseInt(yearStr, 10) : parseInt(yearStr, 10);
-    const parsedHour = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    const second = secondStr == null ? 0 : parseInt(secondStr, 10);
-
-    let hour = parsedHour;
-    if (meridiem) {
-      if (parsedHour < 1 || parsedHour > 12) {
-        throw new Error(`Invalid 12-hour time hour: ${parsedHour}`);
-      }
-
-      const upperMeridiem = meridiem.toUpperCase();
-      if (upperMeridiem === 'AM') {
-        hour = parsedHour === 12 ? 0 : parsedHour;
-      } else {
-        hour = parsedHour === 12 ? 12 : parsedHour + 12;
-      }
-    }
-
-    // Validate ranges
-    if (day < 1 || day > 31) throw new Error(`Invalid day: ${day}`);
-    if (month < 1 || month > 12) throw new Error(`Invalid month: ${month}`);
-    if (hour < 0 || hour > 23) throw new Error(`Invalid hour: ${hour}`);
-    if (minute < 0 || minute > 59) throw new Error(`Invalid minute: ${minute}`);
-    if (second < 0 || second > 59) throw new Error(`Invalid second: ${second}`);
-
-    // Create date and convert to ISO string
-    const date = new Date(year, month - 1, day, hour, minute, second);
-
-    // Verify the date is valid (e.g., Feb 30 is invalid)
-    if (
-      date.getDate() !== day ||
-      date.getMonth() !== month - 1 ||
-      date.getFullYear() !== year
-    ) {
-      throw new Error(`Invalid date: ${day}/${month}/${year}`);
-    }
-
-    return date.toISOString();
+    throw new Error(
+      `Invalid format. Expected DD/MM/YY[YY] HH:MM[:SS], DD-MM-YY[YY] HH:MM[:SS], or YYYY-MM-DD HH:MM[:SS], got: "${trimmed}"`
+    );
   } catch (err) {
     throw new Error(
       `Failed to parse ${fieldName}: "${value}" - ${err instanceof Error ? err.message : String(err)}`

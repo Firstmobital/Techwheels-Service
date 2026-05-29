@@ -926,13 +926,22 @@ async function fetchAllVasRowsWithoutFuelFilter(
   selectColumns: string,
   filters: JobCardClosedFetchFilters,
 ): Promise<Record<string, unknown>[]> {
+  const bounds = getDateRangeBounds(filters.dateFilter)
   let from = 0
   const allRows: Record<string, unknown>[] = []
+
+  // Add formatted date column if jc_closed_date_time is requested
+  const formattedSelectColumns = selectColumns.includes('jc_closed_date_time')
+    ? selectColumns.replace(
+        'jc_closed_date_time',
+        "jc_closed_date_time, TO_CHAR(jc_closed_date_time, 'DD-MM-YYYY HH24:MI:SS') as jc_closed_date_formatted",
+      )
+    : selectColumns
 
   while (true) {
     let query = supabase
       .from('service_vas_jc_data')
-      .select(selectColumns)
+      .select(formattedSelectColumns)
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
     query = applyBranchFilterToQuery(query, filters.branch)
@@ -945,10 +954,9 @@ async function fetchAllVasRowsWithoutFuelFilter(
       query = query.eq('sr_type', filters.serviceType)
     }
 
-    const bounds = getDateRangeBounds(filters.dateFilter)
-    query = applyDateFilterToQuery(query, bounds, {
-      closedDateField: 'jc_closed_date_time',
-    })
+    if (bounds) {
+      query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
+    }
 
     const { data, error } = await query
 
@@ -1842,8 +1850,8 @@ export async function getVasRevenueReport(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<VasRevenueReportData> {
-  const filteredRows = await fetchVasRowsWithEmployeeData(
-    'branch, sr_type, net_price, job_value',
+  const filteredRows = await fetchAllVasRowsWithoutFuelFilter(
+    'branch, sr_type, net_price, job_card_number',
     {
       branch,
       dateFilter,
@@ -1865,31 +1873,33 @@ export async function getVasRevenueReport(
     const typedRow = row as {
       sr_type?: unknown
       net_price?: unknown
-      job_value?: unknown
+      job_card_number?: unknown
     }
 
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const key = serviceTypeGroupKey(serviceType)
-    const jobValue = parseRevenue(typedRow.job_value)
     const netPrice = parseRevenue(typedRow.net_price)
-    // Use labour value first for VAS revenue; fallback to net price when labour is blank/zero.
-    // Count every row as-is so duplicate job cards are fully included in totals.
-    const revenue = jobValue > 0 ? jobValue : netPrice
+    const revenue = netPrice
+    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
 
     totalVasRevenue += revenue
-    totalJobs += 1
+    if (jobCardNumber) {
+      totalJobs += 1
+    }
 
     const existing = grouped.get(key)
     if (existing) {
       existing.totalVasRevenue += revenue
-      existing.jobCount += 1
+      if (jobCardNumber) {
+        existing.jobCount += 1
+      }
       continue
     }
 
     grouped.set(key, {
       serviceType,
       totalVasRevenue: revenue,
-      jobCount: 1,
+      jobCount: jobCardNumber ? 1 : 0,
     })
   }
 

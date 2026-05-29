@@ -11,7 +11,6 @@ import {
   getServiceTypeCounts,
 } from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
-import VasRevenueDataCard from './reports/labour-revenue/VasRevenueDataCard'
 import {
   getReportById,
   getReportsByCategory,
@@ -88,10 +87,12 @@ export default function ReportsPage() {
   const isManpowerReportSelected = selectedReport?.id === 'manpower-wise-labour-revenue'
   const isServiceTypeWiseReportSelected = selectedReport?.id === 'service-type-labour-revenue'
   const isBranchLabourRevenueReportSelected = selectedReport?.id === 'branch-labour-revenue'
+  const isVasRevenueReportSelected = selectedReport?.id === 'vas-revenue-report'
   const shouldShowServiceTypeFilter =
     isManpowerReportSelected ||
     isServiceTypeWiseReportSelected ||
-    isBranchLabourRevenueReportSelected
+    isBranchLabourRevenueReportSelected ||
+    isVasRevenueReportSelected
 
   const canApplyFuelTypeFilter =
     branch === 'Sitapura' ||
@@ -407,13 +408,6 @@ export default function ReportsPage() {
           </div>
         ) : (
           <>
-            {resolvedCategoryId === 'labour-revenue' && (
-              <VasRevenueDataCard
-                branch={effectiveBranchFilter}
-                dateFilter={dateFilter}
-              />
-            )}
-
             {selectedReport ? (
               <selectedReport.Component
                 branch={effectiveBranchFilter}

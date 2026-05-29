@@ -201,14 +201,20 @@ function parseTimestampValue(value: unknown, fieldName: string): string | null {
     return toIsoFromParts(`${y}-${m}-${d}`, `${hh}:${mm}:${ss}`)
   }
 
-  // Handle DD/MM/YY HH:MM or DD/MM/YYYY HH:MM format (Indian date format)
+  // Handle DD/MM/YY, DD/MM/YYYY, DD:MM:YY, DD:MM:YYYY with optional time (Indian format)
   // Also handle variable-length hour/minute (H:MM, H:M, HH:MM, etc.)
-  const ddmmyyHms = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+  const ddmmyyHms = raw.match(/^([0-9]{1,2})([/:])([0-9]{1,2})\2([0-9]{2,4})(?:\s+([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?)?$/)
   if (ddmmyyHms) {
-    const [, d, m, y, hh = '00', mm = '00', ss = '00'] = ddmmyyHms
-    const yearNum = parseInt(y, 10)
-    const yearStr = y.length === 2 ? (yearNum > 50 ? `19${y}` : `20${y}`) : y
-    return toIsoFromParts(`${yearStr}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`, `${hh.padStart(2, '0')}:${mm}:${ss}`)
+    const [, dayStr, , monthStr, yearStr, hhStr = '00', mmStr = '00', ssStr = '00'] = ddmmyyHms
+    const day = dayStr.padStart(2, '0')
+    const month = monthStr.padStart(2, '0')
+    const year = yearStr.length === 2 
+      ? (parseInt(yearStr, 10) > 50 ? `19${yearStr}` : `20${yearStr}`)
+      : yearStr
+    const hh = hhStr.padStart(2, '0')
+    const mm = mmStr.padStart(2, '0')
+    const ss = ssStr.padStart(2, '0')
+    return toIsoFromParts(`${year}-${month}-${day}`, `${hh}:${mm}:${ss}`)
   }
 
   throw new Error(`Invalid datetime value for ${fieldName}: "${raw}"`)
@@ -242,13 +248,16 @@ function parseDateValue(value: unknown, fieldName: string): string | null {
     return parsed.toISOString().slice(0, 10)
   }
 
-  // Handle DD/MM/YY or DD/MM/YYYY format (Indian date format)
-  const ddmmyy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  // Handle DD/MM/YY, DD/MM/YYYY, DD:MM:YY or DD:MM:YYYY format (Indian date format)
+  const ddmmyy = raw.match(/^([0-9]{1,2})([/:])([0-9]{1,2})\2([0-9]{2,4})$/)
   if (ddmmyy) {
-    const [, d, m, y] = ddmmyy
-    const yearNum = parseInt(y, 10)
-    const yearStr = y.length === 2 ? (yearNum > 50 ? `19${y}` : `20${y}`) : y
-    const isoDate = `${yearStr}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+    const [, dayStr, , monthStr, yearStr] = ddmmyy
+    const day = dayStr.padStart(2, '0')
+    const month = monthStr.padStart(2, '0')
+    const year = yearStr.length === 2 
+      ? (parseInt(yearStr, 10) > 50 ? `19${yearStr}` : `20${yearStr}`)
+      : yearStr
+    const isoDate = `${year}-${month}-${day}`
     // Validate the date
     const dateObj = new Date(`${isoDate}T00:00:00`)
     if (!Number.isNaN(dateObj.getTime())) {
