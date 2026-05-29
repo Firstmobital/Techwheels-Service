@@ -212,21 +212,10 @@ export default function ServiceTypeLabourRevenueReport({
             <p className="mt-1 text-2xl font-semibold text-amber-900">{totals.serviceTypes.toLocaleString()}</p>
           </div>
           <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Labour & VAS Snapshot</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <div>
-                <p className="text-[11px] text-cyan-700">Total Labour Revenue</p>
-                <p className="text-lg font-semibold text-cyan-900">
-                  Rs. {totals.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-cyan-700">Total VAS Revenue</p>
-                <p className="text-lg font-semibold text-cyan-900">
-                  Rs. {totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                </p>
-              </div>
-            </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Total Labour + VAS Revenue</p>
+            <p className="mt-1 text-2xl font-semibold text-cyan-900">
+              Rs. {(totals.totalLabourRevenue + totalVasRevenue).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </p>
           </div>
         </div>
       </div>
