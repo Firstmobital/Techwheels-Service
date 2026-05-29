@@ -11,10 +11,11 @@ import {
 } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import { Stack, useRouter } from 'expo-router'
-import { createJobCard, resolveRegNumberFromReference } from '../../lib/api/jobCards'
+import { createJobCard, updateJobCard, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
 import { fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
 import { fetchVehicleFromRcLookup, type RtoCacheLookupRow } from '../../lib/api/rcLookup'
+import { logEvent } from '../../utils/logger'
 
 const DEFAULT_CLAIM_TYPE_OPTIONS = ['Body & Paint', 'Warranty', 'Insurance', 'Goodwill']
 const DEFAULT_BP_CITY_CATEGORY = 'A'
@@ -127,6 +128,7 @@ export default function CreateJobCardScreen() {
   const [modelOptions, setModelOptions] = useState<string[]>([])
   const [paintTypeOptions, setPaintTypeOptions] = useState<string[]>([])
   const [cityCategoryOptions, setCityCategoryOptions] = useState<string[]>([])
+  const [draftJobCardId, setDraftJobCardId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -272,6 +274,7 @@ export default function CreateJobCardScreen() {
       if (resolveRes.error) {
         setVehicleLookupStatus('error')
         Alert.alert('Fetch Failed', resolveRes.error)
+        logEvent('create_job_card_fetch_failed', { error_message: resolveRes.error, stage: 'resolve_reg' }, 'autodoc-create')
         return
       }
 
@@ -280,73 +283,100 @@ export default function CreateJobCardScreen() {
       if (result.error) {
         setVehicleLookupStatus('error')
         Alert.alert('Fetch Failed', result.error)
+        logEvent('create_job_card_fetch_failed', { error_message: result.error, stage: 'fetch_vehicle' }, 'autodoc-create')
         return
       }
+
+      let prefillApplied = false
 
       if (!result.data) {
         const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
         if (rcLookupRes.error) {
           setVehicleLookupStatus('error')
           Alert.alert('Fetch Failed', rcLookupRes.error)
+          logEvent('create_job_card_fetch_failed', { error_message: rcLookupRes.error, stage: 'rc_lookup' }, 'autodoc-create')
           return
         }
 
         if (rcLookupRes.data) {
           applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
-          setVehicleLookupStatus('found')
-          Alert.alert('Vehicle Found', 'Vehicle details found via RC lookup and prefilled.')
+          prefillApplied = true
+        } else {
+          clearVehiclePrefillFields()
+          setVehicleLookupStatus('not_found')
+          setForm((prev) => ({ ...prev, regNumber: resolvedReg }))
+          Alert.alert('Not Found', 'Vehicle not found in DB. Fill details manually and continue.')
+          logEvent('create_job_card_vehicle_not_found', { reg_number: resolvedReg }, 'autodoc-create')
           return
         }
+      } else {
+        const vehicle = result.data
+        const hasVehicleMasterDetails = hasMeaningfulVehicleMasterDetails(vehicle)
 
-        clearVehiclePrefillFields()
-        setVehicleLookupStatus('not_found')
-        setForm((prev) => ({ ...prev, regNumber: resolvedReg }))
-        Alert.alert('Not Found', 'Vehicle not found in DB. Fill details manually and continue.')
-        return
+        if (!hasVehicleMasterDetails) {
+          const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
+          if (rcLookupRes.error) {
+            setVehicleLookupStatus('error')
+            Alert.alert('Fetch Failed', rcLookupRes.error)
+            logEvent('create_job_card_fetch_failed', { error_message: rcLookupRes.error, stage: 'rc_lookup_fallback' }, 'autodoc-create')
+            return
+          }
+
+          if (rcLookupRes.data) {
+            applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
+            prefillApplied = true
+          } else {
+            clearVehiclePrefillFields()
+            setVehicleLookupStatus('not_found')
+            setForm((prev) => ({ ...prev, regNumber: resolvedReg }))
+            Alert.alert('Not Found', 'Vehicle not found in DB. Fill details manually and continue.')
+            logEvent('create_job_card_vehicle_not_found', { reg_number: resolvedReg }, 'autodoc-create')
+            return
+          }
+        } else {
+          setForm((prev) => ({
+            ...prev,
+            regNumber: vehicle.reg_number ?? prev.regNumber,
+            vin: vehicle.vin ?? '',
+            model: vehicle.model ?? '',
+            year: vehicle.year != null ? String(vehicle.year) : '',
+            colour: vehicle.colour ?? '',
+            paintType: vehicle.paint_type ?? '',
+            dealerCity: vehicle.dealer_city ?? '',
+            bpCityCategory: vehicle.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY,
+            ownerName: vehicle.owner_name ?? '',
+            ownerPhone: vehicle.owner_phone ?? '',
+            dateOfSale: vehicle.date_of_sale ?? '',
+          }))
+          prefillApplied = true
+        }
       }
 
-      const vehicle = result.data
-      const hasVehicleMasterDetails = hasMeaningfulVehicleMasterDetails(vehicle)
+      // ✅ AUTO-SAVE DRAFT after successful vehicle fetch
+      if (prefillApplied && !draftJobCardId) {
+        const autoSaveResult = await createJobCard({
+          regNumber: resolvedReg,
+          jcNumber: form.jcNumber,
+          complaintDate: form.complaintDate,
+          kmReading: kmReading,
+          claimType: form.claimType,
+          complaintText: form.complaintText,
+        })
 
-      if (!hasVehicleMasterDetails) {
-        const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
-        if (rcLookupRes.error) {
-          setVehicleLookupStatus('error')
-          Alert.alert('Fetch Failed', rcLookupRes.error)
+        if (autoSaveResult.error) {
+          Alert.alert('Auto-Save Failed', autoSaveResult.error)
+          logEvent('create_job_card_auto_save_failed', { error_message: autoSaveResult.error }, 'autodoc-create')
           return
         }
 
-        if (rcLookupRes.data) {
-          applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
-          setVehicleLookupStatus('found')
-          Alert.alert('Vehicle Found', 'Vehicle details found via RC lookup and prefilled.')
-          return
+        if (autoSaveResult.data) {
+          setDraftJobCardId(autoSaveResult.data.id)
+          logEvent('create_job_card_auto_saved', { job_card_id: autoSaveResult.data.id, jc_number: form.jcNumber }, 'autodoc-create')
         }
-
-        clearVehiclePrefillFields()
-        setVehicleLookupStatus('not_found')
-        setForm((prev) => ({ ...prev, regNumber: resolvedReg }))
-        Alert.alert('Not Found', 'Vehicle not found in DB. Fill details manually and continue.')
-        return
       }
-
-      setForm((prev) => ({
-        ...prev,
-        regNumber: vehicle.reg_number ?? prev.regNumber,
-        vin: vehicle.vin ?? '',
-        model: vehicle.model ?? '',
-        year: vehicle.year != null ? String(vehicle.year) : '',
-        colour: vehicle.colour ?? '',
-        paintType: vehicle.paint_type ?? '',
-        dealerCity: vehicle.dealer_city ?? '',
-        bpCityCategory: vehicle.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY,
-        ownerName: vehicle.owner_name ?? '',
-        ownerPhone: vehicle.owner_phone ?? '',
-        dateOfSale: vehicle.date_of_sale ?? '',
-      }))
 
       setVehicleLookupStatus('found')
-      Alert.alert('Vehicle Found', 'Vehicle details found in DB and prefilled.')
+      logEvent('create_job_card_vehicle_found_and_draft_saved', { reg_number: resolvedReg, jc_number: form.jcNumber }, 'autodoc-create')
     } finally {
       setLookupBusy(false)
     }
@@ -415,9 +445,42 @@ export default function CreateJobCardScreen() {
     if (vehicleRes.error) {
       setSaving(false)
       Alert.alert('Create Failed', vehicleRes.error)
+      logEvent('create_job_card_save_failed', { error_message: vehicleRes.error, stage: 'vehicle_upsert' }, 'autodoc-create')
       return
     }
 
+    // ✅ If draft exists from auto-save, update it instead of creating new
+    if (draftJobCardId) {
+      const updateResult = await updateJobCard(draftJobCardId, {
+        regNumber: form.regNumber,
+        jcNumber: form.jcNumber,
+        complaintDate: form.complaintDate,
+        kmReading,
+        claimType: form.claimType,
+        complaintText: form.complaintText,
+      })
+
+      setSaving(false)
+
+      if (updateResult.error || !updateResult.data) {
+        Alert.alert('Save Failed', updateResult.error ?? 'Unable to update job card')
+        logEvent('create_job_card_update_failed', { error_message: updateResult.error, job_card_id: draftJobCardId }, 'autodoc-create')
+        return
+      }
+
+      logEvent('create_job_card_updated', { job_card_id: updateResult.data.id, jc_number: form.jcNumber }, 'autodoc-create')
+      Alert.alert('Updated', 'Job card draft updated successfully.', [
+        {
+          text: 'Open',
+          onPress: () => {
+            router.replace(`/job-cards/${updateResult.data?.id}/jobcard`)
+          },
+        },
+      ])
+      return
+    }
+
+    // Otherwise create new draft
     const result = await createJobCard({
       regNumber: form.regNumber,
       jcNumber: form.jcNumber,
@@ -430,9 +493,11 @@ export default function CreateJobCardScreen() {
 
     if (result.error || !result.data) {
       Alert.alert('Create Failed', result.error ?? 'Unable to create job card')
+      logEvent('create_job_card_create_failed', { error_message: result.error }, 'autodoc-create')
       return
     }
 
+    logEvent('create_job_card_created', { job_card_id: result.data.id, jc_number: form.jcNumber }, 'autodoc-create')
     Alert.alert('Created', 'Draft job card created successfully.', [
       {
         text: 'Open',

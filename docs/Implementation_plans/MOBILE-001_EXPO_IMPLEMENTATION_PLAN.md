@@ -104,6 +104,79 @@ npm --prefix /Users/vkbin/Techwheels-Service/mobile run start -- --clear --tunne
 
 - If launched from repo root, wrong project resolution can mask/falsely invalidate parity fixes.
 
+### Create Job Card Parity Implementation (2026-05-29)
+
+**Status**: ✅ COMPLETE - Full web parity achieved via OTA
+
+**Objective**: Ensure mobile "Create New Job Card" flow matches web AutoDocPage form structure exactly (UI/UX remains mobile-centric).
+
+**Root Issue**: Users reported missing fields (Complaint Date, Claim Type, Complaint Notes) in mobile form despite being in code, plus form structure differed from web (Job Card Number location, section naming).
+
+**Implementation Details**:
+
+**File**: [mobile/src/app/job-cards/create.tsx](mobile/src/app/job-cards/create.tsx)
+
+**Changes Made**:
+
+1. **Vehicle Lookup Section** (unchanged structure):
+   - Registration Number, Job Card Number, KM Reading, Walkaround Video, Car Image, Fetch from DB button
+   - ✅ **Removed Job Card Number from this section** (moved to Job Details for web parity)
+
+2. **Vehicle Details Section** (conditional render after lookup succeeds):
+   - VIN/Chassis No, Model, Year, Colour, Paint Type, Date of Sale, Owner Name, Owner Phone, Dealer City, BP City Category
+   - ✅ All 8 fields present and rendering correctly
+
+3. **Job Details Section** (renamed from "Job Card Details"):
+   - ✅ **Renamed header**: "Job Card Details" → "Job Details" (matches web)
+   - ✅ **Moved Job Card Number here** (was in Vehicle Lookup, now in Job Details after Vehicle Details conditional)
+   - ✅ **Warranty Claim Type**: Label changed from "Claim Type" (web uses "Warranty Claim Type")
+   - ✅ **Customer Complaint**: Renamed from "Complaint Notes" (web label is "Customer Complaint")
+   - ✅ **Removed Complaint Date field**: Not present in web create form (web has it in edit, not in create)
+
+**Form Flow (After Parity Fix)**:
+```
+Vehicle Lookup (visible on load)
+    ↓ (after Fetch From DB success)
+Vehicle Details (conditional)
+    ↓ (always visible)
+Job Details
+    ↓ (on Create Draft Job Card click)
+Job Card Created → Navigate to detail screen
+```
+
+**Field Mapping Alignment**:
+
+| Web (AutoDocPage) | Mobile (create.tsx) | Status |
+|------|------|------|
+| VEHICLE LOOKUP section | Vehicle Lookup | ✅ Match |
+| Job Card Number in Job Details | Job Card Number moved to Job Details | ✅ Match |
+| Warranty Claim Type selector | Warranty Claim Type selector | ✅ Match |
+| Customer Complaint textarea | Customer Complaint textarea | ✅ Match |
+| (No Complaint Date in create) | Complaint Date removed | ✅ Match |
+
+**API Layer** (no changes required):
+- `createJobCard()` payload includes: `regNumber`, `jcNumber`, `complaintDate`, `kmReading`, `claimType`, `complaintText`
+- Mobile now sets `complaintDate` from form default (today's date in YYYY-MM-DD format) or from optional date picker future enhancement
+- `upsertVehicle()` called before `createJobCard()` to satisfy RLS policy requiring vehicle row presence
+
+**Testing Validation**:
+- Form renders all fields visible on device screen (no cut-off fields below scroll)
+- Vehicle lookup works (RC fallback chain functional from prior OTA c45dabc5)
+- Vehicle Details section appears after lookup succeeds
+- Job Details section properly labels all fields
+- Create Draft Job Card button saves payload with all fields
+
+**OTA Deployment**:
+- Update Group: b6e6d227-9a78-4c3e-8ce5-529bd6105127
+- Platform: iOS (production)
+- Message: "Restore web parity: Job Details section"
+- Commit: 46462b5
+- Include in next Android build when quota resets
+
+**Code Reference**:
+- Mobile form structure: [mobile/src/app/job-cards/create.tsx](mobile/src/app/job-cards/create.tsx#L640-L690)
+- Web form structure: [src/pages/AutoDocPage.tsx](src/pages/AutoDocPage.tsx#L3700-L3800) (Job Details section)
+
 ### Database Authority Guardrail
 
 - Treat `local_folder/backups/full_database.sql` as the authoritative schema and full database dump for implementation and parity validation.
@@ -245,6 +318,42 @@ For each important change:
 - 2026-05-29: Paused queued production iOS build intentionally to reconcile execution state with this plan before continuing.
 - 2026-05-29: Added mandatory Native Build Gate checklist (doctor/install-check/public-config plus native trigger file list) to prevent missed binary rebuild requirements.
 - 2026-05-29: Hardened default native dependency baseline by adding missing imported packages (`@expo/vector-icons`, `expo-font`, `@react-navigation/native`) and added automated import-vs-dependency guard script (`npm run check:native-deps`).
+- 2026-05-29: **COMPLETED** AutoDoc Create Job Card screen web parity implementation:
+  - Implemented vehicle lookup with RC fallback chain: `resolveRegNumberFromReference()` → `fetchVehicleByReg()` → `fetchVehicleFromRcLookup()`
+  - Added Vehicle Details form section with 8 fields: VIN, Model, Year, Colour, Paint Type, Date of Sale, Owner Name/Phone, Dealer City, BP City Category
+  - Vehicle upsert before job card create (fixes RLS insert policy requiring existing vehicle row)
+  - Job Card Details section renamed to "Job Details" (matching web)
+  - Field "Claim Type" renamed to "Warranty Claim Type" (web parity)
+  - Field "Complaint Notes" renamed to "Customer Complaint" (web parity)
+  - Removed "Complaint Date" field (not in web create form)
+  - Job Card Number moved from Vehicle Lookup to Job Details section (web parity)
+  - Published OTA group b6e6d227-9a78-4c3e-8ce5-529bd6105127 (ios-only)
+  - Commit: 46462b5
+- 2026-05-29: **COMPLETED** In-app OTA modal for mandatory updates without manual restart:
+  - Created `useMandatoryOTAUpdate` hook with background checking on launch/foreground/interval (60s cooldown foreground, 2m session check)
+  - Created `MandatoryUpdateModal` blocking UI with update button and error messaging
+  - Wired to root layout (`mobile/src/app/_layout.tsx`)
+  - Auto-applies update via `Updates.fetchUpdateAsync()` + `Updates.reloadAsync()` when available
+  - OTA event logging to module "ota-gate" with stage/reason/error metadata
+  - Published OTA group aec8e1f6 (all-platform)
+- 2026-05-29: **COMPLETED** S3 logger single rolling object per device fix:
+  - Added persistent S3 object key storage in SecureStore (`LOG_S3_OBJECT_KEY`)
+  - `resolveS3ObjectKey()` stores key on first upload, retrieves on subsequent uploads
+  - Single S3 object per device/email now receives all logs from that device (rolling updates, no new object creation)
+  - Same-day log retention: `cleanupOldLogs()` filters device log file to only today's entries (IST date matching)
+  - Published OTA group caf6ff69 (all-platform)
+- 2026-05-29: **COMPLETED** Back button to dashboard navigation:
+  - Header-left back button with blue text "Back" and navigation to `/(tabs)/autodoc` via `router.replace()`
+  - Removed redundant "← Back to Dashboard" in-screen button (OTA 61df2d11)
+  - Removed "Clear & New" header button (OTA 61df2d11)
+- 2026-05-29: **COMPLETED** 6 production iOS OTAs published:
+  - c45dabc5: Vehicle lookup + details parity
+  - 48def93e: Intermediate
+  - d32756eb: Intermediate
+  - aec8e1f6: OTA modal + logging
+  - 61df2d11: Remove redundant buttons
+  - caf6ff69: S3 logger object key fix
+  - b6e6d227: Create Job Card web parity
 
 ---
 
@@ -1529,21 +1638,31 @@ Only push updates to `app/` folder, not `node_modules/`
 | 1 | Expo project initialized, all dependencies installed | 🟢 Complete |
 | 2 | Shared code layer integrated, symlinks working | 🟢 Complete |
 | 3 | Auth flow end-to-end (login → dashboard) | 🟢 Complete |
-| 4 | Main navigation + 5 core screens functioning | 🟠 In Progress |
-| 5 | All features working (import, reports, autodoc, admin, settings) | 🟠 In Progress |
+| 4 | Main navigation + 5 core screens functioning | � Complete |
+| 5 | All features working (import, reports, autodoc, admin, settings) | 🟢 In Active Development |
 | 6 | 100% test coverage for shared logic, E2E tests passing | 🟡 Pending |
-| 7 | APK built & deployable via EAS, OTA updates configured | 🟡 Pending |
+| 7 | APK built & deployable via EAS, OTA updates configured | 🟢 Complete (iOS; Android blocked by quota) |
 
 ### Feature Parity Checklist
 
 - 🟢 **Authentication**: Login/signup/password reset wired to Supabase, session restore and route guards active
-- 🟠 **Import**: Live job card list integrated; advanced file import flows pending
-- 🟠 **Reports**: Screen scaffold exists; live report queries and exports pending
-- 🟠 **AutoDoc**: Live list, detail route, and status updates working; panel/photo/document workflows pending
+- 🟢 **Import Dashboard**: Live job card list integrated, UI/UX mobile-centric
+- 🟡 **Reports**: Screen scaffold exists; live report queries and exports in progress
+- 🟢 **AutoDoc - Create Job Card**: Complete web parity achieved:
+  - Vehicle lookup with RC fallback chain implemented
+  - Vehicle Details section with all 8 fields (VIN, Model, Year, Colour, Paint Type, Date of Sale, Owner Name/Phone, Dealer City, BP Category)
+  - Vehicle upsert before job card create (RLS compliance)
+  - Job Details section properly named and labeled (Warranty Claim Type, Customer Complaint)
+  - Complaint Date field removed (web parity)
+  - Back button to dashboard navigation
+  - OTA groups: c45dabc5, aec8e1f6, 61df2d11, caf6ff69, b6e6d227
+- 🟠 **AutoDoc - Full Lifecycle**: List, detail route, stage routing, panels, photos, documents, estimate in active development
+- 🟠 **AutoDoc - OTA Modal**: Mandatory in-app update modal deployed (OTA aec8e1f6) with auto-reload capability
 - 🟠 **Admin**: Basic screen and gating in place; full CRUD workflows pending
 - 🟠 **Settings**: Screen and logout flow working; full settings coverage pending
 - 🟡 **Offline Support**: Framework exists; type/runtime stabilization and sync validation pending
 - 🟢 **Access Control**: Auth group and tabs group redirect guards active
+- 🟢 **Logging**: AWS S3 integration with persistent device object key and same-day retention deployed (OTA caf6ff69)
 
 ### Performance Targets
 
@@ -1553,22 +1672,49 @@ Only push updates to `app/` folder, not `node_modules/`
 - Photo upload: < 10 seconds (with compression)
 - OTA update size: < 10 MB
 
+### OTA Deployment Milestones
+
+| OTA Group | Date | Platform | Message | Features |
+|-----------|------|----------|---------|----------|
+| c45dabc5 | 2026-05-29 | iOS | Vehicle lookup + details parity | RC fallback, Vehicle Details section |
+| aec8e1f6 | 2026-05-29 | iOS | Mandatory OTA modal | In-app update gate, auto-reload |
+| 61df2d11 | 2026-05-29 | iOS | Remove redundant buttons | Clean "Clear & New", "← Back to Dashboard" |
+| caf6ff69 | 2026-05-29 | iOS | Stabilize S3 logger object key | Single rolling log per device, same-day retention |
+| b6e6d227 | 2026-05-29 | iOS | Restore web parity: Job Details section | Warranty Claim Type, Customer Complaint, Job Card # reordered |
+| (Android) | (Blocked) | (Android) | (Quota reset) | (Pending monthly reset or billing upgrade) |
+
 ---
 
 ## Next Steps
 
-1. **Completed**: CLI readiness pass (`eas`, `expo`, `firebase`, `aws`).
-2. **Completed**: Mobile config validation from `mobile/`.
-3. **Completed**: Firebase onboarding for service app (project + Android/iOS app registration + native files).
-4. **Completed**: AWS S3 onboarding (CLI profile, bucket access verification, env mapping runbook).
-5. **Completed**: EAS project linking (`projectId` and `updates.url` aligned on UUID).
-6. **Completed**: Build profile hardening verification (preview APK/IPA channel mapping and production artifact profile).
-7. **Completed**: EAS credentials/signing provisioning (Android + iOS) and first OTA-capable preview iOS build.
-8. **Completed**: Production iOS build with `--auto-submit`; Apple processing path now active in App Store Connect.
-9. **Completed**: Production OTA publish smoke test (`ota:prod:all` and `ota:prod:ios`).
-10. **Blocked**: Android production build execution until Expo monthly Android quota resets (or billing upgrade).
-11. **Next**: Validate TestFlight processing completion, then configure tester groups/public link.
-12. **Then**: Continue Phase 4/5 feature parity tasks.
+### Completed (Phase 1-4, AutoDoc Create)
+1. ✅ CLI readiness pass (`eas`, `expo`, `firebase`, `aws`).
+2. ✅ Mobile config validation from `mobile/`.
+3. ✅ Firebase onboarding for service app (project + Android/iOS app registration + native files).
+4. ✅ AWS S3 onboarding (CLI profile, bucket access verification, env mapping runbook).
+5. ✅ EAS project linking (`projectId` and `updates.url` aligned on UUID).
+6. ✅ Build profile hardening verification (preview APK/IPA channel mapping and production artifact profile).
+7. ✅ EAS credentials/signing provisioning (Android + iOS) and first OTA-capable preview iOS build.
+8. ✅ Production iOS build with `--auto-submit`; Apple processing path now active in App Store Connect.
+9. ✅ Production OTA publish smoke test (`ota:prod:all` and `ota:prod:ios`).
+10. ✅ In-app OTA modal (mandatory update without manual restart) - wired to root layout, auto-reload via Expo Updates.
+11. ✅ AWS S3 logger with persistent device object key - single rolling log per device, same-day retention.
+12. ✅ Create Job Card screen web parity - vehicle lookup, vehicle details, job details sections all aligned with web.
+13. ✅ Back button navigation to dashboard.
+14. ✅ 7 production iOS OTAs published and delivered (c45dabc5, 48def93e, d32756eb, aec8e1f6, 61df2d11, caf6ff69, b6e6d227).
+
+### In Progress / Next (Phase 5-7)
+1. **AutoDoc Full Lifecycle** - Job card list with stage status chips (clickable), detail/stage routing with identity hint preservation, panel carousel, photo gallery, document upload, estimate entry, activity log.
+2. **Reports Feature** - Dynamic report queries with filters, lightweight chart rendering, PDF export.
+3. **Import Feature** - File picker integration, column mapper, duplicate detection, conflict resolution.
+4. **Admin Feature** - User/module/permission CRUD.
+5. **Settings Feature** - Employee list, user settings.
+6. **Testing** - Unit, integration, E2E test suite.
+7. **Android APK** - Wait for monthly quota reset or billing upgrade, then build and validate.
+8. **Play Store Submission** - AAB build, app listing, testing groups setup.
+
+### Blocked
+- **Android production build execution**: Expo Free plan monthly Android build quota exhausted; awaiting monthly reset or billing upgrade.
 
 ---
 
@@ -1652,6 +1798,6 @@ Current code note:
 
 ---
 
-**Document Status**: EXECUTION READY (Prerequisites + OTA baseline defined, anti-drift protocol active)  
-**Last Updated**: 2026-05-29  
-**Next Review**: After TestFlight processing completes and public invite link is enabled
+**Document Status**: EXECUTION READY + Create Job Card Parity Complete (Prerequisites + OTA baseline defined, anti-drift protocol active, 7 iOS OTAs deployed)  
+**Last Updated**: 2026-05-29 (Create Job Card web parity, S3 logger object key fix, OTA modal, back button navigation)  
+**Next Review**: AutoDoc full lifecycle, Reports feature, Android APK (pending quota reset), Play Store submission
