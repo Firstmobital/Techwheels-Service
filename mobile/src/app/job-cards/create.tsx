@@ -236,6 +236,34 @@ export default function CreateJobCardScreen() {
 
     if (result.canceled) return
     setWalkaroundVideoName(result.assets?.[0]?.name ?? 'walkaround-video')
+
+    // ✅ AUTO-SAVE DRAFT when video is selected (matching web flow: ensureJobCardReadyForUpload)
+    if (!draftJobCardId) {
+      const regNum = form.regNumber.trim()
+      const jcNum = form.jcNumber.trim()
+      const kmNum = form.kmReading.trim()
+
+      if (regNum && jcNum && kmNum) {
+        const kmReading = Number(kmNum)
+        if (Number.isFinite(kmReading) && kmReading >= 0) {
+          const autoSaveResult = await createJobCard({
+            regNumber: regNum,
+            jcNumber: jcNum,
+            complaintDate: form.complaintDate,
+            kmReading: kmReading,
+            claimType: form.claimType,
+            complaintText: form.complaintText,
+          })
+
+          if (autoSaveResult.data) {
+            setDraftJobCardId(autoSaveResult.data.id)
+            logEvent('create_job_card_auto_saved_on_video_upload', { job_card_id: autoSaveResult.data.id, jc_number: jcNum }, 'autodoc-create')
+          } else if (autoSaveResult.error) {
+            logEvent('create_job_card_auto_save_failed', { error_message: autoSaveResult.error, stage: 'video_upload' }, 'autodoc-create')
+          }
+        }
+      }
+    }
   }
 
   const onPickCarImage = async () => {
@@ -352,31 +380,8 @@ export default function CreateJobCardScreen() {
         }
       }
 
-      // ✅ AUTO-SAVE DRAFT after successful vehicle fetch
-      if (prefillApplied && !draftJobCardId) {
-        const autoSaveResult = await createJobCard({
-          regNumber: resolvedReg,
-          jcNumber: form.jcNumber,
-          complaintDate: form.complaintDate,
-          kmReading: kmReading,
-          claimType: form.claimType,
-          complaintText: form.complaintText,
-        })
-
-        if (autoSaveResult.error) {
-          Alert.alert('Auto-Save Failed', autoSaveResult.error)
-          logEvent('create_job_card_auto_save_failed', { error_message: autoSaveResult.error }, 'autodoc-create')
-          return
-        }
-
-        if (autoSaveResult.data) {
-          setDraftJobCardId(autoSaveResult.data.id)
-          logEvent('create_job_card_auto_saved', { job_card_id: autoSaveResult.data.id, jc_number: form.jcNumber }, 'autodoc-create')
-        }
-      }
-
       setVehicleLookupStatus('found')
-      logEvent('create_job_card_vehicle_found_and_draft_saved', { reg_number: resolvedReg, jc_number: form.jcNumber }, 'autodoc-create')
+      logEvent('create_job_card_vehicle_found', { reg_number: resolvedReg, jc_number: form.jcNumber }, 'autodoc-create')
     } finally {
       setLookupBusy(false)
     }

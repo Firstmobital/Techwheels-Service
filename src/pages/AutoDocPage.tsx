@@ -3844,23 +3844,6 @@ export default function AutoDocPage() {
                     onClick={async () => {
                       setSavingDraft(true)
                       try {
-                        await persistDraftJobCard(true)
-                      } finally {
-                        setSavingDraft(false)
-                      }
-                    }}
-                    disabled={savingDraft}
-                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                    </svg>
-                    {savingDraft ? 'Saving...' : 'Save Draft'}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setSavingDraft(true)
-                      try {
                         const ok = await persistDraftJobCard(false)
                         if (ok) {
                           await updateJobCardStatus(ok, 'in_work')
