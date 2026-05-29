@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Techwheels – Mobile Home Screen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f172a;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 32px 16px;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  /* Phone shell */
+  .phone {
+    width: 375px;
+    background: #f8fafc;
+    border-radius: 48px;
+    overflow: hidden;
+    box-shadow: 0 0 0 10px #1e293b, 0 0 0 12px #334155, 0 40px 80px rgba(0,0,0,0.6);
+    position: relative;
+  }
+
+  /* Status bar */
+  .status-bar {
+    background: #1d4ed8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 24px 6px;
+    font-size: 12px;
+    color: #bfdbfe;
+    font-weight: 600;
+  }
+
+  /* Screen scroll area */
+  .screen {
+    height: 780px;
+    overflow-y: auto;
+    background: #f1f5f9;
+    scrollbar-width: none;
+  }
+  .screen::-webkit-scrollbar { display: none; }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 60%, #3b82f6 100%);
+    padding: 20px 20px 36px;
+  }
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .greeting { color: #93c5fd; font-size: 13px; }
+  .online-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 4px 10px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
+  .online-text { color: #bbf7d0; font-size: 11px; font-weight: 600; }
+  .user-name { color: #fff; font-size: 24px; font-weight: 700; margin-top: 2px; }
+  .sub-title { color: #93c5fd; font-size: 13px; margin-top: 2px; }
+
+  /* KPI grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 0 16px;
+    margin-top: -20px;
+  }
+  .kpi-card {
+    background: #fff;
+    border-radius: 18px;
+    padding: 16px 14px;
+    border-left: 4px solid;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .kpi-value { font-size: 26px; font-weight: 800; }
+  .kpi-label { font-size: 13px; font-weight: 600; color: #334155; margin-top: 2px; }
+  .kpi-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+  /* Section */
+  .section { padding: 20px 16px 0; }
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .section-title { font-size: 15px; font-weight: 700; color: #1e293b; }
+  .view-all { font-size: 13px; font-weight: 600; color: #2563eb; }
+
+  /* Quick actions */
+  .action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .action-card {
+    background: #fff;
+    border-radius: 18px;
+    padding: 18px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    cursor: pointer;
+    transition: transform 0.12s;
+  }
+  .action-card:hover { transform: scale(0.97); }
+  .action-icon { font-size: 30px; }
+  .action-label { font-size: 13px; font-weight: 600; color: #1e293b; text-align: center; }
+
+  /* Job card list */
+  .job-list { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; }
+  .job-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .job-icon {
+    width: 40px; height: 40px;
+    background: #eff6ff;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .job-info { flex: 1; min-width: 0; }
+  .job-reg { font-size: 14px; font-weight: 700; color: #0f172a; }
+  .job-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status-badge {
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Tab bar */
+  .tab-bar {
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    padding: 8px 0 12px;
+  }
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .tab-icon { font-size: 22px; }
+  .tab-label { font-size: 10px; font-weight: 600; }
+  .tab-item.active .tab-label { color: #2563eb; }
+  .tab-item:not(.active) .tab-label { color: #94a3b8; }
+  .tab-item:not(.active) .tab-icon { opacity: 0.45; }
+
+  /* Legend panel */
+  .legend {
+    background: #1e293b;
+    border-radius: 20px;
+    padding: 28px 24px;
+    width: 280px;
+    color: #e2e8f0;
+    align-self: flex-start;
+    margin-top: 20px;
+  }
+  .legend h2 { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 12px; }
+  .legend-item { margin-bottom: 14px; }
+  .legend-label { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .legend-desc { font-size: 13px; color: #cbd5e1; line-height: 1.5; }
+  .chip { display: inline-block; border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700; margin: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Phone mockup -->
+<div class="phone">
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>▲▲▲ WiFi 🔋</span>
+  </div>
+
+  <div class="screen">
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-row">
+        <span class="greeting">Good morning</span>
+        <div class="online-badge">
+          <div class="dot"></div>
+          <span class="online-text">Online</span>
+        </div>
+      </div>
+      <div class="user-name">Deepak 👋</div>
+      <div class="sub-title">Techwheels Service Dashboard</div>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-grid">
+      <div class="kpi-card" style="border-color:#2563eb">
+        <div class="kpi-value" style="color:#2563eb">12</div>
+        <div class="kpi-label">Active Jobs</div>
+        <div class="kpi-sub">In progress</div>
+      </div>
+      <div class="kpi-card" style="border-color:#7c3aed">
+        <div class="kpi-value" style="color:#7c3aed">4</div>
+        <div class="kpi-label">Today's Intake</div>
+        <div class="kpi-sub">New vehicles</div>
+      </div>
+      <div class="kpi-card" style="border-color:#ea580c">
+        <div class="kpi-value" style="color:#ea580c">3</div>
+        <div class="kpi-label">Pending Review</div>
+        <div class="kpi-sub">Awaiting action</div>
+      </div>
+      <div class="kpi-card" style="border-color:#16a34a">
+        <div class="kpi-value" style="color:#16a34a">47</div>
+        <div class="kpi-label">Completed</div>
+        <div class="kpi-sub">This month</div>
+      </div>
+    </div>
+
+    <!-- QUICK ACTIONS -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Quick Actions</span>
+      </div>
+      <div class="action-grid">
+        <div class="action-card">
+          <div class="action-icon">📋</div>
+          <div class="action-label">New Job Card</div>
+        </div>
+        <div class="action-card">
+          <div class="action-icon">📊</div>
+          <div class="action-label">Reports</div>
+        </div>
+        <div class="action-card">
+          <div class="action-icon">📥</div>
+          <div class="action-label">Import Data</div>
+        </div>
+        <div class="action-card">
+          <div class="action-icon">🔧</div>
+          <div class="action-label">AutoDoc</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECENT JOB CARDS -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Recent Job Cards</span>
+        <span class="view-all">View all →</span>
+      </div>
+      <div class="job-list">
+        <div class="job-card">
+          <div class="job-icon">🚗</div>
+          <div class="job-info">
+            <div class="job-reg">MH12 AB 3456</div>
+            <div class="job-meta">JC-2024-0891 · Nexon EV</div>
+          </div>
+          <div class="status-badge" style="background:#fff7ed;color:#ea580c">In Work</div>
+        </div>
+        <div class="job-card">
+          <div class="job-icon">🚗</div>
+          <div class="job-info">
+            <div class="job-reg">KA01 CD 7788</div>
+            <div class="job-meta">JC-2024-0890 · Harrier</div>
+          </div>
+          <div class="status-badge" style="background:#eff6ff;color:#2563eb">Submitted</div>
+        </div>
+        <div class="job-card">
+          <div class="job-icon">🚗</div>
+          <div class="job-info">
+            <div class="job-reg">DL5S EF 1122</div>
+            <div class="job-meta">JC-2024-0889 · Safari</div>
+          </div>
+          <div class="status-badge" style="background:#f0fdf4;color:#16a34a">Approved</div>
+        </div>
+        <div class="job-card">
+          <div class="job-icon">🚗</div>
+          <div class="job-info">
+            <div class="job-reg">TN09 GH 5544</div>
+            <div class="job-meta">JC-2024-0888 · Tiago</div>
+          </div>
+          <div class="status-badge" style="background:#f1f5f9;color:#475569">Draft</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end screen -->
+
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <div class="tab-item active">
+      <span class="tab-icon">🏠</span>
+      <span class="tab-label">Home</span>
+    </div>
+    <div class="tab-item">
+      <span class="tab-icon">📥</span>
+      <span class="tab-label">Import</span>
+    </div>
+    <div class="tab-item">
+      <span class="tab-icon">📊</span>
+      <span class="tab-label">Reports</span>
+    </div>
+    <div class="tab-item">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">AutoDoc</span>
+    </div>
+    <div class="tab-item">
+      <span class="tab-icon">⚙️</span>
+      <span class="tab-label">Settings</span>
+    </div>
+  </div>
+</div><!-- end phone -->
+
+<!-- Legend -->
+<div class="legend">
+  <h2>Design Breakdown</h2>
+
+  <div class="legend-item">
+    <div class="legend-label">Header</div>
+    <div class="legend-desc">Blue gradient with greeting, username from Supabase, and live online/offline indicator. Offline shows pending sync count.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-label">KPI Cards (2×2 grid)</div>
+    <div class="legend-desc">Live job counts pulled from Supabase on load + pull-to-refresh. Colour-coded left border per metric.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-label">Quick Actions (2×2 grid)</div>
+    <div class="legend-desc">Tappable tiles to jump to New Job Card, Reports, Import, or AutoDoc.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-label">Recent Job Cards</div>
+    <div class="legend-desc">Last 5 records. Tap any row to open the full job card. Status badges:
+      <br><br>
+      <span class="chip" style="background:#fff7ed;color:#ea580c">In Work</span>
+      <span class="chip" style="background:#eff6ff;color:#2563eb">Submitted</span>
+      <span class="chip" style="background:#f0fdf4;color:#16a34a">Approved</span>
+      <span class="chip" style="background:#f1f5f9;color:#475569">Draft</span>
+      <span class="chip" style="background:#dcfce7;color:#15803d">Completed</span>
+    </div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-label">Tab Bar</div>
+    <div class="legend-desc">Home is now the first tab (was Import). 5 tabs total. Home active state shown in blue.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-label">Colors</div>
+    <div class="legend-desc">
+      Primary: #2563eb (blue)<br>
+      Background: #f1f5f9 (slate-100)<br>
+      Cards: #ffffff with subtle shadow<br>
+      Matching existing app palette
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
