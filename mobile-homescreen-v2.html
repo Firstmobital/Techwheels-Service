@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Techwheels – Home Screen v2</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0a0f1e;
+    min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    display:flex;
+    gap:32px;
+    padding:32px 24px;
+    align-items:flex-start;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+
+  /* ── Phone shell ── */
+  .phone{
+    width:375px;
+    border-radius:52px;
+    overflow:hidden;
+    box-shadow:0 0 0 10px #1a2235,0 0 0 12px #2d3a52,0 48px 96px rgba(0,0,0,.7);
+    background:#f1f5f9;
+    flex-shrink:0;
+  }
+
+  /* Status bar */
+  .sbar{
+    background:#0f172a;
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 24px 8px;
+    color:#94a3b8;font-size:12px;font-weight:600;
+  }
+
+  /* Scrollable screen */
+  .screen{height:800px;overflow-y:auto;scrollbar-width:none;}
+  .screen::-webkit-scrollbar{display:none;}
+
+  /* ══ HEADER ══ */
+  .header{
+    background:linear-gradient(160deg,#0f172a 0%,#1e3a5f 60%,#1d4ed8 100%);
+    padding:18px 18px 28px;
+  }
+  .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .logo-row{display:flex;align-items:center;gap:8px;}
+  .logo-icon{
+    width:36px;height:36px;border-radius:10px;
+    background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;box-shadow:0 4px 12px rgba(59,130,246,.4);
+  }
+  .logo-name{color:#fff;font-size:15px;font-weight:800;letter-spacing:.3px;}
+  .logo-tag{color:#60a5fa;font-size:10px;font-weight:500;letter-spacing:.5px;display:block;}
+  .header-icons{display:flex;gap:10px;}
+  .icon-btn{
+    width:36px;height:36px;border-radius:50%;
+    background:rgba(255,255,255,.1);
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;position:relative;cursor:pointer;
+  }
+  .notif-dot{
+    position:absolute;top:6px;right:6px;
+    width:8px;height:8px;border-radius:50%;
+    background:#ef4444;border:1.5px solid #1e3a5f;
+  }
+
+  /* Greeting */
+  .greeting-row{margin-bottom:14px;}
+  .g-sub{color:#93c5fd;font-size:13px;}
+  .g-name{color:#fff;font-size:22px;font-weight:700;margin-top:2px;}
+
+  /* Search bar */
+  .search-bar{
+    display:flex;align-items:center;gap:10px;
+    background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.15);
+    border-radius:14px;
+    padding:10px 14px;
+    backdrop-filter:blur(8px);
+  }
+  .search-bar span{color:#93c5fd;font-size:15px;}
+  .search-text{color:#64748b;font-size:13px;flex:1;}
+  .search-scan{color:#60a5fa;font-size:14px;}
+
+  /* ══ STATS STRIP ══ */
+  .stats-strip{
+    display:flex;gap:0;
+    margin:0 16px;
+    margin-top:-16px;
+    background:#fff;
+    border-radius:18px;
+    box-shadow:0 4px 16px rgba(0,0,0,.1);
+    overflow:hidden;
+  }
+  .stat{
+    flex:1;padding:14px 8px;text-align:center;
+    border-right:1px solid #f1f5f9;
+  }
+  .stat:last-child{border-right:none;}
+  .stat-val{font-size:20px;font-weight:800;}
+  .stat-lbl{font-size:10px;color:#94a3b8;font-weight:600;margin-top:2px;line-height:1.3;}
+
+  /* ══ SECTION HEADER ══ */
+  .sec{padding:18px 16px 0;}
+  .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .sec-title{font-size:14px;font-weight:700;color:#0f172a;}
+  .sec-link{font-size:12px;font-weight:600;color:#2563eb;}
+
+  /* ══ MODULE GRID ══ */
+  .mod-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+  }
+  .mod-tile{
+    background:#fff;
+    border-radius:18px;
+    padding:14px 8px 12px;
+    display:flex;flex-direction:column;align-items:center;gap:7px;
+    box-shadow:0 2px 8px rgba(0,0,0,.06);
+    cursor:pointer;transition:transform .12s;
+    position:relative;
+  }
+  .mod-tile:hover{transform:scale(.96);}
+  .mod-tile.coming{opacity:.55;}
+  .mod-icon-wrap{
+    width:46px;height:46px;border-radius:14px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:22px;
+  }
+  .mod-label{font-size:11px;font-weight:700;color:#1e293b;text-align:center;line-height:1.3;}
+  .mod-badge{
+    position:absolute;top:8px;right:8px;
+    border-radius:8px;padding:2px 6px;
+    font-size:9px;font-weight:700;
+  }
+  .badge-live{background:#dcfce7;color:#15803d;}
+  .badge-soon{background:#f1f5f9;color:#94a3b8;}
+  .badge-new{background:#fef9c3;color:#a16207;}
+
+  /* ══ RECENT ACTIVITY ══ */
+  .activity-list{display:flex;flex-direction:column;gap:8px;padding-bottom:8px;}
+  .act-row{
+    background:#fff;border-radius:14px;
+    padding:11px 13px;
+    display:flex;align-items:center;gap:11px;
+    box-shadow:0 1px 4px rgba(0,0,0,.05);
+  }
+  .act-icon{
+    width:36px;height:36px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;
+  }
+  .act-body{flex:1;min-width:0;}
+  .act-title{font-size:13px;font-weight:600;color:#0f172a;}
+  .act-meta{font-size:11px;color:#94a3b8;margin-top:1px;}
+  .act-time{font-size:10px;color:#cbd5e1;font-weight:500;flex-shrink:0;}
+
+  /* ══ TAB BAR ══ */
+  .tabbar{
+    background:#fff;
+    border-top:1px solid #e2e8f0;
+    display:flex;padding:8px 0 16px;
+  }
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;}
+  .tab-ic{font-size:21px;}
+  .tab-lb{font-size:10px;font-weight:600;}
+  .tab.on .tab-lb{color:#2563eb;}
+  .tab.off .tab-lb{color:#94a3b8;}
+  .tab.off .tab-ic{opacity:.4;}
+  .tab-center{
+    width:52px;height:52px;border-radius:50%;
+    background:linear-gradient(135deg,#2563eb,#1d4ed8);
+    display:flex;align-items:center;justify-content:center;
+    font-size:22px;margin-top:-22px;
+    box-shadow:0 4px 16px rgba(37,99,235,.45);
+  }
+
+  /* ── annotation panel ── */
+  .notes{
+    width:300px;color:#e2e8f0;
+    display:flex;flex-direction:column;gap:20px;
+    padding-top:8px;
+  }
+  .note-card{background:#1e293b;border-radius:16px;padding:18px 20px;}
+  .note-card h3{font-size:13px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;border-bottom:1px solid #334155;padding-bottom:8px;}
+  .note-item{margin-bottom:9px;}
+  .note-zone{font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:3px;}
+  .note-desc{font-size:12px;color:#94a3b8;line-height:1.55;}
+  .tag{display:inline-block;border-radius:8px;padding:2px 8px;font-size:10px;font-weight:700;margin:2px 2px 2px 0;}
+</style>
+</head>
+<body>
+
+<!-- ══════ PHONE ══════ -->
+<div class="phone">
+
+  <!-- Status bar -->
+  <div class="sbar">
+    <span>9:41</span>
+    <span style="letter-spacing:.5px">▲▲▲ &nbsp;WiFi &nbsp;🔋 98%</span>
+  </div>
+
+  <div class="screen">
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-top">
+        <div class="logo-row">
+          <div class="logo-icon">🔧</div>
+          <div>
+            <div class="logo-name">Techwheels</div>
+            <span class="logo-tag">SERVICE PLATFORM</span>
+          </div>
+        </div>
+        <div class="header-icons">
+          <div class="icon-btn">
+            🔔
+            <div class="notif-dot"></div>
+          </div>
+          <div class="icon-btn">👤</div>
+        </div>
+      </div>
+
+      <div class="greeting-row">
+        <div class="g-sub">Good morning,</div>
+        <div class="g-name">Deepak 👋</div>
+      </div>
+
+      <!-- Search -->
+      <div class="search-bar">
+        <span>🔍</span>
+        <span class="search-text">Search job card, vehicle, report…</span>
+        <span class="search-scan">⊡</span>
+      </div>
+    </div>
+
+    <!-- STATS STRIP -->
+    <div style="padding:0 16px;margin-top:-16px;">
+      <div class="stats-strip">
+        <div class="stat">
+          <div class="stat-val" style="color:#2563eb">12</div>
+          <div class="stat-lbl">Active Jobs</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" style="color:#ea580c">3</div>
+          <div class="stat-lbl">Pending Action</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" style="color:#16a34a">47</div>
+          <div class="stat-lbl">Done This Month</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULES -->
+    <div class="sec">
+      <div class="sec-hdr">
+        <span class="sec-title">Service Modules</span>
+        <span class="sec-link">Manage →</span>
+      </div>
+      <div class="mod-grid">
+
+        <!-- Row 1 -->
+        <div class="mod-tile">
+          <div class="mod-badge badge-live">LIVE</div>
+          <div class="mod-icon-wrap" style="background:#eff6ff;">🎨</div>
+          <div class="mod-label">Body &amp; Paint</div>
+        </div>
+        <div class="mod-tile coming">
+          <div class="mod-badge badge-soon">SOON</div>
+          <div class="mod-icon-wrap" style="background:#fff7ed;">🏭</div>
+          <div class="mod-label">Body Shop</div>
+        </div>
+        <div class="mod-tile coming">
+          <div class="mod-badge badge-soon">SOON</div>
+          <div class="mod-icon-wrap" style="background:#f0fdf4;">⚙️</div>
+          <div class="mod-label">Mechanical</div>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="mod-tile coming">
+          <div class="mod-badge badge-soon">SOON</div>
+          <div class="mod-icon-wrap" style="background:#fdf4ff;">🛠️</div>
+          <div class="mod-label">Service Bay</div>
+        </div>
+        <div class="mod-tile">
+          <div class="mod-badge badge-live">LIVE</div>
+          <div class="mod-icon-wrap" style="background:#f5f3ff;">📊</div>
+          <div class="mod-label">Reports</div>
+        </div>
+        <div class="mod-tile">
+          <div class="mod-badge badge-live">LIVE</div>
+          <div class="mod-icon-wrap" style="background:#ecfdf5;">📥</div>
+          <div class="mod-label">Import Data</div>
+        </div>
+
+        <!-- Row 3 -->
+        <div class="mod-tile coming">
+          <div class="mod-badge badge-soon">SOON</div>
+          <div class="mod-icon-wrap" style="background:#fff1f2;">🔩</div>
+          <div class="mod-label">Parts &amp; Stock</div>
+        </div>
+        <div class="mod-tile coming">
+          <div class="mod-badge badge-soon">SOON</div>
+          <div class="mod-icon-wrap" style="background:#fefce8;">🛡️</div>
+          <div class="mod-label">Warranty</div>
+        </div>
+        <div class="mod-tile">
+          <div class="mod-badge badge-live">LIVE</div>
+          <div class="mod-icon-wrap" style="background:#f0f9ff;">👨‍💼</div>
+          <div class="mod-label">Admin</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RECENT ACTIVITY -->
+    <div class="sec" style="padding-bottom:16px;">
+      <div class="sec-hdr">
+        <span class="sec-title">Recent Activity</span>
+        <span class="sec-link">See all →</span>
+      </div>
+      <div class="activity-list">
+        <div class="act-row">
+          <div class="act-icon" style="background:#eff6ff;">🎨</div>
+          <div class="act-body">
+            <div class="act-title">MH12 AB 3456 – Estimate approved</div>
+            <div class="act-meta">Body &amp; Paint · JC-2024-0891</div>
+          </div>
+          <div class="act-time">2m ago</div>
+        </div>
+        <div class="act-row">
+          <div class="act-icon" style="background:#f5f3ff;">📊</div>
+          <div class="act-body">
+            <div class="act-title">Labour Revenue report exported</div>
+            <div class="act-meta">Reports · May 2024</div>
+          </div>
+          <div class="act-time">14m ago</div>
+        </div>
+        <div class="act-row">
+          <div class="act-icon" style="background:#ecfdf5;">📥</div>
+          <div class="act-body">
+            <div class="act-title">Invoice data import complete</div>
+            <div class="act-meta">Import · 348 records</div>
+          </div>
+          <div class="act-time">1h ago</div>
+        </div>
+        <div class="act-row">
+          <div class="act-icon" style="background:#eff6ff;">🎨</div>
+          <div class="act-body">
+            <div class="act-title">KA01 CD 7788 – Photos captured</div>
+            <div class="act-meta">Body &amp; Paint · Pre-repair stage</div>
+          </div>
+          <div class="act-time">2h ago</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end screen -->
+
+  <!-- TAB BAR -->
+  <div class="tabbar">
+    <div class="tab on">
+      <span class="tab-ic">🏠</span>
+      <span class="tab-lb">Home</span>
+    </div>
+    <div class="tab off">
+      <span class="tab-ic">🔍</span>
+      <span class="tab-lb">Search</span>
+    </div>
+    <div class="tab off" style="align-items:center;">
+      <div class="tab-center">➕</div>
+      <span class="tab-lb" style="color:#2563eb;margin-top:4px;">New</span>
+    </div>
+    <div class="tab off">
+      <span class="tab-ic">🔔</span>
+      <span class="tab-lb">Alerts</span>
+    </div>
+    <div class="tab off">
+      <span class="tab-ic">👤</span>
+      <span class="tab-lb">Profile</span>
+    </div>
+  </div>
+
+</div><!-- end phone -->
+
+<!-- ══════ ANNOTATIONS ══════ -->
+<div class="notes">
+
+  <div class="note-card">
+    <h3>Design Philosophy</h3>
+    <div class="note-item">
+      <div class="note-zone">Platform-first, not feature-first</div>
+      <div class="note-desc">Like Amazon / Tata Motors app — Home is a <strong style="color:#e2e8f0">launcher</strong>, not a screen. Every module lives as a tile. New modules just get added to the grid.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-zone">Scale without redesign</div>
+      <div class="note-desc">LIVE / SOON / NEW badges let you ship future modules (Body Shop, Mechanical, Warranty, Parts) without rebuilding the home screen.</div>
+    </div>
+  </div>
+
+  <div class="note-card">
+    <h3>Zone Breakdown</h3>
+    <div class="note-item">
+      <div class="note-zone">① Header</div>
+      <div class="note-desc">Logo · Greeting · Notification bell (with red dot) · Profile avatar. Dark-blue gradient feels premium.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-zone">② Search Bar</div>
+      <div class="note-desc">Search job cards by reg no., vehicle, or report name. Barcode/QR scan icon for fast intake lookup.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-zone">③ Stats Strip (3 numbers)</div>
+      <div class="note-desc">Active Jobs · Pending Action · Done This Month. Floating card that pops off the header.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-zone">④ Service Modules Grid</div>
+      <div class="note-desc">3-column icon tiles. One tap to any module. Status badges signal readiness.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-zone">⑤ Recent Activity Feed</div>
+      <div class="note-desc">Cross-module feed — any action from any module shows here. Like a notification log on screen.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-zone">⑥ Tab Bar (5 tabs)</div>
+      <div class="note-desc">Home · Search · <strong style="color:#60a5fa">+ New</strong> (floating centre CTA) · Alerts · Profile. Clean and universal.</div>
+    </div>
+  </div>
+
+  <div class="note-card">
+    <h3>Module Tiles Planned</h3>
+    <div>
+      <span class="tag" style="background:#dcfce7;color:#15803d">🎨 Body &amp; Paint</span>
+      <span class="tag" style="background:#dcfce7;color:#15803d">📊 Reports</span>
+      <span class="tag" style="background:#dcfce7;color:#15803d">📥 Import</span>
+      <span class="tag" style="background:#dcfce7;color:#15803d">👨‍💼 Admin</span>
+      <span class="tag" style="background:#f1f5f9;color:#64748b">🏭 Body Shop</span>
+      <span class="tag" style="background:#f1f5f9;color:#64748b">⚙️ Mechanical</span>
+      <span class="tag" style="background:#f1f5f9;color:#64748b">🛠️ Service Bay</span>
+      <span class="tag" style="background:#f1f5f9;color:#64748b">🔩 Parts &amp; Stock</span>
+      <span class="tag" style="background:#f1f5f9;color:#64748b">🛡️ Warranty</span>
+    </div>
+  </div>
+
+  <div class="note-card">
+    <h3>What Changed from v1</h3>
+    <div class="note-desc" style="color:#94a3b8;font-size:12px;line-height:1.7;">
+      ✗ v1 was AutoDoc-centric — KPIs only showed job cards<br>
+      ✗ v1 had no logo / brand identity<br>
+      ✗ v1 had no search / QR scan<br>
+      ✗ v1's tab bar had domain tabs (Import, Reports) mixed with platform nav<br><br>
+      ✓ v2 is a <strong style="color:#e2e8f0">module launcher</strong><br>
+      ✓ Notification bell + profile avatar (standard mobile UX)<br>
+      ✓ Search bar with QR scan shortcut<br>
+      ✓ Coming-soon tiles = roadmap visible in the app<br>
+      ✓ Tab bar = platform nav (Home / Search / New / Alerts / Profile)<br>
+      ✓ Cross-module recent activity feed
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
