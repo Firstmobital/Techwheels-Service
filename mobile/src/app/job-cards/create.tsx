@@ -748,17 +748,47 @@ export default function CreateJobCardScreen() {
           </View>
         ) : null}
 
-        <TouchableOpacity
-          className={`rounded-lg py-4 items-center ${canSubmit ? 'bg-blue-600' : 'bg-blue-300'}`}
-          disabled={!canSubmit}
-          onPress={onCreate}
-        >
-          <Text className="text-white font-semibold">{saving ? 'Creating...' : 'Create Draft Job Card'}</Text>
-        </TouchableOpacity>
+        {showVehicleDetailsForm && draftJobCardId ? (
+          <>
+            <TouchableOpacity
+              className={`rounded-lg py-4 items-center mt-4 ${saving ? 'bg-blue-300' : 'bg-blue-600'}`}
+              disabled={saving}
+              onPress={async () => {
+                setSaving(true)
+                try {
+                  const year = form.year.trim() ? Number(form.year) : null
+                  const kmReading = form.kmReading.trim() ? Number(form.kmReading) : null
 
-        <TouchableOpacity className="mt-3 py-3 items-center" onPress={goToDashboard}>
-          <Text className="text-blue-600 font-semibold">Cancel</Text>
-        </TouchableOpacity>
+                  const updateResult = await updateJobCard(draftJobCardId, {
+                    regNumber: form.regNumber,
+                    jcNumber: form.jcNumber,
+                    complaintDate: form.complaintDate,
+                    kmReading,
+                    claimType: form.claimType,
+                    complaintText: form.complaintText,
+                  })
+
+                  if (updateResult.error || !updateResult.data) {
+                    Alert.alert('Error', updateResult.error ?? 'Unable to update job card')
+                    logEvent('create_job_card_next_failed', { error_message: updateResult.error, job_card_id: draftJobCardId }, 'autodoc-create')
+                    return
+                  }
+
+                  logEvent('create_job_card_next_success', { job_card_id: draftJobCardId }, 'autodoc-create')
+                  router.replace(`/job-cards/${draftJobCardId}/jobcard`)
+                } finally {
+                  setSaving(false)
+                }
+              }}
+            >
+              <Text className="text-white font-semibold">{saving ? 'Saving...' : 'Next: Document Damage'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity className="mt-3 py-3 items-center" onPress={goToDashboard}>
+              <Text className="text-blue-600 font-semibold">Cancel</Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
       </ScrollView>
     </>
   )
