@@ -1905,7 +1905,7 @@ export async function getVasRevenueReport(
 
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const key = serviceTypeGroupKey(serviceType)
-    const netPrice = parseRevenueExcludingGst(typedRow.net_price)
+    const netPrice = parseRevenue(typedRow.net_price)
     const revenue = netPrice
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
 
@@ -2003,7 +2003,7 @@ export async function getVasRevenueByEmployee(
         : String(typedRow.employee_name).trim()
 
     const key = employeeCode.toLowerCase()
-    const netPrice = parseRevenueExcludingGst(typedRow.net_price)
+    const netPrice = parseRevenue(typedRow.net_price)
     const revenue = netPrice
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
 
