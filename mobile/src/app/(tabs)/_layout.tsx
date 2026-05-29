@@ -19,6 +19,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      initialRouteName="index"
       screenOptions={{
         headerShown: true,
         sceneStyle: {
@@ -40,6 +41,19 @@ export default function TabsLayout() {
         },
       }}
     >
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Home',
+          headerTitle: 'Techwheels Service',
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <View className="w-6 h-6" style={{ opacity: color === '#2563eb' ? 1 : 0.5 }}>
+              <Text style={{ color, fontSize: size, fontWeight: 'bold' }}>🏠</Text>
+            </View>
+          ),
+        }}
+      />
       <Tabs.Screen
         name="import"
         options={{
