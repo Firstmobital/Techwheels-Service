@@ -17,6 +17,7 @@
 7. [Risk Mitigation](#risk-mitigation)
 8. [Success Criteria](#success-criteria)
 9. [Release Prerequisites and OTA-First Delivery](#release-prerequisites-and-ota-first-delivery)
+10. [Execution Anti-Drift Protocol](#execution-anti-drift-protocol)
 
 ---
 
@@ -147,6 +148,35 @@ This section is the mandatory go/no-go gate before first distributable mobile bu
 - First installable build must already include OTA capability.
 - Every later JS/TS/UI fix is shipped via OTA to the same channel (no rebuild needed).
 - Rebuild required only when native layer changes (new native module, plugin config, permission changes, app icon/splash/native settings, SDK/runtime bump).
+
+## Execution Anti-Drift Protocol
+
+This plan is the single execution source of truth. Any important implementation decision must be reflected here before or immediately after code/config change.
+
+### Mandatory Update Triggers
+Update this file whenever any one of these changes happens:
+1. Build pipeline changes (EAS profiles, channels, runtimeVersion, submission flow).
+2. Third-party integration changes (Firebase, AWS S3, Supabase, notification providers, auth providers).
+3. Native capability changes (permissions, plugins, app identifiers, google-services.json, Apple capabilities).
+4. API contract changes (Edge Function payload/response, required env variables, storage path rules).
+5. Release policy changes (OTA-vs-rebuild rules, preview/production branch mapping).
+6. Security/credential handling changes (new secrets, secret names, credential rotation process).
+7. Any resolved blocker that changes implementation order or acceptance criteria.
+
+### Required Update Format
+For each important change:
+1. Update the relevant section content.
+2. Add a dated entry in the change log below.
+3. Update `Last Updated` at the bottom of this document.
+4. If execution order changes, update Phase tasks and Success Criteria together.
+
+### Working Rule During Execution
+- No major command run (build, submit, OTA publish, credential onboarding) should proceed if this document is stale relative to the latest decision.
+- If conflict exists between chat discussion and this document, update this document first, then execute.
+
+### Live Change Log
+- 2026-05-29: Added OTA-first prerequisite gate and credential/build baseline for APK + IPA delivery.
+- 2026-05-29: Added Execution Anti-Drift Protocol with mandatory update triggers and sync rules.
 
 ---
 
@@ -1481,6 +1511,6 @@ Expo Go is useful for fast JS iteration, but release validation must happen on E
 
 ---
 
-**Document Status**: EXECUTION READY (Prerequisites + OTA baseline defined)  
+**Document Status**: EXECUTION READY (Prerequisites + OTA baseline defined, anti-drift protocol active)  
 **Last Updated**: 2026-05-29  
 **Next Review**: After first successful preview APK + IPA and first OTA publish
