@@ -456,29 +456,9 @@ export default function CreateJobCardScreen() {
               <Text style={{ color: '#2563eb', fontWeight: '700', fontSize: 12 }}>Back</Text>
             </Pressable>
           ),
-          headerRight: () => (
-            <Pressable
-              onPress={() => {
-                setForm(initialForm())
-                setWalkaroundVideoName('')
-                setCarImageName('')
-                setVehicleLookupStatus('idle')
-              }}
-              style={{ paddingVertical: 6, paddingHorizontal: 10 }}
-            >
-              <Text style={{ color: '#2563eb', fontWeight: '700', fontSize: 12 }}>Clear & New</Text>
-            </Pressable>
-          ),
         }}
       />
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
-        <TouchableOpacity
-          className="self-start mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
-          onPress={goToDashboard}
-        >
-          <Text className="text-blue-700 text-xs font-semibold">← Back to Dashboard</Text>
-        </TouchableOpacity>
-
         <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
           <Text className="text-xs uppercase tracking-wide text-gray-500">Vehicle Lookup</Text>
 
@@ -488,14 +468,6 @@ export default function CreateJobCardScreen() {
             onChangeText={(value) => setForm((prev) => ({ ...prev, regNumber: value.toUpperCase() }))}
             placeholder="RJ14CR1912"
             autoCapitalize="characters"
-            className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
-          />
-
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Job Card Number *</Text>
-          <TextInput
-            value={form.jcNumber}
-            onChangeText={(value) => setForm((prev) => ({ ...prev, jcNumber: value }))}
-            placeholder="JC001"
             className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
           />
 
@@ -665,24 +637,19 @@ export default function CreateJobCardScreen() {
           </View>
         ) : null}
 
-        <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-          <Text className="text-xs uppercase tracking-wide text-gray-500">Job Card Details</Text>
+        {showVehicleDetailsForm ? (
+          <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
+            <Text className="text-xs uppercase tracking-wide text-gray-500">Job Details</Text>
 
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Complaint Date (YYYY-MM-DD) *</Text>
-          <TextInput
-            value={form.complaintDate}
-            onChangeText={(value) => setForm((prev) => ({ ...prev, complaintDate: value }))}
-            placeholder="2026-05-28"
-            className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
-          />
+            <Text className="text-xs text-gray-600 mt-3 mb-1">Job Card Number *</Text>
+            <TextInput
+              value={form.jcNumber}
+              onChangeText={(value) => setForm((prev) => ({ ...prev, jcNumber: value }))}
+              placeholder="e.g. JC-2026-042"
+              className="border border-gray-300 rounded-lg px-3 py-3 bg-white mb-3"
+            />
 
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Claim Type</Text>
-          {loadingLookups ? (
-            <View className="border border-gray-200 rounded-lg p-3 flex-row items-center">
-              <ActivityIndicator size="small" color="#2563eb" />
-              <Text className="text-xs text-gray-600 ml-2">Loading claim types...</Text>
-            </View>
-          ) : (
+            <Text className="text-xs text-gray-600 mb-1">Warranty Claim Type</Text>
             <View className="flex-row flex-wrap">
               {claimTypeOptions.map((option) => {
                 const active = form.claimType === option
@@ -697,19 +664,19 @@ export default function CreateJobCardScreen() {
                 )
               })}
             </View>
-          )}
 
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Complaint Notes</Text>
-          <TextInput
-            value={form.complaintText}
-            onChangeText={(value) => setForm((prev) => ({ ...prev, complaintText: value }))}
-            placeholder="Describe observed issue"
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            className="border border-gray-300 rounded-lg px-3 py-3 bg-white min-h-[96px]"
-          />
-        </View>
+            <Text className="text-xs text-gray-600 mt-3 mb-1">Customer Complaint</Text>
+            <TextInput
+              value={form.complaintText}
+              onChangeText={(value) => setForm((prev) => ({ ...prev, complaintText: value }))}
+              placeholder="Describe the issue as reported by customer..."
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              className="border border-gray-300 rounded-lg px-3 py-3 bg-white min-h-[80px]"
+            />
+          </View>
+        ) : null}
 
         <TouchableOpacity
           className={`rounded-lg py-4 items-center ${canSubmit ? 'bg-blue-600' : 'bg-blue-300'}`}

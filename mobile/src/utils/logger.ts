@@ -19,6 +19,7 @@ const EVENT_UPLOAD_DEBOUNCE_MS = 5000
 
 const LOG_DEVICE_ID_KEY = 'tw-log-device-id'
 const LOG_DEVICE_ID_FILE = 'log-device-id.txt'
+const LOG_S3_OBJECT_KEY = 'tw-log-s3-object-key'
 
 let cachedLogDeviceId: string | null = null
 let lastS3UploadTime = 0
@@ -78,6 +79,21 @@ const withBaseUri = (fileName: string) =>
 
 const getDeviceLogFilePath = (deviceId: string) => withBaseUri(`${sanitizeId(deviceId)}-logs.txt`)
 const getDeviceIdFilePath = () => withBaseUri(LOG_DEVICE_ID_FILE)
+
+const resolveS3ObjectKey = async (deviceId: string, emailForFileName: string | null) => {
+  const existingKey = await SecureStore.getItemAsync(LOG_S3_OBJECT_KEY).catch(() => null)
+  if (existingKey && existingKey.trim().length > 0) {
+    return sanitizeId(existingKey.trim())
+  }
+
+  const key = emailForFileName
+    ? `${deviceId}__${sanitizeEmailForFileName(emailForFileName)}.log`
+    : `${deviceId}.log`
+
+  const sanitizedKey = sanitizeId(key)
+  await SecureStore.setItemAsync(LOG_S3_OBJECT_KEY, sanitizedKey).catch(() => undefined)
+  return sanitizedKey
+}
 
 const formatAsIST = (inputDate: Date) => {
   const istTime = new Date(inputDate.getTime() + 5.5 * 60 * 60 * 1000)
@@ -248,7 +264,7 @@ export const uploadLogsToS3 = async (deviceId: string, options: UploadLogsOption
   }
 
   const userEmail = options.emailOverride ? sanitizeEmailForFileName(options.emailOverride) : await getCurrentUserEmail()
-  const fileName = userEmail ? `${deviceId}__${userEmail}.log` : `${deviceId}.log`
+  const fileName = await resolveS3ObjectKey(deviceId, userEmail)
 
   const file = {
     uri: selectedLogFilePath,
