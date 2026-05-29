@@ -60,8 +60,8 @@ export interface FilteredJcChassisRow {
 export interface LabourKpiSummary {
   monthlyJobCards: number
   monthlyRevenue: number
-  partsNeedingReorder: number
-  openTransitOrders: number
+  totalVasRevenue: number
+  totalVasCount: number
 }
 
 export interface ManpowerServiceTypeLabourRevenue {
@@ -122,11 +122,26 @@ export interface VasRevenueByServiceTypeRow {
   avgVasRevenue: number
 }
 
+export interface VasRevenueByEmployeeRow {
+  employeeCode: string
+  employeeName: string
+  totalVasRevenue: number
+  jobCount: number
+  avgVasRevenue: number
+}
+
 export interface VasRevenueReportData {
   totalVasRevenue: number
   totalJobs: number
   avgVasRevenue: number
   rows: VasRevenueByServiceTypeRow[]
+}
+
+export interface VasRevenueByEmployeeReportData {
+  totalVasRevenue: number
+  totalJobs: number
+  avgVasRevenue: number
+  rows: VasRevenueByEmployeeRow[]
 }
 
 export interface VasRevenueDataRow {
@@ -598,9 +613,13 @@ async function getJobCardFuelColumn(): Promise<JobCardFuelColumn> {
 }
 
 function parseFuelSelectionFromBranch(branch: BranchFilter): 'PV' | 'EV' | null {
-  const normalized = String(branch ?? '').trim().toLowerCase()
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
   if (normalized === 'sitapura pv') return 'PV'
   if (normalized === 'sitapura ev') return 'EV'
+  if (normalized === 'all_pv') return 'PV'
+  if (normalized === 'all_ev') return 'EV'
+  if (normalized === 'ajmer road pv') return 'PV'
+  if (normalized === 'ajmer road ev') return 'EV'
   return null
 }
 
@@ -609,6 +628,28 @@ function matchesFuelSelectionByBranchLabel(rawBranch: unknown, fuelType: 'PV' | 
   if (!normalized) return false
   if (fuelType === 'PV') return normalized.includes('pv')
   return normalized.includes('ev')
+}
+
+function normalizeFuelBucket(rawFuel: unknown): 'PV' | 'EV' | null {
+  const normalized = String(rawFuel ?? '').trim().toLowerCase()
+  if (!normalized) return null
+
+  if (normalized === 'ev' || normalized.includes('electric')) {
+    return 'EV'
+  }
+
+  if (
+    normalized === 'pv' ||
+    normalized.includes('petrol') ||
+    normalized.includes('diesel') ||
+    normalized.includes('cng') ||
+    normalized.includes('hybrid') ||
+    normalized.includes('lpg')
+  ) {
+    return 'PV'
+  }
+
+  return null
 }
 
 function applyDateFilterToQuery(
@@ -908,14 +949,9 @@ async function fetchVasRowsWithEmployeeData(
 
   if (fuelSelection) {
     mergedData = mergedData.filter((row) => {
-      const typedRow = row as { employee_fuel_type?: unknown; branch?: unknown }
-      const empFuelType = typedRow.employee_fuel_type
-      if (empFuelType != null && String(empFuelType).trim() !== '') {
-        return String(empFuelType).trim().toUpperCase() === fuelSelection
-      }
-
-      // Fallback for rows where employee fuel type is not available in employee_master.
-      return matchesFuelSelectionByBranchLabel(typedRow.branch, fuelSelection)
+      const typedRow = row as { employee_fuel_type?: unknown }
+      const employeeFuelBucket = normalizeFuelBucket(typedRow.employee_fuel_type)
+      return employeeFuelBucket === fuelSelection
     })
   }
 
@@ -1264,43 +1300,33 @@ export async function getLabourKpiSummary(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<LabourKpiSummary> {
-  const data = await fetchJobCardWithEmployeeData(
-    'job_card_number, total_invoice_amount, final_spares_amount, sr_type',
-    {
-      branch,
-      dateFilter,
-      serviceType: serviceTypeFilter,
-    },
-  )
+  const [data, vasSummary] = await Promise.all([
+    fetchJobCardWithEmployeeData(
+      'job_card_number, total_invoice_amount',
+      {
+        branch,
+        dateFilter,
+        serviceType: serviceTypeFilter,
+      },
+    ),
+    getVasRevenueReport(branch, dateFilter, serviceTypeFilter),
+  ])
 
   let monthlyRevenue = 0
-  let partsNeedingReorder = 0
-  let openTransitOrders = 0
 
   for (const row of data ?? []) {
     const typedRow = row as {
       total_invoice_amount?: unknown
-      final_spares_amount?: unknown
-      sr_type?: unknown
     }
 
     monthlyRevenue += parseRevenueExcludingGst(typedRow.total_invoice_amount)
-
-    if (parseRevenue(typedRow.final_spares_amount) > 0) {
-      partsNeedingReorder += 1
-    }
-
-    const serviceType = normalizeServiceType(typedRow.sr_type).toLowerCase()
-    if (serviceType.includes('transit')) {
-      openTransitOrders += 1
-    }
   }
 
   return {
     monthlyJobCards: (data ?? []).length,
     monthlyRevenue,
-    partsNeedingReorder,
-    openTransitOrders,
+    totalVasRevenue: vasSummary.totalVasRevenue,
+    totalVasCount: vasSummary.totalJobs,
   }
 }
 
@@ -1850,7 +1876,7 @@ export async function getVasRevenueReport(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<VasRevenueReportData> {
-  const filteredRows = await fetchAllVasRowsWithoutFuelFilter(
+  const filteredRows = await fetchVasRowsWithEmployeeData(
     'branch, sr_type, net_price, job_card_number',
     {
       branch,
@@ -1862,12 +1888,13 @@ export async function getVasRevenueReport(
   interface WorkingVasRevenue {
     serviceType: string
     totalVasRevenue: number
-    jobCount: number
+    uniqueJobCards: Set<string>
   }
 
+  // Track unique job cards globally to deduplicate across all service types
+  const globalUniqueJobCards = new Set<string>()
   const grouped = new Map<string, WorkingVasRevenue>()
   let totalVasRevenue = 0
-  let totalJobs = 0
 
   for (const row of filteredRows) {
     const typedRow = row as {
@@ -1878,43 +1905,152 @@ export async function getVasRevenueReport(
 
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const key = serviceTypeGroupKey(serviceType)
-    const netPrice = parseRevenue(typedRow.net_price)
+    const netPrice = parseRevenueExcludingGst(typedRow.net_price)
     const revenue = netPrice
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
 
     totalVasRevenue += revenue
+
+    // Track unique job card globally
     if (jobCardNumber) {
-      totalJobs += 1
+      globalUniqueJobCards.add(jobCardNumber)
     }
 
     const existing = grouped.get(key)
     if (existing) {
       existing.totalVasRevenue += revenue
       if (jobCardNumber) {
-        existing.jobCount += 1
+        existing.uniqueJobCards.add(jobCardNumber)
       }
       continue
+    }
+
+    const uniqueSet = new Set<string>()
+    if (jobCardNumber) {
+      uniqueSet.add(jobCardNumber)
     }
 
     grouped.set(key, {
       serviceType,
       totalVasRevenue: revenue,
-      jobCount: jobCardNumber ? 1 : 0,
+      uniqueJobCards: uniqueSet,
     })
   }
+
+  const totalJobs = globalUniqueJobCards.size
 
   const rows: VasRevenueByServiceTypeRow[] = [...grouped.values()]
     .map((item) => ({
       serviceType: item.serviceType,
       totalVasRevenue: item.totalVasRevenue,
-      jobCount: item.jobCount,
-      avgVasRevenue: item.jobCount > 0 ? item.totalVasRevenue / item.jobCount : 0,
+      jobCount: item.uniqueJobCards.size,
+      avgVasRevenue: item.uniqueJobCards.size > 0 ? item.totalVasRevenue / item.uniqueJobCards.size : 0,
     }))
     .sort((a, b) => {
       if (b.totalVasRevenue !== a.totalVasRevenue) {
         return b.totalVasRevenue - a.totalVasRevenue
       }
       return a.serviceType.localeCompare(b.serviceType)
+    })
+
+  return {
+    totalVasRevenue,
+    totalJobs,
+    avgVasRevenue: totalJobs > 0 ? totalVasRevenue / totalJobs : 0,
+    rows,
+  }
+}
+
+export async function getVasRevenueByEmployee(
+  branch: BranchFilter,
+  dateFilter: DateRangeFilter,
+  serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
+): Promise<VasRevenueByEmployeeReportData> {
+  const filteredRows = await fetchVasRowsWithEmployeeData(
+    'branch, sr_type, net_price, job_card_number, employee_code',
+    {
+      branch,
+      dateFilter,
+      serviceType: serviceTypeFilter,
+    },
+  )
+
+  interface WorkingEmployeeVasRevenue {
+    employeeCode: string
+    employeeName: string
+    totalVasRevenue: number
+    uniqueJobCards: Set<string>
+  }
+
+  // Track unique job cards globally to deduplicate across all employees
+  const globalUniqueJobCards = new Set<string>()
+  const grouped = new Map<string, WorkingEmployeeVasRevenue>()
+  let totalVasRevenue = 0
+
+  for (const row of filteredRows) {
+    const typedRow = row as {
+      sr_type?: unknown
+      net_price?: unknown
+      job_card_number?: unknown
+      employee_code?: unknown
+      employee_name?: unknown
+    }
+
+    const employeeCode = normalizeEmployeeCode(typedRow.employee_code) || 'Unknown'
+    const employeeName =
+      typedRow.employee_name == null || String(typedRow.employee_name).trim() === ''
+        ? employeeCode
+        : String(typedRow.employee_name).trim()
+
+    const key = employeeCode.toLowerCase()
+    const netPrice = parseRevenueExcludingGst(typedRow.net_price)
+    const revenue = netPrice
+    const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
+
+    totalVasRevenue += revenue
+
+    // Track unique job card globally
+    if (jobCardNumber) {
+      globalUniqueJobCards.add(jobCardNumber)
+    }
+
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.totalVasRevenue += revenue
+      if (jobCardNumber) {
+        existing.uniqueJobCards.add(jobCardNumber)
+      }
+      continue
+    }
+
+    const uniqueSet = new Set<string>()
+    if (jobCardNumber) {
+      uniqueSet.add(jobCardNumber)
+    }
+
+    grouped.set(key, {
+      employeeCode,
+      employeeName,
+      totalVasRevenue: revenue,
+      uniqueJobCards: uniqueSet,
+    })
+  }
+
+  const totalJobs = globalUniqueJobCards.size
+
+  const rows: VasRevenueByEmployeeRow[] = [...grouped.values()]
+    .map((item) => ({
+      employeeCode: item.employeeCode,
+      employeeName: item.employeeName,
+      totalVasRevenue: item.totalVasRevenue,
+      jobCount: item.uniqueJobCards.size,
+      avgVasRevenue: item.uniqueJobCards.size > 0 ? item.totalVasRevenue / item.uniqueJobCards.size : 0,
+    }))
+    .sort((a, b) => {
+      if (b.totalVasRevenue !== a.totalVasRevenue) {
+        return b.totalVasRevenue - a.totalVasRevenue
+      }
+      return a.employeeName.localeCompare(b.employeeName)
     })
 
   return {
@@ -1963,12 +2099,33 @@ export async function getVasRevenueData(
     }
   })
 
-  const totalNetPrice = mappedRows.reduce((sum, row) => sum + row.netPrice, 0)
+  // Deduplicate by job card: merge multiple VAS services on the same job card
+  const deduplicatedMap = new Map<string, VasRevenueDataRow>()
+  let totalNetPrice = 0
+
+  for (const row of mappedRows) {
+    const jcKey = row.jobCardNumber.toLowerCase().trim()
+    
+    totalNetPrice += row.netPrice
+
+    // Keep the first occurrence but accumulate net price
+    const existing = deduplicatedMap.get(jcKey)
+    if (existing) {
+      existing.netPrice += row.netPrice
+    } else {
+      deduplicatedMap.set(jcKey, { ...row })
+    }
+  }
+  
+  // Apply GST exclusion (18%) to total net price
+  const gstExcludedTotalNetPrice = totalNetPrice > 0 ? Math.round(totalNetPrice / 1.18) : 0
+
+  const uniqueJobCards = Array.from(deduplicatedMap.values())
 
   return {
-    totalNetPrice,
-    jobCount: mappedRows.length,
-    rows: mappedRows,
+    totalNetPrice: gstExcludedTotalNetPrice,
+    jobCount: uniqueJobCards.length,
+    rows: uniqueJobCards,
   }
 }
 

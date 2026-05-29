@@ -4,6 +4,8 @@ import {
   type DateRangeFilter,
   getVasRevenueReport,
   type VasRevenueReportData,
+  getVasRevenueByEmployee,
+  type VasRevenueByEmployeeReportData,
 } from '../../../lib/reportQueries'
 import { exportToCSV, formatCurrencyForExport, generateExportFilename } from '../../../lib/exportUtils'
 
@@ -28,6 +30,12 @@ export default function VasRevenueReport({
     avgVasRevenue: 0,
     rows: [],
   })
+  const [employeeData, setEmployeeData] = useState<VasRevenueByEmployeeReportData>({
+    totalVasRevenue: 0,
+    totalJobs: 0,
+    avgVasRevenue: 0,
+    rows: [],
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,10 +45,14 @@ export default function VasRevenueReport({
     setIsLoading(true)
     setError(null)
 
-    getVasRevenueReport(branch, dateFilter, serviceTypeFilter)
-      .then((result: VasRevenueReportData) => {
+    Promise.all([
+      getVasRevenueReport(branch, dateFilter, serviceTypeFilter),
+      getVasRevenueByEmployee(branch, dateFilter, serviceTypeFilter),
+    ])
+      .then(([reportData, empData]: [VasRevenueReportData, VasRevenueByEmployeeReportData]) => {
         if (!active) return
-        setData(result)
+        setData(reportData)
+        setEmployeeData(empData)
       })
       .catch((err: Error) => {
         if (!active) return
@@ -173,6 +185,41 @@ export default function VasRevenueReport({
                   {data.rows.map((row) => (
                     <tr key={row.serviceType} className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-gray-700">{row.serviceType}</td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        {row.totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        {row.jobCount.toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        {row.avgVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h3 className="mb-4 text-sm font-semibold text-gray-900">Employee-wise VAS Revenue</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-600">Employee Code</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-600">Employee Name</th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600">VAS Revenue</th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600">Job Count</th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600">Avg / Job</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {employeeData.rows.map((row) => (
+                    <tr key={row.employeeCode} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-mono text-sm text-gray-700">{row.employeeCode}</td>
+                      <td className="px-3 py-2 text-gray-700">{row.employeeName}</td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                       </td>

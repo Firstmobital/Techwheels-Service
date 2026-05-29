@@ -32,8 +32,8 @@ const CATEGORY_TABS: Array<{ id: ReportCategoryId; label: string }> = [
 interface HeaderStats {
   monthlyJobCards: number
   monthlyRevenue: number
-  partsNeedingReorder: number
-  openTransitOrders: number
+  totalVasRevenue: number
+  totalVasCount: number
 }
 
 function getTodayDateInputValue(): string {
@@ -63,8 +63,8 @@ export default function ReportsPage() {
   const [headerStats, setHeaderStats] = useState<HeaderStats>({
     monthlyJobCards: 0,
     monthlyRevenue: 0,
-    partsNeedingReorder: 0,
-    openTransitOrders: 0,
+    totalVasRevenue: 0,
+    totalVasCount: 0,
   })
   const [headerStatsLoading, setHeaderStatsLoading] = useState(true)
 
@@ -198,8 +198,8 @@ export default function ReportsPage() {
         setHeaderStats({
           monthlyJobCards: 0,
           monthlyRevenue: 0,
-          partsNeedingReorder: 0,
-          openTransitOrders: 0,
+          totalVasRevenue: 0,
+          totalVasCount: 0,
         })
       } finally {
         if (!active) return
@@ -314,15 +314,15 @@ export default function ReportsPage() {
               </p>
             </div>
             <div className="rounded-xl border border-gray-200 border-l-4 border-l-red-500 bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Parts to Reorder</p>
+              <p className="text-sm text-gray-600">Total VAS Revenue</p>
               <p className="mt-1 text-2xl font-semibold text-gray-900">
-                {headerStats.partsNeedingReorder.toLocaleString('en-IN')}
+                ₹{(headerStats.totalVasRevenue / 100000).toFixed(1)}L
               </p>
             </div>
             <div className="rounded-xl border border-gray-200 border-l-4 border-l-amber-500 bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-600">In-Transit Orders</p>
+              <p className="text-sm text-gray-600">Total VAS Count</p>
               <p className="mt-1 text-2xl font-semibold text-gray-900">
-                {headerStats.openTransitOrders.toLocaleString('en-IN')}
+                {headerStats.totalVasCount.toLocaleString('en-IN')}
               </p>
             </div>
           </div>
