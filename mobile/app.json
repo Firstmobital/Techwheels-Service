@@ -7,31 +7,37 @@
     "scheme": "techwheelsservice",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTabletMode": true,
+      "supportsTablet": true,
       "bundleIdentifier": "com.techwheels.service",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Techwheels Service to access your camera for job card photos and document scans.",
         "NSPhotoLibraryUsageDescription": "Allow Techwheels Service to access your photos to attach media to job cards and reports.",
         "NSPhotoLibraryAddUsageDescription": "Allow Techwheels Service to save generated reports and exported media to your photo library.",
         "NSLocationWhenInUseUsageDescription": "Allow Techwheels Service to access your location to geotag job activity and reports.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow Techwheels Service to access your location in the background for field-service continuity.",
-        "NSFaceIDUsageDescription": "Allow Techwheels Service to use Face ID for secure sign-in and sensitive actions."
+        "NSFaceIDUsageDescription": "Allow Techwheels Service to use Face ID for secure sign-in and sensitive actions.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "predictiveBackGestureEnabled": false,
       "package": "com.techwheels.service",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
-        "CAMERA",
-        "READ_MEDIA_IMAGES",
-        "READ_MEDIA_VIDEO",
-        "READ_MEDIA_AUDIO",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "POST_NOTIFICATIONS",
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
@@ -71,6 +77,7 @@
           "faceIDPermission": "Allow Techwheels Service to use Face ID for secure sign-in and sensitive actions."
         }
       ],
+      "expo-font",
       "expo-document-picker",
       [
         "expo-build-properties",
@@ -86,23 +93,19 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "updates": {
-      "url": "https://u.expo.dev/techwheels-service",
-      "fallbackToCacheTimeout": 0,
-      "codegenMode": "partial"
+    "runtimeVersion": {
+      "policy": "appVersion"
     },
-    "eas": {
-      "build": {
-        "experimental": {
-          "prebuildCommand": "echo 'prebuild'"
-        }
-      }
+    "updates": {
+      "url": "https://u.expo.dev/54c61729-6d1f-414e-8224-18a77663ba75",
+      "fallbackToCacheTimeout": 0
     },
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "techwheels-service"
+        "projectId": "54c61729-6d1f-414e-8224-18a77663ba75"
       }
-    }
+    },
+    "owner": "tw_admin"
   }
 }

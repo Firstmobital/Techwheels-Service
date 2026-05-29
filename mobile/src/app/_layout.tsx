@@ -3,8 +3,18 @@ import '../global.css'
 import { Stack } from 'expo-router'
 import { AuthProvider } from '../context/AuthContext'
 import { OfflineProvider } from '../context/OfflineContext'
+import MandatoryUpdateModal from '../components/MandatoryUpdateModal'
+import { useMandatoryOTAUpdate } from '../hooks/useMandatoryOTAUpdate'
 
 export default function RootLayout() {
+  const {
+    modalVisible,
+    checkingUpdate,
+    applyingUpdate,
+    updateErrorMessage,
+    applyMandatoryUpdate,
+  } = useMandatoryOTAUpdate()
+
   return (
     <AuthProvider>
       <OfflineProvider>
@@ -28,6 +38,13 @@ export default function RootLayout() {
             }}
           />
         </Stack>
+        <MandatoryUpdateModal
+          visible={modalVisible}
+          isApplyingUpdate={applyingUpdate}
+          isCheckingUpdate={checkingUpdate}
+          errorMessage={updateErrorMessage}
+          onUpdateNow={applyMandatoryUpdate}
+        />
       </OfflineProvider>
     </AuthProvider>
   )

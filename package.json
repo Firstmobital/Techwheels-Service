@@ -10,7 +10,10 @@
     "dev": "vite",
     "build": "tsc -b --force && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mobile:start": "npm --prefix ./mobile run start -- --tunnel",
+    "mobile:start:clear": "npm --prefix ./mobile run start -- --clear --tunnel",
+    "mobile:typecheck": "npm --prefix ./mobile run -s typecheck"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",

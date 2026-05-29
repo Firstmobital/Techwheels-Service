@@ -1,0 +1,37 @@
+diff --git a/node_modules/react-native-aws3/lib/S3Policy.js b/node_modules/react-native-aws3/lib/S3Policy.js
+index 13bb330..239dbd3 100644
+--- a/node_modules/react-native-aws3/lib/S3Policy.js
++++ b/node_modules/react-native-aws3/lib/S3Policy.js
+@@ -22,7 +22,6 @@ var _require = require('./DateUtils'),
+ 
+ var FIVE_MINUTES = 5 * (60 * 1000);
+ 
+-var AWS_ACL = "public-read";
+ var AWS_SERVICE_NAME = "s3";
+ var AWS_REQUEST_POLICY_VERSION = "aws4_request";
+ var AWS_ALGORITHM = "AWS4-HMAC-SHA256";
+@@ -57,7 +56,6 @@ var S3Policy = exports.S3Policy = function () {
+       var expirationDate = new Date(date.getTime() + policyExpiresIn);
+ 
+       var policyParams = _extends({}, options, {
+-        acl: options.acl || AWS_ACL,
+         algorithm: AWS_ALGORITHM,
+         amzDate: dateToString(date, 'amz-iso8601'),
+         yyyymmddDate: dateToString(date, 'yyyymmdd'),
+@@ -81,7 +79,6 @@ var S3Policy = exports.S3Policy = function () {
+ var formatPolicyForRequestBody = function formatPolicyForRequestBody(base64EncodedPolicy, signature, options) {
+   return {
+     "key": options.key,
+-    "acl": options.acl,
+     "success_action_status": options.successActionStatus,
+     "Content-Type": options.contentType,
+     "X-Amz-Credential": options.credential,
+@@ -95,7 +92,7 @@ var formatPolicyForRequestBody = function formatPolicyForRequestBody(base64Encod
+ var formatPolicyForEncoding = function formatPolicyForEncoding(policy) {
+   return {
+     "expiration": policy.expirationDate,
+-    "conditions": [{ "bucket": policy.bucket }, { "key": policy.key }, { "acl": policy.acl }, { "success_action_status": policy.successActionStatus }, { "Content-Type": policy.contentType }, { "x-amz-credential": policy.credential }, { "x-amz-algorithm": policy.algorithm }, { "x-amz-date": policy.amzDate }]
++    "conditions": [{ "bucket": policy.bucket }, { "key": policy.key }, { "success_action_status": policy.successActionStatus }, { "Content-Type": policy.contentType }, { "x-amz-credential": policy.credential }, { "x-amz-algorithm": policy.algorithm }, { "x-amz-date": policy.amzDate }]
+   };
+ };
+ 

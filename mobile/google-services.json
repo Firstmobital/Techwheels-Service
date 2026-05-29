@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "730873579510",
+    "project_id": "techwheels-service",
+    "storage_bucket": "techwheels-service.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:730873579510:android:a7d7829c4ae414fae8e9d7",
+        "android_client_info": {
+          "package_name": "com.techwheels.service"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjeoQZ7aY7CtUnh913jvPsLiiLZPHsuew"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

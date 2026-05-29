@@ -23,10 +23,6 @@ config.watchFolders = [
   path.resolve(__dirname, '..'),
 ]
 
-// Several files in mobile/src/lib are symlinks into the repo root.
-// Enable symlink traversal so Metro can resolve those modules reliably.
-config.resolver.unstable_enableSymlinks = true
-
 module.exports = withNativeWind(config, {
   input: './src/global.css',
 })

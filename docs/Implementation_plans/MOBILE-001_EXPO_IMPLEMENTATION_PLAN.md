@@ -149,6 +149,47 @@ This section is the mandatory go/no-go gate before first distributable mobile bu
 - Every later JS/TS/UI fix is shipped via OTA to the same channel (no rebuild needed).
 - Rebuild required only when native layer changes (new native module, plugin config, permission changes, app icon/splash/native settings, SDK/runtime bump).
 
+### Current Execution Snapshot (2026-05-29)
+- CLI readiness:
+  - `node`, `npm`, `npx`, `expo`, `eas` available.
+  - `firebase` and `aws` CLI were missing and have been installed.
+- Mobile config validation (`cd mobile && npx expo config --type public`) is now resolving correct app identity (`slug`, `android.package`, `ios.bundleIdentifier`).
+- Firebase service project created under `admin@firstmobital.com`:
+  - Firebase project: `techwheels-service` (Display name: `Techwheels-Service`).
+  - Android app registered: `com.techwheels.service`.
+  - iOS app registered: `com.techwheels.service`.
+  - Native config files generated in `mobile/`:
+    - `google-services.json`
+    - `GoogleService-Info.plist`
+- EAS linkage corrected:
+  - `extra.eas.projectId` now UUID: `54c61729-6d1f-414e-8224-18a77663ba75`.
+  - `updates.url` now UUID-based URL: `https://u.expo.dev/54c61729-6d1f-414e-8224-18a77663ba75`.
+  - `runtimeVersion` configured as `{ "policy": "appVersion" }`.
+- AWS S3 integration complete:
+  - S3 bucket `techwheels-service-logs-prod` created in ap-south-1 (ap-south-1 = Mumbai).
+  - IAM user `techwheels-service-s3-uploader` created with programmatic access.
+  - S3 policy attached: scoped `ListBucket`, `GetObject`, `PutObject`, `DeleteObject` for single bucket.
+  - AWS CLI profile `techwheels-service` configured and validated:
+    - `aws sts get-caller-identity` returns ARN: `arn:aws:iam::405894865811:user/techwheels-service-s3-uploader`
+    - `aws s3api head-bucket` confirms bucket access.
+    - Smoke test passed: upload, delete test file successful.
+  - AWS/S3 env key mapping ready to apply (from reference pattern):
+    - `EXPO_PUBLIC_AWS_REGION` / `AWS_REGION`
+    - `EXPO_PUBLIC_AWS_ACCESS_KEY_ID` / `AWS_ACCESS_KEY_ID`
+    - `EXPO_PUBLIC_AWS_SECRET_ACCESS_KEY` / `AWS_SECRET_ACCESS_KEY`
+    - `EXPO_PUBLIC_S3_BUCKET_NAME` / `S3_BUCKET_NAME` = `techwheels-service-logs-prod`
+- EAS credentials provisioning complete:
+  - Android:
+    - Keystore generated and linked for `@tw_admin/techwheels-service` production signing.
+    - SHA256 fingerprint recorded: `F3:8A:5A:FE:6E:B2:5F:61:92:3C:F9:AC:85:C2:A6:57:5C:8C:90:8D:C8:2C:39:7C:77:5C:38:2A:C1:DF:41:71`.
+  - iOS:
+    - Apple account session validated for team `LTSQS2N52R` (First Mobital Private Limited).
+    - Distribution certificate reused: serial `3B677E5054DB75243113E50D923B4954` (expires `2027-03-20`).
+    - Ad hoc provisioning profile created and active: portal ID `8PC877LYYC` for `com.techwheels.service`.
+    - Registered test device included: `00008110-00116CE21186201E` (Vinod Kumar Bijarnia - iPhone).
+- Remaining blockers before first OTA-capable preview build:
+  - First preview builds (Android APK + iOS IPA) pending.
+
 ## Execution Anti-Drift Protocol
 
 This plan is the single execution source of truth. Any important implementation decision must be reflected here before or immediately after code/config change.
@@ -177,6 +218,33 @@ For each important change:
 ### Live Change Log
 - 2026-05-29: Added OTA-first prerequisite gate and credential/build baseline for APK + IPA delivery.
 - 2026-05-29: Added Execution Anti-Drift Protocol with mandatory update triggers and sync rules.
+- 2026-05-29: Completed CLI readiness preflight; installed missing `firebase` and `aws` CLIs.
+- 2026-05-29: Validated mobile Expo config from `mobile/`; recorded Firebase file and OTA config blockers (project UUID wiring, runtimeVersion, native Firebase files).
+- 2026-05-29: Reauthenticated Firebase CLI (`admin@firstmobital.com`) and created new Firebase project `techwheels-service` for service app.
+- 2026-05-29: Registered Android and iOS Firebase apps for `com.techwheels.service` and generated `google-services.json` + `GoogleService-Info.plist`.
+- 2026-05-29: Re-linked EAS project to valid UUID and aligned `updates.url` + `extra.eas.projectId` with UUID-based OTA routing.
+- 2026-05-29: Hardened `mobile/eas.json` profiles with release channels (`development`, `preview`, `production`) and preview iOS distribution.
+- 2026-05-29: Updated OTA/build scripts in `mobile/package.json` for both platforms (`--platform all`, preview iOS build, production Android+iOS builds).
+- 2026-05-29: Added `ota:prod:ios` command and wired dedicated `production-apk` EAS profile for `build:prod:apk` while retaining production AAB flow.
+- 2026-05-29: Added explicit `ota:prod:all` command alias for production OTA all-platform publish naming consistency.
+- 2026-05-29: Derived AWS/S3 env naming contract from reference project for service rollout (`EXPO_PUBLIC_AWS_REGION`, `EXPO_PUBLIC_AWS_ACCESS_KEY_ID`, `EXPO_PUBLIC_AWS_SECRET_ACCESS_KEY`, `EXPO_PUBLIC_S3_BUCKET_NAME`).
+- 2026-05-29: Added AWS S3 console-to-CLI onboarding runbook, least-privilege IAM guidance, and production secret handling guardrail.
+- 2026-05-29: Completed AWS S3 integration: bucket created (`techwheels-service-logs-prod`, ap-south-1), IAM user + policy provisioned (`techwheels-service-s3-uploader`), CLI profile configured and validated (sts, bucket head, smoke test all green).
+- 2026-05-29: Provisioned Android EAS signing credentials with production keystore and recorded SHA256 fingerprint.
+- 2026-05-29: Provisioned iOS EAS credentials by reusing valid Apple distribution certificate and creating active ad hoc provisioning profile with registered test device.
+- 2026-05-29: Resolved Expo SDK 54 iOS build failure by aligning `react-native-worklets` dependency with installed `react-native-reanimated`.
+- 2026-05-29: Replaced `mobile/src/lib` symlinked files with local materialized copies to satisfy EAS remote build upload constraints.
+- 2026-05-29: Completed iOS preview build (`4f68ea74-5e04-4864-88e9-c7545c0beaf4`) and generated installable IPA artifact.
+- 2026-05-29: Completed production iOS build + auto-submit to App Store Connect (`build: df2cd31a-0573-4975-b63c-b8a8d931559f`, `submission: b15ab589-6f17-4514-9050-5b589eca6c48`, app id `6774519420`).
+- 2026-05-29: Fixed `ota:prod:all` static rendering crash (`window is not defined`) by guarding logger/supabase auth persistence during Node web export.
+- 2026-05-29: Published production OTA updates successfully (`all-platform group: f427e5f3-564d-41be-9971-04f3f1c59eb4`, `ios-only group: b261aabd-57c4-4b97-939b-24c3f892cba4`).
+- 2026-05-29: Production Android build remains blocked by Expo Free plan monthly Android build quota reset window.
+- 2026-05-29: Ported mobile logger to AWS S3 parity flow from reference app (`react-native-aws3`, device-level log file fallback, rate-limited uploads with backoff, debounced flush triggers) while preserving existing `logEvent(eventName, metadata, module)` API.
+- 2026-05-29: Set production EAS AWS env vars for logger uploads (`EXPO_PUBLIC_AWS_REGION`, `EXPO_PUBLIC_AWS_ACCESS_KEY_ID`, `EXPO_PUBLIC_AWS_SECRET_ACCESS_KEY`, `EXPO_PUBLIC_S3_BUCKET_NAME`) and verified values are present in `production` environment.
+- 2026-05-29: Completed Expo native/prebuild hygiene pass (`expo-doctor` now 18/18) by fixing app config schema drift (`ios.supportsTablet`, `updates.codegenMode` removal, stale `expo.eas` block removal), removing Metro symlink override, and untracking `.expo` state files.
+- 2026-05-29: Paused queued production iOS build intentionally to reconcile execution state with this plan before continuing.
+- 2026-05-29: Added mandatory Native Build Gate checklist (doctor/install-check/public-config plus native trigger file list) to prevent missed binary rebuild requirements.
+- 2026-05-29: Hardened default native dependency baseline by adding missing imported packages (`@expo/vector-icons`, `expo-font`, `@react-navigation/native`) and added automated import-vs-dependency guard script (`npm run check:native-deps`).
 
 ---
 
@@ -480,10 +548,12 @@ Create `mobile/package.json` with ALL required modules pre-bundled:
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:prod:apk": "eas build -p android --profile production",
+    "build:prod:apk": "eas build -p android --profile production-apk",
     "build:preview:apk": "eas build -p android --profile preview",
-    "ota:prod": "CI=1 eas update --branch production --platform android --message",
-    "ota:preview": "CI=1 eas update --branch preview --platform android --message"
+    "ota:prod": "CI=1 eas update --branch production --platform all --message",
+    "ota:prod:all": "CI=1 eas update --branch production --platform all --message",
+    "ota:prod:ios": "CI=1 eas update --branch production --platform ios --message",
+    "ota:preview": "CI=1 eas update --branch preview --platform all --message"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.3",
@@ -1313,6 +1383,33 @@ npm run ota:prod -- --message "Fix report export crash"
 - OTA allowed: JS/TS logic, screen layout, validation rules, API request/response mapping.
 - Rebuild required: native module/plugin addition, permission/plugin config changes, app icon/splash, SDK upgrade, runtimeVersion change.
 
+#### 7.5.1 Native Build Gate (Mandatory Before OTA-Only Release)
+Run this gate before any release decision:
+
+```bash
+cd mobile
+npm run check:native-deps
+npx --yes expo-doctor
+npx expo install --check
+npx expo config --type public
+```
+
+Gate must be green only when all are true:
+- `npm run check:native-deps` reports no undeclared external imports.
+- `expo-doctor` reports no native/config failures.
+- `expo install --check` reports no required SDK compatibility upgrades.
+- Public Expo config includes expected Firebase/native entries (`android.googleServicesFile`, `ios.googleServicesFile`, plugins list, `runtimeVersion`).
+
+Treat as native rebuild required if any of these changed since last production binary:
+- `mobile/package.json` (new/updated native dependency such as `expo-*`, `react-native-*`, native SDK bridge libs).
+- `mobile/package-lock.json` (native dependency tree changes).
+- `mobile/app.json` or `mobile/app.config.js` (plugins, permissions, bundle IDs, native files, runtimeVersion behavior).
+- `mobile/google-services.json` or `mobile/GoogleService-Info.plist`.
+- `mobile/metro.config.js`, `mobile/babel.config.js`, `mobile/eas.json` when they alter native build behavior.
+- Any `mobile/ios/**` or `mobile/android/**` file when prebuild folders are present.
+
+If any trigger above is true, do not ship OTA-only. Build a fresh preview binary first, validate on device, then promote.
+
 #### 7.6 Deployment Targets
 - Internal QA: preview channel APK + IPA.
 - External stores: production AAB/IPA via EAS Submit.
@@ -1460,13 +1557,18 @@ Only push updates to `app/` folder, not `node_modules/`
 
 ## Next Steps
 
-1. **Phase 4 completion pass**: Validate all tab routes, headers, empty/error/loading states, and back navigation consistency.
-2. **Import module completion**: Implement device file picker flows (CSV), mapper binding, duplicate/conflict handling, and success/failure UX.
-3. **AutoDoc module completion**: Add panel selection, photo/document capture/upload, and estimate row workflows beyond status transitions.
-4. **Reports module completion**: Connect report query hooks, add mobile chart components, and implement export behavior for mobile.
-5. **Stabilize offline stack**: Resolve existing offline/logger/background-sync type issues, then run end-to-end offline/online sync validation.
-6. **Phase 6 test gate**: Execute auth, import, autodoc, reports, admin, and settings validation checklist on real devices.
-7. **Phase 7 delivery prep**: Finalize EAS preview/production profiles and produce installable preview builds.
+1. **Completed**: CLI readiness pass (`eas`, `expo`, `firebase`, `aws`).
+2. **Completed**: Mobile config validation from `mobile/`.
+3. **Completed**: Firebase onboarding for service app (project + Android/iOS app registration + native files).
+4. **Completed**: AWS S3 onboarding (CLI profile, bucket access verification, env mapping runbook).
+5. **Completed**: EAS project linking (`projectId` and `updates.url` aligned on UUID).
+6. **Completed**: Build profile hardening verification (preview APK/IPA channel mapping and production artifact profile).
+7. **Completed**: EAS credentials/signing provisioning (Android + iOS) and first OTA-capable preview iOS build.
+8. **Completed**: Production iOS build with `--auto-submit`; Apple processing path now active in App Store Connect.
+9. **Completed**: Production OTA publish smoke test (`ota:prod:all` and `ota:prod:ios`).
+10. **Blocked**: Android production build execution until Expo monthly Android quota resets (or billing upgrade).
+11. **Next**: Validate TestFlight processing completion, then configure tester groups/public link.
+12. **Then**: Continue Phase 4/5 feature parity tasks.
 
 ---
 
@@ -1509,8 +1611,47 @@ eas build --platform ios --profile preview
 
 Expo Go is useful for fast JS iteration, but release validation must happen on EAS-built APK/IPA.
 
+### AWS S3 Onboarding (Console + CLI)
+
+Use this exact sequence for service app S3 setup:
+
+1. In AWS Console, switch to target region (recommended: `ap-south-1` unless business requires otherwise).
+2. Create bucket for service logs/artifacts (example pattern: `techwheels-service-logs-prod`).
+3. Keep Block Public Access enabled for all settings.
+4. Enable default encryption (SSE-S3 at minimum).
+5. Create an IAM user for programmatic S3 access (do not use root credentials).
+6. Attach least-privilege bucket policy to IAM user (`s3:ListBucket`, `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` scoped to target bucket).
+7. Create access key for that IAM user.
+8. Configure local AWS profile:
+
+```bash
+aws configure --profile techwheels-service
+```
+
+9. Validate identity and bucket access:
+
+```bash
+AWS_PROFILE=techwheels-service aws sts get-caller-identity
+AWS_PROFILE=techwheels-service aws s3api head-bucket --bucket <YOUR_BUCKET_NAME> --region <YOUR_REGION>
+```
+
+10. Perform upload/delete smoke test:
+
+```bash
+echo "techwheels-service-s3-check" > /tmp/tw-s3-check.txt
+AWS_PROFILE=techwheels-service aws s3 cp /tmp/tw-s3-check.txt s3://<YOUR_BUCKET_NAME>/healthchecks/tw-s3-check.txt
+AWS_PROFILE=techwheels-service aws s3 rm s3://<YOUR_BUCKET_NAME>/healthchecks/tw-s3-check.txt
+```
+
+Security rule:
+- Do not place long-lived AWS secret keys in app-bundled public variables for production mobile runtime.
+- Prefer server-side credential usage (for example, edge/backend upload flow).
+
+Current code note:
+- Current mobile logger now uploads debug logs to AWS S3 using EXPO_PUBLIC AWS/S3 credentials and Expo `extra` fallback values.
+
 ---
 
 **Document Status**: EXECUTION READY (Prerequisites + OTA baseline defined, anti-drift protocol active)  
 **Last Updated**: 2026-05-29  
-**Next Review**: After first successful preview APK + IPA and first OTA publish
+**Next Review**: After TestFlight processing completes and public invite link is enabled
