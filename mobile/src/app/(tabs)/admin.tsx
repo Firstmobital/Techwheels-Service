@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native'
+import { useState } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native'
 import { useAuth } from '../../context/AuthContext'
 
 interface AdminMenuItem {
@@ -12,10 +13,18 @@ interface AdminMenuItem {
 
 export default function AdminScreen() {
   const { user } = useAuth()
+  const [refreshing, setRefreshing] = useState(false)
   const role =
     (user?.app_metadata?.role as string | undefined) ??
     (user?.user_metadata?.role as string | undefined)
   const adminMode = typeof role === 'string' && ['admin', 'super_admin'].includes(role.toLowerCase())
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    setTimeout(() => {
+      setRefreshing(false)
+    }, 300)
+  }
 
   const menuItems: AdminMenuItem[] = [
     {
@@ -101,7 +110,10 @@ export default function AdminScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
+    <ScrollView
+      className="flex-1 bg-gray-50"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       {/* Header */}
       <View className="bg-white border-b border-gray-200 px-4 pt-4 pb-4">
         <View className="flex-row items-center justify-between mb-1">

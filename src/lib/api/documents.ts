@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { resolveExistingJobCardId } from './jobCards'
 import { fail, ok, type ApiResult, type DocType, type DocumentInsert, type DocumentRow } from './types'
 
 const DOCUMENT_SELECT = 'id, job_card_id, doc_type, storage_path, drive_url, drive_file_id, file_size_mb, gps_lat, gps_lng, gps_city, captured_at, created_at'
@@ -90,10 +91,13 @@ export async function invokeUniversalDriveUpload(input: {
 }
 
 export async function listDocuments(jobCardId: string): Promise<ApiResult<DocumentRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const { data, error } = await supabase
     .from('documents')
     .select(DOCUMENT_SELECT)
-    .eq('job_card_id', jobCardId)
+    .eq('job_card_id', resolvedIdRes.data)
     .order('created_at', { ascending: false })
 
   if (error) return fail(error)
@@ -110,8 +114,11 @@ export async function addDocument(input: {
   gpsCity?: string | null
   capturedAt?: string | null
 }): Promise<ApiResult<DocumentRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const payload: DocumentInsert = {
-    job_card_id: input.jobCardId,
+    job_card_id: resolvedIdRes.data,
     doc_type: input.docType,
     storage_path: input.storagePath,
     file_size_mb: Number.isFinite(input.fileSizeMb) ? input.fileSizeMb : 0,
@@ -131,7 +138,7 @@ export async function addDocument(input: {
 
   // Offload to Drive asynchronously after DB insert so UI flow is not blocked by external API latency.
   void invokeUniversalDriveUpload({
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedIdRes.data,
     fileType: input.docType,
     storagePath: input.storagePath,
     fileSizeMb: input.fileSizeMb,
@@ -151,10 +158,13 @@ export async function upsertDocumentByType(input: {
   gpsCity?: string | null
   capturedAt?: string | null
 }): Promise<ApiResult<DocumentRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const { data: existing, error: existingError } = await supabase
     .from('documents')
     .select(DOCUMENT_SELECT)
-    .eq('job_card_id', input.jobCardId)
+    .eq('job_card_id', resolvedIdRes.data)
     .eq('doc_type', input.docType)
     .order('created_at', { ascending: false })
 
@@ -177,7 +187,7 @@ export async function upsertDocumentByType(input: {
   }
 
   const created = await addDocument({
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedIdRes.data,
     docType: input.docType,
     storagePath: input.storagePath,
     fileSizeMb: input.fileSizeMb,
@@ -203,8 +213,12 @@ export async function uploadDocumentFile(input: {
   gpsCity?: string | null
   capturedAt?: string | null
 }): Promise<ApiResult<DocumentRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+  const resolvedJobCardId = resolvedIdRes.data
+
   console.log('[autodoc-upload-debug] uploadDocumentFile start', {
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedJobCardId,
     docType: input.docType,
     fileName: input.fileName,
     fileType: input.file.type,
@@ -223,9 +237,9 @@ export async function uploadDocumentFile(input: {
     ?? 'unknown',
   ).trim() || 'unknown'
 
-  const storagePath = `${dealerCode}/${input.jobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
+  const storagePath = `${dealerCode}/${resolvedJobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
   console.log('[autodoc-upload-debug] Computed storage path for document upload', {
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedJobCardId,
     docType: input.docType,
     storagePath,
     dealerCode,
@@ -242,7 +256,7 @@ export async function uploadDocumentFile(input: {
 
   if (uploadError) {
     console.error('[autodoc-upload-debug] Storage upload failed', {
-      jobCardId: input.jobCardId,
+      jobCardId: resolvedJobCardId,
       docType: input.docType,
       storagePath,
       error: uploadError,
@@ -251,7 +265,7 @@ export async function uploadDocumentFile(input: {
   }
 
   console.log('[autodoc-upload-debug] Storage upload succeeded', {
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedJobCardId,
     docType: input.docType,
     storagePath,
   })
@@ -270,7 +284,7 @@ export async function uploadDocumentFile(input: {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          jobCardId: input.jobCardId,
+          jobCardId: resolvedJobCardId,
           docType: input.docType,
           storagePath,
           fileSizeMb: sizeMb,
@@ -283,7 +297,7 @@ export async function uploadDocumentFile(input: {
 
       const payload = await res.json().catch(() => ({}))
       console.log('[autodoc-upload-debug] document-link-upsert response', {
-        jobCardId: input.jobCardId,
+        jobCardId: resolvedJobCardId,
         docType: input.docType,
         status: res.status,
         ok: res.ok,
@@ -291,7 +305,7 @@ export async function uploadDocumentFile(input: {
       })
       if (res.ok && payload?.data) {
         const driveOffloadRes = await offloadToDriveWithRetry({
-          jobCardId: input.jobCardId,
+          jobCardId: resolvedJobCardId,
           fileType: input.docType,
           storagePath,
           fileSizeMb: sizeMb,
@@ -299,7 +313,7 @@ export async function uploadDocumentFile(input: {
         })
         if (driveOffloadRes.error) {
           console.error('[autodoc-upload-debug] Drive offload failed after retries', {
-            jobCardId: input.jobCardId,
+            jobCardId: resolvedJobCardId,
             docType: input.docType,
             storagePath,
             error: driveOffloadRes.error,
@@ -309,14 +323,14 @@ export async function uploadDocumentFile(input: {
         return ok(payload.data as DocumentRow)
       }
       console.error('[autodoc-upload-debug] document-link-upsert did not return usable data; falling back to client upsert', {
-        jobCardId: input.jobCardId,
+        jobCardId: resolvedJobCardId,
         docType: input.docType,
         status: res.status,
         payload,
       })
     } catch {
       console.error('[autodoc-upload-debug] document-link-upsert request threw; falling back to client upsert', {
-        jobCardId: input.jobCardId,
+        jobCardId: resolvedJobCardId,
         docType: input.docType,
       })
       // fallback to client-side upsert below
@@ -324,7 +338,7 @@ export async function uploadDocumentFile(input: {
   }
 
   const upsertRes = await upsertDocumentByType({
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedJobCardId,
     docType: input.docType,
     storagePath,
     fileSizeMb: sizeMb,
@@ -337,14 +351,14 @@ export async function uploadDocumentFile(input: {
   if (upsertRes.error || !upsertRes.data) return upsertRes
 
   console.log('[autodoc-upload-debug] Client-side document upsert succeeded', {
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedJobCardId,
     docType: input.docType,
     docId: upsertRes.data.id,
     storagePath: upsertRes.data.storage_path,
   })
 
   const fallbackDriveOffloadRes = await offloadToDriveWithRetry({
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedJobCardId,
     fileType: input.docType,
     storagePath,
     fileSizeMb: sizeMb,
@@ -353,7 +367,7 @@ export async function uploadDocumentFile(input: {
 
   if (fallbackDriveOffloadRes.error) {
     console.error('[autodoc-upload-debug] Drive offload failed after retries (client fallback path)', {
-      jobCardId: input.jobCardId,
+      jobCardId: resolvedJobCardId,
       docType: input.docType,
       storagePath,
       error: fallbackDriveOffloadRes.error,

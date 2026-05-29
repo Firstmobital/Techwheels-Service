@@ -7,16 +7,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { listPanels, listPanelPhotos, type PanelRow } from '../../../lib/api'
+import { createPanel, listActivePanelLabels, listPanels, listPanelPhotos, type PanelRow } from '../../../lib/api'
 import { logEvent } from '../../../utils/logger'
+import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
 
 type Params = {
+  id?: string | string[]
   jobCardId?: string | string[]
 }
 
@@ -28,16 +32,24 @@ interface PanelTile {
 
 export default function PanelSelectorScreen() {
   const router = useRouter()
-  const { jobCardId: rawJobCardId } = useLocalSearchParams<Params>()
+  const { id: rawId, jobCardId: rawJobCardId } = useLocalSearchParams<Params>()
 
-  const jobCardId = useMemo(
-    () => (Array.isArray(rawJobCardId) ? rawJobCardId[0] : rawJobCardId),
-    [rawJobCardId]
+  const idFromRoute = useMemo(
+    () => (Array.isArray(rawId) ? rawId[0] : rawId),
+    [rawId]
   )
+
+  const jobCardId = useMemo(() => {
+    const legacyId = Array.isArray(rawJobCardId) ? rawJobCardId[0] : rawJobCardId
+    return idFromRoute || legacyId
+  }, [idFromRoute, rawJobCardId])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [panels, setPanels] = useState<PanelTile[]>([])
+  const [masterPanelLabels, setMasterPanelLabels] = useState<string[]>([])
+  const [customPanelName, setCustomPanelName] = useState('')
+  const [addingPanelName, setAddingPanelName] = useState<string | null>(null)
 
   const loadPanels = async () => {
     if (!jobCardId) {
@@ -50,9 +62,10 @@ export default function PanelSelectorScreen() {
       setError(null)
       logEvent('panel_list_load_start', { job_card_id: jobCardId }, 'panel-selector')
 
-      const [panelsResult, photosResult] = await Promise.all([
+      const [panelsResult, photosResult, labelsResult] = await Promise.all([
         listPanels(jobCardId),
         listPanelPhotos(jobCardId),
+        listActivePanelLabels(),
       ])
 
       if (panelsResult.error) {
@@ -89,6 +102,9 @@ export default function PanelSelectorScreen() {
       }))
 
       setPanels(panelData)
+      if (!labelsResult.error && labelsResult.data) {
+        setMasterPanelLabels(labelsResult.data)
+      }
       logEvent(
         'panel_list_loaded',
         { job_card_id: jobCardId, count: panelData.length },
@@ -112,12 +128,42 @@ export default function PanelSelectorScreen() {
     router.push({
       pathname: '/job-cards/[id]/panel-photos',
       params: {
+        id: jobCardId,
         jobCardId,
         panelId,
         panelName,
       },
     })
   }
+
+  const handleAddPanel = async (panelNameInput: string) => {
+    if (!jobCardId) return
+    const panelName = panelNameInput.trim()
+    if (!panelName) return
+
+    const existing = new Set(panels.map((panel) => panel.name.trim().toLowerCase()))
+    if (existing.has(panelName.toLowerCase())) {
+      Alert.alert('Already Added', `${panelName} is already selected for this job card.`)
+      return
+    }
+
+    setAddingPanelName(panelName)
+    const createRes = await createPanel(jobCardId, panelName)
+    setAddingPanelName(null)
+
+    if (createRes.error) {
+      Alert.alert('Add Panel Failed', createRes.error)
+      return
+    }
+
+    setCustomPanelName('')
+    await loadPanels()
+  }
+
+  const availableToAdd = useMemo(() => {
+    const existing = new Set(panels.map((panel) => panel.name.trim().toLowerCase()))
+    return masterPanelLabels.filter((label) => !existing.has(label.trim().toLowerCase()))
+  }, [masterPanelLabels, panels])
 
   const renderPanelTile = ({ item }: { item: PanelTile }) => (
     <TouchableOpacity
@@ -149,6 +195,10 @@ export default function PanelSelectorScreen() {
       />
 
       <View className="flex-1 bg-gray-50">
+        <View className="px-4 pt-4">
+          <JobWorkflowHeader jobCardId={jobCardId} activeTab="damage" />
+        </View>
+
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#2563eb" />
@@ -174,12 +224,44 @@ export default function PanelSelectorScreen() {
               <Text className="text-sm text-gray-600 mt-2">
                 Add panels to this job card to upload damage photos.
               </Text>
-              <TouchableOpacity
-                className="mt-4 bg-blue-600 rounded-lg py-3 items-center"
-                onPress={() => router.back()}
-              >
-                <Text className="text-white font-semibold">Go Back</Text>
-              </TouchableOpacity>
+
+              {availableToAdd.length > 0 ? (
+                <View className="mt-4">
+                  <Text className="text-xs uppercase tracking-wide text-gray-500 mb-2">Quick Add Panels</Text>
+                  <View className="flex-row flex-wrap">
+                    {availableToAdd.slice(0, 24).map((label) => (
+                      <TouchableOpacity
+                        key={label}
+                        className="mr-2 mb-2 rounded-full border border-blue-300 bg-blue-50 px-3 py-2"
+                        onPress={() => void handleAddPanel(label)}
+                        disabled={addingPanelName === label}
+                      >
+                        <Text className="text-xs font-semibold text-blue-700">
+                          {addingPanelName === label ? 'Adding...' : label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              <View className="mt-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-3">
+                <Text className="text-xs uppercase tracking-wide text-gray-500 mb-2">Custom Panel</Text>
+                <TextInput
+                  value={customPanelName}
+                  onChangeText={setCustomPanelName}
+                  placeholder="Enter panel name"
+                  placeholderTextColor="#9ca3af"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                />
+                <TouchableOpacity
+                  className="mt-3 bg-blue-600 rounded-lg py-2.5 items-center"
+                  onPress={() => void handleAddPanel(customPanelName)}
+                  disabled={addingPanelName !== null}
+                >
+                  <Text className="text-white font-semibold">Add Panel</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         ) : (
@@ -190,9 +272,31 @@ export default function PanelSelectorScreen() {
             scrollEnabled={true}
             contentContainerStyle={{ padding: 16 }}
             ListHeaderComponent={
-              <Text className="text-sm uppercase tracking-wide text-gray-600 font-semibold mb-4">
-                Select a panel to upload damage photos
-              </Text>
+              <View>
+                <Text className="text-sm uppercase tracking-wide text-gray-600 font-semibold mb-3">
+                  Select a panel to upload damage photos
+                </Text>
+
+                {availableToAdd.length > 0 ? (
+                  <View className="mb-3 rounded-xl border border-gray-200 bg-white p-3">
+                    <Text className="text-xs uppercase tracking-wide text-gray-500 mb-2">Add More Panels</Text>
+                    <View className="flex-row flex-wrap">
+                      {availableToAdd.slice(0, 18).map((label) => (
+                        <TouchableOpacity
+                          key={label}
+                          className="mr-2 mb-2 rounded-full border border-blue-300 bg-blue-50 px-3 py-2"
+                          onPress={() => void handleAddPanel(label)}
+                          disabled={addingPanelName === label}
+                        >
+                          <Text className="text-xs font-semibold text-blue-700">
+                            {addingPanelName === label ? 'Adding...' : label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+              </View>
             }
           />
         )}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, RefreshControl } from 'react-native'
 import { useAuth } from '../../context/AuthContext'
 import { useRouter } from 'expo-router'
 
@@ -16,6 +16,14 @@ export default function SettingsScreen() {
   const [notifications, setNotifications] = useState(true)
   const [autoSync, setAutoSync] = useState(true)
   const [offlineMode, setOfflineMode] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    setTimeout(() => {
+      setRefreshing(false)
+    }, 300)
+  }
 
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -40,7 +48,10 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
+    <ScrollView
+      className="flex-1 bg-gray-50"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       {/* Header */}
       <View className="bg-white border-b border-gray-200 px-4 pt-4 pb-4">
         <Text className="text-2xl font-bold text-gray-800 mb-1">Settings</Text>

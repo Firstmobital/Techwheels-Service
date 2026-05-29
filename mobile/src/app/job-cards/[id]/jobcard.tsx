@@ -37,7 +37,7 @@ function toForm(data: any): FormState {
   }
 }
 
-export default function EditJobCardScreen() {
+export default function JobCardStageScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
@@ -84,13 +84,8 @@ export default function EditJobCardScreen() {
     void loadData()
   }, [jobCardId])
 
-  const canSubmit = useMemo(() => {
-    if (!form) return false
-    return form.jcNumber.trim().length > 0 && form.complaintDate.trim().length > 0 && !saving
-  }, [form, saving])
-
-  const onSave = async () => {
-    if (!jobCardId || !form || !canSubmit) return
+  const onSave = async (goToDamage = false) => {
+    if (!jobCardId || !form) return
 
     const km = form.kmReading.trim()
     const kmReading = km.length > 0 ? Number(km) : null
@@ -114,15 +109,18 @@ export default function EditJobCardScreen() {
       return
     }
 
-    Alert.alert('Saved', 'Job card updated successfully.', [
-      { text: 'Open', onPress: () => router.replace(`/job-cards/${jobCardId}/jobcard`) },
-    ])
+    if (goToDamage) {
+      router.push(`/job-cards/${jobCardId}/damage`)
+      return
+    }
+
+    Alert.alert('Saved', 'Job card details updated successfully.')
   }
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Edit Job Card' }} />
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+      <Stack.Screen options={{ title: 'Job Card' }} />
+      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
         <JobWorkflowHeader jobCardId={jobCardId} activeTab="jobcard" />
 
         {loading ? (
@@ -141,7 +139,7 @@ export default function EditJobCardScreen() {
         ) : form ? (
           <>
             <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-              <Text className="text-xs uppercase tracking-wide text-gray-500">Edit Details</Text>
+              <Text className="text-xs uppercase tracking-wide text-gray-500">Job Card Details</Text>
 
               <Text className="text-xs text-gray-600 mt-3 mb-1">Registration Number</Text>
               <TextInput value={form.regNumber} editable={false} className="border border-gray-200 rounded-lg px-3 py-3 bg-gray-100 text-gray-500" />
@@ -195,16 +193,12 @@ export default function EditJobCardScreen() {
               />
             </View>
 
-            <TouchableOpacity
-              className={`rounded-lg py-4 items-center ${canSubmit ? 'bg-blue-600' : 'bg-blue-300'}`}
-              disabled={!canSubmit}
-              onPress={onSave}
-            >
+            <TouchableOpacity className="rounded-lg py-4 items-center bg-blue-600" onPress={() => onSave(false)}>
               <Text className="text-white font-semibold">{saving ? 'Saving...' : 'Save Job Card'}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity className="mt-3 py-3 items-center" onPress={() => router.back()}>
-              <Text className="text-blue-600 font-semibold">Cancel</Text>
+            <TouchableOpacity className="mt-3 rounded-lg py-4 items-center bg-indigo-600" onPress={() => onSave(true)}>
+              <Text className="text-white font-semibold">{saving ? 'Saving...' : 'Next: Damage Stage'}</Text>
             </TouchableOpacity>
           </>
         ) : null}

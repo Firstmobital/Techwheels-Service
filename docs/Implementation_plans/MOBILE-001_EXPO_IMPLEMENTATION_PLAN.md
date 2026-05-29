@@ -55,6 +55,22 @@ All mobile upload flows must emit structured logs and flush on terminal outcomes
 - For push-related traces use module `push-registration`; for upload traces use module `autodoc-upload`
 - Call `flushPendingLogsToS3({ reason })` on upload success/failure terminal states
 
+### AutoDoc Mobile/Web Drift Addendum (2026-05-29)
+
+Observed production drift:
+- Mobile AutoDoc route params can carry a job reference (for example `jc_number`) that is not always the canonical `job_cards.id`, causing stage APIs to query by a non-canonical key and return zero-row errors (`PGRST116`).
+- Resulting impact on mobile: `Job Card` and `Submit` stages can fail to load, and `Damage/Estimate` can appear empty despite web showing active workflow data.
+- Mobile dashboard had a generic `Open` action only; users also require stage-status chip click to deep-link directly into that job's current stage, consistent with web behavior.
+
+Required parity rule:
+- UI/UX may remain mobile-centric.
+- Workflow routing, data loading, and stage progression logic must remain behaviorally equivalent to web for the same job card.
+
+Implementation requirement:
+- Add canonical job-card reference resolution in mobile API layer before stage/document/photo/estimate reads and writes.
+- Make stage status chip actionable per job card on mobile dashboard and open the derived stage route.
+- Keep fallback behavior non-blocking where possible so submit screen can still render checklist with warnings when optional datasets fail.
+
 ---
 
 ## Project Audit Summary

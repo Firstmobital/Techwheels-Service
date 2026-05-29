@@ -35,16 +35,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const bootstrap = async () => {
       try {
         const { data } = await supabase.auth.getSession()
-        if (data.session?.refresh_token) {
-          // Force token refresh so latest user_metadata/JWT claims (e.g., dealer_code) are applied.
-          const refreshed = await supabase.auth.refreshSession({ refresh_token: data.session.refresh_token })
-          if (refreshed.data.session) {
-            if (!mounted) return
-            setSession(refreshed.data.session)
-            setUser(refreshed.data.session.user)
-            return
-          }
-        }
         if (!mounted) {
           return
         }
@@ -99,13 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error }
         }
 
-        const refreshed = data.session?.refresh_token
-          ? await supabase.auth.refreshSession({ refresh_token: data.session.refresh_token })
-          : null
-
-        const sessionToSet = refreshed?.data.session ?? data.session
-        setSession(sessionToSet)
-        setUser(sessionToSet?.user ?? data.user)
+        setSession(data.session)
+        setUser(data.user)
         return { error: undefined }
       } catch (error) {
         return { error: error as Error }

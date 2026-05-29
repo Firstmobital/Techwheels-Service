@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { Stack, useLocalSearchParams } from 'expo-router'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
 import {
   addEstimateRow,
@@ -20,6 +20,9 @@ import {
 import { listPanels } from '../../../lib/api/panels'
 import { listPanelPhotos } from '../../../lib/api/photos'
 import { getAutoDocWorkflowOptions } from '../../../lib/api/autodocRates'
+import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
+import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
+import { uploadDocumentFile } from '../../../lib/api/documents'
 
 type Params = {
   id?: string | string[]
@@ -83,6 +86,7 @@ function newRow(panelName = ''): EstimateFormRow {
 }
 
 export default function JobCardEstimateScreen() {
+  const router = useRouter()
   const { id } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
 
@@ -95,6 +99,7 @@ export default function JobCardEstimateScreen() {
   const [estimateDefectOptions, setEstimateDefectOptions] = useState<string[]>(['Rust', 'Dent', 'Scratch', 'Paint Peel', 'Corrosion'])
   const [savingRowId, setSavingRowId] = useState<string | null>(null)
   const [deletingRowId, setDeletingRowId] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const load = async () => {
     if (!jobCardId) {
@@ -291,10 +296,46 @@ export default function JobCardEstimateScreen() {
 
   const missingEstimatePanels = panelReadiness.filter((item) => item.hasPreRepair && !item.hasCompleteEstimate)
 
+  const onExportEstimate = async () => {
+    if (!jobCardId) return
+
+    if (rows.length === 0) {
+      Alert.alert('No Estimate Rows', 'Add at least one estimate row before exporting.')
+      return
+    }
+
+    setExporting(true)
+    try {
+      const blob = await generateEstimateCsv(jobCardId)
+      const fileName = `estimate_${jobCardId}.csv`
+
+      const uploadRes = await uploadDocumentFile({
+        jobCardId,
+        docType: 'excel_estimate',
+        file: blob,
+        fileName,
+        contentType: 'text/csv',
+      })
+
+      if (uploadRes.error) {
+        Alert.alert('Export Failed', uploadRes.error)
+        return
+      }
+
+      Alert.alert('Exported', 'Estimate Excel generated and uploaded successfully.')
+    } catch (err: any) {
+      Alert.alert('Export Failed', err?.message ?? 'Unable to export estimate excel')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: 'Estimate Editor' }} />
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
+        <JobWorkflowHeader jobCardId={jobCardId} activeTab="estimate" />
+
         {loading ? (
           <View className="items-center justify-center py-20">
             <ActivityIndicator size="large" color="#2563eb" />
@@ -483,6 +524,24 @@ export default function JobCardEstimateScreen() {
                 <Text className="text-sm text-gray-700 mt-1">
                   Panels Completed: {completedEstimatePanels.size} / {panels.length}
                 </Text>
+
+                <TouchableOpacity
+                  className={`mt-3 rounded-lg py-3 items-center ${exporting ? 'bg-indigo-300' : 'bg-indigo-600'}`}
+                  disabled={exporting}
+                  onPress={() => void onExportEstimate()}
+                >
+                  <Text className="text-white font-semibold">{exporting ? 'Exporting...' : 'Export Estimate Excel'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="mt-3 rounded-lg py-3 items-center bg-slate-700"
+                  onPress={() => {
+                    if (!jobCardId) return
+                    router.push(`/job-cards/${jobCardId}/submit`)
+                  }}
+                >
+                  <Text className="text-white font-semibold">Next: Submit Stage</Text>
+                </TouchableOpacity>
               </View>
             )}
           </>

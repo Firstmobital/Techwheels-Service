@@ -35,7 +35,7 @@ export default function LoginScreen() {
         Alert.alert('Login Failed', error.message)
       } else {
         // Navigate to tabs
-        router.replace('/(tabs)/import')
+        router.replace('/(tabs)/home')
       }
     } catch (err: any) {
       Alert.alert('Error', err.message)

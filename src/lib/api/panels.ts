@@ -1,11 +1,15 @@
 import { supabase } from '../supabase'
+import { resolveExistingJobCardId } from './jobCards'
 import { fail, ok, type ApiResult, type PanelRow } from './types'
 
 export async function listPanels(jobCardId: string): Promise<ApiResult<PanelRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const { data, error } = await supabase
     .from('panels')
     .select('id, panel_name, action')
-    .eq('job_card_id', jobCardId)
+    .eq('job_card_id', resolvedIdRes.data)
     .order('created_at')
 
   if (error) return fail(error)
@@ -15,10 +19,12 @@ export async function listPanels(jobCardId: string): Promise<ApiResult<PanelRow[
 export async function createPanel(jobCardId: string, panelName: string): Promise<ApiResult<PanelRow>> {
   const name = panelName.trim()
   if (!name) return fail('Panel name is required')
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const { data, error } = await supabase
     .from('panels')
-    .insert({ job_card_id: jobCardId, panel_name: name, action: 'repaint' })
+    .insert({ job_card_id: resolvedIdRes.data, panel_name: name, action: 'repaint' })
     .select('id, panel_name, action')
     .single<PanelRow>()
 
@@ -42,7 +48,8 @@ export async function syncDamagePanels(jobCardId: string, selectedPanels: string
   panels: PanelRow[]
   removedPanelNames: string[]
 }>> {
-  if (!jobCardId.trim()) return fail('Job card id is required')
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
   if (!supabaseUrl) return fail('Supabase URL not configured')
@@ -58,7 +65,7 @@ export async function syncDamagePanels(jobCardId: string, selectedPanels: string
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ jobCardId, selectedPanels }),
+      body: JSON.stringify({ jobCardId: resolvedIdRes.data, selectedPanels }),
     })
   } catch (error) {
     return fail(error, 'Unable to reach panel sync service')

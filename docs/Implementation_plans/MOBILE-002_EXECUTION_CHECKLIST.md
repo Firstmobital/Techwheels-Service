@@ -60,6 +60,15 @@ Remaining parity backlog (must complete for full closure):
 - [ ] Mobile workflow actions parity (`Compose and Send`, `Submit Claim`, and document readiness gating).
 - [ ] Full Section 4.9 route matrix re-run after parity merge and record pass/fail evidence.
 
+### AutoDoc Route/Stage Parity Hotfix (2026-05-29)
+
+- [x] Identify root cause for mobile `PGRST116` on Job Card/Submit (`job reference` vs canonical `job_cards.id` mismatch).
+- [x] Add canonical job-card ID resolution in mobile API path (`jobCards`, `panels`, `photos`, `estimate`, `documents`).
+- [x] Improve API error surface to include PostgREST details instead of generic `Unexpected error`.
+- [x] Add dashboard stage-status click action to open that job card's derived stage directly.
+- [ ] Re-test full AutoDoc stage flow on mobile for: `JB00034`, `5454`, `JC001` and capture pass/fail notes.
+- [ ] Confirm submit-stage checklist renders without hard failure when optional datasets are unavailable; warnings should remain actionable.
+
 Execution order for docs (start here and proceed):
 - [x] 1) `docs/Implementation_plans/MOBILE-002_EXECUTION_CHECKLIST.md` (daily command sheet and acceptance gates)
 - [ ] 2) `docs/Implementation_plans/MOBILE-005_AUTODOC_GPS_STAMP_PARITY_PLAN.md` (AutoDoc deep parity execution)

@@ -14,7 +14,6 @@ import {
   listJobCardSummaries,
   type JobDashboardSummaryRow,
   type JobCardStatus,
-  updateJobCardStatus,
 } from '../../lib/api/jobCards'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
@@ -29,14 +28,6 @@ type WorkflowStage =
   | 'claim_submitted'
 
 type DashboardCardFilter = 'active_vehicles' | 'today' | WorkflowStage
-
-const QUICK_WORKFLOW_NAV: Array<{ label: string; key?: DashboardCardFilter; route?: string }> = [
-  { key: 'active_vehicles', label: 'Dashboard' },
-  { label: 'Job Card', route: '/job-cards/create' },
-  { key: 'documentation_pre_repair', label: 'Damage' },
-  { key: 'estimate', label: 'Estimate' },
-  { key: 'pre_submit_pending', label: 'Submit' },
-]
 
 function canonicalizeEstimateAction(value: string): string {
   const normalized = value.trim().toLowerCase()
@@ -62,14 +53,6 @@ function deriveWorkflowStage(
   return 'active_intake'
 }
 
-function nextStatus(status: JobCardStatus): JobCardStatus | null {
-  if (status === 'draft') return 'in_work'
-  if (status === 'in_work') return 'approved'
-  if (status === 'approved') return 'submitted'
-  if (status === 'submitted') return 'completed'
-  return null
-}
-
 function stageBadgeClass(stage: WorkflowStage): string {
   if (stage === 'claim_submitted') return 'bg-blue-50 text-blue-700 border-blue-200'
   if (stage === 'post_repair_ppt') return 'bg-indigo-50 text-indigo-700 border-indigo-200'
@@ -90,6 +73,21 @@ function stageLabel(stage: WorkflowStage): string {
   return 'Active Intake'
 }
 
+function formatStatusLabel(status: string | null | undefined): string {
+  const value = String(status ?? '').trim().toLowerCase()
+  if (!value) return 'Draft'
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase())
+}
+
+function statusPillClass(status: string | null | undefined): string {
+  const value = String(status ?? '').trim().toLowerCase()
+  if (value === 'in_work') return 'bg-amber-100 text-amber-700'
+  if (value === 'approved') return 'bg-violet-100 text-violet-700'
+  if (value === 'submitted') return 'bg-emerald-100 text-emerald-700'
+  if (value === 'completed') return 'bg-blue-100 text-blue-700'
+  return 'bg-slate-100 text-slate-700'
+}
+
 function isTodayComplaintDate(value: string | null | undefined): boolean {
   if (!value) return false
   const dt = new Date(value)
@@ -101,21 +99,27 @@ function isTodayComplaintDate(value: string | null | undefined): boolean {
 
 export default function AutoDocScreen() {
   const router = useRouter()
-  const { session } = useAuth()
+  const { session, loading: authLoading } = useAuth()
   const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
   const [stageFilter, setStageFilter] = useState<DashboardCardFilter>('active_vehicles')
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sessionEmail, setSessionEmail] = useState<string>('')
   const [sessionDealerCode, setSessionDealerCode] = useState<string>('')
+  const [rlsDealerCode, setRlsDealerCode] = useState<string>('')
+  const [jobCardSummaryCount, setJobCardSummaryCount] = useState<number | null>(null)
+  const [jobCardsCount, setJobCardsCount] = useState<number | null>(null)
+  const [sampleRowsHint, setSampleRowsHint] = useState<string>('')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
 
   const loadJobCards = useCallback(async () => {
-    if (!session) {
+    const sessionRes = await supabase.auth.getSession()
+    const activeSession = session ?? sessionRes.data.session
+    if (!activeSession) {
       setJobCards([])
       setLoading(false)
       setRefreshing(false)
@@ -125,18 +129,52 @@ export default function AutoDocScreen() {
     try {
       setError(null)
 
-      const currentSession = await supabase.auth.getSession()
-      const refreshToken = currentSession.data.session?.refresh_token
-      if (refreshToken) {
-        await supabase.auth.refreshSession({ refresh_token: refreshToken })
-      }
-
       const result = await listJobCardSummaries()
       if (result.error) {
         setError(result.error)
         return
       }
-      setJobCards(result.data ?? [])
+
+      const rows = result.data ?? []
+      if (rows.length > 0) {
+        setJobCards(rows)
+        return
+      }
+
+      // Hard fallback: if summary path returns empty, read directly from job_cards in current RLS scope.
+      const directRes = await supabase
+        .from('job_cards')
+        .select('id, jc_number, reg_number, complaint_date, status, km_reading')
+        .order('created_at', { ascending: false })
+        .limit(200)
+
+      if (directRes.error) {
+        setJobCards([])
+        return
+      }
+
+      const fallbackRows: JobDashboardSummaryRow[] = (directRes.data ?? []).map((row) => ({
+        job_card_id: row.id,
+        jc_number: row.jc_number,
+        reg_number: row.reg_number,
+        model: null,
+        vehicle_year: null,
+        colour: null,
+        complaint_date: row.complaint_date,
+        status: (row.status as JobCardStatus) ?? 'draft',
+        warranty_age_days: null,
+        tml_share_percent: null,
+        total_estimate_amount: 0,
+        panel_count: 0,
+        photo_count: 0,
+        has_ppt_pre: false,
+        has_ppt_post: false,
+        owner_name: null,
+        km_reading: row.km_reading,
+        panel_names: [],
+      }))
+
+      setJobCards(fallbackRows)
     } catch (err: any) {
       setError(err.message || 'Failed to load AutoDoc job cards')
     } finally {
@@ -146,30 +184,46 @@ export default function AutoDocScreen() {
   }, [session])
 
   useEffect(() => {
-    if (session) {
-      setLoading(true)
-      void loadJobCards()
-    }
-  }, [loadJobCards])
+    if (authLoading) return
+    setLoading(true)
+    void loadJobCards()
+  }, [authLoading, loadJobCards])
 
   useEffect(() => {
     let mounted = true
 
-    async function loadSessionEmail() {
-      const { data } = await supabase.auth.getUser()
+    async function loadSessionMetadata() {
+      const [{ data }, dealerRes, summaryCountRes, jobCardsCountRes, sampleRowsRes] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.rpc('my_dealer_code'),
+        supabase.from('job_card_summary').select('job_card_id', { head: true, count: 'exact' }),
+        supabase.from('job_cards').select('id', { head: true, count: 'exact' }),
+        supabase.from('job_cards').select('jc_number, status').order('created_at', { ascending: false }).limit(3),
+      ])
+
       if (!mounted) return
       const email = data.user?.email ?? ''
       const dealerCode = String(data.user?.user_metadata?.dealer_code ?? '').trim()
       setSessionEmail(email)
       setSessionDealerCode(dealerCode)
+      setRlsDealerCode(String(dealerRes.data ?? '').trim())
+      setJobCardSummaryCount(summaryCountRes.count ?? null)
+      setJobCardsCount(jobCardsCountRes.count ?? null)
+
+      const sampleRows = (sampleRowsRes.data ?? [])
+        .map((row) => `${row.jc_number ?? 'unknown'}:${row.status ?? 'unknown'}`)
+        .join(', ')
+      setSampleRowsHint(sampleRows)
     }
 
-    void loadSessionEmail()
+    if (!authLoading) {
+      void loadSessionMetadata()
+    }
 
     return () => {
       mounted = false
     }
-  }, [])
+  }, [authLoading, session?.user?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -349,33 +403,37 @@ export default function AutoDocScreen() {
     loadJobCards()
   }
 
-  const onQuickStatusAdvance = async (item: JobDashboardSummaryRow) => {
-    if (!item.job_card_id) {
+  const primaryActionLabel = (stage: WorkflowStage): string => {
+    if (stage === 'claim_submitted') return 'View Claim'
+    if (stage === 'post_repair_ppt') return 'Open Submit'
+    if (stage === 'pre_submit_done' || stage === 'pre_submit_pending') return 'Open Submit'
+    if (stage === 'estimate') return 'Complete Estimate'
+    if (stage === 'documentation_pre_repair') return 'Under Repair'
+    return 'Continue Job Card'
+  }
+
+  const openStageForRow = (row: JobDashboardSummaryRow, stage: WorkflowStage) => {
+    if (!row.job_card_id) {
       Alert.alert('Action Unavailable', 'This job card is missing an identifier.')
       return
     }
 
-    const currentStatus = (item.status ?? 'draft') as JobCardStatus
-    const targetStatus = nextStatus(currentStatus)
-    if (!targetStatus) {
-      Alert.alert('No Further Action', 'This job card is already at the final stage.')
+    if (stage === 'claim_submitted' || stage === 'post_repair_ppt' || stage === 'pre_submit_done' || stage === 'pre_submit_pending') {
+      router.push(`/job-cards/${row.job_card_id}/submit`)
       return
     }
 
-    setUpdatingId(item.job_card_id)
-    try {
-      const result = await updateJobCardStatus(item.job_card_id, targetStatus)
-      if (result.error) {
-        Alert.alert('Update Failed', result.error)
-      } else {
-        Alert.alert('Updated', `${item.jc_number ?? 'Job card'} moved to ${targetStatus}.`)
-        loadJobCards()
-      }
-    } catch (err: any) {
-      Alert.alert('Update Failed', err.message || 'Unknown error')
-    } finally {
-      setUpdatingId(null)
+    if (stage === 'estimate') {
+      router.push(`/job-cards/${row.job_card_id}/estimate`)
+      return
     }
+
+    if (stage === 'documentation_pre_repair') {
+      router.push(`/job-cards/${row.job_card_id}/damage`)
+      return
+    }
+
+    router.push(`/job-cards/${row.job_card_id}/jobcard`)
   }
 
   const rowsWithStage = useMemo(
@@ -422,90 +480,20 @@ export default function AutoDocScreen() {
     key: DashboardCardFilter
     label: string
     value: number
-    colorClass: string
+    accentClass: string
   }> = [
-    { key: 'today', label: "Today's Cars", value: kpis.totalToday, colorClass: 'border-slate-200 bg-slate-50 text-slate-800' },
-    { key: 'active_intake', label: 'Active Intake', value: kpis.activeIntake, colorClass: 'border-cyan-200 bg-cyan-50 text-cyan-800' },
-    { key: 'documentation_pre_repair', label: 'Documentation Pre-Repair', value: kpis.documentationPreRepair, colorClass: 'border-orange-200 bg-orange-50 text-orange-800' },
-    { key: 'estimate', label: 'Estimate', value: kpis.estimate, colorClass: 'border-violet-200 bg-violet-50 text-violet-800' },
-    { key: 'pre_submit_pending', label: 'Pre Submit Pending', value: kpis.preSubmitPending, colorClass: 'border-amber-200 bg-amber-50 text-amber-800' },
-    { key: 'pre_submit_done', label: 'Pre Submit Done', value: kpis.preSubmitDone, colorClass: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
-    { key: 'post_repair_ppt', label: 'Post Repair PPT', value: kpis.postRepairPpt, colorClass: 'border-indigo-200 bg-indigo-50 text-indigo-800' },
-    { key: 'claim_submitted', label: 'Claim Submitted', value: kpis.claimSubmitted, colorClass: 'border-blue-200 bg-blue-50 text-blue-800' },
+    { key: 'today', label: "Today's Cars", value: kpis.totalToday, accentClass: 'bg-blue-500' },
+    { key: 'active_intake', label: 'Active Intake', value: kpis.activeIntake, accentClass: 'bg-emerald-500' },
+    { key: 'documentation_pre_repair', label: 'Documentation Pre-Repair', value: kpis.documentationPreRepair, accentClass: 'bg-violet-500' },
+    { key: 'estimate', label: 'Estimate', value: kpis.estimate, accentClass: 'bg-indigo-500' },
+    { key: 'pre_submit_pending', label: 'Pre-submit Pending', value: kpis.preSubmitPending, accentClass: 'bg-amber-600' },
+    { key: 'pre_submit_done', label: 'Pre-submit Done', value: kpis.preSubmitDone, accentClass: 'bg-emerald-400' },
+    { key: 'post_repair_ppt', label: 'Post Repair PPT', value: kpis.postRepairPpt, accentClass: 'bg-blue-400' },
+    { key: 'claim_submitted', label: 'Claim Submitted', value: kpis.claimSubmitted, accentClass: 'bg-rose-500' },
   ]
 
   return (
-    <View className="flex-1 bg-gray-50">
-      <View className="bg-white border-b border-gray-200 px-4 pt-4 pb-3">
-        <Text className="text-2xl font-bold text-gray-800 mb-1">AutoDoc</Text>
-        <Text className="text-sm text-gray-600">Live job cards and status workflow</Text>
-
-        <TouchableOpacity
-          className="mt-3 rounded-lg border border-blue-300 bg-blue-50 py-2 items-center"
-          onPress={() => router.push('/job-cards/create')}
-        >
-          <Text className="text-blue-700 font-semibold">New Job Card</Text>
-        </TouchableOpacity>
-
-        <View className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-          <Text className="text-xs text-gray-500">Search by JC / Reg / Model</Text>
-          <TextInput
-            className="mt-1 text-sm text-gray-800"
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Enter search term"
-            placeholderTextColor="#6b7280"
-          />
-        </View>
-
-        <View className="mt-2 flex-row flex-wrap -mx-1">
-          {statusCards.map((entry) => {
-            const active = stageFilter === entry.key
-            return (
-              <TouchableOpacity
-                key={entry.key}
-                className="w-1/2 px-1 mb-1.5"
-                onPress={() => setStageFilter(entry.key)}
-              >
-                <View className={`rounded-xl border px-3 py-2 min-h-[82px] ${entry.colorClass} ${active ? 'border-2 border-blue-600' : ''}`}>
-                  <Text className="text-[10px] font-semibold uppercase tracking-wide">{entry.label}</Text>
-                  <Text className="text-3xl font-bold mt-1">{entry.value}</Text>
-                </View>
-              </TouchableOpacity>
-            )
-          })}
-        </View>
-
-        <View className="mt-1 flex-row flex-wrap -mx-1">
-          {QUICK_WORKFLOW_NAV.map((item) => {
-            const active = Boolean(item.key && stageFilter === item.key)
-            return (
-              <TouchableOpacity
-                key={item.label}
-                className="w-1/5 px-1"
-                onPress={() => {
-                  if (item.route) {
-                    router.push(item.route as any)
-                    return
-                  }
-                  if (item.key) setStageFilter(item.key)
-                }}
-              >
-                <View className={`rounded-lg border py-2 items-center ${active ? 'border-blue-600 bg-blue-600' : 'border-gray-300 bg-white'}`}>
-                  <Text className={`text-[10px] font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</Text>
-                </View>
-              </TouchableOpacity>
-            )
-          })}
-        </View>
-
-        {jobCards.length === 0 && !loading && !error ? (
-          <Text className="mt-2 text-[10px] text-gray-500">
-            Connected to live DB. No job cards are visible for current account scope{sessionEmail ? ` (${sessionEmail}` : ''}{sessionDealerCode ? ` | dealer ${sessionDealerCode}` : ' | dealer missing'}{sessionEmail ? ')' : ''}.
-          </Text>
-        ) : null}
-      </View>
-
+    <View className="flex-1 bg-white">
       {loading && !refreshing ? (
         <View className="flex-1 items-center justify-center px-6">
           <ActivityIndicator size="large" color="#2563eb" />
@@ -515,10 +503,7 @@ export default function AutoDocScreen() {
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-lg font-semibold text-red-700 mb-1">Unable to load AutoDoc</Text>
           <Text className="text-sm text-red-600 text-center mb-4">{error}</Text>
-          <TouchableOpacity
-            className="bg-blue-600 rounded-lg px-4 py-3"
-            onPress={onRefresh}
-          >
+          <TouchableOpacity className="bg-blue-600 rounded-lg px-4 py-3" onPress={onRefresh}>
             <Text className="text-white font-semibold">Retry</Text>
           </TouchableOpacity>
         </View>
@@ -527,62 +512,127 @@ export default function AutoDocScreen() {
           data={filteredRows}
           keyExtractor={(item, index) => `${item.row.job_card_id ?? item.row.jc_number ?? 'job'}-${index}`}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 16 }}
+          ListHeaderComponent={
+            <>
+              <View className="mt-1 flex-row">
+                <TouchableOpacity
+                  className="flex-1 mr-1.5 rounded-xl border border-gray-400 bg-white py-2 items-center"
+                  onPress={() => router.push('/job-cards/create')}
+                >
+                  <Text className="text-[16px] text-gray-800">☐ Job card</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-1 ml-1.5 rounded-xl border border-gray-400 bg-white py-2 items-center"
+                  onPress={() => setShowSearch((prev) => !prev)}
+                >
+                  <Text className="text-[16px] text-gray-800">☐ Search</Text>
+                </TouchableOpacity>
+              </View>
+
+              {showSearch ? (
+                <View className="mt-2 rounded-xl border border-gray-300 bg-white px-3 py-2">
+                  <TextInput
+                    className="text-sm text-gray-800"
+                    value={search}
+                    onChangeText={setSearch}
+                    placeholder="Search by JC / Reg / Model"
+                    placeholderTextColor="#6b7280"
+                  />
+                </View>
+              ) : null}
+
+              <View className="mt-3 flex-row flex-wrap -mx-1">
+                {statusCards.map((entry) => {
+                  const active = stageFilter === entry.key
+                  return (
+                    <TouchableOpacity
+                      key={entry.key}
+                      className="w-1/2 px-1 mb-2"
+                      onPress={() => setStageFilter(entry.key)}
+                    >
+                      <View className={`relative rounded-xl border border-gray-300 bg-[#f2f2ee] px-3 py-2.5 min-h-[78px] ${active ? 'border-blue-500' : ''}`}>
+                        <View className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${entry.accentClass}`} />
+                        <Text className="text-[11px] text-gray-700 pr-2">{entry.label}</Text>
+                        <Text className="text-[22px] leading-[24px] font-semibold text-gray-900 mt-1">{entry.value}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+
+              <Text className="text-[16px] uppercase tracking-[0.8px] text-gray-600 mt-1 mb-2">Job Cards List</Text>
+
+              {jobCards.length === 0 && !error ? (
+                <Text className="mb-2 text-[10px] text-gray-500">
+                  Connected to live DB. No job cards visible for scope{sessionEmail ? ` (${sessionEmail}` : ''}{sessionDealerCode ? ` | jwt dealer ${sessionDealerCode}` : ' | jwt dealer missing'}{rlsDealerCode ? ` | rls dealer ${rlsDealerCode}` : ' | rls dealer missing'}{sessionEmail ? ')' : ''}. Counts: summary={jobCardSummaryCount ?? 'n/a'}, job_cards={jobCardsCount ?? 'n/a'}, loaded={jobCards.length}, filtered={filteredRows.length}.{sampleRowsHint ? ` Sample: ${sampleRowsHint}.` : ''}
+                </Text>
+              ) : null}
+            </>
+          }
           ListEmptyComponent={
-            <View className="bg-white border border-gray-200 rounded-xl p-6 items-center mt-4">
+            <View className="bg-white border border-gray-300 rounded-xl px-4 py-5 items-center">
               <Text className="text-base font-semibold text-gray-800">No job cards found</Text>
-              <Text className="text-sm text-gray-500 text-center mt-1">
-                No cards match this filter or your current access scope.
-              </Text>
+              {jobCards.length > 0 ? (
+                <TouchableOpacity
+                  className="mt-3 rounded-lg border border-gray-400 bg-white px-4 py-2"
+                  onPress={() => {
+                    setSearch('')
+                    setStageFilter('active_vehicles')
+                  }}
+                >
+                  <Text className="text-gray-700 font-semibold">Reset Filters</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text className="text-sm text-gray-500 text-center mt-1">
+                  No cards match this filter or your current access scope.
+                </Text>
+              )}
             </View>
           }
           renderItem={({ item }) => {
             const { row, stage } = item
-            const busy = updatingId === row.job_card_id
-            const status = (row.status ?? 'draft') as JobCardStatus
-            const targetStatus = nextStatus(status)
+            const modelLabel = row.model?.trim() ? row.model : 'Model'
             return (
-              <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
+              <View className="rounded-2xl border border-gray-300 bg-white px-3 py-3 mb-3">
                 <View className="flex-row items-start justify-between">
                   <View className="flex-1 pr-3">
-                    <Text className="text-base font-bold text-gray-900">
-                      {row.jc_number ?? 'Unknown JC'}
+                    <Text className="text-[20px] leading-[24px] font-bold text-gray-900">{row.jc_number ?? 'Unknown JC'}</Text>
+                    <Text className="text-[15px] leading-[20px] text-gray-700 mt-0.5">
+                      {row.reg_number ?? 'Unknown registration'} · {modelLabel}
                     </Text>
-                    <Text className="text-sm text-gray-600 mt-1">
-                      {row.reg_number ?? 'Unknown registration'}
-                    </Text>
-                    <Text className="text-xs text-gray-500 mt-2">
-                      Status: {row.status ?? 'draft'} | Panels: {row.panel_count ?? 0} | Photos: {row.photo_count ?? 0}
-                    </Text>
-                    <View className={`self-start mt-2 rounded-full border px-2 py-1 ${stageBadgeClass(stage)}`}>
-                      <Text className="text-[11px] font-semibold">{stageLabel(stage)}</Text>
-                    </View>
                   </View>
 
-                  <View>
-                    <TouchableOpacity
-                      className="rounded-lg px-3 py-2 mb-2 bg-slate-200"
-                      onPress={() => {
-                        if (!row.job_card_id) {
-                          Alert.alert('Action Unavailable', 'This job card is missing an identifier.')
-                          return
-                        }
-                        router.push(`/job-cards/${row.job_card_id}`)
-                      }}
-                    >
-                      <Text className="text-slate-700 text-xs font-semibold">Open</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      className={`rounded-lg px-3 py-2 ${busy || !targetStatus ? 'bg-gray-300' : 'bg-blue-600'}`}
-                      onPress={() => onQuickStatusAdvance(row)}
-                      disabled={busy || !targetStatus}
-                    >
-                      <Text className="text-white text-xs font-semibold">
-                        {busy ? 'Updating...' : targetStatus ? `Set ${targetStatus}` : 'Completed'}
-                      </Text>
-                    </TouchableOpacity>
+                  <View className={`rounded-full px-2.5 py-1 ${statusPillClass(row.status)}`}>
+                    <Text className="text-xs font-semibold">{formatStatusLabel(row.status)}</Text>
                   </View>
+                </View>
+
+                <View className="mt-2 border-t border-gray-300 pt-2 flex-row items-center">
+                  <Text className="text-sm text-gray-700 mr-4">☐ {row.panel_count ?? 0} panels</Text>
+                  <Text className="text-sm text-gray-700">☐ {row.photo_count ?? 0} photos</Text>
+                </View>
+
+                <View className="mt-2 flex-row items-end justify-between">
+                  <TouchableOpacity
+                    className={`rounded-full border px-3 py-1 ${stageBadgeClass(stage)}`}
+                    onPress={() => {
+                      openStageForRow(row, stage)
+                    }}
+                  >
+                    <Text className="text-xs font-semibold">{stageLabel(stage)}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="rounded-xl border border-gray-400 bg-white px-6 py-2 items-center"
+                    onPress={() => {
+                      openStageForRow(row, stage)
+                    }}
+                  >
+                    <Text className="text-[18px] leading-[20px] font-semibold text-gray-900">Open</Text>
+                    <Text className="text-xs text-gray-800 mt-0.5">{primaryActionLabel(stage)} →</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )

@@ -144,6 +144,7 @@ export default function PanelPhotosScreen() {
     router.push({
       pathname: '/job-cards/[id]/capture-photo',
       params: {
+        id: jobCardId,
         jobCardId,
         panelId,
         panelName,
@@ -158,6 +159,7 @@ export default function PanelPhotosScreen() {
     router.push({
       pathname: '/job-cards/[id]/capture-photo',
       params: {
+        id: jobCardId,
         jobCardId,
         panelId,
         panelName,

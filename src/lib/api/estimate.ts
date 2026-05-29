@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { resolveExistingJobCardId } from './jobCards'
 import { fail, ok, type ApiResult, type EstimateInsert, type EstimateRow } from './types'
 
 export type AddEstimateRowInput = {
@@ -40,10 +41,13 @@ export type UpdateEstimateRowInput = {
 const ESTIMATE_SELECT = 'id, sr_no, panel_name, part_number, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total'
 
 export async function listEstimateRows(jobCardId: string): Promise<ApiResult<EstimateRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const { data, error } = await supabase
     .from('estimate_rows')
     .select(ESTIMATE_SELECT)
-    .eq('job_card_id', jobCardId)
+    .eq('job_card_id', resolvedIdRes.data)
     .order('sr_no')
 
   if (error) return fail(error)
@@ -51,8 +55,11 @@ export async function listEstimateRows(jobCardId: string): Promise<ApiResult<Est
 }
 
 export async function addEstimateRow(input: AddEstimateRowInput): Promise<ApiResult<EstimateRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const payload: EstimateInsert = {
-    job_card_id: input.jobCardId,
+    job_card_id: resolvedIdRes.data,
     sr_no: input.srNo,
     panel_name: input.panelName?.trim() || null,
     part_number: input.partNumber?.trim() || null,
@@ -121,10 +128,13 @@ export async function deleteEstimateRowsByPanels(jobCardId: string, panelNames: 
   if (!jobCardId.trim()) return fail('Job card id is required')
   if (names.length === 0) return ok(true)
 
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const { error } = await supabase
     .from('estimate_rows')
     .delete()
-    .eq('job_card_id', jobCardId)
+    .eq('job_card_id', resolvedIdRes.data)
     .in('panel_name', names)
 
   if (error) return fail(error)

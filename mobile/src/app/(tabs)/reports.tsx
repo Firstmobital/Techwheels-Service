@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -65,6 +66,8 @@ export default function ReportsScreen() {
   const [dateFieldType, setDateFieldType] = useState<DateFieldType>('closed_date')
 
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [headerStats, setHeaderStats] = useState({
     monthlyJobCards: 0,
@@ -185,6 +188,7 @@ export default function ReportsScreen() {
       } finally {
         if (!active) return
         setLoading(false)
+        setRefreshing(false)
       }
     }
 
@@ -193,10 +197,19 @@ export default function ReportsScreen() {
     return () => {
       active = false
     }
-  }, [dateFilter, effectiveBranchFilter])
+  }, [dateFilter, effectiveBranchFilter, reloadTick])
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    setReloadTick((prev) => prev + 1)
+  }
 
   return (
-    <ScrollView className="flex-1 bg-slate-50" contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView
+      className="flex-1 bg-slate-50"
+      contentContainerStyle={{ paddingBottom: 24 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <View className="px-4 pt-4 pb-2">
         <Text className="text-2xl font-bold text-slate-900">Reports</Text>
         <Text className="text-sm text-slate-600 mt-1">
@@ -217,7 +230,8 @@ export default function ReportsScreen() {
             className="mt-3 bg-blue-600 rounded-lg py-2 items-center"
             onPress={() => {
               setError(null)
-              setLoading(true)
+              setRefreshing(true)
+              setReloadTick((prev) => prev + 1)
             }}
           >
             <Text className="text-white font-semibold">Retry</Text>

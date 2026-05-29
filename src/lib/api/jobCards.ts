@@ -42,6 +42,51 @@ export type JobDashboardSummaryRow = Pick<
   panel_names?: string[]
 }
 
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export async function resolveExistingJobCardId(reference: string): Promise<ApiResult<string>> {
+  const needle = reference.trim()
+  if (!needle) return fail('Job card reference is required')
+
+  if (UUID_V4_PATTERN.test(needle)) {
+    const byIdRes = await supabase
+      .from('job_cards')
+      .select('id')
+      .eq('id', needle)
+      .maybeSingle<{ id: string }>()
+
+    if (byIdRes.error) return fail(byIdRes.error)
+    if (byIdRes.data?.id) return ok(byIdRes.data.id)
+  }
+
+  const byJcRes = await supabase
+    .from('job_cards')
+    .select('id')
+    .eq('jc_number', needle)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>()
+
+  if (byJcRes.error) return fail(byJcRes.error)
+  if (byJcRes.data?.id) return ok(byJcRes.data.id)
+
+  const normalizedReg = normalizeRegNumber(needle)
+  if (normalizedReg) {
+    const byRegRes = await supabase
+      .from('job_cards')
+      .select('id')
+      .eq('reg_number', normalizedReg)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string }>()
+
+    if (byRegRes.error) return fail(byRegRes.error)
+    if (byRegRes.data?.id) return ok(byRegRes.data.id)
+  }
+
+  return fail(`Job card not found for reference: ${needle}`)
+}
+
 export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSummaryRow[]>> {
   const { data, error } = await supabase
     .from('job_card_summary')
@@ -195,18 +240,58 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSumm
 }
 
 export async function getJobCardSummary(jobCardId: string): Promise<ApiResult<JobSummaryRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+  const resolvedJobCardId = resolvedIdRes.data
+
   const { data, error } = await supabase
     .from('job_card_summary')
     .select('*')
-    .eq('job_card_id', jobCardId)
+    .eq('job_card_id', resolvedJobCardId)
     .single<JobSummaryRow>()
 
-  if (error) return fail(error)
+  if (error) {
+    // Fallback path: some environments block direct access to job_card_summary.
+    // Use base job_cards row so stage screens still load on mobile.
+    const { data: jobCardRow, error: jobCardError } = await supabase
+      .from('job_cards')
+      .select('*')
+      .eq('id', resolvedJobCardId)
+      .single<JobCardRow>()
+
+    if (jobCardError || !jobCardRow) return fail(error)
+
+    const { data: estimateRows, error: estimateError } = await supabase
+      .from('estimate_rows')
+      .select('row_total')
+      .eq('job_card_id', resolvedJobCardId)
+
+    if (estimateError) return fail(estimateError)
+
+    const totalEstimateAmount = (estimateRows ?? []).reduce((sum, row) => {
+      const rowTotal = Number(row.row_total ?? 0)
+      return sum + (Number.isFinite(rowTotal) ? rowTotal : 0)
+    }, 0)
+
+    const fallbackSummary = {
+      ...(jobCardRow as unknown as JobSummaryRow),
+      job_card_id: jobCardRow.id,
+      total_estimate_amount: totalEstimateAmount,
+      panel_count: 0,
+      photo_count: 0,
+      has_ppt_pre: false,
+      has_ppt_post: false,
+      warranty_age_days: null,
+      tml_share_percent: null,
+    } as JobSummaryRow
+
+    return ok(fallbackSummary)
+  }
 
   const { data: estimateRows, error: estimateError } = await supabase
     .from('estimate_rows')
     .select('row_total')
-    .eq('job_card_id', jobCardId)
+    .eq('job_card_id', resolvedJobCardId)
 
   if (estimateError) return fail(estimateError)
 

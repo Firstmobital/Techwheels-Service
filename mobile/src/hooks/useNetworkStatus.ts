@@ -33,24 +33,32 @@ export const useNetworkStatus = () => {
       ismetered: state.details?.isConnectionExpensive || false,
     }
 
-    setNetworkState(newState)
+    setNetworkState((prev) => {
+      // Log transition only when connectivity flips.
+      if (newState.isConnected && !prev.isConnected) {
+        logEvent('network_connected', {
+          type: newState.type,
+          metered: newState.ismetered,
+        }, 'network-status')
+      } else if (!newState.isConnected && prev.isConnected) {
+        logEvent('network_disconnected', {
+          type: prev.type,
+        }, 'network-status')
+      }
 
-    // Log connection status changes
-    if (newState.isConnected && !networkState.isConnected) {
-      logEvent('network_connected', {
-        type: newState.type,
-        metered: newState.ismetered,
-      }, 'network-status')
-    } else if (!newState.isConnected && networkState.isConnected) {
-      logEvent('network_disconnected', {
-        type: networkState.type,
-      }, 'network-status')
-    }
-  }, [networkState.isConnected])
+      return newState
+    })
+  }, [])
 
   useEffect(() => {
     // Initial state check
-    NetInfo.fetch().then(handleStateChange)
+    NetInfo.fetch()
+      .then(handleStateChange)
+      .catch((error) => {
+        logEvent('network_fetch_error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        }, 'network-status')
+      })
 
     // Subscribe to changes
     if (!netInfoSubscription) {

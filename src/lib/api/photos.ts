@@ -1,13 +1,17 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
 import { invokeUniversalDriveUpload } from './documents'
+import { resolveExistingJobCardId } from './jobCards'
 import { fail, ok, type ApiResult, type PanelPhotoInsert, type PanelPhotoRow, type PhotoType } from './types'
 
 export async function listPanelPhotos(jobCardId: string): Promise<ApiResult<PanelPhotoRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const { data, error } = await supabase
     .from('panel_photos')
     .select('id, panel_id, photo_type, repair_stage, storage_path, drive_url, drive_file_id, gps_city, captured_at')
-    .eq('job_card_id', jobCardId)
+    .eq('job_card_id', resolvedIdRes.data)
 
   if (error) return fail(error)
   return ok((data ?? []) as unknown as PanelPhotoRow[])
@@ -25,8 +29,11 @@ export async function createPanelPhoto(input: {
   gpsCity?: string | null
   capturedAt?: string
 }): Promise<ApiResult<PanelPhotoRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+
   const payload: PanelPhotoInsert & { repair_stage?: string; gps_lat?: number; gps_lng?: number; gps_city?: string | null; captured_at?: string } = {
-    job_card_id: input.jobCardId,
+    job_card_id: resolvedIdRes.data,
     panel_id: input.panelId,
     photo_type: input.photoType,
     storage_path: input.storagePath,
@@ -48,7 +55,7 @@ export async function createPanelPhoto(input: {
   if (error) return fail(error)
 
   void invokeUniversalDriveUpload({
-    jobCardId: input.jobCardId,
+    jobCardId: resolvedIdRes.data,
     fileType: input.photoType,
     storagePath: input.storagePath,
     fileSizeMb: Number.isFinite(Number(input.fileSizeMb)) ? Number(input.fileSizeMb) : 0,

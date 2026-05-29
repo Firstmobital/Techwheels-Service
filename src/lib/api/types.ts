@@ -29,6 +29,25 @@ export function ok<T>(data: T): ApiResult<T> {
 export function fail<T>(error: unknown, fallback = 'Unexpected error'): ApiResult<T> {
   if (typeof error === 'string' && error.trim()) return { data: null, error }
   if (error instanceof Error && error.message.trim()) return { data: null, error: error.message }
+  if (error && typeof error === 'object') {
+    const maybeError = error as {
+      message?: unknown
+      details?: unknown
+      hint?: unknown
+      code?: unknown
+    }
+
+    const message = typeof maybeError.message === 'string' ? maybeError.message.trim() : ''
+    const details = typeof maybeError.details === 'string' ? maybeError.details.trim() : ''
+    const hint = typeof maybeError.hint === 'string' ? maybeError.hint.trim() : ''
+    const code = typeof maybeError.code === 'string' ? maybeError.code.trim() : ''
+
+    const composed = [message, details, hint, code ? `code: ${code}` : '']
+      .filter((part) => part.length > 0)
+      .join(' | ')
+
+    if (composed) return { data: null, error: composed }
+  }
   return { data: null, error: fallback }
 }
 

@@ -14,6 +14,10 @@
 - **Use**: Daily reference for task status, blockers, and next steps
 - **Workflow**: Mark tasks ✅ as complete, move docs to `/completed` folder
 
+**→ [MOBILE-007_PLATFORM_HOME_SUPERAPP_TRACKER.md](MOBILE-007_PLATFORM_HOME_SUPERAPP_TRACKER.md)** ⭐ **SESSION RECOVERY TRACKER**
+- **Purpose**: Resume mobile platform-home implementation from any interrupted chat without scope drift
+- **Use**: Attach this single file in a new chat and continue from first TODO in Activity Tracker
+
 ---
 
 ## Quick Status Overview

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -274,6 +275,15 @@ export default function ImportScreen() {
     Object.fromEntries(CARDS.map((card) => [card.tableName, emptyCard()])),
   )
   const [busyKey, setBusyKey] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    // Import screen state is local; refresh gesture provides native reload affordance.
+    setTimeout(() => {
+      setRefreshing(false)
+    }, 300)
+  }
 
   const handleSlotFile = async (tableName: string, branch: PortalBranch) => {
     try {
@@ -627,7 +637,11 @@ export default function ImportScreen() {
   }, [cards])
 
   return (
-    <ScrollView className="flex-1 bg-slate-50" contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+    <ScrollView
+      className="flex-1 bg-slate-50"
+      contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <View className="mb-4">
         <Text className="text-2xl font-bold text-slate-900">Import Data</Text>
         <Text className="text-sm text-slate-600 mt-1">

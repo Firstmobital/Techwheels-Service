@@ -182,7 +182,7 @@ export default function CreateJobCardScreen() {
       {
         text: 'Open',
         onPress: () => {
-          router.replace(`/job-cards/${result.data?.id}`)
+          router.replace(`/job-cards/${result.data?.id}/jobcard`)
         },
       },
     ])

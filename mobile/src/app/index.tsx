@@ -14,7 +14,7 @@ export default function IndexRoute() {
   }
 
   if (session) {
-    return <Redirect href="/(tabs)/import" />
+    return <Redirect href="/(tabs)/home" />
   }
 
   return <Redirect href="/(auth)/login" />
