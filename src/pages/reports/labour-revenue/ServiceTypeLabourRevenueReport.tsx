@@ -4,6 +4,7 @@ import {
   type DateRangeFilter,
   getServiceTypeJcChassisRows,
   getServiceTypeLabourRevenue,
+  getVasRevenueReport,
   type ServiceTypeJcChassisRow,
   type ServiceTypeLabourRevenue,
 } from '../../../lib/reportQueries'
@@ -24,6 +25,7 @@ export default function ServiceTypeLabourRevenueReport({
 }: ServiceTypeReportProps) {
   const [rows, setRows] = useState<ServiceTypeLabourRevenue[]>([])
   const [jcChassisRows, setJcChassisRows] = useState<ServiceTypeJcChassisRow[]>([])
+  const [totalVasRevenue, setTotalVasRevenue] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('totalLabourRevenue')
@@ -38,11 +40,13 @@ export default function ServiceTypeLabourRevenueReport({
     Promise.all([
       getServiceTypeLabourRevenue(branch, dateFilter, serviceTypeFilter),
       getServiceTypeJcChassisRows(branch, dateFilter, serviceTypeFilter),
+      getVasRevenueReport(branch, dateFilter, serviceTypeFilter),
     ])
-      .then(([data, jcChassis]) => {
+      .then(([data, jcChassis, vasReport]) => {
         if (!active) return
         setRows(data)
         setJcChassisRows(jcChassis)
+        setTotalVasRevenue(vasReport.totalVasRevenue)
       })
       .catch((err: Error) => {
         if (!active) return
@@ -206,6 +210,23 @@ export default function ServiceTypeLabourRevenueReport({
           <div className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-600">Service Types</p>
             <p className="mt-1 text-2xl font-semibold text-amber-900">{totals.serviceTypes.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Labour & VAS Snapshot</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] text-cyan-700">Total Labour Revenue</p>
+                <p className="text-lg font-semibold text-cyan-900">
+                  Rs. {totals.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-cyan-700">Total VAS Revenue</p>
+                <p className="text-lg font-semibold text-cyan-900">
+                  Rs. {totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
