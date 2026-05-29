@@ -1,11 +1,11 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
 import { invokeUniversalDriveUpload } from './documents'
-import { resolveExistingJobCardId } from './jobCards'
+import { resolveExistingJobCardId, type JobReferenceHints } from './jobCards'
 import { fail, ok, type ApiResult, type PanelPhotoInsert, type PanelPhotoRow, type PhotoType } from './types'
 
-export async function listPanelPhotos(jobCardId: string): Promise<ApiResult<PanelPhotoRow[]>> {
-  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+export async function listPanelPhotos(jobCardId: string, hints?: JobReferenceHints): Promise<ApiResult<PanelPhotoRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId, hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const { data, error } = await supabase
@@ -28,8 +28,9 @@ export async function createPanelPhoto(input: {
   gpsLng?: number
   gpsCity?: string | null
   capturedAt?: string
+  hints?: JobReferenceHints
 }): Promise<ApiResult<PanelPhotoRow>> {
-  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
+  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId, input.hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const payload: PanelPhotoInsert & { repair_stage?: string; gps_lat?: number; gps_lng?: number; gps_city?: string | null; captured_at?: string } = {

@@ -13,6 +13,8 @@ import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
 
 type Params = {
   id?: string | string[]
+  jcNumber?: string | string[]
+  regNumber?: string | string[]
 }
 
 type PanelDamageSummary = {
@@ -25,8 +27,10 @@ type PanelDamageSummary = {
 
 export default function DamageStageScreen() {
   const router = useRouter()
-  const { id } = useLocalSearchParams<Params>()
+  const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
+  const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
+  const regNumberHint = useMemo(() => (Array.isArray(regNumber) ? regNumber[0] : regNumber), [regNumber])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -43,8 +47,8 @@ export default function DamageStageScreen() {
     setError(null)
 
     const [panelRes, photoRes] = await Promise.all([
-      listPanels(jobCardId),
-      listPanelPhotos(jobCardId),
+      listPanels(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
     ])
 
     if (panelRes.error) {
@@ -107,7 +111,7 @@ export default function DamageStageScreen() {
     <>
       <Stack.Screen options={{ title: 'Damage Stage' }} />
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
-        <JobWorkflowHeader jobCardId={jobCardId} activeTab="damage" />
+        <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="damage" />
 
         {loading ? (
           <View className="items-center justify-center py-20">
@@ -149,7 +153,7 @@ export default function DamageStageScreen() {
                   className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2"
                   onPress={() => {
                     if (!jobCardId) return
-                    router.push({ pathname: '/job-cards/[id]/panel-selector', params: { id: jobCardId, jobCardId } })
+                    router.push({ pathname: '/job-cards/[id]/panel-selector', params: { id: jobCardId, jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
                   }}
                 >
                   <Text className="text-xs font-semibold text-blue-700">Manage Panels</Text>
@@ -172,7 +176,7 @@ export default function DamageStageScreen() {
                             if (!jobCardId) return
                             router.push({
                               pathname: '/job-cards/[id]/panel-photos',
-                              params: { id: jobCardId, jobCardId, panelId: panel.id, panelName: panel.panelName },
+                              params: { id: jobCardId, jobCardId, panelId: panel.id, panelName: panel.panelName, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' },
                             })
                           }}
                         >
@@ -195,7 +199,7 @@ export default function DamageStageScreen() {
               className="rounded-lg py-4 items-center bg-indigo-600"
               onPress={() => {
                 if (!jobCardId) return
-                router.push(`/job-cards/${jobCardId}/estimate`)
+                router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
               }}
             >
               <Text className="text-white font-semibold">Next: Estimate Stage</Text>

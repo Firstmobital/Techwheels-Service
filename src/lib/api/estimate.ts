@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { resolveExistingJobCardId } from './jobCards'
+import { resolveExistingJobCardId, type JobReferenceHints } from './jobCards'
 import { fail, ok, type ApiResult, type EstimateInsert, type EstimateRow } from './types'
 
 export type AddEstimateRowInput = {
@@ -40,8 +40,8 @@ export type UpdateEstimateRowInput = {
 
 const ESTIMATE_SELECT = 'id, sr_no, panel_name, part_number, part_description, defect, action, qty, ndp_value, cut_weld_charges, paint_charges, total_special_charges, job_code, job_code_desc, no_off, labour_charges, row_total'
 
-export async function listEstimateRows(jobCardId: string): Promise<ApiResult<EstimateRow[]>> {
-  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+export async function listEstimateRows(jobCardId: string, hints?: JobReferenceHints): Promise<ApiResult<EstimateRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId, hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const { data, error } = await supabase

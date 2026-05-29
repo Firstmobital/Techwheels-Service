@@ -21,6 +21,12 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
+          <Stack.Screen
+            name="job-cards"
+            options={{
+              headerShown: false,
+            }}
+          />
         </Stack>
       </OfflineProvider>
     </AuthProvider>

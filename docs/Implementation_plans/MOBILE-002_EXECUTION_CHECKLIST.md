@@ -69,6 +69,19 @@ Remaining parity backlog (must complete for full closure):
 - [ ] Re-test full AutoDoc stage flow on mobile for: `JB00034`, `5454`, `JC001` and capture pass/fail notes.
 - [ ] Confirm submit-stage checklist renders without hard failure when optional datasets are unavailable; warnings should remain actionable.
 
+### AutoDoc Route/Stage Parity Hotfix (2026-05-29, continued)
+
+- [x] Preserve job identity hints across stage navigation (`id`, `jcNumber`, `regNumber`) from dashboard and workflow tabs.
+- [x] Extend resolver and API calls to use hint-assisted canonical record resolution for stage rehydration.
+- [x] Hide parent root stack header for job-card routes to remove duplicate top bars and route-group label leakage.
+- [x] Keep Job Card and Submit usable when summary scope is partially restricted (warning + fallback context, no hard stop).
+- [ ] Validate existing DB state rehydration for each stage on selected existing cards:
+   - [ ] Job Card: editable details from DB
+   - [ ] Damage: previously saved panels visible
+   - [ ] Estimate: previously saved rows visible
+   - [ ] Submit: readiness/docs reflect same job context
+- [ ] Record card-by-card evidence for: `JB000667`, `JC001` (screenshots + pass/fail note)
+
 Execution order for docs (start here and proceed):
 - [x] 1) `docs/Implementation_plans/MOBILE-002_EXECUTION_CHECKLIST.md` (daily command sheet and acceptance gates)
 - [ ] 2) `docs/Implementation_plans/MOBILE-005_AUTODOC_GPS_STAMP_PARITY_PLAN.md` (AutoDoc deep parity execution)
@@ -89,6 +102,20 @@ Pass criteria:
 ---
 
 ## Pre-Execution Requirements
+
+### Schema Authority Rule
+
+- [x] Treat `local_folder/backups/full_database.sql` as authoritative schema + full DB dump for mobile parity work.
+- [x] Do not downgrade authority to older snapshots.
+
+### Mobile Runtime Command Guardrail
+
+- [x] Start mobile Expo server using mobile package context, not repository root.
+- [x] Canonical launch command documented and used for parity QA:
+
+```bash
+npm --prefix /Users/vkbin/Techwheels-Service/mobile run start -- --clear --tunnel
+```
 
 - [ ] **Expo Account Created**: https://expo.dev/signup
 - [ ] **Expo CLI Installed**: `npm install -g eas-cli expo-cli`

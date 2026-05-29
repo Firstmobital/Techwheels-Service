@@ -1,9 +1,9 @@
 import { supabase } from '../supabase'
-import { resolveExistingJobCardId } from './jobCards'
+import { resolveExistingJobCardId, type JobReferenceHints } from './jobCards'
 import { fail, ok, type ApiResult, type PanelRow } from './types'
 
-export async function listPanels(jobCardId: string): Promise<ApiResult<PanelRow[]>> {
-  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+export async function listPanels(jobCardId: string, hints?: JobReferenceHints): Promise<ApiResult<PanelRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId, hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const { data, error } = await supabase
@@ -16,10 +16,10 @@ export async function listPanels(jobCardId: string): Promise<ApiResult<PanelRow[
   return ok((data ?? []) as PanelRow[])
 }
 
-export async function createPanel(jobCardId: string, panelName: string): Promise<ApiResult<PanelRow>> {
+export async function createPanel(jobCardId: string, panelName: string, hints?: JobReferenceHints): Promise<ApiResult<PanelRow>> {
   const name = panelName.trim()
   if (!name) return fail('Panel name is required')
-  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId, hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const { data, error } = await supabase

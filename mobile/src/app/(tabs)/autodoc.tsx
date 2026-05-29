@@ -42,10 +42,11 @@ function deriveWorkflowStage(
   postRepairReadyJobIds: Set<string>,
   estimatePendingJobIds: Set<string>
 ): WorkflowStage {
+  const jobCardId = row.job_card_id ?? ''
   if (row.status === 'completed') return 'claim_submitted'
-  if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
+  if (jobCardId && postRepairReadyJobIds.has(jobCardId)) return 'post_repair_ppt'
   if (row.status === 'submitted') return 'pre_submit_done'
-  if ((row.status === 'in_work' || row.status === 'approved') && estimatePendingJobIds.has(row.job_card_id)) {
+  if ((row.status === 'in_work' || row.status === 'approved') && jobCardId && estimatePendingJobIds.has(jobCardId)) {
     return 'estimate'
   }
   if (row.status === 'approved') return 'pre_submit_pending'
@@ -418,22 +419,28 @@ export default function AutoDocScreen() {
       return
     }
 
+    const baseParams = {
+      id: row.job_card_id,
+      jcNumber: row.jc_number ?? '',
+      regNumber: row.reg_number ?? '',
+    }
+
     if (stage === 'claim_submitted' || stage === 'post_repair_ppt' || stage === 'pre_submit_done' || stage === 'pre_submit_pending') {
-      router.push(`/job-cards/${row.job_card_id}/submit`)
+      router.push({ pathname: '/job-cards/[id]/submit', params: baseParams })
       return
     }
 
     if (stage === 'estimate') {
-      router.push(`/job-cards/${row.job_card_id}/estimate`)
+      router.push({ pathname: '/job-cards/[id]/estimate', params: baseParams })
       return
     }
 
     if (stage === 'documentation_pre_repair') {
-      router.push(`/job-cards/${row.job_card_id}/damage`)
+      router.push({ pathname: '/job-cards/[id]/damage', params: baseParams })
       return
     }
 
-    router.push(`/job-cards/${row.job_card_id}/jobcard`)
+    router.push({ pathname: '/job-cards/[id]/jobcard', params: baseParams })
   }
 
   const rowsWithStage = useMemo(

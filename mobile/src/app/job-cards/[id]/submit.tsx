@@ -19,8 +19,8 @@ import { listPanelPhotos } from '../../../lib/api/photos'
 import {
   listDocuments,
   uploadDocumentFile,
-  type DocumentRow,
 } from '../../../lib/api/documents'
+import type { DocumentRow } from '../../../lib/api/types'
 import { generateRepairPPT } from '../../../lib/generators/generatePPT'
 import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
 import {
@@ -32,6 +32,8 @@ import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 
 type Params = {
   id?: string | string[]
+  jcNumber?: string | string[]
+  regNumber?: string | string[]
 }
 
 type BusyAction =
@@ -59,8 +61,10 @@ function buildAttachment(doc: DocumentRow, fallbackName: string): EmailAttachmen
 
 export default function SubmitStageScreen() {
   const router = useRouter()
-  const { id } = useLocalSearchParams<Params>()
+  const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
+  const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
+  const regNumberHint = useMemo(() => (Array.isArray(regNumber) ? regNumber[0] : regNumber), [regNumber])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -84,24 +88,30 @@ export default function SubmitStageScreen() {
     setWarning(null)
 
     const [jobRes, docsRes, estimateRes, photosRes] = await Promise.all([
-      getJobCardSummary(jobCardId),
-      listDocuments(jobCardId),
-      listEstimateRows(jobCardId),
-      listPanelPhotos(jobCardId),
+      getJobCardSummary(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listDocuments(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listEstimateRows(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
     ])
 
-    if (jobRes.error || !jobRes.data) {
-      setError(jobRes.error ?? 'Unable to load job card summary')
-      setLoading(false)
-      return
-    }
-
     const nonBlockingWarnings: string[] = []
+    if (jobRes.error || !jobRes.data) {
+      nonBlockingWarnings.push(`Job summary unavailable: ${jobRes.error ?? 'not found'}`)
+    }
     if (docsRes.error) nonBlockingWarnings.push(`Documents unavailable: ${docsRes.error}`)
     if (estimateRes.error) nonBlockingWarnings.push(`Estimate rows unavailable: ${estimateRes.error}`)
     if (photosRes.error) nonBlockingWarnings.push(`Photos unavailable: ${photosRes.error}`)
 
-    setJobCard(jobRes.data)
+    setJobCard(jobRes.data ?? {
+      job_card_id: jobCardId,
+      jc_number: String(jobCardId),
+      reg_number: null,
+      model: null,
+      colour: null,
+      complaint_date: new Date().toISOString(),
+      dealer_name: null,
+      total_estimate_amount: 0,
+    })
     setDocuments(docsRes.error ? [] : (docsRes.data ?? []))
     setEstimateRowsCount(estimateRes.error ? 0 : (estimateRes.data ?? []).length)
 
@@ -338,7 +348,7 @@ export default function SubmitStageScreen() {
     <>
       <Stack.Screen options={{ title: 'Submit Stage' }} />
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        <JobWorkflowHeader jobCardId={jobCardId} activeTab="submit" />
+        <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="submit" />
 
         {loading ? (
           <View className="items-center justify-center py-20">
@@ -430,7 +440,7 @@ export default function SubmitStageScreen() {
                 className="flex-1 mr-2 rounded-lg border border-gray-300 bg-white py-3 items-center"
                 onPress={() => {
                   if (!jobCardId) return
-                  router.push(`/job-cards/${jobCardId}/damage`)
+                  router.push({ pathname: '/job-cards/[id]/damage', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
                 }}
               >
                 <Text className="text-gray-700 font-semibold">Open Damage</Text>
@@ -439,7 +449,7 @@ export default function SubmitStageScreen() {
                 className="flex-1 ml-2 rounded-lg border border-gray-300 bg-white py-3 items-center"
                 onPress={() => {
                   if (!jobCardId) return
-                  router.push(`/job-cards/${jobCardId}/estimate`)
+                  router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
                 }}
               >
                 <Text className="text-gray-700 font-semibold">Open Estimate</Text>

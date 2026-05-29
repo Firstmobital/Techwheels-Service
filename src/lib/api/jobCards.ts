@@ -44,20 +44,104 @@ export type JobDashboardSummaryRow = Pick<
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export async function resolveExistingJobCardId(reference: string): Promise<ApiResult<string>> {
+export type JobReferenceHints = {
+  jcNumber?: string | null
+  regNumber?: string | null
+}
+
+export async function resolveExistingJobCardId(reference: string, hints?: JobReferenceHints): Promise<ApiResult<string>> {
   const needle = reference.trim()
   if (!needle) return fail('Job card reference is required')
 
+  const hintedJc = String(hints?.jcNumber ?? '').trim()
+  const hintedReg = normalizeRegNumber(String(hints?.regNumber ?? ''))
+  const hasHints = Boolean(hintedJc || hintedReg)
+
   if (UUID_V4_PATTERN.test(needle)) {
+    if (!hasHints) {
+      // Fast path for canonical ids when no extra hints are available.
+      return ok(needle)
+    }
+
+    const bySummaryIdRes = await supabase
+      .from('job_card_summary')
+      .select('job_card_id')
+      .eq('job_card_id', needle)
+      .limit(1)
+      .maybeSingle<{ job_card_id: string | null }>()
+
+    if (bySummaryIdRes.error) return fail(bySummaryIdRes.error)
+    if (bySummaryIdRes.data?.job_card_id) return ok(needle)
+
     const byIdRes = await supabase
       .from('job_cards')
       .select('id')
       .eq('id', needle)
-      .maybeSingle<{ id: string }>()
+      .limit(1)
+      .maybeSingle<{ id: string | null }>()
 
     if (byIdRes.error) return fail(byIdRes.error)
-    if (byIdRes.data?.id) return ok(byIdRes.data.id)
+    if (byIdRes.data?.id) return ok(needle)
   }
+
+  if (hintedJc) {
+    const byHintJcSummaryRes = await supabase
+      .from('job_card_summary')
+      .select('job_card_id')
+      .eq('jc_number', hintedJc)
+      .order('jc_created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ job_card_id: string | null }>()
+
+    if (byHintJcSummaryRes.error) return fail(byHintJcSummaryRes.error)
+    if (byHintJcSummaryRes.data?.job_card_id) return ok(byHintJcSummaryRes.data.job_card_id)
+
+    const byHintJcJobRes = await supabase
+      .from('job_cards')
+      .select('id')
+      .eq('jc_number', hintedJc)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string | null }>()
+
+    if (byHintJcJobRes.error) return fail(byHintJcJobRes.error)
+    if (byHintJcJobRes.data?.id) return ok(byHintJcJobRes.data.id)
+  }
+
+  if (hintedReg) {
+    const byHintRegSummaryRes = await supabase
+      .from('job_card_summary')
+      .select('job_card_id')
+      .eq('reg_number', hintedReg)
+      .order('jc_created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ job_card_id: string | null }>()
+
+    if (byHintRegSummaryRes.error) return fail(byHintRegSummaryRes.error)
+    if (byHintRegSummaryRes.data?.job_card_id) return ok(byHintRegSummaryRes.data.job_card_id)
+
+    const byHintRegJobRes = await supabase
+      .from('job_cards')
+      .select('id')
+      .eq('reg_number', hintedReg)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string | null }>()
+
+    if (byHintRegJobRes.error) return fail(byHintRegJobRes.error)
+    if (byHintRegJobRes.data?.id) return ok(byHintRegJobRes.data.id)
+  }
+
+  const bySummaryJcRes = await supabase
+    .from('job_card_summary')
+    .select('job_card_id')
+    .eq('jc_number', needle)
+    .order('jc_created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ job_card_id: string | null }>()
+
+  if (bySummaryJcRes.error) return fail(bySummaryJcRes.error)
+  if (bySummaryJcRes.data?.job_card_id) return ok(bySummaryJcRes.data.job_card_id)
 
   const byJcRes = await supabase
     .from('job_cards')
@@ -72,6 +156,17 @@ export async function resolveExistingJobCardId(reference: string): Promise<ApiRe
 
   const normalizedReg = normalizeRegNumber(needle)
   if (normalizedReg) {
+    const bySummaryRegRes = await supabase
+      .from('job_card_summary')
+      .select('job_card_id')
+      .eq('reg_number', normalizedReg)
+      .order('jc_created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ job_card_id: string | null }>()
+
+    if (bySummaryRegRes.error) return fail(bySummaryRegRes.error)
+    if (bySummaryRegRes.data?.job_card_id) return ok(bySummaryRegRes.data.job_card_id)
+
     const byRegRes = await supabase
       .from('job_cards')
       .select('id')
@@ -204,12 +299,22 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSumm
 
   if (estimateError) return fail(estimateError)
 
-  const { data: panelRows, error: panelError } = await supabase
-    .from('panels')
-    .select('job_card_id, panel_name')
-    .in('job_card_id', jobCardIds)
+  const [panelRes, photoRes] = await Promise.all([
+    supabase
+      .from('panels')
+      .select('job_card_id, panel_name')
+      .in('job_card_id', jobCardIds),
+    supabase
+      .from('panel_photos')
+      .select('job_card_id')
+      .in('job_card_id', jobCardIds),
+  ])
 
-  if (panelError) return fail(panelError)
+  if (panelRes.error) return fail(panelRes.error)
+  if (photoRes.error) return fail(photoRes.error)
+
+  const panelRows = panelRes.data ?? []
+  const photoRows = photoRes.data ?? []
 
   const totalsByJobCard = new Map<string, number>()
   for (const row of estimateRows ?? []) {
@@ -221,26 +326,38 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSumm
   }
 
   const panelNamesByJobCard = new Map<string, string[]>()
+  const panelCountByJobCard = new Map<string, number>()
   for (const panelRow of panelRows ?? []) {
     const jobCardId = panelRow.job_card_id
     const panelName = panelRow.panel_name?.trim()
-    if (!jobCardId || !panelName) continue
+    if (!jobCardId) continue
+    panelCountByJobCard.set(jobCardId, (panelCountByJobCard.get(jobCardId) ?? 0) + 1)
+    if (!panelName) continue
     const existing = panelNamesByJobCard.get(jobCardId) ?? []
     if (!existing.includes(panelName)) existing.push(panelName)
     panelNamesByJobCard.set(jobCardId, existing)
   }
 
+  const photoCountByJobCard = new Map<string, number>()
+  for (const photoRow of photoRows) {
+    const jobCardId = photoRow.job_card_id
+    if (!jobCardId) continue
+    photoCountByJobCard.set(jobCardId, (photoCountByJobCard.get(jobCardId) ?? 0) + 1)
+  }
+
   const adjusted = summaries.map((row) => ({
     ...row,
     total_estimate_amount: row.job_card_id ? (totalsByJobCard.get(row.job_card_id) ?? 0) : 0,
+    panel_count: row.job_card_id ? (panelCountByJobCard.get(row.job_card_id) ?? 0) : 0,
+    photo_count: row.job_card_id ? (photoCountByJobCard.get(row.job_card_id) ?? 0) : 0,
     panel_names: row.job_card_id ? (panelNamesByJobCard.get(row.job_card_id) ?? []) : [],
   }))
 
   return ok(adjusted)
 }
 
-export async function getJobCardSummary(jobCardId: string): Promise<ApiResult<JobSummaryRow>> {
-  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+export async function getJobCardSummary(jobCardId: string, hints?: JobReferenceHints): Promise<ApiResult<JobSummaryRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId, hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
   const resolvedJobCardId = resolvedIdRes.data
 
@@ -248,18 +365,25 @@ export async function getJobCardSummary(jobCardId: string): Promise<ApiResult<Jo
     .from('job_card_summary')
     .select('*')
     .eq('job_card_id', resolvedJobCardId)
-    .single<JobSummaryRow>()
+    .limit(1)
+    .maybeSingle<JobSummaryRow>()
 
   if (error) {
+    return fail(error)
+  }
+
+  if (!data) {
     // Fallback path: some environments block direct access to job_card_summary.
     // Use base job_cards row so stage screens still load on mobile.
     const { data: jobCardRow, error: jobCardError } = await supabase
       .from('job_cards')
       .select('*')
       .eq('id', resolvedJobCardId)
-      .single<JobCardRow>()
+      .limit(1)
+      .maybeSingle<JobCardRow>()
 
-    if (jobCardError || !jobCardRow) return fail(error)
+    if (jobCardError) return fail(jobCardError)
+    if (!jobCardRow) return fail('Job card summary is not visible in current access scope')
 
     const { data: estimateRows, error: estimateError } = await supabase
       .from('estimate_rows')

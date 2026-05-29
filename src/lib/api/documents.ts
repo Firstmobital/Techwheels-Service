@@ -1,6 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
-import { resolveExistingJobCardId } from './jobCards'
+import { resolveExistingJobCardId, type JobReferenceHints } from './jobCards'
 import { fail, ok, type ApiResult, type DocType, type DocumentInsert, type DocumentRow } from './types'
 
 const DOCUMENT_SELECT = 'id, job_card_id, doc_type, storage_path, drive_url, drive_file_id, file_size_mb, gps_lat, gps_lng, gps_city, captured_at, created_at'
@@ -90,8 +90,8 @@ export async function invokeUniversalDriveUpload(input: {
   }
 }
 
-export async function listDocuments(jobCardId: string): Promise<ApiResult<DocumentRow[]>> {
-  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+export async function listDocuments(jobCardId: string, hints?: JobReferenceHints): Promise<ApiResult<DocumentRow[]>> {
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId, hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
   const { data, error } = await supabase

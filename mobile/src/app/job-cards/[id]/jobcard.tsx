@@ -15,6 +15,8 @@ import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
 
 type Params = {
   id?: string | string[]
+  jcNumber?: string | string[]
+  regNumber?: string | string[]
 }
 
 type FormState = {
@@ -39,12 +41,15 @@ function toForm(data: any): FormState {
 
 export default function JobCardStageScreen() {
   const router = useRouter()
-  const { id } = useLocalSearchParams<Params>()
+  const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
+  const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
+  const regNumberHint = useMemo(() => (Array.isArray(regNumber) ? regNumber[0] : regNumber), [regNumber])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [claimTypeOptions, setClaimTypeOptions] = useState<string[]>(['Body & Paint'])
 
@@ -57,14 +62,23 @@ export default function JobCardStageScreen() {
 
     setLoading(true)
     setError(null)
+    setWarning(null)
 
     const [jobRes, lookupsRes] = await Promise.all([
-      getJobCardSummary(jobCardId),
+      getJobCardSummary(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       getAutoDocLookupOptions(),
     ])
 
     if (jobRes.error || !jobRes.data) {
-      setError(jobRes.error ?? 'Unable to load job card')
+      setWarning(jobRes.error ?? 'Unable to load full job summary')
+      setForm({
+        regNumber: regNumberHint ?? '',
+        jcNumber: jobCardNumberHint ?? '',
+        complaintDate: new Date().toISOString().slice(0, 10),
+        kmReading: '',
+        claimType: 'Body & Paint',
+        complaintText: '',
+      })
       setLoading(false)
       return
     }
@@ -110,7 +124,10 @@ export default function JobCardStageScreen() {
     }
 
     if (goToDamage) {
-      router.push(`/job-cards/${jobCardId}/damage`)
+      router.push({
+        pathname: '/job-cards/[id]/damage',
+        params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' },
+      })
       return
     }
 
@@ -121,7 +138,7 @@ export default function JobCardStageScreen() {
     <>
       <Stack.Screen options={{ title: 'Job Card' }} />
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
-        <JobWorkflowHeader jobCardId={jobCardId} activeTab="jobcard" />
+        <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="jobcard" />
 
         {loading ? (
           <View className="items-center justify-center py-20">
@@ -138,6 +155,12 @@ export default function JobCardStageScreen() {
           </View>
         ) : form ? (
           <>
+            {warning ? (
+              <View className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+                <Text className="text-sm text-amber-800">{warning}</Text>
+              </View>
+            ) : null}
+
             <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
               <Text className="text-xs uppercase tracking-wide text-gray-500">Job Card Details</Text>
 

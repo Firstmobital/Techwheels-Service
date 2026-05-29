@@ -26,6 +26,8 @@ import { uploadDocumentFile } from '../../../lib/api/documents'
 
 type Params = {
   id?: string | string[]
+  jcNumber?: string | string[]
+  regNumber?: string | string[]
 }
 
 type EstimateFormRow = {
@@ -87,8 +89,10 @@ function newRow(panelName = ''): EstimateFormRow {
 
 export default function JobCardEstimateScreen() {
   const router = useRouter()
-  const { id } = useLocalSearchParams<Params>()
+  const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
+  const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
+  const regNumberHint = useMemo(() => (Array.isArray(regNumber) ? regNumber[0] : regNumber), [regNumber])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -112,9 +116,9 @@ export default function JobCardEstimateScreen() {
     setError(null)
 
     const [estimateRes, panelRes, photoRes, workflowRes] = await Promise.all([
-      listEstimateRows(jobCardId),
-      listPanels(jobCardId),
-      listPanelPhotos(jobCardId),
+      listEstimateRows(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listPanels(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       getAutoDocWorkflowOptions(),
     ])
 
@@ -334,7 +338,7 @@ export default function JobCardEstimateScreen() {
     <>
       <Stack.Screen options={{ title: 'Estimate Editor' }} />
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
-        <JobWorkflowHeader jobCardId={jobCardId} activeTab="estimate" />
+        <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="estimate" />
 
         {loading ? (
           <View className="items-center justify-center py-20">

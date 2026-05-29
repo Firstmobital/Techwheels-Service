@@ -22,6 +22,8 @@ import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
 type Params = {
   id?: string | string[]
   jobCardId?: string | string[]
+  jcNumber?: string | string[]
+  regNumber?: string | string[]
 }
 
 interface PanelTile {
@@ -32,7 +34,7 @@ interface PanelTile {
 
 export default function PanelSelectorScreen() {
   const router = useRouter()
-  const { id: rawId, jobCardId: rawJobCardId } = useLocalSearchParams<Params>()
+  const { id: rawId, jobCardId: rawJobCardId, jcNumber, regNumber } = useLocalSearchParams<Params>()
 
   const idFromRoute = useMemo(
     () => (Array.isArray(rawId) ? rawId[0] : rawId),
@@ -43,6 +45,8 @@ export default function PanelSelectorScreen() {
     const legacyId = Array.isArray(rawJobCardId) ? rawJobCardId[0] : rawJobCardId
     return idFromRoute || legacyId
   }, [idFromRoute, rawJobCardId])
+  const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
+  const regNumberHint = useMemo(() => (Array.isArray(regNumber) ? regNumber[0] : regNumber), [regNumber])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -63,8 +67,8 @@ export default function PanelSelectorScreen() {
       logEvent('panel_list_load_start', { job_card_id: jobCardId }, 'panel-selector')
 
       const [panelsResult, photosResult, labelsResult] = await Promise.all([
-        listPanels(jobCardId),
-        listPanelPhotos(jobCardId),
+        listPanels(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+        listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
         listActivePanelLabels(),
       ])
 
@@ -132,6 +136,8 @@ export default function PanelSelectorScreen() {
         jobCardId,
         panelId,
         panelName,
+        jcNumber: jobCardNumberHint ?? '',
+        regNumber: regNumberHint ?? '',
       },
     })
   }
@@ -148,7 +154,7 @@ export default function PanelSelectorScreen() {
     }
 
     setAddingPanelName(panelName)
-    const createRes = await createPanel(jobCardId, panelName)
+    const createRes = await createPanel(jobCardId, panelName, { jcNumber: jobCardNumberHint, regNumber: regNumberHint })
     setAddingPanelName(null)
 
     if (createRes.error) {
@@ -196,7 +202,7 @@ export default function PanelSelectorScreen() {
 
       <View className="flex-1 bg-gray-50">
         <View className="px-4 pt-4">
-          <JobWorkflowHeader jobCardId={jobCardId} activeTab="damage" />
+          <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="damage" />
         </View>
 
         {loading ? (

@@ -5,6 +5,8 @@ export type WorkflowTab = 'dashboard' | 'jobcard' | 'damage' | 'estimate' | 'sub
 
 type WorkflowHeaderProps = {
   jobCardId?: string
+  jcNumber?: string
+  regNumber?: string
   activeTab: WorkflowTab
 }
 
@@ -16,8 +18,14 @@ const TABS: Array<{ key: WorkflowTab; label: string }> = [
   { key: 'submit', label: 'Submit' },
 ]
 
-export default function JobWorkflowHeader({ jobCardId, activeTab }: WorkflowHeaderProps) {
+export default function JobWorkflowHeader({ jobCardId, jcNumber, regNumber, activeTab }: WorkflowHeaderProps) {
   const router = useRouter()
+
+  const workflowParams = {
+    id: jobCardId,
+    jcNumber: jcNumber ?? '',
+    regNumber: regNumber ?? '',
+  }
 
   const onPressTab = (tab: WorkflowTab) => {
     if (tab === 'dashboard') {
@@ -28,21 +36,21 @@ export default function JobWorkflowHeader({ jobCardId, activeTab }: WorkflowHead
     if (!jobCardId) return
 
     if (tab === 'jobcard') {
-      router.push(`/job-cards/${jobCardId}/jobcard`)
+      router.push({ pathname: '/job-cards/[id]/jobcard', params: workflowParams })
       return
     }
 
     if (tab === 'damage') {
-      router.push(`/job-cards/${jobCardId}/damage`)
+      router.push({ pathname: '/job-cards/[id]/damage', params: workflowParams })
       return
     }
 
     if (tab === 'estimate') {
-      router.push(`/job-cards/${jobCardId}/estimate`)
+      router.push({ pathname: '/job-cards/[id]/estimate', params: workflowParams })
       return
     }
 
-    router.push(`/job-cards/${jobCardId}/submit`)
+    router.push({ pathname: '/job-cards/[id]/submit', params: workflowParams })
   }
 
   return (
