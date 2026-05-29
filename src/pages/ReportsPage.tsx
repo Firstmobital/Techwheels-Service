@@ -21,14 +21,6 @@ import type { ReportCategoryId } from './reports/types'
 
 const DEFAULT_CATEGORY_ID: ReportCategoryId = 'labour-revenue'
 
-const CATEGORY_TABS: Array<{ id: ReportCategoryId; label: string }> = [
-  { id: 'labour-revenue', label: 'Labour Revenue' },
-  { id: 'performance', label: 'Performance' },
-  { id: 'revenue', label: 'Revenue' },
-  { id: 'parts', label: 'Parts' },
-  { id: 'warranty', label: 'Warranty' },
-]
-
 interface HeaderStats {
   monthlyJobCards: number
   monthlyRevenue: number
@@ -327,29 +319,6 @@ export default function ReportsPage() {
             </div>
           </div>
         )}
-
-        <div className="flex border-b border-gray-200 mb-4">
-          {CATEGORY_TABS.map((category) => {
-            const isActive = resolvedCategoryId === category.id
-            const count = getReportsByCategory(category.id).length
-
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => navigate(`/reports/${category.id}`)}
-                className={[
-                  'px-4 py-2 text-sm font-medium cursor-pointer transition-colors border-b-2',
-                  isActive
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
-                ].join(' ')}
-              >
-                {`${category.label} (${count})`}
-              </button>
-            )
-          })}
-        </div>
 
         <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap gap-2">
