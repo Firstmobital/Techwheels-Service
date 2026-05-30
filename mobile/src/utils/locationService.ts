@@ -11,6 +11,11 @@ export interface MobileGpsLocation {
   lat: number
   lng: number
   accuracy: number | null
+  city?: string | null
+  state?: string | null
+  country?: string | null
+  addressLine?: string | null
+  placeName?: string | null
 }
 
 /**
@@ -36,6 +41,42 @@ export async function getMobileLocation(): Promise<MobileGpsLocation> {
 
     const { latitude, longitude, accuracy } = location.coords
 
+    let city: string | null = null
+    let state: string | null = null
+    let country: string | null = null
+    let addressLine: string | null = null
+    let placeName: string | null = null
+
+    try {
+      const reverse = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      })
+      const first = reverse[0]
+      if (first) {
+        city = first.city ?? first.subregion ?? first.district ?? null
+        state = first.region ?? null
+        country = first.country ?? null
+        placeName = first.name ?? first.street ?? first.streetNumber ?? null
+        addressLine = [
+          first.name,
+          first.street,
+          first.streetNumber,
+          first.district,
+          first.city,
+          first.subregion,
+          first.region,
+          first.country,
+          first.postalCode,
+        ]
+          .map((part) => String(part ?? '').trim())
+          .filter((part, index, all) => part.length > 0 && all.indexOf(part) === index)
+          .join(', ') || null
+      }
+    } catch {
+      // Reverse geocoding is best-effort; lat/lng tagging remains mandatory.
+    }
+
     logEvent(
       'location_captured',
       {
@@ -43,6 +84,7 @@ export async function getMobileLocation(): Promise<MobileGpsLocation> {
         lat: latitude.toFixed(6),
         lng: longitude.toFixed(6),
         accuracy: accuracy?.toFixed(2),
+        city: city ?? undefined,
       },
       'location-service'
     )
@@ -51,6 +93,11 @@ export async function getMobileLocation(): Promise<MobileGpsLocation> {
       lat: latitude,
       lng: longitude,
       accuracy,
+      city,
+      state,
+      country,
+      addressLine,
+      placeName,
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown location error'

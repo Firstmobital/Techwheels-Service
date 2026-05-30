@@ -312,13 +312,13 @@ export async function uploadDocumentFile(input: {
           resourceType: 'document',
         })
         if (driveOffloadRes.error) {
-          console.error('[autodoc-upload-debug] Drive offload failed after retries', {
+          // Mobile flow should not fail user uploads when Drive offload is temporarily unavailable.
+          console.warn('[autodoc-upload-debug] Drive offload failed after retries (non-blocking)', {
             jobCardId: resolvedJobCardId,
             docType: input.docType,
             storagePath,
             error: driveOffloadRes.error,
           })
-          return fail(`File uploaded, but Drive sync failed: ${driveOffloadRes.error}`)
         }
         return ok(payload.data as DocumentRow)
       }
@@ -366,13 +366,12 @@ export async function uploadDocumentFile(input: {
   })
 
   if (fallbackDriveOffloadRes.error) {
-    console.error('[autodoc-upload-debug] Drive offload failed after retries (client fallback path)', {
+    console.warn('[autodoc-upload-debug] Drive offload failed after retries (client fallback path, non-blocking)', {
       jobCardId: resolvedJobCardId,
       docType: input.docType,
       storagePath,
       error: fallbackDriveOffloadRes.error,
     })
-    return fail(`File uploaded, but Drive sync failed: ${fallbackDriveOffloadRes.error}`)
   }
 
   return ok(upsertRes.data)
