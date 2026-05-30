@@ -5,13 +5,14 @@ Version Context: Techwheels Service v1.0 (current workspace state)
 
 ## Product Scope
 
-- Domains: Import, Reports, AutoDoc, Admin, Settings.
+- Domains: Import, Reception, Reports, AutoDoc, Admin, Settings.
 - Backend platform: Supabase Auth + Postgres + Storage.
 - UI framework: React + TypeScript + Vite.
 
 ## Active Route Surface
 
 - `/import`
+- `/reception`
 - `/reports/:categoryId/:reportId`
 - `/settings`
 - `/admin`

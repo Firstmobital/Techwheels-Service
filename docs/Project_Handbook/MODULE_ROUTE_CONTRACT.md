@@ -31,6 +31,7 @@ This document defines the authoritative mapping between database modules and fro
 | 6 | `employees` | `/employees` | `/settings` | SettingsPage | Active | Employee master data management |
 | 7 | `reports` | `/reports` | `/reports` | ReportsPage + sub-routes | Active | Analytics and cross-module dashboards |
 | 8 | `admin` | `/admin` | `/admin` | AdminPage | Active | User and permission management |
+| 10 | `reception` | `/reception` | `/reception` | ReceptionPage | Active | Front desk vehicle intake and SA assignment |
 
 **Legend:**
 - **Module Name**: Authoritative name from `public.modules.name`
@@ -49,6 +50,7 @@ This document defines the authoritative mapping between database modules and fro
 // From src/App.tsx :: ROUTE_MODULE_MAP
 const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/import':   ['job_cards'],              // Import/Job Card creation
+  '/reception':['reception'],              // Front desk intake records
   '/reports':  ['reports'],                // Reports & Analytics
   '/settings': ['employees'],              // Employee master data
   '/admin':    ['admin'],                  // Admin panel

@@ -11,6 +11,7 @@ import AuthCallback from './pages/AuthCallback'
 import PasswordUpdatePage from './pages/PasswordUpdatePage'
 import AutoDocPage from './pages/AutoDocPage'
 import JobCardPage from './pages/JobCardPage'
+import ReceptionPage from './pages/ReceptionPage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
 import { useOnline } from './hooks/useOnline'
@@ -65,6 +66,15 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    to: '/reception',
+    label: 'Reception',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25h16.5m-16.5 0A2.25 2.25 0 001.5 7.5v9A2.25 2.25 0 003.75 18.75h16.5A2.25 2.25 0 0022.5 16.5v-9a2.25 2.25 0 00-2.25-2.25m-16.5 0V3.75A2.25 2.25 0 016 1.5h12a2.25 2.25 0 012.25 2.25v1.5M9 9.75h6m-6 3h6" />
+      </svg>
+    ),
+  },
 ]
 
 type ModuleName =
@@ -77,8 +87,9 @@ type ModuleName =
   | 'reports'
   | 'admin'
   | 'autodoc'
+  | 'reception'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception'
 
 interface PermissionRow {
   module_name: string
@@ -90,6 +101,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/settings': ['employees'],
   '/admin': ['admin'],
   '/autodoc': ['autodoc'],
+  '/reception': ['reception'],
 }
 
 function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly ModuleName[]) {
@@ -103,12 +115,13 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/settings')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
   if (pathname.startsWith('/admin')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/admin'])
   if (pathname.startsWith('/autodoc')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
+  if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback')) return true
   return false
 }
 
 function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
-  const preferenceOrder: AppRoute[] = ['/import', '/reports', '/settings', '/autodoc', '/admin']
+  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/reports', '/settings', '/autodoc', '/admin']
   return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
 }
 
@@ -133,6 +146,7 @@ function AccessDenied() {
                 <li>• <strong>Reports</strong> — View cross-module analytics and dashboards</li>
                 <li>• <strong>Employees</strong> — Manage employee master data</li>
                 <li>• <strong>AutoDoc</strong> — Build vehicle documentation and estimates</li>
+                <li>• <strong>Reception</strong> — Capture front-desk intake entries</li>
               </ul>
               <p className="mt-4 text-xs text-gray-500">
                 If you believe this is a mistake, ask your administrator to check your module assignments in the Admin Panel.
@@ -295,6 +309,7 @@ function AppInner() {
       if (item.to === '/settings') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/settings'])
       if (item.to === '/admin') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/admin'])
       if (item.to === '/autodoc') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
+      if (item.to === '/reception') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
       return false
     }),
     [allowedModules],
@@ -431,6 +446,10 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   </>
                 )}
               </NavLink>}
+
+              {visibleNavItems.some((item) => item.to === '/reception') && (
+                <SideNavLink to="/reception" icon={NAV_ITEMS[5].icon} label={NAV_ITEMS[5].label} />
+              )}
             </nav>
 
             {/* Sidebar footer */}
@@ -563,6 +582,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/admin']}>
                       <AdminPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/reception"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/reception']}>
+                      <ReceptionPage />
                     </RequireAccess>
                   )}
                 />
