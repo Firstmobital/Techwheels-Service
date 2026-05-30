@@ -177,6 +177,37 @@ Job Card Created → Navigate to detail screen
 - Mobile form structure: [mobile/src/app/job-cards/create.tsx](mobile/src/app/job-cards/create.tsx#L640-L690)
 - Web form structure: [src/pages/AutoDocPage.tsx](src/pages/AutoDocPage.tsx#L3700-L3800) (Job Details section)
 
+### Create Job Card Upload Source Expansion (2026-05-30)
+
+**Status**: ✅ COMPLETE - Published via production OTA (android + ios)
+
+**Objective**: Remove file-only limitation in mobile create flow so required walkaround and car-image inputs can be captured directly from camera, selected from gallery, or chosen from files.
+
+**Root Cause Confirmed**:
+- `Create Job Card` upload fields were wired only to `expo-document-picker`, which prevented camera capture and gallery-first workflows.
+
+**Implementation Details**:
+
+**File**: [mobile/src/app/job-cards/create.tsx](mobile/src/app/job-cards/create.tsx)
+
+**Changes Made**:
+1. Added `expo-image-picker` camera and media-library support for both required upload fields.
+2. Replaced direct picker call with source-selection action sheet for each field:
+  - Walkaround video: `Capture Video`, `Pick from Gallery`, `Choose File`
+  - Car image: `Capture Photo`, `Pick from Gallery`, `Choose File`
+3. Added explicit permission checks and user alerts for denied camera/gallery access.
+4. Preserved draft auto-save behavior on first walkaround selection and made it source-agnostic (camera/gallery/file).
+5. Updated UI placeholder text to communicate all supported source options.
+
+**OTA Deployment**:
+- Update Group: `11fbb4d6-941b-4b88-a1ea-70337b343057`
+- Platforms: `android`, `ios`
+- Message: `mobile: add capture + gallery + file options for walkaround video and car image in create job card`
+- Commit: `cc2ff18b2fdffe1c60ebc87cd914a5257c855e98`
+
+**Validation**:
+- Type diagnostics for [mobile/src/app/job-cards/create.tsx](mobile/src/app/job-cards/create.tsx) returned no errors after patch.
+
 ### Database Authority Guardrail
 
 - Treat `local_folder/backups/full_database.sql` as the authoritative schema and full database dump for implementation and parity validation.
@@ -289,6 +320,8 @@ For each important change:
 - If conflict exists between chat discussion and this document, update this document first, then execute.
 
 ### Live Change Log
+- 2026-05-30: **COMPLETED** Create Job Card upload-source parity enhancement on mobile: added camera capture + gallery pick + file pick for both walkaround video and car image in [mobile/src/app/job-cards/create.tsx](mobile/src/app/job-cards/create.tsx), preserving draft auto-save behavior.
+- 2026-05-30: Published production OTA update for upload-source expansion (`group: 11fbb4d6-941b-4b88-a1ea-70337b343057`, `android update id: 019e7720-fb34-7c00-a437-2f687fe8638a`, `ios update id: 019e7720-fb34-71c6-817b-26385d853f66`, commit `cc2ff18b2fdffe1c60ebc87cd914a5257c855e98`).
 - 2026-05-29: Added OTA-first prerequisite gate and credential/build baseline for APK + IPA delivery.
 - 2026-05-29: Added Execution Anti-Drift Protocol with mandatory update triggers and sync rules.
 - 2026-05-29: Completed CLI readiness preflight; installed missing `firebase` and `aws` CLIs.
@@ -1798,6 +1831,6 @@ Current code note:
 
 ---
 
-**Document Status**: EXECUTION READY + Create Job Card Parity Complete (Prerequisites + OTA baseline defined, anti-drift protocol active, 7 iOS OTAs deployed)  
-**Last Updated**: 2026-05-29 (Create Job Card web parity, S3 logger object key fix, OTA modal, back button navigation)  
+**Document Status**: EXECUTION READY + Create Job Card Parity Complete (Prerequisites + OTA baseline defined, anti-drift protocol active, upload source expansion deployed via production OTA)  
+**Last Updated**: 2026-05-30 (Create flow upload-source expansion + production OTA publish for android/ios)  
 **Next Review**: AutoDoc full lifecycle, Reports feature, Android APK (pending quota reset), Play Store submission
