@@ -59,6 +59,7 @@ const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   owner_name: ['owner_name', 'owner name'],
   owner_phone: ['owner_phone', 'owner phone'],
   source: ['source'],
+  branch: ['branch', 'service branch'],
 }
 
 function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; skipped: number }> {
