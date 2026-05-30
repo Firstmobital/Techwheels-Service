@@ -218,6 +218,14 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="floor-incharge"
+        options={{
+          title: 'Floor Incharge',
+          headerShown: true,
+          href: null,
+        }}
+      />
     </Tabs>
   )
 }
