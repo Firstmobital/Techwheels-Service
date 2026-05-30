@@ -16,6 +16,12 @@ import {
   type InvoiceParseError,
 } from '../lib/invoiceColumnMapper'
 import {
+  mapInvoiceOrderHeaders,
+  buildInvoiceOrderInsertRow,
+  formatInvoiceOrderParseErrors,
+  type InvoiceOrderParseError,
+} from '../lib/invoiceOrderColumnMapper'
+import {
   mapJcClosedHeaders,
   buildJcClosedInsertRow,
   formatJcClosedParseErrors,
@@ -120,6 +126,11 @@ const CARDS: CardConfig[] = [
     description: 'Closed job card records across all branches.',
   },
   {
+    tableName: 'service_invoice_order_data',
+    title: 'Invoice Order Data',
+    description: 'Invoice order sheet records across all branches.',
+  },
+  {
     tableName: 'service_vas_jc_data',
     title: 'VAS Data',
     description: 'Value-added service job card data across all branches.',
@@ -185,6 +196,7 @@ const CARDS: CardConfig[] = [
 
 const REVENUE_REPORT_TABLES = new Set([
   'job_card_closed_data',
+  'service_invoice_order_data',
   'service_vas_jc_data',
 ])
 
@@ -460,6 +472,70 @@ async function getTableColumns(tableName: string): Promise<string[]> {
       'chassis_number',
       'vrn',
       'branch',
+      'created_at',
+      'updated_at',
+    ]
+  }
+
+  if (tableName === 'service_invoice_order_data') {
+    return [
+      'id',
+      'branch',
+      'vehicle_registration_number',
+      'chassis_number',
+      'job_card_number',
+      'status',
+      'job_card_channel',
+      'created_date_time',
+      'closed_date_time',
+      'completed_date_time',
+      'service_request_no',
+      'account',
+      'invoice_format',
+      'last_name',
+      'first_name',
+      'labour_rate_list',
+      'parts_price_list',
+      'customer_po_ref',
+      'delivery_variance_percent',
+      'payment_type',
+      'fms',
+      'insurance_company_name',
+      'insurance_type',
+      'insurance_expiry_date',
+      'open_for_days',
+      'sr_type',
+      'arn',
+      'account_phone_number',
+      'crn',
+      'contact_phones',
+      'vehicle_delivery_date',
+      'effective_final_delivery_estimate_date',
+      'delivery_variance_hours',
+      'effective_total_estimate',
+      'total_estimate_variance_percent',
+      'balance_payment_to_be_adjusted',
+      'total_payment_amount_adjusted',
+      'parent_product_line',
+      'product_line',
+      'division',
+      'total_invoice_amount',
+      'kms',
+      'hours',
+      'vehicle_sale_date',
+      'tm_invoice_date',
+      'warranty',
+      'amc',
+      'final_labour_amount',
+      'final_spares_amount',
+      'total_order_value',
+      'delay_reason',
+      'jobs_entry_complete',
+      'parts_entry_complete',
+      'supervisor',
+      'sr_assigned_to',
+      'invoiced',
+      'source_row_hash',
       'created_at',
       'updated_at',
     ]
@@ -987,6 +1063,7 @@ export default function ImportPage() {
       try {
         const isVasTable = tableName === 'service_vas_jc_data'
         const isInvoiceTable = tableName === 'service_invoice_data'
+        const isInvoiceOrderTable = tableName === 'service_invoice_order_data'
         const isJcClosedTable = tableName === 'job_card_closed_data'
         const isPartsConsumptionTable = tableName === 'service_parts_consumption_data'
         const isPartsOrderTable = tableName === 'service_parts_order_data'
@@ -995,6 +1072,7 @@ export default function ImportPage() {
         const isSpecialMappedTable =
           isVasTable ||
           isInvoiceTable ||
+          isInvoiceOrderTable ||
           isJcClosedTable ||
           isPartsConsumptionTable ||
           isPartsOrderTable ||
@@ -1251,6 +1329,21 @@ export default function ImportPage() {
           }
         }
 
+        let invoiceOrderHeaderMapping: Record<string, string> | null = null
+        if (isInvoiceOrderTable) {
+          try {
+            const excelHeaders = await getFirstAvailableHeaders()
+            if (excelHeaders.length === 0) {
+              throw new Error('No valid data found in uploaded files')
+            }
+            invoiceOrderHeaderMapping = mapInvoiceOrderHeaders(excelHeaders)
+          } catch (err) {
+            throw new Error(
+              `Invoice Order Data: ${err instanceof Error ? err.message : String(err)}`,
+            )
+          }
+        }
+
         let processedBranches = 0
 
         for (const branch of readyBranches) {
@@ -1503,6 +1596,32 @@ export default function ImportPage() {
                 }
               }
             }
+          } else if (isInvoiceOrderTable && invoiceOrderHeaderMapping) {
+            const invoiceOrderParseErrors: InvoiceOrderParseError[] = []
+            const insertRows: Record<string, unknown>[] = []
+
+            for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+              const { row, errors } = buildInvoiceOrderInsertRow(
+                rawRows[rowIdx],
+                branch,
+                invoiceOrderHeaderMapping,
+                rowIdx + 2,
+              )
+
+              if (errors.length > 0) {
+                invoiceOrderParseErrors.push(...errors)
+              } else if (row) {
+                insertRows.push(row)
+              }
+            }
+
+            if (invoiceOrderParseErrors.length > 0) {
+              throw new Error(
+                `Invoice Order Data parse errors found:\n${formatInvoiceOrderParseErrors(invoiceOrderParseErrors.slice(0, 10))}`,
+              )
+            }
+
+            totalInserted += await upsertOrInsertRows(insertRows, ['branch,source_row_hash'])
           } else if (isPartsConsumptionTable && partsConsumptionHeaderMapping) {
             const parseErrors: PartsConsumptionParseError[] = []
             const insertRows: Record<string, unknown>[] = []
