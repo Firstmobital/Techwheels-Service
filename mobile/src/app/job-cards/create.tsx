@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
+import * as ImagePicker from 'expo-image-picker'
 import { Stack, useRouter } from 'expo-router'
 import { createJobCard, updateJobCard, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
@@ -227,7 +228,46 @@ export default function CreateJobCardScreen() {
     }))
   }
 
-  const onPickWalkaround = async () => {
+  const maybeAutoSaveDraftAfterVideoSelection = async () => {
+    // Keep mobile create flow aligned with web by auto-creating draft when first walkaround is selected.
+    if (draftJobCardId) return
+
+    const regNum = form.regNumber.trim()
+    const jcNum = form.jcNumber.trim()
+    const kmNum = form.kmReading.trim()
+
+    if (regNum && jcNum && kmNum) {
+      const kmReading = Number(kmNum)
+      if (Number.isFinite(kmReading) && kmReading >= 0) {
+        const autoSaveResult = await createJobCard({
+          regNumber: regNum,
+          jcNumber: jcNum,
+          complaintDate: form.complaintDate,
+          kmReading: kmReading,
+          claimType: form.claimType,
+          complaintText: form.complaintText,
+        })
+
+        if (autoSaveResult.data) {
+          setDraftJobCardId(autoSaveResult.data.id)
+          logEvent('create_job_card_auto_saved_on_video_upload', { job_card_id: autoSaveResult.data.id, jc_number: jcNum }, 'autodoc-create')
+        } else if (autoSaveResult.error) {
+          logEvent('create_job_card_auto_save_failed', { error_message: autoSaveResult.error, stage: 'video_upload' }, 'autodoc-create')
+        }
+      }
+    }
+  }
+
+  const applyWalkaroundSelection = async (name: string) => {
+    setWalkaroundVideoName(name || 'walkaround-video')
+    await maybeAutoSaveDraftAfterVideoSelection()
+  }
+
+  const applyCarImageSelection = (name: string) => {
+    setCarImageName(name || 'car-image')
+  }
+
+  const pickWalkaroundFromFiles = async () => {
     const result = await DocumentPicker.getDocumentAsync({
       type: ['video/*'],
       multiple: false,
@@ -235,38 +275,46 @@ export default function CreateJobCardScreen() {
     })
 
     if (result.canceled) return
-    setWalkaroundVideoName(result.assets?.[0]?.name ?? 'walkaround-video')
-
-    // ✅ AUTO-SAVE DRAFT when video is selected (matching web flow: ensureJobCardReadyForUpload)
-    if (!draftJobCardId) {
-      const regNum = form.regNumber.trim()
-      const jcNum = form.jcNumber.trim()
-      const kmNum = form.kmReading.trim()
-
-      if (regNum && jcNum && kmNum) {
-        const kmReading = Number(kmNum)
-        if (Number.isFinite(kmReading) && kmReading >= 0) {
-          const autoSaveResult = await createJobCard({
-            regNumber: regNum,
-            jcNumber: jcNum,
-            complaintDate: form.complaintDate,
-            kmReading: kmReading,
-            claimType: form.claimType,
-            complaintText: form.complaintText,
-          })
-
-          if (autoSaveResult.data) {
-            setDraftJobCardId(autoSaveResult.data.id)
-            logEvent('create_job_card_auto_saved_on_video_upload', { job_card_id: autoSaveResult.data.id, jc_number: jcNum }, 'autodoc-create')
-          } else if (autoSaveResult.error) {
-            logEvent('create_job_card_auto_save_failed', { error_message: autoSaveResult.error, stage: 'video_upload' }, 'autodoc-create')
-          }
-        }
-      }
-    }
+    await applyWalkaroundSelection(result.assets?.[0]?.name ?? 'walkaround-video')
   }
 
-  const onPickCarImage = async () => {
+  const pickWalkaroundFromCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert('Camera Permission Needed', 'Allow camera access to capture a walkaround video.')
+      return
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: false,
+      quality: 0.8,
+    })
+
+    if (result.canceled) return
+    const asset = result.assets?.[0]
+    await applyWalkaroundSelection(asset?.fileName ?? asset?.uri?.split('/').pop() ?? 'walkaround-video')
+  }
+
+  const pickWalkaroundFromGallery = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert('Gallery Permission Needed', 'Allow media library access to select a walkaround video.')
+      return
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: false,
+      quality: 0.8,
+    })
+
+    if (result.canceled) return
+    const asset = result.assets?.[0]
+    await applyWalkaroundSelection(asset?.fileName ?? asset?.uri?.split('/').pop() ?? 'walkaround-video')
+  }
+
+  const pickCarImageFromFiles = async () => {
     const result = await DocumentPicker.getDocumentAsync({
       type: ['image/*'],
       multiple: false,
@@ -274,7 +322,61 @@ export default function CreateJobCardScreen() {
     })
 
     if (result.canceled) return
-    setCarImageName(result.assets?.[0]?.name ?? 'car-image')
+    applyCarImageSelection(result.assets?.[0]?.name ?? 'car-image')
+  }
+
+  const pickCarImageFromCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert('Camera Permission Needed', 'Allow camera access to capture a car image.')
+      return
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    })
+
+    if (result.canceled) return
+    const asset = result.assets?.[0]
+    applyCarImageSelection(asset?.fileName ?? asset?.uri?.split('/').pop() ?? 'car-image')
+  }
+
+  const pickCarImageFromGallery = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert('Gallery Permission Needed', 'Allow media library access to select a car image.')
+      return
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    })
+
+    if (result.canceled) return
+    const asset = result.assets?.[0]
+    applyCarImageSelection(asset?.fileName ?? asset?.uri?.split('/').pop() ?? 'car-image')
+  }
+
+  const onPickWalkaround = async () => {
+    Alert.alert('Select Walkaround Video', 'Choose how you want to add the walkaround video.', [
+      { text: 'Capture Video', onPress: () => { void pickWalkaroundFromCamera() } },
+      { text: 'Pick from Gallery', onPress: () => { void pickWalkaroundFromGallery() } },
+      { text: 'Choose File', onPress: () => { void pickWalkaroundFromFiles() } },
+      { text: 'Cancel', style: 'cancel' },
+    ])
+  }
+
+  const onPickCarImage = async () => {
+    Alert.alert('Select Car Image', 'Choose how you want to add the car image.', [
+      { text: 'Capture Photo', onPress: () => { void pickCarImageFromCamera() } },
+      { text: 'Pick from Gallery', onPress: () => { void pickCarImageFromGallery() } },
+      { text: 'Choose File', onPress: () => { void pickCarImageFromFiles() } },
+      { text: 'Cancel', style: 'cancel' },
+    ])
   }
 
   const onFetchFromDb = async () => {
@@ -552,12 +654,12 @@ export default function CreateJobCardScreen() {
 
           <Text className="text-xs text-gray-600 mt-3 mb-1">Vehicle Walkaround Video *</Text>
           <TouchableOpacity className="border border-gray-300 rounded-lg px-3 py-3 bg-white" onPress={onPickWalkaround}>
-            <Text className="text-sm text-gray-700">{walkaroundVideoName || 'Choose video file'}</Text>
+            <Text className="text-sm text-gray-700">{walkaroundVideoName || 'Capture video, pick from gallery, or choose file'}</Text>
           </TouchableOpacity>
 
           <Text className="text-xs text-gray-600 mt-3 mb-1">Car Image *</Text>
           <TouchableOpacity className="border border-gray-300 rounded-lg px-3 py-3 bg-white" onPress={onPickCarImage}>
-            <Text className="text-sm text-gray-700">{carImageName || 'Choose car image'}</Text>
+            <Text className="text-sm text-gray-700">{carImageName || 'Capture photo, pick from gallery, or choose file'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
