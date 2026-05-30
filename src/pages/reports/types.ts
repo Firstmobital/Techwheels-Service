@@ -3,6 +3,7 @@ import type { BranchFilter, DateRangeFilter } from '../../lib/reportQueries'
 
 export type ReportCategoryId = 'labour-revenue' | 'performance' | 'revenue' | 'parts' | 'warranty'
 export type ReportId =
+  | 'job-card-details'
   | 'service-type-labour-revenue'
   | 'branch-labour-revenue'
   | 'manpower-wise-labour-revenue'

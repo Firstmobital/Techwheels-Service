@@ -1,4 +1,5 @@
 import BranchLabourRevenueReport from './BranchLabourRevenueReport'
+import JobCardDetailsReport from './JobCardDetailsReport'
 import ManpowerWiseLabourRevenueReport from './ManpowerWiseLabourRevenueReport'
 import ServiceTypeLabourRevenueReport from './ServiceTypeLabourRevenueReport'
 import VasRevenueReport from './VasRevenueReport'
@@ -42,5 +43,13 @@ export const LABOUR_REVENUE_REPORTS: ReportDefinition[] = [
     description: 'Total VAS revenue from net price and unique job-card count.',
     cardHint: 'Best for monitoring VAS collections and unique VAS jobs.',
     Component: VasRevenueReport,
+  },
+  {
+    id: 'job-card-details',
+    categoryId: 'labour-revenue',
+    label: 'Job Card Details',
+    description: 'Job card status KPIs from invoice order data.',
+    cardHint: 'Tracks cancelled, closed-not-invoiced, and open job cards.',
+    Component: JobCardDetailsReport,
   },
 ]
