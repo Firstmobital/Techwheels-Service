@@ -103,7 +103,7 @@ export default function ReportsPage() {
     }
 
     if (branch === 'ALL' && fuelType !== 'ALL') {
-      return `Sitapura ${fuelType}`
+      return `ALL_${fuelType}`
     }
 
     if (branch === 'Sitapura' && fuelType !== 'ALL') {

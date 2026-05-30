@@ -623,6 +623,15 @@ function parseFuelSelectionFromBranch(branch: BranchFilter): 'PV' | 'EV' | null 
   return null
 }
 
+function getFuelScopedBranch(branch: BranchFilter): BranchFilter {
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  if (normalized.startsWith('sitapura')) return 'Sitapura'
+  if (normalized.startsWith('ajmer road')) return 'Ajmer Road'
+
+  return 'ALL'
+}
+
 function matchesFuelSelectionByBranchLabel(rawBranch: unknown, fuelType: 'PV' | 'EV'): boolean {
   const normalized = String(rawBranch ?? '').trim().toLowerCase()
   if (!normalized) return false
@@ -671,10 +680,10 @@ function applyDateFilterToQuery(
     return `${year}-${month}-${day}`
   }
 
-  // Always use invoice_date with >= from and <= to (inclusive)
+  // Apply an inclusive date-range for day-level fields using an exclusive upper bound.
   const fromDate = toLocalDateString(bounds.from)
-  const toDate = toLocalDateString(bounds.toExclusive)
-  return query.gte(dateField, fromDate).lte(dateField, toDate)
+  const toDateExclusive = toLocalDateString(bounds.toExclusive)
+  return query.gte(dateField, fromDate).lt(dateField, toDateExclusive)
 }
 
 async function fetchJobCardWithEmployeeData(
@@ -683,9 +692,9 @@ async function fetchJobCardWithEmployeeData(
 ): Promise<Record<string, unknown>[]> {
   // Parse fuel selection BEFORE fetching - we'll use it for employee filtering
   const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
-  // For JC fetch, use 'Sitapura' as branch if we're filtering by fuel (PV/EV)
+  // Scope branch filter correctly before fuel filtering (ALL/Sitapura/Ajmer Road).
   const jcFilters = fuelSelection
-    ? { ...filters, branch: 'Sitapura' as BranchFilter }
+    ? { ...filters, branch: getFuelScopedBranch(filters.branch) }
     : filters
 
   // Fetch all job card rows from job_card_closed_data (WITHOUT fuel filtering)
@@ -750,10 +759,8 @@ async function fetchJobCardWithEmployeeData(
   if (fuelSelection) {
     mergedData = mergedData.filter((row) => {
       const typedRow = row as { employee_fuel_type?: unknown }
-      const empFuelType = typedRow.employee_fuel_type
-      if (!empFuelType) return false
-      const normalized = String(empFuelType).trim().toUpperCase()
-      return normalized === fuelSelection
+      const employeeFuelBucket = normalizeFuelBucket(typedRow.employee_fuel_type)
+      return employeeFuelBucket === fuelSelection
     })
   }
 
@@ -819,11 +826,13 @@ async function fetchAllJobCardClosedRows(
   selectColumns: string,
   filters: JobCardClosedFetchFilters,
 ): Promise<Record<string, unknown>[]> {
+  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
+  if (fuelSelection) {
+    return fetchJobCardWithEmployeeData(selectColumns, filters)
+  }
+
   const invoiceDateField =
     filters.dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
-  const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
-  const fuelColumn = fuelSelection ? await getJobCardFuelColumn() : null
-  const queryBranch: BranchFilter = fuelSelection ? 'Sitapura' : filters.branch
 
   let from = 0
   const allRows: Record<string, unknown>[] = []
@@ -834,11 +843,7 @@ async function fetchAllJobCardClosedRows(
       .select(selectColumns)
       .range(from, from + QUERY_PAGE_SIZE - 1)
 
-    query = applyBranchFilterToQuery(query, queryBranch)
-
-    if (fuelSelection && fuelColumn) {
-      query = query.eq(fuelColumn, fuelSelection)
-    }
+    query = applyBranchFilterToQuery(query, filters.branch)
 
     if (Array.isArray(filters.serviceType)) {
       if (filters.serviceType.length > 0) {
@@ -874,16 +879,7 @@ async function fetchAllJobCardClosedRows(
     from += QUERY_PAGE_SIZE
   }
 
-  let finalRows = allRows
-
-  // Fallback for schemas without dedicated fuel column: infer from branch label if possible.
-  if (fuelSelection && !fuelColumn) {
-    finalRows = finalRows.filter((row) =>
-      matchesFuelSelectionByBranchLabel((row as { branch?: unknown }).branch, fuelSelection),
-    )
-  }
-
-  return finalRows
+  return allRows
 }
 
 async function fetchVasRowsWithEmployeeData(
@@ -892,7 +888,7 @@ async function fetchVasRowsWithEmployeeData(
 ): Promise<Record<string, unknown>[]> {
   const fuelSelection = parseFuelSelectionFromBranch(filters.branch)
   const vasFilters = fuelSelection
-    ? { ...filters, branch: 'Sitapura' as BranchFilter }
+    ? { ...filters, branch: getFuelScopedBranch(filters.branch) }
     : filters
 
   const vasRows = await fetchAllVasRowsWithoutFuelFilter(`${selectColumns}, employee_code`, vasFilters)
