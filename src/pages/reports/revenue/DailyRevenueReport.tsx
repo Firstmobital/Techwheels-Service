@@ -14,7 +14,12 @@ type SortKey =
   | 'vasRevenue'
   | 'avgBillingPerVehicle'
 
-export default function DailyRevenueReportComponent({ branch, dateFilter }: ReportViewProps) {
+export default function DailyRevenueReportComponent({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<DailyRevenueReport[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +32,10 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
     setIsLoading(true)
     setError(null)
 
-    getDailyRevenueReport(branch, dateFilter)
+    getDailyRevenueReport(branch, dateFilter, {
+      serviceTypeFilter,
+      manpowerFilter: parentProductLineFilter,
+    })
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -44,7 +52,7 @@ export default function DailyRevenueReportComponent({ branch, dateFilter }: Repo
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1

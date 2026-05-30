@@ -14,7 +14,12 @@ type SortKey =
   | 'vasRevenue'
   | 'avgRevenuePerJobCard'
 
-export default function ProductLinePerformanceReport({ branch, dateFilter }: ReportViewProps) {
+export default function ProductLinePerformanceReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<ProductLinePerformanceRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +32,10 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
     setIsLoading(true)
     setError(null)
 
-    getProductLinePerformance(branch, dateFilter)
+    getProductLinePerformance(branch, dateFilter, {
+      serviceTypeFilter,
+      manpowerFilter: parentProductLineFilter,
+    })
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -44,7 +52,7 @@ export default function ProductLinePerformanceReport({ branch, dateFilter }: Rep
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1

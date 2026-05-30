@@ -91,6 +91,7 @@ export interface ManpowerWiseFilters {
 export interface ManpowerWiseFilterOptions {
   serviceTypes: string[]
   parentProductLines: string[]
+  manpowerNames: string[]
 }
 
 export interface DuplicateChassisSameMonthRow {
@@ -543,6 +544,12 @@ interface JobCardClosedFetchFilters {
   dateFilter: DateRangeFilter
   serviceType?: 'ALL' | string | string[]
   parentProductLine?: 'ALL' | string
+  manpower?: 'ALL' | string | string[]
+}
+
+interface RevenueReportFilters {
+  serviceTypeFilter?: 'ALL' | string | string[]
+  manpowerFilter?: 'ALL' | string | string[]
 }
 
 type JobCardInvoiceDateColumn = 'invoice_date' | 'Invoice_date' | null
@@ -797,6 +804,14 @@ async function fetchAllJobCardClosedRowsWithoutFuelFilter(
       query = query.eq('parent_product_line', filters.parentProductLine)
     }
 
+    if (Array.isArray(filters.manpower)) {
+      if (filters.manpower.length > 0) {
+        query = query.in('sr_assigned_to', filters.manpower)
+      }
+    } else if (filters.manpower && filters.manpower !== 'ALL') {
+      query = query.eq('sr_assigned_to', filters.manpower)
+    }
+
     const bounds = getDateRangeBounds(filters.dateFilter)
     query = applyDateFilterToQuery(query, bounds, {
       closedDateField: 'closed_date_time',
@@ -855,6 +870,14 @@ async function fetchAllJobCardClosedRows(
 
     if (filters.parentProductLine && filters.parentProductLine !== 'ALL') {
       query = query.eq('parent_product_line', filters.parentProductLine)
+    }
+
+    if (Array.isArray(filters.manpower)) {
+      if (filters.manpower.length > 0) {
+        query = query.in('sr_assigned_to', filters.manpower)
+      }
+    } else if (filters.manpower && filters.manpower !== 'ALL') {
+      query = query.eq('sr_assigned_to', filters.manpower)
     }
 
     const bounds = getDateRangeBounds(filters.dateFilter)
@@ -1605,18 +1628,20 @@ export async function getManpowerWiseFilterOptions(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
 ): Promise<ManpowerWiseFilterOptions> {
-  const data = await fetchAllJobCardClosedRows('sr_type, parent_product_line', {
+  const data = await fetchAllJobCardClosedRows('sr_type, parent_product_line, sr_assigned_to', {
     branch,
     dateFilter,
   })
 
   const serviceTypes = new Set<string>()
   const parentProductLines = new Set<string>()
+  const manpowerNames = new Set<string>()
 
   for (const row of data ?? []) {
-    const typedRow = row as { sr_type?: unknown; parent_product_line?: unknown }
+    const typedRow = row as { sr_type?: unknown; parent_product_line?: unknown; sr_assigned_to?: unknown }
     const serviceType = normalizeServiceType(typedRow.sr_type)
     const parentProductLine = normalizeParentProductLine(typedRow.parent_product_line)
+    const manpowerName = normalizeManpowerName(typedRow.sr_assigned_to)
 
     if (serviceType !== 'Unknown') {
       serviceTypes.add(serviceType)
@@ -1625,11 +1650,16 @@ export async function getManpowerWiseFilterOptions(
     if (parentProductLine) {
       parentProductLines.add(parentProductLine)
     }
+
+    if (manpowerName !== 'Unknown Manpower') {
+      manpowerNames.add(manpowerName)
+    }
   }
 
   return {
     serviceTypes: [...serviceTypes].sort((a, b) => a.localeCompare(b)),
     parentProductLines: [...parentProductLines].sort((a, b) => a.localeCompare(b)),
+    manpowerNames: [...manpowerNames].sort((a, b) => a.localeCompare(b)),
   }
 }
 
@@ -2156,6 +2186,7 @@ export async function getVasRevenueData(
 export async function getDailyRevenueReport(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: RevenueReportFilters = {},
 ): Promise<DailyRevenueReport[]> {
   // For daily revenue, always use closed_date_time as the report date
   // Invoice date column is optional and only needed for filtering
@@ -2165,6 +2196,8 @@ export async function getDailyRevenueReport(
       {
         branch,
         dateFilter,
+        serviceType: filters.serviceTypeFilter,
+        manpower: filters.manpowerFilter,
       },
     ),
     getVasRevenueByJobCard(branch, dateFilter),
@@ -2252,6 +2285,7 @@ export async function getDailyRevenueReport(
 export async function getCategoryWiseRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: RevenueReportFilters = {},
 ): Promise<CategoryWiseRevenue[]> {
   const [data, vasByJobCard] = await Promise.all([
     fetchAllJobCardClosedRows(
@@ -2259,6 +2293,8 @@ export async function getCategoryWiseRevenue(
       {
         branch,
         dateFilter,
+        serviceType: filters.serviceTypeFilter,
+        manpower: filters.manpowerFilter,
       },
     ),
     getVasRevenueByJobCard(branch, dateFilter),
@@ -2360,6 +2396,7 @@ export async function getCategoryWiseRevenue(
 export async function getMonthlyRevenuesTrend(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: RevenueReportFilters = {},
 ): Promise<MonthlyTrendRevenue[]> {
   const [data, vasByJobCard] = await Promise.all([
     fetchAllJobCardClosedRows(
@@ -2367,6 +2404,8 @@ export async function getMonthlyRevenuesTrend(
       {
         branch,
         dateFilter,
+        serviceType: filters.serviceTypeFilter,
+        manpower: filters.manpowerFilter,
       },
     ),
     getVasRevenueByJobCard(branch, dateFilter),
@@ -2810,11 +2849,14 @@ export async function getVasBillingHoursEfficiency(
 export async function getLabourSparesMixByServiceType(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: RevenueReportFilters = {},
 ): Promise<LabourSparesMixRow[]> {
   const [data, vasByJobCard] = await Promise.all([
     fetchAllJobCardClosedRows('sr_type, final_labour_amount, final_spares_amount, job_card_number', {
       branch,
       dateFilter,
+      serviceType: filters.serviceTypeFilter,
+      manpower: filters.manpowerFilter,
     }),
     getVasRevenueByJobCard(branch, dateFilter),
   ])
@@ -2898,6 +2940,7 @@ export async function getLabourSparesMixByServiceType(
 export async function getProductLinePerformance(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: RevenueReportFilters = {},
 ): Promise<ProductLinePerformanceRow[]> {
   const [data, vasByJobCard] = await Promise.all([
     fetchAllJobCardClosedRows(
@@ -2905,6 +2948,8 @@ export async function getProductLinePerformance(
       {
         branch,
         dateFilter,
+        serviceType: filters.serviceTypeFilter,
+        manpower: filters.manpowerFilter,
       },
     ),
     getVasRevenueByJobCard(branch, dateFilter),
@@ -2997,6 +3042,7 @@ export async function getProductLinePerformance(
 export async function getModelWiseRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: RevenueReportFilters = {},
 ): Promise<ModelWiseRevenueRow[]> {
   const [data, vasByJobCard] = await Promise.all([
     fetchAllJobCardClosedRows(
@@ -3004,6 +3050,8 @@ export async function getModelWiseRevenue(
       {
         branch,
         dateFilter,
+        serviceType: filters.serviceTypeFilter,
+        manpower: filters.manpowerFilter,
       },
     ),
     getVasRevenueByJobCard(branch, dateFilter),
@@ -3668,6 +3716,7 @@ export async function getServiceDueList(
 export async function getVehicleWiseRevenue(
   branch: BranchFilter,
   dateFilter: DateRangeFilter,
+  filters: RevenueReportFilters = {},
 ): Promise<VehicleWiseRevenueRow[]> {
   const [data, vasByJobCard] = await Promise.all([
     fetchAllJobCardClosedRows(
@@ -3675,6 +3724,8 @@ export async function getVehicleWiseRevenue(
       {
         branch,
         dateFilter,
+        serviceType: filters.serviceTypeFilter,
+        manpower: filters.manpowerFilter,
       },
     ),
     getVasRevenueByJobCard(branch, dateFilter),

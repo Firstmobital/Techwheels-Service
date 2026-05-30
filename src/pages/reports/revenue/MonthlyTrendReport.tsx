@@ -6,7 +6,12 @@ import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey = 'month' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue' | 'vasRevenue'
 
-export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewProps) {
+export default function MonthlyTrendReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<MonthlyTrendRevenue[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,7 +24,10 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
     setIsLoading(true)
     setError(null)
 
-    getMonthlyRevenuesTrend(branch, dateFilter)
+    getMonthlyRevenuesTrend(branch, dateFilter, {
+      serviceTypeFilter,
+      manpowerFilter: parentProductLineFilter,
+    })
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -36,7 +44,7 @@ export default function MonthlyTrendReport({ branch, dateFilter }: ReportViewPro
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1

@@ -25,7 +25,12 @@ type SortKey =
   | 'avgRevenuePerJC'
   | 'topServiceType'
 
-export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportViewProps) {
+export default function ModelWiseRevenueReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<ModelWiseRevenueRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +43,10 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
     setLoading(true)
     setError(null)
 
-    getModelWiseRevenue(branch, dateFilter)
+    getModelWiseRevenue(branch, dateFilter, {
+      serviceTypeFilter,
+      manpowerFilter: parentProductLineFilter,
+    })
       .then((data) => {
         if (!cancelled) setRows(data)
       })
@@ -52,7 +60,7 @@ export default function ModelWiseRevenueReport({ branch, dateFilter }: ReportVie
     return () => {
       cancelled = true
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1

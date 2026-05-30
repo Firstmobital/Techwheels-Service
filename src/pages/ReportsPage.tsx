@@ -28,6 +28,15 @@ interface HeaderStats {
   totalVasCount: number
 }
 
+const BLOCKED_SERVICE_ADVISOR_VALUES = new Set(['.', 'ankit', '., ankit', 'panwar, aakansha'])
+
+function sanitizeServiceAdvisorOptions(values: string[]): string[] {
+  return values.filter((value) => {
+    const normalized = value.trim().toLowerCase()
+    return normalized !== '' && !BLOCKED_SERVICE_ADVISOR_VALUES.has(normalized)
+  })
+}
+
 function getTodayDateInputValue(): string {
   const now = new Date()
   const year = now.getFullYear()
@@ -50,8 +59,10 @@ export default function ReportsPage() {
   const [dateFieldType, setDateFieldType] = useState<DateFieldType>('closed_date')
   const [serviceTypeFilter, setServiceTypeFilter] = useState<string[]>([])
   const [parentProductLineFilter, setParentProductLineFilter] = useState<'ALL' | string>('ALL')
+  const [serviceAdvisorFilter, setServiceAdvisorFilter] = useState<string[]>([])
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>([])
   const [parentProductLineOptions, setParentProductLineOptions] = useState<string[]>([])
+  const [serviceAdvisorOptions, setServiceAdvisorOptions] = useState<string[]>([])
   const [headerStats, setHeaderStats] = useState<HeaderStats>({
     monthlyJobCards: 0,
     monthlyRevenue: 0,
@@ -80,11 +91,15 @@ export default function ReportsPage() {
   const isServiceTypeWiseReportSelected = selectedReport?.id === 'service-type-labour-revenue'
   const isBranchLabourRevenueReportSelected = selectedReport?.id === 'branch-labour-revenue'
   const isVasRevenueReportSelected = selectedReport?.id === 'vas-revenue-report'
+  const isRevenueCategorySelected = resolvedCategoryId === 'revenue'
   const shouldShowServiceTypeFilter =
+    isRevenueCategorySelected ||
     isManpowerReportSelected ||
     isServiceTypeWiseReportSelected ||
     isBranchLabourRevenueReportSelected ||
     isVasRevenueReportSelected
+  const shouldShowManpowerWiseFilter = isManpowerReportSelected
+  const shouldShowServiceAdvisorFilter = isRevenueCategorySelected
 
   const canApplyFuelTypeFilter =
     branch === 'Sitapura' ||
@@ -227,26 +242,37 @@ export default function ReportsPage() {
   }, [canApplyFuelTypeFilter, fuelType])
 
   useEffect(() => {
-    if (!shouldShowServiceTypeFilter) {
+    if (!shouldShowServiceTypeFilter && !shouldShowManpowerWiseFilter && !shouldShowServiceAdvisorFilter) {
       setServiceTypeOptions([])
       setServiceTypeFilter([])
       setParentProductLineOptions([])
       setParentProductLineFilter('ALL')
+      setServiceAdvisorOptions([])
+      setServiceAdvisorFilter([])
       return
     }
 
     let active = true
 
-    if (isManpowerReportSelected) {
+    if (isManpowerReportSelected || shouldShowManpowerWiseFilter) {
       getManpowerWiseFilterOptions(effectiveBranchFilter, dateFilter)
         .then((options) => {
           if (!active) return
           setServiceTypeOptions(options.serviceTypes)
-          setParentProductLineOptions(options.parentProductLines)
           setServiceTypeFilter((prev) => prev.filter((value) => options.serviceTypes.includes(value)))
-          setParentProductLineFilter((prev) =>
-            prev === 'ALL' || options.parentProductLines.includes(prev) ? prev : 'ALL',
-          )
+
+          if (isManpowerReportSelected) {
+            setParentProductLineOptions(options.parentProductLines)
+            setParentProductLineFilter((prev) =>
+              prev === 'ALL' || options.parentProductLines.includes(prev) ? prev : 'ALL',
+            )
+          } else {
+            setParentProductLineOptions([])
+            setParentProductLineFilter('ALL')
+            const advisorOptions = sanitizeServiceAdvisorOptions(options.manpowerNames)
+            setServiceAdvisorOptions(advisorOptions)
+            setServiceAdvisorFilter((prev) => prev.filter((value) => advisorOptions.includes(value)))
+          }
         })
         .catch(() => {
           if (!active) return
@@ -254,6 +280,41 @@ export default function ReportsPage() {
           setParentProductLineOptions([])
           setServiceTypeFilter([])
           setParentProductLineFilter('ALL')
+          setServiceAdvisorOptions([])
+          setServiceAdvisorFilter([])
+        })
+    } else if (shouldShowServiceAdvisorFilter) {
+      Promise.all([
+        getServiceTypeCounts(effectiveBranchFilter, dateFilter),
+        getManpowerWiseFilterOptions(effectiveBranchFilter, dateFilter),
+      ])
+        .then(([counts, manpowerOptions]) => {
+          if (!active) return
+
+          const options = counts
+            .map((item) => item.serviceType)
+            .filter((value) => value !== 'Unknown')
+
+          setServiceTypeOptions(options)
+          setServiceTypeFilter((prev) => prev.filter((value) => options.includes(value)))
+
+          setParentProductLineOptions([])
+          setParentProductLineFilter('ALL')
+
+          const advisorOptions = sanitizeServiceAdvisorOptions(manpowerOptions.manpowerNames)
+          setServiceAdvisorOptions(advisorOptions)
+          setServiceAdvisorFilter((prev) =>
+            prev.filter((value) => advisorOptions.includes(value)),
+          )
+        })
+        .catch(() => {
+          if (!active) return
+          setServiceTypeOptions([])
+          setServiceTypeFilter([])
+          setParentProductLineOptions([])
+          setParentProductLineFilter('ALL')
+          setServiceAdvisorOptions([])
+          setServiceAdvisorFilter([])
         })
     } else {
       getServiceTypeCounts(effectiveBranchFilter, dateFilter)
@@ -266,6 +327,8 @@ export default function ReportsPage() {
           setServiceTypeFilter((prev) => prev.filter((value) => options.includes(value)))
           setParentProductLineOptions([])
           setParentProductLineFilter('ALL')
+          setServiceAdvisorOptions([])
+          setServiceAdvisorFilter([])
         })
         .catch(() => {
           if (!active) return
@@ -273,13 +336,22 @@ export default function ReportsPage() {
           setServiceTypeFilter([])
           setParentProductLineOptions([])
           setParentProductLineFilter('ALL')
+          setServiceAdvisorOptions([])
+          setServiceAdvisorFilter([])
         })
     }
 
     return () => {
       active = false
     }
-  }, [dateFilter, effectiveBranchFilter, isManpowerReportSelected, shouldShowServiceTypeFilter])
+  }, [
+    dateFilter,
+    effectiveBranchFilter,
+    isManpowerReportSelected,
+    shouldShowServiceTypeFilter,
+    shouldShowManpowerWiseFilter,
+    shouldShowServiceAdvisorFilter,
+  ])
 
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
@@ -355,13 +427,18 @@ export default function ReportsPage() {
           onFuelTypeChange={setFuelType}
           disableFuelType={!canApplyFuelTypeFilter}
           showServiceTypeFilter={shouldShowServiceTypeFilter}
-          showManpowerFilters={isManpowerReportSelected}
+          showManpowerFilters={shouldShowManpowerWiseFilter}
           serviceTypeFilter={serviceTypeFilter}
           onServiceTypeFilterChange={setServiceTypeFilter}
           serviceTypeOptions={serviceTypeOptions}
           parentProductLineFilter={parentProductLineFilter}
           onParentProductLineFilterChange={setParentProductLineFilter}
           parentProductLineOptions={parentProductLineOptions}
+          manpowerFilterLabel={isManpowerReportSelected ? 'Parent Product Line' : 'Manpower Wise'}
+          showServiceAdvisorFilter={shouldShowServiceAdvisorFilter}
+          serviceAdvisorFilter={serviceAdvisorFilter}
+          onServiceAdvisorFilterChange={setServiceAdvisorFilter}
+          serviceAdvisorOptions={serviceAdvisorOptions}
           datePreset={datePreset}
           onDatePresetChange={setDatePreset}
           dateFieldType={effectiveDateFieldType}
@@ -387,6 +464,7 @@ export default function ReportsPage() {
                 fuelType={fuelType}
                 serviceTypeFilter={serviceTypeFilter}
                 parentProductLineFilter={parentProductLineFilter}
+                serviceAdvisorFilter={serviceAdvisorFilter}
               />
             ) : (
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">

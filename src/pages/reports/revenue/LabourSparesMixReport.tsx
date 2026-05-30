@@ -3,7 +3,12 @@ import { getLabourSparesMixByServiceType, type LabourSparesMixRow } from '../../
 import type { ReportViewProps } from '../types'
 import { exportToCSV } from '../../../lib/exportUtils'
 
-export default function LabourSparesMixReport({ branch, dateFilter }: ReportViewProps) {
+export default function LabourSparesMixReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<LabourSparesMixRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -14,7 +19,10 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
     setLoading(true)
     setError(null)
 
-    getLabourSparesMixByServiceType(branch, dateFilter)
+    getLabourSparesMixByServiceType(branch, dateFilter, {
+      serviceTypeFilter,
+      manpowerFilter: parentProductLineFilter,
+    })
       .then((result) => {
         if (!active) return
         setRows(result)
@@ -32,7 +40,7 @@ export default function LabourSparesMixReport({ branch, dateFilter }: ReportView
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const totals = useMemo(() => {
     return rows.reduce(

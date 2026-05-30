@@ -50,6 +50,7 @@ export interface ReportViewProps {
   fuelType?: 'ALL' | 'PV' | 'EV'
   serviceTypeFilter?: 'ALL' | string | string[]
   parentProductLineFilter?: 'ALL' | string
+  serviceAdvisorFilter?: string[]
 }
 
 export interface ReportCategoryDefinition {

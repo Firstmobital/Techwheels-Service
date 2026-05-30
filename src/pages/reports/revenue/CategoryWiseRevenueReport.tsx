@@ -13,7 +13,12 @@ type SortKey =
   | 'vasRevenue'
   | 'contributionPercentage'
 
-export default function CategoryWiseRevenueReport({ branch, dateFilter }: ReportViewProps) {
+export default function CategoryWiseRevenueReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<CategoryWiseRevenue[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -26,7 +31,10 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
     setIsLoading(true)
     setError(null)
 
-    getCategoryWiseRevenue(branch, dateFilter)
+    getCategoryWiseRevenue(branch, dateFilter, {
+      serviceTypeFilter,
+      manpowerFilter: parentProductLineFilter,
+    })
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -43,7 +51,7 @@ export default function CategoryWiseRevenueReport({ branch, dateFilter }: Report
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1

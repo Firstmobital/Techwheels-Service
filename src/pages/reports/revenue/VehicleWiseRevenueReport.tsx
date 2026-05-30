@@ -16,7 +16,12 @@ type SortKey =
   | 'firstVisitDate'
   | 'lastVisitDate'
 
-export default function VehicleWiseRevenueReport({ branch, dateFilter }: ReportViewProps) {
+export default function VehicleWiseRevenueReport({
+  branch,
+  dateFilter,
+  serviceTypeFilter = 'ALL',
+  parentProductLineFilter = 'ALL',
+}: ReportViewProps) {
   const [rows, setRows] = useState<VehicleWiseRevenueRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +34,10 @@ export default function VehicleWiseRevenueReport({ branch, dateFilter }: ReportV
     setIsLoading(true)
     setError(null)
 
-    getVehicleWiseRevenue(branch, dateFilter)
+    getVehicleWiseRevenue(branch, dateFilter, {
+      serviceTypeFilter,
+      manpowerFilter: parentProductLineFilter,
+    })
       .then((data) => {
         if (!active) return
         setRows(data)
@@ -47,7 +55,7 @@ export default function VehicleWiseRevenueReport({ branch, dateFilter }: ReportV
     return () => {
       active = false
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { BranchFilter, DateRangePreset, DateFieldType } from '../../../lib/reportQueries'
 
 interface ReportFiltersPanelProps {
@@ -16,6 +17,11 @@ interface ReportFiltersPanelProps {
   parentProductLineFilter?: 'ALL' | string
   onParentProductLineFilterChange?: (value: 'ALL' | string) => void
   parentProductLineOptions?: string[]
+  manpowerFilterLabel?: string
+  showServiceAdvisorFilter?: boolean
+  serviceAdvisorFilter?: string[]
+  onServiceAdvisorFilterChange?: (value: string[]) => void
+  serviceAdvisorOptions?: string[]
   datePreset: DateRangePreset
   onDatePresetChange: (value: DateRangePreset) => void
   customFrom: string
@@ -35,6 +41,10 @@ const DATE_PRESET_OPTIONS: { label: string; value: DateRangePreset }[] = [
   { label: 'Custom Date Range', value: 'custom' },
 ]
 
+function sortFilterOptions(values: string[]): string[] {
+  return [...values].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+}
+
 export default function ReportFiltersPanel({
   branch,
   onBranchChange,
@@ -51,6 +61,11 @@ export default function ReportFiltersPanel({
   parentProductLineFilter = 'ALL',
   onParentProductLineFilterChange,
   parentProductLineOptions = [],
+  manpowerFilterLabel = 'Manpower Wise',
+  showServiceAdvisorFilter = false,
+  serviceAdvisorFilter = [],
+  onServiceAdvisorFilterChange,
+  serviceAdvisorOptions = [],
   datePreset,
   onDatePresetChange,
   customFrom,
@@ -62,13 +77,46 @@ export default function ReportFiltersPanel({
   onDateFieldTypeChange,
   showDateFieldTypeFilter = true,
 }: ReportFiltersPanelProps) {
+  const [isServiceTypeDropdownOpen, setIsServiceTypeDropdownOpen] = useState(false)
+  const [isServiceAdvisorDropdownOpen, setIsServiceAdvisorDropdownOpen] = useState(false)
+  const serviceTypeDropdownRef = useRef<HTMLDivElement | null>(null)
+  const serviceAdvisorDropdownRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+
+      if (serviceTypeDropdownRef.current && !serviceTypeDropdownRef.current.contains(target)) {
+        setIsServiceTypeDropdownOpen(false)
+      }
+
+      if (serviceAdvisorDropdownRef.current && !serviceAdvisorDropdownRef.current.contains(target)) {
+        setIsServiceAdvisorDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
   const topGridClass = showManpowerFilters ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4' : 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
   const normalizedBranch = branchOptions.includes(branch) ? branch : 'ALL'
+  const sortedBranchOptions = sortFilterOptions(branchOptions)
+  const sortedServiceTypeOptions = sortFilterOptions(serviceTypeOptions)
+  const sortedParentProductLineOptions = sortFilterOptions(parentProductLineOptions)
+  const sortedServiceAdvisorOptions = sortFilterOptions(serviceAdvisorOptions)
   const allServiceTypesSelected = serviceTypeFilter.length === 0
   const selectedServiceTypeLabel =
     serviceTypeFilter.length === 0
       ? 'All Service Types'
       : `${serviceTypeFilter.length} selected`
+  const allServiceAdvisorsSelected = serviceAdvisorFilter.length === 0
+  const selectedServiceAdvisorLabel =
+    serviceAdvisorFilter.length === 0
+      ? 'All Service Advisors'
+      : `${serviceAdvisorFilter.length} selected`
 
   const toggleServiceType = (value: string) => {
     if (!onServiceTypeFilterChange) return
@@ -83,6 +131,19 @@ export default function ReportFiltersPanel({
     onServiceTypeFilterChange([...serviceTypeFilter, value])
   }
 
+  const toggleServiceAdvisor = (value: string) => {
+    if (!onServiceAdvisorFilterChange) return
+
+    const isSelected = serviceAdvisorFilter.includes(value)
+    if (isSelected) {
+      const next = serviceAdvisorFilter.filter((item) => item !== value)
+      onServiceAdvisorFilterChange(next)
+      return
+    }
+
+    onServiceAdvisorFilterChange([...serviceAdvisorFilter, value])
+  }
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
       <div className={topGridClass}>
@@ -94,7 +155,7 @@ export default function ReportFiltersPanel({
             className="rounded border border-gray-300 px-2 py-2 text-sm"
           >
             <option value="ALL">All Branches</option>
-            {branchOptions.map((value) => (
+            {sortedBranchOptions.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -148,50 +209,56 @@ export default function ReportFiltersPanel({
         {showServiceTypeFilter && onServiceTypeFilterChange ? (
           <div className="flex flex-col gap-1 text-xs font-medium text-gray-600">
             <span>Service Type</span>
-            <details className="group relative">
-              <summary className="flex cursor-pointer list-none items-center justify-between rounded border border-gray-300 px-2 py-2 text-sm text-gray-700">
+            <div className="relative" ref={serviceTypeDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsServiceTypeDropdownOpen((prev) => !prev)}
+                className="flex w-full cursor-pointer items-center justify-between rounded border border-gray-300 px-2 py-2 text-sm text-gray-700"
+              >
                 <span className="truncate">{selectedServiceTypeLabel}</span>
                 <span className="ml-2 text-xs text-gray-500">▾</span>
-              </summary>
+              </button>
 
-              <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded border border-gray-300 bg-white p-2 shadow-lg">
-                <label className="mb-1 flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={allServiceTypesSelected}
-                    onChange={() => onServiceTypeFilterChange([])}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  All Service Types
-                </label>
-
-                {serviceTypeOptions.map((value) => (
-                  <label key={value} className="mb-1 flex items-center gap-2 text-sm text-gray-700">
+              {isServiceTypeDropdownOpen ? (
+                <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded border border-gray-300 bg-white p-2 shadow-lg">
+                  <label className="mb-1 flex items-center gap-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
-                      checked={serviceTypeFilter.includes(value)}
-                      onChange={() => toggleServiceType(value)}
+                      checked={allServiceTypesSelected}
+                      onChange={() => onServiceTypeFilterChange([])}
                       className="h-4 w-4 rounded border-gray-300"
                     />
-                    <span className="truncate">{value}</span>
+                    All Service Types
                   </label>
-                ))}
-              </div>
-            </details>
+
+                  {sortedServiceTypeOptions.map((value) => (
+                    <label key={value} className="mb-1 flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={serviceTypeFilter.includes(value)}
+                        onChange={() => toggleServiceType(value)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="truncate">{value}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
         {showManpowerFilters && onParentProductLineFilterChange ? (
           <>
             <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-              Parent Product Line
+              {manpowerFilterLabel}
               <select
                 value={parentProductLineFilter}
                 onChange={(event) => onParentProductLineFilterChange(event.target.value)}
                 className="rounded border border-gray-300 px-2 py-2 text-sm"
               >
-                <option value="ALL">All Parent Product Lines</option>
-                {parentProductLineOptions.map((value) => (
+                <option value="ALL">All</option>
+                {sortedParentProductLineOptions.map((value) => (
                   <option key={value} value={value}>
                     {value}
                   </option>
@@ -199,6 +266,48 @@ export default function ReportFiltersPanel({
               </select>
             </label>
           </>
+        ) : null}
+
+        {showServiceAdvisorFilter && onServiceAdvisorFilterChange ? (
+          <div className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+            <span>Service Advisor</span>
+            <div className="relative" ref={serviceAdvisorDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsServiceAdvisorDropdownOpen((prev) => !prev)}
+                className="flex w-full cursor-pointer items-center justify-between rounded border border-gray-300 px-2 py-2 text-sm text-gray-700"
+              >
+                <span className="truncate">{selectedServiceAdvisorLabel}</span>
+                <span className="ml-2 text-xs text-gray-500">▾</span>
+              </button>
+
+              {isServiceAdvisorDropdownOpen ? (
+                <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded border border-gray-300 bg-white p-2 shadow-lg">
+                  <label className="mb-1 flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={allServiceAdvisorsSelected}
+                      onChange={() => onServiceAdvisorFilterChange([])}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    All Service Advisors
+                  </label>
+
+                  {sortedServiceAdvisorOptions.map((value) => (
+                    <label key={value} className="mb-1 flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={serviceAdvisorFilter.includes(value)}
+                        onChange={() => toggleServiceAdvisor(value)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="truncate">{value}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
         ) : null}
 
         {datePreset === 'custom' && (
