@@ -174,6 +174,7 @@ function AccessDenied() {
                 <li>• <strong>AutoDoc</strong> — Build vehicle documentation and estimates</li>
                 <li>• <strong>Reception</strong> — Capture front-desk intake entries</li>
                 <li>• <strong>Service Advisor</strong> — Work only assigned intake rows</li>
+                <li>• <strong>Floor Incharge</strong> — Assign technicians to open job cards</li>
               </ul>
               <p className="mt-4 text-xs text-gray-500">
                 If you believe this is a mistake, ask your administrator to check your module assignments in the Admin Panel.
