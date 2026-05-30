@@ -12,6 +12,7 @@ export interface ReceptionEntryRow {
   jc_number: string | null
   owner_name: string | null
   owner_phone: string | null
+  branch: string | null
   source: string
   remark: string | null
   estimate_storage_path: string | null
@@ -35,6 +36,7 @@ export interface ReceptionEntryInput {
   owner_name?: string | null
   owner_phone?: string | null
   source: string
+  branch?: string | null
 }
 
 export interface ServiceAdvisorEntryUpdateInput {
@@ -59,11 +61,44 @@ function normalizePayload(input: ReceptionEntryInput) {
     owner_name: input.owner_name?.trim() || null,
     owner_phone: normalizePhone(input.owner_phone),
     source: input.source.trim(),
+    branch: input.branch?.trim() || null,
   }
 }
 
 function sanitizeFileNamePart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+export async function listServiceBranches(): Promise<ApiResult<string[]>> {
+  const { data, error } = await supabase
+    .from('service_branches')
+    .select('name')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+
+  if (error) return fail(error)
+  return ok((data ?? []).map((r: { name: string }) => r.name))
+}
+
+export async function createServiceBranch(name: string): Promise<ApiResult<{ id: number; name: string }>> {
+  const trimmed = name.trim()
+  if (!trimmed) return fail('Branch name is required')
+  const { data, error } = await supabase
+    .from('service_branches')
+    .insert({ name: trimmed, is_active: true })
+    .select('id, name')
+    .single()
+  if (error) return fail(error)
+  return ok(data as { id: number; name: string })
+}
+
+export async function deleteServiceBranch(id: number): Promise<ApiResult<null>> {
+  const { error } = await supabase
+    .from('service_branches')
+    .delete()
+    .eq('id', id)
+  if (error) return fail(error)
+  return ok(null)
 }
 
 export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
