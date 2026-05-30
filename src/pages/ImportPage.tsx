@@ -120,11 +120,6 @@ const CARDS: CardConfig[] = [
     description: 'Closed job card records across all branches.',
   },
   {
-    tableName: 'service_invoice_data',
-    title: 'Invoice Data',
-    description: 'Service invoice records across all branches.',
-  },
-  {
     tableName: 'service_vas_jc_data',
     title: 'VAS Data',
     description: 'Value-added service job card data across all branches.',
@@ -190,7 +185,6 @@ const CARDS: CardConfig[] = [
 
 const REVENUE_REPORT_TABLES = new Set([
   'job_card_closed_data',
-  'service_invoice_data',
   'service_vas_jc_data',
 ])
 
