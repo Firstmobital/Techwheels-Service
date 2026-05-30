@@ -55,7 +55,6 @@ export interface ReportDefinition {
 
 export const REPORT_CATEGORIES: ReportCategoryDefinition[] = [
   { id: 'labour-revenue', label: 'Labour Revenue' },
-  { id: 'performance', label: 'Performance' },
   { id: 'revenue', label: 'Revenue' },
   { id: 'parts', label: 'Parts' },
 ]
@@ -84,66 +83,6 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
     categoryId: 'labour-revenue',
     label: 'Duplicate Chassis (Same Month)',
     description: 'Shows duplicate chassis entries only when they repeat within the same month.',
-  },
-  {
-    id: 'customer-retention',
-    categoryId: 'performance',
-    label: 'Customer Retention Report',
-    description: 'Vehicle-level repeat-visit retention metrics and lapsed customer outreach list.',
-  },
-  {
-    id: 'service-due',
-    categoryId: 'performance',
-    label: 'Service Due Report',
-    description: 'Current kilometre-based due status with urgency segmentation and outreach list.',
-  },
-  {
-    id: 'advisor-performance',
-    categoryId: 'performance',
-    label: 'Advisor Performance Report',
-    description: 'Detailed rows by advisor and source table.',
-  },
-  {
-    id: 'vas-job-performance',
-    categoryId: 'performance',
-    label: 'VAS Job Performance Report',
-    description: 'Grouped VAS job KPIs with completion, value, discount, and hours analysis.',
-  },
-  {
-    id: 'tat-duration-buckets',
-    categoryId: 'performance',
-    label: 'TAT Duration Bucket Report',
-    description: 'Created-to-closed turnaround distribution with duration buckets and averages.',
-  },
-  {
-    id: 'employee-utilization',
-    categoryId: 'performance',
-    label: 'Employee Utilization Report',
-    description: 'Advisor workload and revenue utilization for selected branch/date filters.',
-  },
-  {
-    id: 'jc-invoice-reconciliation',
-    categoryId: 'performance',
-    label: 'JC-to-Invoice Reconciliation Report',
-    description: 'Match coverage, missing invoice rate, and value variance across JC and invoice data.',
-  },
-  {
-    id: 'net-price-final-revenue-variance',
-    categoryId: 'performance',
-    label: 'Net Price vs Final Revenue Variance Report',
-    description: 'Estimate vs realized revenue variance by branch and job code.',
-  },
-  {
-    id: 'end-to-end-job-lifecycle',
-    categoryId: 'performance',
-    label: 'End-to-End Job Lifecycle Report',
-    description: 'Create-to-close-to-invoice timeline and value chain conversion.',
-  },
-  {
-    id: 'vas-billing-hours-efficiency',
-    categoryId: 'performance',
-    label: 'VAS Billing Hours Efficiency Report',
-    description: 'Billing hour utilization by performed by, job code, and rate type.',
   },
   {
     id: 'daily-revenue',
