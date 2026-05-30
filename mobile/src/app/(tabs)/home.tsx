@@ -9,7 +9,7 @@ type ModuleTile = {
   label: string
   icon: string
   badge: 'LIVE' | 'SOON' | 'NEW'
-  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings'
+  route?: '/(tabs)/autodoc' | '/(tabs)/reports' | '/(tabs)/import' | '/(tabs)/admin' | '/(tabs)/settings' | '/(tabs)/floor-incharge'
 }
 
 const MODULES: ModuleTile[] = [
@@ -18,6 +18,7 @@ const MODULES: ModuleTile[] = [
   { key: 'import', label: 'Import Data', icon: '📥', badge: 'LIVE', route: '/(tabs)/import' },
   { key: 'admin', label: 'Admin', icon: '👨‍💼', badge: 'LIVE', route: '/(tabs)/admin' },
   { key: 'settings', label: 'Settings', icon: '⚙️', badge: 'LIVE', route: '/(tabs)/settings' },
+  { key: 'floor_incharge', label: 'Floor Incharge', icon: '🔩', badge: 'LIVE', route: '/(tabs)/floor-incharge' },
 ]
 
 const ACTIVITY_FEED = [
@@ -119,7 +120,7 @@ export default function PlatformHomeScreen() {
       <View className="px-4 -mt-4">
         <View className="bg-white rounded-2xl border border-slate-200 flex-row overflow-hidden">
           <View className="flex-1 items-center py-3 border-r border-slate-100">
-              <Text className="text-blue-600 text-xl font-bold">5</Text>
+              <Text className="text-blue-600 text-xl font-bold">6</Text>
             <Text className="text-slate-500 text-xs mt-1">Live Modules</Text>
           </View>
           <View className="flex-1 items-center py-3 border-r border-slate-100">
