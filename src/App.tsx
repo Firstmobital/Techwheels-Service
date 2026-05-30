@@ -13,6 +13,7 @@ import AutoDocPage from './pages/AutoDocPage'
 import JobCardPage from './pages/JobCardPage'
 import ReceptionPage from './pages/ReceptionPage'
 import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
+import FloorInchargePage from './pages/FloorInchargePage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
 import { useOnline } from './hooks/useOnline'
@@ -77,6 +78,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    to: '/floor-incharge',
+    label: 'Floor Incharge',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+      </svg>
+    ),
+  },
+  {
     to: '/service-advisor',
     label: 'Service Advisor',
     icon: (
@@ -99,8 +109,9 @@ type ModuleName =
   | 'autodoc'
   | 'reception'
   | 'service_advisor'
+  | 'floor_incharge'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge'
 
 interface PermissionRow {
   module_name: string
@@ -114,6 +125,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/autodoc': ['autodoc'],
   '/reception': ['reception'],
   '/service-advisor': ['service_advisor'],
+  '/floor-incharge': ['floor_incharge'],
 }
 
 function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly ModuleName[]) {
@@ -129,12 +141,13 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/autodoc')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
   if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
   if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
+  if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback')) return true
   return false
 }
 
 function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
-  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/reports', '/settings', '/autodoc', '/admin']
+  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/floor-incharge', '/reports', '/settings', '/autodoc', '/admin']
   return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
 }
 
@@ -325,6 +338,7 @@ function AppInner() {
       if (item.to === '/autodoc') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
       if (item.to === '/reception') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
       if (item.to === '/service-advisor') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
+      if (item.to === '/floor-incharge') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
       return false
     }),
     [allowedModules],
@@ -466,8 +480,12 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                 <SideNavLink to="/reception" icon={NAV_ITEMS[5].icon} label={NAV_ITEMS[5].label} />
               )}
 
+              {visibleNavItems.some((item) => item.to === '/floor-incharge') && (
+                <SideNavLink to="/floor-incharge" icon={NAV_ITEMS[6].icon} label={NAV_ITEMS[6].label} />
+              )}
+
               {visibleNavItems.some((item) => item.to === '/service-advisor') && (
-                <SideNavLink to="/service-advisor" icon={NAV_ITEMS[6].icon} label={NAV_ITEMS[6].label} />
+                <SideNavLink to="/service-advisor" icon={NAV_ITEMS[7].icon} label={NAV_ITEMS[7].label} />
               )}
             </nav>
 
@@ -617,6 +635,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/service-advisor']}>
                       <ServiceAdvisorPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/floor-incharge"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/floor-incharge']}>
+                      <FloorInchargePage />
                     </RequireAccess>
                   )}
                 />
