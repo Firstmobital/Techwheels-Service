@@ -83,6 +83,7 @@ export type Database = {
           fuel_type: string | null
           id: number
           location: string | null
+          rote: string | null
           updated_at: string
         }
         Insert: {
@@ -93,6 +94,7 @@ export type Database = {
           fuel_type?: string | null
           id?: never
           location?: string | null
+          rote?: string | null
           updated_at?: string
         }
         Update: {
@@ -103,6 +105,7 @@ export type Database = {
           fuel_type?: string | null
           id?: never
           location?: string | null
+          rote?: string | null
           updated_at?: string
         }
         Relationships: []

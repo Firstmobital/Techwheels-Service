@@ -3,6 +3,7 @@ export interface EmployeeRecord {
   employee_name: string
   location: string | null
   department: string | null
+  rote?: string | null
 }
 
 export interface EmployeeLookupIndex {

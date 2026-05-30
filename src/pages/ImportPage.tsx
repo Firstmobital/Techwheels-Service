@@ -547,7 +547,7 @@ async function getTableColumns(tableName: string): Promise<string[]> {
 async function getEmployeeLookupIndex(): Promise<EmployeeLookupIndex> {
   const { data, error } = await supabase
     .from('employee_master')
-    .select('employee_code, employee_name, location, department')
+    .select('employee_code, employee_name, location, department, rote')
 
   if (error) throw new Error(error.message)
 

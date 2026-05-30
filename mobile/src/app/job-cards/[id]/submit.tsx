@@ -274,11 +274,18 @@ export default function SubmitStageScreen() {
         total_estimate_amount: Number(jobCard.total_estimate_amount ?? 0),
       })
 
-      const attachments: EmailAttachmentRef[] = [
-        buildAttachment(prePptDoc!, 'pre-repair.pptx'),
-        buildAttachment(excelDoc!, 'estimate.xlsx'),
-        buildAttachment(walkaroundDoc!, 'vehicle-walkaround.mp4'),
-      ]
+      const attachments: EmailAttachmentRef[] = []
+      
+      // Only include attachments with non-zero file size
+      if (prePptDoc && (prePptDoc.file_size_mb ?? 0) > 0) {
+        attachments.push(buildAttachment(prePptDoc, 'pre-repair.pptx'))
+      }
+      if (excelDoc && (excelDoc.file_size_mb ?? 0) > 0) {
+        attachments.push(buildAttachment(excelDoc, 'estimate.xlsx'))
+      }
+      if (walkaroundDoc && (walkaroundDoc.file_size_mb ?? 0) > 0) {
+        attachments.push(buildAttachment(walkaroundDoc, 'vehicle-walkaround.mp4'))
+      }
 
       const targetEmail = 'vinodexodus@gmail.com'
       const sendRes = await sendClaimEmail(jobCardId, {
@@ -329,13 +336,21 @@ export default function SubmitStageScreen() {
         total_estimate_amount: Number(jobCard.total_estimate_amount ?? 0),
       })
 
-      const attachments: EmailAttachmentRef[] = [
-        buildAttachment(postPptDoc!, 'post-repair.pptx'),
-      ]
-
-      if (excelDoc) attachments.push(buildAttachment(excelDoc, 'estimate.xlsx'))
-      if (prePptDoc) attachments.push(buildAttachment(prePptDoc, 'pre-repair.pptx'))
-      if (deliveryDoc) attachments.push(buildAttachment(deliveryDoc, 'delivery-video.mp4'))
+      const attachments: EmailAttachmentRef[] = []
+      
+      // Only include attachments with non-zero file size
+      if (postPptDoc && (postPptDoc.file_size_mb ?? 0) > 0) {
+        attachments.push(buildAttachment(postPptDoc, 'post-repair.pptx'))
+      }
+      if (excelDoc && (excelDoc.file_size_mb ?? 0) > 0) {
+        attachments.push(buildAttachment(excelDoc, 'estimate.xlsx'))
+      }
+      if (prePptDoc && (prePptDoc.file_size_mb ?? 0) > 0) {
+        attachments.push(buildAttachment(prePptDoc, 'pre-repair.pptx'))
+      }
+      if (deliveryDoc && (deliveryDoc.file_size_mb ?? 0) > 0) {
+        attachments.push(buildAttachment(deliveryDoc, 'delivery-video.mp4'))
+      }
 
       const targetEmail = 'vinodexodus@gmail.com'
       const sendRes = await sendClaimEmail(jobCardId, {

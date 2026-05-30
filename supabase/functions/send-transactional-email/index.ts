@@ -223,6 +223,10 @@ async function toResendAttachment(
       accessToken,
     })
 
+    if (bytes.length === 0) {
+      throw new Error(`Drive attachment ${driveFileId} is empty (0 bytes)`)
+    }
+
     return {
       filename: ref.filename,
       content: bytesToBase64(bytes),
@@ -251,6 +255,11 @@ async function toResendAttachment(
   }
 
   const bytes = new Uint8Array(await downloadRes.arrayBuffer())
+  
+  if (bytes.length === 0) {
+    throw new Error(`Attachment ${ref.storagePath} is empty (0 bytes)`)
+  }
+  
   return {
     filename: ref.filename,
     content: bytesToBase64(bytes),
