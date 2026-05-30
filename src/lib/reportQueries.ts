@@ -2202,8 +2202,8 @@ export async function getDailyRevenueReport(
     const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const partsAmount = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber.toLowerCase()
-    const shouldIncludeVas = jobCardNumber.length > 0 && !processedJobCardsForVas.has(jobCardKey)
+    const jobCardKey = jobCardNumber?.toLowerCase() ?? ''
+    const shouldIncludeVas = !!jobCardNumber && !processedJobCardsForVas.has(jobCardKey)
     const vasAmount = shouldIncludeVas ? vasByJobCard.get(jobCardKey) ?? 0 : 0
 
     if (shouldIncludeVas) {
@@ -2294,8 +2294,8 @@ export async function getCategoryWiseRevenue(
     const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const partsAmount = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber.toLowerCase()
-    const shouldIncludeVas = jobCardNumber.length > 0 && !processedJobCardsForVas.has(jobCardKey)
+    const jobCardKey = jobCardNumber?.toLowerCase() ?? ''
+    const shouldIncludeVas = !!jobCardNumber && !processedJobCardsForVas.has(jobCardKey)
     const vasAmount = shouldIncludeVas ? vasByJobCard.get(jobCardKey) ?? 0 : 0
     if (shouldIncludeVas) {
       processedJobCardsForVas.add(jobCardKey)
@@ -2400,8 +2400,8 @@ export async function getMonthlyRevenuesTrend(
     const labourAmount = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const partsAmount = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber.toLowerCase()
-    const shouldIncludeVas = jobCardNumber.length > 0 && !processedJobCardsForVas.has(jobCardKey)
+    const jobCardKey = jobCardNumber?.toLowerCase() ?? ''
+    const shouldIncludeVas = !!jobCardNumber && !processedJobCardsForVas.has(jobCardKey)
     const vasAmount = shouldIncludeVas ? vasByJobCard.get(jobCardKey) ?? 0 : 0
     if (shouldIncludeVas) {
       processedJobCardsForVas.add(jobCardKey)
@@ -2847,8 +2847,8 @@ export async function getLabourSparesMixByServiceType(
     const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber.toLowerCase()
-    const shouldIncludeVas = jobCardNumber.length > 0 && !processedJobCardsForVas.has(jobCardKey)
+    const jobCardKey = jobCardNumber?.toLowerCase() ?? ''
+    const shouldIncludeVas = !!jobCardNumber && !processedJobCardsForVas.has(jobCardKey)
     const vasRevenue = shouldIncludeVas ? vasByJobCard.get(jobCardKey) ?? 0 : 0
 
     if (shouldIncludeVas) {
@@ -2941,8 +2941,8 @@ export async function getProductLinePerformance(
     const labourRevenue = parseRevenueExcludingGst(typedRow.final_labour_amount)
     const sparesRevenue = parseRevenueExcludingGst(typedRow.final_spares_amount)
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber.toLowerCase()
-    const shouldIncludeVas = jobCardNumber.length > 0 && !processedJobCardsForVas.has(jobCardKey)
+    const jobCardKey = jobCardNumber?.toLowerCase() ?? ''
+    const shouldIncludeVas = !!jobCardNumber && !processedJobCardsForVas.has(jobCardKey)
     const vasRevenue = shouldIncludeVas ? vasByJobCard.get(jobCardKey) ?? 0 : 0
 
     if (shouldIncludeVas) {
@@ -3047,8 +3047,8 @@ export async function getModelWiseRevenue(
       ? parseRevenueExcludingGst(typedRow.total_invoice_amount)
       : labourRevenue + sparesRevenue
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber.toLowerCase()
-    const shouldIncludeVas = jobCardNumber.length > 0 && !processedJobCardsForVas.has(jobCardKey)
+    const jobCardKey = jobCardNumber?.toLowerCase() ?? ''
+    const shouldIncludeVas = !!jobCardNumber && !processedJobCardsForVas.has(jobCardKey)
     const vasRevenue = shouldIncludeVas ? vasByJobCard.get(jobCardKey) ?? 0 : 0
     if (shouldIncludeVas) {
       processedJobCardsForVas.add(jobCardKey)
@@ -3715,8 +3715,8 @@ export async function getVehicleWiseRevenue(
     const reportDate = getJobCardReportDateValue(typedRow, dateFilter)
     const closedDate = toIsoDate(reportDate, 'day')
     const jobCardNumber = normalizeJobCardNumber(typedRow.job_card_number)
-    const jobCardKey = jobCardNumber.toLowerCase()
-    const shouldIncludeVas = jobCardNumber.length > 0 && !processedJobCardsForVas.has(jobCardKey)
+    const jobCardKey = jobCardNumber?.toLowerCase() ?? ''
+    const shouldIncludeVas = !!jobCardNumber && !processedJobCardsForVas.has(jobCardKey)
     const vasRevenue = shouldIncludeVas ? vasByJobCard.get(jobCardKey) ?? 0 : 0
 
     if (shouldIncludeVas) {
