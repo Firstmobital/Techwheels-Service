@@ -113,15 +113,18 @@ export default function ReportsPage() {
     return branch
   }, [branch, fuelType, resolvedCategoryId])
 
+  const forceInvoiceDateFilter =
+    resolvedCategoryId === 'labour-revenue' || resolvedCategoryId === 'revenue'
+
   const effectiveDateFieldType = useMemo<DateFieldType>(() => {
-    if (resolvedCategoryId === 'labour-revenue') {
+    if (forceInvoiceDateFilter) {
       return 'invoice_date'
     }
 
     return dateFieldType
-  }, [dateFieldType, resolvedCategoryId])
+  }, [dateFieldType, forceInvoiceDateFilter])
 
-  const showDateFieldTypeFilter = resolvedCategoryId !== 'labour-revenue'
+  const showDateFieldTypeFilter = !forceInvoiceDateFilter
 
   const dateFilter = useMemo<DateRangeFilter>(
     () => ({
