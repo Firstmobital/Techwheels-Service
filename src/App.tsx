@@ -12,6 +12,7 @@ import PasswordUpdatePage from './pages/PasswordUpdatePage'
 import AutoDocPage from './pages/AutoDocPage'
 import JobCardPage from './pages/JobCardPage'
 import ReceptionPage from './pages/ReceptionPage'
+import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
 import { useOnline } from './hooks/useOnline'
@@ -75,6 +76,15 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    to: '/service-advisor',
+    label: 'Service Advisor',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+      </svg>
+    ),
+  },
 ]
 
 type ModuleName =
@@ -88,8 +98,9 @@ type ModuleName =
   | 'admin'
   | 'autodoc'
   | 'reception'
+  | 'service_advisor'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor'
 
 interface PermissionRow {
   module_name: string
@@ -102,6 +113,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/admin': ['admin'],
   '/autodoc': ['autodoc'],
   '/reception': ['reception'],
+  '/service-advisor': ['service_advisor'],
 }
 
 function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly ModuleName[]) {
@@ -116,12 +128,13 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/admin')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/admin'])
   if (pathname.startsWith('/autodoc')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
   if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
+  if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback')) return true
   return false
 }
 
 function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
-  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/reports', '/settings', '/autodoc', '/admin']
+  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/reports', '/settings', '/autodoc', '/admin']
   return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
 }
 
@@ -147,6 +160,7 @@ function AccessDenied() {
                 <li>• <strong>Employees</strong> — Manage employee master data</li>
                 <li>• <strong>AutoDoc</strong> — Build vehicle documentation and estimates</li>
                 <li>• <strong>Reception</strong> — Capture front-desk intake entries</li>
+                <li>• <strong>Service Advisor</strong> — Work only assigned intake rows</li>
               </ul>
               <p className="mt-4 text-xs text-gray-500">
                 If you believe this is a mistake, ask your administrator to check your module assignments in the Admin Panel.
@@ -310,6 +324,7 @@ function AppInner() {
       if (item.to === '/admin') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/admin'])
       if (item.to === '/autodoc') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/autodoc'])
       if (item.to === '/reception') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
+      if (item.to === '/service-advisor') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
       return false
     }),
     [allowedModules],
@@ -449,6 +464,10 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
 
               {visibleNavItems.some((item) => item.to === '/reception') && (
                 <SideNavLink to="/reception" icon={NAV_ITEMS[5].icon} label={NAV_ITEMS[5].label} />
+              )}
+
+              {visibleNavItems.some((item) => item.to === '/service-advisor') && (
+                <SideNavLink to="/service-advisor" icon={NAV_ITEMS[6].icon} label={NAV_ITEMS[6].label} />
               )}
             </nav>
 
@@ -590,6 +609,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/reception']}>
                       <ReceptionPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/service-advisor"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/service-advisor']}>
+                      <ServiceAdvisorPage />
                     </RequireAccess>
                   )}
                 />

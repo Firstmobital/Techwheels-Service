@@ -339,14 +339,18 @@ Deno.serve(async (req) => {
         return json(headers, { error: 'Missing GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY(_BASE64) env for Drive attachments' }, 500)
       }
 
-      resendAttachments = await Promise.all(
-        (body.attachments ?? []).map((ref) => toResendAttachment(ref, {
-          supabaseUrl: SUPABASE_URL,
-          serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
-          googleServiceAccountEmail: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-          googleServiceAccountPrivateKey: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY,
-        })),
+      resendAttachments = (
+        await Promise.allSettled(
+          (body.attachments ?? []).map((ref) => toResendAttachment(ref, {
+            supabaseUrl: SUPABASE_URL,
+            serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+            googleServiceAccountEmail: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            googleServiceAccountPrivateKey: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY,
+          })),
+        )
       )
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => (result as PromiseFulfilledResult<{ filename: string; content: string }>).value)
     }
 
     const resendRes = await fetch('https://api.resend.com/emails', {

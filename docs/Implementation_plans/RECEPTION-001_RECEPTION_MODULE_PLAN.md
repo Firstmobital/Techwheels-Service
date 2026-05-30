@@ -3,6 +3,8 @@
 ## Objective
 Create a new web module named Reception for front-desk intake with RBAC-controlled access, dealer-scoped data, and upload support aligned to the provided template fields.
 
+Extension: Add a second module named Service Advisor that uses the same source table and only exposes advisor-assigned rows for the logged-in advisor.
+
 ## Authoritative Audit Baseline
 
 ### Web module state (audited)
@@ -12,9 +14,8 @@ Create a new web module named Reception for front-desk intake with RBAC-controll
 
 ### DB state (audited from authoritative dump)
 - Authority source: local_folder/backups/full_database.sql.
-- public.modules currently contains ids 1-9 with names:
-  - job_cards, invoices, parts_inventory, parts_orders, parts_consumption, employees, reports, admin, autodoc.
-- No existing Reception table/module row found in authoritative dump.
+- public.modules contains reception at id 10 with route /reception.
+- public.service_reception_entries exists with dealer-scoped RLS and reception RBAC policies.
 - Existing dealer-scoped policy pattern uses public.my_dealer_code() and RLS on core tables.
 
 ## Reception Data Contract
@@ -64,16 +65,39 @@ Fields based on shared reference:
 2. Validate unauthorized users cannot access /reception.
 3. Validate authorized users can create, edit, delete, and import records.
 
+### Phase 6: Service Advisor Module (same source table)
+1. Add module row service_advisor with route /service-advisor.
+2. Extend service_reception_entries with SA workflow columns:
+  - remark
+  - estimate_storage_path
+  - estimate_file_name
+  - estimate_content_type
+  - estimate_uploaded_at
+  - estimate_uploaded_by
+3. Add function public.my_sa_name() to resolve logged-in SA name from JWT/users profile.
+4. Add SA-specific SELECT/UPDATE policies on service_reception_entries to allow only assigned rows.
+5. Add trigger guard to restrict SA updates to only:
+  - service_type
+  - jc_number
+  - remark
+  - estimate fields
+6. Add new page src/pages/ServiceAdvisorPage.tsx and route /service-advisor.
+7. Add sidebar nav item Service Advisor.
+8. Add estimate upload in SA page (any file type) to storage with signed URL preview.
+
 ## Execution Status
 - Phase 1: Completed (migration added)
 - Phase 2: Completed
 - Phase 3: Completed
 - Phase 4: Completed
-- Phase 5: In progress (build validation pending)
+- Phase 5: Completed
+- Phase 6: Completed
 
 ## Files Added/Updated for RECEPTION-001
 - supabase/migrations/20260530195500_create_reception_module.sql
+- supabase/migrations/20260530204000_add_service_advisor_module_and_reception_sa_controls.sql
 - src/lib/api/reception.ts
 - src/lib/api/index.ts
 - src/pages/ReceptionPage.tsx
+- src/pages/ServiceAdvisorPage.tsx
 - src/App.tsx

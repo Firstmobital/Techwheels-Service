@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { AUTODOC_BUCKET } from '../autodocStorage'
 import { fail, ok, type ApiResult } from './types'
 
 export interface ReceptionEntryRow {
@@ -12,6 +13,12 @@ export interface ReceptionEntryRow {
   owner_name: string | null
   owner_phone: string | null
   source: string
+  remark: string | null
+  estimate_storage_path: string | null
+  estimate_file_name: string | null
+  estimate_content_type: string | null
+  estimate_uploaded_at: string | null
+  estimate_uploaded_by: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -26,6 +33,12 @@ export interface ReceptionEntryInput {
   owner_name?: string | null
   owner_phone?: string | null
   source: string
+}
+
+export interface ServiceAdvisorEntryUpdateInput {
+  service_type: string
+  jc_number?: string | null
+  remark?: string | null
 }
 
 function normalizePhone(value?: string | null): string | null {
@@ -47,7 +60,21 @@ function normalizePayload(input: ReceptionEntryInput) {
   }
 }
 
+function sanitizeFileNamePart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
 export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const { data, error } = await supabase
+    .from('service_reception_entries')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) return fail(error)
+  return ok((data ?? []) as ReceptionEntryRow[])
+}
+
+export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
   const { data, error } = await supabase
     .from('service_reception_entries')
     .select('*')
@@ -149,4 +176,70 @@ export async function listReceptionSaNames(): Promise<ApiResult<string[]>> {
 
   const uniqueNames = Array.from(new Set(values))
   return ok(uniqueNames)
+}
+
+export async function updateServiceAdvisorEntry(
+  id: number,
+  input: ServiceAdvisorEntryUpdateInput,
+): Promise<ApiResult<ReceptionEntryRow>> {
+  const payload = {
+    service_type: input.service_type.trim(),
+    jc_number: input.jc_number?.trim().toUpperCase() || null,
+    remark: input.remark?.trim() || null,
+  }
+
+  if (!payload.service_type) return fail('Service Type is required')
+
+  const { data, error } = await supabase
+    .from('service_reception_entries')
+    .update(payload)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) return fail(error)
+  return ok(data as ReceptionEntryRow)
+}
+
+export async function uploadServiceAdvisorEstimate(
+  id: number,
+  file: File,
+): Promise<ApiResult<ReceptionEntryRow>> {
+  const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
+  const safeName = sanitizeFileNamePart(file.name || `estimate.${extension}`)
+  const storagePath = `service-advisor-estimates/${id}/${Date.now()}_${safeName}`
+
+  const uploadRes = await supabase.storage
+    .from(AUTODOC_BUCKET)
+    .upload(storagePath, file, { upsert: true, contentType: file.type || 'application/octet-stream' })
+
+  if (uploadRes.error) return fail(uploadRes.error)
+
+  const { data, error } = await supabase
+    .from('service_reception_entries')
+    .update({
+      estimate_storage_path: storagePath,
+      estimate_file_name: file.name,
+      estimate_content_type: file.type || null,
+      estimate_uploaded_at: new Date().toISOString(),
+      estimate_uploaded_by: null,
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) return fail(error)
+  return ok(data as ReceptionEntryRow)
+}
+
+export async function getServiceAdvisorEstimateSignedUrl(
+  storagePath: string,
+): Promise<ApiResult<string>> {
+  const { data, error } = await supabase.storage
+    .from(AUTODOC_BUCKET)
+    .createSignedUrl(storagePath, 3600)
+
+  if (error) return fail(error)
+  if (!data?.signedUrl) return fail('Unable to create signed URL')
+  return ok(data.signedUrl)
 }
