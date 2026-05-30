@@ -165,7 +165,6 @@ export default function ServiceAdvisorPage() {
                   <th className="px-3 py-2 text-left">Job Card Number</th>
                   <th className="px-3 py-2 text-left">Remark</th>
                   <th className="px-3 py-2 text-left">Estimate</th>
-                  <th className="px-3 py-2 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-700">
@@ -236,6 +235,16 @@ export default function ServiceAdvisorPage() {
                           >
                             {uploadingId === row.id ? 'Uploading...' : row.estimate_storage_path ? 'Replace File' : 'Upload File'}
                           </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => void saveRow(row.id)}
+                                disabled={savingId === row.id}
+                                className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {savingId === row.id ? 'Saving...' : 'Save'}
+                              </button>
+                            </div>
                           {row.estimate_file_name && (
                             <span className="max-w-40 truncate text-xs text-gray-600" title={row.estimate_file_name}>
                               {row.estimate_file_name}
@@ -252,16 +261,6 @@ export default function ServiceAdvisorPage() {
                             </a>
                           )}
                         </div>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => void saveRow(row.id)}
-                          disabled={savingId === row.id}
-                          className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {savingId === row.id ? 'Saving...' : 'Save'}
-                        </button>
                       </td>
                     </tr>
                   )
