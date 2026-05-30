@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useId, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { broadcastLastUpdated } from '../hooks/useLastUpdated'
@@ -698,7 +698,7 @@ interface SlotDropzoneProps {
 }
 
 function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputId = useId()
   const [isDragging, setIsDragging] = useState(false)
 
   const handleFile = useCallback(
@@ -747,8 +747,8 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
           )}
         </div>
       ) : (
-        <div
-          onClick={() => inputRef.current?.click()}
+        <label
+          htmlFor={inputId}
           onDragOver={(e) => {
             e.preventDefault()
             setIsDragging(true)
@@ -782,17 +782,17 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
           </svg>
           Drop or click to browse
           <input
-            ref={inputRef}
+              id={inputId}
             type="file"
             accept=".xlsx,.xls,.csv"
-            className="sr-only"
+              className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) handleFile(file)
               e.target.value = ''
             }}
           />
-        </div>
+          </label>
       )}
     </div>
   )
