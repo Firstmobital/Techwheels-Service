@@ -360,7 +360,14 @@ export default function ReceptionPage() {
             <span className="mb-1 block font-medium">Registration No *</span>
             <input
               value={form.reg_number}
-              onChange={(event) => setForm((prev) => ({ ...prev, reg_number: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  reg_number: event.target.value.toUpperCase(),
+                }))
+              }
+              style={{ textTransform: 'uppercase' }}
+              autoCapitalize="characters"
               placeholder="RJ14AB1234"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
             />
@@ -401,7 +408,14 @@ export default function ReceptionPage() {
             <span className="mb-1 block font-medium">Job Card Number</span>
             <input
               value={form.jc_number}
-              onChange={(event) => setForm((prev) => ({ ...prev, jc_number: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  jc_number: event.target.value.toUpperCase(),
+                }))
+              }
+              style={{ textTransform: 'uppercase' }}
+              autoCapitalize="characters"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
             />
           </label>
@@ -419,8 +433,14 @@ export default function ReceptionPage() {
             <span className="mb-1 block font-medium">Owner Phone</span>
             <input
               value={form.owner_phone}
-              onChange={(event) => setForm((prev) => ({ ...prev, owner_phone: event.target.value }))}
+              onChange={(event) => {
+                const digitsOnly = event.target.value.replace(/\D/g, '').slice(0, 10)
+                setForm((prev) => ({ ...prev, owner_phone: digitsOnly }))
+              }}
               placeholder="10 digits"
+              inputMode="numeric"
+              pattern="[0-9]{10}"
+              maxLength={10}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
             />
           </label>
