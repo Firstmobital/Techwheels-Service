@@ -6,6 +6,7 @@ import {
   deleteReceptionEntry,
   listReceptionEntries,
   listReceptionSaNames,
+  listServiceBranches,
   type ReceptionEntryInput,
   type ReceptionEntryRow,
   updateReceptionEntry,
@@ -30,6 +31,7 @@ type FormState = {
   owner_name: string
   owner_phone: string
   source: string
+  branch: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -41,6 +43,7 @@ const EMPTY_FORM: FormState = {
   owner_name: '',
   owner_phone: '',
   source: SOURCE_OPTIONS[0],
+  branch: '',
 }
 
 function normalizeHeader(value: string): string {
@@ -156,6 +159,7 @@ export default function ReceptionPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<ReceptionEntryRow[]>([])
   const [saOptions, setSaOptions] = useState<string[]>([])
+  const [branchOptions, setBranchOptions] = useState<string[]>([])
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -178,7 +182,7 @@ export default function ReceptionPage() {
     setLoading(true)
     setError(null)
 
-    const [entriesRes, saRes] = await Promise.all([listReceptionEntries(), listReceptionSaNames()])
+    const [entriesRes, saRes, branchRes] = await Promise.all([listReceptionEntries(), listReceptionSaNames(), listServiceBranches()])
 
     if (entriesRes.error) {
       setError(entriesRes.error)
@@ -189,6 +193,9 @@ export default function ReceptionPage() {
 
     if (!saRes.error) {
       setSaOptions(saRes.data ?? [])
+    }
+    if (!branchRes.error) {
+      setBranchOptions(branchRes.data ?? [])
     }
 
     setLoading(false)
@@ -208,8 +215,8 @@ export default function ReceptionPage() {
     setNotice(null)
     setError(null)
 
-    if (!form.reg_number.trim() || !form.service_type.trim() || !form.sa_name.trim() || !form.source.trim()) {
-      setError('Please fill all required fields: Registration No, Service Type, SA Name, Source')
+    if (!form.reg_number.trim() || !form.service_type.trim() || !form.sa_name.trim() || !form.source.trim() || !form.branch.trim()) {
+      setError('Please fill all required fields: Registration No, Service Type, SA Name, Source, Branch')
       return
     }
 
@@ -229,6 +236,7 @@ export default function ReceptionPage() {
       owner_name: form.owner_name,
       owner_phone: form.owner_phone,
       source: form.source,
+      branch: form.branch || null,
     }
 
     const result =
@@ -259,6 +267,7 @@ export default function ReceptionPage() {
       owner_name: entry.owner_name ?? '',
       owner_phone: entry.owner_phone ?? '',
       source: entry.source,
+      branch: entry.branch ?? '',
     })
     setNotice(null)
     setError(null)
@@ -454,6 +463,20 @@ export default function ReceptionPage() {
             >
               {SOURCE_OPTIONS.map((option) => (
                 <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm text-gray-700">
+            <span className="mb-1 block font-medium">Service Branch *</span>
+            <select
+              value={form.branch}
+              onChange={(event) => setForm((prev) => ({ ...prev, branch: event.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
+            >
+              <option value="">— Select Branch —</option>
+              {branchOptions.map((b) => (
+                <option key={b} value={b}>{b}</option>
               ))}
             </select>
           </label>
