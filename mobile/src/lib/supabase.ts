@@ -27,3 +27,4 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 export const hasSupabaseEnv = !!supabaseUrl && !!supabaseAnonKey
+export const SUPABASE_URL = supabaseUrl

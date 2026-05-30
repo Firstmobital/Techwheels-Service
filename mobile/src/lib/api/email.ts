@@ -1,4 +1,4 @@
-import { supabase } from '../supabase'
+import { supabase, SUPABASE_URL } from '../supabase'
 import { fail, ok, type ApiResult } from './types'
 
 export interface EmailLog {
@@ -30,8 +30,6 @@ async function sendTransactionalEmail(
   attachments?: EmailAttachmentRef[],
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
-    const { getSupabaseBaseUrl } = await import('../env')
-    const supabaseUrl = getSupabaseBaseUrl()
     const { data: { session } } = await supabase.auth.getSession()
     const accessToken = session?.access_token
 
@@ -40,7 +38,7 @@ async function sendTransactionalEmail(
     }
 
     const response = await fetch(
-      `${supabaseUrl.replace(/\/$/, '')}/functions/v1/send-transactional-email`,
+      `${SUPABASE_URL}/functions/v1/send-transactional-email`,
       {
         method: 'POST',
         headers: {
