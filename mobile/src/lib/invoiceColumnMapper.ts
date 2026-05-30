@@ -17,6 +17,39 @@ const INVOICE_HEADER_MAPPING: Record<string, string> = {
   vrn: 'VRN',
 }
 
+const INVOICE_HEADER_ALIASES: Record<string, string[]> = {
+  invoice_number: ['Invoice #', 'Invoice No', 'Invoice Number', 'invoice_number'],
+  invoice_date: ['Invoice Date', 'Invoice Dt', 'invoice_date'],
+  bill_to_first_name: ['Bill To First Name', 'Bill To F Name', 'bill_to_first_name'],
+  bill_to_last_name: ['Bill To Last Name', 'Bill To L Name', 'bill_to_last_name'],
+  final_labour_invoice_amount: [
+    'Final Labour Invoice Amount',
+    'Final Labour Amount',
+    'final_labour_invoice_amount',
+  ],
+  final_spares_invoice_amount: [
+    'Final Spares Invoice Amount',
+    'Final Spare Invoice Amount',
+    'Final Spares Amount',
+    'final_spares_invoice_amount',
+  ],
+  final_consolidated_invoice_amount: [
+    'Final Consolidated Invoice Amount',
+    'Final Invoice Amount',
+    'Total Invoice Amount',
+    'final_consolidated_invoice_amount',
+  ],
+  discounts_labour: ['Discounts (Labour)', 'Labour Discount', 'discounts_labour'],
+  other_charges_labour: ['Other Charges (Labour)', 'Labour Other Charges', 'other_charges_labour'],
+  discounts_parts: ['Discounts (Parts)', 'Parts Discount', 'discounts_parts'],
+  other_charges_parts: ['Other Charges (Parts)', 'Parts Other Charges', 'other_charges_parts'],
+  final_tcs_amount: ['Final TCS Amount', 'TCS Amount', 'final_tcs_amount'],
+  order_number: ['Order #', 'Order No', 'Order Number', 'order_number'],
+  sr_number: ['SR #', 'SR No', 'SR Number', 'sr_number'],
+  chassis_number: ['Chassis #', 'Chassis No', 'Chassis Number', 'chassis_number'],
+  vrn: ['VRN', 'Reg No', 'Registration Number', 'Vehicle Registration Number', 'vrn'],
+}
+
 const AMOUNT_COLUMNS = new Set([
   'final_labour_invoice_amount',
   'final_spares_invoice_amount',
@@ -45,6 +78,12 @@ function normalizeHeader(header: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase()
+}
+
+function normalizeHeaderForLookup(header: string): string {
+  return normalizeHeader(header)
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '')
 }
 
 function parseRupeeAmount(raw: unknown): number {
@@ -101,16 +140,42 @@ function parseInvoiceDate(value: unknown, fieldName: string): string | null {
 
 export function mapInvoiceHeaders(excelHeaders: string[]): Record<string, string> {
   const normalizedHeaders = excelHeaders.map(normalizeHeader)
+  const normalizedLookup = new Map<string, string>()
+  for (const header of excelHeaders) {
+    const key = normalizeHeaderForLookup(header)
+    if (key && !normalizedLookup.has(key)) {
+      normalizedLookup.set(key, header)
+    }
+  }
+
   const mapping: Record<string, string> = {}
   const missingColumns: string[] = []
 
   for (const [dbCol, excelCol] of Object.entries(INVOICE_HEADER_MAPPING)) {
-    const idx = normalizedHeaders.findIndex((h) => h === normalizeHeader(excelCol))
-    if (idx >= 0) {
-      mapping[dbCol] = excelHeaders[idx]
-    } else {
-      missingColumns.push(excelCol)
+    const aliases = INVOICE_HEADER_ALIASES[dbCol] ?? [excelCol, dbCol]
+
+    let mappedHeader: string | undefined
+
+    for (const alias of aliases) {
+      const byLookup = normalizedLookup.get(normalizeHeaderForLookup(alias))
+      if (byLookup) {
+        mappedHeader = byLookup
+        break
+      }
+
+      const idx = normalizedHeaders.findIndex((h) => h === normalizeHeader(alias))
+      if (idx >= 0) {
+        mappedHeader = excelHeaders[idx]
+        break
+      }
     }
+
+    if (mappedHeader) {
+      mapping[dbCol] = mappedHeader
+      continue
+    }
+
+    missingColumns.push(excelCol)
   }
 
   if (missingColumns.length > 0) {
