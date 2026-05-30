@@ -6,6 +6,9 @@ import {
   createRateCardWithRows,
   exportActiveRateRowsByCityCategory,
   listRateCards,
+  listServiceBranches,
+  createServiceBranch,
+  deleteServiceBranch,
   type RateCardRow,
   type RateRowInput,
 } from '../lib/api'
@@ -322,6 +325,12 @@ export default function SettingsPage() {
   const [filterJobCard, setFilterJobCard] = useState('')
   const [filterSrName, setFilterSrName] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
+
+  // Branch management
+  const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([{ id: 0, name: '' }])
+  const [newBranchName, setNewBranchName] = useState('')
+  const [branchSaving, setBranchSaving] = useState(false)
+  const [branchDeleting, setBranchDeleting] = useState<number | null>(null)
   const [selectedIssueIds, setSelectedIssueIds] = useState<Record<number, boolean>>({})
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
@@ -1133,6 +1142,44 @@ export default function SettingsPage() {
     setResolvingIssueId(null)
   }, [fetchIssues, issueCodeSelections, employees])
 
+
+  async function loadBranches() {
+    const res = await listServiceBranches()
+    if (!res.error && res.data) {
+      // We need full objects with id — fetch from supabase directly
+      const { data } = await supabase
+        .from('service_branches')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+      setBranches(data ?? [])
+    }
+  }
+
+  async function handleAddBranch() {
+    if (!newBranchName.trim()) return
+    setBranchSaving(true)
+    const res = await createServiceBranch(newBranchName.trim())
+    setBranchSaving(false)
+    if (res.error) {
+      setError(res.error)
+      return
+    }
+    setNewBranchName('')
+    await loadBranches()
+    setMessage(`Branch "${newBranchName.trim()}" added`)
+  }
+
+  async function handleDeleteBranch(id: number, name: string) {
+    if (!window.confirm(`Delete branch "${name}"?`)) return
+    setBranchDeleting(id)
+    const res = await deleteServiceBranch(id)
+    setBranchDeleting(null)
+    if (res.error) { setError(res.error); return }
+    await loadBranches()
+    setMessage(`Branch "${name}" deleted`)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -1155,6 +1202,59 @@ export default function SettingsPage() {
             {error ?? message}
           </div>
         )}
+
+        <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Branch Management</h2>
+              <p className="mt-0.5 text-xs text-gray-500">Add or remove service branches. These appear as options in the Reception module.</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            {/* Add branch */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newBranchName}
+                onChange={(e) => setNewBranchName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddBranch() } }}
+                placeholder="e.g. Sitapura, Ajmer Road, Shahpura…"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none ring-blue-100 focus:border-blue-500 focus:ring"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddBranch()}
+                disabled={branchSaving || !newBranchName.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {branchSaving ? 'Adding…' : '+ Add Branch'}
+              </button>
+            </div>
+            {/* Branch list */}
+            {branches.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No branches yet. Add your first branch above.</p>
+            ) : (
+              <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 overflow-hidden">
+                {branches.map((b) => (
+                  <div key={b.id} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📍</span>
+                      <span className="text-sm font-medium text-gray-800">{b.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteBranch(b.id, b.name)}
+                      disabled={branchDeleting === b.id}
+                      className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      {branchDeleting === b.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
