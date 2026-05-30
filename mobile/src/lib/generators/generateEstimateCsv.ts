@@ -51,29 +51,15 @@ function toCsv(payload: EstimateExportPayload): string {
 }
 
 export async function generateEstimateCsv(jobCardId: string): Promise<Blob> {
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
-  const { data: auth } = await supabase.auth.getSession()
-  const token = auth.session?.access_token
-
-  if (!supabaseUrl || !token) {
-    throw new Error('Missing authenticated session for estimate export')
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/estimate-export-data`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ jobCardId }),
+  const { data, error } = await supabase.functions.invoke('estimate-export-data', {
+    body: { jobCardId },
   })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(errorText || `Estimate export failed (${response.status})`)
+  if (error) {
+    throw new Error(error.message || 'Estimate export failed')
   }
 
-  const payload = (await response.json()) as EstimateExportPayload
+  const payload = (data ?? {}) as EstimateExportPayload
   const csv = toCsv(payload)
   return new Blob([csv], { type: 'text/csv;charset=utf-8' })
 }

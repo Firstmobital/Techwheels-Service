@@ -30,19 +30,28 @@ async function sendTransactionalEmail(
   attachments?: EmailAttachmentRef[],
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
+    const { getSupabaseBaseUrl } = await import('../env')
+    const supabaseUrl = getSupabaseBaseUrl()
+    const { data: { session } } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
+
+    if (!accessToken) {
+      return fail('No authenticated session for email send')
+    }
+
     const response = await fetch(
-      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/send-transactional-email`,
+      `${supabaseUrl.replace(/\/$/, '')}/functions/v1/send-transactional-email`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token ?? ''}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           to,
           subject,
           html,
-          text: html.replace(/<[^>]*>/g, ''), // Strip HTML for plain text
+          text: html.replace(/<[^>]*>/g, ''),
           purpose: 'manual_message',
           attachments,
         }),

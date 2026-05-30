@@ -16,6 +16,7 @@ import {
 } from '../../../lib/api/jobCards'
 import { listEstimateRows } from '../../../lib/api/estimate'
 import { listPanelPhotos } from '../../../lib/api/photos'
+import { listPanels } from '../../../lib/api/panels'
 import {
   listDocuments,
   uploadDocumentFile,
@@ -75,6 +76,8 @@ export default function SubmitStageScreen() {
   const [estimateRowsCount, setEstimateRowsCount] = useState(0)
   const [preRepairPhotoCount, setPreRepairPhotoCount] = useState(0)
   const [postRepairPhotoCount, setPostRepairPhotoCount] = useState(0)
+  const [selectedPanelIds, setSelectedPanelIds] = useState<string[]>([])
+  const [postRepairPanelIds, setPostRepairPanelIds] = useState<string[]>([])
 
   const loadSubmitData = async () => {
     if (!jobCardId) {
@@ -87,11 +90,12 @@ export default function SubmitStageScreen() {
     setError(null)
     setWarning(null)
 
-    const [jobRes, docsRes, estimateRes, photosRes] = await Promise.all([
+    const [jobRes, docsRes, estimateRes, photosRes, panelsRes] = await Promise.all([
       getJobCardSummary(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       listDocuments(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       listEstimateRows(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       listPanelPhotos(jobCardId),
+      listPanels(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
     ])
 
     const nonBlockingWarnings: string[] = []
@@ -101,6 +105,7 @@ export default function SubmitStageScreen() {
     if (docsRes.error) nonBlockingWarnings.push(`Documents unavailable: ${docsRes.error}`)
     if (estimateRes.error) nonBlockingWarnings.push(`Estimate rows unavailable: ${estimateRes.error}`)
     if (photosRes.error) nonBlockingWarnings.push(`Photos unavailable: ${photosRes.error}`)
+    if (panelsRes.error) nonBlockingWarnings.push(`Panels unavailable: ${panelsRes.error}`)
 
     setJobCard(jobRes.data ?? {
       job_card_id: jobCardId,
@@ -118,13 +123,26 @@ export default function SubmitStageScreen() {
     const photos = photosRes.error ? [] : (photosRes.data ?? [])
     let pre = 0
     let post = 0
+    const postRepairPanelSet = new Set<string>()
     for (const photo of photos) {
       const stage = String((photo as any).repair_stage ?? '').trim().toLowerCase()
+      const panelId = String((photo as any).panel_id ?? '').trim()
       if (stage === 'pre-repair') pre += 1
-      if (stage === 'post-repair') post += 1
+      if (stage === 'post-repair') {
+        post += 1
+        if (panelId) postRepairPanelSet.add(panelId)
+      }
     }
+
+    const panels = panelsRes.error ? [] : (panelsRes.data ?? [])
+    const selectedIds = panels
+      .map((panel) => String(panel.id ?? '').trim())
+      .filter((idValue) => idValue.length > 0)
+
     setPreRepairPhotoCount(pre)
     setPostRepairPhotoCount(post)
+    setSelectedPanelIds(selectedIds)
+    setPostRepairPanelIds(Array.from(postRepairPanelSet))
     setWarning(nonBlockingWarnings.length > 0 ? nonBlockingWarnings.join(' | ') : null)
 
     setLoading(false)
@@ -152,17 +170,25 @@ export default function SubmitStageScreen() {
 
   const composeReady = Boolean(prePptDoc && excelDoc && walkaroundDoc)
   const submitReady = Boolean(postPptDoc)
+  const postRepairPptReady = useMemo(() => {
+    if (selectedPanelIds.length === 0) return false
+    const covered = new Set(postRepairPanelIds)
+    return selectedPanelIds.every((panelId) => covered.has(panelId))
+  }, [postRepairPanelIds, selectedPanelIds])
+
+  const missingPostRepairPanelsCount = Math.max(selectedPanelIds.length - postRepairPanelIds.length, 0)
+  const completionScore = [
+    prePptDoc,
+    excelDoc,
+    walkaroundDoc,
+    postPptDoc,
+  ].filter(Boolean).length
 
   const handleGeneratePpt = async (type: 'pre-repair' | 'post-repair') => {
     if (!jobCardId) return
 
-    if (type === 'pre-repair' && preRepairPhotoCount === 0) {
-      Alert.alert('Missing Photos', 'Capture pre-repair photos before generating Pre-Repair PPT.')
-      return
-    }
-
-    if (type === 'post-repair' && postRepairPhotoCount === 0) {
-      Alert.alert('Missing Photos', 'Capture post-repair photos before generating Post-Repair PPT.')
+    if (type === 'post-repair' && !postRepairPptReady) {
+      Alert.alert('Missing Photos', 'Upload at least one post-repair photo for every selected panel before generating Post-Repair PPT.')
       return
     }
 
@@ -197,11 +223,6 @@ export default function SubmitStageScreen() {
 
   const handleExportEstimate = async () => {
     if (!jobCardId) return
-
-    if (estimateRowsCount === 0) {
-      Alert.alert('No Estimate Rows', 'Complete estimate rows before exporting estimate Excel.')
-      return
-    }
 
     setBusy('excel')
 
@@ -371,27 +392,47 @@ export default function SubmitStageScreen() {
               </View>
             ) : null}
 
-            <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-              <Text className="text-xs uppercase tracking-wide text-gray-500">Submission Checklist</Text>
-              <Text className="text-base font-semibold text-gray-900 mt-1">{jobCard?.jc_number ?? '-'}</Text>
-              <Text className="text-sm text-gray-600 mt-1">Reg: {jobCard?.reg_number ?? '-'}</Text>
+            <View className="bg-slate-900 rounded-2xl px-4 py-4 mb-3">
+              <View className="flex-row items-center justify-between">
+                <View>
+                  <Text className="text-[11px] uppercase tracking-widest text-slate-300">Submit Stage</Text>
+                  <Text className="text-xl font-bold text-white mt-1">{jobCard?.jc_number ?? '-'}</Text>
+                  <Text className="text-sm text-slate-200 mt-1">Reg: {jobCard?.reg_number ?? '-'}</Text>
+                </View>
+                <View className="bg-amber-300 rounded-full px-3 py-1">
+                  <Text className="text-[11px] font-semibold text-amber-900">Awaiting Approval</Text>
+                </View>
+              </View>
+              <View className="mt-4 rounded-xl bg-slate-800 px-3 py-3">
+                <Text className="text-xs text-slate-300">Completion</Text>
+                <Text className="text-lg font-semibold text-white mt-1">{completionScore}/4 essentials ready</Text>
+                <View className="mt-2 h-2 rounded-full bg-slate-700 overflow-hidden">
+                  <View className="h-2 rounded-full bg-cyan-400" style={{ width: `${(completionScore / 4) * 100}%` }} />
+                </View>
+              </View>
+            </View>
 
-              <View className="mt-3">
-                <Text className="text-sm text-gray-700">Pre-repair photos: {preRepairPhotoCount}</Text>
-                <Text className="text-sm text-gray-700">Post-repair photos: {postRepairPhotoCount}</Text>
-                <Text className="text-sm text-gray-700">Estimate rows: {estimateRowsCount}</Text>
+            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
+              <Text className="text-xs uppercase tracking-wide text-slate-500">Submission Checklist</Text>
+              <View className="mt-3 gap-y-1">
+                <Text className="text-sm text-slate-700">Selected panels: {selectedPanelIds.length}</Text>
+                <Text className="text-sm text-slate-700">Pre-repair photos: {preRepairPhotoCount}</Text>
+                <Text className="text-sm text-slate-700">Post-repair photos: {postRepairPhotoCount}</Text>
+                <Text className="text-sm text-slate-700">Estimate rows: {estimateRowsCount}</Text>
                 <Text className={`text-sm mt-1 ${prePptDoc ? 'text-emerald-700' : 'text-amber-700'}`}>Pre-Repair PPT: {prePptDoc ? 'Uploaded' : 'Missing'}</Text>
                 <Text className={`text-sm ${excelDoc ? 'text-emerald-700' : 'text-amber-700'}`}>Estimate Excel: {excelDoc ? 'Uploaded' : 'Missing'}</Text>
                 <Text className={`text-sm ${walkaroundDoc ? 'text-emerald-700' : 'text-amber-700'}`}>Walkaround Video: {walkaroundDoc ? 'Uploaded' : 'Missing'}</Text>
+                <Text className={`text-sm ${deliveryDoc ? 'text-emerald-700' : 'text-amber-700'}`}>Delivery Video: {deliveryDoc ? 'Uploaded' : 'Pending'}</Text>
                 <Text className={`text-sm ${postPptDoc ? 'text-emerald-700' : 'text-amber-700'}`}>Post-Repair PPT: {postPptDoc ? 'Uploaded' : 'Missing'}</Text>
               </View>
             </View>
 
-            <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-              <Text className="text-base font-semibold text-gray-900">Pre-Submit Actions</Text>
+            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
+              <Text className="text-base font-semibold text-slate-900">Pre-Submit Actions</Text>
+              <Text className="text-xs text-slate-500 mt-1">Generate files first, then send claim email to set job as submitted.</Text>
 
               <TouchableOpacity
-                className={`mt-3 rounded-lg py-3 items-center ${busy === 'pre-ppt' ? 'bg-blue-300' : 'bg-blue-600'}`}
+                className={`mt-3 rounded-xl py-3 items-center ${busy === 'pre-ppt' ? 'bg-blue-300' : 'bg-blue-600'}`}
                 disabled={!!busy}
                 onPress={() => void handleGeneratePpt('pre-repair')}
               >
@@ -399,7 +440,7 @@ export default function SubmitStageScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                className={`mt-3 rounded-lg py-3 items-center ${busy === 'excel' ? 'bg-indigo-300' : 'bg-indigo-600'}`}
+                className={`mt-3 rounded-xl py-3 items-center ${busy === 'excel' ? 'bg-indigo-300' : 'bg-indigo-600'}`}
                 disabled={!!busy}
                 onPress={() => void handleExportEstimate()}
               >
@@ -407,35 +448,49 @@ export default function SubmitStageScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                className={`mt-3 rounded-lg py-3 items-center ${busy === 'compose-send' ? 'bg-emerald-300' : 'bg-emerald-600'}`}
-                disabled={!!busy}
+                className={`mt-3 rounded-xl py-3 items-center ${(busy === 'compose-send' || !composeReady) ? 'bg-emerald-300' : 'bg-emerald-600'}`}
+                disabled={!!busy || !composeReady}
                 onPress={() => void handleComposeAndSend()}
               >
                 <Text className="text-white font-semibold">{busy === 'compose-send' ? 'Sending...' : 'Compose & Send (Set Submitted)'}</Text>
               </TouchableOpacity>
+              {!composeReady ? (
+                <Text className="text-xs text-amber-700 mt-2">Upload Pre-Repair PPT, Estimate Excel, and Walkaround Video first.</Text>
+              ) : null}
             </View>
 
-            <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-              <Text className="text-base font-semibold text-gray-900">Final Submit</Text>
+            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
+              <Text className="text-base font-semibold text-slate-900">Final Submit</Text>
+              <Text className="text-xs text-slate-500 mt-1">Post-repair file generation and final warranty submission.</Text>
 
               <TouchableOpacity
-                className={`mt-3 rounded-lg py-3 items-center ${busy === 'post-ppt' ? 'bg-violet-300' : 'bg-violet-600'}`}
-                disabled={!!busy}
+                className={`mt-3 rounded-xl py-3 items-center ${(busy === 'post-ppt' || !postRepairPptReady) ? 'bg-violet-300' : 'bg-violet-600'}`}
+                disabled={!!busy || !postRepairPptReady}
                 onPress={() => void handleGeneratePpt('post-repair')}
               >
                 <Text className="text-white font-semibold">{busy === 'post-ppt' ? 'Generating...' : 'Generate Post-Repair PPT'}</Text>
               </TouchableOpacity>
+              {!postRepairPptReady ? (
+                <Text className="text-xs text-amber-700 mt-2">
+                  {selectedPanelIds.length === 0
+                    ? 'Select and upload panels in Damage stage before generating Post-Repair PPT.'
+                    : `${missingPostRepairPanelsCount} selected panel${missingPostRepairPanelsCount === 1 ? '' : 's'} still need post-repair photos.`}
+                </Text>
+              ) : null}
 
               <TouchableOpacity
-                className={`mt-3 rounded-lg py-3 items-center ${busy === 'submit-claim' ? 'bg-slate-400' : 'bg-slate-700'}`}
-                disabled={!!busy}
+                className={`mt-3 rounded-xl py-3 items-center ${(busy === 'submit-claim' || !submitReady) ? 'bg-slate-400' : 'bg-slate-800'}`}
+                disabled={!!busy || !submitReady}
                 onPress={() => void handleSubmitClaim()}
               >
                 <Text className="text-white font-semibold">{busy === 'submit-claim' ? 'Submitting...' : 'Submit Claim (Set Completed)'}</Text>
               </TouchableOpacity>
+              {!submitReady ? (
+                <Text className="text-xs text-amber-700 mt-2">Generate Post-Repair PPT first.</Text>
+              ) : null}
             </View>
 
-            <View className="flex-row">
+            <View className="flex-row pb-2">
               <TouchableOpacity
                 className="flex-1 mr-2 rounded-lg border border-gray-300 bg-white py-3 items-center"
                 onPress={() => {

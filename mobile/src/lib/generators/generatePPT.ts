@@ -13,6 +13,7 @@
 import PptxGenJS from 'pptxgenjs'
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { getSupabaseBaseUrl } from '../env'
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ async function toDataURL(storagePath: string, driveFileId: string | null): Promi
           console.warn('[PPT] No auth token available, falling back to Supabase Storage')
         } else {
           console.log('[PPT] Auth token obtained, calling drive-file-export edge function')
-          const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
+          const SUPABASE_URL = getSupabaseBaseUrl()
           const res = await fetch(`${SUPABASE_URL}/functions/v1/drive-file-export`, {
             method: 'POST',
             headers: {
@@ -198,34 +199,17 @@ async function toDataURL(storagePath: string, driveFileId: string | null): Promi
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchAll(jobCardId: string) {
-  // Get auth token for edge function call
-  const { data: auth } = await supabase.auth.getSession()
-  const token = auth?.session?.access_token
-
-  if (!token) {
-    throw new Error('Not authenticated. Please log in again.')
-  }
-
   // Fetch summary and estimate via edge function (bypasses RLS)
   const estimateDataPromise = (async () => {
-    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
-    if (!SUPABASE_URL) throw new Error('Supabase URL not configured')
-
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-export-data`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ jobCardId }),
+    const { data, error } = await supabase.functions.invoke('estimate-export-data', {
+      body: { jobCardId },
     })
 
-    if (!res.ok) {
-      const errData = await res.json()
-      throw new Error(errData.error ?? `Failed to fetch estimate data (HTTP ${res.status})`)
+    if (error) {
+      throw new Error(error.message || 'Failed to fetch estimate data')
     }
 
-    const result = await res.json()
+    const result = data ?? {}
     return { summary: result.jc, estRows: result.rows }
   })()
 
@@ -619,7 +603,7 @@ export async function generateRepairPPT(
   jobCardId: string,
   type: 'pre-repair' | 'post-repair',
   options?: { download?: boolean; fileName?: string },
-): Promise<Blob> {
+): Promise<ArrayBuffer> {
   console.log(`[PPT] Starting PPT generation for job card: ${jobCardId}, type: ${type}`)
   
   // 1. Fetch all Supabase data in parallel
@@ -702,18 +686,22 @@ export async function generateRepairPPT(
   console.log('[PPT] Adding summary slide...')
   addSummarySlide(prs, summary, estRows)
 
-  // 5. Build PPT blob
+  // 5. Build PPT binary in a mobile-safe format
   console.log('[PPT] Generating PPTX file...')
-  const blob = await prs.write({ outputType: 'blob' }) as Blob
-  console.log(`[PPT] ✓ PPTX generated, size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`)
+  const pptArrayBuffer = await prs.write({ outputType: 'arraybuffer' }) as ArrayBuffer
+  console.log(`[PPT] ✓ PPTX generated, size: ${(pptArrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`)
 
   // 6. Optional browser download
   const slug     = (summary.reg_number ?? jobCardId).replace(/\s+/g, '_')
   const defaultName = `PPT_${slug}.pptx`
   const fileName = options?.fileName || defaultName
 
-  if (options?.download !== false) {
+  if (options?.download !== false && typeof document !== 'undefined') {
     console.log(`[PPT] Downloading as: ${fileName}`)
+    const blob = new Blob(
+      [new Uint8Array(pptArrayBuffer)],
+      { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    )
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -726,5 +714,5 @@ export async function generateRepairPPT(
   }
 
   console.log('[PPT] ✓ PPT generation complete')
-  return blob
+  return pptArrayBuffer
 }

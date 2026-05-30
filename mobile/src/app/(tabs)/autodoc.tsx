@@ -17,6 +17,7 @@ import {
 } from '../../lib/api/jobCards'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { useFocusEffect } from '@react-navigation/native'
 
 type WorkflowStage =
   | 'active_intake'
@@ -189,6 +190,13 @@ export default function AutoDocScreen() {
     setLoading(true)
     void loadJobCards()
   }, [authLoading, loadJobCards])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (authLoading) return
+      void loadJobCards()
+    }, [authLoading, loadJobCards]),
+  )
 
   useEffect(() => {
     let mounted = true

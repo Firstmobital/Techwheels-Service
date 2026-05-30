@@ -201,6 +201,10 @@ export default function DamageStageScreen() {
     )
   }, [selectedPanelRows])
 
+  const selectedPanelsWithPreRepair = useMemo(() => {
+    return selectedPanelRows.filter((panel) => panel.preRepairCount > 0).length
+  }, [selectedPanelRows])
+
   const stageCountForPanel = (panel: PanelDamageSummary, stage: DamageStage): number => {
     if (stage === 'pre-repair') return panel.preRepairCount
     if (stage === 'under-repair') return panel.underRepairCount
@@ -254,7 +258,7 @@ export default function DamageStageScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Damage Stage' }} />
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
+      <ScrollView className="flex-1 bg-slate-100" contentContainerStyle={{ padding: 14, paddingBottom: 28 }}>
         <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="damage" />
 
         {loading ? (
@@ -263,21 +267,43 @@ export default function DamageStageScreen() {
             <Text className="text-sm text-gray-600 mt-3">Loading damage workflow...</Text>
           </View>
         ) : error ? (
-          <View className="bg-white border border-red-200 rounded-xl p-5">
+          <View className="bg-white border border-red-200 rounded-2xl p-5 mt-3">
             <Text className="text-lg font-semibold text-red-700">Unable to load damage stage</Text>
             <Text className="text-sm text-red-600 mt-1">{error}</Text>
-            <TouchableOpacity className="mt-4 bg-blue-600 rounded-lg py-3 items-center" onPress={loadDamage}>
+            <TouchableOpacity className="mt-4 bg-blue-600 rounded-xl py-3 items-center" onPress={loadDamage}>
               <Text className="text-white font-semibold">Retry</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
+            <View className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <Text className="text-[11px] uppercase tracking-wide text-blue-700 font-semibold">Damage Overview</Text>
+              <Text className="text-xl font-bold text-slate-900 mt-1">{selectedPanels.length} Panels Selected</Text>
+              <Text className="text-xs text-slate-600 mt-1">
+                Pre-repair captured for {selectedPanelsWithPreRepair} of {selectedPanels.length} selected panels.
+              </Text>
+              <View className="mt-3 flex-row">
+                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 mr-2">
+                  <Text className="text-[11px] text-slate-500">Pre</Text>
+                  <Text className="text-base font-semibold text-slate-900">{totals.pre}</Text>
+                </View>
+                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 ml-2 mr-2">
+                  <Text className="text-[11px] text-slate-500">Under</Text>
+                  <Text className="text-base font-semibold text-slate-900">{totals.under}</Text>
+                </View>
+                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 ml-2">
+                  <Text className="text-[11px] text-slate-500">Post</Text>
+                  <Text className="text-base font-semibold text-slate-900">{totals.post}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
               <View className="flex-row items-start justify-between">
-                <Text className="text-base font-semibold text-gray-900">Select Affected Panels</Text>
+                <Text className="text-base font-semibold text-slate-900">Select Affected Panels</Text>
                 {syncingPanels ? <Text className="text-xs text-blue-700">Syncing...</Text> : null}
               </View>
-              <Text className="text-xs text-gray-500 mt-1">Tap to select or deselect panel cards for this job card.</Text>
+              <Text className="text-xs text-slate-500 mt-1">Tap cards to select or deselect panels for this job card.</Text>
               <Text className="text-xs text-blue-700 mt-1">Source: {panelSourceNote}</Text>
 
               <View className="mt-3 flex-row flex-wrap">
@@ -287,17 +313,17 @@ export default function DamageStageScreen() {
                     <TouchableOpacity
                       key={panelName}
                       disabled={syncingPanels}
-                      className={`mr-2 mb-2 rounded-lg border px-3 py-3 ${active ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-white'}`}
+                      className={`mr-2 mb-2 rounded-xl border px-3 py-3 ${active ? 'border-blue-300 bg-blue-50' : 'border-slate-300 bg-white'}`}
                       onPress={() => { void togglePanel(panelName) }}
                     >
-                      <Text className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-gray-700'}`}>{panelName}</Text>
+                      <Text className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>{panelName}</Text>
                     </TouchableOpacity>
                   )
                 })}
               </View>
 
               {selectedPanels.length === 0 ? (
-                <View className="mt-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-3">
+                <View className="mt-2 rounded-xl border border-dashed border-amber-300 bg-amber-50 px-3 py-3">
                   <Text className="text-sm text-amber-800">Select at least one panel to unlock stage-wise upload cards.</Text>
                 </View>
               ) : (
@@ -307,8 +333,8 @@ export default function DamageStageScreen() {
 
             {selectedPanels.length > 0 && activeStage ? (
               <>
-                <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-                  <Text className="text-xs uppercase tracking-wide text-gray-500">Select Repair Stage</Text>
+                <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
+                  <Text className="text-xs uppercase tracking-wide text-slate-500">Select Repair Stage</Text>
                   <View className="mt-3 flex-row">
                     {DAMAGE_STAGES.map((stage, index) => {
                       const active = activeStage === stage.key
@@ -316,7 +342,7 @@ export default function DamageStageScreen() {
                       return (
                         <TouchableOpacity
                           key={stage.key}
-                          className={`flex-1 rounded-lg border px-3 py-3 ${stage.cardClass} ${active ? 'ring-2 ring-blue-500' : ''} ${index < DAMAGE_STAGES.length - 1 ? 'mr-2' : ''}`}
+                          className={`flex-1 rounded-xl border px-3 py-3 ${stage.cardClass} ${active ? 'border-blue-500' : ''} ${index < DAMAGE_STAGES.length - 1 ? 'mr-2' : ''}`}
                           onPress={() => setActiveStage(stage.key)}
                         >
                           <Text className={`text-[11px] font-semibold uppercase ${stage.valueClass}`}>{stage.label}</Text>
@@ -327,29 +353,29 @@ export default function DamageStageScreen() {
                   </View>
                 </View>
 
-                <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-                  <Text className="text-base font-semibold text-gray-900">{DAMAGE_STAGES.find((s) => s.key === activeStage)?.label} Photo Upload</Text>
-                  <Text className="text-xs text-gray-500 mt-1">Upload photos stage-wise for selected panels.</Text>
+                <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
+                  <Text className="text-base font-semibold text-slate-900">{DAMAGE_STAGES.find((s) => s.key === activeStage)?.label} Photo Upload</Text>
+                  <Text className="text-xs text-slate-500 mt-1">Upload photos stage-wise for selected panels.</Text>
 
                   <View className="mt-3">
                     {selectedPanelRows.map((panel) => {
                       const count = stageCountForPanel(panel, activeStage)
                       return (
-                        <View key={panel.id} className="rounded-lg border border-gray-200 px-3 py-3 mb-2">
+                        <View key={panel.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 mb-2">
                           <View className="flex-row items-center justify-between">
                             <View className="flex-1 pr-2">
-                              <Text className="text-sm font-semibold text-gray-900">{panel.panelName}</Text>
-                              <Text className="text-xs text-gray-600 mt-1">{count} photo{count === 1 ? '' : 's'} in this stage</Text>
+                              <Text className="text-sm font-semibold text-slate-900">{panel.panelName}</Text>
+                              <Text className="text-xs text-slate-600 mt-1">{count} photo{count === 1 ? '' : 's'} in this stage</Text>
                             </View>
                             <View className="flex-row">
                               <TouchableOpacity
-                                className="rounded-md border border-blue-300 bg-blue-50 px-3 py-2 mr-2"
+                                className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 mr-2"
                                 onPress={() => goToCapture(panel, activeStage)}
                               >
                                 <Text className="text-xs font-semibold text-blue-700">Upload</Text>
                               </TouchableOpacity>
                               <TouchableOpacity
-                                className="rounded-md border border-gray-300 bg-white px-3 py-2"
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2"
                                 onPress={() => {
                                   if (!jobCardId) return
                                   router.push({
@@ -365,7 +391,7 @@ export default function DamageStageScreen() {
                                   })
                                 }}
                               >
-                                <Text className="text-xs font-semibold text-gray-700">View</Text>
+                                <Text className="text-xs font-semibold text-slate-700">View</Text>
                               </TouchableOpacity>
                             </View>
                           </View>
@@ -377,15 +403,22 @@ export default function DamageStageScreen() {
               </>
             ) : null}
 
-            <TouchableOpacity
-              className="rounded-lg py-4 items-center bg-indigo-600"
-              onPress={() => {
-                if (!jobCardId) return
-                router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
-              }}
-            >
-              <Text className="text-white font-semibold">Next: Estimate Stage</Text>
-            </TouchableOpacity>
+            <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
+              <Text className="text-xs uppercase tracking-wide text-slate-500">Ready For Estimate</Text>
+              <Text className="text-sm text-slate-700 mt-1">
+                Estimate cards are auto-created from selected panels to match the web workflow.
+              </Text>
+              <TouchableOpacity
+                className={`mt-3 rounded-xl py-4 items-center ${selectedPanels.length === 0 ? 'bg-indigo-300' : 'bg-indigo-600'}`}
+                disabled={selectedPanels.length === 0}
+                onPress={() => {
+                  if (!jobCardId) return
+                  router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
+                }}
+              >
+                <Text className="text-white font-semibold">Next: Estimate Stage</Text>
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </ScrollView>

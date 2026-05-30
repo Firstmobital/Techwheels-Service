@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { getSupabaseBaseUrl } from '../env'
 import { resolveExistingJobCardId, type JobReferenceHints } from './jobCards'
 import { fail, ok, type ApiResult, type DocType, type DocumentInsert, type DocumentRow } from './types'
 
@@ -54,7 +55,7 @@ export async function invokeUniversalDriveUpload(input: {
   resourceType?: 'document' | 'panel_photo'
   bucketId?: string
 }): Promise<ApiResult<UniversalDriveResponse>> {
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+  const supabaseUrl = getSupabaseBaseUrl()
   const sessionRes = await supabase.auth.getSession()
   const token = sessionRes.data.session?.access_token
 
@@ -205,7 +206,7 @@ export async function upsertDocumentByType(input: {
 export async function uploadDocumentFile(input: {
   jobCardId: string
   docType: DocType
-  file: Blob
+  file: Blob | ArrayBuffer | Uint8Array
   fileName: string
   contentType?: string
   gpsLat?: number | null
@@ -213,6 +214,23 @@ export async function uploadDocumentFile(input: {
   gpsCity?: string | null
   capturedAt?: string | null
 }): Promise<ApiResult<DocumentRow>> {
+  const fileSizeBytes = (() => {
+    if (input.file instanceof ArrayBuffer) return input.file.byteLength
+    if (input.file instanceof Uint8Array) return input.file.byteLength
+    return Number((input.file as Blob).size ?? 0)
+  })()
+
+  const inferredType = (() => {
+    if (typeof input.contentType === 'string' && input.contentType.trim().length > 0) {
+      return input.contentType.trim()
+    }
+    const blobType = (input.file as Blob).type
+    if (typeof blobType === 'string' && blobType.trim().length > 0) {
+      return blobType.trim()
+    }
+    return 'application/octet-stream'
+  })()
+
   const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
   const resolvedJobCardId = resolvedIdRes.data
@@ -221,8 +239,8 @@ export async function uploadDocumentFile(input: {
     jobCardId: resolvedJobCardId,
     docType: input.docType,
     fileName: input.fileName,
-    fileType: input.file.type,
-    fileSizeBytes: input.file.size,
+    fileType: inferredType,
+    fileSizeBytes,
   })
   const cleanName = (input.fileName.trim() || `${input.docType}.bin`)
     .replace(/\s+/g, '_')
@@ -245,11 +263,11 @@ export async function uploadDocumentFile(input: {
     dealerCode,
   })
 
-  const effectiveContentType = input.contentType || input.file.type || 'application/octet-stream'
+  const effectiveContentType = inferredType
 
   const { error: uploadError } = await supabase.storage
     .from(AUTODOC_BUCKET)
-    .upload(storagePath, input.file, {
+    .upload(storagePath, input.file as any, {
       contentType: effectiveContentType,
       upsert: false,
     })
@@ -270,10 +288,10 @@ export async function uploadDocumentFile(input: {
     storagePath,
   })
 
-  const sizeMb = Number((input.file.size / (1024 * 1024)).toFixed(3))
+  const sizeMb = Number((fileSizeBytes / (1024 * 1024)).toFixed(3))
 
   // Prefer service-role edge function to avoid client-side RLS failures on documents table.
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+  const supabaseUrl = getSupabaseBaseUrl()
   const token = sessionRes.session?.access_token
   if (supabaseUrl && token) {
     try {

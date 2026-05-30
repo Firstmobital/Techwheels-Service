@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { getRcLookupFunctionEnv } from '../env'
 import { fail, normalizeRegNumber, ok, type ApiResult } from './types'
 
 export type RtoCacheLookupRow = {
@@ -81,7 +82,7 @@ export async function fetchVehicleFromRcLookup(reference: string): Promise<ApiRe
   console.log('[RC-LOOKUP] normalized input:', reference, 'result:', normalizedVehicleNumber)
   if (!normalizedVehicleNumber) return fail('Registration number is required for RC lookup')
 
-  const rcLookupFunctionName = ((import.meta.env.VITE_RC_LOOKUP_FUNCTION_NAME as string | undefined) || 'invoke-ocean025').trim()
+  const rcLookupFunctionName = getRcLookupFunctionEnv().trim()
   console.log('[RC-LOOKUP] Calling edge function:', rcLookupFunctionName)
 
   try {

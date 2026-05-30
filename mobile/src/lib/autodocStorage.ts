@@ -1,3 +1,3 @@
-const envBucket = (import.meta.env.VITE_SUPABASE_AUTODOC_BUCKET as string | undefined)?.trim()
+import { getAutodocBucketEnv } from './env'
 
-export const AUTODOC_BUCKET = envBucket && envBucket.length > 0 ? envBucket : 'autodoc'
+export const AUTODOC_BUCKET = getAutodocBucketEnv()
