@@ -209,7 +209,14 @@ export async function uploadServiceAdvisorEstimate(
 ): Promise<ApiResult<ReceptionEntryRow>> {
   const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
   const safeName = sanitizeFileNamePart(file.name || `estimate.${extension}`)
-  const storagePath = `service-advisor-estimates/${id}/${Date.now()}_${safeName}`
+  const sessionForPath = await supabase.auth.getSession()
+  const user = sessionForPath.data.session?.user
+  const dealerCode = String(
+    user?.user_metadata?.dealer_code
+    ?? user?.app_metadata?.dealer_code
+    ?? 'unknown',
+  ).trim() || 'unknown'
+  const storagePath = `${dealerCode}/service-advisor-estimates/${id}/${Date.now()}_${safeName}`
 
   const uploadRes = await supabase.storage
     .from(AUTODOC_BUCKET)
