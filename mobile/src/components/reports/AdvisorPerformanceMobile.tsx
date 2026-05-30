@@ -14,7 +14,7 @@ type SourceTable = 'service_vas_jc_data' | 'job_card_closed_data'
 interface EmployeeOption {
   employee_code: string
   employee_name: string
-  rote: string | null
+  role: string | null
 }
 
 interface ReportRow {
@@ -52,7 +52,7 @@ export default function AdvisorPerformanceMobile({ branch, dateFilter }: Props) 
     const loadEmployees = async () => {
       const { data, error: fetchError } = await supabase
         .from('employee_master')
-        .select('employee_code, employee_name, rote')
+        .select('employee_code, employee_name, role')
         .order('employee_code', { ascending: true })
 
       if (!active) return
@@ -252,7 +252,7 @@ export default function AdvisorPerformanceMobile({ branch, dateFilter }: Props) 
         {selectedEmployee ? (
           <Text className="text-[11px] text-slate-600 mt-1">
             Selected: {selectedEmployee.employee_code} - {selectedEmployee.employee_name}
-            {selectedEmployee.rote ? ` (${selectedEmployee.rote})` : ''}
+            {selectedEmployee.role ? ` (${selectedEmployee.role})` : ''}
           </Text>
         ) : (
           <Text className="text-[11px] text-slate-600 mt-1">Selected: all employees</Text>

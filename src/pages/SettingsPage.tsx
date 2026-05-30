@@ -17,7 +17,7 @@ interface EmployeeRow {
   location: string | null
   department: string | null
   fuel_type: string | null
-  rote: string | null
+  role: string | null
 }
 
 interface MappingIssueRow {
@@ -39,7 +39,7 @@ interface EmployeeUploadRow {
   location: string | null
   department: string | null
   fuel_type: string | null
-  rote: string | null
+  role: string | null
 }
 
 interface RateUploadRow {
@@ -106,9 +106,9 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
           }
         }
 
-        // Optional headers for fuel_type and rote.
+        // Optional headers for fuel_type and role.
         const fuelTypeHeader = normalizedToOriginal.get('fuel type') || normalizedToOriginal.get('fuel_type')
-        const roteHeader = normalizedToOriginal.get('rote') || normalizedToOriginal.get('role')
+        const roleHeader = normalizedToOriginal.get('role') || normalizedToOriginal.get('rote')
 
         if (missingHeaders.length > 0) {
           reject(new Error(`Missing required headers: ${missingHeaders.join(', ')}`))
@@ -122,7 +122,7 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
             const location = String(row[resolvedHeaders.location] ?? '').trim()
             const department = String(row[resolvedHeaders.department] ?? '').trim()
             const fuelType = fuelTypeHeader ? String(row[fuelTypeHeader] ?? '').trim() : ''
-            const rote = roteHeader ? String(row[roteHeader] ?? '').trim() : ''
+            const role = roleHeader ? String(row[roleHeader] ?? '').trim() : ''
 
             if (!code || !name) {
               return null
@@ -134,7 +134,7 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
               location: location || null,
               department: department || null,
               fuel_type: fuelType || null,
-              rote: rote || null,
+              role: role || null,
             }
           })
           .filter((row): row is EmployeeUploadRow => row !== null)
@@ -268,7 +268,7 @@ export default function SettingsPage() {
     location: '',
     department: '',
     fuel_type: '',
-    rote: '',
+    role: '',
   })
 
   const handleExportEmployees = useCallback(() => {
@@ -283,7 +283,7 @@ export default function SettingsPage() {
       Location: emp.location || '',
       Department: emp.department || '',
       'Fuel Type': emp.fuel_type || '',
-      Rote: emp.rote || '',
+      Role: emp.role || '',
     }))
 
     const worksheet = XLSX.utils.json_to_sheet(exportData)
@@ -379,7 +379,7 @@ export default function SettingsPage() {
     setLoadingEmployees(true)
     const { data, error: fetchError } = await supabase
       .from('employee_master')
-      .select('id, employee_code, employee_name, location, department, fuel_type, rote')
+      .select('id, employee_code, employee_name, location, department, fuel_type, role')
       .order('employee_code', { ascending: true })
 
     if (fetchError) {
@@ -955,7 +955,7 @@ export default function SettingsPage() {
       location: employee.location?.trim() || null,
       department: employee.department?.trim() || null,
       fuel_type: employee.fuel_type?.trim() || null,
-      rote: employee.rote?.trim() || null,
+      role: employee.role?.trim() || null,
     }
 
     if (!payload.employee_code || !payload.employee_name) {
@@ -990,7 +990,7 @@ export default function SettingsPage() {
       location: newEmployee.location.trim() || null,
       department: newEmployee.department.trim() || null,
       fuel_type: newEmployee.fuel_type.trim() || getDefaultFuelType(newEmployee.employee_code.trim()) || null,
-      rote: newEmployee.rote.trim() || null,
+      role: newEmployee.role.trim() || null,
     }
 
     if (!payload.employee_code || !payload.employee_name) {
@@ -1007,7 +1007,7 @@ export default function SettingsPage() {
       return
     }
 
-    setNewEmployee({ employee_code: '', employee_name: '', location: '', department: '', fuel_type: '', rote: '' })
+    setNewEmployee({ employee_code: '', employee_name: '', location: '', department: '', fuel_type: '', role: '' })
     setMessage(`Added ${payload.employee_code}.`)
     await fetchEmployees()
   }, [fetchEmployees, newEmployee])
@@ -1160,7 +1160,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Employee Master</h2>
-              <p className="mt-0.5 text-xs text-gray-500">Expected headers: SA CODE, SA NAME, location, department. Optional: Fuel Type, Rote.</p>
+              <p className="mt-0.5 text-xs text-gray-500">Expected headers: SA CODE, SA NAME, location, department. Optional: Fuel Type, Role.</p>
             </div>
             <div className="flex gap-2">
               <button
@@ -1227,9 +1227,9 @@ export default function SettingsPage() {
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
               <input
-                value={newEmployee.rote}
-                onChange={(event) => setNewEmployee((prev) => ({ ...prev, rote: event.target.value }))}
-                placeholder="Rote"
+                value={newEmployee.role}
+                onChange={(event) => setNewEmployee((prev) => ({ ...prev, role: event.target.value }))}
+                placeholder="Role"
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
               <div className="flex items-center">
@@ -1252,7 +1252,7 @@ export default function SettingsPage() {
                     <th className="px-3 py-2 font-semibold">Location</th>
                     <th className="px-3 py-2 font-semibold">Department</th>
                     <th className="px-3 py-2 font-semibold">Fuel Type</th>
-                    <th className="px-3 py-2 font-semibold">Rote</th>
+                    <th className="px-3 py-2 font-semibold">Role</th>
                     <th className="px-3 py-2 font-semibold">Action</th>
                   </tr>
                 </thead>
@@ -1346,17 +1346,17 @@ export default function SettingsPage() {
                         </td>
                         <td className="px-3 py-2">
                           <input
-                            value={employee.rote ?? ''}
+                            value={employee.role ?? ''}
                             disabled={editingEmployeeId !== employee.id}
                             onChange={(event) => {
                               const value = event.target.value
                               setEmployees((prev) =>
                                 prev.map((row) =>
-                                  row.id === employee.id ? { ...row, rote: value } : row,
+                                  row.id === employee.id ? { ...row, role: value } : row,
                                 ),
                               )
                             }}
-                            placeholder="Rote"
+                            placeholder="Role"
                             className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
                           />
                         </td>

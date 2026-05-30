@@ -1,5 +1,5 @@
--- Add rote column to employee master for role-like tagging and dropdown usage.
+-- Add role column to employee master for role assignment, RBAC mapping, and dropdown usage.
 alter table if exists public.employee_master
-  add column if not exists rote text;
+  add column if not exists role text;
 
-comment on column public.employee_master.rote is 'Rote label for employee assignment, RBAC mapping, and dropdown filtering.';
+comment on column public.employee_master.role is 'Role label for employee assignment, RBAC mapping, and dropdown filtering.';

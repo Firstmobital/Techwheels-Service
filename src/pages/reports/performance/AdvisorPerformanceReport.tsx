@@ -11,7 +11,7 @@ type SourceTable = 'service_vas_jc_data' | 'job_card_closed_data'
 interface EmployeeOption {
   employee_code: string
   employee_name: string
-  rote: string | null
+  role: string | null
 }
 
 interface ReportRow {
@@ -48,7 +48,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
   const loadEmployees = useCallback(async () => {
     const { data, error: fetchError } = await supabase
       .from('employee_master')
-      .select('employee_code, employee_name, rote')
+      .select('employee_code, employee_name, role')
       .order('employee_code', { ascending: true })
 
     if (fetchError) {
@@ -182,7 +182,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
               <option value="">All employees</option>
               {employees.map((employee) => (
                 <option key={employee.employee_code} value={employee.employee_code}>
-                  {employee.employee_code} - {employee.employee_name}{employee.rote ? ` (${employee.rote})` : ''}
+                  {employee.employee_code} - {employee.employee_name}{employee.role ? ` (${employee.role})` : ''}
                 </option>
               ))}
             </select>
@@ -192,7 +192,7 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
         <div className="mt-4 flex items-center gap-3">
           <span className="text-xs text-gray-500">
             {selectedEmployee
-              ? `Selected: ${selectedEmployee.employee_code} - ${selectedEmployee.employee_name}${selectedEmployee.rote ? ` (${selectedEmployee.rote})` : ''}`
+              ? `Selected: ${selectedEmployee.employee_code} - ${selectedEmployee.employee_name}${selectedEmployee.role ? ` (${selectedEmployee.role})` : ''}`
               : 'Selected: all employees'}
           </span>
         </div>
