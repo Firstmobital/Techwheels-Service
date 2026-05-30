@@ -146,6 +146,13 @@ function excelSerialToIso(value: number): string {
 function parseTimestamp(value: unknown, fieldName: string): string | null {
   if (value === null || value === undefined || value === '') return null
 
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new Error(`Invalid datetime value for ${fieldName}`)
+    }
+    return value.toISOString()
+  }
+
   if (typeof value === 'number') {
     return excelSerialToIso(value)
   }
@@ -153,13 +160,10 @@ function parseTimestamp(value: unknown, fieldName: string): string | null {
   const raw = String(value).trim()
   if (!raw) return null
 
-  const parsed = new Date(raw)
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString()
-  }
-
+  // Handle DD/MM/YY, DD/MM/YYYY, DD-MM-YY, DD-MM-YYYY,
+  // with optional time and optional AM/PM.
   const ddmmyyyy12h = raw.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i,
+    /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?\s*(AM|PM)?)?$/i,
   )
   if (ddmmyyyy12h) {
     const [, dStr, mStr, yStr, hStr = '0', minStr = '00', secStr = '00', meridiemRaw] = ddmmyyyy12h
@@ -183,11 +187,49 @@ function parseTimestamp(value: unknown, fieldName: string): string | null {
     return date.toISOString()
   }
 
+  // Handle YYYY-MM-DD with optional time as a UTC wall-clock value
+  // so values stay identical to the sheet when viewed in UTC.
+  const ymdHms = raw.match(
+    /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?)?$/,
+  )
+  if (ymdHms) {
+    const [, yStr, mStr, dStr, hStr = '0', minStr = '00', secStr = '00'] = ymdHms
+    const year = Number.parseInt(yStr, 10)
+    const month = Number.parseInt(mStr, 10)
+    const day = Number.parseInt(dStr, 10)
+    const hour = Number.parseInt(hStr, 10)
+    const minute = Number.parseInt(minStr, 10)
+    const second = Number.parseInt(secStr, 10)
+
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
+    if (Number.isNaN(date.getTime())) {
+      throw new Error(`Invalid datetime value for ${fieldName}: "${raw}"`)
+    }
+
+    return date.toISOString()
+  }
+
+  // ISO timestamps with timezone (Z or ±HH:MM)
+  // can safely use native Date parsing.
+  if (/z$|[+-]\d{2}:?\d{2}$/i.test(raw)) {
+    const parsedWithTz = new Date(raw)
+    if (!Number.isNaN(parsedWithTz.getTime())) {
+      return parsedWithTz.toISOString()
+    }
+  }
+
   throw new Error(`Invalid datetime value for ${fieldName}: "${raw}"`)
 }
 
 function parseDate(value: unknown, fieldName: string): string | null {
   if (value === null || value === undefined || value === '') return null
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new Error(`Invalid date value for ${fieldName}`)
+    }
+    return value.toISOString().slice(0, 10)
+  }
 
   if (typeof value === 'number') {
     return excelSerialToIso(value).slice(0, 10)
@@ -196,12 +238,7 @@ function parseDate(value: unknown, fieldName: string): string | null {
   const raw = String(value).trim()
   if (!raw) return null
 
-  const parsed = new Date(raw)
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10)
-  }
-
-  const ddmmyyyy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  const ddmmyyyy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
   if (ddmmyyyy) {
     const [, dStr, mStr, yStr] = ddmmyyyy
     const day = Number.parseInt(dStr, 10)
@@ -214,6 +251,27 @@ function parseDate(value: unknown, fieldName: string): string | null {
     }
 
     return date.toISOString().slice(0, 10)
+  }
+
+  const ymd = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (ymd) {
+    const [, yStr, mStr, dStr] = ymd
+    const year = Number.parseInt(yStr, 10)
+    const month = Number.parseInt(mStr, 10)
+    const day = Number.parseInt(dStr, 10)
+    const date = new Date(Date.UTC(year, month - 1, day))
+    if (Number.isNaN(date.getTime())) {
+      throw new Error(`Invalid date value for ${fieldName}: "${raw}"`)
+    }
+    return date.toISOString().slice(0, 10)
+  }
+
+  // ISO dates with timezone can use native parsing.
+  if (/z$|[+-]\d{2}:?\d{2}$/i.test(raw)) {
+    const parsed = new Date(raw)
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10)
+    }
   }
 
   throw new Error(`Invalid date value for ${fieldName}: "${raw}"`)
