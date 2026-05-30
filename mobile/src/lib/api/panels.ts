@@ -44,41 +44,93 @@ export async function deletePanel(panelId: string): Promise<ApiResult<true>> {
   return ok(true)
 }
 
-export async function syncDamagePanels(jobCardId: string, selectedPanels: string[]): Promise<ApiResult<{
+export async function syncDamagePanels(jobCardId: string, selectedPanels: string[], hints?: JobReferenceHints): Promise<ApiResult<{
   panels: PanelRow[]
   removedPanelNames: string[]
 }>> {
-  const resolvedIdRes = await resolveExistingJobCardId(jobCardId)
+  const resolvedIdRes = await resolveExistingJobCardId(jobCardId, hints)
   if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
 
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
-  if (!supabaseUrl) return fail('Supabase URL not configured')
+  const normalizedSelected = Array.from(new Set(selectedPanels.map((name) => name.trim()).filter((name) => name.length > 0)))
 
-  const session = await supabase.auth.getSession()
-  const token = session.data.session?.access_token
+  const directSyncFallback = async (): Promise<ApiResult<{
+    panels: PanelRow[]
+    removedPanelNames: string[]
+  }>> => {
+    const listRes = await listPanels(resolvedIdRes.data, hints)
+    if (listRes.error || !listRes.data) {
+      return fail(listRes.error ?? 'Unable to read existing panels')
+    }
 
-  let response: Response
-  try {
-    response = await fetch(`${supabaseUrl}/functions/v1/autodoc-sync-panels`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ jobCardId: resolvedIdRes.data, selectedPanels }),
+    const existingByName = new Map<string, PanelRow>()
+    for (const panel of listRes.data) {
+      const name = String(panel.panel_name ?? '').trim()
+      if (!name) continue
+      existingByName.set(name, panel)
+    }
+
+    const removedPanelNames: string[] = []
+    const removedPanelIds: string[] = []
+    for (const [name, panel] of existingByName.entries()) {
+      if (normalizedSelected.includes(name)) continue
+      removedPanelNames.push(name)
+      removedPanelIds.push(panel.id)
+    }
+
+    for (const panelId of removedPanelIds) {
+      const deletePhotosRes = await supabase
+        .from('panel_photos')
+        .delete()
+        .eq('job_card_id', resolvedIdRes.data)
+        .eq('panel_id', panelId)
+
+      if (deletePhotosRes.error) return fail(deletePhotosRes.error)
+
+      const deletePanelRes = await deletePanel(panelId)
+      if (deletePanelRes.error) return fail(deletePanelRes.error)
+    }
+
+    if (removedPanelNames.length > 0) {
+      const deleteEstimateRes = await supabase
+        .from('estimate_rows')
+        .delete()
+        .eq('job_card_id', resolvedIdRes.data)
+        .in('panel_name', removedPanelNames)
+
+      if (deleteEstimateRes.error) return fail(deleteEstimateRes.error)
+    }
+
+    for (const panelName of normalizedSelected) {
+      if (existingByName.has(panelName)) continue
+      const createRes = await createPanel(resolvedIdRes.data, panelName, hints)
+      if (createRes.error) return fail(createRes.error)
+    }
+
+    const finalRes = await listPanels(resolvedIdRes.data, hints)
+    if (finalRes.error || !finalRes.data) return fail(finalRes.error ?? 'Unable to fetch final panel list')
+
+    return ok({
+      panels: finalRes.data,
+      removedPanelNames,
     })
-  } catch (error) {
-    return fail(error, 'Unable to reach panel sync service')
   }
 
-  const result = await response.json().catch(() => ({})) as {
+  const invokeRes = await supabase.functions.invoke('autodoc-sync-panels', {
+    body: { jobCardId: resolvedIdRes.data, selectedPanels: normalizedSelected },
+  })
+
+  if (invokeRes.error) {
+    return directSyncFallback()
+  }
+
+  const result = (invokeRes.data ?? {}) as {
     error?: string
     panels?: PanelRow[]
     removedPanelNames?: string[]
   }
 
-  if (!response.ok) {
-    return fail(result.error ?? `HTTP ${response.status}`)
+  if (result.error) {
+    return directSyncFallback()
   }
 
   return ok({

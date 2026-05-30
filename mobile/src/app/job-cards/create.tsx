@@ -16,7 +16,7 @@ import DatePickerField from '../../components/common/DatePickerField'
 import ModelChipSelector from '../../components/common/ModelChipSelector'
 import NativeSelectField from '../../components/common/NativeSelectField'
 import { uploadDocumentFile } from '../../lib/api/documents'
-import { createJobCard, updateJobCard, resolveRegNumberFromReference } from '../../lib/api/jobCards'
+import { createJobCard, updateJobCard, updateJobCardStatus, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
 import { fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
 import { fetchVehicleFromRcLookup, type RtoCacheLookupRow } from '../../lib/api/rcLookup'
@@ -789,7 +789,12 @@ export default function CreateJobCardScreen() {
       Alert.alert('Updated', 'Job card draft updated successfully.', [
         {
           text: 'Open',
-          onPress: () => {
+          onPress: async () => {
+            const statusRes = await updateJobCardStatus(updateResult.data.id, 'in_work')
+            if (statusRes.error) {
+              Alert.alert('Status Update Failed', statusRes.error)
+              return
+            }
             router.replace(`/job-cards/${updateResult.data?.id}/damage`)
           },
         },
@@ -818,7 +823,12 @@ export default function CreateJobCardScreen() {
     Alert.alert('Created', 'Draft job card created successfully.', [
       {
         text: 'Open',
-        onPress: () => {
+        onPress: async () => {
+          const statusRes = await updateJobCardStatus(result.data.id, 'in_work')
+          if (statusRes.error) {
+            Alert.alert('Status Update Failed', statusRes.error)
+            return
+          }
           router.replace(`/job-cards/${result.data?.id}/damage`)
         },
       },

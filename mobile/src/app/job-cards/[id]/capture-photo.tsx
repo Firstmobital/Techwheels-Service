@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { logEvent } from '../../../utils/logger'
 import { getMobileLocation, isLocationPermissionGranted } from '../../../utils/locationService'
+import { getDealerContext } from '../../../lib/api/auth'
 import { createPanelPhoto, deletePanelPhoto } from '../../../lib/api/photos'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 import { supabase } from '../../../lib/supabase'
@@ -39,6 +40,7 @@ interface CaptureState {
   gpsCity: string | null
   gpsAccuracy: number | null
   capturedAt: string | null
+  gpsProcessing: boolean
   uploading: boolean
   error: string | null
 }
@@ -74,6 +76,7 @@ export default function CapturePhotoScreen() {
     gpsCity: null,
     gpsAccuracy: null,
     capturedAt: null,
+    gpsProcessing: false,
     uploading: false,
     error: null,
   })
@@ -141,6 +144,11 @@ export default function CapturePhotoScreen() {
         ...s,
         imageUri: asset.uri,
         imageMimeType: asset.type === 'image' ? 'image/jpeg' : 'image/jpeg',
+        gpsLat: null,
+        gpsLng: null,
+        gpsCity: null,
+        gpsAccuracy: null,
+        capturedAt: null,
       }))
 
       logEvent(
@@ -158,10 +166,10 @@ export default function CapturePhotoScreen() {
     }
   }
 
-  const captureGpsLocation = async () => {
+  const captureGpsLocation = async (attempt = 1) => {
     try {
       logEvent('gps_capture_start', { stage }, 'capture-photo')
-      setState((s) => ({ ...s, error: null }))
+      setState((s) => ({ ...s, error: null, gpsProcessing: true }))
 
       const location = await getMobileLocation()
 
@@ -171,6 +179,7 @@ export default function CapturePhotoScreen() {
         gpsLng: location.lng,
         gpsAccuracy: location.accuracy,
         capturedAt: new Date().toISOString(),
+        gpsProcessing: false,
       }))
 
       logEvent(
@@ -184,18 +193,27 @@ export default function CapturePhotoScreen() {
       )
     } catch (err: any) {
       const msg = err?.message || 'GPS capture failed'
-      setState((s) => ({ ...s, error: msg }))
-      logEvent('gps_capture_error', { error: msg }, 'capture-photo')
+      logEvent('gps_capture_error', { error: msg, attempt }, 'capture-photo')
 
-      // Ask if user wants to retry
-      Alert.alert('Location Error', msg, [
-        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
-        {
-          text: 'Retry',
-          onPress: () => captureGpsLocation(),
-          style: 'default',
-        },
-      ])
+      if (attempt < 3) {
+        setState((s) => ({
+          ...s,
+          error: 'Still fetching GPS location. Retrying automatically...',
+          gpsProcessing: true,
+        }))
+
+        setTimeout(() => {
+          void captureGpsLocation(attempt + 1)
+        }, 1200)
+        return
+      }
+
+      setState((s) => ({
+        ...s,
+        error: 'Unable to get GPS location. Please retake photo in open sky and try again.',
+        gpsProcessing: false,
+      }))
+      logEvent('gps_capture_error', { error: msg }, 'capture-photo')
     }
   }
 
@@ -227,9 +245,18 @@ export default function CapturePhotoScreen() {
           ? 'primer'
           : 'defect'
 
+      const dealerRes = await getDealerContext()
+      const dealerCode = dealerRes.data?.dealerCode
+        ?? String(process.env.EXPO_PUBLIC_DEFAULT_DEALER_CODE ?? '').trim().toUpperCase()
+        ?? 'UNKNOWN'
+
+      if (!dealerCode || dealerCode === 'UNKNOWN') {
+        throw new Error(dealerRes.error ?? 'Dealer code not available for storage path')
+      }
+
       const ext = (state.imageMimeType ?? '').toLowerCase().includes('png') ? 'png' : 'jpg'
       const fileName = `${stageToPhotoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
-      const storagePath = `mobile/${jobCardId}/${panelId}/${fileName}`
+      const storagePath = `${dealerCode}/${jobCardId}/${panelId}/${fileName}`
 
       const { error: uploadError } = await supabase.storage
         .from(AUTODOC_BUCKET)
@@ -343,7 +370,15 @@ export default function CapturePhotoScreen() {
             <View className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
               <Text className="text-sm font-semibold text-gray-900 mb-3">GPS Information</Text>
 
-              {state.gpsLat !== null && state.gpsLng !== null ? (
+              {state.gpsProcessing ? (
+                <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex-row items-center">
+                  <ActivityIndicator size="small" color="#a16207" />
+                  <View className="ml-3 flex-1">
+                    <Text className="text-sm font-semibold text-yellow-800">GPS tagging in progress...</Text>
+                    <Text className="text-xs text-yellow-700 mt-1">Please wait. Location is being captured automatically.</Text>
+                  </View>
+                </View>
+              ) : state.gpsLat !== null && state.gpsLng !== null ? (
                 <>
                   <View className="space-y-2">
                     <View className="flex-row justify-between">
@@ -365,22 +400,15 @@ export default function CapturePhotoScreen() {
                       </View>
                     )}
                   </View>
-                  <View className="border-t border-gray-200 mt-2 pt-2 flex-row gap-2">
-                    <TouchableOpacity
-                      className="flex-1 bg-gray-100 rounded py-2 items-center"
-                      onPress={captureGpsLocation}
-                    >
-                      <Text className="text-xs font-semibold text-gray-700">Recapture GPS</Text>
-                    </TouchableOpacity>
+                  <View className="border-t border-gray-200 mt-3 pt-3">
+                    <Text className="text-xs text-green-700 font-semibold">GPS location added successfully.</Text>
                   </View>
                 </>
               ) : (
-                <TouchableOpacity
-                  className="bg-yellow-100 border border-yellow-300 rounded py-3 items-center"
-                  onPress={captureGpsLocation}
-                >
-                  <Text className="text-sm font-semibold text-yellow-800">Capture GPS Location</Text>
-                </TouchableOpacity>
+                <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <Text className="text-sm font-semibold text-yellow-800">Waiting for GPS lock...</Text>
+                  <Text className="text-xs text-yellow-700 mt-1">Location capture runs automatically in the background.</Text>
+                </View>
               )}
             </View>
           )}
@@ -394,15 +422,20 @@ export default function CapturePhotoScreen() {
           )}
 
           {/* Action buttons */}
-          {state.imageUri && state.gpsLat !== null ? (
+          {state.imageUri ? (
             <View className="gap-3 mt-auto">
               <TouchableOpacity
-                disabled={state.uploading}
-                className={`${state.uploading ? 'bg-gray-400' : 'bg-green-600'} rounded-lg py-4 items-center`}
+                disabled={state.uploading || state.gpsProcessing || state.gpsLat === null || state.gpsLng === null}
+                className={`${state.uploading || state.gpsProcessing || state.gpsLat === null || state.gpsLng === null ? 'bg-gray-400' : 'bg-green-600'} rounded-lg py-4 items-center`}
                 onPress={handleUpload}
               >
                 {state.uploading ? (
                   <ActivityIndicator color="white" />
+                ) : state.gpsProcessing || state.gpsLat === null || state.gpsLng === null ? (
+                  <View className="flex-row items-center">
+                    <ActivityIndicator color="white" size="small" />
+                    <Text className="text-white font-semibold ml-2">Processing photo with GPS...</Text>
+                  </View>
                 ) : (
                   <Text className="text-white font-semibold">Upload Photo</Text>
                 )}

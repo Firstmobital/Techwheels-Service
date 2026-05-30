@@ -68,7 +68,7 @@ export default function PanelSelectorScreen() {
 
       const [panelsResult, photosResult, labelsResult] = await Promise.all([
         listPanels(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
-        listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+        listPanelPhotos(jobCardId),
         listActivePanelLabels(),
       ])
 

@@ -12,7 +12,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import DatePickerField from '../../../components/common/DatePickerField'
 import ModelChipSelector from '../../../components/common/ModelChipSelector'
 import NativeSelectField from '../../../components/common/NativeSelectField'
-import { getJobCardSummary, updateJobCard } from '../../../lib/api/jobCards'
+import { getJobCardSummary, updateJobCard, updateJobCardStatus } from '../../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../../lib/api/autodocRates'
 import { fetchVehicleByReg, upsertVehicle } from '../../../lib/api/vehicles'
 import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
@@ -255,6 +255,12 @@ export default function JobCardStageScreen() {
     }
 
     if (goToDamage) {
+      const statusRes = await updateJobCardStatus(jobCardId, 'in_work')
+      if (statusRes.error) {
+        Alert.alert('Status Update Failed', statusRes.error)
+        return
+      }
+
       router.push({
         pathname: '/job-cards/[id]/damage',
         params: { id: jobCardId, jcNumber: form.jcNumber, regNumber: form.regNumber },

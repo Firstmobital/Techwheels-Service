@@ -118,7 +118,7 @@ export default function JobCardEstimateScreen() {
     const [estimateRes, panelRes, photoRes, workflowRes] = await Promise.all([
       listEstimateRows(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       listPanels(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
-      listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listPanelPhotos(jobCardId),
       getAutoDocWorkflowOptions(),
     ])
 

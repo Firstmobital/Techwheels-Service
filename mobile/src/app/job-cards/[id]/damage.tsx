@@ -8,10 +8,13 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { getJobCardSummary } from '../../../lib/api/jobCards'
 import { listActivePanelLabels } from '../../../lib/api/autodocRates'
+import { getActiveModelRates } from '../../../lib/api/autodocRates'
 import { listPanels } from '../../../lib/api/panels'
 import { listPanelPhotos } from '../../../lib/api/photos'
 import { syncDamagePanels } from '../../../lib/api/panels'
+import { fetchVehicleByReg } from '../../../lib/api/vehicles'
 import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
 
 type Params = {
@@ -54,6 +57,8 @@ const DAMAGE_STAGES: Array<{ key: DamageStage; label: string; short: string; car
   },
 ]
 
+const DEFAULT_BP_CITY_CATEGORY = 'A'
+
 function uniqueNonEmpty(values: string[]): string[] {
   const seen = new Set<string>()
   const result: string[] = []
@@ -84,6 +89,7 @@ export default function DamageStageScreen() {
   const [selectedPanels, setSelectedPanels] = useState<string[]>([])
   const [activeStage, setActiveStage] = useState<DamageStage | null>(null)
   const [syncingPanels, setSyncingPanels] = useState(false)
+  const [panelSourceNote, setPanelSourceNote] = useState<string>('')
 
   const loadDamage = async () => {
     if (!jobCardId) {
@@ -95,10 +101,11 @@ export default function DamageStageScreen() {
     setLoading(true)
     setError(null)
 
-    const [panelRes, photoRes, panelMasterRes] = await Promise.all([
-      listPanels(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
-      listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+    const [panelRes, photoRes, panelMasterRes, jobRes] = await Promise.all([
+      listPanels(jobCardId),
+      listPanelPhotos(jobCardId),
       listActivePanelLabels(),
+      getJobCardSummary(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
     ])
 
     if (panelRes.error) {
@@ -137,14 +144,34 @@ export default function DamageStageScreen() {
       }
     })
 
-    setPanelRows(mapped)
-    const selected = mapped.map((row) => row.panelName)
-    setSelectedPanels(selected)
-
     const masterLabels = panelMasterRes.error || !panelMasterRes.data ? [] : panelMasterRes.data
-    setPanelOptions(uniqueNonEmpty([...masterLabels, ...selected]))
 
-    if (selected.length > 0) {
+    let effectiveOptions = uniqueNonEmpty(masterLabels)
+    setPanelSourceNote('All active panel master options')
+
+    const regFromJob = String(jobRes.data?.reg_number ?? '').trim()
+    if (regFromJob) {
+      const vehicleRes = await fetchVehicleByReg(regFromJob)
+      const modelName = String(vehicleRes.data?.model ?? jobRes.data?.model ?? '').trim()
+      const bpCityCategory = String(vehicleRes.data?.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY).trim()
+
+      if (modelName && bpCityCategory) {
+        const ratesRes = await getActiveModelRates({ cityCategory: bpCityCategory, modelName })
+        if (!ratesRes.error && ratesRes.data && ratesRes.data.rows.length > 0) {
+          effectiveOptions = uniqueNonEmpty(ratesRes.data.rows.map((row) => row.panelLabel))
+          setPanelSourceNote(`Model-wise rate card panels (${ratesRes.data.modelName} / ${bpCityCategory})`)
+        }
+      }
+    }
+
+    setPanelRows(mapped)
+    const selectedFromDb = mapped.map((row) => row.panelName)
+    const selectedFiltered = selectedFromDb.filter((name) => effectiveOptions.some((option) => option.toLowerCase() === name.toLowerCase()))
+
+    setSelectedPanels(selectedFiltered)
+    setPanelOptions(effectiveOptions)
+
+    if (selectedFiltered.length > 0) {
       setActiveStage((prev) => prev ?? 'pre-repair')
     } else {
       setActiveStage(null)
@@ -192,7 +219,10 @@ export default function DamageStageScreen() {
     if (next.length > 0 && !activeStage) setActiveStage('pre-repair')
 
     setSyncingPanels(true)
-    const syncRes = await syncDamagePanels(jobCardId, next)
+    const syncRes = await syncDamagePanels(jobCardId, next, {
+      jcNumber: jobCardNumberHint,
+      regNumber: regNumberHint,
+    })
     setSyncingPanels(false)
 
     if (syncRes.error) {
@@ -248,6 +278,7 @@ export default function DamageStageScreen() {
                 {syncingPanels ? <Text className="text-xs text-blue-700">Syncing...</Text> : null}
               </View>
               <Text className="text-xs text-gray-500 mt-1">Tap to select or deselect panel cards for this job card.</Text>
+              <Text className="text-xs text-blue-700 mt-1">Source: {panelSourceNote}</Text>
 
               <View className="mt-3 flex-row flex-wrap">
                 {panelOptions.map((panelName) => {

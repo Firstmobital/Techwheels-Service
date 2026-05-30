@@ -91,7 +91,7 @@ export default function SubmitStageScreen() {
       getJobCardSummary(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       listDocuments(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
       listEstimateRows(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
-      listPanelPhotos(jobCardId, { jcNumber: jobCardNumberHint, regNumber: regNumberHint }),
+      listPanelPhotos(jobCardId),
     ])
 
     const nonBlockingWarnings: string[] = []
