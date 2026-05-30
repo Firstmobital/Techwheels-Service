@@ -19,6 +19,8 @@ export interface ReceptionEntryRow {
   estimate_content_type: string | null
   estimate_uploaded_at: string | null
   estimate_uploaded_by: string | null
+  estimate_drive_url: string | null
+  estimate_drive_file_id: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -215,31 +217,39 @@ export async function uploadServiceAdvisorEstimate(
 
   if (uploadRes.error) return fail(uploadRes.error)
 
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+  const sessionRes = await supabase.auth.getSession()
+  const token = sessionRes.data.session?.access_token
+
+  if (!supabaseUrl || !token) return fail('No active session for Drive offload request')
+
+  const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      resource_type: 'reception_estimate',
+      bucket_id: AUTODOC_BUCKET,
+      object_name: storagePath,
+      reception_entry_id: id,
+      file_type: 'estimate',
+      file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
+    }),
+  })
+
+  const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+  if (!driveRes.ok || drivePayload?.error) {
+    return fail(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`)
+  }
+
   const { data, error } = await supabase
     .from('service_reception_entries')
-    .update({
-      estimate_storage_path: storagePath,
-      estimate_file_name: file.name,
-      estimate_content_type: file.type || null,
-      estimate_uploaded_at: new Date().toISOString(),
-      estimate_uploaded_by: null,
-    })
-    .eq('id', id)
     .select('*')
+    .eq('id', id)
     .single()
 
   if (error) return fail(error)
   return ok(data as ReceptionEntryRow)
-}
-
-export async function getServiceAdvisorEstimateSignedUrl(
-  storagePath: string,
-): Promise<ApiResult<string>> {
-  const { data, error } = await supabase.storage
-    .from(AUTODOC_BUCKET)
-    .createSignedUrl(storagePath, 3600)
-
-  if (error) return fail(error)
-  if (!data?.signedUrl) return fail('Unable to create signed URL')
-  return ok(data.signedUrl)
 }

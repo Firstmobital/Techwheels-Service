@@ -83,7 +83,8 @@ Fields based on shared reference:
   - estimate fields
 6. Add new page src/pages/ServiceAdvisorPage.tsx and route /service-advisor.
 7. Add sidebar nav item Service Advisor.
-8. Add estimate upload in SA page (any file type) to storage with signed URL preview.
+8. Add estimate upload in SA page (any file type) using universal-drive-upload only.
+9. Persist returned Drive URL and Drive File ID directly in service_reception_entries table.
 
 ## Execution Status
 - Phase 1: Completed (migration added)
@@ -96,6 +97,8 @@ Fields based on shared reference:
 ## Files Added/Updated for RECEPTION-001
 - supabase/migrations/20260530195500_create_reception_module.sql
 - supabase/migrations/20260530204000_add_service_advisor_module_and_reception_sa_controls.sql
+- supabase/migrations/20260530213000_service_advisor_estimate_drive_url_columns.sql
+- supabase/functions/universal-drive-upload/index.ts
 - src/lib/api/reception.ts
 - src/lib/api/index.ts
 - src/pages/ReceptionPage.tsx

@@ -2,14 +2,18 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
 
 type UploadBody = {
-  resource_type?: 'document' | 'panel_photo'
-  resourceType?: 'document' | 'panel_photo'
+  resource_type?: 'document' | 'panel_photo' | 'reception_estimate'
+  resourceType?: 'document' | 'panel_photo' | 'reception_estimate'
   bucket_id?: string
   bucketId?: string
   object_name?: string
   objectName?: string
   job_card_id?: string
   jobCardId?: string
+  reception_entry_id?: number | string
+  receptionEntryId?: number | string
+  resource_id?: number | string
+  resourceId?: number | string
   doc_type?: string
   docType?: string
   file_type?: string
@@ -54,15 +58,25 @@ function json(status: number, body: unknown): Response {
 }
 
 function normalizeBody(body: UploadBody) {
-  const resourceType = String(body.resource_type ?? body.resourceType ?? 'document').trim().toLowerCase() === 'panel_photo'
+  const rawResourceType = String(body.resource_type ?? body.resourceType ?? 'document').trim().toLowerCase()
+  const resourceType = rawResourceType === 'panel_photo'
     ? 'panel_photo'
-    : 'document'
+    : rawResourceType === 'reception_estimate'
+      ? 'reception_estimate'
+      : 'document'
   const bucketId = String(body.bucket_id ?? body.bucketId ?? 'autodoc').trim()
   const objectName = String(body.object_name ?? body.objectName ?? '').trim().replace(/^\/+/, '')
   const jobCardId = String(body.job_card_id ?? body.jobCardId ?? '').trim()
+  const receptionEntryId = String(
+    body.reception_entry_id
+    ?? body.receptionEntryId
+    ?? body.resource_id
+    ?? body.resourceId
+    ?? '',
+  ).trim()
   const fileType = String(body.file_type ?? body.fileType ?? body.doc_type ?? body.docType ?? '').trim()
   const fileSizeMb = Number(body.file_size_mb ?? body.fileSizeMb ?? 0)
-  return { resourceType, bucketId, objectName, jobCardId, fileType, fileSizeMb }
+  return { resourceType, bucketId, objectName, jobCardId, receptionEntryId, fileType, fileSizeMb }
 }
 
 function toYmd(input: string | null | undefined): string {
@@ -362,13 +376,16 @@ Deno.serve(async (req) => {
   try {
     const body = normalizeBody(await req.json() as UploadBody)
 
-    if (!body.jobCardId) {
+    if (body.resourceType !== 'reception_estimate' && !body.jobCardId) {
       return json(400, { ok: false, error: 'job_card_id is required', error_code: 'VALIDATION_ERROR' })
+    }
+    if (body.resourceType === 'reception_estimate' && !body.receptionEntryId) {
+      return json(400, { ok: false, error: 'reception_entry_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (!body.objectName) {
       return json(400, { ok: false, error: 'object_name is required', error_code: 'VALIDATION_ERROR' })
     }
-    if (!body.fileType) {
+    if (body.resourceType !== 'reception_estimate' && !body.fileType) {
       return json(400, {
         ok: false,
         error: 'file_type is required',
@@ -423,31 +440,33 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRole)
 
-    const { data: jobCard, error: jobCardErr } = await supabase
-      .from('job_cards')
-      .select('reg_number')
-      .eq('id', body.jobCardId)
-      .maybeSingle<{ reg_number: string | null }>()
-
-    if (jobCardErr) {
-      return json(500, { ok: false, error: jobCardErr.message, error_code: 'DB_ERROR' })
-    }
-
-    const registrationNo = (jobCard?.reg_number ?? '').trim()
-    if (!registrationNo) {
-      return json(400, {
-        ok: false,
-        error: 'Registration number not found for job card',
-        error_code: 'REGISTRATION_NOT_FOUND',
-      })
-    }
+    let registrationNo = ''
 
     let rowId = ''
     let rowCreatedAt: string | null = null
     let existingDriveFileId = ''
-    let effectiveFileType = body.fileType
+    let effectiveFileType = body.fileType || 'estimate'
 
     if (body.resourceType === 'document') {
+      const { data: jobCard, error: jobCardErr } = await supabase
+        .from('job_cards')
+        .select('reg_number')
+        .eq('id', body.jobCardId)
+        .maybeSingle<{ reg_number: string | null }>()
+
+      if (jobCardErr) {
+        return json(500, { ok: false, error: jobCardErr.message, error_code: 'DB_ERROR' })
+      }
+
+      registrationNo = (jobCard?.reg_number ?? '').trim()
+      if (!registrationNo) {
+        return json(400, {
+          ok: false,
+          error: 'Registration number not found for job card',
+          error_code: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+
       const { data: docRows, error: docQueryErr } = await supabase
         .from('documents')
         .select('id, created_at, drive_file_id, doc_type')
@@ -474,7 +493,26 @@ Deno.serve(async (req) => {
       rowCreatedAt = docRow.created_at
       existingDriveFileId = String(docRow.drive_file_id ?? '').trim()
       effectiveFileType = String(docRow.doc_type ?? body.fileType)
-    } else {
+    } else if (body.resourceType === 'panel_photo') {
+      const { data: jobCard, error: jobCardErr } = await supabase
+        .from('job_cards')
+        .select('reg_number')
+        .eq('id', body.jobCardId)
+        .maybeSingle<{ reg_number: string | null }>()
+
+      if (jobCardErr) {
+        return json(500, { ok: false, error: jobCardErr.message, error_code: 'DB_ERROR' })
+      }
+
+      registrationNo = (jobCard?.reg_number ?? '').trim()
+      if (!registrationNo) {
+        return json(400, {
+          ok: false,
+          error: 'Registration number not found for job card',
+          error_code: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+
       const { data: photoRows, error: photoQueryErr } = await supabase
         .from('panel_photos')
         .select('id, created_at, drive_file_id, photo_type')
@@ -500,6 +538,48 @@ Deno.serve(async (req) => {
       rowCreatedAt = photoRow.created_at
       existingDriveFileId = String(photoRow.drive_file_id ?? '').trim()
       effectiveFileType = String(photoRow.photo_type ?? body.fileType)
+    } else {
+      const receptionId = Number(body.receptionEntryId)
+      if (!Number.isFinite(receptionId)) {
+        return json(400, {
+          ok: false,
+          error: 'Invalid reception_entry_id',
+          error_code: 'VALIDATION_ERROR',
+        })
+      }
+
+      const { data: receptionRows, error: receptionErr } = await supabase
+        .from('service_reception_entries')
+        .select('id, created_at, reg_number, estimate_drive_file_id')
+        .eq('id', receptionId)
+        .limit(1)
+
+      if (receptionErr) {
+        return json(500, { ok: false, error: receptionErr.message, error_code: 'DB_ERROR' })
+      }
+
+      const receptionRow = receptionRows?.[0]
+      if (!receptionRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Reception entry row not found for upload payload',
+          error_code: 'RECEPTION_ENTRY_NOT_FOUND',
+        })
+      }
+
+      registrationNo = String(receptionRow.reg_number ?? '').trim()
+      if (!registrationNo) {
+        return json(400, {
+          ok: false,
+          error: 'Registration number not found for reception entry',
+          error_code: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+
+      rowId = String(receptionRow.id)
+      rowCreatedAt = receptionRow.created_at
+      existingDriveFileId = String(receptionRow.estimate_drive_file_id ?? '').trim()
+      effectiveFileType = body.fileType || 'estimate'
     }
 
     const { data: blob, error: dlErr } = await supabase.storage
@@ -521,7 +601,9 @@ Deno.serve(async (req) => {
     const datePart = toYmd(rowCreatedAt)
     const driveFileName = body.resourceType === 'document'
       ? `${normalizedReg}_${normalizedFileType}_${datePart}.${ext}`
-      : `${normalizedReg}_PANEL_${normalizedFileType}_${datePart}_${rowId.slice(0, 8)}.${ext}`
+      : body.resourceType === 'panel_photo'
+        ? `${normalizedReg}_PANEL_${normalizedFileType}_${datePart}_${rowId.slice(0, 8)}.${ext}`
+        : `${normalizedReg}_SA_ESTIMATE_${datePart}_${rowId}.${ext}`
 
     const privateKeyPem = serviceAccountPrivateKeyBase64
       ? decodeServiceAccountKey(serviceAccountPrivateKeyBase64)
@@ -578,20 +660,34 @@ Deno.serve(async (req) => {
       await makeDriveFilePublic({ accessToken, fileId })
     }
 
-    const targetTable = body.resourceType === 'document' ? 'documents' : 'panel_photos'
+    const updatePayload = body.resourceType === 'reception_estimate'
+      ? {
+          estimate_drive_url: driveUrl,
+          estimate_drive_file_id: fileId,
+          estimate_storage_path: body.objectName,
+          estimate_file_name: body.objectName.split('/').at(-1) ?? null,
+          estimate_content_type: mimeType,
+          estimate_uploaded_at: new Date().toISOString(),
+        }
+      : {
+          drive_url: driveUrl,
+          drive_file_id: fileId,
+        }
+    const targetTable = body.resourceType === 'document'
+      ? 'documents'
+      : body.resourceType === 'panel_photo'
+        ? 'panel_photos'
+        : 'service_reception_entries'
     const { error: updateErr } = await supabase
       .from(targetTable)
-      .update({
-        drive_url: driveUrl,
-        drive_file_id: fileId,
-      })
+      .update(updatePayload)
       .eq('id', rowId)
 
     if (updateErr) {
       await logPendingUpload(supabase, {
-        resource_type: 'document',
+        resource_type: body.resourceType,
         resource_id: rowId,
-        job_card_id: body.jobCardId,
+        job_card_id: body.jobCardId || null,
         doc_type: effectiveFileType,
         registration_no: normalizedReg,
         storage_bucket: body.bucketId,
@@ -623,7 +719,7 @@ Deno.serve(async (req) => {
     await logPendingUpload(supabase, {
       resource_type: body.resourceType,
       resource_id: rowId,
-      job_card_id: body.jobCardId,
+      job_card_id: body.jobCardId || null,
       doc_type: effectiveFileType,
       registration_no: normalizedReg,
       storage_bucket: body.bucketId,

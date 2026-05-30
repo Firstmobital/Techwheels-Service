@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  getServiceAdvisorEstimateSignedUrl,
   listServiceAdvisorEntries,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
@@ -12,6 +11,14 @@ type RowDraft = {
   jc_number: string
   remark: string
 }
+
+const SERVICE_TYPE_OPTIONS = [
+  'Running Repair',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+]
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -30,7 +37,6 @@ export default function ServiceAdvisorPage() {
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
-  const [estimateUrls, setEstimateUrls] = useState<Record<number, string>>({})
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,22 +45,6 @@ export default function ServiceAdvisorPage() {
   const [uploadingId, setUploadingId] = useState<number | null>(null)
 
   const hasRows = useMemo(() => rows.length > 0, [rows.length])
-
-  async function hydrateSignedUrls(entries: ReceptionEntryRow[]) {
-    const next: Record<number, string> = {}
-
-    await Promise.all(
-      entries.map(async (row) => {
-        if (!row.estimate_storage_path) return
-        const res = await getServiceAdvisorEstimateSignedUrl(row.estimate_storage_path)
-        if (!res.error && res.data) {
-          next[row.id] = res.data
-        }
-      }),
-    )
-
-    setEstimateUrls(next)
-  }
 
   async function loadRows() {
     setLoading(true)
@@ -81,8 +71,6 @@ export default function ServiceAdvisorPage() {
       }
     })
     setDrafts(mappedDrafts)
-
-    await hydrateSignedUrls(data)
     setLoading(false)
   }
 
@@ -194,11 +182,18 @@ export default function ServiceAdvisorPage() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">{row.source}</td>
                       <td className="px-3 py-2">
-                        <input
+                        <select
                           value={draft.service_type}
                           onChange={(event) => patchDraft(row.id, { service_type: event.target.value })}
                           className="w-44 rounded-md border border-gray-300 px-2 py-1 outline-none focus:border-blue-500"
-                        />
+                        >
+                          {SERVICE_TYPE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                          {!SERVICE_TYPE_OPTIONS.includes(draft.service_type) && draft.service_type.trim() && (
+                            <option value={draft.service_type}>{draft.service_type}</option>
+                          )}
+                        </select>
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -246,9 +241,9 @@ export default function ServiceAdvisorPage() {
                               {row.estimate_file_name}
                             </span>
                           )}
-                          {estimateUrls[row.id] && (
+                          {row.estimate_drive_url && (
                             <a
-                              href={estimateUrls[row.id]}
+                              href={row.estimate_drive_url}
                               target="_blank"
                               rel="noreferrer"
                               className="text-xs font-medium text-blue-700 hover:underline"
