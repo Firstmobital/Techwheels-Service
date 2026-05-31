@@ -1,18 +1,18 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** 🟡 FRESH RESTART MODE: FOUNDATION + AUTH SCREENS COMPLETE, BODY & PAINT AUDIT PENDING  
+**Status:** 🟡 PHASE B CLOSED: FOUNDATION + AUTH + HOME COMPLETE, BODY & PAINT AUDIT PENDING  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-05-31 14:45 IST (AUTH-001/002/003 + SHELL-001 audited and published; BP screens audit pending)  
+**Last Updated:** 2026-05-31 15:10 IST (Current device screenshots reviewed; Home KPIs/badges moved to DB-backed values; BP-01 set as immediate next screen)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
-**Primary Goal:** Auth screens validated against reference screenshots, OTA published. Next: Capture BP-01 Device screenshot and do strict visual parity audit before implementation. Then complete BP-02..BP-08 one-screen-at-a-time with documented audit trail.
+**Primary Goal:** Auth + Home screens validated against current device screenshots and DB-truth checks. Next: Execute BP-01 (`bp`) strict visual parity audit and fixes, then complete BP-02..BP-08 one-screen-at-a-time with documented audit trail.
 
 ---
 
 ## 0) Fresh Restart Baseline (2026-05-31)
 
 1. All prior pass/fail claims are historical context only and are not sign-off.
-2. ✅ **COMPLETE:** AUTH screens (login, signup, reset) and home screen audited against reference screenshots, implemented, and OTA published (group `e3bc22fd-315f-41bc-89e4-f4f91263ce9e`)
-3. ⏳ **NEXT:** Capture fresh BP-01 device screenshot post-OTA, do visual parity audit against reference, then implement fixes
+2. ✅ **COMPLETE:** AUTH screens (login, signup, reset) and home screen audited against current device screenshots; Home counters are now DB-backed.
+3. ⏳ **NEXT:** Start BP-01 (`mobile/src/app/(tabs)/autodoc.tsx`) with fresh paired screenshot audit (reference vs device), then implement and verify parity gaps.
 4. A screen can move to `RV` only with paired screenshots (reference vs app) and DB-truth checks.
 5. A screen can move to `DN` only after iOS + Android visual parity confirmation AND documented audit trail in this tracker.
 6. **Audit trail is mandatory:** Every screen must have before/after gaps documented before marking as complete.
@@ -35,7 +35,7 @@
    - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/reference-design/Techwheels Service App.html`
    - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/reference-design/app/theme.css`
 3. Database truth is locked to:
-   - `supabase/backups/full_database.sql` (authoritative schema and full dump)
+   - `local_folder/backups/full_database.sql` (authoritative schema and full dump)
 4. No guessed/demo values from reference `app/data.js` are allowed in production mobile code.
 5. All user-visible values must come from current app data flow (Supabase APIs and DB tables/views aligned to full dump schema).
 6. Authority never downgrades: if newer dump supersedes this one later, mappings move forward only.
@@ -237,16 +237,16 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | FOUND-01 | Foundation | global tokens | `mobile/tailwind.config.js` | N/A (design token layer only) | DN | Mobile | ✅ Colors, radius, fonts added from reference theme.css (2026-05-31) |
 | FOUND-02 | Foundation | global typography | `mobile/src/app/_layout.tsx` | N/A (font load only) | DN | Mobile | ✅ Space Grotesk, Plus Jakarta Sans, JetBrains Mono loaded via expo-font (2026-05-31) |
 | FOUND-03 | Foundation | global icon layer | `mobile/src/components/ui/Icon.tsx` | N/A (icon wrapper only) | DN | Mobile | ✅ Icon wrapper with lucide-react-native mapping created (2026-05-31); ready for emoji replacement |
-| AUTH-01 | Auth | login | `mobile/src/app/(auth)/login.tsx` | Supabase auth + profile metadata | NS | Mobile | |
-| AUTH-02 | Auth | signup | `mobile/src/app/(auth)/signup.tsx` | Supabase auth | NS | Mobile | |
-| AUTH-03 | Auth | reset | `mobile/src/app/(auth)/password-reset.tsx` | Supabase auth recovery | NS | Mobile | |
-| SHELL-01 | Shell | home | `mobile/src/app/(tabs)/home.tsx` | reports + summary APIs | NS | Mobile | |
+| AUTH-01 | Auth | login | `mobile/src/app/(auth)/login.tsx` | Supabase auth + profile metadata | DN | Mobile | ✅ Current iOS device screenshot reviewed (2026-05-31); visual parity accepted. |
+| AUTH-02 | Auth | signup | `mobile/src/app/(auth)/signup.tsx` | Supabase auth | DN | Mobile | ✅ Current iOS device screenshot reviewed (2026-05-31); visual parity accepted. |
+| AUTH-03 | Auth | reset | `mobile/src/app/(auth)/password-reset.tsx` | Supabase auth recovery | DN | Mobile | ✅ Current iOS device screenshot reviewed (2026-05-31); visual parity accepted. |
+| SHELL-01 | Shell | home | `mobile/src/app/(tabs)/home.tsx` | `job_cards` + `estimate_rows` + `import_metadata` + `users` | DN | Mobile | ✅ Current iOS device screenshot reviewed (2026-05-31). KPIs/badges now DB-backed: Revenue Today, Open Job Cards, Pending Claims, datasets, active users, latest import update text. |
 | SHELL-02 | Shell | newScreen | `mobile/src/app/(tabs)/new.tsx` | navigation/action config | NS | Mobile | |
 | SHELL-03 | Shell | search | `mobile/src/app/(tabs)/search.tsx` | searchable entities APIs | NS | Mobile | |
 | SHELL-04 | Shell | alerts | `mobile/src/app/(tabs)/alerts.tsx` | alerts/notifications source | NS | Mobile | |
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
-| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | NS | Mobile | **START FIRST (Fresh Restart):** establish parity baseline for cards, filters, and icon containers before downstream screens. |
+| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | NS | Mobile | **IMMEDIATE NEXT SCREEN:** start now from fresh paired screenshot audit; establish parity baseline for cards, filters, and icon containers before downstream screens. |
 | BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | NS | Mobile | Pending fresh audit after BP-01 sign-off. |
 | BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | NS | Mobile | Pending fresh audit after BP-02. |
 | BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | Pending fresh audit after BP-03. |
@@ -262,6 +262,28 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 ---
 
 ## 7) Body & Paint Workflow: BP-01 Dashboard (FIRST SCREEN - FRESH START)
+
+### 7.0 Fresh Gap Checklist (Next Device Audit Pass)
+
+Use this checklist during the next BP-01 screenshot pass.
+Status legend for this section: `OK` = matches reference, `GAP` = mismatch found, `TBD` = pending screenshot review.
+
+| Area | Reference baseline (BP artboard) | Device audit status | Notes for next pass |
+|---|---|---|---|
+| Header | Back button + `Module` label + `Body & Paint` title + right bell/avatar chips + search field | TBD | Verify spacing/padding rhythm, icon stroke weight, chip radius, and text hierarchy. |
+| Segmented tabs | 3 pills: `Active`, `Today`, `Done` with count suffix style `Label · N` | TBD | Count values are data-driven in app; parity check is pill anatomy, typography, spacing, active-state color/contrast. |
+| Stage strip | Horizontal cards: Documentation, Estimate, Pre-Submit, Post-Repair, Intake; each with icon + count + label | TBD | Validate semantic icon backgrounds (`#fbefdd`, `#f4edff`, `#fbefdd`, `#e9f0fd`, `#f6f4ee`), icon visibility, and card spacing. |
+| Job cards list | Card anatomy with JC number, status pill, reg/model row, pipeline, metrics row, primary CTA with arrow | TBD | Validate status pill colors, pipeline alignment, metric icon size, and CTA text/icon alignment. |
+| CTA + FAB | Per-card primary CTA and bottom `New Job Card` FAB in brand blue | TBD | Confirm FAB placement/safe-area offset, shadow, label/icon balance, and no overlap with tab bar. |
+
+**Reference capture to compare against:**
+1. `Techwheels Service Screens.html` -> section `2 · Body & Paint` -> artboard `B&P Dashboard`.
+2. Keep structure/style parity strict; treat count magnitudes as live-data dependent unless explicitly fixed by design spec.
+
+**Audit input required from next pass:**
+1. iOS screenshot of full BP dashboard (top header through FAB).
+2. Android screenshot of full BP dashboard (same scroll depth/state).
+3. One cropped screenshot for segmented tabs + stage strip for pixel-level color/spacing checks.
 
 ### 7.1 Scope for BP-01 Dashboard
 
@@ -317,6 +339,32 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 ---
 
 ## 9) Live Parity Audit Progress (2026-05-31)
+
+### 9.0 Current Device Snapshot Audit: AUTH + HOME (2026-05-31)
+
+**Evidence Source:** latest iOS screenshots shared in current review cycle (login, signup, reset, home).
+
+**Outcome:**
+1. Auth parity is acceptable for current pass: login/signup/reset moved to `DN`.
+2. Home parity is acceptable for current pass: moved to `DN`.
+3. Home KPI and module badge values are now DB-backed (no static/demo values in render path).
+
+**Observed Home values in current screenshot (DB-driven):**
+1. Revenue Today: `₹0`
+2. Job Cards Open: `6`
+3. Claims Pending: `1`
+4. Body & Paint badge: `6 active`
+5. Reports badge: `Updated 19h ago`
+6. Import Data badge: `17 datasets`
+7. Admin badge: `8 users`
+
+**Implementation note (DB-backed Home mapping):**
+1. Revenue today/Open/Pending claims derived from `job_cards` + `estimate_rows` aggregates via existing summary API path.
+2. Import badge and last-updated text derived from `import_metadata`.
+3. Admin badge derived from active count in `users`.
+
+**Release note:**
+1. `npm run ota:prod:all` succeeded in this cycle.
 
 ### 9.1 BP-01 Dashboard: Semantic Color Fix Deployed (2026-05-31)
 
