@@ -307,7 +307,7 @@ export default function DamageStageScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
               <TouchableOpacity
                 style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
-                onPress={() => router.back()}
+                onPress={() => router.push('/(tabs)/autodoc')}
               >
                 <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
               </TouchableOpacity>
@@ -426,16 +426,16 @@ export default function DamageStageScreen() {
                         borderWidth: 1,
                         borderColor: active ? '#2a4cd0' : '#d8d2c6',
                         backgroundColor: active ? '#2a4cd0' : '#ffffff',
-                        paddingHorizontal: 16,
-                        paddingVertical: 11,
+                        paddingHorizontal: 14, // Adjusted padding
+                        paddingVertical: 10, // Adjusted padding
                         opacity: syncingPanels ? 0.65 : 1,
                       }}
                     >
-                      {active ? <Icon name="check" size={14} color="#ffffff" strokeWidth={3} /> : null}
-                      <Text style={{ marginLeft: active ? 7 : 0, fontSize: 18, fontWeight: '700', color: active ? '#ffffff' : '#4b4e59' }}>{panelName}</Text>
+                      {active ? <Icon name="check" size={12} color="#ffffff" strokeWidth={2.5} /> : null}
+                      <Text style={{ marginLeft: active ? 6 : 0, fontSize: 16, fontWeight: '700', color: active ? '#ffffff' : '#4b4e59' }}>{panelName}</Text>
                       {active && photoCount > 0 ? (
-                        <View style={{ marginLeft: 8, borderRadius: 8, backgroundColor: '#5b7de0', paddingHorizontal: 7, paddingVertical: 1 }}>
-                          <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '700' }}>{photoCount}</Text>
+                        <View style={{ marginLeft: 6, borderRadius: 8, backgroundColor: '#5b7de0', paddingHorizontal: 6, paddingVertical: 1 }}>
+                          <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '700' }}>{photoCount}</Text>
                         </View>
                       ) : null}
                     </TouchableOpacity>
@@ -481,9 +481,9 @@ export default function DamageStageScreen() {
                             paddingVertical: 13,
                           }}
                         >
-                          <Text style={{ fontSize: 12, fontWeight: '800', color: accent, lineHeight: 16, textTransform: 'uppercase' }}>{stage.label}</Text>
-                          <Text style={{ fontSize: 42, fontWeight: '700', color: active ? accent : '#1a1b21', marginTop: 6 }}>{value}</Text>
-                          <Text style={{ fontSize: 14, color: '#7d8090', fontWeight: '600', marginTop: 1 }}>photos</Text>
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: accent, lineHeight: 18, textTransform: 'uppercase' }}>{stage.label}</Text>
+                          <Text style={{ fontSize: 40, fontWeight: '700', color: active ? accent : '#1a1b21', marginTop: 6 }}>{value}</Text>
+                          <Text style={{ fontSize: 13, color: '#7d8090', fontWeight: '600', marginTop: 1 }}>photos</Text>
                         </TouchableOpacity>
                       )
                     })}
@@ -533,15 +533,27 @@ export default function DamageStageScreen() {
 
             <View style={{ marginHorizontal: 16, marginTop: 14 }}>
               <TouchableOpacity
-                style={{ borderRadius: 16, backgroundColor: selectedPanels.length === 0 ? '#a8b6f1' : '#2a4cd0', paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 9 }}
-                disabled={selectedPanels.length === 0}
+                style={{ borderRadius: 16, backgroundColor: selectedPanels.length === 0 || totals.pre === 0 ? '#a8b6f1' : '#2a4cd0', paddingVertical: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 9 }}
+                disabled={selectedPanels.length === 0 || totals.pre === 0}
                 onPress={() => {
                   if (!jobCardId) return
+                  
+                  // Enforce stage transition: cannot proceed to Estimate without completing pre-repair photos for all selected panels
+                  if (selectedPanels.length === 0) {
+                    Alert.alert('Select Panels', 'Select at least one panel before proceeding to Estimate.')
+                    return
+                  }
+                  
+                  if (totals.pre === 0) {
+                    Alert.alert('Pre-Repair Photos Required', 'All selected panels must have at least one pre-repair photo before proceeding to Estimate.')
+                    return
+                  }
+                  
                   router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
                 }}
               >
-                <Text style={{ color: '#ffffff', fontSize: 19, fontWeight: '700' }}>Next · Estimate stage</Text>
-                <Icon name="arrow-right" size={19} color="#ffffff" strokeWidth={2} />
+                <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: '700' }}>Next · Estimate stage</Text>
+                <Icon name="arrow-right" size={20} color="#ffffff" strokeWidth={2} />
               </TouchableOpacity>
             </View>
           </>

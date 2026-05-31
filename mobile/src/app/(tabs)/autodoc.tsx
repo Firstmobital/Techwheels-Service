@@ -296,27 +296,51 @@ export default function AutoDocScreen() {
         return
       }
 
-      const estimateRes = await supabase
-        .from('estimate_rows')
-        .select('job_card_id')
-        .in('job_card_id', jobCardIds)
+      // Get all panels for these jobs
+      const [panelsRes, photosRes] = await Promise.all([
+        supabase.from('panels').select('id, job_card_id').in('job_card_id', jobCardIds),
+        supabase
+          .from('panel_photos')
+          .select('job_card_id, panel_id')
+          .in('job_card_id', jobCardIds)
+          .eq('stage', 'pre-repair'),
+      ])
 
-      if (cancelled || estimateRes.error) {
+      if (cancelled || panelsRes.error || photosRes.error) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
         return
       }
 
-      const estimateJobIdSet = new Set<string>()
-      for (const row of estimateRes.data ?? []) {
-        if (row.job_card_id) estimateJobIdSet.add(row.job_card_id)
+      // Map selected panels by job
+      const selectedPanelIdsByJob = new Map<string, Set<string>>()
+      for (const panel of panelsRes.data ?? []) {
+        if (!panel.job_card_id || !panel.id) continue
+        const existing = selectedPanelIdsByJob.get(panel.job_card_id) ?? new Set<string>()
+        existing.add(panel.id)
+        selectedPanelIdsByJob.set(panel.job_card_id, existing)
       }
 
-      const pendingSet = new Set<string>()
-      for (const jobCardId of jobCardIds) {
-        if (!estimateJobIdSet.has(jobCardId)) pendingSet.add(jobCardId)
+      // Map pre-repair photos by job
+      const preRepairPanelIdsByJob = new Map<string, Set<string>>()
+      for (const photo of photosRes.data ?? []) {
+        if (!photo.job_card_id || !photo.panel_id) continue
+        const existing = preRepairPanelIdsByJob.get(photo.job_card_id) ?? new Set<string>()
+        existing.add(photo.panel_id)
+        preRepairPanelIdsByJob.set(photo.job_card_id, existing)
       }
 
-      if (!cancelled) setEstimatePendingJobIds(pendingSet)
+      // Jobs ready for estimate: all selected panels must have pre-repair photos
+      const readySet = new Set<string>()
+      for (const [jobCardId, selectedPanelsSet] of selectedPanelIdsByJob.entries()) {
+        if (selectedPanelsSet.size === 0) continue
+        const preRepairPanelsSet = preRepairPanelIdsByJob.get(jobCardId) ?? new Set<string>()
+        const hasAllPanels = Array.from(selectedPanelsSet).every((panelId) =>
+          preRepairPanelsSet.has(panelId)
+        )
+        if (hasAllPanels) readySet.add(jobCardId)
+      }
+
+      if (!cancelled) setEstimatePendingJobIds(readySet)
     }
 
     void computeEstimatePendingJobs()

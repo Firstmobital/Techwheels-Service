@@ -382,7 +382,7 @@ export default function JobCardStageScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
               <TouchableOpacity
                 style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
-                onPress={() => router.back()}
+                onPress={() => router.push('/(tabs)/autodoc')}
               >
                 <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
               </TouchableOpacity>
@@ -480,41 +480,41 @@ export default function JobCardStageScreen() {
               </View>
             ) : null}
 
-            <View style={{ marginHorizontal: 16, marginTop: 10, marginBottom: 10, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 16 }}>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: '#7d8090', letterSpacing: 1.2, marginBottom: 2, textTransform: 'uppercase' }}>Job Card Details</Text>
+            <View style={{ marginHorizontal: 16, marginTop: 8, marginBottom: 8, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 14 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#7d8090', marginBottom: 2, textTransform: 'uppercase' }}>Job Card Details</Text>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Registration number</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Registration number</Text>
               <TextInput
                 value={form.regNumber}
                 editable={false}
-                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 16, fontWeight: '600' }}
+                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 14, fontWeight: '500' }}
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Job card number</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Job card number</Text>
               <TextInput
                 value={form.jcNumber}
                 editable={false}
-                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 16, fontWeight: '600' }}
+                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 14, fontWeight: '500' }}
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Complaint date</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Complaint date</Text>
               <TextInput
                 value={form.complaintDate}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintDate: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>KM reading</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>KM reading</Text>
               <TextInput
                 value={form.kmReading}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, kmReading: value } : prev))}
                 keyboardType="number-pad"
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Claim type</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Claim type</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {claimTypeOptions.map((option) => {
                   const active = form.claimType === option
@@ -539,39 +539,39 @@ export default function JobCardStageScreen() {
                 })}
               </View>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Complaint notes</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Complaint notes</Text>
               <TextInput
                 value={form.complaintText}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintText: value } : prev))}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 24, paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500', minHeight: 150 }}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 24, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500', minHeight: 130 }}
                 placeholderTextColor="#9ca3af"
               />
             </View>
 
-            <View style={{ marginHorizontal: 16, marginBottom: 10, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 16 }}>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: '#7d8090', letterSpacing: 1.2, marginBottom: 2, textTransform: 'uppercase' }}>Vehicle Details</Text>
+            <View style={{ marginHorizontal: 16, marginBottom: 8, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 14 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#7d8090', marginBottom: 2, textTransform: 'uppercase' }}>Vehicle Details</Text>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>VIN / Chassis no.</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>VIN / Chassis no.</Text>
               <TextInput
                 value={form.vin}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, vin: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 tracking-wide">Model</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Model</Text>
               <ModelChipSelector
                 value={form.model}
                 options={modelChipOptions}
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, model: value } : prev))}
               />
 
-              <View style={{ flexDirection: 'row', marginTop: 14, columnGap: 8 }}>
+              <View style={{ flexDirection: 'row', marginTop: 10, columnGap: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginBottom: 8, letterSpacing: 0.2 }}>Year</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginBottom: 6 }}>Year</Text>
                   <NativeSelectField
                     value={form.year}
                     placeholder="Select year"
@@ -581,7 +581,7 @@ export default function JobCardStageScreen() {
                 </View>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginBottom: 8, letterSpacing: 0.2 }}>Colour</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginBottom: 6 }}>Colour</Text>
                   <NativeSelectField
                     value={form.colour}
                     placeholder="Select colour"
@@ -591,7 +591,7 @@ export default function JobCardStageScreen() {
                 </View>
               </View>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Paint type</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Paint type</Text>
               <NativeSelectField
                 value={form.paintType}
                 placeholder="Select paint type"
@@ -599,47 +599,47 @@ export default function JobCardStageScreen() {
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, paintType: value } : prev))}
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Date of Sale</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Date of Sale</Text>
               <DatePickerField
                 value={form.dateOfSale}
                 placeholder="YYYY-MM-DD"
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, dateOfSale: value } : prev))}
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Car Ageing (auto-calc)</Text>
-              <View style={{ borderRadius: 999, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 20, paddingVertical: 15 }}>
-                <Text style={{ fontSize: 17, fontWeight: '700', color: '#2a4cd0' }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Car Ageing (auto-calc)</Text>
+              <View style={{ borderRadius: 999, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 18, paddingVertical: 12 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#2a4cd0' }}>
                   {calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'} days
                 </Text>
               </View>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Owner name</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Owner name</Text>
               <TextInput
                 value={form.ownerName}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerName: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Owner phone</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Owner phone</Text>
               <TextInput
                 value={form.ownerPhone}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerPhone: normalizeOwnerPhoneInput(value) } : prev))}
                 keyboardType="phone-pad"
                 maxLength={10}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Dealer city</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Dealer city</Text>
               <TextInput
                 value={form.dealerCity}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, dealerCity: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>BP category</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>BP category</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).map((option) => {
                   const active = form.bpCityCategory === option
@@ -658,7 +658,7 @@ export default function JobCardStageScreen() {
                       }}
                       onPress={() => setForm((prev) => (prev ? { ...prev, bpCityCategory: option } : prev))}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#2a4cd0' : '#1a1b21' }}>{option}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#2a4cd0' : '#1a1b21' }}>{option}</Text>
                     </TouchableOpacity>
                   )
                 })}

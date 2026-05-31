@@ -214,12 +214,37 @@ export default function JobCardEstimateScreen() {
 
     const preRepairSet = new Set<string>()
     for (const photo of photoRes.data ?? []) {
-      const stage = String((photo as any).repair_stage ?? '').trim().toLowerCase()
+      const stage = String((photo as any).stage ?? '').trim().toLowerCase()
       if (stage !== 'pre-repair') continue
       const panelKey = panelNameById.get(photo.panel_id)
       if (panelKey) preRepairSet.add(panelKey)
     }
     setPreRepairPanelNames(preRepairSet)
+
+    // Stage gate: enforce pre-repair photos for all selected panels before accessing Estimate
+    const normalizedPanelNames = panelNames.map((name) => normalizePanelKey(name))
+    const hasAllPreRepairPhotos = normalizedPanelNames.every((panelKey) => preRepairSet.has(panelKey))
+
+    if (!hasAllPreRepairPhotos) {
+      setError('Pre-repair photos required')
+      setLoading(false)
+      Alert.alert(
+        'Documentation Incomplete',
+        'All selected panels must have pre-repair photos before proceeding to Estimate. Please return to the Damage stage.',
+        [
+          {
+            text: 'Go Back to Damage',
+            onPress: () => {
+              router.push({
+                pathname: '/job-cards/[id]/damage',
+                params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' },
+              })
+            },
+          },
+        ]
+      )
+      return
+    }
 
     if (workflowRes.data?.estimateActionOptions?.length) {
       setEstimateActionOptions(
