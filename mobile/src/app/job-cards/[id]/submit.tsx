@@ -446,8 +446,9 @@ export default function SubmitStageScreen() {
                   <ChecklistRow
                     key={item.label}
                     label={item.label}
-                    status={item.ok ? 'done' : 'missing'}
-                    subtext={item.val}
+                    statusText={item.val}
+                    completed={item.ok}
+                    size="md"
                   />
                 ))}
               </View>
@@ -465,18 +466,16 @@ export default function SubmitStageScreen() {
                   variant="primary"
                   enabled={!busy}
                   loading={busy === 'pre-ppt'}
-                  disabled={!!busy}
                   onPress={() => void handleGeneratePpt('pre-repair')}
                 />
 
                 <ActionRow
                   title="Export Estimate Excel"
                   subtitle="Generate spreadsheet from estimate rows"
-                  icon="sheet"
+                  icon="file-text"
                   variant="primary"
                   enabled={!busy}
                   loading={busy === 'excel'}
-                  disabled={!!busy}
                   onPress={() => void handleExportEstimate()}
                 />
 
@@ -487,7 +486,6 @@ export default function SubmitStageScreen() {
                   variant={composeReady ? 'success' : 'secondary'}
                   enabled={composeReady && !busy}
                   loading={busy === 'compose-send'}
-                  disabled={!!busy || !composeReady}
                   onPress={() => void handleComposeAndSend()}
                 />
               </View>
@@ -504,11 +502,10 @@ export default function SubmitStageScreen() {
                 <ActionRow
                   title="Generate Post-Repair PPT"
                   subtitle={postRepairPptReady ? 'Create after photos presentation' : 'Missing repair photos'}
-                  icon="camera-video"
+                  icon="camera"
                   variant={postRepairPptReady ? 'primary' : 'secondary'}
                   enabled={postRepairPptReady && !busy}
                   loading={busy === 'post-ppt'}
-                  disabled={!!busy || !postRepairPptReady}
                   onPress={() => void handleGeneratePpt('post-repair')}
                 />
 
@@ -519,7 +516,6 @@ export default function SubmitStageScreen() {
                   variant={submitReady ? 'success' : 'secondary'}
                   enabled={submitReady && !busy}
                   loading={busy === 'submit-claim'}
-                  disabled={!!busy || !submitReady}
                   onPress={() => void handleSubmitClaim()}
                 />
               </View>
