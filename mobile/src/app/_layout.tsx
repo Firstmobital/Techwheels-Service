@@ -37,6 +37,8 @@ export default function RootLayout() {
     updateErrorMessage,
     applyMandatoryUpdate,
   } = useMandatoryOTAUpdate()
+
+  useEffect(() => {
     async function loadFonts() {
       try {
         await Font.loadAsync({
