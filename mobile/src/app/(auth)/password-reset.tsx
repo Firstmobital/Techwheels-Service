@@ -50,46 +50,56 @@ export default function PasswordResetScreen() {
       >
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text className="text-4xl font-bold mb-2 text-center text-blue-600">
-            Techwheels
-          </Text>
-          <Text className="text-gray-600 text-center mb-8">Reset Password</Text>
-
-          <Text className="text-gray-700 mb-4">
-            Enter your email address and we'll send you a link to reset your password.
-          </Text>
-
-          <TextInput
-            className="border border-gray-300 rounded-lg px-4 py-3 mb-6 bg-gray-50"
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            editable={!loading}
-            placeholderTextColor="#999"
-            autoCapitalize="none"
-          />
-
-          <TouchableOpacity
-            className={`rounded-lg py-4 flex-row items-center justify-center ${
-              loading ? 'bg-blue-400' : 'bg-blue-600'
-            }`}
-            onPress={handleResetPassword}
-            disabled={loading}
-          >
-            {loading && <ActivityIndicator color="white" size="small" />}
-            <Text className={`text-white text-center font-semibold ml-2 ${loading ? 'opacity-0' : ''}`}>
-              {loading ? 'Sending email...' : 'Send Reset Link'}
-            </Text>
-          </TouchableOpacity>
-
-          <View className="mt-6 flex-row justify-center">
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text className="text-blue-600 font-semibold">Back to Login</Text>
+          {/* Blue Header */}
+          <View className="bg-blue-600 px-6 pt-6 pb-8">
+            <TouchableOpacity onPress={() => router.back()} className="mb-4 self-start">
+              <Text className="text-white text-[17px]">‹ Back to sign in</Text>
             </TouchableOpacity>
+            <Text className="text-white text-4xl font-bold">Techwheels</Text>
+            <Text className="text-blue-200 text-sm tracking-wider mt-1">SERVICE PLATFORM</Text>
+          </View>
+
+          {/* Form Content */}
+          <View className="px-6 pt-8 pb-12">
+            <Text className="text-slate-900 text-[28px] font-bold mb-2">Reset password</Text>
+            <Text className="text-slate-600 text-[17px] mb-8">Enter your email and we'll send a reset link.</Text>
+
+            {/* Email */}
+            <Text className="text-slate-900 font-semibold text-[15px] mb-2">Email</Text>
+            <TextInput
+              className="border border-slate-300 rounded-2xl px-5 py-4 mb-8 bg-white text-[17px]"
+              placeholder="you@dealer.in"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              editable={!loading}
+              placeholderTextColor="#999"
+              autoCapitalize="none"
+            />
+
+            {/* Send Reset Link Button */}
+            <TouchableOpacity
+              className={`rounded-2xl py-4 flex-row items-center justify-center ${
+                loading ? 'bg-blue-400' : 'bg-blue-600'
+              }`}
+              onPress={handleResetPassword}
+              disabled={loading}
+            >
+              {loading && <ActivityIndicator color="white" size="small" style={{ marginRight: 8 }} />}
+              <Text className="text-white font-semibold text-[17px]">
+                {loading ? 'Sending email...' : 'Send reset link'}
+              </Text>
+              {!loading && <Text className="text-white ml-2">→</Text>}
+            </TouchableOpacity>
+
+            {/* Back to Login */}
+            <View className="mt-8 flex-row justify-center">
+              <TouchableOpacity onPress={() => router.back()}>
+                <Text className="text-blue-600 font-semibold text-[17px]">Back to Login</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
