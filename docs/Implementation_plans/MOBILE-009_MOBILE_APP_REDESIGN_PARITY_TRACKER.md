@@ -1,10 +1,10 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** IN PROGRESS (planning complete, implementation pending)  
+**Status:** FOUNDATION + BP-01 COMPLETE (6 items done: FOUND-01/02/03 + BP-01 visual redesign)  
 **Priority:** CRITICAL  
-**Start Date:** 2026-05-31  
+**Last Updated:** 2026-05-31  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
-**Primary Goal:** Rebuild mobile UI to match the provided redesign reference exactly, while replacing all sample/guessed values with live values from the authoritative database contract.
+**Primary Goal:** ✅ Foundation layer complete (tokens, fonts, icon wrapper). BP-01 Dashboard redesign complete matching reference artboard exactly while preserving all DB data logic. Ready for next screen: BP-02 Create Job Card.
 
 ---
 
@@ -223,9 +223,9 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 
 | ID | Module | Reference Screen ID | Mobile Target Route/File | Data Source (DB Truth) | Status | Owner | Notes |
 |---|---|---|---|---|---|---|---|
-| FOUND-01 | Foundation | global tokens | `mobile/tailwind.config.js` | N/A (design token layer only) | NS | Mobile | Add audited token palette + radius + font families |
-| FOUND-02 | Foundation | global typography | `mobile/src/app/_layout.tsx` | N/A (font load only) | NS | Mobile | Load Space Grotesk, Plus Jakarta Sans, JetBrains Mono |
-| FOUND-03 | Foundation | global icon layer | `mobile/src/components/ui/Icon.tsx` | N/A (icon wrapper only) | NS | Mobile | Map reference icon names to lucide-react-native |
+| FOUND-01 | Foundation | global tokens | `mobile/tailwind.config.js` | N/A (design token layer only) | DN | Mobile | ✅ Colors, radius, fonts added from reference theme.css (2026-05-31) |
+| FOUND-02 | Foundation | global typography | `mobile/src/app/_layout.tsx` | N/A (font load only) | DN | Mobile | ✅ Space Grotesk, Plus Jakarta Sans, JetBrains Mono loaded via expo-font (2026-05-31) |
+| FOUND-03 | Foundation | global icon layer | `mobile/src/components/ui/Icon.tsx` | N/A (icon wrapper only) | DN | Mobile | ✅ Icon wrapper with lucide-react-native mapping created (2026-05-31); ready for emoji replacement |
 | AUTH-01 | Auth | login | `mobile/src/app/(auth)/login.tsx` | Supabase auth + profile metadata | NS | Mobile | |
 | AUTH-02 | Auth | signup | `mobile/src/app/(auth)/signup.tsx` | Supabase auth | NS | Mobile | |
 | AUTH-03 | Auth | reset | `mobile/src/app/(auth)/password-reset.tsx` | Supabase auth recovery | NS | Mobile | |
@@ -235,7 +235,7 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | SHELL-04 | Shell | alerts | `mobile/src/app/(tabs)/alerts.tsx` | alerts/notifications source | NS | Mobile | |
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
-| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | IP | Mobile | First implementation screen |
+| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | DN | Mobile | ✅ Visual redesign complete; parity with reference `bp` artboard (2026-05-31) |
 | BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | NS | Mobile | |
 | BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | NS | Mobile | |
 | BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | |

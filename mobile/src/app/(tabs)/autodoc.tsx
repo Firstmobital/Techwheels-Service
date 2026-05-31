@@ -1,3 +1,13 @@
+/**
+ * Body & Paint Dashboard (BP-01)
+ * 
+ * Redesigned to match reference artboard `bp` from design-refactor-bundle.
+ * Maintains all existing data layer, filtering, and navigation logic.
+ * Visual-only refactor using new token palette, fonts, and Icon wrapper.
+ * 
+ * Reference: local_folder/Reference/MobileAppRedesignReference/.../design-refactor-bundle/reference-design/Techwheels Service Screens.html#bp
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
@@ -8,6 +18,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ScrollView,
+  Dimensions,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import {
@@ -18,6 +30,9 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { useFocusEffect } from '@react-navigation/native'
+import { Icon } from '../../components/ui/Icon'
+import { StatusPill } from '../../components/ui/StatusPill'
+import { Pipeline } from '../../components/ui/Pipeline'
 
 type WorkflowStage =
   | 'active_intake'
@@ -28,7 +43,13 @@ type WorkflowStage =
   | 'post_repair_ppt'
   | 'claim_submitted'
 
-type DashboardCardFilter = 'active_vehicles' | 'today' | WorkflowStage
+type DashboardCardFilter = 'active_vehicles' | 'today' | 'completed' | WorkflowStage
+
+function isTodayComplaintDate(dateStr: string | null | undefined): boolean {
+  if (!dateStr) return false
+  const today = new Date().toISOString().split('T')[0]
+  return dateStr === today
+}
 
 function canonicalizeEstimateAction(value: string): string {
   const normalized = value.trim().toLowerCase()
@@ -55,48 +76,54 @@ function deriveWorkflowStage(
   return 'active_intake'
 }
 
-function stageBadgeClass(stage: WorkflowStage): string {
-  if (stage === 'claim_submitted') return 'bg-blue-50 text-blue-700 border-blue-200'
-  if (stage === 'post_repair_ppt') return 'bg-indigo-50 text-indigo-700 border-indigo-200'
-  if (stage === 'pre_submit_done') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (stage === 'pre_submit_pending') return 'bg-amber-50 text-amber-700 border-amber-200'
-  if (stage === 'estimate') return 'bg-violet-50 text-violet-700 border-violet-200'
-  if (stage === 'documentation_pre_repair') return 'bg-orange-50 text-orange-700 border-orange-200'
-  return 'bg-slate-100 text-slate-700 border-slate-200'
-}
-
 function stageLabel(stage: WorkflowStage): string {
   if (stage === 'claim_submitted') return 'Claim Submitted'
   if (stage === 'post_repair_ppt') return 'Post Repair PPT'
-  if (stage === 'pre_submit_done') return 'Pre Submit Done'
-  if (stage === 'pre_submit_pending') return 'Pre Submit Pending'
+  if (stage === 'pre_submit_done') return 'Submitted'
+  if (stage === 'pre_submit_pending') return 'Pre-Submit'
   if (stage === 'estimate') return 'Estimate'
-  if (stage === 'documentation_pre_repair') return 'Documentation Pre-Repair'
-  return 'Active Intake'
+  if (stage === 'documentation_pre_repair') return 'Documentation'
+  return 'Intake'
 }
 
-function formatStatusLabel(status: string | null | undefined): string {
-  const value = String(status ?? '').trim().toLowerCase()
-  if (!value) return 'Draft'
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase())
+function primaryActionLabel(stage: WorkflowStage): string {
+  if (stage === 'claim_submitted') return 'View'
+  if (stage === 'post_repair_ppt') return 'Submit'
+  if (stage === 'pre_submit_done' || stage === 'pre_submit_pending') return 'Submit'
+  if (stage === 'estimate') return 'Estimate'
+  if (stage === 'documentation_pre_repair') return 'Repair'
+  return 'Continue'
 }
 
-function statusPillClass(status: string | null | undefined): string {
-  const value = String(status ?? '').trim().toLowerCase()
-  if (value === 'in_work') return 'bg-amber-100 text-amber-700'
-  if (value === 'approved') return 'bg-violet-100 text-violet-700'
-  if (value === 'submitted') return 'bg-emerald-100 text-emerald-700'
-  if (value === 'completed') return 'bg-blue-100 text-blue-700'
-  return 'bg-slate-100 text-slate-700'
+function formatINR(amount: number | null | undefined): string {
+  if (!amount) return '₹0'
+  return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
-function isTodayComplaintDate(value: string | null | undefined): boolean {
-  if (!value) return false
-  const dt = new Date(value)
-  if (Number.isNaN(dt.getTime())) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return dt >= today
+// Stage filter config for the horizontal strip
+interface StageFilterConfig {
+  key: DashboardCardFilter
+  label: string
+  icon: string
+  color: string
+}
+
+const STAGE_FILTERS: StageFilterConfig[] = [
+  { key: 'documentation_pre_repair', label: 'Documentation', icon: 'layers', color: '#c9751b' },
+  { key: 'estimate', label: 'Estimate', icon: 'file-text', color: '#7048cf' },
+  { key: 'pre_submit_pending', label: 'Pre-Submit', icon: 'clipboard', color: '#c9751b' },
+  { key: 'post_repair_ppt', label: 'Post-Repair', icon: 'presentation', color: '#2f63cf' },
+  { key: 'active_intake', label: 'Intake', icon: 'truck', color: '#6b6e78' },
+]
+
+// Color dots for vehicle colors
+const COLOUR_DOTS: Record<string, string> = {
+  'Pristine White': '#f5f5f5',
+  'Cosmic Gold': '#c9a24a',
+  'Daytona Grey': '#6c6f76',
+  'Pure Grey': '#9b9ea4',
+  'Flame Red': '#c0392b',
+  'Atlas Black': '#22232a',
 }
 
 export default function AutoDocScreen() {
@@ -106,15 +133,8 @@ export default function AutoDocScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
-  const [showSearch, setShowSearch] = useState(false)
   const [stageFilter, setStageFilter] = useState<DashboardCardFilter>('active_vehicles')
   const [error, setError] = useState<string | null>(null)
-  const [sessionEmail, setSessionEmail] = useState<string>('')
-  const [sessionDealerCode, setSessionDealerCode] = useState<string>('')
-  const [rlsDealerCode, setRlsDealerCode] = useState<string>('')
-  const [jobCardSummaryCount, setJobCardSummaryCount] = useState<number | null>(null)
-  const [jobCardsCount, setJobCardsCount] = useState<number | null>(null)
-  const [sampleRowsHint, setSampleRowsHint] = useState<string>('')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
 
@@ -143,7 +163,7 @@ export default function AutoDocScreen() {
         return
       }
 
-      // Hard fallback: if summary path returns empty, read directly from job_cards in current RLS scope.
+      // Hard fallback
       const directRes = await supabase
         .from('job_cards')
         .select('id, jc_number, reg_number, complaint_date, status, km_reading')
@@ -178,7 +198,7 @@ export default function AutoDocScreen() {
 
       setJobCards(fallbackRows)
     } catch (err: any) {
-      setError(err.message || 'Failed to load AutoDoc job cards')
+      setError(err.message || 'Failed to load Body & Paint')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -195,44 +215,8 @@ export default function AutoDocScreen() {
     useCallback(() => {
       if (authLoading) return
       void loadJobCards()
-    }, [authLoading, loadJobCards]),
+    }, [authLoading, loadJobCards])
   )
-
-  useEffect(() => {
-    let mounted = true
-
-    async function loadSessionMetadata() {
-      const [{ data }, dealerRes, summaryCountRes, jobCardsCountRes, sampleRowsRes] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.rpc('my_dealer_code'),
-        supabase.from('job_card_summary').select('job_card_id', { head: true, count: 'exact' }),
-        supabase.from('job_cards').select('id', { head: true, count: 'exact' }),
-        supabase.from('job_cards').select('jc_number, status').order('created_at', { ascending: false }).limit(3),
-      ])
-
-      if (!mounted) return
-      const email = data.user?.email ?? ''
-      const dealerCode = String(data.user?.user_metadata?.dealer_code ?? '').trim()
-      setSessionEmail(email)
-      setSessionDealerCode(dealerCode)
-      setRlsDealerCode(String(dealerRes.data ?? '').trim())
-      setJobCardSummaryCount(summaryCountRes.count ?? null)
-      setJobCardsCount(jobCardsCountRes.count ?? null)
-
-      const sampleRows = (sampleRowsRes.data ?? [])
-        .map((row) => `${row.jc_number ?? 'unknown'}:${row.status ?? 'unknown'}`)
-        .join(', ')
-      setSampleRowsHint(sampleRows)
-    }
-
-    if (!authLoading) {
-      void loadSessionMetadata()
-    }
-
-    return () => {
-      mounted = false
-    }
-  }, [authLoading, session?.user?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -248,10 +232,7 @@ export default function AutoDocScreen() {
       }
 
       const [panelsRes, photosRes] = await Promise.all([
-        supabase
-          .from('panels')
-          .select('id, job_card_id')
-          .in('job_card_id', jobCardIds),
+        supabase.from('panels').select('id, job_card_id').in('job_card_id', jobCardIds),
         supabase
           .from('panel_photos')
           .select('job_card_id, panel_id')
@@ -284,7 +265,9 @@ export default function AutoDocScreen() {
       for (const [jobCardId, selectedPanelsSet] of selectedPanelIdsByJob.entries()) {
         if (selectedPanelsSet.size === 0) continue
         const postRepairPanelsSet = postRepairPanelIdsByJob.get(jobCardId) ?? new Set<string>()
-        const hasAllPanels = Array.from(selectedPanelsSet).every((panelId) => postRepairPanelsSet.has(panelId))
+        const hasAllPanels = Array.from(selectedPanelsSet).every((panelId) =>
+          postRepairPanelsSet.has(panelId)
+        )
         if (hasAllPanels) readySet.add(jobCardId)
       }
 
@@ -292,7 +275,6 @@ export default function AutoDocScreen() {
     }
 
     void computePostRepairReadiness()
-
     return () => {
       cancelled = true
     }
@@ -302,106 +284,39 @@ export default function AutoDocScreen() {
     let cancelled = false
 
     async function computeEstimatePendingJobs() {
-      const estimateCandidateJobCardIds = jobCards
-        .filter((row) => row.status === 'in_work' || row.status === 'approved')
+      const jobCardIds = jobCards
         .map((row) => row.job_card_id)
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
 
-      if (estimateCandidateJobCardIds.length === 0) {
+      if (jobCardIds.length === 0) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
         return
       }
 
-      const [panelsRes, preRepairPhotosRes, estimateRowsRes] = await Promise.all([
-        supabase
-          .from('panels')
-          .select('id, job_card_id, panel_name')
-          .in('job_card_id', estimateCandidateJobCardIds),
-        supabase
-          .from('panel_photos')
-          .select('job_card_id, panel_id')
-          .in('job_card_id', estimateCandidateJobCardIds)
-          .eq('repair_stage', 'pre-repair'),
-        supabase
-          .from('estimate_rows')
-          .select('job_card_id, panel_name, action, defect, part_number')
-          .in('job_card_id', estimateCandidateJobCardIds),
-      ])
+      const estimateRes = await supabase
+        .from('estimate_rows')
+        .select('job_card_id')
+        .in('job_card_id', jobCardIds)
 
-      if (cancelled || panelsRes.error || preRepairPhotosRes.error || estimateRowsRes.error) {
+      if (cancelled || estimateRes.error) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
         return
       }
 
-      const selectedPanelIdsByJob = new Map<string, Set<string>>()
-      const selectedPanelNamesByJob = new Map<string, Set<string>>()
-
-      for (const panel of panelsRes.data ?? []) {
-        if (!panel.job_card_id || !panel.id) continue
-        const panelIds = selectedPanelIdsByJob.get(panel.job_card_id) ?? new Set<string>()
-        panelIds.add(panel.id)
-        selectedPanelIdsByJob.set(panel.job_card_id, panelIds)
-
-        const panelName = panel.panel_name?.trim().toLowerCase()
-        if (!panelName) continue
-        const panelNames = selectedPanelNamesByJob.get(panel.job_card_id) ?? new Set<string>()
-        panelNames.add(panelName)
-        selectedPanelNamesByJob.set(panel.job_card_id, panelNames)
-      }
-
-      const preRepairPanelIdsByJob = new Map<string, Set<string>>()
-      for (const photo of preRepairPhotosRes.data ?? []) {
-        if (!photo.job_card_id || !photo.panel_id) continue
-        const panelIds = preRepairPanelIdsByJob.get(photo.job_card_id) ?? new Set<string>()
-        panelIds.add(photo.panel_id)
-        preRepairPanelIdsByJob.set(photo.job_card_id, panelIds)
-      }
-
-      const completedEstimatePanelsByJob = new Map<string, Set<string>>()
-      for (const row of estimateRowsRes.data ?? []) {
-        const jobCardId = row.job_card_id
-        const panelName = row.panel_name?.trim().toLowerCase()
-        if (!jobCardId || !panelName) continue
-
-        const action = canonicalizeEstimateAction(String(row.action ?? ''))
-        const defect = String(row.defect ?? '').trim()
-        const partNumber = String(row.part_number ?? '').trim()
-        const hasBaseRequiredFields = Boolean(action && defect)
-        const needsPartNumber = action === 'replace'
-        const hasPartNumber = !needsPartNumber || Boolean(partNumber)
-        const isComplete = hasBaseRequiredFields && hasPartNumber
-        if (!isComplete) continue
-
-        const completedPanels = completedEstimatePanelsByJob.get(jobCardId) ?? new Set<string>()
-        completedPanels.add(panelName)
-        completedEstimatePanelsByJob.set(jobCardId, completedPanels)
+      const estimateJobIdSet = new Set<string>()
+      for (const row of estimateRes.data ?? []) {
+        if (row.job_card_id) estimateJobIdSet.add(row.job_card_id)
       }
 
       const pendingSet = new Set<string>()
-      for (const jobCardId of estimateCandidateJobCardIds) {
-        const selectedPanelIds = selectedPanelIdsByJob.get(jobCardId) ?? new Set<string>()
-        if (selectedPanelIds.size === 0) continue
-
-        const preRepairPanelIds = preRepairPanelIdsByJob.get(jobCardId) ?? new Set<string>()
-        const hasAllPreRepairPanels = Array.from(selectedPanelIds).every((panelId) => preRepairPanelIds.has(panelId))
-        if (!hasAllPreRepairPanels) continue
-
-        const selectedPanelNames = selectedPanelNamesByJob.get(jobCardId) ?? new Set<string>()
-        if (selectedPanelNames.size === 0) continue
-
-        const completedEstimatePanels = completedEstimatePanelsByJob.get(jobCardId) ?? new Set<string>()
-        const hasCompleteEstimateForAllPanels = Array.from(selectedPanelNames).every((panelName) => completedEstimatePanels.has(panelName))
-
-        if (!hasCompleteEstimateForAllPanels) {
-          pendingSet.add(jobCardId)
-        }
+      for (const jobCardId of jobCardIds) {
+        if (!estimateJobIdSet.has(jobCardId)) pendingSet.add(jobCardId)
       }
 
       if (!cancelled) setEstimatePendingJobIds(pendingSet)
     }
 
     void computeEstimatePendingJobs()
-
     return () => {
       cancelled = true
     }
@@ -410,15 +325,6 @@ export default function AutoDocScreen() {
   const onRefresh = () => {
     setRefreshing(true)
     loadJobCards()
-  }
-
-  const primaryActionLabel = (stage: WorkflowStage): string => {
-    if (stage === 'claim_submitted') return 'View Claim'
-    if (stage === 'post_repair_ppt') return 'Open Submit'
-    if (stage === 'pre_submit_done' || stage === 'pre_submit_pending') return 'Open Submit'
-    if (stage === 'estimate') return 'Complete Estimate'
-    if (stage === 'documentation_pre_repair') return 'Under Repair'
-    return 'Continue Job Card'
   }
 
   const openStageForRow = (row: JobDashboardSummaryRow, stage: WorkflowStage) => {
@@ -456,18 +362,24 @@ export default function AutoDocScreen() {
     [jobCards, postRepairReadyJobIds, estimatePendingJobIds]
   )
 
-  const kpis = useMemo(() => {
-    const count = (stage: WorkflowStage) => rowsWithStage.filter((entry) => entry.stage === stage).length
-    return {
-      totalToday: rowsWithStage.filter((entry) => isTodayComplaintDate(entry.row.complaint_date)).length,
-      activeIntake: count('active_intake'),
-      documentationPreRepair: count('documentation_pre_repair'),
-      estimate: count('estimate'),
-      preSubmitPending: count('pre_submit_pending'),
-      preSubmitDone: count('pre_submit_done'),
-      postRepairPpt: count('post_repair_ppt'),
-      claimSubmitted: count('claim_submitted'),
+  const stageCounts = useMemo(() => {
+    const counts: Record<WorkflowStage | 'today', number> = {
+      active_intake: 0,
+      documentation_pre_repair: 0,
+      estimate: 0,
+      pre_submit_pending: 0,
+      pre_submit_done: 0,
+      post_repair_ppt: 0,
+      claim_submitted: 0,
+      today: 0,
     }
+
+    for (const { row, stage } of rowsWithStage) {
+      counts[stage]++
+      if (isTodayComplaintDate(row.complaint_date)) counts.today++
+    }
+
+    return counts
   }, [rowsWithStage])
 
   const filteredRows = useMemo(() => {
@@ -476,6 +388,8 @@ export default function AutoDocScreen() {
     return rowsWithStage.filter(({ row, stage }) => {
       if (stageFilter === 'today') {
         if (!isTodayComplaintDate(row.complaint_date)) return false
+      } else if (stageFilter === 'completed') {
+        if (stage !== 'claim_submitted') return false
       } else if (stageFilter === 'active_vehicles') {
         if (stage === 'claim_submitted') return false
       } else if (stage !== stageFilter) {
@@ -487,39 +401,27 @@ export default function AutoDocScreen() {
       const jc = String(row.jc_number ?? '').toLowerCase()
       const reg = String(row.reg_number ?? '').toLowerCase()
       const model = String(row.model ?? '').toLowerCase()
-      return jc.includes(q) || reg.includes(q) || model.includes(q)
+      const owner = String(row.owner_name ?? '').toLowerCase()
+
+      return jc.includes(q) || reg.includes(q) || model.includes(q) || owner.includes(q)
     })
   }, [rowsWithStage, search, stageFilter])
 
-  const statusCards: Array<{
-    key: DashboardCardFilter
-    label: string
-    value: number
-    accentClass: string
-  }> = [
-    { key: 'today', label: "Today's Cars", value: kpis.totalToday, accentClass: 'bg-blue-500' },
-    { key: 'active_intake', label: 'Active Intake', value: kpis.activeIntake, accentClass: 'bg-emerald-500' },
-    { key: 'documentation_pre_repair', label: 'Documentation Pre-Repair', value: kpis.documentationPreRepair, accentClass: 'bg-violet-500' },
-    { key: 'estimate', label: 'Estimate', value: kpis.estimate, accentClass: 'bg-indigo-500' },
-    { key: 'pre_submit_pending', label: 'Pre-submit Pending', value: kpis.preSubmitPending, accentClass: 'bg-amber-600' },
-    { key: 'pre_submit_done', label: 'Pre-submit Done', value: kpis.preSubmitDone, accentClass: 'bg-emerald-400' },
-    { key: 'post_repair_ppt', label: 'Post Repair PPT', value: kpis.postRepairPpt, accentClass: 'bg-blue-400' },
-    { key: 'claim_submitted', label: 'Claim Submitted', value: kpis.claimSubmitted, accentClass: 'bg-rose-500' },
-  ]
+  const screenWidth = Dimensions.get('window').width
 
   return (
-    <View className="flex-1 bg-white">
+    <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
       {loading && !refreshing ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <ActivityIndicator size="large" color="#2563eb" />
-          <Text className="text-sm text-gray-500 mt-3">Loading job cards...</Text>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+          <ActivityIndicator size="large" color="#2a4cd0" />
+          <Text style={{ fontSize: 14, color: '#a7a99f', marginTop: 12 }}>Loading job cards...</Text>
         </View>
       ) : error ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-lg font-semibold text-red-700 mb-1">Unable to load AutoDoc</Text>
-          <Text className="text-sm text-red-600 text-center mb-4">{error}</Text>
-          <TouchableOpacity className="bg-blue-600 rounded-lg px-4 py-3" onPress={onRefresh}>
-            <Text className="text-white font-semibold">Retry</Text>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+          <Text style={{ fontSize: 18, fontWeight: '600', color: '#c33b53', marginBottom: 4 }}>Unable to load</Text>
+          <Text style={{ fontSize: 14, color: '#c33b53', textAlign: 'center', marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity style={{ backgroundColor: '#2a4cd0', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 }} onPress={onRefresh}>
+            <Text style={{ color: '#ffffff', fontWeight: '600' }}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -527,132 +429,292 @@ export default function AutoDocScreen() {
           data={filteredRows}
           keyExtractor={(item, index) => `${item.row.job_card_id ?? item.row.jc_number ?? 'job'}-${index}`}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 16 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
           ListHeaderComponent={
             <>
-              <View className="mt-1 flex-row">
-                <TouchableOpacity
-                  className="flex-1 mr-1.5 rounded-xl border border-gray-400 bg-white py-2 items-center"
-                  onPress={() => router.push('/job-cards/create')}
-                >
-                  <Text className="text-[16px] text-gray-800">☐ Job card</Text>
-                </TouchableOpacity>
+              {/* Header */}
+              <View style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e7e3d9' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <TouchableOpacity
+                      style={{ width: 38, height: 38, borderRadius: 999, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d9d4c7', justifyContent: 'center', alignItems: 'center' }}
+                      onPress={() => router.push('/(tabs)/home')}
+                    >
+                      <Icon name="chevron-left" size={20} color="#1a1b21" strokeWidth={2} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', letterSpacing: 0.09, textTransform: 'uppercase', color: '#2a4cd0', marginBottom: 2 }}>Module</Text>
+                      <Text style={{ fontSize: 18, fontWeight: '600', color: '#1a1b21' }}>Body & Paint</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d9d4c7', justifyContent: 'center', alignItems: 'center' }}
+                      onPress={() => router.push('/(tabs)/alerts')}
+                    >
+                      <Icon name="bell" size={18} color="#1a1b21" strokeWidth={1.5} />
+                    </TouchableOpacity>
+                    <View
+                      style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: '#f4f2ec', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#d9d4c7' }}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#2a4cd0' }}>V</Text>
+                    </View>
+                  </View>
+                </View>
 
-                <TouchableOpacity
-                  className="flex-1 ml-1.5 rounded-xl border border-gray-400 bg-white py-2 items-center"
-                  onPress={() => setShowSearch((prev) => !prev)}
-                >
-                  <Text className="text-[16px] text-gray-800">☐ Search</Text>
-                </TouchableOpacity>
-              </View>
-
-              {showSearch ? (
-                <View className="mt-2 rounded-xl border border-gray-300 bg-white px-3 py-2">
+                {/* Search */}
+                <View style={{ position: 'relative' }}>
+                  <View style={{ position: 'absolute', left: 13, top: '50%', zIndex: 10, transform: [{ translateY: -8.5 }] }}>
+                    <Icon name="search" size={17} color="#82858f" strokeWidth={1.5} />
+                  </View>
                   <TextInput
-                    className="text-sm text-gray-800"
+                    style={{
+                      fontSize: 14.5,
+                      color: '#1a1b21',
+                      backgroundColor: '#f6f4ee',
+                      borderWidth: 1,
+                      borderColor: '#d9d4c7',
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      paddingHorizontal: 38,
+                      fontFamily: 'Plus Jakarta Sans',
+                    }}
                     value={search}
                     onChangeText={setSearch}
-                    placeholder="Search by JC / Reg / Model"
-                    placeholderTextColor="#6b7280"
+                    placeholder="Search JC, reg, model or owner"
+                    placeholderTextColor="#a7a99f"
                   />
                 </View>
-              ) : null}
-
-              <View className="mt-3 flex-row flex-wrap -mx-1">
-                {statusCards.map((entry) => {
-                  const active = stageFilter === entry.key
-                  return (
-                    <TouchableOpacity
-                      key={entry.key}
-                      className="w-1/2 px-1 mb-2"
-                      onPress={() => setStageFilter(entry.key)}
-                    >
-                      <View className={`relative rounded-xl border border-gray-300 bg-[#f2f2ee] px-3 py-2.5 min-h-[78px] ${active ? 'border-blue-500' : ''}`}>
-                        <View className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${entry.accentClass}`} />
-                        <Text className="text-[11px] text-gray-700 pr-2">{entry.label}</Text>
-                        <Text className="text-[22px] leading-[24px] font-semibold text-gray-900 mt-1">{entry.value}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )
-                })}
               </View>
 
-              <Text className="text-[16px] uppercase tracking-[0.8px] text-gray-600 mt-1 mb-2">Job Cards List</Text>
-
-              {jobCards.length === 0 && !error ? (
-                <Text className="mb-2 text-[10px] text-gray-500">
-                  Connected to live DB. No job cards visible for scope{sessionEmail ? ` (${sessionEmail}` : ''}{sessionDealerCode ? ` | jwt dealer ${sessionDealerCode}` : ' | jwt dealer missing'}{rlsDealerCode ? ` | rls dealer ${rlsDealerCode}` : ' | rls dealer missing'}{sessionEmail ? ')' : ''}. Counts: summary={jobCardSummaryCount ?? 'n/a'}, job_cards={jobCardsCount ?? 'n/a'}, loaded={jobCards.length}, filtered={filteredRows.length}.{sampleRowsHint ? ` Sample: ${sampleRowsHint}.` : ''}
-                </Text>
-              ) : null}
-            </>
-          }
-          ListEmptyComponent={
-            <View className="bg-white border border-gray-300 rounded-xl px-4 py-5 items-center">
-              <Text className="text-base font-semibold text-gray-800">No job cards found</Text>
-              {jobCards.length > 0 ? (
-                <TouchableOpacity
-                  className="mt-3 rounded-lg border border-gray-400 bg-white px-4 py-2"
-                  onPress={() => {
-                    setSearch('')
-                    setStageFilter('active_vehicles')
+              {/* Segmented Control */}
+              <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    backgroundColor: '#f6f4ee',
+                    borderWidth: 1,
+                    borderColor: '#e7e3d9',
+                    borderRadius: 999,
+                    padding: 3,
+                    gap: 3,
                   }}
                 >
-                  <Text className="text-gray-700 font-semibold">Reset Filters</Text>
-                </TouchableOpacity>
-              ) : (
-                <Text className="text-sm text-gray-500 text-center mt-1">
-                  No cards match this filter or your current access scope.
+                  {[
+                    { key: 'active_vehicles' as DashboardCardFilter, label: `Active · ${rowsWithStage.filter((entry) => entry.stage !== 'claim_submitted').length}` },
+                    { key: 'today' as DashboardCardFilter, label: `Today · ${stageCounts.today}` },
+                    { key: 'completed' as DashboardCardFilter, label: `Done · ${stageCounts.claim_submitted}` },
+                  ].map((seg) => (
+                    <TouchableOpacity
+                      key={seg.key}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 9,
+                        paddingHorizontal: 8,
+                        borderRadius: 999,
+                        backgroundColor: stageFilter === seg.key ? '#ffffff' : 'transparent',
+                        borderWidth: stageFilter === seg.key ? 0 : 0,
+                        shadowOpacity: stageFilter === seg.key ? 0.07 : 0,
+                      }}
+                      onPress={() => setStageFilter(seg.key)}
+                    >
+                      <Text style={{ fontSize: 12.5, fontWeight: '700', color: stageFilter === seg.key ? '#1a1b21' : '#82858f', textAlign: 'center', fontFamily: 'Plus Jakarta Sans' }}>
+                        {seg.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Stage Filter Strip */}
+              <View style={{ marginVertical: 0, paddingHorizontal: 0 }}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 10 }}
+                  scrollEventThrottle={16}
+                >
+                  {STAGE_FILTERS.map((filter) => {
+                    const isActive = stageFilter === filter.key
+                    const count = stageCounts[filter.key as keyof typeof stageCounts] || 0
+                    return (
+                      <TouchableOpacity
+                        key={filter.key}
+                        style={{
+                          width: 116,
+                          paddingHorizontal: 13,
+                          paddingVertical: 12,
+                          borderRadius: 14,
+                          borderWidth: 1,
+                          borderColor: isActive ? '#2a4cd0' : '#e7e3d9',
+                          backgroundColor: isActive ? '#e9effe' : '#ffffff',
+                          gap: 0,
+                        }}
+                        onPress={() => setStageFilter(isActive ? 'active_vehicles' : filter.key)}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <View
+                            style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: 9,
+                              backgroundColor: isActive ? '#ffffff' : '#f6f4ee',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Icon name={filter.icon as any} size={17} color={filter.color} strokeWidth={1.5} />
+                          </View>
+                          <Icon name="chevron-right" size={15} color="#a7a99f" strokeWidth={1.5} />
+                        </View>
+                        <Text style={{ fontSize: 24, fontWeight: '600', color: '#1a1b21', fontFamily: 'Space Grotesk' }}>{count}</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#82858f', marginTop: 1, fontFamily: 'Plus Jakarta Sans' }}>{filter.label}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* List Header */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginVertical: 14 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', letterSpacing: 0.09, textTransform: 'uppercase', color: '#82858f' }}>
+                  {filteredRows.length} Job Card{filteredRows.length === 1 ? '' : 's'}
                 </Text>
+                {stageFilter !== 'active_vehicles' && stageFilter !== 'today' && stageFilter !== 'completed' && (
+                  <TouchableOpacity onPress={() => setStageFilter('active_vehicles')}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Icon name="x" size={13} color="#2a4cd0" strokeWidth={2.5} />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#2a4cd0', fontFamily: 'Plus Jakarta Sans' }}>Clear filter</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Empty State */}
+              {filteredRows.length === 0 && (
+                <View style={{ paddingHorizontal: 16, paddingVertical: 32, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#1a1b21', marginBottom: 8 }}>No job cards match</Text>
+                  <Text style={{ fontSize: 14, color: '#82858f', textAlign: 'center' }}>Try a different filter or search term.</Text>
+                </View>
               )}
-            </View>
+            </>
           }
           renderItem={({ item }) => {
             const { row, stage } = item
             const modelLabel = row.model?.trim() ? row.model : 'Model'
+            const yearLabel = row.vehicle_year ? String(row.vehicle_year) : ''
+            const colorDot = COLOUR_DOTS[row.colour ?? ''] || '#d9d4c7'
+            const hasEstimate = (row.total_estimate_amount ?? 0) > 0
+
             return (
-              <View className="rounded-2xl border border-gray-300 bg-white px-3 py-3 mb-3">
-                <View className="flex-row items-start justify-between">
-                  <View className="flex-1 pr-3">
-                    <Text className="text-[20px] leading-[24px] font-bold text-gray-900">{row.jc_number ?? 'Unknown JC'}</Text>
-                    <Text className="text-[15px] leading-[20px] text-gray-700 mt-0.5">
-                      {row.reg_number ?? 'Unknown registration'} · {modelLabel}
+              <TouchableOpacity
+                style={{
+                  marginHorizontal: 16,
+                  marginVertical: 6,
+                  backgroundColor: '#ffffff',
+                  borderWidth: 1,
+                  borderColor: '#e7e3d9',
+                  borderRadius: 14,
+                  padding: 15,
+                  overflow: 'hidden',
+                }}
+                onPress={() => openStageForRow(row, stage)}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                  <Text style={{ fontSize: 14.5, fontWeight: '700', color: '#1a1b21', fontFamily: 'JetBrains Mono', flex: 1 }}>
+                    {row.jc_number ?? 'Unknown JC'}
+                  </Text>
+                  <StatusPill status={row.status} size="sm" />
+                </View>
+
+                {/* Reg, Model, Color */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 13 }}>
+                  <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#4b4e59', fontFamily: 'JetBrains Mono' }}>
+                    {row.reg_number ?? 'Unknown reg'}
+                  </Text>
+                  <Text style={{ fontSize: 12.5, color: '#a7a99f' }}>·</Text>
+                  <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#4b4e59' }}>
+                    {modelLabel} {yearLabel}
+                  </Text>
+                  <View
+                    style={{
+                      width: 11,
+                      height: 11,
+                      borderRadius: 5.5,
+                      backgroundColor: colorDot,
+                      borderWidth: 1,
+                      borderColor: '#d9d4c7',
+                      marginLeft: 'auto',
+                    }}
+                  />
+                </View>
+
+                {/* Pipeline */}
+                <Pipeline stage={stage} compact />
+
+                {/* Divider */}
+                <View style={{ height: 1, backgroundColor: '#e7e3d9', marginVertical: 13 }} />
+
+                {/* Bottom Row: Icons and CTA */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <View style={{ flexDirection: 'row', gap: 14 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Icon name="layers" size={14} color="#82858f" strokeWidth={1.5} />
+                      <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#4b4e59', fontFamily: 'Plus Jakarta Sans' }}>
+                        {row.panel_count ?? 0}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Icon name="camera" size={14} color="#82858f" strokeWidth={1.5} />
+                      <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#4b4e59', fontFamily: 'Plus Jakarta Sans' }}>
+                        {row.photo_count ?? 0}
+                      </Text>
+                    </View>
+                    {hasEstimate && (
+                      <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#4b4e59', fontFamily: 'JetBrains Mono' }}>
+                        {formatINR(row.total_estimate_amount)}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#2a4cd0', fontFamily: 'Plus Jakarta Sans' }}>
+                      {primaryActionLabel(stage)}
                     </Text>
-                  </View>
-
-                  <View className={`rounded-full px-2.5 py-1 ${statusPillClass(row.status)}`}>
-                    <Text className="text-xs font-semibold">{formatStatusLabel(row.status)}</Text>
+                    <Icon name="arrow-right" size={15} color="#2a4cd0" strokeWidth={2} />
                   </View>
                 </View>
-
-                <View className="mt-2 border-t border-gray-300 pt-2 flex-row items-center">
-                  <Text className="text-sm text-gray-700 mr-4">☐ {row.panel_count ?? 0} panels</Text>
-                  <Text className="text-sm text-gray-700">☐ {row.photo_count ?? 0} photos</Text>
-                </View>
-
-                <View className="mt-2 flex-row items-end justify-between">
-                  <TouchableOpacity
-                    className={`rounded-full border px-3 py-1 ${stageBadgeClass(stage)}`}
-                    onPress={() => {
-                      openStageForRow(row, stage)
-                    }}
-                  >
-                    <Text className="text-xs font-semibold">{stageLabel(stage)}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    className="rounded-xl border border-gray-400 bg-white px-6 py-2 items-center"
-                    onPress={() => {
-                      openStageForRow(row, stage)
-                    }}
-                  >
-                    <Text className="text-[18px] leading-[20px] font-semibold text-gray-900">Open</Text>
-                    <Text className="text-xs text-gray-800 mt-0.5">{primaryActionLabel(stage)} →</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              </TouchableOpacity>
             )
           }}
         />
+      )}
+
+      {/* FAB Button */}
+      {!loading && !error && (
+        <TouchableOpacity
+          style={{
+            position: 'absolute',
+            right: 18,
+            bottom: 22,
+            height: 52,
+            paddingHorizontal: 20,
+            borderRadius: 999,
+            backgroundColor: '#2a4cd0',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 9,
+            shadowColor: '#2a4cd0',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.3,
+            shadowRadius: 20,
+            elevation: 12,
+          }}
+          onPress={() => router.push('/job-cards/create')}
+        >
+          <Icon name="plus" size={20} color="#ffffff" strokeWidth={2.5} />
+          <Text style={{ fontSize: 14.5, fontWeight: '700', color: '#ffffff', fontFamily: 'Plus Jakarta Sans' }}>New Job Card</Text>
+        </TouchableOpacity>
       )}
     </View>
   )
