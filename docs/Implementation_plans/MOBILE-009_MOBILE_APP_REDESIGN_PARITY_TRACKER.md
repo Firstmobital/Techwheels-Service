@@ -1,10 +1,20 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** ⚠️ FOUNDATION COMPLETE, BODY & PAINT PARITY NOT ACHIEVED (BP-01..BP-04 require visual correction and re-audit)  
+**Status:** 🟡 FRESH RESTART MODE: FOUNDATION COMPLETE, ALL SCREEN PARITY AUDITS RESET TO PENDING  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-05-31 (Post-OTA screenshot re-audit failed parity gates)  
+**Last Updated:** 2026-05-31 (Fresh restart baseline applied; all screen audit states reset before re-validation.)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
-**Primary Goal:** Foundation layer is complete (tokens, fonts, icon wrapper), but Body & Paint screens must reach strict visual parity against reference before sign-off. Data logic remains DB-truth aligned; this is a visual parity correction pass.
+**Primary Goal:** Treat all screens as pending, re-audit from scratch, and complete one-screen-at-a-time parity validation. Start from **BP-01 Dashboard first** to lock global visual language (header, cards, chips, icon containers, spacing rhythm), then proceed BP-02..BP-08.
+
+---
+
+## 0) Fresh Restart Baseline (2026-05-31)
+
+1. All prior pass/fail claims are historical context only and are not sign-off.
+2. Effective baseline: every screen in Body & Paint is `NS` until fresh evidence is captured.
+3. A screen can move to `RV` only with paired screenshots (reference vs app) and DB-truth checks.
+4. A screen can move to `DN` only after iOS + Android visual parity confirmation.
+5. **First screen for restart:** `BP-01 Dashboard` (`mobile/src/app/(tabs)/autodoc.tsx`).
 
 ---
 
@@ -235,14 +245,14 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | SHELL-04 | Shell | alerts | `mobile/src/app/(tabs)/alerts.tsx` | alerts/notifications source | NS | Mobile | |
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
-| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | RV | Mobile | Re-opened after post-OTA audit (2026-05-31): dashboard still diverges from reference card anatomy, icon treatment, and spacing rhythm. |
-| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | NS | Mobile | |
-| BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | IP | Mobile | Functional flow works, but visual parity fails: typography hierarchy, field shells, and stage rail/card styling do not match reference. |
-| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | IP | Mobile | Functional flow works, but visual parity fails: affected panel chips, repair-stage cards, upload rows, and bottom CTA treatment differ from reference. |
-| BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | NS | Mobile | |
-| BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | NS | Mobile | |
-| BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | IP | Mobile | Parity fails on estimate total hero, tokenized chips/pills, panel readiness section, and summary card structure. |
-| BP-08 | Body & Paint | submit | `mobile/src/app/job-cards/[id]/submit.tsx` | `documents`, `panel_photos`, `estimate_rows`, `job_cards` | IP | Mobile | Parity fails on checklist icon circles/semantics, pre-submit action rows, disabled-state styling, and section spacing. |
+| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | NS | Mobile | **START FIRST (Fresh Restart):** establish parity baseline for cards, filters, and icon containers before downstream screens. |
+| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | NS | Mobile | Pending fresh audit after BP-01 sign-off. |
+| BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | NS | Mobile | Pending fresh audit after BP-02. |
+| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | Pending fresh audit after BP-03. |
+| BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | NS | Mobile | Capture flow camera/gallery selection. |
+| BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | NS | Mobile | Review captured panel photos by repair stage. |
+| BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | NS | Mobile | Pending fresh audit; include OTA-safe hero rendering validation on existing binaries. |
+| BP-08 | Body & Paint | submit | `mobile/src/app/job-cards/[id]/submit.tsx` | `documents`, `panel_photos`, `estimate_rows`, `job_cards` | NS | Mobile | Pending fresh audit after estimate parity closure. |
 | REP-01 | Reports | reports | `mobile/src/app/(tabs)/reports.tsx` | report query layer | NS | Mobile | |
 | REP-02 | Reports | report_* | `mobile/src/app/reports/[id].tsx` (or existing report route mapping) | report query layer | NS | Mobile | Route parity validation needed |
 | OPS-01 | Operations | import | `mobile/src/app/(tabs)/import.tsx` | import pipeline tables/APIs | NS | Mobile | |
@@ -250,13 +260,14 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 
 ---
 
-## 7) Body & Paint First-Screen Start Plan (BP-01 Dashboard)
+## 7) Body & Paint Workflow: BP-01 Dashboard (FIRST SCREEN - FRESH START)
 
-### 7.1 Scope for first delivery
+### 7.1 Scope for BP-01 Dashboard
 
-1. Redesign only `BP-01` (`mobile/src/app/(tabs)/autodoc.tsx`) to exact reference layout and visual hierarchy.
-2. Preserve current DB-backed data fetch from `listJobCardSummaries()` and existing fallback behavior.
-3. Ensure stage counters, chips, search filtering, and card metrics remain source-of-truth from DB data (not local mocks).
+1. Re-audit `mobile/src/app/(tabs)/autodoc.tsx` from scratch against reference `bp` artboard.
+2. Validate visual parity for: header row, segmented tabs, stage filter cards, job cards, status pills, CTA placement, FAB.
+3. Confirm all displayed metrics are DB-truth values from `job_card_summary` + existing aggregates.
+4. Capture fresh paired screenshots (reference vs app) on iOS and Android before changing status.
 
 ### 7.2 BP-01 field-to-source map
 
@@ -267,18 +278,17 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 5. Stage derivation: computed from `status` + photo/estimate readiness checks against `panel_photos`, `estimate_rows`, and `documents`
 6. Panel/photo count: aggregate from `panels`, `panel_photos`
 7. Estimate total: authoritative sum from `estimate_rows.row_total`
-8. Owner/KM shown when required: `owner_name`, `km_reading`
 
 ### 7.3 BP-01 acceptance criteria
 
-1. Visual parity with reference `bp` artboard in spacing, typography, cards, filter strip, and CTA placement.
-2. No hardcoded demo values present in rendered output path.
-3. All displayed job metrics reconcile with live query results.
-4. Route transitions from dashboard cards match current workflow destinations.
+1. Visual parity with reference `bp` artboard in spacing, typography, card anatomy, icon treatment, and chip rhythm.
+2. No hardcoded demo values in render path.
+3. All displayed metrics reconcile with live query results.
+4. Dashboard routes transition correctly to downstream workflow screens.
 
 ---
 
-## 8) QA and Sign-Off Gates
+## 8) Fresh Audit Workflow (All Screens Pending Baseline)
 
 ### 8.1 Per-screen gates
 
@@ -305,12 +315,24 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 
 ---
 
-## 8.4 Live Parity Audit: BP-01 (2026-05-31) ✅ PASS
+## 9) Live Parity Audit Progress (2026-05-31)
 
-**Evidence Source:** TestFlight screenshots (8 screens) + Device validation  
-**Reference:** `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/screenshots/`  
-**Audit Date:** 2026-05-31 13:00 IST  
-**Status:** ✅ VISUAL PARITY CONFIRMED
+### 9.1 BP-01 Dashboard: Semantic Color Fix Deployed (2026-05-31)
+
+**OTA Status:** ✅ LIVE (iOS + Android, ID: 85beebd1-3d23-459c-8d5e-944a296bff92)  
+**Last Change:** Stage filter card icon backgrounds updated to use semantic palette (Documentation #fbefdd, Estimate #f4edff, Pre-Submit #fbefdd, Post-Repair #e9f0fd, Intake #f6f4ee)  
+**Validation:** Pending screenshot comparison from device (reload TestFlight app)
+
+**Next Steps:**
+1. Reload app on TestFlight to pull OTA update
+2. Take fresh iOS + Android screenshots of dashboard stage filters
+3. Compare against reference design: `local_folder/Reference/.../screenshots/`
+4. Document any remaining parity gaps (color, spacing, icon visibility)
+5. Iterate fixes if needed; otherwise mark BP-01 as DN (Done)
+
+---
+
+### 9.2 Previous Audit: BP-01 (2026-05-31) - Reference Snapshot [ARCHIVED, NOT CURRENT SIGN-OFF]
 
 ### Visual Elements Verified
 
@@ -349,10 +371,10 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 - ✅ No data mutations observed in flow
 - ✅ All CTA buttons functional
 
-### Conclusion
+### Conclusion (Archived Snapshot Only)
 
-**BP-01 is PRODUCTION-READY** with visual parity to reference design confirmed on live device.  
-Next screen: BP-02 (Create Job Card)
+This historical snapshot is retained for context only and does not override Section 0 fresh-restart rules.  
+Current effective status remains: BP-01 = NS until new paired evidence is captured.
 
 ---
 

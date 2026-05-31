@@ -4,7 +4,7 @@ import * as Updates from 'expo-updates'
 import { flushPendingLogsToS3, logEvent } from '../utils/logger'
 
 const FOREGROUND_CHECK_COOLDOWN_MS = 60 * 1000
-const ACTIVE_SESSION_CHECK_INTERVAL_MS = 2 * 60 * 1000
+const ACTIVE_SESSION_CHECK_INTERVAL_MS = 30 * 1000
 
 const resolveChannel = () => {
   const channel = (Updates.channel ?? '').trim().toLowerCase()
@@ -176,7 +176,8 @@ export function useMandatoryOTAUpdate() {
       const becameActive = previousState.match(/inactive|background/) && nextAppState === 'active'
       if (!becameActive) return
 
-      checkForMandatoryUpdate('foreground')
+      // Force foreground checks so users see the OTA gate immediately after returning.
+      checkForMandatoryUpdate('foreground', true)
     })
 
     return () => {
