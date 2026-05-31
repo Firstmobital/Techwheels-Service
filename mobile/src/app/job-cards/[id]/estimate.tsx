@@ -24,6 +24,7 @@ import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
 import NativeSelectField from '../../../components/common/NativeSelectField'
 import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
 import { uploadDocumentFile } from '../../../lib/api/documents'
+import { HeroBlock, Pill } from '../../../components/ui'
 
 type Params = {
   id?: string | string[]
@@ -477,12 +478,12 @@ export default function JobCardEstimateScreen() {
           </View>
         ) : (
           <>
-            <View className="mt-3 rounded-2xl border border-blue-300 bg-gradient-to-br from-blue-600 to-blue-800 p-4 shadow-lg">
-              <Text className="text-[11px] uppercase tracking-widest text-blue-100 font-semibold">Estimate Total</Text>
-              <Text className="text-4xl font-bold text-white mt-3">{formatCurrency(grandTotal)}</Text>
-              <Text className="text-sm text-blue-50 mt-2">
-                {completedEstimatePanels.size} of {panels.length} panels estimate-ready
-              </Text>
+            <HeroBlock
+              title="Estimate Total"
+              mainValue={formatCurrency(grandTotal)}
+              subtitle={`${completedEstimatePanels.size} of ${panels.length} panels estimate-ready`}
+              variant="brand"
+            >
               <View className="mt-4 flex-row gap-3">
                 <View className="flex-1 rounded-xl bg-white bg-opacity-15 px-3 py-2.5">
                   <Text className="text-[10px] font-semibold text-blue-100 uppercase tracking-wide">Parts</Text>
@@ -505,7 +506,7 @@ export default function JobCardEstimateScreen() {
                   <Text className="text-amber-100">No active rates found</Text>
                 )}
               </Text>
-            </View>
+            </HeroBlock>
 
             <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
               <Text className="text-xs uppercase tracking-wide text-slate-500">Panel Estimate Readiness</Text>
@@ -515,13 +516,17 @@ export default function JobCardEstimateScreen() {
                 panelReadiness.map((item) => (
                   <View key={item.panelName} className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                     <Text className="text-sm font-semibold text-slate-900">{item.panelName}</Text>
-                    <View className="flex-row mt-2">
-                      <Text className={`text-[11px] mr-2 px-2 py-1 rounded ${item.hasPreRepair ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                        {item.hasPreRepair ? 'Pre-Repair OK' : 'Pre-Repair Missing'}
-                      </Text>
-                      <Text className={`text-[11px] px-2 py-1 rounded ${item.hasCompleteEstimate ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {item.hasCompleteEstimate ? 'Estimate OK' : 'Estimate Pending'}
-                      </Text>
+                    <View className="flex-row mt-2 gap-2">
+                      <Pill
+                        label={item.hasPreRepair ? 'Pre-Repair OK' : 'Pre-Repair Missing'}
+                        variant={item.hasPreRepair ? 'post' : 'warning'}
+                        size="sm"
+                      />
+                      <Pill
+                        label={item.hasCompleteEstimate ? 'Estimate OK' : 'Estimate Pending'}
+                        variant={item.hasCompleteEstimate ? 'under' : 'warning'}
+                        size="sm"
+                      />
                     </View>
                   </View>
                 ))

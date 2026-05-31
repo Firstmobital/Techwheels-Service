@@ -30,6 +30,7 @@ import {
   type EmailAttachmentRef,
 } from '../../../lib/api/email'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
+import { ChecklistRow, ActionRow } from '../../../components/ui'
 
 type Params = {
   id?: string | string[]
@@ -428,7 +429,7 @@ export default function SubmitStageScreen() {
             </View>
 
             <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
-              <View className="flex-row justify-between items-center mb-3">
+              <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Submission Checklist</Text>
                 <Text className="text-xs font-bold text-slate-700">{[prePptDoc, excelDoc, walkaroundDoc, postPptDoc].filter(Boolean).length}/4</Text>
               </View>
@@ -442,17 +443,12 @@ export default function SubmitStageScreen() {
                   { label: 'Walkaround Video', ok: !!walkaroundDoc, val: walkaroundDoc ? 'Uploaded' : 'Missing' },
                   { label: 'Post-Repair PPT', ok: !!postPptDoc, val: postPptDoc ? 'Uploaded' : 'Missing' },
                 ].map((item) => (
-                  <View key={item.label} className="flex-row items-center justify-between px-3 py-2.5 bg-slate-50 rounded-lg">
-                    <View className="flex-row items-center flex-1">
-                      <View className={`w-5 h-5 rounded-full flex items-center justify-center mr-3 ${item.ok ? 'bg-emerald-100' : 'bg-amber-100'}`}>
-                        <Text className={`text-xs font-bold ${item.ok ? 'text-emerald-700' : 'text-amber-700'}`}>
-                          {item.ok ? '✓' : '✕'}
-                        </Text>
-                      </View>
-                      <Text className="text-sm font-semibold text-slate-700">{item.label}</Text>
-                    </View>
-                    <Text className={`text-xs font-semibold ${item.ok ? 'text-emerald-700' : 'text-amber-700'}`}>{item.val}</Text>
-                  </View>
+                  <ChecklistRow
+                    key={item.label}
+                    label={item.label}
+                    status={item.ok ? 'done' : 'missing'}
+                    subtext={item.val}
+                  />
                 ))}
               </View>
             </View>
@@ -461,78 +457,40 @@ export default function SubmitStageScreen() {
               <Text className="text-base font-semibold text-slate-900">Pre-Submit Actions</Text>
               <Text className="text-xs text-slate-500 mt-1">Generate files first, then send claim email to set job as submitted.</Text>
 
-              <TouchableOpacity
-                className="mt-3 rounded-xl px-4 py-3 flex-row items-center bg-blue-50 border border-blue-200"
-                disabled={!!busy}
-                onPress={() => void handleGeneratePpt('pre-repair')}
-              >
-                <View className={`w-10 h-10 rounded-lg flex items-center justify-center mr-3 ${
-                  busy === 'pre-ppt' ? 'bg-blue-600' : 'bg-blue-100'
-                }`}>
-                  {busy === 'pre-ppt' ? (
-                    <Text className="text-white text-xs">...</Text>
-                  ) : (
-                    <Text className="text-blue-700 text-lg">📊</Text>
-                  )}
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">Generate Pre-Repair PPT</Text>
-                  <Text className="text-xs text-slate-500 mt-0.5">{busy === 'pre-ppt' ? 'Generating...' : 'Create presentation'}</Text>
-                </View>
-                <Text className="text-blue-700 text-xl ml-2">→</Text>
-              </TouchableOpacity>
+              <View className="mt-3 gap-y-2">
+                <ActionRow
+                  title="Generate Pre-Repair PPT"
+                  subtitle="Create presentation from pre-repair photos"
+                  icon="image"
+                  variant="primary"
+                  enabled={!busy}
+                  loading={busy === 'pre-ppt'}
+                  disabled={!!busy}
+                  onPress={() => void handleGeneratePpt('pre-repair')}
+                />
 
-              <TouchableOpacity
-                className="mt-3 rounded-xl px-4 py-3 flex-row items-center bg-indigo-50 border border-indigo-200"
-                disabled={!!busy}
-                onPress={() => void handleExportEstimate()}
-              >
-                <View className={`w-10 h-10 rounded-lg flex items-center justify-center mr-3 ${
-                  busy === 'excel' ? 'bg-indigo-600' : 'bg-indigo-100'
-                }`}>
-                  {busy === 'excel' ? (
-                    <Text className="text-white text-xs">...</Text>
-                  ) : (
-                    <Text className="text-indigo-700 text-lg">📈</Text>
-                  )}
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-semibold text-slate-900">Export Estimate Excel</Text>
-                  <Text className="text-xs text-slate-500 mt-0.5">{busy === 'excel' ? 'Generating...' : 'Generate spreadsheet'}</Text>
-                </View>
-                <Text className="text-indigo-700 text-xl ml-2">→</Text>
-              </TouchableOpacity>
+                <ActionRow
+                  title="Export Estimate Excel"
+                  subtitle="Generate spreadsheet from estimate rows"
+                  icon="sheet"
+                  variant="primary"
+                  enabled={!busy}
+                  loading={busy === 'excel'}
+                  disabled={!!busy}
+                  onPress={() => void handleExportEstimate()}
+                />
 
-              <TouchableOpacity
-                className={`mt-3 rounded-xl px-4 py-3 flex-row items-center ${
-                  composeReady ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-100 border border-slate-300 opacity-50'
-                }`}
-                disabled={!!busy || !composeReady}
-                onPress={() => void handleComposeAndSend()}
-              >
-                <View className={`w-10 h-10 rounded-lg flex items-center justify-center mr-3 ${
-                  busy === 'compose-send' ? 'bg-emerald-600' : composeReady ? 'bg-emerald-100' : 'bg-slate-300'
-                }`}>
-                  {busy === 'compose-send' ? (
-                    <Text className="text-white text-xs">...</Text>
-                  ) : (
-                    <Text className={`text-lg ${composeReady ? 'text-emerald-700' : 'text-slate-500'}`}>📧</Text>
-                  )}
-                </View>
-                <View className="flex-1">
-                  <Text className={`text-sm font-semibold ${
-                    composeReady ? 'text-slate-900' : 'text-slate-500'
-                  }`}>
-                    Compose & Send (Set Submitted)
-                  </Text>
-                  <Text className={`text-xs mt-0.5 ${
-                    busy === 'compose-send' ? 'text-emerald-700' : composeReady ? 'text-slate-500' : 'text-slate-500'
-                  }`}>
-                    {busy === 'compose-send' ? 'Sending...' : composeReady ? 'Send claim email' : 'Awaiting uploads'}
-                  </Text>
-                </View>
-                {composeReady && <Text className="text-emerald-700 text-xl ml-2">→</Text>}
-              </TouchableOpacity>
+                <ActionRow
+                  title="Compose & Send (Set Submitted)"
+                  subtitle={composeReady ? 'Send claim email' : 'Awaiting uploads'}
+                  icon="send"
+                  variant={composeReady ? 'success' : 'secondary'}
+                  enabled={composeReady && !busy}
+                  loading={busy === 'compose-send'}
+                  disabled={!!busy || !composeReady}
+                  onPress={() => void handleComposeAndSend()}
+                />
+              </View>
               {!composeReady ? (
                 <Text className="text-xs text-amber-700 mt-3 px-2">⚠️ Upload Pre-Repair PPT, Estimate Excel, and Walkaround Video first.</Text>
               ) : null}
@@ -542,76 +500,35 @@ export default function SubmitStageScreen() {
               <Text className="text-base font-semibold text-slate-900">Final Submit</Text>
               <Text className="text-xs text-slate-500 mt-1">Post-repair file generation and final warranty submission.</Text>
 
-              <TouchableOpacity
-                className={`mt-3 rounded-xl px-4 py-3 flex-row items-center ${
-                  postRepairPptReady ? 'bg-violet-50 border border-violet-200' : 'bg-slate-100 border border-slate-300 opacity-50'
-                }`}
-                disabled={!!busy || !postRepairPptReady}
-                onPress={() => void handleGeneratePpt('post-repair')}
-              >
-                <View className={`w-10 h-10 rounded-lg flex items-center justify-center mr-3 ${
-                  busy === 'post-ppt' ? 'bg-violet-600' : postRepairPptReady ? 'bg-violet-100' : 'bg-slate-300'
-                }`}>
-                  {busy === 'post-ppt' ? (
-                    <Text className="text-white text-xs">...</Text>
-                  ) : (
-                    <Text className={`text-lg ${postRepairPptReady ? 'text-violet-700' : 'text-slate-500'}`}>📹</Text>
-                  )}
-                </View>
-                <View className="flex-1">
-                  <Text className={`text-sm font-semibold ${
-                    postRepairPptReady ? 'text-slate-900' : 'text-slate-500'
-                  }`}>
-                    Generate Post-Repair PPT
-                  </Text>
-                  <Text className={`text-xs mt-0.5 ${
-                    busy === 'post-ppt' ? 'text-violet-700' : postRepairPptReady ? 'text-slate-500' : 'text-slate-500'
-                  }`}>
-                    {busy === 'post-ppt' ? 'Generating...' : postRepairPptReady ? 'Create after photos presentation' : 'Missing repair photos'}
-                  </Text>
-                </View>
-                {postRepairPptReady && <Text className="text-violet-700 text-xl ml-2">→</Text>}
-              </TouchableOpacity>
+              <View className="mt-3 gap-y-2">
+                <ActionRow
+                  title="Generate Post-Repair PPT"
+                  subtitle={postRepairPptReady ? 'Create after photos presentation' : 'Missing repair photos'}
+                  icon="camera-video"
+                  variant={postRepairPptReady ? 'primary' : 'secondary'}
+                  enabled={postRepairPptReady && !busy}
+                  loading={busy === 'post-ppt'}
+                  disabled={!!busy || !postRepairPptReady}
+                  onPress={() => void handleGeneratePpt('post-repair')}
+                />
+
+                <ActionRow
+                  title="Submit Claim (Complete Job)"
+                  subtitle={submitReady ? 'Final warranty submission' : 'Awaiting Post-Repair PPT'}
+                  icon="check-circle"
+                  variant={submitReady ? 'success' : 'secondary'}
+                  enabled={submitReady && !busy}
+                  loading={busy === 'submit-claim'}
+                  disabled={!!busy || !submitReady}
+                  onPress={() => void handleSubmitClaim()}
+                />
+              </View>
               {!postRepairPptReady ? (
                 <Text className="text-xs text-amber-700 mt-3 px-2">
                   {selectedPanelIds.length === 0
                     ? '⚠️ Select and upload panels in Damage stage before generating Post-Repair PPT.'
                     : `⚠️ ${missingPostRepairPanelsCount} selected panel${missingPostRepairPanelsCount === 1 ? '' : 's'} still need post-repair photos.`}
                 </Text>
-              ) : null}
-
-              <TouchableOpacity
-                className={`mt-3 rounded-xl px-4 py-3 flex-row items-center ${
-                  submitReady ? 'bg-slate-900 border border-slate-800' : 'bg-slate-100 border border-slate-300 opacity-50'
-                }`}
-                disabled={!!busy || !submitReady}
-                onPress={() => void handleSubmitClaim()}
-              >
-                <View className={`w-10 h-10 rounded-lg flex items-center justify-center mr-3 ${
-                  busy === 'submit-claim' ? 'bg-emerald-600' : submitReady ? 'bg-slate-800' : 'bg-slate-300'
-                }`}>
-                  {busy === 'submit-claim' ? (
-                    <Text className="text-white text-xs">...</Text>
-                  ) : (
-                    <Text className={`text-lg ${submitReady ? 'text-white' : 'text-slate-500'}`}>✓</Text>
-                  )}
-                </View>
-                <View className="flex-1">
-                  <Text className={`text-sm font-semibold ${
-                    submitReady ? 'text-white' : 'text-slate-500'
-                  }`}>
-                    Submit Claim (Complete Job)
-                  </Text>
-                  <Text className={`text-xs mt-0.5 ${
-                    busy === 'submit-claim' ? 'text-emerald-300' : submitReady ? 'text-slate-300' : 'text-slate-500'
-                  }`}>
-                    {busy === 'submit-claim' ? 'Submitting...' : submitReady ? 'Final warranty submission' : 'Awaiting Post-Repair PPT'}
-                  </Text>
-                </View>
-                {submitReady && <Text className="text-white text-xl ml-2">→</Text>}
-              </TouchableOpacity>
-              {!submitReady ? (
-                <Text className="text-xs text-amber-700 mt-3 px-2">⚠️ Generate Post-Repair PPT first.</Text>
               ) : null}
             </View>
 

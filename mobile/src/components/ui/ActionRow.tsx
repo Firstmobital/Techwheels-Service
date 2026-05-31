@@ -126,14 +126,14 @@ export const ActionRow: React.FC<ActionRowProps> = ({
           >
             {loading ? (
               <Text style={{ fontSize: 12, color: colors.iconColor }}>⋯</Text>
-            ) : (
+            ) : icon ? (
               <Icon
                 name={icon}
                 size={20}
                 color={colors.iconColor}
                 strokeWidth={2}
               />
-            )}
+            ) : null}
           </View>
         )}
 
