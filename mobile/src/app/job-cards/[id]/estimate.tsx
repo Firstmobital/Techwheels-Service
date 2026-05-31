@@ -477,34 +477,34 @@ export default function JobCardEstimateScreen() {
           </View>
         ) : (
           <>
-            <View className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-              <Text className="text-[11px] uppercase tracking-wide text-blue-700 font-semibold">Estimate Overview</Text>
-              <Text className="text-xl font-bold text-slate-900 mt-1">{formatCurrency(grandTotal)}</Text>
-              <Text className="text-xs text-slate-600 mt-1">
-                {completedEstimatePanels.size} of {panels.length} selected panels are estimate-ready.
+            <View className="mt-3 rounded-2xl border border-blue-300 bg-gradient-to-br from-blue-600 to-blue-800 p-4 shadow-lg">
+              <Text className="text-[11px] uppercase tracking-widest text-blue-100 font-semibold">Estimate Total</Text>
+              <Text className="text-4xl font-bold text-white mt-3">{formatCurrency(grandTotal)}</Text>
+              <Text className="text-sm text-blue-50 mt-2">
+                {completedEstimatePanels.size} of {panels.length} panels estimate-ready
               </Text>
-              <Text className="text-xs mt-1 text-blue-700">
-                Rate Card Status:{' '}
-                {!resolvedModelName || !resolvedCityCategory ? (
-                  <Text className="text-slate-600">Awaiting model/city category</Text>
-                ) : loadingModelRates ? (
-                  <Text className="text-blue-700">Loading rates...</Text>
-                ) : activeModelRates.length > 0 ? (
-                  <Text className="text-emerald-700">{activeModelRates.length} panel rates active: {resolvedModelName} / {resolvedCityCategory}</Text>
-                ) : (
-                  <Text className="text-amber-700">No active rates found for {resolvedModelName} / {resolvedCityCategory}</Text>
-                )}
-              </Text>
-              <View className="mt-3 flex-row">
-                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 mr-2">
-                  <Text className="text-[11px] text-slate-500">Parts</Text>
-                  <Text className="text-base font-semibold text-slate-900">{formatCurrency(estimateTotals.parts)}</Text>
+              <View className="mt-4 flex-row gap-3">
+                <View className="flex-1 rounded-xl bg-white bg-opacity-15 px-3 py-2.5">
+                  <Text className="text-[10px] font-semibold text-blue-100 uppercase tracking-wide">Parts</Text>
+                  <Text className="text-lg font-bold text-white mt-1">{formatCurrency(estimateTotals.parts)}</Text>
                 </View>
-                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 ml-2">
-                  <Text className="text-[11px] text-slate-500">Paint + Labour</Text>
-                  <Text className="text-base font-semibold text-slate-900">{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
+                <View className="flex-1 rounded-xl bg-white bg-opacity-15 px-3 py-2.5">
+                  <Text className="text-[10px] font-semibold text-blue-100 uppercase tracking-wide">Paint + Labour</Text>
+                  <Text className="text-lg font-bold text-white mt-1">{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
                 </View>
               </View>
+              <Text className="text-xs mt-3 text-blue-50">
+                Rate Card Status:{' '}
+                {!resolvedModelName || !resolvedCityCategory ? (
+                  <Text className="text-blue-100">Awaiting model/city category</Text>
+                ) : loadingModelRates ? (
+                  <Text className="text-blue-100">Loading rates...</Text>
+                ) : activeModelRates.length > 0 ? (
+                  <Text className="text-emerald-100 font-semibold">{activeModelRates.length} panel rates active: {resolvedModelName} / {resolvedCityCategory}</Text>
+                ) : (
+                  <Text className="text-amber-100">No active rates found</Text>
+                )}
+              </Text>
             </View>
 
             <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
@@ -628,9 +628,9 @@ export default function JobCardEstimateScreen() {
                       </View>
                     </View>
 
-                    <View className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
-                      <Text className="text-xs text-blue-700">Row Total</Text>
-                      <Text className="text-lg font-bold text-blue-800">{formatCurrency(rowTotal)}</Text>
+                    <View className="mt-3 rounded-xl border border-blue-300 bg-blue-100 bg-opacity-40 px-3 py-3">
+                      <Text className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Row Total</Text>
+                      <Text className="text-xl font-bold text-blue-700 mt-1">{formatCurrency(rowTotal)}</Text>
                     </View>
 
                     <TouchableOpacity

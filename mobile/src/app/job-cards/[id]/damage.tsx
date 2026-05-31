@@ -339,14 +339,17 @@ export default function DamageStageScreen() {
                     {DAMAGE_STAGES.map((stage, index) => {
                       const active = activeStage === stage.key
                       const value = stage.key === 'pre-repair' ? totals.pre : stage.key === 'under-repair' ? totals.under : totals.post
+                      const stageColorClass = stage.key === 'pre-repair' ? 'bg-orange-100 border-orange-300' : stage.key === 'under-repair' ? 'bg-blue-100 border-blue-300' : 'bg-emerald-100 border-emerald-300'
+                      const stageTextClass = stage.key === 'pre-repair' ? 'text-orange-700' : stage.key === 'under-repair' ? 'text-blue-700' : 'text-emerald-700'
                       return (
                         <TouchableOpacity
                           key={stage.key}
-                          className={`flex-1 rounded-xl border px-3 py-3 ${stage.cardClass} ${active ? 'border-blue-500' : ''} ${index < DAMAGE_STAGES.length - 1 ? 'mr-2' : ''}`}
+                          className={`flex-1 rounded-xl border-2 px-3 py-3 ${active ? stageColorClass : 'border-slate-300 bg-slate-50'} ${index < DAMAGE_STAGES.length - 1 ? 'mr-2' : ''}`}
                           onPress={() => setActiveStage(stage.key)}
                         >
-                          <Text className={`text-[11px] font-semibold uppercase ${stage.valueClass}`}>{stage.label}</Text>
-                          <Text className={`text-2xl font-bold mt-1 ${stage.valueClass}`}>{value}</Text>
+                          <Text className={`text-[11px] font-bold uppercase tracking-wider ${active ? stageTextClass : 'text-slate-600'}`}>{stage.label}</Text>
+                          <Text className={`text-3xl font-bold mt-2 ${active ? stageTextClass : 'text-slate-800'}`}>{value}</Text>
+                          <Text className={`text-xs font-semibold mt-1 ${active ? stageTextClass : 'text-slate-600'}`}>photos</Text>
                         </TouchableOpacity>
                       )
                     })}

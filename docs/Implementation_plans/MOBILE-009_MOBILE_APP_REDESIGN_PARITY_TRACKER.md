@@ -1,10 +1,10 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** ✅ FOUNDATION + BP-01 COMPLETE + LIVE TESTFLIGHT PARITY VERIFIED (6 items done: FOUND-01/02/03 + BP-01 visual redesign + visual parity audit pass)  
+**Status:** ⚠️ FOUNDATION COMPLETE, BODY & PAINT PARITY NOT ACHIEVED (BP-01..BP-04 require visual correction and re-audit)  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-05-31 (Live TestFlight screenshots verified)  
+**Last Updated:** 2026-05-31 (Post-OTA screenshot re-audit failed parity gates)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
-**Primary Goal:** ✅ Foundation layer complete (tokens, fonts, icon wrapper). BP-01 Dashboard redesign complete matching reference artboard exactly while preserving all DB data logic. **LIVE PARITY VERIFIED on TestFlight.** Ready for next screen: BP-02 Create Job Card.
+**Primary Goal:** Foundation layer is complete (tokens, fonts, icon wrapper), but Body & Paint screens must reach strict visual parity against reference before sign-off. Data logic remains DB-truth aligned; this is a visual parity correction pass.
 
 ---
 
@@ -235,14 +235,14 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | SHELL-04 | Shell | alerts | `mobile/src/app/(tabs)/alerts.tsx` | alerts/notifications source | NS | Mobile | |
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
-| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | DN | Mobile | ✅ Visual redesign complete; parity with reference `bp` artboard verified (2026-05-31). Live TestFlight screenshots confirm: header layout, search, segmented control, stage filter strip, job cards, tabs, icons, colors, typography all match reference. Zero emoji icons remain. Data logic fully preserved. |
+| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | RV | Mobile | Re-opened after post-OTA audit (2026-05-31): dashboard still diverges from reference card anatomy, icon treatment, and spacing rhythm. |
 | BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | NS | Mobile | |
-| BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | NS | Mobile | |
-| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | |
+| BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | IP | Mobile | Functional flow works, but visual parity fails: typography hierarchy, field shells, and stage rail/card styling do not match reference. |
+| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | IP | Mobile | Functional flow works, but visual parity fails: affected panel chips, repair-stage cards, upload rows, and bottom CTA treatment differ from reference. |
 | BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | NS | Mobile | |
 | BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | NS | Mobile | |
-| BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | NS | Mobile | |
-| BP-08 | Body & Paint | submit | `mobile/src/app/job-cards/[id]/submit.tsx` | `documents`, `panel_photos`, `estimate_rows`, `job_cards` | NS | Mobile | |
+| BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | IP | Mobile | Parity fails on estimate total hero, tokenized chips/pills, panel readiness section, and summary card structure. |
+| BP-08 | Body & Paint | submit | `mobile/src/app/job-cards/[id]/submit.tsx` | `documents`, `panel_photos`, `estimate_rows`, `job_cards` | IP | Mobile | Parity fails on checklist icon circles/semantics, pre-submit action rows, disabled-state styling, and section spacing. |
 | REP-01 | Reports | reports | `mobile/src/app/(tabs)/reports.tsx` | report query layer | NS | Mobile | |
 | REP-02 | Reports | report_* | `mobile/src/app/reports/[id].tsx` (or existing report route mapping) | report query layer | NS | Mobile | Route parity validation needed |
 | OPS-01 | Operations | import | `mobile/src/app/(tabs)/import.tsx` | import pipeline tables/APIs | NS | Mobile | |
@@ -356,7 +356,153 @@ Next screen: BP-02 (Create Job Card)
 
 ---
 
-## 9) Immediate Next Action
+## 9) Deep-Dive Audit Findings (2026-05-31, Follow-up)
 
-1. Execute BP-01 implementation (Body & Paint Dashboard) as first screen.
-2. After BP-01 is done, update this tracker row `BP-01` status from `IP` -> `RV` -> `DN` with proof notes.
+**Audit Date:** 2026-05-31 13:30 IST  
+**Auditor:** GitHub Copilot (intensive line-by-line comparison)  
+**Reference Sources:** bp-core.jsx, bp-more.jsx (design-refactor-bundle)  
+**Implementation Files:** autodoc.tsx, estimate.tsx, damage.tsx, submit.tsx
+
+### BP-01 Dashboard (`autodoc.tsx`)
+- ✅ Layout structure matches reference
+- ✅ All icons rendering (no emoji)
+- ✅ Colors applied correctly
+- ⚠️ Stage filter strip: Icon sizing and background treatment correct but not verified on device
+- ✅ Data binding correct (job counts, statuses)
+
+### BP-02 (Estimate) - **GAPS DETECTED**
+
+**Gap 1: Estimate Total Box (Critical)**
+- Reference: `linear-gradient(150deg, var(--brand), var(--brand-700))` + white text
+- Current: Flat `bg-blue-50` with blue text
+- Fix Required: Implement gradient background, switch to white text, add nested semi-transparent boxes for Parts/Paint+Labour
+
+**Gap 2: Panel Readiness Styling**
+- Reference: Uses `<U.Pill>` components with semantic color variants (post, under, pre)
+- Current: Using inline background colors (emerald-100, blue-100, amber-100)
+- Fix Required: Create/use Pill component with consistent semantic color system
+
+**Gap 3: Row Totals Box**
+- Reference: `background: 'rgba(255,255,255,0.13)'` (semi-transparent white), proper styling
+- Current: Not using gradient or transparent effects
+- Fix Required: Match reference styling with transparency and colors
+
+### BP-03 (Damage) - **GAPS DETECTED**
+
+**Gap 1: Repair Stage Cards (Critical)**
+- Reference: Uses `color-mix(in oklch, <color>, transparent 90%)` for soft backgrounds + `1.5px solid` borders
+- Current: Using Tailwind classes (border-blue-200, bg-blue-50) which are fixed colors, not dynamic color-mixed
+- Fix Required: Create stage-specific styling with proper color semantics (orange, blue, emerald)
+
+**Gap 2: Panel Options Display**
+- Reference: Chip styling with check icon on selected state
+- Current: Chip rendering but check icon styling may differ
+- Fix Required: Verify check icon appears correctly with checkmark styling
+
+### BP-04 (Submit) - **GAPS DETECTED**
+
+**Gap 1: Submission Checklist (Critical)**
+- Reference: Icons in 22px circles (post-soft/pre-soft background), check/x icons (13px stroke 2.5)
+- Current: Plain text with color coding only, no icons in circles
+- Fix Required: Add check/X icon circles, apply semantic background colors (post for done, pre for missing)
+
+**Gap 2: Action Row Buttons (Critical)**
+- Reference: Icon circles (36px), icon background (post, surface-3), state styling with chevron/check
+- Current: Plain text buttons with color changes but no icon circles
+- Fix Required: Create action row with icon circles, proper busy/done state indication
+
+**Gap 3: Header Box Styling**
+- Reference: Dark background (var(--surface-900) or dark slate), full width, specific spacing
+- Current: Using bg-slate-900 which is correct, but verify shadow and spacing
+- Fix Required: Verify shadow styling (box-shadow var(--shadow-brand) or similar)
+
+### Severity Assessment
+- 🔴 **Critical (High Visibility)**: Estimate gradient, Damage color-mix, Submit checklist icons, Action rows
+- 🟡 **Medium (Subtle)**: Panel readiness pills, Row totals styling
+- 🟢 **Low (Minor)**: Spacing/alignment refinements
+
+---
+
+## 9.1) Reusable Design Parity Audit Framework
+
+**New Document Created:** `SCREEN_REDESIGN_PARITY_AUDIT_TEMPLATE.md`
+
+This document provides a systematic checklist for verifying parity on future screen redesigns:
+- Component-level styling grid (colors, typography, spacing, borders, shadows)
+- Screen-level layout verification
+- Data binding & value display checks
+- Interaction & animation verification
+- Accessibility requirements
+- Screenshot comparison matrix
+- Common drift patterns to avoid
+- Sign-off criteria
+
+**For future screens (BP-02, BP-03, etc.):**
+1. Use template checklist before marking screen as complete
+2. Test each component category (colors, typography, borders, shadows, interactions)
+3. Compare side-by-side with reference code and screenshots
+4. Document findings in tracker with PASS/FAIL per component
+5. Sign off only when all checklist items verified
+
+---
+
+## 9.2) Immediate Fixes Required (2026-05-31)
+
+Before marking BP-01, BP-02, BP-03, BP-04 as complete:
+
+1. **estimate.tsx**: Replace flat gradient background for estimate total box
+2. **damage.tsx**: Replace Tailwind color classes with proper semantic stage styling (color-mix equivalent)
+3. **submit.tsx**: Add icon circles to submission checklist, style action rows with icon circles
+4. **All screens**: Verify all border, shadow, and spacing exact matches reference
+
+---
+
+## 10) Immediate Next Action
+
+1. Fix identified styling gaps in estimate.tsx, damage.tsx, submit.tsx (see Section 9.2)
+2. Test fixes on device via TestFlight
+3. Validate screenshot parity with reference
+4. Update tracker completion status with before/after evidence
+5. Document lessons learned for future screens
+
+---
+
+## 11) Reality Check Audit (2026-05-31, User Screenshot Evidence)
+
+This section overrides any earlier "parity verified" claims. Latest real-device screenshots show clear visual drift across Body & Paint screens.
+
+### 11.1 Screen-by-screen parity verdict
+
+1. Dashboard (`bp`) - **FAIL**
+   - Current app cards and chip anatomy differ from reference (surface depth, icon containers, spacing rhythm).
+   - Progress rail and metric row do not fully match reference token usage and spacing.
+
+2. Job Card (`jobcard`) - **FAIL**
+   - Header and section typography are heavier/larger in reference; current field shells and labels are not matched.
+   - Tab card dimensions and stroke/shadow treatment differ from reference layout.
+
+3. Damage (`damage`) - **FAIL**
+   - Affected panel chip selection visuals are close but not parity-level (shape, density, and selected-state details differ).
+   - Repair-stage cards and upload rows do not match reference iconography, fill, and stroke semantics.
+
+4. Estimate (`estimate`) - **FAIL**
+   - Estimate total hero block still not matched exactly (gradient balance, inset cards, text hierarchy, and rhythm).
+   - Panel readiness and summary sections diverge in spacing and typography cadence.
+
+5. Submit (`submit`) - **FAIL**
+   - Submission checklist and action rows still differ from reference card anatomy and status semantics.
+   - Disabled and warning states are present but not visually equivalent to reference treatment.
+
+### 11.2 Quality gate decision
+
+- Body & Paint redesign is **NOT READY** for parity sign-off.
+- Keep DB/data status as healthy; issue is visual/interaction parity only.
+- Any release note claiming full redesign parity must be blocked until all BP screens pass side-by-side audit.
+
+### 11.3 Mandatory correction sequence (no skip)
+
+1. Correct shared primitives first (section cards, pills/chips, icon circles, status badges, disabled buttons).
+2. Rebuild BP-03 Job Card and BP-04 Damage to reference rhythm and component anatomy.
+3. Rebuild BP-07 Estimate hero/readiness/summary blocks using exact reference structure.
+4. Rebuild BP-08 Submit checklist/action rows/final submit states.
+5. Re-audit with paired screenshots (reference vs app) on iOS and Android before any parity claim.

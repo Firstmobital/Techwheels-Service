@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "6325d1b5-8ed1-44b7-b382-be0216f56550"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "tw.techwheels.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}
