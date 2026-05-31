@@ -24,94 +24,60 @@ interface PipelineProps {
 
 function getStageConfig(stage: WorkflowStage | null | undefined): {
   label: string
-  color: string
+  currentIndex: number
   bgColor: string
-  steps: Array<{ name: string; done: boolean }>
+  steps: Array<{ name: string }>
 } {
-  const stepMap: Record<WorkflowStage, { label: string; color: string; bgColor: string; steps: Array<{ name: string; done: boolean }> }> = {
+  const baseSteps = [
+    { name: 'intake' },
+    { name: 'documentation' },
+    { name: 'estimate' },
+    { name: 'submit' },
+    { name: 'post-repair' },
+  ]
+
+  const stepMap: Record<WorkflowStage, { label: string; currentIndex: number; bgColor: string; steps: Array<{ name: string }> }> = {
     active_intake: {
       label: 'Intake',
-      color: '#6b6e78',
+      currentIndex: 0,
       bgColor: '#eeece5',
-      steps: [
-        { name: 'intake', done: true },
-        { name: 'documentation', done: false },
-        { name: 'estimate', done: false },
-        { name: 'submit', done: false },
-        { name: 'post-repair', done: false },
-      ],
+      steps: baseSteps,
     },
     documentation_pre_repair: {
       label: 'Documentation',
-      color: '#c9751b',
+      currentIndex: 1,
       bgColor: '#fbefdd',
-      steps: [
-        { name: 'intake', done: true },
-        { name: 'documentation', done: true },
-        { name: 'estimate', done: false },
-        { name: 'submit', done: false },
-        { name: 'post-repair', done: false },
-      ],
+      steps: baseSteps,
     },
     estimate: {
       label: 'Estimate',
-      color: '#7048cf',
+      currentIndex: 2,
       bgColor: '#efeafb',
-      steps: [
-        { name: 'intake', done: true },
-        { name: 'documentation', done: true },
-        { name: 'estimate', done: true },
-        { name: 'submit', done: false },
-        { name: 'post-repair', done: false },
-      ],
+      steps: baseSteps,
     },
     pre_submit_pending: {
       label: 'Pre-Submit',
-      color: '#c9751b',
+      currentIndex: 3,
       bgColor: '#fbefdd',
-      steps: [
-        { name: 'intake', done: true },
-        { name: 'documentation', done: true },
-        { name: 'estimate', done: true },
-        { name: 'submit', done: false },
-        { name: 'post-repair', done: false },
-      ],
+      steps: baseSteps,
     },
     pre_submit_done: {
       label: 'Submitted',
-      color: '#1c8f63',
+      currentIndex: 3,
       bgColor: '#e4f4ec',
-      steps: [
-        { name: 'intake', done: true },
-        { name: 'documentation', done: true },
-        { name: 'estimate', done: true },
-        { name: 'submit', done: true },
-        { name: 'post-repair', done: false },
-      ],
+      steps: baseSteps,
     },
     post_repair_ppt: {
       label: 'Post-Repair',
-      color: '#2f63cf',
+      currentIndex: 4,
       bgColor: '#e9f0fd',
-      steps: [
-        { name: 'intake', done: true },
-        { name: 'documentation', done: true },
-        { name: 'estimate', done: true },
-        { name: 'submit', done: true },
-        { name: 'post-repair', done: true },
-      ],
+      steps: baseSteps,
     },
     claim_submitted: {
       label: 'Completed',
-      color: '#2a4cd0',
+      currentIndex: 4,
       bgColor: '#e9effe',
-      steps: [
-        { name: 'intake', done: true },
-        { name: 'documentation', done: true },
-        { name: 'estimate', done: true },
-        { name: 'submit', done: true },
-        { name: 'post-repair', done: true },
-      ],
+      steps: baseSteps,
     },
   }
 
@@ -120,13 +86,19 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
 
 export const Pipeline: React.FC<PipelineProps> = ({ stage, compact = false }) => {
   const config = getStageConfig(stage)
+  const DONE_COLOR = '#1f9a6b'
+  const CURRENT_COLOR = '#2f63cf'
+  const UPCOMING_COLOR = '#ffffff'
+  const UPCOMING_BORDER = '#d9d4c7'
+
+  const currentIndex = Math.max(0, Math.min(config.currentIndex, config.steps.length - 1))
 
   if (compact) {
     return (
       <View
         style={{
           backgroundColor: config.bgColor,
-          borderColor: config.color,
+          borderColor: '#9ea4b0',
           borderWidth: 1,
           borderRadius: 6,
           paddingHorizontal: 10,
@@ -138,7 +110,7 @@ export const Pipeline: React.FC<PipelineProps> = ({ stage, compact = false }) =>
           style={{
             fontSize: 12,
             fontWeight: '600',
-            color: config.color,
+            color: '#4b4e59',
           }}
         >
           {config.label}
@@ -151,44 +123,76 @@ export const Pipeline: React.FC<PipelineProps> = ({ stage, compact = false }) =>
     <View
       style={{
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
+        width: '100%',
+        paddingVertical: 2,
         paddingVertical: 4,
       }}
-    >
       {config.steps.map((step, index) => (
-        <React.Fragment key={step.name}>
-          <View
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 12,
-              backgroundColor: step.done ? config.color : '#d9d4c7',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            {step.done && (
+      {config.steps.map((step, index) => (
+          {index < currentIndex ? (
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: DONE_COLOR,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
               <Text
                 style={{
                   fontSize: 14,
-                  fontWeight: 'bold',
+                  fontWeight: '700',
                   color: '#ffffff',
                 }}
               >
                 ✓
               </Text>
-            )}
-          </View>
+            </View>
+          ) : index === currentIndex ? (
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: CURRENT_COLOR,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 3.5,
+                  backgroundColor: '#ffffff',
+                }}
+              />
+            </View>
+          ) : (
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: UPCOMING_COLOR,
+                borderWidth: 2,
+                borderColor: UPCOMING_BORDER,
+              }}
+            />
+          )}
+
           {index < config.steps.length - 1 && (
             <View
               style={{
                 flex: 1,
-                height: 2,
-                backgroundColor: config.steps[index + 1].done ? config.color : '#d9d4c7',
-                maxWidth: 16,
+                height: 3,
+                backgroundColor: index < currentIndex ? DONE_COLOR : UPCOMING_BORDER,
+                marginHorizontal: 4,
               }}
             />
+          )}
           )}
         </React.Fragment>
       ))}

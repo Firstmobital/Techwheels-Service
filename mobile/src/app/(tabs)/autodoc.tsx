@@ -30,6 +30,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { useFocusEffect } from '@react-navigation/native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Icon } from '../../components/ui/Icon'
 import { StatusPill } from '../../components/ui/StatusPill'
 import { Pipeline } from '../../components/ui/Pipeline'
@@ -129,6 +130,7 @@ const COLOUR_DOTS: Record<string, string> = {
 
 export default function AutoDocScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const { session, loading: authLoading } = useAuth()
   const [jobCards, setJobCards] = useState<JobDashboardSummaryRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -434,7 +436,16 @@ export default function AutoDocScreen() {
           ListHeaderComponent={
             <>
               {/* Header */}
-              <View style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e7e3d9' }}>
+              <View
+                style={{
+                  paddingTop: Math.max(insets.top + 6, 16),
+                  paddingBottom: 10,
+                  paddingHorizontal: 16,
+                  backgroundColor: '#ffffff',
+                  borderBottomWidth: 1,
+                  borderBottomColor: '#e7e3d9',
+                }}
+              >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                     <TouchableOpacity
