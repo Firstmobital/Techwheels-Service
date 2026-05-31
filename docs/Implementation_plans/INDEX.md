@@ -1,7 +1,7 @@
 # Implementation Plans Index
 
-**Last Updated:** 2026-05-28  
-**Total Active Plans:** 7
+**Last Updated:** 2026-05-31  
+**Total Active Plans:** 8
 **Mobile App Plans Added:** 2026-05-27
 
 ---
@@ -32,6 +32,7 @@
 | MOBILE-001 | Techwheels Mobile App - Expo Implementation | 🟡 HIGH | 🟠 IN PROGRESS | Development Team | 2026-05-27 | 2026-06-10 | 45% |
 | MOBILE-005 | AutoDoc Mobile Parity with Mandatory GPS-Stamped Damage Photos | 🟡 HIGH | 🔴 PENDING | Techwheels Product + Mobile Dev Team | 2026-05-28 | 2026-06-05 | 0% |
 | MOBILE-006 | Google Satellite Hybrid GPS Stamp Plan | 🟡 HIGH | 🔴 PENDING | Techwheels Product + Mobile/Web Dev Team | 2026-05-28 | 2026-06-06 | 0% |
+| MOBILE-009 | Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth) | 🔴 CRITICAL | 🟠 IN PROGRESS | Techwheels Product + Mobile Engineering + GitHub Copilot | 2026-05-31 | TBD | 5% |
 
 ---
 
@@ -100,6 +101,13 @@
 - **Status:** Pending kickoff
 - **Latest Update:** 2026-05-28 - Hybrid implementation plan documented for server-side Google satellite imagery with mandatory fallback tile, caching, and billing guardrails.
 - **Next Step:** Execute Phase 0 prerequisites (billing/quota/alerts/key restrictions), then start backend proxy implementation.
+
+### MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
+- **File:** [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md)
+- **Risk Level:** 🔴 HIGH (strict no-drift visual parity + schema-truth data contract)
+- **Status:** In progress (planning complete, implementation pending)
+- **Latest Update:** 2026-05-31 - Created full screen inventory tracker with DB-authoritative field mapping from `supabase/backups/full_database.sql` and Body & Paint-first execution lane.
+- **Next Step:** Start BP-01 implementation for `mobile/src/app/(tabs)/autodoc.tsx` using exact reference `bp` artboard parity.
 
 ---
 

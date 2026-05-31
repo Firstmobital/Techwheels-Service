@@ -18,6 +18,7 @@
 | BODYSHOP-001 | Bodyshop Module End-to-End Workflow | 🔴 PENDING | [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md) | 2026-05-22 | 2026-05-30 | 0% | 2026-05-22 |
 | DRIVE-001 | Universal Drive Upload & Storage Offload | 🔴 PENDING | [DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md](DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md) | 2026-05-23 | 2026-05-24 | 0% | 2026-05-23 |
 | MOBILE-001 | Techwheels Mobile App (Expo) | 🟡 IN PROGRESS | [MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md) | 2026-05-27 | 2026-06-06 | 71% (Phase 1-5 ✅) | 2026-05-27 |
+| MOBILE-009 | Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth) | 🟠 IN PROGRESS | [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md) | 2026-05-31 | TBD | 5% (Planning ✅) | 2026-05-31 |
 
 ---
 
@@ -30,6 +31,18 @@
 ---
 
 ## 🟡 Active Plans (Currently Executing)
+
+### MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
+**File**: [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md)  
+**Status**: Planning complete, screen implementation pending  
+**Next Step**: Implement BP-01 (Body & Paint Dashboard) with exact reference parity and DB-truth values only
+
+**Scope Lock**:
+- Reference design source: `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App`
+- Authoritative DB contract: `supabase/backups/full_database.sql`
+- Activity tracker includes all screens (Auth, Shell, Body & Paint, Reports, Operations)
+
+---
 
 ### MOBILE-001: Techwheels Mobile App (Expo Implementation)
 **File**: [MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md)  
