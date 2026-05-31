@@ -298,77 +298,81 @@ export default function JobCardStageScreen() {
               </View>
             ) : null}
 
-            <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-              <Text className="text-xs uppercase tracking-wide text-gray-500">Job Card Details</Text>
+            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
+              <Text className="text-base font-bold text-slate-900 tracking-tight">Job Card Details</Text>
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Registration Number</Text>
-              <TextInput value={form.regNumber} editable={false} className="border border-gray-200 rounded-lg px-3 py-3 bg-gray-100 text-gray-500" />
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Registration Number</Text>
+              <TextInput value={form.regNumber} editable={false} className="border border-slate-200 rounded-lg px-3 py-3 bg-slate-100 text-slate-500 text-sm font-medium" />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Job Card Number *</Text>
-              <TextInput value={form.jcNumber} editable={false} className="border border-gray-200 rounded-lg px-3 py-3 bg-gray-100 text-gray-500" />
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Job Card Number *</Text>
+              <TextInput value={form.jcNumber} editable={false} className="border border-slate-200 rounded-lg px-3 py-3 bg-slate-100 text-slate-500 text-sm font-medium" />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Complaint Date (YYYY-MM-DD) *</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Complaint Date (YYYY-MM-DD) *</Text>
               <TextInput
                 value={form.complaintDate}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintDate: value } : prev))}
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">KM Reading</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">KM Reading</Text>
               <TextInput
                 value={form.kmReading}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, kmReading: value } : prev))}
                 keyboardType="number-pad"
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Claim Type</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Claim Type</Text>
               <View className="flex-row flex-wrap">
                 {claimTypeOptions.map((option) => {
                   const active = form.claimType === option
                   return (
                     <TouchableOpacity
                       key={option}
-                      className={`mr-2 mb-2 rounded-full border px-3 py-2 ${active ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}
+                      className={`mr-2 mb-2 rounded-lg border px-3 py-2.5 ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-300 bg-white'}`}
                       onPress={() => setForm((prev) => (prev ? { ...prev, claimType: option } : prev))}
                     >
-                      <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{option}</Text>
+                      <Text className={`text-xs font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>{option}</Text>
                     </TouchableOpacity>
                   )
                 })}
               </View>
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Complaint Notes</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Complaint Notes</Text>
               <TextInput
                 value={form.complaintText}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintText: value } : prev))}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white min-h-[96px]"
+                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium min-h-[96px]"
+                placeholderTextColor="#9ca3af"
               />
             </View>
 
-            <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-              <Text className="text-xs uppercase tracking-wide text-gray-500">Vehicle Details</Text>
+            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
+              <Text className="text-base font-bold text-slate-900 tracking-tight">Vehicle Details</Text>
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">VIN / Chassis No</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">VIN / Chassis No</Text>
               <TextInput
                 value={form.vin}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, vin: value } : prev))}
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Model</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Model</Text>
               <ModelChipSelector
                 value={form.model}
                 options={modelChipOptions}
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, model: value } : prev))}
               />
 
-              <View className="flex-row mt-3">
-                <View className="w-1/2 pr-2">
-                  <Text className="text-xs text-gray-600 mb-1">Year</Text>
+              <View className="flex-row mt-4 gap-2">
+                <View className="flex-1">
+                  <Text className="text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide">Year</Text>
                   <NativeSelectField
                     value={form.year}
                     placeholder="Select year"
@@ -377,8 +381,8 @@ export default function JobCardStageScreen() {
                   />
                 </View>
 
-                <View className="w-1/2 pl-2">
-                  <Text className="text-xs text-gray-600 mb-1">Colour</Text>
+                <View className="flex-1">
+                  <Text className="text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide">Colour</Text>
                   <NativeSelectField
                     value={form.colour}
                     placeholder="Select colour"
@@ -388,7 +392,7 @@ export default function JobCardStageScreen() {
                 </View>
               </View>
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Paint Type</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Paint Type</Text>
               <NativeSelectField
                 value={form.paintType}
                 placeholder="Select paint type"
@@ -396,53 +400,56 @@ export default function JobCardStageScreen() {
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, paintType: value } : prev))}
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Date of Sale</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Date of Sale</Text>
               <DatePickerField
                 value={form.dateOfSale}
                 placeholder="YYYY-MM-DD"
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, dateOfSale: value } : prev))}
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Car Ageing (auto-calc)</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Car Ageing (auto-calc)</Text>
               <View className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-3">
-                <Text className="text-sm text-blue-900 font-medium">
+                <Text className="text-sm font-semibold text-blue-900">
                   {calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'} days
                 </Text>
               </View>
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Owner Name</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Owner Name</Text>
               <TextInput
                 value={form.ownerName}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerName: value } : prev))}
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Owner Phone</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Owner Phone</Text>
               <TextInput
                 value={form.ownerPhone}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerPhone: value } : prev))}
                 keyboardType="phone-pad"
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">Dealer City</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Dealer City</Text>
               <TextInput
                 value={form.dealerCity}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, dealerCity: value } : prev))}
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs text-gray-600 mt-3 mb-1">BP City Category</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">BP City Category</Text>
               <View className="flex-row flex-wrap">
                 {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).map((option) => {
                   const active = form.bpCityCategory === option
                   return (
                     <TouchableOpacity
                       key={option}
-                      className={`mr-2 mb-2 rounded-full border px-3 py-2 ${active ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}
+                      className={`mr-2 mb-2 rounded-lg border px-3 py-2.5 ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-300 bg-white'}`}
                       onPress={() => setForm((prev) => (prev ? { ...prev, bpCityCategory: option } : prev))}
                     >
-                      <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{option}</Text>
+                      <Text className={`text-xs font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>{option}</Text>
                     </TouchableOpacity>
                   )
                 })}
