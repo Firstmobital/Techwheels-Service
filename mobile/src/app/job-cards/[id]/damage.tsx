@@ -16,6 +16,7 @@ import { listPanelPhotos } from '../../../lib/api/photos'
 import { syncDamagePanels } from '../../../lib/api/panels'
 import { fetchVehicleByReg } from '../../../lib/api/vehicles'
 import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
+import { Chip, Pill } from '../../../components/ui'
 
 type Params = {
   id?: string | string[]
@@ -310,14 +311,15 @@ export default function DamageStageScreen() {
                 {panelOptions.map((panelName) => {
                   const active = selectedPanels.includes(panelName)
                   return (
-                    <TouchableOpacity
+                    <Chip
                       key={panelName}
-                      disabled={syncingPanels}
-                      className={`mr-2 mb-2 rounded-xl border px-3 py-3 ${active ? 'border-blue-300 bg-blue-50' : 'border-slate-300 bg-white'}`}
+                      label={panelName}
+                      selected={active}
                       onPress={() => { void togglePanel(panelName) }}
-                    >
-                      <Text className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>{panelName}</Text>
-                    </TouchableOpacity>
+                      disabled={syncingPanels}
+                      showCheck={true}
+                      variant="large"
+                    />
                   )
                 })}
               </View>
@@ -335,21 +337,82 @@ export default function DamageStageScreen() {
               <>
                 <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
                   <Text className="text-xs uppercase tracking-wide text-slate-500">Select Repair Stage</Text>
-                  <View className="mt-3 flex-row">
+                <View className="mt-3 flex-row">
                     {DAMAGE_STAGES.map((stage, index) => {
                       const active = activeStage === stage.key
                       const value = stage.key === 'pre-repair' ? totals.pre : stage.key === 'under-repair' ? totals.under : totals.post
-                      const stageColorClass = stage.key === 'pre-repair' ? 'bg-orange-100 border-orange-300' : stage.key === 'under-repair' ? 'bg-blue-100 border-blue-300' : 'bg-emerald-100 border-emerald-300'
-                      const stageTextClass = stage.key === 'pre-repair' ? 'text-orange-700' : stage.key === 'under-repair' ? 'text-blue-700' : 'text-emerald-700'
                       return (
                         <TouchableOpacity
                           key={stage.key}
-                          className={`flex-1 rounded-xl border-2 px-3 py-3 ${active ? stageColorClass : 'border-slate-300 bg-slate-50'} ${index < DAMAGE_STAGES.length - 1 ? 'mr-2' : ''}`}
+                          className={`flex-1 rounded-xl border-1.5 px-3 py-3 items-center justify-center ${index < DAMAGE_STAGES.length - 1 ? 'mr-2' : ''}`}
+                          style={{
+                            backgroundColor: active
+                              ? stage.key === 'pre-repair'
+                                ? '#fbefdd'
+                                : stage.key === 'under-repair'
+                                  ? '#e9f0fd'
+                                  : '#e4f4ec'
+                              : '#f6f4ee',
+                            borderColor: active
+                              ? stage.key === 'pre-repair'
+                                ? '#f1dcb8'
+                                : stage.key === 'under-repair'
+                                  ? '#cadcf8'
+                                  : '#bfe6d2'
+                              : '#e7e3d9',
+                            borderWidth: 1.5,
+                          }}
                           onPress={() => setActiveStage(stage.key)}
                         >
-                          <Text className={`text-[11px] font-bold uppercase tracking-wider ${active ? stageTextClass : 'text-slate-600'}`}>{stage.label}</Text>
-                          <Text className={`text-3xl font-bold mt-2 ${active ? stageTextClass : 'text-slate-800'}`}>{value}</Text>
-                          <Text className={`text-xs font-semibold mt-1 ${active ? stageTextClass : 'text-slate-600'}`}>photos</Text>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '700',
+                              letterSpacing: 0.5,
+                              color: active
+                                ? stage.key === 'pre-repair'
+                                  ? '#c9751b'
+                                  : stage.key === 'under-repair'
+                                    ? '#2f63cf'
+                                    : '#1c8f63'
+                                : '#82858f',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {stage.label}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 28,
+                              fontWeight: '800',
+                              color: active
+                                ? stage.key === 'pre-repair'
+                                  ? '#c9751b'
+                                  : stage.key === 'under-repair'
+                                    ? '#2f63cf'
+                                    : '#1c8f63'
+                                : '#4b4e59',
+                              marginTop: 8,
+                            }}
+                          >
+                            {value}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '600',
+                              color: active
+                                ? stage.key === 'pre-repair'
+                                  ? '#c9751b'
+                                  : stage.key === 'under-repair'
+                                    ? '#2f63cf'
+                                    : '#1c8f63'
+                                : '#82858f',
+                              marginTop: 4,
+                            }}
+                          >
+                            photos
+                          </Text>
                         </TouchableOpacity>
                       )
                     })}

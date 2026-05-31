@@ -8,5 +8,10 @@
 export { Icon, type IconName, type IconProps } from './Icon'
 export { StatusPill, type JobCardStatus } from './StatusPill'
 export { Pipeline, type WorkflowStage } from './Pipeline'
+export { Chip, type ChipProps } from './Chip'
+export { Pill, type PillProps, type PillVariant } from './Pill'
+export { ChecklistRow, type ChecklistRowProps } from './ChecklistRow'
+export { ActionRow, type ActionRowProps } from './ActionRow'
+export { HeroBlock, type HeroBlockProps } from './HeroBlock'
 
 export default {}
