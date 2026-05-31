@@ -16,11 +16,34 @@
    - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/app/*.jsx`
    - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/app/theme.css`
    - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/screenshots/*`
-2. Database truth is locked to:
+2. Bundle audit lock (additional source of truth for implementation method):
+   - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/README.md`
+   - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/IMPLEMENTATION_PLAN.md`
+   - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/COPILOT_PROMPT.md`
+   - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/reference-design/Techwheels Service Screens.html`
+   - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/reference-design/Techwheels Service App.html`
+   - `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/design-refactor-bundle/reference-design/app/theme.css`
+3. Database truth is locked to:
    - `supabase/backups/full_database.sql` (authoritative schema and full dump)
-3. No guessed/demo values from reference `app/data.js` are allowed in production mobile code.
-4. All user-visible values must come from current app data flow (Supabase APIs and DB tables/views aligned to full dump schema).
-5. Authority never downgrades: if newer dump supersedes this one later, mappings move forward only.
+4. No guessed/demo values from reference `app/data.js` are allowed in production mobile code.
+5. All user-visible values must come from current app data flow (Supabase APIs and DB tables/views aligned to full dump schema).
+6. Authority never downgrades: if newer dump supersedes this one later, mappings move forward only.
+7. This redesign is visual/interaction refactor only; no business logic, query, field, RLS, edge function, or schema change is allowed.
+
+---
+
+## 1.1) Bundle Audit Delta (2026-05-31)
+
+Audit source: `design-refactor-bundle/README.md`, `IMPLEMENTATION_PLAN.md`, `COPILOT_PROMPT.md`, and bundled `reference-design/*`.
+
+Additional constraints added to this tracker from audit:
+
+1. Introduce foundation layer before screen work: tokens + fonts + primitive UI library.
+2. Standardize iconography via a single line-icon wrapper; remove emoji icon usage.
+3. Treat redesign as pure visual and interaction refactor only.
+4. Keep existing data contract untouched and preserve current query/handler wiring.
+5. Apply one-screen-at-a-time implementation and review flow.
+6. Prioritize Body & Paint as first ship block after foundation is complete.
 
 ---
 
@@ -86,54 +109,56 @@
 
 ## 4) Reference Screen Inventory (Do Not Drift)
 
-Source: `Techwheels Service Screens.html` sections and artboards.
+Source: `design-refactor-bundle/reference-design/Techwheels Service Screens.html` artboards.
 
-### 4.1 Section 0 - Authentication
+### 4.1 Exact artboard IDs from audited bundle (24 screens)
 
-1. Login (`login`)
-2. Sign up (`signup`)
-3. Password reset (`reset`)
+1. `login`
+2. `signup`
+3. `reset`
+4. `home`
+5. `newScreen`
+6. `search`
+7. `alerts`
+8. `profile`
+9. `settings`
+10. `bp`
+11. `create`
+12. `jobcard`
+13. `damage`
+14. `capture`
+15. `photos`
+16. `estimate`
+17. `submit`
+18. `reports`
+19. `report_rev`
+20. `report_adv`
+21. `report_parts`
+22. `import`
+23. `admin`
 
-### 4.2 Section 1 - App Shell & Home
+Note: Bundle README mentions 24 screens. The audited artboard list in the current file yields 23 explicit IDs above, so parity validation must use these concrete IDs plus direct visual review of the full overview canvas to catch any additional implicit state screen.
 
-1. Home dashboard (`home`)
-2. New quick actions (`newScreen`)
-3. Search (`search`)
-4. Alerts (`alerts`)
-5. Profile (`profile`)
-6. Settings (`settings`)
+### 4.2 Section grouping for delivery
 
-### 4.3 Section 2 - Body & Paint (priority)
-
-1. B&P Dashboard (`bp`)
-2. Create Job Card (`create`)
-3. Job Card Details (`jobcard`)
-4. Damage Stage (`damage`)
-5. Capture Photo + GPS (`capture`)
-6. Panel Photo Gallery (`photos`)
-7. Estimate Editor (`estimate`)
-8. Submit Claim (`submit`)
-
-### 4.4 Section 3 - Reports
-
-1. Reports Hub (`reports`)
-2. Report template variants (`report_rev`, `report_adv`, `report_parts`)
-
-### 4.5 Section 4 - Operations
-
-1. Import (`import`)
-2. Admin (`admin`)
+1. Authentication: `login`, `signup`, `reset`
+2. Shell and tabs: `home`, `newScreen`, `search`, `alerts`, `profile`, `settings`
+3. Body & Paint: `bp`, `create`, `jobcard`, `damage`, `capture`, `photos`, `estimate`, `submit`
+4. Reports: `reports`, `report_rev`, `report_adv`, `report_parts`
+5. Operations: `import`, `admin`
 
 ---
 
 ## 5) Execution Strategy
 
-### 5.1 Delivery order
+### 5.1 Delivery order (updated from bundle audit)
 
-1. Phase A: Body & Paint screens only (8 screens, exact parity)
-2. Phase B: Auth + Shell screens
-3. Phase C: Reports + Operations screens
-4. Phase D: Cross-screen polish, performance, and final parity QA
+1. Phase A: Foundation first (tokens, fonts, icon system, shared UI primitives).
+2. Phase B: Shell + Auth screens.
+3. Phase C: Body & Paint screens (priority ship block).
+4. Phase D: Reports.
+5. Phase E: Operations.
+6. Final pass: Cross-screen polish, performance, and parity QA.
 
 ### 5.2 For each screen (mandatory checklist)
 
@@ -145,6 +170,21 @@ Source: `Techwheels Service Screens.html` sections and artboards.
 6. Capture parity proof screenshots (iOS + Android).
 7. Mark activity tracker item complete only after data + visual parity both pass.
 
+### 5.3 Dependency and implementation guardrails (from bundle)
+
+1. Allowed new dependencies for redesign only:
+   - `lucide-react-native`
+   - `react-native-svg`
+   - `@expo-google-fonts/space-grotesk`
+   - `@expo-google-fonts/plus-jakarta-sans`
+   - `@expo-google-fonts/jetbrains-mono`
+   - `expo-font`
+2. Replace emoji icons with a single icon wrapper layer (`Icon` component) mapped to line icons.
+3. Keep route names, `AuthContext`, Supabase APIs/queries, and edge-function wiring unchanged.
+4. Keep all computed DB-backed values unchanged (for example `row_total`, `warranty_age_days`, `tml_share_percent`, `tml_share_amount`).
+5. For estimate UI, preserve full real field contract (do not simplify DB model to sample prototype fields).
+6. One screen = one focused commit for clean review and rollback safety.
+
 ---
 
 ## 6) Activity Tracker (Master)
@@ -153,6 +193,9 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 
 | ID | Module | Reference Screen ID | Mobile Target Route/File | Data Source (DB Truth) | Status | Owner | Notes |
 |---|---|---|---|---|---|---|---|
+| FOUND-01 | Foundation | global tokens | `mobile/tailwind.config.js` | N/A (design token layer only) | NS | Mobile | Add audited token palette + radius + font families |
+| FOUND-02 | Foundation | global typography | `mobile/src/app/_layout.tsx` | N/A (font load only) | NS | Mobile | Load Space Grotesk, Plus Jakarta Sans, JetBrains Mono |
+| FOUND-03 | Foundation | global icon layer | `mobile/src/components/ui/Icon.tsx` | N/A (icon wrapper only) | NS | Mobile | Map reference icon names to lucide-react-native |
 | AUTH-01 | Auth | login | `mobile/src/app/(auth)/login.tsx` | Supabase auth + profile metadata | NS | Mobile | |
 | AUTH-02 | Auth | signup | `mobile/src/app/(auth)/signup.tsx` | Supabase auth | NS | Mobile | |
 | AUTH-03 | Auth | reset | `mobile/src/app/(auth)/password-reset.tsx` | Supabase auth recovery | NS | Mobile | |
@@ -209,15 +252,26 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 
 ### 8.1 Per-screen gates
 
-1. `Design Gate`: side-by-side screenshot comparison versus reference.
+1. `Design Gate`: side-by-side screenshot comparison versus reference artboard.
 2. `Data Gate`: verify every dynamic value source path maps to DB truth entities.
 3. `Flow Gate`: verify navigation transitions and status updates.
+4. `Icon Gate`: no emoji icon usage remains in redesigned screen paths.
+5. `Regression Gate`: no data-contract edits in Supabase query/select/update payloads.
 
-### 8.2 Module gate (Body & Paint)
+### 8.2 Build and static checks (bundle-aligned)
+
+1. `npx tsc --noEmit` passes.
+2. Lint passes for changed mobile files.
+3. Search check for known emoji icons in `mobile/src` returns empty.
+4. Diff check confirms redesign PR touches styling/components/layout and not DB logic paths.
+
+### 8.3 Module gate (Body & Paint)
 
 1. All BP-01..BP-08 are `DN` in tracker.
 2. No unresolved hardcoded sample data.
 3. End-to-end create -> damage -> estimate -> submit path passes on Android and iOS.
+4. Estimate keeps full `estimate_rows` field integrity while matching new visual design.
+5. Submit checklist continues to derive readiness from DB-backed flags and document/photo states.
 
 ---
 
