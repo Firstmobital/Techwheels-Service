@@ -9,13 +9,14 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import DatePickerField from '../../../components/common/DatePickerField'
 import ModelChipSelector from '../../../components/common/ModelChipSelector'
 import NativeSelectField from '../../../components/common/NativeSelectField'
-import { getJobCardSummary, updateJobCard, updateJobCardStatus } from '../../../lib/api/jobCards'
+import { getJobCardSummary, type JobCardStatus, updateJobCard, updateJobCardStatus } from '../../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../../lib/api/autodocRates'
 import { fetchVehicleByReg, upsertVehicle } from '../../../lib/api/vehicles'
-import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
+import { Icon } from '../../../components/ui/Icon'
 
 type Params = {
   id?: string | string[]
@@ -81,7 +82,44 @@ function uniqueNonEmpty(values: string[]): string[] {
   return result
 }
 
+function normalizeOwnerPhoneInput(value: string | null | undefined): string {
+  const digitsOnly = String(value ?? '').replace(/\D/g, '')
+  if (!digitsOnly) return ''
+  if (digitsOnly.length <= 10) return digitsOnly
+  return digitsOnly.slice(-10)
+}
+
+function isValidOwnerPhone(value: string | null | undefined): boolean {
+  return /^\d{10}$/.test(normalizeOwnerPhoneInput(value))
+}
+
+function pickFirstText(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    const normalized = String(value ?? '').trim()
+    if (normalized) return normalized
+  }
+  return ''
+}
+
+function toDateInputValue(value: string | null | undefined): string {
+  const raw = pickFirstText(value)
+  if (!raw) return ''
+
+  const match = raw.match(/(\d{4})[-/](\d{2})[-/](\d{2})/)
+  if (match) {
+    const [, year, month, day] = match
+    return `${year}-${month}-${day}`
+  }
+
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
+  return ''
+}
+
 function toForm(data: any, vehicle: any | null): FormState {
+  const ownerPhone = normalizeOwnerPhoneInput(pickFirstText(vehicle?.owner_phone, data?.owner_phone))
+  const dateOfSale = toDateInputValue(pickFirstText(vehicle?.date_of_sale, data?.date_of_sale))
+
   return {
     regNumber: String(data?.reg_number ?? ''),
     jcNumber: String(data?.jc_number ?? ''),
@@ -93,17 +131,18 @@ function toForm(data: any, vehicle: any | null): FormState {
     model: String(vehicle?.model ?? data?.model ?? ''),
     year: vehicle?.year == null ? '' : String(vehicle.year),
     colour: String(vehicle?.colour ?? data?.colour ?? ''),
-    paintType: String(vehicle?.paint_type ?? ''),
-    dateOfSale: String(vehicle?.date_of_sale ?? ''),
+    paintType: pickFirstText(vehicle?.paint_type, data?.paint_type),
+    dateOfSale,
     ownerName: String(vehicle?.owner_name ?? data?.owner_name ?? ''),
-    ownerPhone: String(vehicle?.owner_phone ?? ''),
-    dealerCity: String(vehicle?.dealer_city ?? ''),
-    bpCityCategory: String(vehicle?.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY),
+    ownerPhone,
+    dealerCity: pickFirstText(vehicle?.dealer_city, data?.dealer_city),
+    bpCityCategory: pickFirstText(vehicle?.bp_city_category, data?.bp_city_category) || DEFAULT_BP_CITY_CATEGORY,
   }
 }
 
 export default function JobCardStageScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
@@ -113,6 +152,7 @@ export default function JobCardStageScreen() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
+  const [jobStatus, setJobStatus] = useState<JobCardStatus>('draft')
   const [form, setForm] = useState<FormState | null>(null)
   const [claimTypeOptions, setClaimTypeOptions] = useState<string[]>(['Body & Paint'])
   const [modelOptions, setModelOptions] = useState<string[]>([])
@@ -174,6 +214,7 @@ export default function JobCardStageScreen() {
       setWarning(vehicleRes.error)
     }
 
+    setJobStatus((jobRes.data.status as JobCardStatus) ?? 'draft')
     setForm(toForm(jobRes.data, vehicleRes.data ?? null))
 
     if (lookupsRes.data) {
@@ -205,6 +246,31 @@ export default function JobCardStageScreen() {
   const onSave = async (goToDamage = false) => {
     if (!jobCardId || !form) return
 
+    if (!form.paintType.trim()) {
+      Alert.alert('Missing Paint Type', 'Select paint type before saving.')
+      return
+    }
+
+    if (!form.dateOfSale.trim()) {
+      Alert.alert('Missing Date of Sale', 'Select Date of Sale to calculate car ageing before saving.')
+      return
+    }
+
+    if (!form.ownerName.trim()) {
+      Alert.alert('Missing Owner Name', 'Enter owner name before saving.')
+      return
+    }
+
+    if (!form.ownerPhone.trim()) {
+      Alert.alert('Missing Owner Phone', 'Enter owner phone before saving.')
+      return
+    }
+
+    if (!isValidOwnerPhone(form.ownerPhone)) {
+      Alert.alert('Invalid Owner Phone', 'Owner phone must be exactly 10 digits.')
+      return
+    }
+
     const km = form.kmReading.trim()
     const kmReading = km.length > 0 ? Number(km) : null
     if (km.length > 0 && (!Number.isFinite(kmReading) || Number(kmReading) < 0)) {
@@ -230,7 +296,7 @@ export default function JobCardStageScreen() {
       dealerCity: form.dealerCity,
       bpCityCategory: form.bpCityCategory,
       ownerName: form.ownerName,
-      ownerPhone: form.ownerPhone,
+      ownerPhone: normalizeOwnerPhoneInput(form.ownerPhone),
       dateOfSale: form.dateOfSale || null,
     })
 
@@ -271,108 +337,241 @@ export default function JobCardStageScreen() {
     Alert.alert('Saved', 'Job card details updated successfully.')
   }
 
+  const statusLabel = useMemo(() => {
+    if (jobStatus === 'completed') return 'Submitted'
+    if (jobStatus === 'approved') return 'Approved'
+    if (jobStatus === 'submitted') return 'Submitted'
+    if (jobStatus === 'in_work') return 'In Work'
+    return 'Draft'
+  }, [jobStatus])
+
+  const statusAccent = useMemo(() => {
+    if (jobStatus === 'completed' || jobStatus === 'submitted') return '#1f9a6b'
+    if (jobStatus === 'approved') return '#7048cf'
+    if (jobStatus === 'in_work') return '#c9751b'
+    return '#7d8090'
+  }, [jobStatus])
+
+  const stageIndex = useMemo(() => {
+    if (jobStatus === 'draft') return 0
+    if (jobStatus === 'in_work') return 1
+    if (jobStatus === 'approved') return 2
+    if (jobStatus === 'submitted') return 3
+    if (jobStatus === 'completed') return 4
+    return 0
+  }, [jobStatus])
+
+  const stageLabels = ['Intake', 'Document', 'Estimate', 'Pre-Submit', 'Submit']
+
   return (
     <>
-      <Stack.Screen options={{ title: 'Job Card' }} />
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
-        <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="jobcard" />
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView style={{ flex: 1, backgroundColor: '#f6f4ee' }} contentContainerStyle={{ paddingBottom: 28 }}>
+        <SafeAreaView
+          edges={['top']}
+          style={{
+            backgroundColor: '#ffffff',
+            borderBottomWidth: 1,
+            borderBottomColor: '#e7e3d9',
+            paddingHorizontal: 16,
+            paddingTop: Math.max(insets.top > 0 ? 8 : 18, 8),
+            paddingBottom: 12,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <TouchableOpacity
+                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
+                onPress={() => router.back()}
+              >
+                <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
+              </TouchableOpacity>
+              <View style={{ minWidth: 0, flex: 1 }}>
+                <Text style={{ fontSize: 11, color: '#8b90a0', fontWeight: '700', letterSpacing: 0.12, textTransform: 'uppercase' }}>
+                  {form?.jcNumber || jobCardNumberHint || 'Job Card'}
+                </Text>
+                <Text style={{ fontSize: 18, color: '#1a1b21', fontWeight: '700' }}>Job Card</Text>
+              </View>
+            </View>
+            <View style={{ borderWidth: 1, borderColor: '#e3ceb0', backgroundColor: '#fbefdd', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: statusAccent, marginRight: 7 }} />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: statusAccent }}>{statusLabel}</Text>
+            </View>
+          </View>
+        </SafeAreaView>
+
+        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e7e3d9', backgroundColor: '#ffffff' }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={{ flex: 1, borderRadius: 14, backgroundColor: '#2a4cd0', borderWidth: 1, borderColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}>
+              <Icon name="file" size={18} color="#ffffff" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#ffffff' }}>Job Card</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/damage', params: { id: jobCardId, jcNumber: form?.jcNumber ?? '', regNumber: form?.regNumber ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="grid" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Damage</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: form?.jcNumber ?? '', regNumber: form?.regNumber ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="file-text" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Estimate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/submit', params: { id: jobCardId, jcNumber: form?.jcNumber ?? '', regNumber: form?.regNumber ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="send" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Submit</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+            {stageLabels.map((label, index) => {
+              const isDone = index < stageIndex
+              const isCurrent = index === stageIndex
+              return (
+                <View key={label} style={{ flex: 1, alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#ffffff',
+                        borderWidth: isDone || isCurrent ? 0 : 2,
+                        borderColor: '#d8d2c6',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {isDone ? <Text style={{ color: '#ffffff', fontWeight: '700' }}>✓</Text> : isCurrent ? <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#ffffff' }} /> : null}
+                    </View>
+                    {index < stageLabels.length - 1 ? <View style={{ height: 3, flex: 1, backgroundColor: isDone ? '#1f9a6b' : '#d8d2c6', marginHorizontal: 6, borderRadius: 2 }} /> : null}
+                  </View>
+                  <Text style={{ marginTop: 8, fontSize: 12, fontWeight: isCurrent ? '700' : '600', color: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#a7a99f' }}>{label}</Text>
+                </View>
+              )
+            })}
+          </View>
+        </View>
 
         {loading ? (
-          <View className="items-center justify-center py-20">
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text className="text-sm text-gray-600 mt-3">Loading job card...</Text>
+            <Text style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Loading job card...</Text>
           </View>
         ) : error ? (
-          <View className="bg-white border border-red-200 rounded-xl p-5">
-            <Text className="text-lg font-semibold text-red-700">Unable to load job card</Text>
-            <Text className="text-sm text-red-600 mt-1">{error}</Text>
-            <TouchableOpacity className="mt-4 bg-blue-600 rounded-lg py-3 items-center" onPress={loadData}>
-              <Text className="text-white font-semibold">Retry</Text>
+          <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#fecaca', borderRadius: 14, padding: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#b91c1c' }}>Unable to load job card</Text>
+            <Text style={{ fontSize: 14, color: '#dc2626', marginTop: 4 }}>{error}</Text>
+            <TouchableOpacity style={{ marginTop: 12, backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }} onPress={loadData}>
+              <Text style={{ color: '#ffffff', fontWeight: '700' }}>Retry</Text>
             </TouchableOpacity>
           </View>
         ) : form ? (
           <>
             {warning ? (
-              <View className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
-                <Text className="text-sm text-amber-800">{warning}</Text>
+              <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 8, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 12, padding: 14 }}>
+                <Text style={{ fontSize: 13, color: '#92400e' }}>{warning}</Text>
               </View>
             ) : null}
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
-              <Text className="text-base font-bold text-slate-900 tracking-tight">Job Card Details</Text>
+            <View style={{ marginHorizontal: 16, marginTop: 10, marginBottom: 10, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 16 }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#7d8090', letterSpacing: 1.2, marginBottom: 2, textTransform: 'uppercase' }}>Job Card Details</Text>
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Registration Number</Text>
-              <TextInput value={form.regNumber} editable={false} className="border border-slate-200 rounded-lg px-3 py-3 bg-slate-100 text-slate-500 text-sm font-medium" />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Registration number</Text>
+              <TextInput
+                value={form.regNumber}
+                editable={false}
+                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 16, fontWeight: '600' }}
+              />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Job Card Number *</Text>
-              <TextInput value={form.jcNumber} editable={false} className="border border-slate-200 rounded-lg px-3 py-3 bg-slate-100 text-slate-500 text-sm font-medium" />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Job card number</Text>
+              <TextInput
+                value={form.jcNumber}
+                editable={false}
+                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 16, fontWeight: '600' }}
+              />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Complaint Date (YYYY-MM-DD) *</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Complaint date</Text>
               <TextInput
                 value={form.complaintDate}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintDate: value } : prev))}
-                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">KM Reading</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>KM reading</Text>
               <TextInput
                 value={form.kmReading}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, kmReading: value } : prev))}
                 keyboardType="number-pad"
-                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Claim Type</Text>
-              <View className="flex-row flex-wrap">
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Claim type</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {claimTypeOptions.map((option) => {
                   const active = form.claimType === option
                   return (
                     <TouchableOpacity
                       key={option}
-                      className={`mr-2 mb-2 rounded-lg border px-3 py-2.5 ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-300 bg-white'}`}
+                      style={{
+                        marginRight: 8,
+                        marginBottom: 8,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: active ? '#2a4cd0' : '#1a1b21',
+                        backgroundColor: active ? '#2a4cd0' : '#ffffff',
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                      }}
                       onPress={() => setForm((prev) => (prev ? { ...prev, claimType: option } : prev))}
                     >
-                      <Text className={`text-xs font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>{option}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#ffffff' : '#1a1b21' }}>{option}</Text>
                     </TouchableOpacity>
                   )
                 })}
               </View>
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Complaint Notes</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Complaint notes</Text>
               <TextInput
                 value={form.complaintText}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintText: value } : prev))}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
-                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium min-h-[96px]"
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 24, paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500', minHeight: 150 }}
                 placeholderTextColor="#9ca3af"
               />
             </View>
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
-              <Text className="text-base font-bold text-slate-900 tracking-tight">Vehicle Details</Text>
+            <View style={{ marginHorizontal: 16, marginBottom: 10, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 16 }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#7d8090', letterSpacing: 1.2, marginBottom: 2, textTransform: 'uppercase' }}>Vehicle Details</Text>
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">VIN / Chassis No</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>VIN / Chassis no.</Text>
               <TextInput
                 value={form.vin}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, vin: value } : prev))}
-                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Model</Text>
+              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 tracking-wide">Model</Text>
               <ModelChipSelector
                 value={form.model}
                 options={modelChipOptions}
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, model: value } : prev))}
               />
 
-              <View className="flex-row mt-4 gap-2">
-                <View className="flex-1">
-                  <Text className="text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide">Year</Text>
+              <View style={{ flexDirection: 'row', marginTop: 14, columnGap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginBottom: 8, letterSpacing: 0.2 }}>Year</Text>
                   <NativeSelectField
                     value={form.year}
                     placeholder="Select year"
@@ -381,8 +580,8 @@ export default function JobCardStageScreen() {
                   />
                 </View>
 
-                <View className="flex-1">
-                  <Text className="text-xs font-semibold text-slate-700 mb-2 uppercase tracking-wide">Colour</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginBottom: 8, letterSpacing: 0.2 }}>Colour</Text>
                   <NativeSelectField
                     value={form.colour}
                     placeholder="Select colour"
@@ -392,7 +591,7 @@ export default function JobCardStageScreen() {
                 </View>
               </View>
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Paint Type</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Paint type</Text>
               <NativeSelectField
                 value={form.paintType}
                 placeholder="Select paint type"
@@ -400,64 +599,74 @@ export default function JobCardStageScreen() {
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, paintType: value } : prev))}
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Date of Sale</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Date of Sale</Text>
               <DatePickerField
                 value={form.dateOfSale}
                 placeholder="YYYY-MM-DD"
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, dateOfSale: value } : prev))}
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Car Ageing (auto-calc)</Text>
-              <View className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-3">
-                <Text className="text-sm font-semibold text-blue-900">
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Car Ageing (auto-calc)</Text>
+              <View style={{ borderRadius: 999, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 20, paddingVertical: 15 }}>
+                <Text style={{ fontSize: 17, fontWeight: '700', color: '#2a4cd0' }}>
                   {calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'} days
                 </Text>
               </View>
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Owner Name</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Owner name</Text>
               <TextInput
                 value={form.ownerName}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerName: value } : prev))}
-                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Owner Phone</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Owner phone</Text>
               <TextInput
                 value={form.ownerPhone}
-                onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerPhone: value } : prev))}
+                onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerPhone: normalizeOwnerPhoneInput(value) } : prev))}
                 keyboardType="phone-pad"
-                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                maxLength={10}
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">Dealer City</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>Dealer city</Text>
               <TextInput
                 value={form.dealerCity}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, dealerCity: value } : prev))}
-                className="border border-slate-300 rounded-lg px-3 py-3 bg-white text-slate-900 text-sm font-medium"
+                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 16, fontWeight: '500' }}
                 placeholderTextColor="#9ca3af"
               />
 
-              <Text className="text-xs font-semibold text-slate-700 mt-4 mb-2 uppercase tracking-wide">BP City Category</Text>
-              <View className="flex-row flex-wrap">
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21', marginTop: 14, marginBottom: 8, letterSpacing: 0.2 }}>BP category</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).map((option) => {
                   const active = form.bpCityCategory === option
                   return (
                     <TouchableOpacity
                       key={option}
-                      className={`mr-2 mb-2 rounded-lg border px-3 py-2.5 ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-300 bg-white'}`}
+                      style={{
+                        marginRight: 8,
+                        marginBottom: 8,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: active ? '#2a4cd0' : '#1a1b21',
+                        backgroundColor: active ? '#ffffff' : '#ffffff',
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                      }}
                       onPress={() => setForm((prev) => (prev ? { ...prev, bpCityCategory: option } : prev))}
                     >
-                      <Text className={`text-xs font-semibold ${active ? 'text-blue-700' : 'text-slate-700'}`}>{option}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#2a4cd0' : '#1a1b21' }}>{option}</Text>
                     </TouchableOpacity>
                   )
                 })}
               </View>
             </View>
 
-            <TouchableOpacity className="mt-1 rounded-lg py-4 items-center bg-indigo-600" onPress={() => onSave(true)}>
-              <Text className="text-white font-semibold">{saving ? 'Saving...' : 'Next: Damage Stage'}</Text>
+            <TouchableOpacity style={{ marginHorizontal: 16, marginTop: 4, borderRadius: 999, paddingVertical: 18, alignItems: 'center', backgroundColor: '#4a43df' }} onPress={() => onSave(true)}>
+              <Text style={{ color: '#ffffff', fontSize: 19, fontWeight: '700' }}>{saving ? 'Saving...' : 'Next: Damage Stage'}</Text>
             </TouchableOpacity>
           </>
         ) : null}

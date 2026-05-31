@@ -1,10 +1,10 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** � PHASE C STARTING: BP-01 COMPLETE, BP-02 CREATE FLOW NEXT  
+**Status:** PHASE C IN PROGRESS: BP-02 (RV), BP-03 (RV), BP-04 DAMAGE NEXT  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-05-31 15:45 IST (BP-01 visual parity audit complete: all 5 stage filters present, header/tabs/cards/FAB match reference exactly. Approved for sign-off. BP-02 is immediate next.)  
+**Last Updated:** 2026-05-31 22:26 IST (Sequence updated per user: Job Card accepted for current pass; Damage is next focus; Estimate starts only after Damage pass.)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
-**Primary Goal:** Complete BP-02 through BP-08 screens one-at-a-time with documented visual parity audits. BP-02 (Create Job Card) audit begins now.
+**Primary Goal:** Complete BP-03 through BP-08 screens one-at-a-time with documented visual parity audits. BP-02 (Create Job Card) is now closed for review in this cycle.
 
 ---
 
@@ -12,7 +12,7 @@
 
 1. All prior pass/fail claims are historical context only and are not sign-off.
 2. ✅ **COMPLETE:** AUTH screens (login, signup, reset) and home screen audited against current device screenshots; Home counters are now DB-backed.
-3. ⏳ **NEXT:** Start BP-01 (`mobile/src/app/(tabs)/autodoc.tsx`) with fresh paired screenshot audit (reference vs device), then implement and verify parity gaps.
+3. ⏳ **NEXT:** Start BP-04 (`mobile/src/app/job-cards/[id]/damage.tsx`) from fresh paired screenshots, then proceed to BP-07 (`mobile/src/app/job-cards/[id]/estimate.tsx`).
 4. A screen can move to `RV` only with paired screenshots (reference vs app) and DB-truth checks.
 5. A screen can move to `DN` only after iOS + Android visual parity confirmation AND documented audit trail in this tracker.
 6. **Audit trail is mandatory:** Every screen must have before/after gaps documented before marking as complete.
@@ -40,6 +40,13 @@
 5. All user-visible values must come from current app data flow (Supabase APIs and DB tables/views aligned to full dump schema).
 6. Authority never downgrades: if newer dump supersedes this one later, mappings move forward only.
 7. This redesign is visual/interaction refactor only; no business logic, query, field, RLS, edge function, or schema change is allowed.
+
+### 1.3) User Directive Lock (2026-05-31)
+
+1. Effective immediately: no business-logic changes are permitted unless explicitly requested and approved by user in this chat.
+2. This includes create/fetch/save/hydration sequence behavior, status transitions, and DB write timing semantics.
+3. If a bug appears logic-related during parity work, capture it in tracker and pause for user sign-off before code changes.
+4. Runtime logic edits introduced in this pass that altered create-flow save sequencing were rolled back to preserve previously tested behavior.
 
 ---
 
@@ -247,9 +254,9 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
 | BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | RV | Mobile | ✅ Visual parity audit complete (2026-05-31): all 5 stage filters present, header/tabs/cards/FAB match reference exactly. DB-backed metrics wired. Approved for sign-off. |
-| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | NS | Mobile | Pending fresh audit after BP-01 sign-off. |
-| BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | NS | Mobile | Pending fresh audit after BP-02. |
-| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | Pending fresh audit after BP-03. |
+| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | RV | Mobile | ✅ User-approved for current cycle (2026-05-31). Header/stepper/layout parity implemented; post-fetch Date of Sale + Customer Complaint restored; Paint Type/Date of Sale/Owner Name/Owner Phone validations enforced; owner phone restricted to 10 digits. ⚠️ Per user directive (2026-05-31), business-logic/save-sequencing changes are locked and can only be modified after explicit approval. |
+| BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | RV | Mobile | ✅ User confirmed screen looks complete in current pass (2026-05-31). Keep business logic unchanged; only visual parity follow-ups if explicitly requested. |
+| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | IP | Mobile | 🔄 Active next screen per user sequence. Damage parity pass applied (design-only): custom detail header, icon tabs, 5-step strip, reference-style affected-panels chips with count badges, repair-stage cards, upload rows, and bottom CTA. Pending user screenshot sign-off. |
 | BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | NS | Mobile | Capture flow camera/gallery selection. |
 | BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | NS | Mobile | Review captured panel photos by repair stage. |
 | BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | NS | Mobile | Pending fresh audit; include OTA-safe hero rendering validation on existing binaries. |
@@ -336,6 +343,69 @@ Status legend for this section: `OK` = matches reference, `GAP` = mismatch found
 2. No hardcoded demo values in render path.
 3. All displayed metrics reconcile with live query results.
 4. Dashboard routes transition correctly to downstream workflow screens.
+
+### 7.4 BP-02 Paired Screenshot Diff (2026-05-31)
+
+**Reference:** Intake -> New Job Card (Lookup step) artboard screenshot  
+**Current app evidence:** user-shared BP-02 current screen screenshot  
+**Audit Status:** 🟢 REVIEW READY (user-approved current pass)
+
+| Area | Reference baseline | Current screenshot gap | Fix status |
+|---|---|---|---|
+| Header | Circular back icon + `INTAKE` overline + `New Job Card` title in custom top bar | Legacy nav bar with text `Back`; missing intake overline/header treatment | ✅ First pass implemented in `create.tsx` |
+| Stepper | 2-step rail (`1 Lookup` active, `2 Vehicle details` inactive) under header | Stepper missing in current screenshot | ✅ First pass implemented |
+| Lookup card shell | Soft border card, rounded corners, tighter spacing rhythm | Plain bordered form block with old spacing and typography | ✅ First pass implemented |
+| Input anatomy | Rounded fields, tuned placeholder color, KM suffix inside input | Legacy text fields and missing KM suffix style | ✅ First pass implemented |
+| Upload rows | Icon tile + title/subtitle + upload icon affordance | Plain text buttons for video/image pickers | ✅ First pass implemented |
+| Fetch CTA | Disabled neutral button with icon when prerequisites missing | Bright blue enabled-style button in current screenshot | ✅ First pass implemented |
+| Helper note + footer CTA | Soft info note + disabled `Create & start documentation` footer button | Helper note and footer CTA style did not match reference | ✅ First pass implemented |
+
+**Implementation note (2026-05-31):**
+1. Redesign pass started in `mobile/src/app/job-cards/create.tsx` while preserving existing create/fetch/upload logic.
+2. Build gate check passed (`npx tsc --noEmit`).
+3. Post-fetch sections aligned to reference: Vehicle Details and Job Details now rendered in redesigned style.
+4. Required-field gate updates: Paint Type, Date of Sale, Owner Name, Owner Phone mandatory before proceed.
+5. Owner phone input normalized to digits and constrained to exactly 10 digits.
+
+**7.4.1 BP-02 Closure Note (2026-05-31):**
+1. ✅ Date of Sale no longer drops after RC lookup; fallback mapping added for nested `regDate` payload shapes.
+2. ✅ Customer Complaint textarea restored in redesigned Job Details card.
+3. ✅ Car ageing dependency preserved: Date of Sale required for meaningful ageing calculation.
+4. ✅ Current pass accepted by user; BP-02 moved to `RV`.
+5. ⏭️ Next screen in sequence: BP-04 (`mobile/src/app/job-cards/[id]/damage.tsx`).
+
+### 7.5 BP-03 Paired Screenshot Diff (2026-05-31)
+
+**Reference:** Job Card screen artboard with header (`JC-2026-0428` + status pill), icon tabs, 5-step stage strip, form cards  
+**Current app evidence:** user-shared current screen (`Job Card` plain header, old chip tabs, no stage strip)  
+**Audit Status:** 🟡 IN PROGRESS (fix pass required)
+
+**Design audit rule (confirmed by user):**
+1. `Draft` vs `In Work` values are data-state dependent and are **not** treated as visual parity gaps.
+2. BP-03 audit compares layout, spacing, typography, iconography, component anatomy, and interaction styling only.
+
+| Area | Reference baseline | Current screenshot gap | Fix status |
+|---|---|---|---|
+| Top header | Back circle + small JC number + title `Job Card` + right status pill | Current screenshot had overlap + weak hierarchy | ✅ Fixed in code; pending device re-verify screenshot |
+| Header safe area | Header content should start below status bar/notch with no overlap | Status bar time overlaps JC number line in current app screenshot | ✅ Fixed: safe-area inset padding applied in `mobile/src/app/job-cards/[id]/jobcard.tsx` |
+| Workflow tabs | 4 icon cards: Job Card, Damage, Estimate, Submit | Older screenshot showed legacy pills; icon-tab migration applied | ✅ Fixed in code; pending device re-verify screenshot |
+| Stage strip | 5-step visual strip with labels (Intake, Document, Estimate, Pre-Submit, Submit) and current-step highlight | Older screenshot showed missing strip; stage-strip migration applied | ✅ Fixed in code; pending device re-verify screenshot |
+| Job card details card | Section title + sentence-case labels + locked reg/jc fields with read-only treatment | Current had uppercase legacy labels and heavier old styling | ⚠️ PARTIAL: sentence-case labels fixed; final lock-icon/field-muted polish pending |
+| Vehicle details card | Two-column Year/Colour, Paint type, ageing highlight chip, owner/dealer/bp fields in modern card style | Current uses legacy field styles and spacing rhythm; BP category control does not match segmented look | ⏳ Pending fix |
+| Primary CTA | Bottom full-width blue button `Next · Damage stage →` | Current button text/style differs (`Next: Damage Stage`) | ⏳ Pending fix |
+
+**Functional parity expectations for BP-03 (must preserve):**
+1. Load full database-backed state on open by job-card id.
+2. Allow editing and saving for permitted fields.
+3. Keep `Registration number` and `Job card number` non-editable (read-only).
+4. Continue navigation to Damage stage after successful save/status update.
+
+**BP-03 Fix Log (2026-05-31, latest):**
+1. ✅ Header overlap regression fixed (safe-area inset top padding).
+2. ✅ Header now uses contextual JC/status layout instead of plain nav title.
+3. ✅ Workflow section migrated to icon-card tabs + stage strip.
+4. ✅ Registration number and Job card number remain read-only (non-editable).
+5. ⏳ Remaining: final typography/spacing and read-only lock-treatment polish for exact pixel parity.
 
 ---
 

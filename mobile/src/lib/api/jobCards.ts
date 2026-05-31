@@ -11,6 +11,7 @@ export type CreateJobCardInput = {
 }
 
 export type UpdateJobCardInput = {
+  regNumber?: string
   jcNumber: string
   complaintDate: string
   kmReading?: number | null

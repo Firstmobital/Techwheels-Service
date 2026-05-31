@@ -8,15 +8,15 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { getJobCardSummary } from '../../../lib/api/jobCards'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { getJobCardSummary, type JobCardStatus } from '../../../lib/api/jobCards'
 import { listActivePanelLabels } from '../../../lib/api/autodocRates'
 import { getActiveModelRates } from '../../../lib/api/autodocRates'
 import { listPanels } from '../../../lib/api/panels'
 import { listPanelPhotos } from '../../../lib/api/photos'
 import { syncDamagePanels } from '../../../lib/api/panels'
 import { fetchVehicleByReg } from '../../../lib/api/vehicles'
-import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
-import { Chip, Pill } from '../../../components/ui'
+import { Icon } from '../../../components/ui/Icon'
 
 type Params = {
   id?: string | string[]
@@ -34,27 +34,18 @@ type PanelDamageSummary = {
 
 type DamageStage = 'pre-repair' | 'under-repair' | 'post-repair'
 
-const DAMAGE_STAGES: Array<{ key: DamageStage; label: string; short: string; cardClass: string; valueClass: string }> = [
+const DAMAGE_STAGES: Array<{ key: DamageStage; label: string }> = [
   {
     key: 'pre-repair',
     label: 'Pre-Repair',
-    short: 'PRE',
-    cardClass: 'border-orange-200 bg-orange-50',
-    valueClass: 'text-orange-700',
   },
   {
     key: 'under-repair',
     label: 'Under-Repair',
-    short: 'UNDER',
-    cardClass: 'border-blue-200 bg-blue-50',
-    valueClass: 'text-blue-700',
   },
   {
     key: 'post-repair',
     label: 'Post-Repair',
-    short: 'POST',
-    cardClass: 'border-emerald-200 bg-emerald-50',
-    valueClass: 'text-emerald-700',
   },
 ]
 
@@ -78,6 +69,7 @@ function uniqueNonEmpty(values: string[]): string[] {
 
 export default function DamageStageScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
@@ -91,6 +83,7 @@ export default function DamageStageScreen() {
   const [activeStage, setActiveStage] = useState<DamageStage | null>(null)
   const [syncingPanels, setSyncingPanels] = useState(false)
   const [panelSourceNote, setPanelSourceNote] = useState<string>('')
+  const [jobStatus, setJobStatus] = useState<JobCardStatus>('draft')
 
   const loadDamage = async () => {
     if (!jobCardId) {
@@ -151,6 +144,7 @@ export default function DamageStageScreen() {
     setPanelSourceNote('All active panel master options')
 
     const regFromJob = String(jobRes.data?.reg_number ?? '').trim()
+    setJobStatus((jobRes.data?.status as JobCardStatus) ?? 'draft')
     if (regFromJob) {
       const vehicleRes = await fetchVehicleByReg(regFromJob)
       const modelName = String(vehicleRes.data?.model ?? jobRes.data?.model ?? '').trim()
@@ -202,9 +196,32 @@ export default function DamageStageScreen() {
     )
   }, [selectedPanelRows])
 
-  const selectedPanelsWithPreRepair = useMemo(() => {
-    return selectedPanelRows.filter((panel) => panel.preRepairCount > 0).length
-  }, [selectedPanelRows])
+  const panelPhotoCountByName = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const row of panelRows) {
+      const total = row.preRepairCount + row.underRepairCount + row.postRepairCount
+      map.set(row.panelName.toLowerCase(), total)
+    }
+    return map
+  }, [panelRows])
+
+  const statusLabel = useMemo(() => {
+    if (jobStatus === 'completed') return 'Submitted'
+    if (jobStatus === 'approved') return 'Approved'
+    if (jobStatus === 'submitted') return 'Submitted'
+    if (jobStatus === 'in_work') return 'In Work'
+    return 'Draft'
+  }, [jobStatus])
+
+  const statusAccent = useMemo(() => {
+    if (jobStatus === 'completed' || jobStatus === 'submitted') return '#1f9a6b'
+    if (jobStatus === 'approved') return '#7048cf'
+    if (jobStatus === 'in_work') return '#c9751b'
+    return '#7d8090'
+  }, [jobStatus])
+
+  const stageLabels = ['Intake', 'Document', 'Estimate', 'Pre-Submit', 'Submit']
+  const stageIndex = 1
 
   const stageCountForPanel = (panel: PanelDamageSummary, stage: DamageStage): number => {
     if (stage === 'pre-repair') return panel.preRepairCount
@@ -256,211 +273,256 @@ export default function DamageStageScreen() {
     })
   }
 
+  const goToPanelPhotos = (panel: PanelDamageSummary) => {
+    if (!jobCardId) return
+    router.push({
+      pathname: '/job-cards/[id]/panel-photos',
+      params: {
+        id: jobCardId,
+        jobCardId,
+        panelId: panel.id,
+        panelName: panel.panelName,
+        jcNumber: jobCardNumberHint ?? '',
+        regNumber: regNumberHint ?? '',
+      },
+    })
+  }
+
   return (
     <>
-      <Stack.Screen options={{ title: 'Damage Stage' }} />
-      <ScrollView className="flex-1 bg-slate-100" contentContainerStyle={{ padding: 14, paddingBottom: 28 }}>
-        <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="damage" />
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView style={{ flex: 1, backgroundColor: '#f6f4ee' }} contentContainerStyle={{ paddingBottom: 28 }}>
+        <SafeAreaView
+          edges={['top']}
+          style={{
+            backgroundColor: '#ffffff',
+            borderBottomWidth: 1,
+            borderBottomColor: '#e7e3d9',
+            paddingHorizontal: 16,
+            paddingTop: Math.max(insets.top > 0 ? 8 : 18, 8),
+            paddingBottom: 12,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <TouchableOpacity
+                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
+                onPress={() => router.back()}
+              >
+                <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
+              </TouchableOpacity>
+              <View style={{ minWidth: 0, flex: 1 }}>
+                <Text style={{ fontSize: 11, color: '#8b90a0', fontWeight: '700', letterSpacing: 0.12, textTransform: 'uppercase' }}>
+                  {jobCardNumberHint || 'Job Card'}
+                </Text>
+                <Text style={{ fontSize: 18, color: '#1a1b21', fontWeight: '700' }}>Damage Documentation</Text>
+              </View>
+            </View>
+            <View style={{ borderWidth: 1, borderColor: '#e3ceb0', backgroundColor: '#fbefdd', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: statusAccent, marginRight: 7 }} />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: statusAccent }}>{statusLabel}</Text>
+            </View>
+          </View>
+        </SafeAreaView>
+
+        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e7e3d9', backgroundColor: '#ffffff' }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/jobcard', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="file" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Job Card</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, borderRadius: 14, backgroundColor: '#2a4cd0', borderWidth: 1, borderColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}>
+              <Icon name="grid" size={18} color="#ffffff" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#ffffff' }}>Damage</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="file-text" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Estimate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/submit', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="send" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Submit</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+            {stageLabels.map((label, index) => {
+              const isDone = index < stageIndex
+              const isCurrent = index === stageIndex
+              return (
+                <View key={label} style={{ flex: 1, alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#ffffff',
+                        borderWidth: isDone || isCurrent ? 0 : 2,
+                        borderColor: '#d8d2c6',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {isDone ? <Text style={{ color: '#ffffff', fontWeight: '700' }}>✓</Text> : isCurrent ? <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#ffffff' }} /> : null}
+                    </View>
+                    {index < stageLabels.length - 1 ? <View style={{ height: 3, flex: 1, backgroundColor: isDone ? '#1f9a6b' : '#d8d2c6', marginHorizontal: 6, borderRadius: 2 }} /> : null}
+                  </View>
+                  <Text style={{ marginTop: 8, fontSize: 12, fontWeight: isCurrent ? '700' : '600', color: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#a7a99f' }}>{label}</Text>
+                </View>
+              )
+            })}
+          </View>
+        </View>
 
         {loading ? (
-          <View className="items-center justify-center py-20">
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text className="text-sm text-gray-600 mt-3">Loading damage workflow...</Text>
+            <Text style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Loading damage workflow...</Text>
           </View>
         ) : error ? (
-          <View className="bg-white border border-red-200 rounded-2xl p-5 mt-3">
-            <Text className="text-lg font-semibold text-red-700">Unable to load damage stage</Text>
-            <Text className="text-sm text-red-600 mt-1">{error}</Text>
-            <TouchableOpacity className="mt-4 bg-blue-600 rounded-xl py-3 items-center" onPress={loadDamage}>
-              <Text className="text-white font-semibold">Retry</Text>
+          <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#fecaca', borderRadius: 14, padding: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#b91c1c' }}>Unable to load damage stage</Text>
+            <Text style={{ fontSize: 14, color: '#dc2626', marginTop: 4 }}>{error}</Text>
+            <TouchableOpacity style={{ marginTop: 12, backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }} onPress={loadDamage}>
+              <Text style={{ color: '#ffffff', fontWeight: '700' }}>Retry</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            <View className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-              <Text className="text-[11px] uppercase tracking-wide text-blue-700 font-semibold">Damage Overview</Text>
-              <Text className="text-xl font-bold text-slate-900 mt-1">{selectedPanels.length} Panels Selected</Text>
-              <Text className="text-xs text-slate-600 mt-1">
-                Pre-repair captured for {selectedPanelsWithPreRepair} of {selectedPanels.length} selected panels.
-              </Text>
-              <View className="mt-3 flex-row">
-                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 mr-2">
-                  <Text className="text-[11px] text-slate-500">Pre</Text>
-                  <Text className="text-base font-semibold text-slate-900">{totals.pre}</Text>
-                </View>
-                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 ml-2 mr-2">
-                  <Text className="text-[11px] text-slate-500">Under</Text>
-                  <Text className="text-base font-semibold text-slate-900">{totals.under}</Text>
-                </View>
-                <View className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 ml-2">
-                  <Text className="text-[11px] text-slate-500">Post</Text>
-                  <Text className="text-base font-semibold text-slate-900">{totals.post}</Text>
+            <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 24, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 40, fontWeight: '700', color: '#1a1b21' }}>Affected panels</Text>
+                <View style={{ borderWidth: 1, borderColor: '#9fb9f2', backgroundColor: '#dbe7fb', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#2a4cd0' }}>{selectedPanels.length} selected</Text>
                 </View>
               </View>
-            </View>
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
-              <View className="flex-row items-start justify-between">
-                <Text className="text-base font-semibold text-slate-900">Select Affected Panels</Text>
-                {syncingPanels ? <Text className="text-xs text-blue-700">Syncing...</Text> : null}
-              </View>
-              <Text className="text-xs text-slate-500 mt-1">Tap cards to select or deselect panels for this job card.</Text>
-              <Text className="text-xs text-blue-700 mt-1">Source: {panelSourceNote}</Text>
+              <Text style={{ fontSize: 13, color: '#7d8090', marginTop: 6 }}>{panelSourceNote.replace('Model-wise rate card panels ', 'From the model rate card · ')}</Text>
 
-              <View className="mt-3 flex-row flex-wrap">
+              <View style={{ marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {panelOptions.map((panelName) => {
                   const active = selectedPanels.includes(panelName)
+                  const photoCount = panelPhotoCountByName.get(panelName.toLowerCase()) ?? 0
+
                   return (
-                    <Chip
+                    <TouchableOpacity
                       key={panelName}
-                      label={panelName}
-                      selected={active}
                       onPress={() => { void togglePanel(panelName) }}
                       disabled={syncingPanels}
-                      showCheck={true}
-                      variant="large"
-                    />
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: active ? '#2a4cd0' : '#d8d2c6',
+                        backgroundColor: active ? '#2a4cd0' : '#ffffff',
+                        paddingHorizontal: 16,
+                        paddingVertical: 11,
+                        opacity: syncingPanels ? 0.65 : 1,
+                      }}
+                    >
+                      {active ? <Icon name="check" size={14} color="#ffffff" strokeWidth={3} /> : null}
+                      <Text style={{ marginLeft: active ? 7 : 0, fontSize: 18, fontWeight: '700', color: active ? '#ffffff' : '#4b4e59' }}>{panelName}</Text>
+                      {active && photoCount > 0 ? (
+                        <View style={{ marginLeft: 8, borderRadius: 8, backgroundColor: '#5b7de0', paddingHorizontal: 7, paddingVertical: 1 }}>
+                          <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '700' }}>{photoCount}</Text>
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
                   )
                 })}
               </View>
 
               {selectedPanels.length === 0 ? (
-                <View className="mt-2 rounded-xl border border-dashed border-amber-300 bg-amber-50 px-3 py-3">
-                  <Text className="text-sm text-amber-800">Select at least one panel to unlock stage-wise upload cards.</Text>
+                <View style={{ marginTop: 12, borderRadius: 11, backgroundColor: '#fbefdd', borderWidth: 1, borderColor: '#f1dcb8', paddingHorizontal: 12, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Icon name="alert-circle" size={15} color="#c9751b" strokeWidth={2} />
+                  <Text style={{ fontSize: 12, color: '#c9751b', fontWeight: '600', flex: 1 }}>Select at least one panel to unlock stage-wise photo upload.</Text>
                 </View>
-              ) : (
-                <Text className="text-xs text-blue-700 mt-1">Selected: {selectedPanels.join(', ')}</Text>
-              )}
+              ) : null}
             </View>
 
             {selectedPanels.length > 0 && activeStage ? (
               <>
-                <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
-                  <Text className="text-xs uppercase tracking-wide text-slate-500">Select Repair Stage</Text>
-                <View className="mt-3 flex-row">
-                    {DAMAGE_STAGES.map((stage, index) => {
+                <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 24, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 16 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#7d8090', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12 }}>Repair Stage</Text>
+                  <View style={{ flexDirection: 'row', gap: 9 }}>
+                    {DAMAGE_STAGES.map((stage) => {
                       const active = activeStage === stage.key
                       const value = stage.key === 'pre-repair' ? totals.pre : stage.key === 'under-repair' ? totals.under : totals.post
+
+                      const accent = stage.key === 'pre-repair' ? '#c9751b' : stage.key === 'under-repair' ? '#2f63cf' : '#1c8f63'
                       return (
                         <TouchableOpacity
                           key={stage.key}
-                          className={`flex-1 rounded-xl border-1.5 px-3 py-3 items-center justify-center ${index < DAMAGE_STAGES.length - 1 ? 'mr-2' : ''}`}
+                          onPress={() => setActiveStage(stage.key)}
                           style={{
+                            flex: 1,
+                            borderRadius: 13,
+                            borderWidth: 1.5,
+                            borderColor: active ? accent : '#e7e3d9',
                             backgroundColor: active
                               ? stage.key === 'pre-repair'
                                 ? '#fbefdd'
                                 : stage.key === 'under-repair'
                                   ? '#e9f0fd'
                                   : '#e4f4ec'
-                              : '#f6f4ee',
-                            borderColor: active
-                              ? stage.key === 'pre-repair'
-                                ? '#f1dcb8'
-                                : stage.key === 'under-repair'
-                                  ? '#cadcf8'
-                                  : '#bfe6d2'
-                              : '#e7e3d9',
-                            borderWidth: 1.5,
+                              : '#ffffff',
+                            paddingHorizontal: 14,
+                            paddingVertical: 13,
                           }}
-                          onPress={() => setActiveStage(stage.key)}
                         >
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              fontWeight: '700',
-                              letterSpacing: 0.5,
-                              color: active
-                                ? stage.key === 'pre-repair'
-                                  ? '#c9751b'
-                                  : stage.key === 'under-repair'
-                                    ? '#2f63cf'
-                                    : '#1c8f63'
-                                : '#82858f',
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {stage.label}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 28,
-                              fontWeight: '800',
-                              color: active
-                                ? stage.key === 'pre-repair'
-                                  ? '#c9751b'
-                                  : stage.key === 'under-repair'
-                                    ? '#2f63cf'
-                                    : '#1c8f63'
-                                : '#4b4e59',
-                              marginTop: 8,
-                            }}
-                          >
-                            {value}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              fontWeight: '600',
-                              color: active
-                                ? stage.key === 'pre-repair'
-                                  ? '#c9751b'
-                                  : stage.key === 'under-repair'
-                                    ? '#2f63cf'
-                                    : '#1c8f63'
-                                : '#82858f',
-                              marginTop: 4,
-                            }}
-                          >
-                            photos
-                          </Text>
+                          <Text style={{ fontSize: 12, fontWeight: '800', color: accent, lineHeight: 16, textTransform: 'uppercase' }}>{stage.label}</Text>
+                          <Text style={{ fontSize: 42, fontWeight: '700', color: active ? accent : '#1a1b21', marginTop: 6 }}>{value}</Text>
+                          <Text style={{ fontSize: 14, color: '#7d8090', fontWeight: '600', marginTop: 1 }}>photos</Text>
                         </TouchableOpacity>
                       )
                     })}
                   </View>
                 </View>
 
-                <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
-                  <Text className="text-base font-semibold text-slate-900">{DAMAGE_STAGES.find((s) => s.key === activeStage)?.label} Photo Upload</Text>
-                  <Text className="text-xs text-slate-500 mt-1">Upload photos stage-wise for selected panels.</Text>
+                <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 24, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 16 }}>
+                  <Text style={{ fontSize: 42, fontWeight: '700', color: '#1a1b21', marginBottom: 12 }}>{DAMAGE_STAGES.find((s) => s.key === activeStage)?.label} uploads</Text>
 
-                  <View className="mt-3">
+                  <View style={{ gap: 10 }}>
                     {selectedPanelRows.map((panel) => {
                       const count = stageCountForPanel(panel, activeStage)
+                      const done = count > 0
+
                       return (
-                        <View key={panel.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 mb-2">
-                          <View className="flex-row items-center justify-between">
-                            <View className="flex-1 pr-2">
-                              <Text className="text-sm font-semibold text-slate-900">{panel.panelName}</Text>
-                              <Text className="text-xs text-slate-600 mt-1">{count} photo{count === 1 ? '' : 's'} in this stage</Text>
-                            </View>
-                            <View className="flex-row">
-                              <TouchableOpacity
-                                className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 mr-2"
-                                onPress={() => goToCapture(panel, activeStage)}
-                              >
-                                <Text className="text-xs font-semibold text-blue-700">Upload</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                className="rounded-lg border border-slate-300 bg-white px-3 py-2"
-                                onPress={() => {
-                                  if (!jobCardId) return
-                                  router.push({
-                                    pathname: '/job-cards/[id]/panel-photos',
-                                    params: {
-                                      id: jobCardId,
-                                      jobCardId,
-                                      panelId: panel.id,
-                                      panelName: panel.panelName,
-                                      jcNumber: jobCardNumberHint ?? '',
-                                      regNumber: regNumberHint ?? '',
-                                    },
-                                  })
-                                }}
-                              >
-                                <Text className="text-xs font-semibold text-slate-700">View</Text>
-                              </TouchableOpacity>
-                            </View>
+                        <View key={panel.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, borderColor: '#e7e3d9', backgroundColor: '#fbfaf6', paddingHorizontal: 12, paddingVertical: 12 }}>
+                          <View style={{ width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: done ? '#e4f4ec' : '#f1efea' }}>
+                            <Icon name={done ? 'check' : 'camera'} size={19} color={done ? '#1c8f63' : '#8b90a0'} strokeWidth={done ? 2.5 : 2} />
                           </View>
+
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1b21' }}>{panel.panelName}</Text>
+                            <Text style={{ fontSize: 13, color: '#7d8090', marginTop: 1 }}>{count} photo{count === 1 ? '' : 's'}</Text>
+                          </View>
+
+                          <TouchableOpacity
+                            onPress={() => goToCapture(panel, activeStage)}
+                            style={{ borderRadius: 12, borderWidth: 1, borderColor: '#a8c2f2', backgroundColor: '#d5e1f8', paddingHorizontal: 14, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                          >
+                            <Icon name="plus" size={16} color="#2a4cd0" strokeWidth={2.5} />
+                            <Text style={{ fontSize: 17, fontWeight: '700', color: '#2a4cd0' }}>Add</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => goToPanelPhotos(panel)}
+                            style={{ borderRadius: 12, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', paddingHorizontal: 14, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <Icon name="eye" size={16} color="#1a1b21" strokeWidth={2} />
+                          </TouchableOpacity>
                         </View>
                       )
                     })}
@@ -469,20 +531,17 @@ export default function DamageStageScreen() {
               </>
             ) : null}
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
-              <Text className="text-xs uppercase tracking-wide text-slate-500">Ready For Estimate</Text>
-              <Text className="text-sm text-slate-700 mt-1">
-                Estimate cards are auto-created from selected panels to match the web workflow.
-              </Text>
+            <View style={{ marginHorizontal: 16, marginTop: 14 }}>
               <TouchableOpacity
-                className={`mt-3 rounded-xl py-4 items-center ${selectedPanels.length === 0 ? 'bg-indigo-300' : 'bg-indigo-600'}`}
+                style={{ borderRadius: 16, backgroundColor: selectedPanels.length === 0 ? '#a8b6f1' : '#2a4cd0', paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 9 }}
                 disabled={selectedPanels.length === 0}
                 onPress={() => {
                   if (!jobCardId) return
                   router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
                 }}
               >
-                <Text className="text-white font-semibold">Next: Estimate Stage</Text>
+                <Text style={{ color: '#ffffff', fontSize: 19, fontWeight: '700' }}>Next · Estimate stage</Text>
+                <Icon name="arrow-right" size={19} color="#ffffff" strokeWidth={2} />
               </TouchableOpacity>
             </View>
           </>

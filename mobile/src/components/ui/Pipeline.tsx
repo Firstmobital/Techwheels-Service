@@ -123,12 +123,13 @@ export const Pipeline: React.FC<PipelineProps> = ({ stage, compact = false }) =>
     <View
       style={{
         flexDirection: 'row',
+        alignItems: 'center',
         width: '100%',
-        paddingVertical: 2,
         paddingVertical: 4,
       }}
+    >
       {config.steps.map((step, index) => (
-      {config.steps.map((step, index) => (
+        <React.Fragment key={step.name}>
           {index < currentIndex ? (
             <View
               style={{
@@ -192,7 +193,6 @@ export const Pipeline: React.FC<PipelineProps> = ({ stage, compact = false }) =>
                 marginHorizontal: 4,
               }}
             />
-          )}
           )}
         </React.Fragment>
       ))}

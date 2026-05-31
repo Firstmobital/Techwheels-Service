@@ -12,9 +12,11 @@ import {
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
 import { Stack, useRouter } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import DatePickerField from '../../components/common/DatePickerField'
 import ModelChipSelector from '../../components/common/ModelChipSelector'
 import NativeSelectField from '../../components/common/NativeSelectField'
+import { Icon } from '../../components/ui/Icon'
 import { uploadDocumentFile } from '../../lib/api/documents'
 import { createJobCard, updateJobCard, updateJobCardStatus, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
@@ -88,6 +90,30 @@ function toDateInputValue(value: string | null | undefined): string {
     return `${year}-${month}-${day}`
   }
 
+  const dmyWithMonthName = raw.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/)
+  if (dmyWithMonthName) {
+    const [, dayRaw, monthNameRaw, year] = dmyWithMonthName
+    const monthMap: Record<string, string> = {
+      jan: '01',
+      feb: '02',
+      mar: '03',
+      apr: '04',
+      may: '05',
+      jun: '06',
+      jul: '07',
+      aug: '08',
+      sep: '09',
+      oct: '10',
+      nov: '11',
+      dec: '12',
+    }
+    const month = monthMap[monthNameRaw.toLowerCase()]
+    if (month) {
+      const day = dayRaw.padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+  }
+
   const parsed = new Date(raw)
   if (!Number.isNaN(parsed.getTime())) {
     return parsed.toISOString().slice(0, 10)
@@ -153,8 +179,20 @@ function uniqueNonEmpty(values: string[]): string[] {
   return result
 }
 
+function normalizeOwnerPhoneInput(value: string | null | undefined): string {
+  const digitsOnly = String(value ?? '').replace(/\D/g, '')
+  if (!digitsOnly) return ''
+  if (digitsOnly.length <= 10) return digitsOnly
+  return digitsOnly.slice(-10)
+}
+
+function isValidOwnerPhone(value: string | null | undefined): boolean {
+  return /^\d{10}$/.test(normalizeOwnerPhoneInput(value))
+}
+
 export default function CreateJobCardScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
 
   const goToDashboard = () => {
     router.replace('/(tabs)/autodoc')
@@ -273,15 +311,78 @@ export default function CreateJobCardScreen() {
   }
 
   const applyRtoCacheToForm = (row: RtoCacheLookupRow, resolvedReg: string) => {
-    const model = pickFirstText(row.api_rc_model, row.api_rc_vehicle_class, row.api_rc_vehicle_manufacturer_name)
-    const color = pickFirstText(row.api_rc_vehicle_colour)
-    const owner = pickFirstText(row.api_rc_owner)
-    const ownerPhone = pickFirstText(row.api_rc_mobile_number)
-    const chassis = pickFirstText(row.api_rc_chassis_number, row.api_rc_chassis)
-    const dealerCity = pickFirstText(row.api_rc_reg_authority)
-    const dateOfSale = toDateInputValue(row.api_rc_reg_date)
-    const manufacturedYearRaw = pickFirstText(row.api_rc_vehicle_manufacturing_month_year)
+    const rowAny = row as Record<string, any>
+    const responseData = rowAny?.api_rc_response?.result?.data ?? rowAny?.api_rc_response?.data ?? null
+
+    const model = pickFirstText(
+      row.api_rc_model,
+      rowAny?.api_rc_model,
+      responseData?.model,
+      row.api_rc_vehicle_class,
+      responseData?.class,
+      row.api_rc_vehicle_manufacturer_name,
+      responseData?.vehicleManufacturerName,
+    )
+
+    const color = pickFirstText(
+      row.api_rc_vehicle_colour,
+      rowAny?.api_rc_vehicle_colour,
+      responseData?.vehicleColour,
+    )
+
+    const owner = pickFirstText(
+      row.api_rc_owner,
+      rowAny?.api_rc_owner,
+      responseData?.owner,
+    )
+
+    const ownerPhoneRaw = pickFirstText(
+      row.api_rc_mobile_number,
+      rowAny?.api_rc_mobile_number,
+      responseData?.mobileNumber,
+    )
+    const ownerPhone = normalizeOwnerPhoneInput(ownerPhoneRaw)
+
+    const chassis = pickFirstText(
+      row.api_rc_chassis_number,
+      row.api_rc_chassis,
+      rowAny?.api_rc_chassis_number,
+      rowAny?.api_rc_chassis,
+      responseData?.chassis,
+    )
+
+    const dealerCity = pickFirstText(
+      row.api_rc_reg_authority,
+      rowAny?.api_rc_reg_authority,
+      responseData?.regAuthority,
+    )
+
+    const rcRegDateRaw = pickFirstText(
+      row.api_rc_reg_date,
+      rowAny?.api_rc_reg_date,
+      rowAny?.regDate,
+      responseData?.regDate,
+    )
+    const dateOfSale = toDateInputValue(rcRegDateRaw)
+
+    const manufacturedYearRaw = pickFirstText(
+      row.api_rc_vehicle_manufacturing_month_year,
+      rowAny?.api_rc_vehicle_manufacturing_month_year,
+      responseData?.vehicleManufacturingMonthYear,
+    )
     const extractedYear = manufacturedYearRaw.match(/\b(19\d{2}|20\d{2})\b/)?.[1] ?? ''
+
+    const patch = {
+      regNumber: resolvedReg,
+      vin: chassis,
+      model,
+      year: extractedYear,
+      colour: color,
+      ownerName: owner,
+      ownerPhone: ownerPhone,
+      dealerCity,
+      dateOfSale,
+    }
 
     setForm((prev) => ({
       ...prev,
@@ -295,6 +396,8 @@ export default function CreateJobCardScreen() {
       dealerCity: dealerCity || prev.dealerCity,
       dateOfSale: dateOfSale || prev.dateOfSale,
     }))
+
+    return patch
   }
 
   const validateLookupPrerequisitesForUpload = (docLabel: 'walkaround video' | 'car image') => {
@@ -606,6 +709,10 @@ export default function CreateJobCardScreen() {
       return
     }
 
+    const ensuredDraftId = draftJobCardId ?? await ensureDraftJobCardForUpload()
+    if (!ensuredDraftId) return
+    if (!draftJobCardId) setDraftJobCardId(ensuredDraftId)
+
     setLookupBusy(true)
     setVehicleLookupStatus('idle')
 
@@ -628,6 +735,7 @@ export default function CreateJobCardScreen() {
       }
 
       let prefillApplied = false
+      let vehiclePatch: Partial<FormState> | null = null
 
       if (!result.data) {
         const rcLookupRes = await fetchVehicleFromRcLookup(resolvedReg)
@@ -639,7 +747,7 @@ export default function CreateJobCardScreen() {
         }
 
         if (rcLookupRes.data) {
-          applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
+          vehiclePatch = applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
           prefillApplied = true
         } else {
           clearVehiclePrefillFields()
@@ -663,7 +771,7 @@ export default function CreateJobCardScreen() {
           }
 
           if (rcLookupRes.data) {
-            applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
+            vehiclePatch = applyRtoCacheToForm(rcLookupRes.data, resolvedReg)
             prefillApplied = true
           } else {
             clearVehiclePrefillFields()
@@ -674,6 +782,20 @@ export default function CreateJobCardScreen() {
             return
           }
         } else {
+          vehiclePatch = {
+            regNumber: vehicle.reg_number ?? resolvedReg,
+            vin: vehicle.vin ?? '',
+            model: vehicle.model ?? '',
+            year: vehicle.year != null ? String(vehicle.year) : '',
+            colour: vehicle.colour ?? '',
+            paintType: vehicle.paint_type ?? '',
+            dealerCity: vehicle.dealer_city ?? '',
+            bpCityCategory: vehicle.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY,
+            ownerName: vehicle.owner_name ?? '',
+            ownerPhone: normalizeOwnerPhoneInput(vehicle.owner_phone ?? ''),
+            dateOfSale: vehicle.date_of_sale ?? '',
+          }
+
           setForm((prev) => ({
             ...prev,
             regNumber: vehicle.reg_number ?? prev.regNumber,
@@ -685,10 +807,58 @@ export default function CreateJobCardScreen() {
             dealerCity: vehicle.dealer_city ?? '',
             bpCityCategory: vehicle.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY,
             ownerName: vehicle.owner_name ?? '',
-            ownerPhone: vehicle.owner_phone ?? '',
+            ownerPhone: normalizeOwnerPhoneInput(vehicle.owner_phone ?? ''),
             dateOfSale: vehicle.date_of_sale ?? '',
           }))
           prefillApplied = true
+        }
+      }
+
+      if (prefillApplied) {
+        const merged = {
+          ...form,
+          regNumber: resolvedReg,
+          ...(vehiclePatch ?? {}),
+        }
+
+        const year = merged.year.trim() ? Number(merged.year) : null
+        const safeYear = year != null && Number.isFinite(year) ? year : null
+
+        const vehiclePersistRes = await upsertVehicle({
+          regNumber: merged.regNumber,
+          vin: merged.vin,
+          model: merged.model,
+          year: safeYear,
+          colour: merged.colour,
+          paintType: merged.paintType,
+          dealerCity: merged.dealerCity,
+          bpCityCategory: merged.bpCityCategory,
+          ownerName: merged.ownerName,
+          ownerPhone: merged.ownerPhone,
+          dateOfSale: merged.dateOfSale || null,
+        })
+
+        if (vehiclePersistRes.error) {
+          setVehicleLookupStatus('error')
+          Alert.alert('Fetch Failed', vehiclePersistRes.error)
+          logEvent('create_job_card_fetch_failed', { error_message: vehiclePersistRes.error, stage: 'persist_vehicle_after_fetch' }, 'autodoc-create')
+          return
+        }
+
+        const updateAfterFetchRes = await updateJobCard(ensuredDraftId, {
+          regNumber: merged.regNumber,
+          jcNumber: merged.jcNumber,
+          complaintDate: merged.complaintDate,
+          kmReading,
+          claimType: merged.claimType,
+          complaintText: merged.complaintText,
+        })
+
+        if (updateAfterFetchRes.error || !updateAfterFetchRes.data) {
+          setVehicleLookupStatus('error')
+          Alert.alert('Fetch Failed', updateAfterFetchRes.error ?? 'Unable to sync fetched data into draft job card.')
+          logEvent('create_job_card_fetch_failed', { error_message: updateAfterFetchRes.error ?? 'draft sync failed', stage: 'persist_job_card_after_fetch' }, 'autodoc-create')
+          return
         }
       }
 
@@ -701,6 +871,31 @@ export default function CreateJobCardScreen() {
 
   const onCreate = async () => {
     if (!canSubmit) return
+
+    if (!form.paintType.trim()) {
+      Alert.alert('Missing Paint Type', 'Select paint type before creating the job card.')
+      return
+    }
+
+    if (!form.dateOfSale.trim()) {
+      Alert.alert('Missing Date of Sale', 'Select Date of Sale to calculate car ageing before creating the job card.')
+      return
+    }
+
+    if (!form.ownerName.trim()) {
+      Alert.alert('Missing Owner Name', 'Enter owner name before creating the job card.')
+      return
+    }
+
+    if (!form.ownerPhone.trim()) {
+      Alert.alert('Missing Owner Phone', 'Enter owner phone before creating the job card.')
+      return
+    }
+
+    if (!isValidOwnerPhone(form.ownerPhone)) {
+      Alert.alert('Invalid Owner Phone', 'Owner phone must be exactly 10 digits.')
+      return
+    }
 
     const km = form.kmReading.trim()
     const kmReading = km.length > 0 ? Number(km) : null
@@ -781,21 +976,22 @@ export default function CreateJobCardScreen() {
 
       if (updateResult.error || !updateResult.data) {
         Alert.alert('Save Failed', updateResult.error ?? 'Unable to update job card')
-        logEvent('create_job_card_update_failed', { error_message: updateResult.error, job_card_id: draftJobCardId }, 'autodoc-create')
+        logEvent('create_job_card_update_failed', { error_message: updateResult.error ?? undefined, job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
         return
       }
 
-      logEvent('create_job_card_updated', { job_card_id: updateResult.data.id, jc_number: form.jcNumber }, 'autodoc-create')
+      const updatedJobCardId = updateResult.data.id
+      logEvent('create_job_card_updated', { job_card_id: updatedJobCardId, jc_number: form.jcNumber }, 'autodoc-create')
       Alert.alert('Updated', 'Job card draft updated successfully.', [
         {
           text: 'Open',
           onPress: async () => {
-            const statusRes = await updateJobCardStatus(updateResult.data.id, 'in_work')
+            const statusRes = await updateJobCardStatus(updatedJobCardId, 'in_work')
             if (statusRes.error) {
               Alert.alert('Status Update Failed', statusRes.error)
               return
             }
-            router.replace(`/job-cards/${updateResult.data?.id}/damage`)
+            router.replace(`/job-cards/${updatedJobCardId}/damage`)
           },
         },
       ])
@@ -815,21 +1011,22 @@ export default function CreateJobCardScreen() {
 
     if (result.error || !result.data) {
       Alert.alert('Create Failed', result.error ?? 'Unable to create job card')
-      logEvent('create_job_card_create_failed', { error_message: result.error }, 'autodoc-create')
+      logEvent('create_job_card_create_failed', { error_message: result.error ?? undefined }, 'autodoc-create')
       return
     }
 
-    logEvent('create_job_card_created', { job_card_id: result.data.id, jc_number: form.jcNumber }, 'autodoc-create')
+    const createdJobCardId = result.data.id
+    logEvent('create_job_card_created', { job_card_id: createdJobCardId, jc_number: form.jcNumber }, 'autodoc-create')
     Alert.alert('Created', 'Draft job card created successfully.', [
       {
         text: 'Open',
         onPress: async () => {
-          const statusRes = await updateJobCardStatus(result.data.id, 'in_work')
+          const statusRes = await updateJobCardStatus(createdJobCardId, 'in_work')
           if (statusRes.error) {
             Alert.alert('Status Update Failed', statusRes.error)
             return
           }
-          router.replace(`/job-cards/${result.data?.id}/damage`)
+          router.replace(`/job-cards/${createdJobCardId}/damage`)
         },
       },
     ])
@@ -839,115 +1036,209 @@ export default function CreateJobCardScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'New Job Card',
-          headerLeft: () => (
-            <Pressable
-              onPress={goToDashboard}
-              style={{ paddingVertical: 6, paddingHorizontal: 6 }}
-            >
-              <Text style={{ color: '#2563eb', fontWeight: '700', fontSize: 12 }}>Back</Text>
-            </Pressable>
-          ),
+          headerShown: false,
         }}
       />
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
-        <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-          <Text className="text-xs uppercase tracking-wide text-gray-500">Vehicle Lookup</Text>
+      <ScrollView style={{ flex: 1, backgroundColor: '#f6f4ee' }} contentContainerStyle={{ paddingBottom: 24 }}>
+        <View
+          style={{
+            backgroundColor: '#ffffff',
+            borderBottomWidth: 1,
+            borderBottomColor: '#e7e3d9',
+            paddingTop: Math.max(insets.top + 8, 18),
+            paddingHorizontal: 20,
+            paddingBottom: 14,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <Pressable
+              onPress={goToDashboard}
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                borderWidth: 1,
+                borderColor: '#d8d2c6',
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: '#ffffff',
+              }}
+            >
+              <Icon name="chevron-left" size={24} color="#4b4e59" strokeWidth={2} />
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#2a4cd0', textTransform: 'uppercase', marginBottom: 2 }}>Intake</Text>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1b21' }}>New Job Card</Text>
+            </View>
+          </View>
+        </View>
 
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Registration Number *</Text>
+        <View style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e7e3d9' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a4cd0', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: '700' }}>1</Text>
+            </View>
+            <Text style={{ marginLeft: 10, fontSize: 16, fontWeight: '700', color: '#1a1b21' }}>Lookup</Text>
+            <View style={{ flex: 1, height: 2, backgroundColor: '#e0dbd0', marginHorizontal: 12 }} />
+            <View style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#cfc9bd', justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}>
+              <Text style={{ color: '#7d8090', fontSize: 18, fontWeight: '700' }}>2</Text>
+            </View>
+            <Text style={{ marginLeft: 10, fontSize: 16, fontWeight: '600', color: '#7d8090' }}>Vehicle details</Text>
+          </View>
+        </View>
+
+        <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 14 }}>Vehicle Lookup</Text>
+
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Registration number<Text style={{ color: '#cf3858' }}>*</Text></Text>
           <TextInput
             value={form.regNumber}
             onChangeText={(value) => {
               setForm((prev) => ({ ...prev, regNumber: value.toUpperCase() }))
               setDraftJobCardId(null)
             }}
-            placeholder="RJ14CR1912"
+            placeholder="MH12 KJ 4471"
+            placeholderTextColor="#a7a99f"
             autoCapitalize="characters"
-            className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21', marginBottom: 14 }}
           />
 
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Job Card Number *</Text>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Job card number<Text style={{ color: '#cf3858' }}>*</Text></Text>
           <TextInput
             value={form.jcNumber}
             onChangeText={(value) => {
               setForm((prev) => ({ ...prev, jcNumber: value }))
               setDraftJobCardId(null)
             }}
-            placeholder="e.g. JC-2026-042"
-            className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+            placeholder="JC-2026-0432"
+            placeholderTextColor="#a7a99f"
+            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21', marginBottom: 14 }}
           />
 
-          <Text className="text-xs text-gray-600 mt-3 mb-1">KM Reading *</Text>
-          <TextInput
-            value={form.kmReading}
-            onChangeText={(value) => {
-              setForm((prev) => ({ ...prev, kmReading: value }))
-              setDraftJobCardId(null)
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>KM reading<Text style={{ color: '#cf3858' }}>*</Text></Text>
+          <View style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 6, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+            <TextInput
+              value={form.kmReading}
+              onChangeText={(value) => {
+                setForm((prev) => ({ ...prev, kmReading: value }))
+                setDraftJobCardId(null)
+              }}
+              placeholder="28450"
+              placeholderTextColor="#a7a99f"
+              keyboardType="number-pad"
+              style={{ flex: 1, fontSize: 16, color: '#1a1b21', paddingVertical: 8 }}
+            />
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#7d8090' }}>km</Text>
+          </View>
+
+          <TouchableOpacity
+            style={{
+              borderWidth: 1,
+              borderColor: '#d8d2c6',
+              borderRadius: 16,
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              marginBottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
             }}
-            placeholder="18420"
-            keyboardType="number-pad"
-            className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
-          />
-
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Vehicle Walkaround Video *</Text>
-          <TouchableOpacity className="border border-gray-300 rounded-lg px-3 py-3 bg-white" onPress={onPickWalkaround}>
-            <Text className="text-sm text-gray-700">{walkaroundVideoName || 'Capture video, pick from gallery, or choose file'}</Text>
-          </TouchableOpacity>
-
-          <Text className="text-xs text-gray-600 mt-3 mb-1">Car Image *</Text>
-          <TouchableOpacity className="border border-gray-300 rounded-lg px-3 py-3 bg-white" onPress={onPickCarImage}>
-            <Text className="text-sm text-gray-700">{carImageName || 'Capture photo, pick from gallery, or choose file'}</Text>
+            onPress={onPickWalkaround}
+          >
+            <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+              <Icon name="video" size={24} color="#505462" strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1b21' }}>Walkaround video</Text>
+              <Text style={{ fontSize: 12, color: '#7d8090' }}>{uploadingWalkaround ? 'Uploading...' : walkaroundVideoName || 'Capture or pick a 360° video'}</Text>
+            </View>
+            <Icon name="cloud-upload" size={24} color="#7d8090" strokeWidth={1.8} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`mt-3 rounded-lg py-3 items-center ${lookupBusy || !lookupReady ? 'bg-blue-300' : 'bg-blue-600'}`}
+            style={{
+              borderWidth: 1,
+              borderColor: '#d8d2c6',
+              borderRadius: 16,
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              marginBottom: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}
+            onPress={onPickCarImage}
+          >
+            <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+              <Icon name="camera" size={24} color="#505462" strokeWidth={2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1b21' }}>Car image</Text>
+              <Text style={{ fontSize: 12, color: '#7d8090' }}>{uploadingCarImage ? 'Uploading...' : carImageName || 'GPS-tagged exterior shot'}</Text>
+            </View>
+            <Icon name="cloud-upload" size={24} color="#7d8090" strokeWidth={1.8} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={{
+              borderRadius: 14,
+              paddingVertical: 14,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: lookupBusy || !lookupReady ? '#eeece5' : '#2a4cd0',
+              flexDirection: 'row',
+              gap: 8,
+            }}
             onPress={onFetchFromDb}
             disabled={lookupBusy || !lookupReady}
           >
-            <Text className="text-white font-semibold">
-              {lookupBusy ? 'Fetching...' : uploadingWalkaround || uploadingCarImage ? 'Uploading...' : 'Fetch from DB'}
+            <Icon name="rotate-cw" size={20} color={lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff'} strokeWidth={2} />
+            <Text style={{ fontSize: 16, fontWeight: '700', color: lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff' }}>
+              {lookupBusy ? 'Fetching...' : 'Fetch from DB'}
             </Text>
           </TouchableOpacity>
 
-          <Text className="text-xs text-gray-500 mt-2">
-            Enter Registration No, Job Card Number, KM Reading, then upload Vehicle Walkaround Video and Car Image (GPS tagged) to enable fetch.
-          </Text>
+          <View style={{ marginTop: 14, borderRadius: 14, backgroundColor: '#f3f1eb', paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row' }}>
+            <Icon name="info" size={18} color="#7d8090" strokeWidth={1.8} />
+            <Text style={{ marginLeft: 10, flex: 1, fontSize: 12, color: '#7d8090', lineHeight: 20 }}>
+              Enter reg, JC & KM, then attach the walkaround video and a GPS-tagged car image to enable fetch.
+            </Text>
+          </View>
 
           {vehicleLookupStatus === 'found' ? (
-            <Text className="text-xs text-emerald-700 mt-2">Vehicle found. Continue creating draft job card.</Text>
+            <Text style={{ fontSize: 12, color: '#1f9a6b', marginTop: 10, fontWeight: '600' }}>Vehicle found. Continue creating draft job card.</Text>
           ) : null}
 
           {vehicleLookupStatus === 'not_found' ? (
-            <Text className="text-xs text-amber-700 mt-2">Vehicle not found. Fill details manually and proceed.</Text>
+            <Text style={{ fontSize: 12, color: '#c9751b', marginTop: 10, fontWeight: '600' }}>Vehicle not found. Fill details manually and proceed.</Text>
           ) : null}
 
           {vehicleLookupStatus === 'error' ? (
-            <Text className="text-xs text-red-700 mt-2">Fetch failed due to DB or access error.</Text>
+            <Text style={{ fontSize: 12, color: '#c33b53', marginTop: 10, fontWeight: '600' }}>Fetch failed due to DB or access error.</Text>
           ) : null}
         </View>
 
         {showVehicleDetailsForm ? (
-          <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-            <Text className="text-xs uppercase tracking-wide text-gray-500">Vehicle Details</Text>
+          <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 14 }}>Vehicle details</Text>
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">VIN / Chassis No</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>VIN / Chassis no.</Text>
             <TextInput
               value={form.vin}
               onChangeText={(value) => setForm((prev) => ({ ...prev, vin: value }))}
               placeholder="17-char VIN"
-              className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+              placeholderTextColor="#a7a99f"
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21', marginBottom: 14 }}
             />
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Model</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Model</Text>
             <ModelChipSelector
               value={form.model}
               options={modelChipOptions}
               onChange={(value) => setForm((prev) => ({ ...prev, model: value }))}
             />
 
-            <View className="flex-row mt-3">
-              <View className="w-1/2 pr-2">
-                <Text className="text-xs text-gray-600 mb-1">Year</Text>
+            <View style={{ flexDirection: 'row', marginTop: 14 }}>
+              <View style={{ width: '48%', marginRight: '4%' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Year</Text>
                 <NativeSelectField
                   value={form.year}
                   placeholder="Select year"
@@ -955,9 +1246,8 @@ export default function CreateJobCardScreen() {
                   onChange={(value) => setForm((prev) => ({ ...prev, year: value }))}
                 />
               </View>
-
-              <View className="w-1/2 pl-2">
-                <Text className="text-xs text-gray-600 mb-1">Colour</Text>
+              <View style={{ width: '48%' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Colour</Text>
                 <NativeSelectField
                   value={form.colour}
                   placeholder="Select colour"
@@ -967,7 +1257,7 @@ export default function CreateJobCardScreen() {
               </View>
             </View>
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Paint Type</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Paint type</Text>
             <NativeSelectField
               value={form.paintType}
               placeholder="Select paint type"
@@ -975,92 +1265,111 @@ export default function CreateJobCardScreen() {
               onChange={(value) => setForm((prev) => ({ ...prev, paintType: value }))}
             />
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Date of Sale</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Date of Sale</Text>
             <DatePickerField
               value={form.dateOfSale}
               placeholder="YYYY-MM-DD"
               onChange={(value) => setForm((prev) => ({ ...prev, dateOfSale: value }))}
             />
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Car Ageing (auto-calc)</Text>
-            <View className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-3">
-              <Text className="text-sm text-blue-900 font-medium">
-                {calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'} days
-              </Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Car Ageing (auto-calc)</Text>
+            <View style={{ borderRadius: 16, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 14, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Icon name="clock" size={20} color="#2a4cd0" strokeWidth={2} />
+              <Text style={{ fontSize: 17, fontWeight: '700', color: '#2a4cd0' }}>{calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'}</Text>
+              <Text style={{ fontSize: 17, fontWeight: '600', color: '#4b4e59' }}>days car ageing</Text>
             </View>
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Owner Name</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Owner name</Text>
             <TextInput
               value={form.ownerName}
               onChangeText={(value) => setForm((prev) => ({ ...prev, ownerName: value }))}
               placeholder="Full name"
-              className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+              placeholderTextColor="#a7a99f"
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21' }}
             />
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Owner Phone</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Owner phone</Text>
             <TextInput
               value={form.ownerPhone}
-              onChangeText={(value) => setForm((prev) => ({ ...prev, ownerPhone: value }))}
+              onChangeText={(value) => setForm((prev) => ({ ...prev, ownerPhone: normalizeOwnerPhoneInput(value) }))}
               placeholder="10-digit mobile"
+              placeholderTextColor="#a7a99f"
               keyboardType="phone-pad"
-              className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
+              maxLength={10}
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21' }}
             />
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Dealer City</Text>
-            <TextInput
-              value={form.dealerCity}
-              onChangeText={(value) => setForm((prev) => ({ ...prev, dealerCity: value }))}
-              placeholder="Jaipur"
-              className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
-            />
-
-            <Text className="text-xs text-gray-600 mt-3 mb-1">BP City Category</Text>
-            <View className="flex-row flex-wrap">
-              {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).map((option) => {
-                const active = form.bpCityCategory === option
-                return (
-                  <TouchableOpacity
-                    key={option}
-                    className={`mr-2 mb-2 rounded-full border px-3 py-2 ${active ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}
-                    onPress={() => setForm((prev) => ({ ...prev, bpCityCategory: option }))}
-                  >
-                    <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{option}</Text>
-                  </TouchableOpacity>
-                )
-              })}
+            <View style={{ flexDirection: 'row', marginTop: 14 }}>
+              <View style={{ width: '52%', marginRight: '4%' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Dealer city</Text>
+                <TextInput
+                  value={form.dealerCity}
+                  onChangeText={(value) => setForm((prev) => ({ ...prev, dealerCity: value }))}
+                  placeholder="Jaipur"
+                  placeholderTextColor="#a7a99f"
+                  style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21' }}
+                />
+              </View>
+              <View style={{ width: '44%' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>BP category</Text>
+                <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, padding: 3, backgroundColor: '#f1efea' }}>
+                  {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).slice(0, 3).map((option) => {
+                    const active = form.bpCityCategory === option
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        style={{ flex: 1, borderRadius: 999, paddingVertical: 8, alignItems: 'center', backgroundColor: active ? '#ffffff' : 'transparent' }}
+                        onPress={() => setForm((prev) => ({ ...prev, bpCityCategory: option }))}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#1a1b21' : '#7d8090' }}>{option}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              </View>
             </View>
           </View>
         ) : null}
 
         {showVehicleDetailsForm ? (
-          <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
-            <Text className="text-xs uppercase tracking-wide text-gray-500">Job Details</Text>
+          <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 8 }}>Job details</Text>
 
-            <Text className="text-xs text-gray-600 mb-1">Warranty Claim Type</Text>
-            <View className="flex-row flex-wrap">
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Warranty claim type</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
               {claimTypeOptions.map((option) => {
                 const active = form.claimType === option
                 return (
                   <TouchableOpacity
                     key={option}
-                    className={`mr-2 mb-2 rounded-full border px-3 py-2 ${active ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}
+                    style={{
+                      marginRight: 8,
+                      marginBottom: 8,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: active ? '#2a4cd0' : '#d8d2c6',
+                      backgroundColor: active ? '#2a4cd0' : '#ffffff',
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
+                    }}
                     onPress={() => setForm((prev) => ({ ...prev, claimType: option }))}
                   >
-                    <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{option}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#ffffff' : '#4b4e59' }}>{option}</Text>
                   </TouchableOpacity>
                 )
               })}
             </View>
 
-            <Text className="text-xs text-gray-600 mt-3 mb-1">Customer Complaint</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Customer Complaint</Text>
             <TextInput
               value={form.complaintText}
               onChangeText={(value) => setForm((prev) => ({ ...prev, complaintText: value }))}
               placeholder="Describe the issue as reported by customer..."
+              placeholderTextColor="#a7a99f"
               multiline
-              numberOfLines={3}
+              numberOfLines={4}
               textAlignVertical="top"
-              className="border border-gray-300 rounded-lg px-3 py-3 bg-white min-h-[80px]"
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, minHeight: 120, fontSize: 16, color: '#1a1b21' }}
             />
           </View>
         ) : null}
@@ -1071,9 +1380,33 @@ export default function CreateJobCardScreen() {
               className={`rounded-lg py-4 items-center mt-4 ${saving ? 'bg-blue-300' : 'bg-blue-600'}`}
               disabled={saving}
               onPress={async () => {
+                if (!form.paintType.trim()) {
+                  Alert.alert('Missing Paint Type', 'Select paint type before continuing to damage stage.')
+                  return
+                }
+
+                if (!form.dateOfSale.trim()) {
+                  Alert.alert('Missing Date of Sale', 'Select Date of Sale to calculate car ageing before continuing.')
+                  return
+                }
+
+                if (!form.ownerName.trim()) {
+                  Alert.alert('Missing Owner Name', 'Enter owner name before continuing to damage stage.')
+                  return
+                }
+
+                if (!form.ownerPhone.trim()) {
+                  Alert.alert('Missing Owner Phone', 'Enter owner phone before continuing to damage stage.')
+                  return
+                }
+
+                if (!isValidOwnerPhone(form.ownerPhone)) {
+                  Alert.alert('Invalid Owner Phone', 'Owner phone must be exactly 10 digits.')
+                  return
+                }
+
                 setSaving(true)
                 try {
-                  const year = form.year.trim() ? Number(form.year) : null
                   const kmReading = form.kmReading.trim() ? Number(form.kmReading) : null
 
                   const updateResult = await updateJobCard(draftJobCardId, {
@@ -1087,7 +1420,7 @@ export default function CreateJobCardScreen() {
 
                   if (updateResult.error || !updateResult.data) {
                     Alert.alert('Error', updateResult.error ?? 'Unable to update job card')
-                    logEvent('create_job_card_next_failed', { error_message: updateResult.error, job_card_id: draftJobCardId }, 'autodoc-create')
+                    logEvent('create_job_card_next_failed', { error_message: updateResult.error ?? undefined, job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
                     return
                   }
 
@@ -1105,6 +1438,28 @@ export default function CreateJobCardScreen() {
               <Text className="text-blue-600 font-semibold">Cancel</Text>
             </TouchableOpacity>
           </>
+        ) : null}
+
+        {!showVehicleDetailsForm ? (
+          <View style={{ marginHorizontal: 20, marginTop: 12 }}>
+            <TouchableOpacity
+              disabled
+              style={{
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: '#ddd6c9',
+                backgroundColor: '#f3f1eb',
+                paddingVertical: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 8,
+              }}
+            >
+              <Text style={{ fontSize: 17, fontWeight: '700', color: '#a7a99f' }}>Create & start documentation</Text>
+              <Icon name="arrow-right" size={18} color="#a7a99f" strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         ) : null}
       </ScrollView>
     </>
