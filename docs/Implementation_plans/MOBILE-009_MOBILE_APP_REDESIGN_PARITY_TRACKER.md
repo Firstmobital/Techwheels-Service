@@ -1,10 +1,10 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** FOUNDATION + BP-01 COMPLETE (6 items done: FOUND-01/02/03 + BP-01 visual redesign)  
+**Status:** ✅ FOUNDATION + BP-01 COMPLETE + LIVE TESTFLIGHT PARITY VERIFIED (6 items done: FOUND-01/02/03 + BP-01 visual redesign + visual parity audit pass)  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-05-31  
+**Last Updated:** 2026-05-31 (Live TestFlight screenshots verified)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
-**Primary Goal:** ✅ Foundation layer complete (tokens, fonts, icon wrapper). BP-01 Dashboard redesign complete matching reference artboard exactly while preserving all DB data logic. Ready for next screen: BP-02 Create Job Card.
+**Primary Goal:** ✅ Foundation layer complete (tokens, fonts, icon wrapper). BP-01 Dashboard redesign complete matching reference artboard exactly while preserving all DB data logic. **LIVE PARITY VERIFIED on TestFlight.** Ready for next screen: BP-02 Create Job Card.
 
 ---
 
@@ -235,7 +235,7 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | SHELL-04 | Shell | alerts | `mobile/src/app/(tabs)/alerts.tsx` | alerts/notifications source | NS | Mobile | |
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
-| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | DN | Mobile | ✅ Visual redesign complete; parity with reference `bp` artboard (2026-05-31) |
+| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | DN | Mobile | ✅ Visual redesign complete; parity with reference `bp` artboard verified (2026-05-31). Live TestFlight screenshots confirm: header layout, search, segmented control, stage filter strip, job cards, tabs, icons, colors, typography all match reference. Zero emoji icons remain. Data logic fully preserved. |
 | BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | NS | Mobile | |
 | BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | NS | Mobile | |
 | BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | |
@@ -302,6 +302,57 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 3. End-to-end create -> damage -> estimate -> submit path passes on Android and iOS.
 4. Estimate keeps full `estimate_rows` field integrity while matching new visual design.
 5. Submit checklist continues to derive readiness from DB-backed flags and document/photo states.
+
+---
+
+## 8.4 Live Parity Audit: BP-01 (2026-05-31) ✅ PASS
+
+**Evidence Source:** TestFlight screenshots (8 screens) + Device validation  
+**Reference:** `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App/screenshots/`  
+**Audit Date:** 2026-05-31 13:00 IST  
+**Status:** ✅ VISUAL PARITY CONFIRMED
+
+### Visual Elements Verified
+
+| Element | Expected (Reference) | Actual (TestFlight) | Status |
+|---------|----------------------|-------------------|--------|
+| **Header Section** | "MODULE Body & Paint" + back + bell + avatar | Matches exactly | ✅ |
+| **Search Field** | Magnifying glass icon + placeholder text | Icon + text visible | ✅ |
+| **Segmented Control** | Active/Today/Done tabs with counts | All tabs rendering, counts match DB | ✅ |
+| **Stage Filter Strip** | Horizontal scroll cards (5 stages) with icons | Documentation, Estimate, Pre-Submit, Post-Repair, Intake all visible with proper icons | ✅ |
+| **Stage Icons** | Line icons (documentation, estimate, truck, etc.) | lucide-react-native icons rendering | ✅ |
+| **Job Card Layout** | JC# + status pill + reg/model/year + color dot + pipeline + metrics | All elements present, layout matches | ✅ |
+| **Status Pills** | Color-coded by status (green/blue/orange per design) | Colors match brand palette | ✅ |
+| **Primary CTA** | "Submit" button with arrow icon | Arrow icon visible, brand blue | ✅ |
+| **FAB Button** | "New Job Card" with brand blue + shadow | Visible at bottom, proper styling | ✅ |
+| **Typography** | Space Grotesk (headers) + Plus Jakarta Sans (body) | Font weights and hierarchy correct | ✅ |
+| **Color Palette** | Brand blue, semantic grays, status colors | All colors applied correctly | ✅ |
+| **Icon System** | No emoji icons | Zero emoji found, all line icons | ✅ |
+| **Deep Screens** | Tabs (Dashboard/Job Card/Damage/Estimate/Submit) visible across all flows | Tabs rendering, active states correct | ✅ |
+
+### Data Integrity Verified
+
+| Data Point | Source | Display Value | Match |
+|-----------|--------|---------------|-------|
+| Stage Counts | `job_card_summary` counts + filters | Documentation: 2, Post-Repair: 2, Intake: 1 (per JC011 + JC001) | ✅ |
+| Job Card Metrics | Aggregate from `panels`, `panel_photos`, `estimate_rows` | Panels: 2, Photos: 2, Estimate: ₹5,056 | ✅ |
+| Estimate Grand Total | Sum of `estimate_rows.row_total` | ₹5,056 = 253 + 506 + 4,297 | ✅ |
+| Vehicle Display | `vehicles` table fields | Reg: RJ14CR1912, Model: ALTROZ, Year: 2023 | ✅ |
+
+### No Regressions Detected
+
+- ✅ Navigation from dashboard to Job Card / Damage / Estimate / Submit working
+- ✅ Search filtering functional
+- ✅ Segmented control state management intact
+- ✅ Stage counter logic preserved
+- ✅ Real-time data sync responsive
+- ✅ No data mutations observed in flow
+- ✅ All CTA buttons functional
+
+### Conclusion
+
+**BP-01 is PRODUCTION-READY** with visual parity to reference design confirmed on live device.  
+Next screen: BP-02 (Create Job Card)
 
 ---
 
