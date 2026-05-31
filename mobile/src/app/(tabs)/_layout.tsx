@@ -198,7 +198,7 @@ export default function TabsLayout() {
         name="autodoc"
         options={{
           title: 'Body & Paint',
-          headerShown: true,
+          headerShown: false,
           href: null,
         }}
       />

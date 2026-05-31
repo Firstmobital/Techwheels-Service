@@ -110,10 +110,10 @@ interface StageFilterConfig {
 }
 
 const STAGE_FILTERS: StageFilterConfig[] = [
-  { key: 'documentation_pre_repair', label: 'Documentation', icon: 'layers', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
+  { key: 'documentation_pre_repair', label: 'Documentation', icon: 'grid', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
   { key: 'estimate', label: 'Estimate', icon: 'file-text', iconColor: '#7048cf', iconBgColor: '#f4edff' },
-  { key: 'pre_submit_pending', label: 'Pre-Submit', icon: 'clipboard', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
-  { key: 'post_repair_ppt', label: 'Post-Repair', icon: 'presentation', iconColor: '#2f63cf', iconBgColor: '#e9f0fd' },
+  { key: 'pre_submit_pending', label: 'Pre-Submit', icon: 'square', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
+  { key: 'post_repair_ppt', label: 'Post-Repair', icon: 'package', iconColor: '#2f63cf', iconBgColor: '#e9f0fd' },
   { key: 'active_intake', label: 'Intake', icon: 'truck', iconColor: '#6b6e78', iconBgColor: '#f6f4ee' },
 ]
 
@@ -651,7 +651,7 @@ export default function AutoDocScreen() {
                 </View>
 
                 {/* Pipeline */}
-                <Pipeline stage={stage} compact />
+                <Pipeline stage={stage} />
 
                 {/* Divider */}
                 <View style={{ height: 1, backgroundColor: '#e7e3d9', marginVertical: 13 }} />
