@@ -38,6 +38,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
         { name: 'documentation', done: false },
         { name: 'estimate', done: false },
         { name: 'submit', done: false },
+        { name: 'post-repair', done: false },
       ],
     },
     documentation_pre_repair: {
@@ -49,6 +50,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
         { name: 'documentation', done: true },
         { name: 'estimate', done: false },
         { name: 'submit', done: false },
+        { name: 'post-repair', done: false },
       ],
     },
     estimate: {
@@ -60,6 +62,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
         { name: 'documentation', done: true },
         { name: 'estimate', done: true },
         { name: 'submit', done: false },
+        { name: 'post-repair', done: false },
       ],
     },
     pre_submit_pending: {
@@ -71,6 +74,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
         { name: 'documentation', done: true },
         { name: 'estimate', done: true },
         { name: 'submit', done: false },
+        { name: 'post-repair', done: false },
       ],
     },
     pre_submit_done: {
@@ -82,6 +86,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
         { name: 'documentation', done: true },
         { name: 'estimate', done: true },
         { name: 'submit', done: true },
+        { name: 'post-repair', done: false },
       ],
     },
     post_repair_ppt: {
@@ -93,6 +98,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
         { name: 'documentation', done: true },
         { name: 'estimate', done: true },
         { name: 'submit', done: true },
+        { name: 'post-repair', done: true },
       ],
     },
     claim_submitted: {
@@ -104,6 +110,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
         { name: 'documentation', done: true },
         { name: 'estimate', done: true },
         { name: 'submit', done: true },
+        { name: 'post-repair', done: true },
       ],
     },
   }
