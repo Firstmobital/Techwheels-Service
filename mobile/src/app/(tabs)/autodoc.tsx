@@ -651,7 +651,9 @@ export default function AutoDocScreen() {
                 </View>
 
                 {/* Pipeline */}
-                <Pipeline stage={stage} />
+                <View style={{ marginVertical: 14 }}>
+                  <Pipeline stage={stage} />
+                </View>
 
                 {/* Divider */}
                 <View style={{ height: 1, backgroundColor: '#e7e3d9', marginVertical: 13 }} />
@@ -660,7 +662,7 @@ export default function AutoDocScreen() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                   <View style={{ flexDirection: 'row', gap: 14 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                      <Icon name="layers" size={14} color="#82858f" strokeWidth={1.5} />
+                      <Icon name="grid" size={14} color="#82858f" strokeWidth={1.5} />
                       <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#4b4e59', fontFamily: 'Plus Jakarta Sans' }}>
                         {row.panel_count ?? 0}
                       </Text>
