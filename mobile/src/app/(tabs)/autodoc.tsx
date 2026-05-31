@@ -105,15 +105,16 @@ interface StageFilterConfig {
   key: DashboardCardFilter
   label: string
   icon: string
-  color: string
+  iconColor: string
+  iconBgColor: string
 }
 
 const STAGE_FILTERS: StageFilterConfig[] = [
-  { key: 'documentation_pre_repair', label: 'Documentation', icon: 'layers', color: '#c9751b' },
-  { key: 'estimate', label: 'Estimate', icon: 'file-text', color: '#7048cf' },
-  { key: 'pre_submit_pending', label: 'Pre-Submit', icon: 'clipboard', color: '#c9751b' },
-  { key: 'post_repair_ppt', label: 'Post-Repair', icon: 'presentation', color: '#2f63cf' },
-  { key: 'active_intake', label: 'Intake', icon: 'truck', color: '#6b6e78' },
+  { key: 'documentation_pre_repair', label: 'Documentation', icon: 'layers', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
+  { key: 'estimate', label: 'Estimate', icon: 'file-text', iconColor: '#7048cf', iconBgColor: '#f4edff' },
+  { key: 'pre_submit_pending', label: 'Pre-Submit', icon: 'clipboard', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
+  { key: 'post_repair_ppt', label: 'Post-Repair', icon: 'presentation', iconColor: '#2f63cf', iconBgColor: '#e9f0fd' },
+  { key: 'active_intake', label: 'Intake', icon: 'truck', iconColor: '#6b6e78', iconBgColor: '#f6f4ee' },
 ]
 
 // Color dots for vehicle colors
@@ -558,12 +559,12 @@ export default function AutoDocScreen() {
                               width: 30,
                               height: 30,
                               borderRadius: 9,
-                              backgroundColor: isActive ? '#ffffff' : '#f6f4ee',
+                              backgroundColor: filter.iconBgColor,
                               justifyContent: 'center',
                               alignItems: 'center',
                             }}
                           >
-                            <Icon name={filter.icon as any} size={17} color={filter.color} strokeWidth={1.5} />
+                            <Icon name={filter.icon as any} size={17} color={filter.iconColor} strokeWidth={1.5} />
                           </View>
                           <Icon name="chevron-right" size={15} color="#a7a99f" strokeWidth={1.5} />
                         </View>
