@@ -60,7 +60,38 @@ function formatTimestamp(value: string | null | undefined): string {
 
 function formatInterval(value: string | null | undefined): string {
   if (!value) return '—'
-  return value
+
+  const input = value.trim()
+
+  const dayMatch = input.match(/(-?\d+)\s+day/)
+  const timeMatch = input.match(/(-?\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?/)
+
+  const days = dayMatch ? Number(dayMatch[1]) : 0
+  const hours = timeMatch ? Number(timeMatch[1]) : 0
+  const minutes = timeMatch ? Number(timeMatch[2]) : 0
+
+  if ([days, hours, minutes].some((n) => Number.isNaN(n))) {
+    return input
+  }
+
+  const totalMinutes = (days * 24 * 60) + (hours * 60) + minutes
+  const safeMinutes = Math.max(0, totalMinutes)
+
+  const outDays = Math.floor(safeMinutes / (24 * 60))
+  const remAfterDays = safeMinutes % (24 * 60)
+  const outHours = Math.floor(remAfterDays / 60)
+  const outMinutes = remAfterDays % 60
+
+  return `${outDays}D-${String(outHours).padStart(2, '0')}H-${String(outMinutes).padStart(2, '0')}M`
+}
+
+function normalizeStageValue(value: string | null | undefined): string {
+  return String(value ?? '').trim()
+}
+
+function normalizeStatusValue(value: string | null | undefined): string {
+  const normalized = normalizeStageValue(value).toLowerCase()
+  return normalized || 'work_inprocess'
 }
 
 function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
@@ -496,6 +527,11 @@ export default function FloorInchargePage() {
                   }
                   const bayOptions = buildBayOptions(jc.fuel_type)
                   const canEditStage = Boolean(assignment) && !isSaving
+                  const hasStageChanges = Boolean(assignment) && (
+                    normalizeStageValue(draft.bay_no) !== normalizeStageValue(assignment?.bay_no)
+                    || normalizeStatusValue(draft.work_status) !== normalizeStatusValue(assignment?.work_status)
+                    || normalizeStageValue(draft.remark) !== normalizeStageValue(assignment?.remark)
+                  )
 
                   return (
                     <tr key={jc.id} className="hover:bg-gray-50 transition-colors">
@@ -566,7 +602,7 @@ export default function FloorInchargePage() {
                         <button
                           type="button"
                           onClick={() => void saveStage(jc.assignment_key)}
-                          disabled={!canEditStage}
+                          disabled={!canEditStage || !hasStageChanges}
                           className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {isSaving ? 'Saving...' : assignment ? 'Save Stage' : 'Assign First'}
