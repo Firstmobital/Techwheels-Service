@@ -1,19 +1,26 @@
 -- Backfill Reception entries from PSF Revenue source (job_card_closed_data)
--- Window: 2026-05-30 to 2026-05-31 (inclusive)
+-- Window: 2026-05-28 to 2026-05-31 (inclusive)
 -- Authoritative source schema: local_folder/backups/full_database.sql
 --
 -- IMPORTANT:
 -- 1) Set target dealer code before running.
 -- 2) Run in Supabase SQL Editor manually.
--- 3) Script is idempotent for source='PSF Revenue Backfill (30-31 May 2026)'.
+-- 3) Uses a dedicated source tag for 28-31 window.
+-- 4) Duplicate guard is source-agnostic (dealer + reg + jc) to avoid reinserts
+--    when source labels differ across backfill runs.
+-- 5) Existing 30-31 May reception rows WILL NOT be reinserted (dedupe by dealer+reg+jc).
+--    Any technician_assignments work on those rows is preserved.
+--
+-- OPTIONAL: To preview rows that will be inserted (without committing), replace the final SELECT
+-- with a verification query to count rows that would be inserted.
 
 BEGIN;
 
 WITH params AS (
   SELECT
     '3000840'::text AS target_dealer_code,
-    'PSF Revenue Backfill (30-31 May 2026)'::text AS backfill_source,
-    DATE '2026-05-30' AS start_date,
+    'PSF Revenue Backfill (28-31 May 2026)'::text AS backfill_source,
+    DATE '2026-05-28' AS start_date,
     DATE '2026-05-31' AS end_date
 ),
 source_rows AS (
@@ -133,12 +140,22 @@ inserted AS (
   WHERE NOT EXISTS (
     SELECT 1
     FROM public.service_reception_entries r
-    WHERE upper(r.reg_number) = upper(i.reg_number)
+    WHERE r.dealer_code = i.dealer_code
+      AND upper(r.reg_number) = upper(i.reg_number)
       AND coalesce(r.jc_number, '') = coalesce(i.jc_number, '')
-      AND r.source = i.source
   )
   RETURNING id
 )
 SELECT count(*) AS inserted_rows FROM inserted;
+
+-- VERIFICATION (optional): To count rows without inserting, comment out the INSERT...SELECT above
+-- and uncomment this query in a fresh transaction:
+-- SELECT count(*) AS rows_to_insert FROM to_insert t
+-- WHERE NOT EXISTS (
+--   SELECT 1 FROM public.service_reception_entries r
+--   WHERE r.dealer_code = t.dealer_code
+--     AND upper(r.reg_number) = upper(t.reg_number)
+--     AND coalesce(r.jc_number, '') = coalesce(t.jc_number, '')
+-- );
 
 COMMIT;

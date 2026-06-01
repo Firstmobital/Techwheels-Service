@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import { supabase } from '../lib/supabase'
 import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
   listReceptionEmployees,
   listReceptionEntries,
-  listServiceBranches,
   type ReceptionEmployeeOption,
   type ReceptionEntryInput,
   type ReceptionEntryRow,
@@ -15,36 +15,22 @@ import {
 
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 
-const SERVICE_TYPE_OPTIONS = [
-  'Running Repair',
-  'First Free Service',
-  'Second Free Service',
-  'Third Free Service',
-  'Paid Service',
-]
-
 type FormState = {
   reg_number: string
   model: string
-  service_type: string
   sa_employee_code: string
-  jc_number: string
   owner_name: string
   owner_phone: string
   source: string
-  branch: string
 }
 
 const EMPTY_FORM: FormState = {
   reg_number: '',
   model: '',
-  service_type: '',
   sa_employee_code: '',
-  jc_number: '',
   owner_name: '',
   owner_phone: '',
   source: SOURCE_OPTIONS[0],
-  branch: '',
 }
 
 function normalizeHeader(value: string): string {
@@ -54,14 +40,14 @@ function normalizeHeader(value: string): string {
 const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   reg_number: ['reg_number', 'registration no', 'registration number', 'vehicle registration number', 'vrn'],
   model: ['model', 'vehicle model'],
-  service_type: ['service_type', 'service type'],
   sa_employee_code: ['sa_employee_code', 'employee_code', 'sa code', 'employee code', 'sa_code'],
-  jc_number: ['jc_number', 'job card number', 'job card numbe', 'job card no'],
   owner_name: ['owner_name', 'owner name'],
   owner_phone: ['owner_phone', 'owner phone'],
   source: ['source'],
-  branch: ['branch', 'service branch'],
 }
+
+const IMPORT_SERVICE_TYPE_ALIASES = ['service_type', 'service type']
+const IMPORT_JC_NUMBER_ALIASES = ['jc_number', 'job card number', 'job card numbe', 'job card no']
 
 function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; skipped: number }> {
   return new Promise((resolve, reject) => {
@@ -104,6 +90,9 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
           }
         })
 
+        const serviceTypeIndex = headerRow.findIndex((col) => IMPORT_SERVICE_TYPE_ALIASES.includes(col))
+        const jcNumberIndex = headerRow.findIndex((col) => IMPORT_JC_NUMBER_ALIASES.includes(col))
+
         if (indexMap.reg_number < 0 || indexMap.sa_employee_code < 0) {
           reject(new Error('Missing required headers. Required: reg_number, sa_employee_code'))
           return
@@ -116,7 +105,7 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
           const row = normalizedRows[i]
 
           const regNumber = row[indexMap.reg_number]?.trim() ?? ''
-          const serviceType = row[indexMap.service_type]?.trim() ?? ''
+          const serviceType = serviceTypeIndex >= 0 ? row[serviceTypeIndex]?.trim() ?? '' : ''
           const saEmployeeCode = row[indexMap.sa_employee_code]?.trim() ?? ''
 
           if (!regNumber && !serviceType && !saEmployeeCode) {
@@ -133,7 +122,7 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
             model: indexMap.model >= 0 ? row[indexMap.model]?.trim() ?? '' : '',
             service_type: serviceType,
             sa_employee_code: saEmployeeCode,
-            jc_number: indexMap.jc_number >= 0 ? row[indexMap.jc_number]?.trim() ?? '' : '',
+            jc_number: jcNumberIndex >= 0 ? row[jcNumberIndex]?.trim() ?? '' : '',
             owner_name: indexMap.owner_name >= 0 ? row[indexMap.owner_name]?.trim() ?? '' : '',
             owner_phone: indexMap.owner_phone >= 0 ? row[indexMap.owner_phone]?.trim() ?? '' : '',
             source: indexMap.source >= 0 ? row[indexMap.source]?.trim() ?? SOURCE_OPTIONS[0] : SOURCE_OPTIONS[0],
@@ -161,7 +150,7 @@ export default function ReceptionPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<ReceptionEntryRow[]>([])
   const [employeeOptions, setEmployeeOptions] = useState<ReceptionEmployeeOption[]>([])
-  const [branchOptions, setBranchOptions] = useState<string[]>([])
+  const [canImport, setCanImport] = useState(false)
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -184,7 +173,11 @@ export default function ReceptionPage() {
     setLoading(true)
     setError(null)
 
-    const [entriesRes, employeeRes, branchRes] = await Promise.all([listReceptionEntries(), listReceptionEmployees(), listServiceBranches()])
+    const [entriesRes, employeeRes, authRes] = await Promise.all([
+      listReceptionEntries(),
+      listReceptionEmployees(),
+      supabase.auth.getSession(),
+    ])
 
     if (entriesRes.error) {
       setError(entriesRes.error)
@@ -196,8 +189,19 @@ export default function ReceptionPage() {
     if (!employeeRes.error) {
       setEmployeeOptions(employeeRes.data ?? [])
     }
-    if (!branchRes.error) {
-      setBranchOptions(branchRes.data ?? [])
+
+    const userId = authRes.data.session?.user?.id
+    if (userId) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle()
+
+      const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+      setCanImport(role === 'admin' || role === 'super_admin' || role === 'super admin')
+    } else {
+      setCanImport(false)
     }
 
     setLoading(false)
@@ -217,8 +221,8 @@ export default function ReceptionPage() {
     setNotice(null)
     setError(null)
 
-    if (!form.reg_number.trim() || !form.sa_employee_code.trim() || !form.source.trim() || !form.branch.trim()) {
-      setError('Please fill all required fields: Registration No, SA Name, Source, Branch')
+    if (!form.reg_number.trim() || !form.sa_employee_code.trim() || !form.source.trim()) {
+      setError('Please fill all required fields: Registration No, SA Name, Source')
       return
     }
 
@@ -232,13 +236,11 @@ export default function ReceptionPage() {
     const payload: ReceptionEntryInput = {
       reg_number: form.reg_number,
       model: form.model,
-      service_type: form.service_type,
+      service_type: '',
       sa_employee_code: form.sa_employee_code,
-      jc_number: form.jc_number,
       owner_name: form.owner_name,
       owner_phone: form.owner_phone,
       source: form.source,
-      branch: form.branch || null,
     }
 
     const result =
@@ -268,13 +270,10 @@ export default function ReceptionPage() {
     setForm({
       reg_number: entry.reg_number,
       model: entry.model ?? '',
-      service_type: entry.service_type,
       sa_employee_code: resolvedEmployeeCode,
-      jc_number: entry.jc_number ?? '',
       owner_name: entry.owner_name ?? '',
       owner_phone: entry.owner_phone ?? '',
       source: entry.source,
-      branch: entry.branch ?? '',
     })
     setNotice(null)
     setError(null)
@@ -302,6 +301,12 @@ export default function ReceptionPage() {
   }
 
   async function handleImportChange(event: React.ChangeEvent<HTMLInputElement>) {
+    if (!canImport) {
+      setError('You are not allowed to import reception entries.')
+      event.target.value = ''
+      return
+    }
+
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -347,23 +352,25 @@ export default function ReceptionPage() {
             <h1 className="text-xl font-semibold text-gray-900">Reception</h1>
             <p className="mt-1 text-sm text-gray-500">Capture front desk intake records and assign service advisor.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={handleImportChange}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {uploading ? 'Importing...' : 'Import XLSX/CSV'}
-            </button>
-          </div>
+          {canImport && (
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleImportChange}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {uploading ? 'Importing...' : 'Import XLSX/CSV'}
+              </button>
+            </div>
+          )}
         </div>
 
         {error && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
@@ -399,17 +406,6 @@ export default function ReceptionPage() {
           </label>
 
           <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Service Type</span>
-            <input
-              list="reception-service-types"
-              value={form.service_type}
-              onChange={(event) => setForm((prev) => ({ ...prev, service_type: event.target.value }))}
-              placeholder="Running Repair"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            />
-          </label>
-
-          <label className="text-sm text-gray-700">
             <span className="mb-1 block font-medium">SA Name *</span>
             <select
               value={form.sa_employee_code}
@@ -423,22 +419,6 @@ export default function ReceptionPage() {
                 </option>
               ))}
             </select>
-          </label>
-
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Job Card Number</span>
-            <input
-              value={form.jc_number}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  jc_number: event.target.value.toUpperCase(),
-                }))
-              }
-              style={{ textTransform: 'uppercase' }}
-              autoCapitalize="characters"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            />
           </label>
 
           <label className="text-sm text-gray-700">
@@ -479,26 +459,7 @@ export default function ReceptionPage() {
             </select>
           </label>
 
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Service Branch *</span>
-            <select
-              value={form.branch}
-              onChange={(event) => setForm((prev) => ({ ...prev, branch: event.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            >
-              <option value="">— Select Branch —</option>
-              {branchOptions.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </label>
         </div>
-
-        <datalist id="reception-service-types">
-          {SERVICE_TYPE_OPTIONS.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
@@ -539,9 +500,7 @@ export default function ReceptionPage() {
                   <th className="px-3 py-2 text-left">Source</th>
                   <th className="px-3 py-2 text-left">Reg No</th>
                   <th className="px-3 py-2 text-left">Model</th>
-                  <th className="px-3 py-2 text-left">Service Type</th>
                   <th className="px-3 py-2 text-left">SA Name</th>
-                  <th className="px-3 py-2 text-left">JC Number</th>
                   <th className="px-3 py-2 text-left">Owner Name</th>
                   <th className="px-3 py-2 text-left">Owner Phone</th>
                   <th className="px-3 py-2 text-right">Actions</th>
@@ -555,9 +514,7 @@ export default function ReceptionPage() {
                     <td className="whitespace-nowrap px-3 py-2">{entry.source}</td>
                     <td className="whitespace-nowrap px-3 py-2 font-medium">{entry.reg_number}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.model ?? '-'}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.service_type}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.sa_name}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.jc_number ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.owner_name ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.owner_phone ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right">

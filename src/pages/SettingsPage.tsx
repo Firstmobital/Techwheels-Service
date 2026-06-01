@@ -392,6 +392,53 @@ export default function SettingsPage() {
     return { total, byBranch }
   }, [issues])
 
+  const settingsCards = useMemo(
+    () => [
+      {
+        id: 'branch-management',
+        title: 'Branch Management',
+        description: 'Add and remove branches used across modules.',
+        stat: `${branches.length} branches`,
+      },
+      {
+        id: 'employee-master',
+        title: 'Employee Master',
+        description: 'Upload, edit, and maintain employee mapping data.',
+        stat: `${employees.length} employees`,
+      },
+      {
+        id: 'autodoc-rate-cards',
+        title: 'AutoDoc Rate Cards',
+        description: 'Import and activate city-category labour rate cards.',
+        stat: `${rateCards.length} cards`,
+      },
+      {
+        id: 'unmapped-sr-entries',
+        title: 'Unmapped SR Entries (All Pendencies)',
+        description: 'Review and resolve unresolved SR mapping issues.',
+        stat: `${issues.length} issues`,
+      },
+    ],
+    [branches.length, employees.length, issues.length, rateCards.length],
+  )
+
+  const openSettingReference = useCallback((sectionId: string) => {
+    const element = document.getElementById(sectionId)
+    if (!element) return
+    window.history.replaceState(null, '', `#${sectionId}`)
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  useEffect(() => {
+    const sectionId = window.location.hash.replace('#', '').trim()
+    if (!sectionId) return
+    const element = document.getElementById(sectionId)
+    if (!element) return
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
   const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true)
     const { data, error: fetchError } = await supabase
@@ -1214,7 +1261,37 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">Settings Sections</h2>
+            <p className="mt-0.5 text-xs text-gray-500">Open any card to jump directly to that setting.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {settingsCards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => openSettingReference(card.id)}
+                className="group rounded-xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{card.title}</div>
+                    <p className="mt-1 text-xs text-gray-600">{card.description}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-600 shadow-sm">
+                    {card.stat}
+                  </span>
+                </div>
+                <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-blue-700 group-hover:text-blue-800">
+                  Open Section →
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section id="branch-management" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Branch Management</h2>
@@ -1267,7 +1344,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <section id="employee-master" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Employee Master</h2>
@@ -1544,7 +1621,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <section id="autodoc-rate-cards" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">AutoDoc Rate Cards</h2>
@@ -1683,7 +1760,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <section id="unmapped-sr-entries" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Unmapped SR Entries (All Pendencies)</h2>

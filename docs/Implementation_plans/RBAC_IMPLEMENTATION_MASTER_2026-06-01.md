@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 20:10 UTC  
+**Last Updated**: 2026-06-01 11:16 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -25,8 +25,9 @@
 - Floor Incharge row-scope migration executed: 20260601194000_add_floor_incharge_fuel_scope_policy_scaffold.sql.
 - Floor Incharge stage-column migration executed: 20260601200500_add_floor_incharge_stage_columns_and_harden_assignments.sql.
 - Technician module app wiring completed (`/technician` route, sidebar visibility by module permission, protected route guard).
-- Technician page baseline added: own assignment rows + day-wise Income Tracker based on closed PSF `Total Workshop Revenue` formula.
-- Technician RBAC scaffold migration created: 20260601212000_add_technician_module_and_visibility_policies.sql.
+- Technician page implemented with super-admin selector: admin can choose any `TECHNICIAN` from Employee Master and view selected technician rows + day-wise earnings.
+- Technician RBAC migration executed: 20260601212000_add_technician_module_and_visibility_policies.sql.
+- Fresh full dump regenerated after Technician rollout; authority remains: local_folder/backups/full_database.sql (never downgrade).
 
 ### Superadmin Default Access Policy (Locked)
 
