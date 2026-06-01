@@ -24,6 +24,9 @@
 - Floor Incharge visibility requirement clarified: screen rows must render by Floor Incharge role and fuel-type scope, with fuel-type differentiation derived from employee mapping (`SA CODE` -> role + fuel_type in Employee Master).
 - Floor Incharge row-scope migration executed: 20260601194000_add_floor_incharge_fuel_scope_policy_scaffold.sql.
 - Floor Incharge stage-column migration executed: 20260601200500_add_floor_incharge_stage_columns_and_harden_assignments.sql.
+- Technician module app wiring completed (`/technician` route, sidebar visibility by module permission, protected route guard).
+- Technician page baseline added: own assignment rows + day-wise Income Tracker based on closed PSF `Total Workshop Revenue` formula.
+- Technician RBAC scaffold migration created: 20260601212000_add_technician_module_and_visibility_policies.sql.
 
 ### Superadmin Default Access Policy (Locked)
 

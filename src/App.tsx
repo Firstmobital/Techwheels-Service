@@ -14,6 +14,7 @@ import JobCardPage from './pages/JobCardPage'
 import ReceptionPage from './pages/ReceptionPage'
 import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
 import FloorInchargePage from './pages/FloorInchargePage'
+import TechnicianPage from './pages/TechnicianPage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
 import { useOnline } from './hooks/useOnline'
@@ -95,6 +96,15 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    to: '/technician',
+    label: 'Technician',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l-2.267-2.267m2.267 2.267L7.5 19.5m4.267-6.597l2.094-2.095a2.25 2.25 0 10-3.182-3.182L8.585 9.72m3.182 3.183l-3.182-3.182" />
+      </svg>
+    ),
+  },
 ]
 
 type ModuleName =
@@ -110,8 +120,9 @@ type ModuleName =
   | 'reception'
   | 'service_advisor'
   | 'floor_incharge'
+  | 'technician'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/technician'
 
 interface PermissionRow {
   module_name: string
@@ -126,6 +137,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/reception': ['reception'],
   '/service-advisor': ['service_advisor'],
   '/floor-incharge': ['floor_incharge'],
+  '/technician': ['technician'],
 }
 
 function hasAnyModuleAccess(allowedModules: Set<string>, modules: readonly ModuleName[]) {
@@ -142,12 +154,13 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
   if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
   if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
+  if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback')) return true
   return false
 }
 
 function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
-  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/floor-incharge', '/reports', '/settings', '/autodoc', '/admin']
+  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/floor-incharge', '/technician', '/reports', '/settings', '/autodoc', '/admin']
   return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
 }
 
@@ -175,6 +188,7 @@ function AccessDenied() {
                 <li>• <strong>Reception</strong> — Capture front-desk intake entries</li>
                 <li>• <strong>Service Advisor</strong> — Work only assigned intake rows</li>
                 <li>• <strong>Floor Incharge</strong> — Assign technicians to open job cards</li>
+                <li>• <strong>Technician</strong> — View assigned rows and day-wise income tracker</li>
               </ul>
               <p className="mt-4 text-xs text-gray-500">
                 If you believe this is a mistake, ask your administrator to check your module assignments in the Admin Panel.
@@ -340,6 +354,7 @@ function AppInner() {
       if (item.to === '/reception') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
       if (item.to === '/service-advisor') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
       if (item.to === '/floor-incharge') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
+      if (item.to === '/technician') return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
       return false
     }),
     [allowedModules],
@@ -487,6 +502,10 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
 
               {visibleNavItems.some((item) => item.to === '/service-advisor') && (
                 <SideNavLink to="/service-advisor" icon={NAV_ITEMS[7].icon} label={NAV_ITEMS[7].label} />
+              )}
+
+              {visibleNavItems.some((item) => item.to === '/technician') && (
+                <SideNavLink to="/technician" icon={NAV_ITEMS[8].icon} label={NAV_ITEMS[8].label} />
               )}
             </nav>
 
@@ -644,6 +663,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/floor-incharge']}>
                       <FloorInchargePage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/technician"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/technician']}>
+                      <TechnicianPage />
                     </RequireAccess>
                   )}
                 />
