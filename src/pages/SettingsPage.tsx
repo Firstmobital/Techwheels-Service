@@ -70,28 +70,6 @@ const DEALER_CODE_RULES = [
   { key: '3001440', location: 'Ajmer Road', fuel_type: 'PV' },
 ] as const
 
-const SETTINGS_MODELS_STORAGE_KEY = 'settings.models.v1'
-
-const DEFAULT_MODEL_OPTIONS = [
-  'Nexon',
-  'Punch EV',
-  'Tiago EV',
-  'Tigor EV',
-  'Altroz',
-  'Curvv',
-  'Curvv EV',
-  'Harrier',
-  'Harrier EV',
-  'Hexa',
-  'Nexon EV',
-  'Punch',
-  'Punch CNG',
-  'Safari',
-  'Sierra',
-  'Tiago',
-  'Tigor',
-] as const
-
 function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
@@ -462,7 +440,7 @@ export default function SettingsPage() {
         id: 'models',
         title: 'Models',
         description: 'Manage dropdown model values for future use.',
-        stat: `${models.length} models`,
+        stat: `${modelOptions.length} models`,
       },
       {
         id: 'autodoc-rate-cards',
@@ -477,7 +455,7 @@ export default function SettingsPage() {
         stat: `${issues.length} issues`,
       },
     ],
-    [branches.length, employees.length, issues.length, models.length, rateCards.length],
+    [branches.length, employees.length, issues.length, modelOptions.length, rateCards.length],
   )
 
   const openSettingReference = useCallback((sectionId: string) => {
@@ -1311,15 +1289,15 @@ export default function SettingsPage() {
     return value.trim().replace(/\s+/g, ' ')
   }
 
-  function modelExists(value: string, excludeIndex?: number): boolean {
+  function modelExists(value: string, excludeId?: number): boolean {
     const normalized = normalizeModelInput(value).toLowerCase()
-    return models.some((model, index) => {
-      if (excludeIndex !== undefined && index === excludeIndex) return false
-      return normalizeModelInput(model).toLowerCase() === normalized
+    return modelOptions.some((model) => {
+      if (excludeId !== undefined && model.id === excludeId) return false
+      return normalizeModelInput(model.model_name).toLowerCase() === normalized
     })
   }
 
-  function handleAddModel() {
+  async function handleAddModel() {
     setError(null)
     setMessage(null)
 
@@ -1334,19 +1312,28 @@ export default function SettingsPage() {
       return
     }
 
-    setModels((prev) => [...prev, normalized])
+    setSavingModel(true)
+    const result = await createModelOption(normalized, modelOptions.length)
+    setSavingModel(false)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    await loadModelOptions()
     setNewModelName('')
     setMessage(`Model "${normalized}" added.`)
   }
 
-  function handleStartEditModel(index: number) {
-    setEditingModelIndex(index)
-    setEditingModelValue(models[index] ?? '')
+  function handleStartEditModel(model: ModelOption) {
+    setEditingModelId(model.id)
+    setEditingModelValue(model.model_name)
     setError(null)
     setMessage(null)
   }
 
-  function handleSaveModelEdit(index: number) {
+  async function handleSaveModelEdit(model: ModelOption) {
     setError(null)
     setMessage(null)
 
@@ -1356,25 +1343,43 @@ export default function SettingsPage() {
       return
     }
 
-    if (modelExists(normalized, index)) {
+    if (modelExists(normalized, model.id)) {
       setError(`Model "${normalized}" already exists.`)
       return
     }
 
-    setModels((prev) => prev.map((model, modelIndex) => (modelIndex === index ? normalized : model)))
-    setEditingModelIndex(null)
+    setSavingModel(true)
+    const result = await updateModelOption(model.id, { modelName: normalized })
+    setSavingModel(false)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    await loadModelOptions()
+    setEditingModelId(null)
     setEditingModelValue('')
     setMessage(`Model updated to "${normalized}".`)
   }
 
-  function handleDeleteModel(index: number) {
-    const value = models[index]
+  async function handleDeleteModel(model: ModelOption) {
+    const value = model.model_name
     if (!value) return
     if (!window.confirm(`Delete model "${value}"?`)) return
 
-    setModels((prev) => prev.filter((_, modelIndex) => modelIndex !== index))
-    if (editingModelIndex === index) {
-      setEditingModelIndex(null)
+    setDeletingModelId(model.id)
+    const result = await deleteModelOption(model.id)
+    setDeletingModelId(null)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    await loadModelOptions()
+    if (editingModelId === model.id) {
+      setEditingModelId(null)
       setEditingModelValue('')
     }
     setMessage(`Model "${value}" deleted.`)
@@ -1467,10 +1472,10 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={handleAddModel}
-                disabled={!newModelName.trim()}
+                disabled={!newModelName.trim() || savingModel}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                + Add Model
+                {savingModel ? 'Saving...' : '+ Add Model'}
               </button>
             </div>
 
@@ -1484,48 +1489,56 @@ export default function SettingsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {models.length === 0 ? (
+                  {loadingModels ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={3}>Loading models...</td>
+                    </tr>
+                  ) : modelOptions.length === 0 ? (
                     <tr>
                       <td className="px-3 py-3 text-gray-400" colSpan={3}>No models configured.</td>
                     </tr>
                   ) : (
-                    models.map((model, index) => (
-                      <tr key={`${model}-${index}`} className="border-b border-gray-100">
+                    modelOptions.map((model, index) => (
+                      <tr key={model.id} className="border-b border-gray-100">
                         <td className="px-3 py-2 text-gray-500">{index + 1}</td>
                         <td className="px-3 py-2">
-                          {editingModelIndex === index ? (
+                          {editingModelId === model.id ? (
                             <input
                               value={editingModelValue}
                               onChange={(event) => setEditingModelValue(event.target.value)}
                               onKeyDown={(event) => {
                                 if (event.key === 'Enter') {
                                   event.preventDefault()
-                                  handleSaveModelEdit(index)
+                                  void handleSaveModelEdit(model)
                                 }
                               }}
                               className="w-full rounded border border-gray-300 px-2 py-1"
                             />
                           ) : (
-                            <span className="font-medium text-gray-800">{model}</span>
+                            <span className="font-medium text-gray-800">{model.model_name}</span>
                           )}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex gap-2">
-                            {editingModelIndex === index ? (
+                            {editingModelId === model.id ? (
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => handleSaveModelEdit(index)}
+                                  onClick={() => {
+                                    void handleSaveModelEdit(model)
+                                  }}
+                                  disabled={savingModel}
                                   className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white"
                                 >
-                                  Save
+                                  {savingModel ? 'Saving...' : 'Save'}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setEditingModelIndex(null)
+                                    setEditingModelId(null)
                                     setEditingModelValue('')
                                   }}
+                                  disabled={savingModel}
                                   className="rounded bg-gray-500 px-3 py-1 text-xs font-medium text-white"
                                 >
                                   Cancel
@@ -1534,7 +1547,8 @@ export default function SettingsPage() {
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => handleStartEditModel(index)}
+                                onClick={() => handleStartEditModel(model)}
+                                disabled={deletingModelId === model.id || savingModel}
                                 className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white"
                               >
                                 Edit
@@ -1542,10 +1556,13 @@ export default function SettingsPage() {
                             )}
                             <button
                               type="button"
-                              onClick={() => handleDeleteModel(index)}
+                              onClick={() => {
+                                void handleDeleteModel(model)
+                              }}
+                              disabled={deletingModelId === model.id}
                               className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white"
                             >
-                              Delete
+                              {deletingModelId === model.id ? 'Deleting...' : 'Delete'}
                             </button>
                           </div>
                         </td>

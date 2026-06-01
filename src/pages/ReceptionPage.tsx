@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
+import { getModelNames } from '../lib/api/settings'
 import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
@@ -35,6 +36,7 @@ const DEFAULT_MODEL_OPTIONS = [
   'Sierra',
   'Tiago',
   'Tigor',
+  'Xpres T Ev',
 ]
 
 type FormState = {
@@ -192,6 +194,45 @@ export default function ReceptionPage() {
     return values
   }, [employeeOptions])
 
+  async function loadModelOptions() {
+    const result = await getModelNames()
+    if (!result.error && (result.data?.length ?? 0) > 0) {
+      const cleaned = (result.data ?? [])
+        .map((value) => String(value ?? '').trim().replace(/\s+/g, ' '))
+        .filter(Boolean)
+
+      const unique = Array.from(new Set(cleaned))
+      if (unique.length > 0) {
+        setModelOptions(unique)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(SETTINGS_MODELS_STORAGE_KEY, JSON.stringify(unique))
+        }
+        return
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const raw = window.localStorage.getItem(SETTINGS_MODELS_STORAGE_KEY)
+      if (!raw) return
+
+      try {
+        const parsed = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return
+
+        const cleaned = parsed
+          .map((value) => String(value ?? '').trim().replace(/\s+/g, ' '))
+          .filter(Boolean)
+
+        const unique = Array.from(new Set(cleaned))
+        if (unique.length > 0) {
+          setModelOptions(unique)
+        }
+      } catch {
+        // Ignore invalid local storage payloads and keep defaults.
+      }
+    }
+  }
+
   async function loadData() {
     setLoading(true)
     setError(null)
@@ -232,29 +273,7 @@ export default function ReceptionPage() {
 
   useEffect(() => {
     void loadData()
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const raw = window.localStorage.getItem(SETTINGS_MODELS_STORAGE_KEY)
-    if (!raw) return
-
-    try {
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return
-
-      const cleaned = parsed
-        .map((value) => String(value ?? '').trim().replace(/\s+/g, ' '))
-        .filter(Boolean)
-
-      const unique = Array.from(new Set(cleaned))
-      if (unique.length > 0) {
-        setModelOptions(unique)
-      }
-    } catch {
-      // Ignore invalid local storage payloads and keep defaults.
-    }
+    void loadModelOptions()
   }, [])
 
   function resetForm() {
