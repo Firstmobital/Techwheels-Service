@@ -97,11 +97,16 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
       const status = (row.status ?? '').trim().toLowerCase()
       const invoiced = isTruthyInvoiceValue(row.invoiced)
 
-      if (status.includes('cancel')) {
+      // Cancelled: status is "cancelled" (or contains "cancel" but not part of another word)
+      if (status === 'cancelled' || status === 'cancel') {
         cancelledCount += 1
-      } else if (status.includes('close') && !invoiced) {
+      }
+      // Closed Not Invoiced: status is "closed" AND invoiced is NOT true
+      else if ((status === 'closed' || status.includes('closed')) && !invoiced) {
         closedNotInvoicedCount += 1
-      } else if (status.includes('open')) {
+      }
+      // Open: status is "open" or other non-closed, non-cancelled statuses
+      else if (status === 'open' || (status !== 'closed' && status !== 'cancelled' && status !== 'cancel')) {
         openCount += 1
       }
     }
@@ -121,11 +126,11 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
       const invoiced = isTruthyInvoiceValue(row.invoiced)
 
       if (selectedKPI === 'cancelled') {
-        return status.includes('cancel')
+        return status === 'cancelled' || status === 'cancel'
       } else if (selectedKPI === 'closed-not-invoiced') {
-        return status.includes('close') && !invoiced
+        return (status === 'closed' || status.includes('closed')) && !invoiced
       } else if (selectedKPI === 'open') {
-        return status.includes('open')
+        return status === 'open' || (status !== 'closed' && status !== 'cancelled' && status !== 'cancel')
       }
       return false
     })
