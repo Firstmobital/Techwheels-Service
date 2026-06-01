@@ -2,6 +2,8 @@
 -- Purpose: Harden privilege posture by adding strict RLS to employee_master, technician_assignments, service_branches
 -- Date: 2026-06-01
 
+BEGIN;
+
 -- Enable RLS on sensitive tables (if not already enabled)
 ALTER TABLE public.employee_master ENABLE ROW LEVEL SECURITY;
 
@@ -36,3 +38,5 @@ CREATE POLICY employee_master_delete_admin ON public.employee_master
 -- Add RLS to service_branches (if it exists and lacks policies)
 -- Note: verify this table exists in current schema before uncommenting
 -- ALTER TABLE public.service_branches ENABLE ROW LEVEL SECURITY;
+
+COMMIT;

@@ -9,6 +9,8 @@
 -- - sa_display_name is cached for UI convenience, but NOT used for access decisions
 -- - sa_name is immutable CRM data, kept for audit only
 
+BEGIN;
+
 -- Drop old name-based SA policies (if they exist)
 DROP POLICY IF EXISTS service_reception_select_sa_v1 ON public.service_reception_entries;
 DROP POLICY IF EXISTS service_reception_update_sa_v1 ON public.service_reception_entries;
@@ -83,3 +85,5 @@ CREATE POLICY service_reception_update_sa ON public.service_reception_entries
   );
 
 -- Service Advisor cannot delete assigned rows (if needed in future, create separate policy)
+
+COMMIT;
