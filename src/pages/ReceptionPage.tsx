@@ -15,6 +15,28 @@ import {
 
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 
+const SETTINGS_MODELS_STORAGE_KEY = 'settings.models.v1'
+
+const DEFAULT_MODEL_OPTIONS = [
+  'Nexon',
+  'Punch EV',
+  'Tiago EV',
+  'Tigor EV',
+  'Altroz',
+  'Curvv',
+  'Curvv EV',
+  'Harrier',
+  'Harrier EV',
+  'Hexa',
+  'Nexon EV',
+  'Punch',
+  'Punch CNG',
+  'Safari',
+  'Sierra',
+  'Tiago',
+  'Tigor',
+]
+
 type FormState = {
   reg_number: string
   model: string
@@ -150,6 +172,7 @@ export default function ReceptionPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<ReceptionEntryRow[]>([])
   const [employeeOptions, setEmployeeOptions] = useState<ReceptionEmployeeOption[]>([])
+  const [modelOptions, setModelOptions] = useState<string[]>([...DEFAULT_MODEL_OPTIONS])
   const [canImport, setCanImport] = useState(false)
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -209,6 +232,29 @@ export default function ReceptionPage() {
 
   useEffect(() => {
     void loadData()
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const raw = window.localStorage.getItem(SETTINGS_MODELS_STORAGE_KEY)
+    if (!raw) return
+
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return
+
+      const cleaned = parsed
+        .map((value) => String(value ?? '').trim().replace(/\s+/g, ' '))
+        .filter(Boolean)
+
+      const unique = Array.from(new Set(cleaned))
+      if (unique.length > 0) {
+        setModelOptions(unique)
+      }
+    } catch {
+      // Ignore invalid local storage payloads and keep defaults.
+    }
   }, [])
 
   function resetForm() {
@@ -398,11 +444,18 @@ export default function ReceptionPage() {
 
           <label className="text-sm text-gray-700">
             <span className="mb-1 block font-medium">Model</span>
-            <input
+            <select
               value={form.model}
               onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            />
+            >
+              <option value="">— Select Model —</option>
+              {modelOptions.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="text-sm text-gray-700">
