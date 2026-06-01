@@ -2,89 +2,86 @@
 
 **Date**: 2026-06-01  
 **Objective**: Deploy 5 database migrations to staging environment  
-**Time Estimate**: 15-20 minutes  
+**Time Estimate**: 10-15 minutes (5 migrations, 2-3 min each)  
 **Risk Level**: LOW (no data changes; schema-only)
 
 ---
 
-## OPTION A: Quick Copy-Paste (Easiest)
+## IMPORTANT: Source of Truth
 
-### Step 1: Go to Supabase SQL Editor
+**The 5 individual migration files in `supabase/migrations/20260601*.sql` are the ONLY authoritative source.**
+
+These files:
+- Are tracked in version control
+- Are applied automatically by Supabase CLI
+- Define the exact schema changes
+- Must NOT be duplicated in other locations (prevents drift)
+
+---
+
+## Deploy Individual Migrations (Recommended)
+
+If you prefer to deploy one migration at a time (recommended for clarity):
+
+### In Supabase SQL Editor
 
 1. Open [Supabase Dashboard](https://app.supabase.com)
 2. Navigate to **SQL Editor** tab
 3. Click **New Query**
 
-### Step 2: Copy & Paste Consolidated SQL
-
-1. Open file: `scripts/PHASE_1A_CONSOLIDATED_MIGRATIONS.sql`
-2. Copy **ENTIRE** contents (from first `BEGIN;` to last comment)
-3. Paste into Supabase SQL Editor
-4. Click **Run** button
-
-### Step 3: Verify Execution
-
-```
-Expected output at bottom:
-✓ Query successful (X rows affected)
-No errors
-```
-
-**If you see errors**:
-- Note the error message
-- Check the line number indicated
-- Do NOT proceed; investigate before continuing
-
----
-
-## OPTION B: Deploy Individual Migrations (Step-by-Step)
-
-If you prefer to deploy one migration at a time:
-
 ### Migration 1: Create user_employee_links table
 
 **File**: `supabase/migrations/20260601000000_create_user_employee_links.sql`
 
-1. Go to SQL Editor → New Query
-2. Copy contents of migration file
-3. Paste and Run
-4. Verify: In Schema Editor, look for table `user_employee_links` with 3 indexes ✓
+1. Copy entire contents from file
+2. Paste into SQL Editor
+3. Click **Run**
+4. Expected: ✓ Query successful
+5. Verify: In Schema Editor, look for table `user_employee_links` with 3 indexes ✓
 
 ### Migration 2: Add columns to service_reception_entries
 
 **File**: `supabase/migrations/20260601010000_add_sa_employee_code_to_reception.sql`
 
-1. Go to SQL Editor → New Query
-2. Copy and Paste
-3. Verify: Columns `sa_employee_code` + `sa_display_name` exist in service_reception_entries ✓
+1. Click **New Query** (fresh query)
+2. Copy and paste contents
+3. Click **Run**
+4. Expected: ✓ Query successful
+5. Verify: Columns `sa_employee_code` + `sa_display_name` exist in service_reception_entries ✓
 
 ### Migration 3: Create helper functions
 
 **File**: `supabase/migrations/20260601020000_create_sa_employee_code_function.sql`
 
-1. Go to SQL Editor → New Query
-2. Copy and Paste
-3. Verify: Functions `my_sa_employee_code()` and `has_module_action()` exist ✓
+1. Click **New Query**
+2. Copy and paste
+3. Click **Run**
+4. Expected: ✓ Query successful
+5. Verify: Functions `my_sa_employee_code()` and `has_module_action()` in Functions list ✓
 
 ### Migration 4: Fix RLS policies
 
 **File**: `supabase/migrations/20260601030000_fix_reception_rls_policies.sql`
 
-1. Go to SQL Editor → New Query
-2. Copy and Paste
-3. Verify: Old name-based policies removed; new employee-code policies created ✓
+1. Click **New Query**
+2. Copy and paste
+3. Click **Run**
+4. Expected: ✓ Query successful
+5. Verify: In Schema Editor → service_reception_entries → Policies: see new SA policies ✓
 
 ### Migration 5: Harden sensitive table RLS
 
 **File**: `supabase/migrations/20260601040000_harden_sensitive_table_rls.sql`
 
-1. Go to SQL Editor → New Query
-2. Copy and Paste
-3. Verify: RLS enabled on `employee_master` table ✓
+1. Click **New Query**
+2. Copy and paste
+3. Click **Run**
+4. Expected: ✓ Query successful
+5. Verify: In Schema Editor → employee_master → RLS is **enabled** ✓
 
 ---
 
-## Verification Checklist (After Migrations)
+## Verification Checklist (After All 5 Migrations)
 
 Run these checks in Supabase SQL Editor to confirm all migrations succeeded:
 
@@ -209,14 +206,15 @@ Then troubleshoot and re-run migrations.
 
 ## Quick Reference
 
-| File | Purpose | Execution Method |
-|------|---------|------------------|
-| `PHASE_1A_CONSOLIDATED_MIGRATIONS.sql` | All 5 migrations combined | Copy-paste (easiest) |
-| `20260601000000_create_user_employee_links.sql` | Linkage table | Individual |
-| `20260601010000_add_sa_employee_code_to_reception.sql` | New columns | Individual |
-| `20260601020000_create_sa_employee_code_function.sql` | Helper functions | Individual |
-| `20260601030000_fix_reception_rls_policies.sql` | RLS policies | Individual |
-| `20260601040000_harden_sensitive_table_rls.sql` | Sensitive table RLS | Individual |
+| # | File | Purpose |
+|---|------|---------|
+| 1 | `supabase/migrations/20260601000000_create_user_employee_links.sql` | Create linkage table + 3 indexes |
+| 2 | `supabase/migrations/20260601010000_add_sa_employee_code_to_reception.sql` | Add sa_employee_code + sa_display_name columns + 2 indexes |
+| 3 | `supabase/migrations/20260601020000_create_sa_employee_code_function.sql` | Create my_sa_employee_code() + has_module_action() functions |
+| 4 | `supabase/migrations/20260601030000_fix_reception_rls_policies.sql` | Drop old policies; create new employee-code-based policies |
+| 5 | `supabase/migrations/20260601040000_harden_sensitive_table_rls.sql` | Enable RLS on employee_master; add admin-only policies |
+
+**Note**: These 5 files in `supabase/migrations/` are the ONLY authoritative source. Execute them in order 1→2→3→4→5.
 
 ---
 

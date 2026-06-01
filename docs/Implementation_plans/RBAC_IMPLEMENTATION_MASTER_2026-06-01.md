@@ -347,11 +347,16 @@ Add bounded sections inside Admin workspace:
 ### Phase 1: Service Advisor Identity & Semantics (CURRENT CYCLE)
 
 #### 1.1 Schema Migrations
-- **Migration 1**: Create `user_employee_links` table with indexes
-- **Migration 2**: Add `sa_employee_code` column + index to `service_reception_entries`
-- **Migration 3**: Create `my_sa_employee_code()` function
-- **Migration 4**: Create `has_module_action()` function
-- **Migration 5** (Optional): Create `role_catalog` table with seed data
+
+**Authoritative Source**: Individual files in `supabase/migrations/20260601*.sql` (tracked in version control; applied by Supabase CLI)
+
+- **Migration 1** (`20260601000000_create_user_employee_links.sql`): Create `user_employee_links` table with 3 indexes
+- **Migration 2** (`20260601010000_add_sa_employee_code_to_reception.sql`): Add `sa_employee_code` + `sa_display_name` columns + 2 indexes
+- **Migration 3** (`20260601020000_create_sa_employee_code_function.sql`): Create `my_sa_employee_code()` + `has_module_action()` helper functions
+- **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`): Drop old name-based SA policies; create new employee-code-based policies with correct action semantics
+- **Migration 5** (`20260601040000_harden_sensitive_table_rls.sql`): Enable RLS on `employee_master`; add admin-only policies
+
+**Important**: Do NOT create duplicate consolidated SQL files. Individual migration files are the single source of truth to prevent drift and support automated Supabase CLI deployments.
 
 #### 1.2 Data Backfill & Validation
 - **Script 1**: Match existing `sa_name` values to `employee_master.employee_name` (normalized: trim, lowercase, compare)
@@ -362,10 +367,12 @@ Add bounded sections inside Admin workspace:
 - **Script 6**: Validate backfill (check FKs, no orphans, coverage %)
 
 #### 1.3 RLS Policy Migration
-- **Migration 6**: Drop old name-based SA policies (`service_reception_select_sa_v1`, `service_reception_update_sa_v1`)
-- **Migration 7**: Create new employee-code-based SA policies
-- **Migration 8**: Fix reception policies — replace `has_module_view` with `has_module_modify`/`can_delete` for writes
-- **Migration 9**: Audit and harden RLS on sensitive tables (employee_master, technician_assignments, service_branches)
+
+Included in **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`):
+- Drop old name-based SA policies (`service_reception_select_sa_v1`, `service_reception_update_sa_v1`, old reception policies)
+- Create new employee-code-based SA policies (filter by `sa_employee_code = my_sa_employee_code()`)
+- Fix reception INSERT/UPDATE/DELETE policies to use correct action semantics (`can_modify`/`can_delete` instead of `can_view` for writes)
+- Add RLS to sensitive tables via **Migration 5** (`20260601040000_harden_sensitive_table_rls.sql`)
 
 #### 1.4 API Changes
 - **Reception create/update**: Accept `sa_employee_code` from payload; store and backfill `sa_name` from employee_master for display
@@ -397,14 +404,14 @@ Use this section as the real-time status dashboard. Update immediately after eac
 
 | # | Task | Status | Owner | Due | Notes | Verified |
 |---|------|--------|-------|-----|-------|----------|
-| 1.1 | Create `user_employee_links` migration file | ✓ Done | Copilot | 2026-06-01 | File: 20260601000000_create_user_employee_links.sql; 3 indexes created | ☑ |
-| 1.2 | Create `sa_employee_code` column migration | ✓ Done | Copilot | 2026-06-01 | File: 20260601010000_add_sa_employee_code_to_reception.sql; added sa_display_name also | ☑ |
-| 1.3 | Create `my_sa_employee_code()` function migration | ✓ Done | Copilot | 2026-06-01 | File: 20260601020000_create_sa_employee_code_function.sql; includes has_module_action() | ☑ |
-| 1.4 | Create `has_module_action()` function migration | ✓ Done | Copilot | 2026-06-01 | Included in 1.3 file; unified action dispatcher | ☑ |
-| 1.5 | Create `role_catalog` table migration (optional) | ⚪ Not Started | TBD | 2026-06-02 | Can defer if not blocking Phase 1 | ☐ |
-| 1.6 | Review all migrations for syntax/correctness | ✓ Done | Copilot | 2026-06-01 | All 5 migrations reviewed; syntax correct | ☑ |
-| 1.7 | Execute migrations in staging DB | 🟡 In Progress | User | 2026-06-01 | Use scripts/deploy_phase1_migrations.sh for step-by-step | ☐ |
-| 1.8 | Test schema integrity post-migration | ⚪ Not Started | User | 2026-06-01 | After 1.7 complete; verify FK, indexes, RLS policies | ☐ |
+| 1.1 | Create `user_employee_links` migration | ✓ Done | Copilot | 2026-06-01 | File: 20260601000000_create_user_employee_links.sql; 3 indexes | ☑ |
+| 1.2 | Create `sa_employee_code` + `sa_display_name` migration | ✓ Done | Copilot | 2026-06-01 | File: 20260601010000_add_sa_employee_code_to_reception.sql; 2 indexes | ☑ |
+| 1.3 | Create `my_sa_employee_code()` + `has_module_action()` functions | ✓ Done | Copilot | 2026-06-01 | File: 20260601020000_create_sa_employee_code_function.sql | ☑ |
+| 1.4 | Fix RLS policies (action semantics + employee-code filtering) | ✓ Done | Copilot | 2026-06-01 | File: 20260601030000_fix_reception_rls_policies.sql | ☑ |
+| 1.5 | Harden sensitive table RLS (employee_master, etc.) | ✓ Done | Copilot | 2026-06-01 | File: 20260601040000_harden_sensitive_table_rls.sql | ☑ |
+| 1.6 | Review all 5 migrations for syntax/correctness | ✓ Done | Copilot | 2026-06-01 | All files reviewed; syntax correct | ☑ |
+| 1.7 | Execute migrations in staging DB | 🟡 In Progress | User | 2026-06-01 | Use Phase 1A guide; execute in order 1→2→3→4→5 | ☐ |
+| 1.8 | Test schema integrity post-migration | ⚪ Not Started | User | 2026-06-01 | After 1.7; verify FK, indexes, RLS policies | ☐ |
 
 ### 4.2 Data Backfill & Validation
 
