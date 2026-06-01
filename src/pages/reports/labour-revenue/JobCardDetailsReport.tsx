@@ -110,6 +110,15 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
 
   // Build employee lookup index
   const employeeIndex = useMemo(() => buildEmployeeLookupIndex(employees), [employees])
+  const employeeMasterByCode = useMemo(() => {
+    const byCode = new Map<string, EmployeeMasterRecord>()
+    for (const employee of employees) {
+      const code = String(employee.employee_code ?? '').trim().toUpperCase()
+      if (!code) continue
+      byCode.set(code, employee)
+    }
+    return byCode
+  }, [employees])
 
   useEffect(() => {
     let cancelled = false
@@ -143,7 +152,7 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
         let mappedRows = allRows.map((row) => {
           const matchResult = resolveEmployeeForSr(row.sr_assigned_to, employeeIndex)
           const matchedEmployee = matchResult.employeeCode
-            ? employeeIndex.byCode.get(matchResult.employeeCode.trim().toUpperCase())
+            ? employeeMasterByCode.get(matchResult.employeeCode.trim().toUpperCase())
             : undefined
 
           return {
@@ -181,7 +190,7 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
     return () => {
       cancelled = true
     }
-  }, [branch, dateFilter, employeeIndex])
+  }, [branch, dateFilter, employeeIndex, employeeMasterByCode])
 
   const summary = useMemo(() => {
     let cancelledCount = 0
