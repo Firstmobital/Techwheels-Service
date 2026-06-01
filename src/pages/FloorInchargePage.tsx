@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
+import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +75,7 @@ export default function FloorInchargePage() {
   const [saving, setSaving] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [branchFilter, setBranchFilter] = useState('All')
+  const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   useEffect(() => {
@@ -83,15 +84,20 @@ export default function FloorInchargePage() {
 
   async function fetchAll() {
     setLoading(true)
+    setDataError(null)
     try {
       const [receptionRes, empRes] = await Promise.all([
-        listReceptionEntries(),
+        listFloorInchargeEntries(),
         supabase
           .from('employee_master')
           .select('id, employee_code, employee_name, department, location, role')
           .ilike('role', 'technician')
           .order('employee_name'),
       ])
+
+      if (receptionRes.error) {
+        setDataError(receptionRes.error)
+      }
 
       const receptionRows = receptionRes.error || !receptionRes.data
         ? []
@@ -226,6 +232,12 @@ export default function FloorInchargePage() {
           </button>
         </div>
 
+        {dataError && (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {dataError}
+          </div>
+        )}
+
         {/* Stats */}
         <div className="flex gap-4 mt-4">
           <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
@@ -279,7 +291,13 @@ export default function FloorInchargePage() {
             Loading job cards…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">No job cards found.</div>
+          <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
+            {dataError
+              ? 'Rows are hidden due to access/scope rules. Please verify Floor Incharge module permission and role/fuel mapping.'
+              : search.trim() || branchFilter !== 'All'
+                ? 'No rows match your current filters.'
+                : 'No rows are visible in your Floor Incharge scope right now.'}
+          </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
             <table className="min-w-full divide-y divide-gray-100 text-sm">

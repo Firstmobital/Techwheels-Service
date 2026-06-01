@@ -139,6 +139,29 @@ export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEn
   return ok((data ?? []) as ReceptionEntryRow[])
 }
 
+export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const { data, error } = await supabase
+    .from('service_reception_entries')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    const message = typeof error === 'string'
+      ? error
+      : (error as { message?: string; code?: string }).message ?? ''
+    const code = typeof error === 'object' && error !== null
+      ? String((error as { code?: string }).code ?? '')
+      : ''
+
+    if (code === '42501' || /permission denied|row-level security|not allowed/i.test(message)) {
+      return fail('You do not have Floor Incharge row access for your current mapping and scope.')
+    }
+    return fail(error)
+  }
+
+  return ok((data ?? []) as ReceptionEntryRow[])
+}
+
 export async function createReceptionEntry(input: ReceptionEntryInput): Promise<ApiResult<ReceptionEntryRow>> {
   const payload = normalizePayload(input)
 
