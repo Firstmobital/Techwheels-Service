@@ -3,7 +3,7 @@ import { REPORT_BRANCH_OPTIONS, applyBranchFilterToQuery } from './branches'
 import { getTableColumns } from './getTableColumns'
 
 export type BranchFilter = 'ALL' | string
-export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'custom'
+export type DateRangePreset = 'today' | 'this-week' | 'this-month' | 'last-month' | 'custom'
 export type DateFieldType = 'closed_date' | 'invoice_date'
 
 export interface DateRangeFilter {
@@ -1105,6 +1105,14 @@ export function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string;
   if (dateFilter.preset === 'this-month') {
     const from = getStartOfMonth(now)
     return { from: from.toISOString(), toExclusive: tomorrowStart.toISOString() }
+  }
+
+  if (dateFilter.preset === 'last-month') {
+    const lastMonth = addDays(now, -now.getDate())
+    const from = getStartOfMonth(lastMonth)
+    const to = new Date(from)
+    to.setMonth(to.getMonth() + 1)
+    return { from: from.toISOString(), toExclusive: to.toISOString() }
   }
 
   if (!dateFilter.customFrom || !dateFilter.customTo) return null

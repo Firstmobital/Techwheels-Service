@@ -38,6 +38,7 @@ const DATE_PRESET_OPTIONS: { label: string; value: DateRangePreset }[] = [
   { label: 'Today', value: 'today' },
   { label: 'This Week', value: 'this-week' },
   { label: 'This Month', value: 'this-month' },
+  { label: 'Last Month', value: 'last-month' },
   { label: 'Custom Date Range', value: 'custom' },
 ]
 
