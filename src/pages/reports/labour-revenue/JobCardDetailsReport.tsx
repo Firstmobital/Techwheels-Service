@@ -5,6 +5,8 @@ import { supabase } from '../../../lib/supabase'
 import { buildEmployeeLookupIndex, resolveEmployeeForSr, type EmployeeRecord } from '../../../lib/employeeMatcher'
 import type { ReportViewProps } from '../types'
 
+type EmployeeMasterRecord = EmployeeRecord & { fuel_type: string | null }
+
 interface ServiceInvoiceOrderRow {
   branch: string | null
   job_card_number: string | null
@@ -15,6 +17,7 @@ interface ServiceInvoiceOrderRow {
   closed_date_time: string | null
   sr_assigned_to: string | null
   sr_assigned_to_name: string | null
+  employee_fuel_type?: string | null
   account: string | null
 }
 
@@ -36,12 +39,54 @@ function formatDateTime(dateString: string | null): string {
   }
 }
 
-export default function JobCardDetailsReport({ branch, dateFilter, fuelType }: ReportViewProps) {
+function parseFuelSelectionFromBranch(branch: string): 'PV' | 'EV' | null {
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  if (normalized === 'sitapura pv') return 'PV'
+  if (normalized === 'sitapura ev') return 'EV'
+  if (normalized === 'all_pv') return 'PV'
+  if (normalized === 'all_ev') return 'EV'
+  if (normalized === 'ajmer road pv') return 'PV'
+  if (normalized === 'ajmer road ev') return 'EV'
+  return null
+}
+
+function getFuelScopedBranch(branch: string): string {
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  if (normalized.startsWith('sitapura')) return 'Sitapura'
+  if (normalized.startsWith('ajmer road')) return 'Ajmer Road'
+
+  return 'ALL'
+}
+
+function normalizeFuelBucket(rawFuel: unknown): 'PV' | 'EV' | null {
+  const normalized = String(rawFuel ?? '').trim().toLowerCase()
+  if (!normalized) return null
+
+  if (normalized === 'ev' || normalized.includes('electric')) {
+    return 'EV'
+  }
+
+  if (
+    normalized === 'pv' ||
+    normalized.includes('petrol') ||
+    normalized.includes('diesel') ||
+    normalized.includes('cng') ||
+    normalized.includes('hybrid') ||
+    normalized.includes('lpg')
+  ) {
+    return 'PV'
+  }
+
+  return null
+}
+
+export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<ServiceInvoiceOrderRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedKPI, setSelectedKPI] = useState<KPIType>(null)
-  const [employees, setEmployees] = useState<EmployeeRecord[]>([])
+  const [employees, setEmployees] = useState<EmployeeMasterRecord[]>([])
 
   // Fetch employees once on mount
   useEffect(() => {
@@ -49,11 +94,11 @@ export default function JobCardDetailsReport({ branch, dateFilter, fuelType }: R
       try {
         const { data, error: empError } = await supabase
           .from('employee_master')
-          .select('employee_code, employee_name, location, department, role')
+          .select('employee_code, employee_name, location, department, role, fuel_type')
           .limit(5000)
 
         if (empError) throw new Error(empError.message)
-        setEmployees((data as EmployeeRecord[]) ?? [])
+        setEmployees((data as EmployeeMasterRecord[]) ?? [])
       } catch (err) {
         console.error('Failed to fetch employees:', err)
         setEmployees([])
@@ -75,17 +120,15 @@ export default function JobCardDetailsReport({ branch, dateFilter, fuelType }: R
 
       try {
         const bounds = getDateRangeBounds(dateFilter)
+        const fuelSelection = parseFuelSelectionFromBranch(branch)
+        const queryBranch = fuelSelection ? getFuelScopedBranch(branch) : branch
 
         let query = supabase
           .from('service_invoice_order_data')
           .select('branch, job_card_number, status, invoiced, sr_type, created_date_time, closed_date_time, sr_assigned_to, account')
           .limit(5000)
 
-        query = applyBranchFilterToQuery(query, branch)
-
-        if (fuelType && fuelType !== 'ALL') {
-          query = query.eq('fuel_type', fuelType)
-        }
+        query = applyBranchFilterToQuery(query, queryBranch)
 
         if (bounds) {
           query = query.gte('created_date_time', bounds.from).lt('created_date_time', bounds.toExclusive)
@@ -96,16 +139,27 @@ export default function JobCardDetailsReport({ branch, dateFilter, fuelType }: R
 
         const allRows = (data as ServiceInvoiceOrderRow[] | null) ?? []
 
-        // Map sr_assigned_to with employee names
-        const mappedRows = allRows.map((row) => {
+        // Map sr_assigned_to with employee names and fuel buckets from employee_master
+        let mappedRows = allRows.map((row) => {
           const matchResult = resolveEmployeeForSr(row.sr_assigned_to, employeeIndex)
-          const matchedEmployee = employees.find((e) => e.employee_code === matchResult.employeeCode)
+          const matchedEmployee = matchResult.employeeCode
+            ? employeeIndex.byCode.get(matchResult.employeeCode.trim().toUpperCase())
+            : undefined
 
           return {
             ...row,
             sr_assigned_to_name: matchedEmployee?.employee_name ?? row.sr_assigned_to,
+            employee_fuel_type: matchedEmployee?.fuel_type ?? null,
           }
         })
+
+        // Apply fuel filter AFTER merge using employee_master fuel_type
+        if (fuelSelection) {
+          mappedRows = mappedRows.filter((row) => {
+            const employeeFuelBucket = normalizeFuelBucket(row.employee_fuel_type)
+            return employeeFuelBucket === fuelSelection
+          })
+        }
 
         if (!cancelled) {
           setRows(mappedRows)
@@ -127,7 +181,7 @@ export default function JobCardDetailsReport({ branch, dateFilter, fuelType }: R
     return () => {
       cancelled = true
     }
-  }, [branch, dateFilter, fuelType])
+  }, [branch, dateFilter, employeeIndex])
 
   const summary = useMemo(() => {
     let cancelledCount = 0

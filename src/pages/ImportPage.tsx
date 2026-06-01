@@ -1713,9 +1713,6 @@ export default function ImportPage() {
                 // Avoid schema-cache failures by never sending it from the app payload.
                 delete row.net_order_qty
 
-                // Save dealer_code before schema filtering for RLS compliance
-                const originalDealerCode = row.dealer_code
-
                 if (partsOrderColumns.length > 0) {
                   for (const key of Object.keys(row)) {
                     if (key === 'source_row_hash') continue
@@ -1725,17 +1722,16 @@ export default function ImportPage() {
                   }
 
                   if (!partsOrderHasDealerCode) {
-                    if (partsOrderHasDealerName && row.dealer_name == null && originalDealerCode != null) {
-                      row.dealer_name = originalDealerCode
+                    const dealerCode = row.dealer_code
+                    if (partsOrderHasDealerName && row.dealer_name == null && dealerCode != null) {
+                      row.dealer_name = dealerCode
                     }
-                  }
-                }
-
-                // Ensure dealer_code is set for RLS policy compliance
-                // If table has dealer_code column, always set it; otherwise it will be deleted by schema filter
-                if (partsOrderHasDealerCode) {
-                  if (!row.dealer_code || row.dealer_code === '') {
-                    row.dealer_code = userDealerCode || originalDealerCode || null
+                    delete row.dealer_code
+                  } else {
+                    // dealer_code column exists - ensure it's set for RLS policy
+                    if (!row.dealer_code || row.dealer_code === '') {
+                      row.dealer_code = userDealerCode
+                    }
                   }
                 }
 
