@@ -348,6 +348,7 @@ export default function SettingsPage() {
   const [selectedIssueIds, setSelectedIssueIds] = useState<Record<number, boolean>>({})
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
 
   const employeeOptions = useMemo(
     () => employees.map((employee) => ({ code: employee.employee_code, name: employee.employee_name })),
@@ -423,21 +424,32 @@ export default function SettingsPage() {
   )
 
   const openSettingReference = useCallback((sectionId: string) => {
-    const element = document.getElementById(sectionId)
-    if (!element) return
+    setSelectedSectionId(sectionId)
     window.history.replaceState(null, '', `#${sectionId}`)
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
   useEffect(() => {
     const sectionId = window.location.hash.replace('#', '').trim()
-    if (!sectionId) return
-    const element = document.getElementById(sectionId)
+    if (!sectionId) {
+      setSelectedSectionId(null)
+      return
+    }
+    const exists = settingsCards.some((card) => card.id === sectionId)
+    if (!exists) {
+      setSelectedSectionId(null)
+      return
+    }
+    setSelectedSectionId(sectionId)
+  }, [settingsCards])
+
+  useEffect(() => {
+    if (!selectedSectionId) return
+    const element = document.getElementById(selectedSectionId)
     if (!element) return
     window.requestAnimationFrame(() => {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
-  }, [])
+  }, [selectedSectionId])
 
   const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true)
@@ -1272,7 +1284,12 @@ export default function SettingsPage() {
                 key={card.id}
                 type="button"
                 onClick={() => openSettingReference(card.id)}
-                className="group rounded-xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                className={[
+                  'group rounded-xl border p-4 text-left transition',
+                  selectedSectionId === card.id
+                    ? 'border-blue-300 bg-blue-50'
+                    : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50',
+                ].join(' ')}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1291,6 +1308,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {selectedSectionId === 'branch-management' && (
         <section id="branch-management" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
@@ -1343,7 +1361,9 @@ export default function SettingsPage() {
             )}
           </div>
         </section>
+        )}
 
+        {selectedSectionId === 'employee-master' && (
         <section id="employee-master" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
@@ -1620,7 +1640,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
+        {selectedSectionId === 'autodoc-rate-cards' && (
         <section id="autodoc-rate-cards" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
@@ -1759,7 +1781,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
+        {selectedSectionId === 'unmapped-sr-entries' && (
         <section id="unmapped-sr-entries" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
@@ -2008,6 +2032,7 @@ export default function SettingsPage() {
             </table>
           </div>
         </section>
+        )}
       </div>
     </div>
   )
