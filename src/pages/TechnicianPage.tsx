@@ -30,6 +30,11 @@ type IncomeDayRow = {
   technicianIncome: number
 }
 
+type TechnicianOption = {
+  code: string
+  name: string
+}
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
   const date = new Date(value)
@@ -72,8 +77,11 @@ export default function TechnicianPage() {
   const [assignments, setAssignments] = useState<TechnicianAssignmentRow[]>([])
   const [incomeByDay, setIncomeByDay] = useState<IncomeDayRow[]>([])
   const [technicianCodes, setTechnicianCodes] = useState<string[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [technicianOptions, setTechnicianOptions] = useState<TechnicianOption[]>([])
+  const [selectedTechnicianCode, setSelectedTechnicianCode] = useState('')
 
-  async function loadData() {
+  async function loadData(adminSelectedCode?: string) {
     setLoading(true)
     setError(null)
 
@@ -84,61 +92,120 @@ export default function TechnicianPage() {
         setAssignments([])
         setIncomeByDay([])
         setTechnicianCodes([])
+        setTechnicianOptions([])
+        setSelectedTechnicianCode('')
+        setIsAdmin(false)
         setLoading(false)
         return
       }
 
-      const mappingsRes = await supabase
-        .from('user_employee_links')
-        .select('employee_code, is_active')
-        .eq('user_id', userId)
-        .eq('is_active', true)
+      const profileRes = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle()
 
-      if (mappingsRes.error) {
-        setError(mappingsRes.error.message)
-        setAssignments([])
-        setIncomeByDay([])
-        setTechnicianCodes([])
-        setLoading(false)
-        return
-      }
+      const userIsAdmin = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase() === 'admin'
+      setIsAdmin(userIsAdmin)
 
-      const mappedCodes = Array.from(new Set(
-        (mappingsRes.data ?? [])
-          .map((row) => String((row as { employee_code?: string }).employee_code ?? '').trim().toUpperCase())
-          .filter(Boolean),
-      ))
+      let effectiveCodes: string[] = []
 
-      if (mappedCodes.length === 0) {
-        setAssignments([])
-        setIncomeByDay([])
-        setTechnicianCodes([])
-        setLoading(false)
-        return
-      }
+      if (userIsAdmin) {
+        const allTechRes = await supabase
+          .from('employee_master')
+          .select('employee_code, employee_name, role')
+          .order('employee_name', { ascending: true })
 
-      const employeeRes = await supabase
-        .from('employee_master')
-        .select('employee_code, role')
-        .in('employee_code', mappedCodes)
+        if (allTechRes.error) {
+          setError(allTechRes.error.message)
+          setAssignments([])
+          setIncomeByDay([])
+          setTechnicianCodes([])
+          setTechnicianOptions([])
+          setSelectedTechnicianCode('')
+          setLoading(false)
+          return
+        }
 
-      if (employeeRes.error) {
-        setError(employeeRes.error.message)
-        setAssignments([])
-        setIncomeByDay([])
-        setTechnicianCodes([])
-        setLoading(false)
-        return
-      }
-
-      const technicianCodeSet = new Set(
-        (employeeRes.data ?? [])
+        const optionsMap = new Map<string, TechnicianOption>()
+        ;(allTechRes.data ?? [])
           .filter((row) => String((row as { role?: string | null }).role ?? '').trim().toLowerCase() === 'technician')
-          .map((row) => String((row as { employee_code?: string }).employee_code ?? '').trim().toUpperCase())
-          .filter(Boolean),
-      )
+          .forEach((row) => {
+            const code = String((row as { employee_code?: string | null }).employee_code ?? '').trim().toUpperCase()
+            if (!code) return
+            const name = String((row as { employee_name?: string | null }).employee_name ?? '').trim()
+            optionsMap.set(code, {
+              code,
+              name: name || code,
+            })
+          })
 
-      const effectiveCodes = mappedCodes.filter((code) => technicianCodeSet.has(code))
+        const options = Array.from(optionsMap.values())
+        setTechnicianOptions(options)
+
+        const preferredCode = String(adminSelectedCode ?? selectedTechnicianCode).trim().toUpperCase()
+        const hasPreferredCode = preferredCode.length > 0 && options.some((opt) => opt.code === preferredCode)
+        const nextSelectedCode = hasPreferredCode ? preferredCode : (options[0]?.code ?? '')
+
+        setSelectedTechnicianCode(nextSelectedCode)
+        effectiveCodes = nextSelectedCode ? [nextSelectedCode] : []
+      } else {
+        setTechnicianOptions([])
+        setSelectedTechnicianCode('')
+
+        const mappingsRes = await supabase
+          .from('user_employee_links')
+          .select('employee_code, is_active')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+
+        if (mappingsRes.error) {
+          setError(mappingsRes.error.message)
+          setAssignments([])
+          setIncomeByDay([])
+          setTechnicianCodes([])
+          setLoading(false)
+          return
+        }
+
+        const mappedCodes = Array.from(new Set(
+          (mappingsRes.data ?? [])
+            .map((row) => String((row as { employee_code?: string }).employee_code ?? '').trim().toUpperCase())
+            .filter(Boolean),
+        ))
+
+        if (mappedCodes.length === 0) {
+          setAssignments([])
+          setIncomeByDay([])
+          setTechnicianCodes([])
+          setLoading(false)
+          return
+        }
+
+        const employeeRes = await supabase
+          .from('employee_master')
+          .select('employee_code, role')
+          .in('employee_code', mappedCodes)
+
+        if (employeeRes.error) {
+          setError(employeeRes.error.message)
+          setAssignments([])
+          setIncomeByDay([])
+          setTechnicianCodes([])
+          setLoading(false)
+          return
+        }
+
+        const technicianCodeSet = new Set(
+          (employeeRes.data ?? [])
+            .filter((row) => String((row as { role?: string | null }).role ?? '').trim().toLowerCase() === 'technician')
+            .map((row) => String((row as { employee_code?: string }).employee_code ?? '').trim().toUpperCase())
+            .filter(Boolean),
+        )
+
+        effectiveCodes = mappedCodes.filter((code) => technicianCodeSet.has(code))
+      }
+
       setTechnicianCodes(effectiveCodes)
 
       if (effectiveCodes.length === 0) {
@@ -273,6 +340,9 @@ export default function TechnicianPage() {
       setAssignments([])
       setIncomeByDay([])
       setTechnicianCodes([])
+      setTechnicianOptions([])
+      setSelectedTechnicianCode('')
+      setIsAdmin(false)
     } finally {
       setLoading(false)
     }
@@ -290,17 +360,52 @@ export default function TechnicianPage() {
   return (
     <div className="mx-auto w-full max-w-7xl p-4 md:p-6 space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Technician</h1>
-            <p className="mt-1 text-sm text-gray-500">View your assigned rows and day-wise income tracker.</p>
+            <p className="mt-1 text-sm text-gray-500">
+              {isAdmin
+                ? 'Select any TECHNICIAN from Employee Master to view rows and day-wise income.'
+                : 'View your assigned rows and day-wise income tracker.'}
+            </p>
           </div>
-          <button
-            onClick={() => void loadData()}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Refresh
-          </button>
+
+          {isAdmin && (
+            <div className="flex items-end gap-2">
+              <div>
+                <label htmlFor="technician-select" className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Technician
+                </label>
+                <select
+                  id="technician-select"
+                  value={selectedTechnicianCode}
+                  onChange={(e) => {
+                    const nextCode = e.target.value
+                    setSelectedTechnicianCode(nextCode)
+                    void loadData(nextCode)
+                  }}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                >
+                  {technicianOptions.length === 0 ? (
+                    <option value="">No technician found</option>
+                  ) : (
+                    technicianOptions.map((opt) => (
+                      <option key={opt.code} value={opt.code}>{opt.code} - {opt.name}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <button
+              onClick={() => void loadData()}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -356,16 +461,20 @@ export default function TechnicianPage() {
 
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
-          My Rows ({assignments.length})
+          {isAdmin ? `Selected Technician Rows (${assignments.length})` : `My Rows (${assignments.length})`}
         </div>
 
         {loading ? (
           <div className="p-4 text-sm text-gray-500">Loading technician rows...</div>
         ) : assignments.length === 0 ? (
           <div className="p-4 text-sm text-gray-500">
-            {technicianCodes.length === 0
-              ? 'No active TECHNICIAN mapping found for your account.'
-              : 'No assigned rows found for your technician code(s).'}
+            {isAdmin
+              ? (technicianCodes.length === 0
+                ? 'No TECHNICIAN found in Employee Master.'
+                : 'No assigned rows found for the selected technician.')
+              : (technicianCodes.length === 0
+                ? 'No active TECHNICIAN mapping found for your account.'
+                : 'No assigned rows found for your technician code(s).')}
           </div>
         ) : (
           <div className="overflow-x-auto">
