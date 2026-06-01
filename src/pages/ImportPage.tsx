@@ -1684,6 +1684,17 @@ export default function ImportPage() {
             const insertRows: Record<string, unknown>[] = []
             const portal = cardState.portal ?? 'EV'
 
+            // Get current user's dealer code for RLS compliance
+            let userDealerCode: string | null = null
+            try {
+              const { data: sessionData } = await supabase.auth.getSession()
+              if (sessionData?.session?.user?.user_metadata?.dealer_code) {
+                userDealerCode = sessionData.session.user.user_metadata.dealer_code
+              }
+            } catch {
+              // Continue without dealer_code if session fetch fails
+            }
+
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
               const { row, errors } = buildPartsOrderInsertRow(
@@ -1717,6 +1728,11 @@ export default function ImportPage() {
                     }
                     delete row.dealer_code
                   }
+                }
+
+                // Ensure dealer_code is set for RLS policy compliance
+                if (userDealerCode && (!row.dealer_code || row.dealer_code === '')) {
+                  row.dealer_code = userDealerCode
                 }
 
                 const rowSourceHash =
