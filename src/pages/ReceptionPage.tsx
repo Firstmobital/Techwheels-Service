@@ -218,7 +218,7 @@ export default function ReceptionPage() {
     setError(null)
 
     if (!form.reg_number.trim() || !form.service_type.trim() || !form.sa_employee_code.trim() || !form.source.trim() || !form.branch.trim()) {
-      setError('Please fill all required fields: Registration No, Service Type, Employee Code, Source, Branch')
+      setError('Please fill all required fields: Registration No, Service Type, SA Name, Source, Branch')
       return
     }
 
@@ -259,12 +259,17 @@ export default function ReceptionPage() {
   }
 
   function startEdit(entry: ReceptionEntryRow) {
+    const resolvedEmployeeCode =
+      entry.sa_employee_code
+      ?? employeeOptions.find((employee) => employee.employee_name === entry.sa_name)?.employee_code
+      ?? ''
+
     setEditingId(entry.id)
     setForm({
       reg_number: entry.reg_number,
       model: entry.model ?? '',
       service_type: entry.service_type,
-      sa_employee_code: entry.sa_employee_code ?? '',
+      sa_employee_code: resolvedEmployeeCode,
       jc_number: entry.jc_number ?? '',
       owner_name: entry.owner_name ?? '',
       owner_phone: entry.owner_phone ?? '',
@@ -405,14 +410,19 @@ export default function ReceptionPage() {
           </label>
 
           <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Employee Code *</span>
-            <input
-              list="reception-employee-options"
+            <span className="mb-1 block font-medium">SA Name *</span>
+            <select
               value={form.sa_employee_code}
-              onChange={(event) => setForm((prev) => ({ ...prev, sa_employee_code: event.target.value.toUpperCase() }))}
-              placeholder="Select or type employee code"
+              onChange={(event) => setForm((prev) => ({ ...prev, sa_employee_code: event.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            />
+            >
+              <option value="">— Select SA —</option>
+              {sortedEmployeeOptions.map((employee) => (
+                <option key={employee.employee_code} value={employee.employee_code}>
+                  {employee.employee_name} ({employee.employee_code})
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="text-sm text-gray-700">
@@ -484,12 +494,6 @@ export default function ReceptionPage() {
           </label>
         </div>
 
-        <datalist id="reception-employee-options">
-          {sortedEmployeeOptions.map((employee) => (
-            <option key={employee.employee_code} value={employee.employee_code}>{employee.employee_name}</option>
-          ))}
-        </datalist>
-
         <datalist id="reception-service-types">
           {SERVICE_TYPE_OPTIONS.map((name) => (
             <option key={name} value={name} />
@@ -536,7 +540,7 @@ export default function ReceptionPage() {
                   <th className="px-3 py-2 text-left">Reg No</th>
                   <th className="px-3 py-2 text-left">Model</th>
                   <th className="px-3 py-2 text-left">Service Type</th>
-                  <th className="px-3 py-2 text-left">Employee</th>
+                  <th className="px-3 py-2 text-left">SA Name</th>
                   <th className="px-3 py-2 text-left">JC Number</th>
                   <th className="px-3 py-2 text-left">Owner Name</th>
                   <th className="px-3 py-2 text-left">Owner Phone</th>
@@ -552,7 +556,7 @@ export default function ReceptionPage() {
                     <td className="whitespace-nowrap px-3 py-2 font-medium">{entry.reg_number}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.model ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.service_type}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.sa_name} ({entry.sa_employee_code ?? '—'})</td>
+                    <td className="whitespace-nowrap px-3 py-2">{entry.sa_name}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.jc_number ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.owner_name ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.owner_phone ?? '-'}</td>
