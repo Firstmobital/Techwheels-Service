@@ -11,6 +11,11 @@ import {
   deleteServiceBranch,
   type RateCardRow,
   type RateRowInput,
+  listModelOptions,
+  createModelOption,
+  updateModelOption,
+  deleteModelOption,
+  type ModelOption,
 } from '../lib/api'
 
 interface EmployeeRow {
@@ -371,10 +376,13 @@ export default function SettingsPage() {
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
-  const [models, setModels] = useState<string[]>([...DEFAULT_MODEL_OPTIONS])
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
   const [newModelName, setNewModelName] = useState('')
-  const [editingModelIndex, setEditingModelIndex] = useState<number | null>(null)
+  const [editingModelId, setEditingModelId] = useState<number | null>(null)
   const [editingModelValue, setEditingModelValue] = useState('')
+  const [savingModel, setSavingModel] = useState(false)
+  const [deletingModelId, setDeletingModelId] = useState<number | null>(null)
 
   const employeeOptions = useMemo(
     () => employees.map((employee) => ({ code: employee.employee_code, name: employee.employee_name })),
@@ -419,33 +427,22 @@ export default function SettingsPage() {
     return { total, byBranch }
   }, [issues])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+  async function loadModelOptions() {
+    setLoadingModels(true)
+    const result = await listModelOptions()
+    setLoadingModels(false)
 
-    const raw = window.localStorage.getItem(SETTINGS_MODELS_STORAGE_KEY)
-    if (!raw) return
-
-    try {
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return
-
-      const cleaned = parsed
-        .map((value) => String(value ?? '').trim().replace(/\s+/g, ' '))
-        .filter(Boolean)
-
-      const unique = Array.from(new Set(cleaned))
-      if (unique.length > 0) {
-        setModels(unique)
-      }
-    } catch {
-      // Ignore invalid local storage payloads and keep defaults.
+    if (result.error) {
+      setError(result.error)
+      return
     }
-  }, [])
+
+    setModelOptions(result.data ?? [])
+  }
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(SETTINGS_MODELS_STORAGE_KEY, JSON.stringify(models))
-  }, [models])
+    void loadModelOptions()
+  }, [])
 
   const settingsCards = useMemo(
     () => [
