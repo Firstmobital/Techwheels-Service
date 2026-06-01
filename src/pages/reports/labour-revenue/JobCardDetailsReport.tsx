@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getDateRangeBounds } from '../../../lib/reportQueries'
-import { applyBranchFilterToQuery } from '../../../lib/branches'
+import { applyBranchFilterToQuery, matchesBranchSelection } from '../../../lib/branches'
 import { supabase } from '../../../lib/supabase'
 import { buildEmployeeLookupIndex, resolveEmployeeForSr, type EmployeeRecord } from '../../../lib/employeeMatcher'
 import type { ReportViewProps } from '../types'
@@ -17,6 +17,7 @@ interface ServiceInvoiceOrderRow {
   closed_date_time: string | null
   sr_assigned_to: string | null
   sr_assigned_to_name: string | null
+  employee_location?: string | null
   employee_fuel_type?: string | null
   account: string | null
 }
@@ -57,6 +58,24 @@ function getFuelScopedBranch(branch: string): string {
   if (normalized.startsWith('ajmer road')) return 'Ajmer Road'
 
   return 'ALL'
+}
+
+function parseBranchSelectionFromFilter(branch: string): string {
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  if (normalized === 'all' || normalized === 'all_pv' || normalized === 'all_ev') {
+    return 'ALL'
+  }
+
+  if (normalized === 'sitapura pv' || normalized === 'sitapura ev') {
+    return 'Sitapura'
+  }
+
+  if (normalized === 'ajmer road pv' || normalized === 'ajmer road ev') {
+    return 'Ajmer Road'
+  }
+
+  return branch
 }
 
 function normalizeFuelBucket(rawFuel: unknown): 'PV' | 'EV' | null {
@@ -130,7 +149,8 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
       try {
         const bounds = getDateRangeBounds(dateFilter)
         const fuelSelection = parseFuelSelectionFromBranch(branch)
-        const queryBranch = fuelSelection ? getFuelScopedBranch(branch) : branch
+        const branchSelection = parseBranchSelectionFromFilter(branch)
+        const queryBranch = fuelSelection ? getFuelScopedBranch(branch) : branchSelection
 
         let query = supabase
           .from('service_invoice_order_data')
@@ -158,9 +178,17 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
           return {
             ...row,
             sr_assigned_to_name: matchedEmployee?.employee_name ?? row.sr_assigned_to,
+            employee_location: matchedEmployee?.location ?? null,
             employee_fuel_type: matchedEmployee?.fuel_type ?? null,
           }
         })
+
+        // Apply branch filter AFTER merge using employee_master location
+        if (branchSelection !== 'ALL') {
+          mappedRows = mappedRows.filter((row) =>
+            matchesBranchSelection(row.employee_location, branchSelection),
+          )
+        }
 
         // Apply fuel filter AFTER merge using employee_master fuel_type
         if (fuelSelection) {
