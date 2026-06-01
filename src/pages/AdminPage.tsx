@@ -545,7 +545,7 @@ export default function AdminPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-800',
             ].join(' ')}
           >
-            {t === 'users' ? '👤 Users' : t === 'permissions' ? '🔐 Permissions' : t === 'modules' ? '🧩 Modules' : '🔗 SA Mappings'}
+            {t === 'users' ? '👤 Users' : t === 'permissions' ? '🔐 Permissions' : t === 'modules' ? '🧩 Modules' : '🔗 Employee Mappings'}
           </button>
         ))}
       </div>
@@ -762,7 +762,7 @@ export default function AdminPage() {
       {tab === 'mappings' && (
         <div>
           <div className="mb-4 flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-gray-900">User → Service Advisor Mappings</h2>
+            <h2 className="text-sm font-semibold text-gray-900">User → Employee Mappings</h2>
             <button
               onClick={() => setShowAddMapping(true)}
               className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
@@ -775,7 +775,7 @@ export default function AdminPage() {
             <div className="flex h-40 items-center justify-center text-sm text-gray-400">Loading mappings…</div>
           ) : mappings.length === 0 ? (
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-              No mappings yet. Create one to link a user to a Service Advisor.
+              No mappings yet. Create one to link a user to an employee.
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -1019,7 +1019,7 @@ export default function AdminPage() {
 
       {/* ── ADD MAPPING MODAL ── */}
       {showAddMapping && (
-        <Modal title="Create SA Mapping" onClose={() => setShowAddMapping(false)}>
+        <Modal title="Create Employee Mapping" onClose={() => setShowAddMapping(false)}>
           <div className="space-y-4">
             <Field label="User *">
               <select
@@ -1035,15 +1035,15 @@ export default function AdminPage() {
               </select>
             </Field>
 
-            <Field label="Service Advisor *">
+            <Field label="Employee *">
               <input
-                list="sa-list"
+                list="emp-list"
                 value={mapEmployeeCode}
                 onChange={e => setMapEmployeeCode(e.target.value.toUpperCase())}
                 placeholder="Search by code or name…"
                 className={INPUT}
               />
-              <datalist id="sa-list">
+              <datalist id="emp-list">
                 {serviceAdvisors.map(sa => (
                   <option key={sa.employee_code} value={sa.employee_code}>{sa.employee_name}</option>
                 ))}
