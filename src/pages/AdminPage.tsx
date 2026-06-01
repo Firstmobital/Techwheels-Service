@@ -6,7 +6,7 @@ import {
   createUserEmployeeLink,
   updateUserEmployeeLink,
   deactivateUserEmployeeLink,
-  listServiceAdvisors,
+  listEmployees,
   type UserEmployeeLinkRow,
 } from '../lib/api/userEmployeeLinks'
 
@@ -159,7 +159,7 @@ export default function AdminPage() {
 
   // Mappings tab
   const [mappings, setMappings]             = useState<UserEmployeeLinkRow[]>([])
-  const [serviceAdvisors, setServiceAdvisors] = useState<Array<{ employee_code: string; employee_name: string }>>([])
+  const [employeeCatalog, setEmployeeCatalog] = useState<Array<{ employee_code: string; employee_name: string }>>([])
   const [mappingsLoading, setMappingsLoading] = useState(false)
   const [showAddMapping, setShowAddMapping] = useState(false)
   const [mapUserId, setMapUserId]           = useState('')
@@ -170,7 +170,7 @@ export default function AdminPage() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
   useEffect(() => {
-    Promise.all([loadUsers(), loadModules(), loadMappings(), loadServiceAdvisors()]).finally(() => setLoading(false))
+    Promise.all([loadUsers(), loadModules(), loadMappings(), loadEmployeeCatalog()]).finally(() => setLoading(false))
   }, [])
 
   async function loadUsers() {
@@ -228,10 +228,10 @@ export default function AdminPage() {
     setMappingsLoading(false)
   }
 
-  async function loadServiceAdvisors() {
-    const result = await listServiceAdvisors()
+  async function loadEmployeeCatalog() {
+    const result = await listEmployees()
     if (result.data) {
-      setServiceAdvisors(result.data)
+      setEmployeeCatalog(result.data)
     }
   }
 
@@ -790,12 +790,12 @@ export default function AdminPage() {
                 <tbody className="divide-y divide-gray-100">
                   {mappings.map(m => {
                     const user = users.find(u => u.id === m.user_id)
-                    const sa = serviceAdvisors.find(s => s.employee_code === m.employee_code)
+                    const linkedEmployee = employeeCatalog.find(s => s.employee_code === m.employee_code)
                     return (
                       <tr key={m.id} className="transition-colors hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-900">{user?.full_name || user?.email || m.user_id}</td>
                         <td className="px-4 py-3 font-mono text-sm text-gray-600">{m.employee_code}</td>
-                        <td className="px-4 py-3 text-gray-600">{sa?.employee_name || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{linkedEmployee?.employee_name || '—'}</td>
                         <td className="px-4 py-3 text-gray-600">{m.dealer_code}</td>
                         <td className="px-4 py-3">
                           <button
@@ -1044,8 +1044,8 @@ export default function AdminPage() {
                 className={INPUT}
               />
               <datalist id="emp-list">
-                {serviceAdvisors.map(sa => (
-                  <option key={sa.employee_code} value={sa.employee_code}>{sa.employee_name}</option>
+                {employeeCatalog.map(emp => (
+                  <option key={emp.employee_code} value={emp.employee_code}>{emp.employee_name}</option>
                 ))}
               </datalist>
             </Field>

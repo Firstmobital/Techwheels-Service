@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 15:10 UTC  
+**Last Updated**: 2026-06-01 15:40 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -14,6 +14,7 @@
 - Latest full_database.sql refresh remains authoritative after superadmin parity updates.
 - Malformed admin user (id 1661d961-d73d-411e-9eab-cff26bbc048b) deleted and dump refreshed 2026-06-01.
 - Authority: local_folder/backups/full_database.sql (post-cleanup, final state for Phase 1B).
+- Multi-code ownership migration prepared: 20260601154000_enable_multi_employee_code_visibility.sql (run pending).
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -85,7 +86,7 @@ Phase 1B is complete (schema + backfill strategy + RLS + superadmin hardening). 
 - `sa_display_name` = **Cached signup name** (UI display only, can be stale)
 - `sa_name` = **Original CRM value** (audit trail, never for logic)
 
-**RLS Rule**: All filtering ONLY by `sa_employee_code = my_sa_employee_code()`. Never by name.
+**RLS Rule (Target)**: Filter by employee-code membership (`user_has_employee_code(sa_employee_code)`), never by name.
 
 ### Scope
 - **Phase 1 (This Cycle)**: Service Advisor identity, reception row ownership, permission semantics hardening
@@ -397,6 +398,7 @@ Add bounded sections inside Admin workspace:
 - **Migration 3** (`20260601020000_create_sa_employee_code_function.sql`): Create `my_sa_employee_code()` + `has_module_action()` helper functions
 - **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`): Drop old name-based SA policies; create new employee-code-based policies with correct action semantics
 - **Migration 5** (`20260601040000_harden_sensitive_table_rls.sql`): Enable RLS on `employee_master`; add admin-only policies
+- **Migration 6** (`20260601154000_enable_multi_employee_code_visibility.sql`): Update SA policies to support multiple active employee-code mappings per user/dealer
 
 **Important**: Do NOT create duplicate consolidated SQL files. Individual migration files are the single source of truth to prevent drift.
 
@@ -420,6 +422,7 @@ Included in **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`):
 - **Reception create/update**: Accept `sa_employee_code` from payload; store and backfill `sa_name` from employee_master for display
 - **Service Advisor list**: Already filtered by RLS; no app-layer changes needed
 - **Admin mapping APIs**: Create CRUD endpoints for `user_employee_links` (list, create, update, deactivate)
+- **SA RLS support for multi-code users**: Membership helper (`user_has_employee_code`) checks all active mappings for current dealer
 - **Dealer code profile APIs**: Create CRUD endpoints for dealer-code pattern metadata (branch, fuel_type, is_active)
 
 #### 1.5 Frontend Changes
@@ -462,6 +465,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.12 | Delete malformed admin user from database | ✓ Done | User | 2026-06-01 | Harddelete of id 1661d961-d73d-411e-9eab-cff26bbc048b and all references | ☑ |
 | 1.13 | Update AdminPage to hide inactive users by default | ✓ Done | Copilot | 2026-06-01 | File: src/pages/AdminPage.tsx; added showInactive toggle; inactive users filtered by default | ☑ |
 | 1.14 | Create fresh authoritative full dump post-cleanup | ✓ Done | User | 2026-06-01 | local_folder/backups/full_database.sql refreshed; authority locked post-malformed-user deletion | ☑ |
+| 1.15 | Enable multi-employee-code SA ownership policies | 🟡 In Progress | User + Copilot | 2026-06-01 | Migration prepared: 20260601154000_enable_multi_employee_code_visibility.sql; apply pending | ☐ |
 
 ### 4.2 Data Backfill & Validation
 

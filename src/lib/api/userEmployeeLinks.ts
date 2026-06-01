@@ -192,25 +192,29 @@ export async function deactivateUserEmployeeLink(id: number): Promise<ApiResult<
 }
 
 /**
- * Get all SA employees (for dropdown in UI)
+ * Get all employees (for mapping dropdown in UI)
  */
-export async function listServiceAdvisors(): Promise<ApiResult<Array<{ employee_code: string; employee_name: string }>>> {
+export async function listEmployees(): Promise<ApiResult<Array<{ employee_code: string; employee_name: string }>>> {
   try {
-    // Fetch all employee_master records and filter in JS since complex role filtering is easier there
+    // Employee mapping is role-agnostic: any employee can be linked to a user.
     const { data: allData, error: allError } = await supabase
       .from('employee_master')
-      .select('employee_code, employee_name, role')
+      .select('employee_code, employee_name')
       .order('employee_name')
 
-    if (allError) return fail(`Failed to list SAs: ${allError.message}`)
+    if (allError) return fail(`Failed to list employees: ${allError.message}`)
 
-    const filtered = (allData ?? [])
-      .filter(e => (e.role ?? '').toLowerCase().includes('sa') || (e.role ?? '').toLowerCase().includes('service'))
-      .map(e => ({ employee_code: e.employee_code, employee_name: e.employee_name }))
+    const employees = (allData ?? []).map(e => ({
+      employee_code: e.employee_code,
+      employee_name: e.employee_name,
+    }))
 
-    return ok(filtered)
+    return ok(employees)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    return fail(`Failed to list SAs: ${message}`)
+    return fail(`Failed to list employees: ${message}`)
   }
 }
+
+// Backward-compatible alias for existing imports.
+export const listServiceAdvisors = listEmployees
