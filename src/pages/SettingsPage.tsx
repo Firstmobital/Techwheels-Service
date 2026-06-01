@@ -56,9 +56,14 @@ interface RateUploadRow {
 const REQUIRED_HEADERS = {
   employee_code: 'sa code',
   employee_name: 'sa name',
-  location: 'location',
   department: 'department',
 } as const
+
+const DEALER_CODE_RULES = [
+  { key: '3000840', location: 'Sitapura', fuel_type: 'PV' },
+  { key: '500A840', location: 'Sitapura', fuel_type: 'EV' },
+  { key: '3001440', location: 'Ajmer Road', fuel_type: 'PV' },
+] as const
 
 function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -68,6 +73,14 @@ function normalizeBranch(value: string | null | undefined): string | null {
   if (!value) return null
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function deriveLocationAndFuelType(employeeCode: string): { location: string; fuel_type: string } | null {
+  const normalizedCode = employeeCode.trim().toUpperCase()
+  if (!normalizedCode) return null
+  const match = DEALER_CODE_RULES.find((rule) => normalizedCode.includes(rule.key))
+  if (!match) return null
+  return { location: match.location, fuel_type: match.fuel_type }
 }
 
 function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
@@ -95,7 +108,6 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
         const resolvedHeaders: Record<keyof typeof REQUIRED_HEADERS, string> = {
           employee_code: '',
           employee_name: '',
-          location: '',
           department: '',
         }
 
@@ -109,7 +121,8 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
           }
         }
 
-        // Optional headers for fuel_type and role.
+        // Optional headers for location, fuel_type and role.
+        const locationHeader = normalizedToOriginal.get('location')
         const fuelTypeHeader = normalizedToOriginal.get('fuel type') || normalizedToOriginal.get('fuel_type')
         const roleHeader = normalizedToOriginal.get('role') || normalizedToOriginal.get('rote')
 
@@ -122,10 +135,11 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
           .map((row) => {
             const code = String(row[resolvedHeaders.employee_code] ?? '').trim()
             const name = String(row[resolvedHeaders.employee_name] ?? '').trim()
-            const location = String(row[resolvedHeaders.location] ?? '').trim()
             const department = String(row[resolvedHeaders.department] ?? '').trim()
+            const location = locationHeader ? String(row[locationHeader] ?? '').trim() : ''
             const fuelType = fuelTypeHeader ? String(row[fuelTypeHeader] ?? '').trim() : ''
             const role = roleHeader ? String(row[roleHeader] ?? '').trim() : ''
+            const derived = deriveLocationAndFuelType(code)
 
             if (!code || !name) {
               return null
@@ -134,9 +148,9 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
             return {
               employee_code: code,
               employee_name: name,
-              location: location || null,
+              location: location || derived?.location || null,
               department: department || null,
-              fuel_type: fuelType || null,
+              fuel_type: derived?.fuel_type ?? (fuelType || null),
               role: role || null,
             }
           })
@@ -377,12 +391,6 @@ export default function SettingsPage() {
 
     return { total, byBranch }
   }, [issues])
-
-  const getDefaultFuelType = (employeeCode: string): string | null => {
-    if (employeeCode === '3000840') return 'PV'
-    if (employeeCode === '500A840') return 'EV'
-    return null
-  }
 
   const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true)
@@ -958,12 +966,13 @@ export default function SettingsPage() {
     setMessage(null)
     setError(null)
 
+    const derived = deriveLocationAndFuelType(employee.employee_code)
     const payload = {
       employee_code: employee.employee_code.trim(),
       employee_name: employee.employee_name.trim(),
-      location: employee.location?.trim() || null,
+      location: employee.location?.trim() || derived?.location || null,
       department: employee.department?.trim() || null,
-      fuel_type: employee.fuel_type?.trim() || null,
+      fuel_type: employee.fuel_type?.trim() || derived?.fuel_type || null,
       role: employee.role?.trim() || null,
     }
 
@@ -993,12 +1002,14 @@ export default function SettingsPage() {
     setMessage(null)
     setError(null)
 
+    const derived = deriveLocationAndFuelType(newEmployee.employee_code)
+
     const payload = {
       employee_code: newEmployee.employee_code.trim(),
       employee_name: newEmployee.employee_name.trim(),
-      location: newEmployee.location.trim() || null,
+      location: newEmployee.location.trim() || derived?.location || null,
       department: newEmployee.department.trim() || null,
-      fuel_type: newEmployee.fuel_type.trim() || getDefaultFuelType(newEmployee.employee_code.trim()) || null,
+      fuel_type: newEmployee.fuel_type.trim() || derived?.fuel_type || null,
       role: newEmployee.role.trim() || null,
     }
 
@@ -1260,7 +1271,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Employee Master</h2>
-              <p className="mt-0.5 text-xs text-gray-500">Expected headers: SA CODE, SA NAME, location, department. Optional: Fuel Type, Role.</p>
+              <p className="mt-0.5 text-xs text-gray-500">Expected headers: SA CODE, SA NAME, department. Location and Fuel Type are auto-derived from SA CODE rules.</p>
             </div>
             <div className="flex gap-2">
               <button
@@ -1298,7 +1309,16 @@ export default function SettingsPage() {
             <div className="grid grid-cols-7 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
               <input
                 value={newEmployee.employee_code}
-                onChange={(event) => setNewEmployee((prev) => ({ ...prev, employee_code: event.target.value }))}
+                onChange={(event) => {
+                  const employeeCode = event.target.value
+                  const derived = deriveLocationAndFuelType(employeeCode)
+                  setNewEmployee((prev) => ({
+                    ...prev,
+                    employee_code: employeeCode,
+                    location: derived?.location ?? prev.location,
+                    fuel_type: derived?.fuel_type ?? prev.fuel_type,
+                  }))
+                }}
                 placeholder="SA CODE"
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
@@ -1374,9 +1394,17 @@ export default function SettingsPage() {
                             disabled={editingEmployeeId !== employee.id}
                             onChange={(event) => {
                               const value = event.target.value
+                              const derived = deriveLocationAndFuelType(value)
                               setEmployees((prev) =>
                                 prev.map((row) =>
-                                  row.id === employee.id ? { ...row, employee_code: value } : row,
+                                  row.id === employee.id
+                                    ? {
+                                        ...row,
+                                        employee_code: value,
+                                        location: derived?.location ?? null,
+                                        fuel_type: derived?.fuel_type ?? null,
+                                      }
+                                    : row,
                                 ),
                               )
                             }}

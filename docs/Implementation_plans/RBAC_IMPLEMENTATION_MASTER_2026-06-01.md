@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 14:30 UTC  
+**Last Updated**: 2026-06-01 15:10 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -22,31 +22,42 @@
 - Any newly created or newly activated module must be auto-granted to all active admins without manual action.
 - Any user promoted to active admin must be auto-granted all active modules without manual action.
 
+### Dealer-Code Business Semantics (Locked)
+
+- Dealer code is the operational identity for branch + fuel-type context in this dealership setup.
+- Current known semantics from CRM:
+  - Dealer code containing `3000840` => Branch = Sitapura, Fuel Type = PV
+  - Dealer code containing `500A840` => Branch = Sitapura, Fuel Type = EV
+  - Dealer code containing `3001440` => Branch = Ajmer Road, Fuel Type = PV
+- One signed-up user can legitimately map to multiple employee codes and multiple dealer codes.
+- Mapping is not restricted to SA-only users; any employee role can be linked via `user_employee_links`.
+- Future dealer codes (example: Ajmer Road + EV) must be handled as configuration data, not hardcoded logic.
+
 ### Documentation Governance (No Confusion Policy)
 
 - This file is the canonical implementation and status tracker.
 - Phase-1 split docs were removed after migration completion to prevent duplicate guidance.
 - Do not create additional phase markdown files unless explicitly requested.
 
-### Immediate Next Steps (Phase 1B)
+### Immediate Next Steps (Phase 1C)
 
-1. Run migration 20260601080000_enable_superadmin_auto_module_grants.sql.
-2. Confirm verification 2 returns zero rows for missing active-module admin grants.
-3. Refresh full_database.sql and keep it as updated authority snapshot.
-4. Continue API/UI implementation tasks for dynamic role/permission administration.
+1. Complete reception form migration to `sa_employee_code` selectors.
+2. Add dynamic Dealer Code Profile catalog in Admin UI (branch/fuel metadata per dealer code pattern).
+3. Enforce mapping validation against Dealer Code Profile rules (UI + API).
+4. Run staging test matrix for multi-mapping users across multiple dealer codes.
 
 ---
 
 ## EXECUTIVE SUMMARY
 
 ### Current State
-Phase 1A database hardening is complete (schema + functions + RLS). Remaining work is Phase 1B backfill/validation and Phase 1C+ application integration:
+Phase 1B is complete (schema + backfill strategy + RLS + superadmin hardening). Current focus is Phase 1C application integration and dynamic controls:
 
-1. **Data backfill pending** — Existing reception rows still need verified `sa_employee_code` population and unresolved-case handling
-2. **User-employee mapping seed pending** — Initial `user_employee_links` data must be seeded and validated
-3. **Hardcoded role taxonomy** — Role enums hardcoded in Admin UI vs free-text employee role field
-4. **Hardcoded frontend routes** — Module-to-route mapping requires code edits, not catalog-driven
-5. **Admin mapping UX pending** — Mapping operations still SQL-first until UI/API work is delivered
+1. **Dealer-code semantics locked** — Branch/fuel meaning now explicitly tied to CRM dealer-code patterns
+2. **Multi-mapping model active** — One user may map to multiple employee codes/dealer codes, including cross fuel-type contexts
+3. **Mapping UI/API baseline delivered** — Employee mapping tab and API layer are implemented; staging validation remains
+4. **Reception UI migration pending** — Reception forms still need end-to-end `sa_employee_code` selection flow
+5. **Dealer-code profile catalog pending** — Need dynamic Admin-managed rules for future dealer codes (no hardcoding)
 
 **Risk**: Authenticated users can access/modify data outside intended scope if they bypass UI controls.
 
@@ -369,6 +380,7 @@ Add bounded sections inside Admin workspace:
 3. **Roles & Module Permissions** — Assign module permissions to users (checkboxes for view/modify/delete per user+module)
 4. **User-Employee Mapping** — Link each user to their active primary employee code(s) per dealer
 5. **Module Catalog** — Create/disable modules (technical: name, label, route, sort_order)
+6. **Dealer Code Profiles** — Configure dealer code pattern -> branch + fuel type metadata (editable in Admin, used by mapping/reception forms)
 
 ---
 
@@ -408,9 +420,11 @@ Included in **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`):
 - **Reception create/update**: Accept `sa_employee_code` from payload; store and backfill `sa_name` from employee_master for display
 - **Service Advisor list**: Already filtered by RLS; no app-layer changes needed
 - **Admin mapping APIs**: Create CRUD endpoints for `user_employee_links` (list, create, update, deactivate)
+- **Dealer code profile APIs**: Create CRUD endpoints for dealer-code pattern metadata (branch, fuel_type, is_active)
 
 #### 1.5 Frontend Changes
 - **Admin**: Add "User-Employee Mapping" tab (assign/revoke primary mapping per user/dealer)
+- **Admin**: Add "Dealer Code Profiles" tab for dynamic branch/fuel mapping rules (no code deploy required for new codes)
 - **Reception form**: Display/set `sa_employee_code` selector; derive display `sa_name` from employee master
 - **Service Advisor page**: No logic changes; data already filtered at DB via RLS
 - **App.tsx**: Begin removing hardcoded ROUTE_MODULE_MAP; use permission results instead
@@ -480,22 +494,26 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 4.1 | Update `listServiceAdvisorEntries()` API | ⚪ Not Started | TBD | — | RLS now enforces filtering; app-layer no change needed | ☐ |
 | 4.2 | Update reception entry create payload | ⚪ Not Started | TBD | — | Accept sa_employee_code parameter | ☐ |
 | 4.3 | Update reception entry edit payload | ⚪ Not Started | TBD | — | Accept sa_employee_code parameter | ☐ |
-| 4.4 | Create admin API: list user-employee mappings | ⚪ Not Started | TBD | — | GET /api/user-employee-links | ☐ |
-| 4.5 | Create admin API: create user-employee mapping | ⚪ Not Started | TBD | — | POST /api/user-employee-links with validation | ☐ |
-| 4.6 | Create admin API: update mapping (is_primary, is_active) | ⚪ Not Started | TBD | — | PUT /api/user-employee-links/:id | ☐ |
-| 4.7 | Create admin API: deactivate mapping | ⚪ Not Started | TBD | — | Can defer to v2 | ☐ |
+| 4.4 | Create admin API: list user-employee mappings | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/userEmployeeLinks.ts (`listUserEmployeeLinks`) | ☑ |
+| 4.5 | Create admin API: create user-employee mapping | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/userEmployeeLinks.ts (`createUserEmployeeLink`) with validation | ☑ |
+| 4.6 | Create admin API: update mapping (is_primary, is_active) | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/userEmployeeLinks.ts (`updateUserEmployeeLink`) | ☑ |
+| 4.7 | Create admin API: deactivate mapping | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/userEmployeeLinks.ts (`deactivateUserEmployeeLink`) | ☑ |
 | 4.8 | Test APIs in staging with varied permission sets | ⚪ Not Started | TBD | — | Admin, SA, reception staff | ☐ |
+| 4.9 | Create dealer-code profile APIs (list/create/update/deactivate) | ⚪ Not Started | TBD | — | Dynamic branch/fuel mapping by dealer code pattern | ☐ |
+| 4.10 | Add API validation for multi-code users across one dealership | ⚪ Not Started | TBD | — | Allow multiple employee codes per user; enforce active primary per dealer_code | ☐ |
 
 ### 4.5 Frontend Changes
 
 | # | Task | Status | Owner | Due | Notes | Verified |
 |---|------|--------|-------|-----|-------|----------|
-| 5.1 | Create AdminMappingTab component | ⚪ Not Started | TBD | — | User-employee link CRUD UI | ☐ |
-| 5.2 | Add mapping tab to AdminPage.tsx | ⚪ Not Started | TBD | — | Section 4 in admin workspace | ☐ |
+| 5.1 | Create AdminMappingTab component | 🟡 In Progress | Copilot | 2026-06-01 | Integrated directly in AdminPage.tsx; extract to component pending | ☐ |
+| 5.2 | Add mapping tab to AdminPage.tsx | ✓ Done | Copilot | 2026-06-01 | Added Employee Mappings tab + create/toggle/deactivate controls | ☑ |
 | 5.3 | Update reception entry form | ⚪ Not Started | TBD | — | Accept/display sa_employee_code | ☐ |
 | 5.4 | Update service advisor page (if UI changes needed) | ⚪ Not Started | TBD | — | RLS enforces filtering; display already works | ☐ |
 | 5.5 | Add validation: admin cannot remove active mapping if SA has assigned rows | ⚪ Not Started | TBD | — | Prevent data stranding | ☐ |
 | 5.6 | Test permission gating in dev with test users | ⚪ Not Started | TBD | — | Verify nav/route guards work | ☐ |
+| 5.7 | Add Dealer Code Profiles tab in Admin UI | ⚪ Not Started | TBD | — | Manage dealer code pattern -> branch/fuel metadata | ☐ |
+| 5.8 | Auto-suggest branch/fuel in mapping + reception forms from dealer-code profile | ⚪ Not Started | TBD | — | Dynamic behavior for new dealer codes | ☐ |
 
 ### 4.6 Testing & Validation
 
@@ -558,7 +576,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 
 - **Deployment velocity**: Phase 1 complete in ≤5 working days
 - **Zero security incidents**: No permission-related breaches post-rollout (30-day window)
-- **Coverage**: 100% of SA and reception flows using new model within 7 days
+- **Coverage**: 100% of employee-mapped and reception flows using new model within 7 days
 - **Admin usability**: Zero helpdesk tickets on mapping UI (first 14 days)
 - **Performance**: All permission checks <10ms (p99); no regression vs baseline
 - **Adoption**: 100% of SA users re-authenticated and verified visible within 24h of rollout
@@ -580,6 +598,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 |---------|------|--------|--------|-------|
 | 1.0 | 2026-06-01 | Engineering Lead (TBD) | Draft | Consolidated from 3 separate plans; ready for Phase 1 kickoff |
 | 1.1 | 2026-06-01 | Copilot + User | Active | Phase 1A migrations executed; authoritative dump refreshed; moved to Phase 1B |
+| 1.2 | 2026-06-01 | Copilot + User | Active | Phase 1B completed; dealer-code business semantics locked; Phase 1C dynamic employee mapping requirements updated |
 
 ---
 
@@ -587,4 +606,4 @@ Use this section as the real-time status dashboard. Update immediately after eac
 **All previous separate RBAC plan files (RBAC_SA_DYNAMIC_CONTROL_PLAN_2026-06-01.md, RBAC_FULL_DUMP_AUDIT_2026-06-01.md, RBAC_MASTER_IMPLEMENTATION_PLAN_2026-06-01.md) are superseded and should be archived.**
 
 Last updated: 2026-06-01  
-Next review: After Phase 1B backfill + validation execution
+Next review: After Phase 1C reception form + dealer-code profile delivery
