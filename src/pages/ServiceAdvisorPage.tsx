@@ -157,12 +157,15 @@ export default function ServiceAdvisorPage() {
               <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Created At</th>
+                  <th className="px-3 py-2 text-left">Created By</th>
+                  <th className="px-3 py-2 text-left">Source</th>
                   <th className="px-3 py-2 text-left">Reg No</th>
                   <th className="px-3 py-2 text-left">Model</th>
-                  <th className="px-3 py-2 text-left">Owner</th>
-                  <th className="px-3 py-2 text-left">Source</th>
                   <th className="px-3 py-2 text-left">Service Type</th>
-                  <th className="px-3 py-2 text-left">Job Card Number</th>
+                  <th className="px-3 py-2 text-left">SA Name</th>
+                  <th className="px-3 py-2 text-left">JC Number</th>
+                  <th className="px-3 py-2 text-left">Owner Name</th>
+                  <th className="px-3 py-2 text-left">Owner Phone</th>
                   <th className="px-3 py-2 text-left">Remark</th>
                   <th className="px-3 py-2 text-left">Estimate</th>
                 </tr>
@@ -173,13 +176,10 @@ export default function ServiceAdvisorPage() {
                   return (
                     <tr key={row.id}>
                       <td className="whitespace-nowrap px-3 py-2">{formatDate(row.created_at)}</td>
+                      <td className="whitespace-nowrap px-3 py-2">{row.created_by ?? '-'}</td>
+                      <td className="whitespace-nowrap px-3 py-2">{row.source}</td>
                       <td className="whitespace-nowrap px-3 py-2 font-medium">{row.reg_number}</td>
                       <td className="whitespace-nowrap px-3 py-2">{row.model ?? '-'}</td>
-                      <td className="whitespace-nowrap px-3 py-2">
-                        <div>{row.owner_name ?? '-'}</div>
-                        <div className="text-xs text-gray-500">{row.owner_phone ?? '-'}</div>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2">{row.source}</td>
                       <td className="px-3 py-2">
                         <select
                           value={draft.service_type}
@@ -194,6 +194,7 @@ export default function ServiceAdvisorPage() {
                           )}
                         </select>
                       </td>
+                      <td className="whitespace-nowrap px-3 py-2">{row.sa_name ?? '-'}</td>
                       <td className="px-3 py-2">
                         <input
                           value={draft.jc_number}
@@ -204,6 +205,8 @@ export default function ServiceAdvisorPage() {
                           className="w-44 rounded-md border border-gray-300 px-2 py-1 outline-none focus:border-blue-500"
                         />
                       </td>
+                      <td className="whitespace-nowrap px-3 py-2">{row.owner_name ?? '-'}</td>
+                      <td className="whitespace-nowrap px-3 py-2">{row.owner_phone ?? '-'}</td>
                       <td className="px-3 py-2">
                         <textarea
                           value={draft.remark}

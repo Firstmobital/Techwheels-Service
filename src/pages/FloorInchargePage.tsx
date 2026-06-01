@@ -6,42 +6,44 @@ import { listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
 
 interface JobCard {
   id: number
-  job_card_number: string
-  branch: string
-  status: string | null
-  vehicle_registration_number: string | null
-  sr_type: string | null
-  sr_assigned_to: string | null
-  created_date_time: string | null
-  open_for_days: number | null
-  product_line: string | null
-  chassis_number: string | null
+  created_at: string | null
+  created_by: string | null
+  source: string | null
+  reg_number: string | null
+  model: string | null
+  service_type: string | null
+  sa_name: string | null
+  jc_number: string | null
+  owner_name: string | null
+  owner_phone: string | null
+  branch: string | null
+  assignment_key: string
 }
 
-function calculateOpenDays(createdAt: string | null): number | null {
-  if (!createdAt) return null
-  const created = new Date(createdAt)
-  if (Number.isNaN(created.getTime())) return null
-
-  const diffMs = Date.now() - created.getTime()
-  if (diffMs < 0) return 0
-
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+function formatDate(value: string | null): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
 function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
+  const assignmentKey = row.jc_number?.trim() || `RECEPTION-${row.id}`
+
   return {
     id: row.id,
-    job_card_number: row.jc_number?.trim() || `RECEPTION-${row.id}`,
-    branch: row.branch?.trim() || '—',
-    status: null,
-    vehicle_registration_number: row.reg_number ?? null,
-    sr_type: row.service_type ?? null,
-    sr_assigned_to: row.sa_name ?? null,
-    created_date_time: row.created_at ?? null,
-    open_for_days: calculateOpenDays(row.created_at ?? null),
-    product_line: row.model ?? null,
-    chassis_number: null,
+    created_at: row.created_at ?? null,
+    created_by: row.created_by ?? null,
+    source: row.source ?? null,
+    reg_number: row.reg_number ?? null,
+    model: row.model ?? null,
+    service_type: row.service_type ?? null,
+    sa_name: row.sa_name ?? null,
+    jc_number: row.jc_number ?? null,
+    owner_name: row.owner_name ?? null,
+    owner_phone: row.owner_phone ?? null,
+    branch: row.branch ?? null,
+    assignment_key: assignmentKey,
   }
 }
 
@@ -167,7 +169,7 @@ export default function FloorInchargePage() {
   }
 
   const branches = useMemo(() => {
-    const b = new Set(jobCards.map((j) => j.branch).filter(Boolean))
+    const b = new Set(jobCards.map((j) => j.branch).filter(Boolean) as string[])
     return ['All', ...Array.from(b).sort()]
   }, [jobCards])
 
@@ -177,15 +179,15 @@ export default function FloorInchargePage() {
       const q = search.toLowerCase()
       const matchSearch =
         !q ||
-        jc.job_card_number?.toLowerCase().includes(q) ||
-        (jc.vehicle_registration_number ?? '').toLowerCase().includes(q) ||
-        (jc.chassis_number ?? '').toLowerCase().includes(q) ||
-        (jc.sr_type ?? '').toLowerCase().includes(q)
+        (jc.jc_number ?? '').toLowerCase().includes(q) ||
+        (jc.reg_number ?? '').toLowerCase().includes(q) ||
+        (jc.sa_name ?? '').toLowerCase().includes(q) ||
+        (jc.owner_name ?? '').toLowerCase().includes(q)
       return matchBranch && matchSearch
     })
   }, [jobCards, search, branchFilter])
 
-  const assignedCount = filtered.filter((jc) => !!assignments[jc.job_card_number]).length
+  const assignedCount = filtered.filter((jc) => !!assignments[jc.assignment_key]).length
   const unassignedCount = filtered.length - assignedCount
 
   return (
@@ -206,7 +208,7 @@ export default function FloorInchargePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Floor Incharge</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Assign technicians to open job cards</p>
+            <p className="text-sm text-gray-500 mt-0.5">Reception rows with Floor Incharge assignment controls</p>
           </div>
           <button
             onClick={fetchAll}
@@ -244,7 +246,7 @@ export default function FloorInchargePage() {
           </svg>
           <input
             type="text"
-            placeholder="Search job card, reg. no, chassis…"
+            placeholder="Search JC no, reg. no, SA name, owner…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -278,54 +280,42 @@ export default function FloorInchargePage() {
             <table className="min-w-full divide-y divide-gray-100 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Job Card No.</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created At</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created By</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Source</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Reg No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Model</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Service Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SA Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">JC Number</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Owner Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Owner Phone</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Branch</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vehicle Reg.</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SR Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Open Days</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Product Line</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-56">Assign Technician</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((jc) => {
-                  const assignment = assignments[jc.job_card_number]
-                  const isSaving = saving === jc.job_card_number
+                  const assignment = assignments[jc.assignment_key]
+                  const isSaving = saving === jc.assignment_key
                   return (
                     <tr key={jc.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-blue-700 whitespace-nowrap">
-                        {jc.job_card_number}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{jc.branch}</td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                        {jc.vehicle_registration_number || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                        {jc.sr_type ? (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                            {jc.sr_type}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {jc.open_for_days != null ? (
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            jc.open_for_days > 5 ? 'bg-red-50 text-red-700' :
-                            jc.open_for_days > 2 ? 'bg-amber-50 text-amber-700' :
-                            'bg-green-50 text-green-700'
-                          }`}>
-                            {jc.open_for_days}d
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px] truncate" title={jc.product_line ?? ''}>
-                        {jc.product_line || '—'}
-                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(jc.created_at)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.created_by || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.source || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap font-medium text-blue-700">{jc.reg_number || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.model || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.service_type || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.sa_name || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.jc_number || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.owner_name || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.owner_phone || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{jc.branch || '—'}</td>
                       <td className="px-4 py-3 w-56">
                         <select
                           value={assignment?.technician_code ?? ''}
-                          onChange={(e) => assignTechnician(jc.job_card_number, e.target.value)}
+                          onChange={(e) => assignTechnician(jc.assignment_key, e.target.value)}
                           disabled={isSaving}
                           className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
                         >
