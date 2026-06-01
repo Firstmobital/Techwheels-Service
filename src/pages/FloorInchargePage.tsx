@@ -53,6 +53,7 @@ interface Employee {
   employee_name: string
   department: string
   location: string
+  role?: string | null
 }
 
 interface TechnicianAssignment {
@@ -87,8 +88,8 @@ export default function FloorInchargePage() {
         listReceptionEntries(),
         supabase
           .from('employee_master')
-          .select('id, employee_code, employee_name, department, location')
-          .eq('department', 'Service')
+          .select('id, employee_code, employee_name, department, location, role')
+          .ilike('role', 'technician')
           .order('employee_name'),
       ])
 
@@ -96,8 +97,12 @@ export default function FloorInchargePage() {
         ? []
         : receptionRes.data.map(mapReceptionRowToJobCard)
 
+      const technicianEmployees = (empRes.data ?? []).filter((employee) =>
+        String(employee.role ?? '').trim().toLowerCase() === 'technician',
+      )
+
       setJobCards(receptionRows)
-      setEmployees(empRes.data ?? [])
+      setEmployees(technicianEmployees)
 
       // Try to fetch assignments — graceful fallback if table doesn't exist yet
       const assignRes = await supabase.from('technician_assignments').select('*')

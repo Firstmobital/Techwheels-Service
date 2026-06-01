@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 17:45 UTC  
+**Last Updated**: 2026-06-01 18:35 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -20,6 +20,7 @@
 - Mitigation executed: 20260601170500_make_sa_visibility_dealer_agnostic.sql (dealer-agnostic SA visibility active).
 - SA update blocker root cause identified: trigger function `enforce_service_reception_sa_update()` still used legacy `sa_name` ownership check.
 - Mitigation executed: 20260601173000_fix_sa_update_guard_to_employee_code.sql (trigger guard now employee-code based).
+- Floor Incharge technician assignment options are now restricted to Employee Master rows with `role = TECHNICIAN` (web + mobile parity).
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -51,6 +52,7 @@
 2. Add dynamic Dealer Code Profile catalog in Admin UI (branch/fuel metadata per dealer code pattern).
 3. Enforce mapping validation against Dealer Code Profile rules (UI + API).
 4. Run staging test matrix for multi-mapping users across multiple dealer codes.
+5. Complete staging verification that Floor Incharge dropdowns exclude non-TECHNICIAN roles in web and mobile.
 
 ---
 
@@ -156,6 +158,11 @@ Phase 1B is complete (schema + backfill strategy + RLS + superadmin hardening). 
   - SA policy: `service_reception_entries.sa_name = my_sa_name()`
   - Lowercase comparison: `LOWER(sa_name) = LOWER(my_sa_name())`
 - **Risk**: Name changes, formatting differences, or lookup failures silently break visibility
+
+#### Technician Assignment Identity (Current App-Layer Guard)
+- Floor Incharge assignment dropdowns (web + mobile) now source users from `employee_master` where `role = 'TECHNICIAN'` (case-insensitive).
+- Guard exists at app layer today and should remain aligned with future role-catalog normalization.
+- This prevents accidental assignment to SA/CRM/other non-technician roles.
 
 #### Privilege Posture
 - Broad `GRANT ALL ON TABLE ... TO authenticated` on:
@@ -443,6 +450,8 @@ Included in **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`):
 - **Integration**: User with view-only permission cannot create/update/delete
 - **E2E**: Admin assigns user-employee mapping → SA logs in → verifies visibility
 - **E2E**: SA cannot modify rows outside assignment via direct API
+- **Integration**: Floor Incharge technician list includes only `employee_master.role = TECHNICIAN` users
+- **E2E**: Non-technician employees never appear in technician assignment dropdown (web + mobile)
 - **Security**: Direct RLS bypass attempt (e.g., raw Supabase query) returns zero rows
 - **Performance**: SA filter query executes <100ms
 
@@ -525,6 +534,8 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 5.6 | Test permission gating in dev with test users | ⚪ Not Started | TBD | — | Verify nav/route guards work | ☐ |
 | 5.7 | Add Dealer Code Profiles tab in Admin UI | ⚪ Not Started | TBD | — | Manage dealer code pattern -> branch/fuel metadata | ☐ |
 | 5.8 | Auto-suggest branch/fuel in mapping + reception forms from dealer-code profile | ⚪ Not Started | TBD | — | Dynamic behavior for new dealer codes | ☐ |
+| 5.9 | Restrict Floor Incharge dropdown to TECHNICIAN role (web) | ✓ Done | Copilot | 2026-06-01 | src/pages/FloorInchargePage.tsx now filters employee_master by role technician | ☑ |
+| 5.10 | Restrict Floor Incharge dropdown to TECHNICIAN role (mobile) | ✓ Done | Copilot | 2026-06-01 | mobile/src/app/(tabs)/floor-incharge.tsx now filters employee_master by role technician | ☑ |
 
 ### 4.6 Testing & Validation
 
@@ -539,6 +550,8 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 6.7 | E2E test: Deactivate mapping → SA sees nothing | ⚪ Not Started | TBD | — | Cache clear / re-auth | ☐ |
 | 6.8 | Security test: Direct Supabase query without permission → 0 rows | ⚪ Not Started | TBD | — | Verify RLS enforces | ☐ |
 | 6.9 | Performance test: SA filter query <100ms | ⚪ Not Started | TBD | — | With 41 employees, 2-100 reception rows | ☐ |
+| 6.10 | Integration test: web Floor Incharge excludes non-technician roles in dropdown | ⚪ Not Started | TBD | — | Verify only TECHNICIAN role options shown | ☐ |
+| 6.11 | Integration test: mobile Floor Incharge excludes non-technician roles in picker | ⚪ Not Started | TBD | — | Verify only TECHNICIAN role options shown | ☐ |
 
 ### 4.7 Rollout & Documentation
 
@@ -610,6 +623,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.0 | 2026-06-01 | Engineering Lead (TBD) | Draft | Consolidated from 3 separate plans; ready for Phase 1 kickoff |
 | 1.1 | 2026-06-01 | Copilot + User | Active | Phase 1A migrations executed; authoritative dump refreshed; moved to Phase 1B |
 | 1.2 | 2026-06-01 | Copilot + User | Active | Phase 1B completed; dealer-code business semantics locked; Phase 1C dynamic employee mapping requirements updated |
+| 1.3 | 2026-06-01 | Copilot + User | Active | Added TECHNICIAN role parity documentation for Floor Incharge dropdown filtering (web + mobile) |
 
 ---
 

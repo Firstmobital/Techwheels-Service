@@ -25,6 +25,7 @@ interface Employee {
   employee_code: string
   employee_name: string
   location: string
+  role?: string | null
 }
 
 interface Assignment {
@@ -72,14 +73,18 @@ export default function FloorInchargeScreen() {
           .limit(300),
         supabase
           .from('employee_master')
-          .select('id, employee_code, employee_name, location')
-          .eq('department', 'Service')
+          .select('id, employee_code, employee_name, location, role')
+          .ilike('role', 'technician')
           .order('employee_name'),
         supabase.from('technician_assignments').select('*'),
       ])
 
+      const technicianEmployees = (empRes.data ?? []).filter((employee) =>
+        String(employee.role ?? '').trim().toLowerCase() === 'technician',
+      )
+
       setJobCards(jcRes.data ?? [])
-      setEmployees(empRes.data ?? [])
+      setEmployees(technicianEmployees)
 
       const map: Record<string, Assignment> = {}
       if (!assignRes.error && assignRes.data) {
