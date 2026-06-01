@@ -440,8 +440,9 @@ Use this section as the real-time status dashboard. Update immediately after eac
 |---|------|--------|-------|-----|-------|----------|
 | 2.1 | Choose fresh-start path (delete legacy reception rows) | ✓ Done | User | 2026-06-01 | Legacy reception entries removed via 20260601050000 migration | ☑ |
 | 2.2 | Run fresh-start migration (cleanup + seed) | ✓ Done | User | 2026-06-01 | File: 20260601050000_fresh_start_cleanup_and_seed_user_employee_links.sql | ☑ |
-| 2.3 | Resolve remaining unmapped SA users manually | 🟡 In Progress | Admin | 2026-06-01 | Unmapped: Deepak Sharma, Riteshmamodiya | ☐ |
-| 2.4 | Validate mapping integrity and unmapped count | ⚪ Not Started | User | 2026-06-01 | Run verification query after manual inserts | ☐ |
+| 2.3 | Resolve remaining unmapped SA users manually | 🟡 In Progress | Admin | 2026-06-01 | Deepak mapped via 20260601060000; Riteshmamodiya blocked (no employee_master record yet) | ☐ |
+| 2.4 | Validate mapping integrity and unmapped count | ✓ Done | User | 2026-06-01 | Verification executed in 20260601060000; current expected unmapped count = 1 (Ritesh) | ☑ |
+| 2.6 | Decide Ritesh handling path | 🟡 In Progress | Admin | 2026-06-01 | Option A: create employee_master record then map; Option B: keep as admin-only without SA mapping | ☐ |
 | 2.5 | Archive/remove obsolete backfill scripts | ✓ Done | Copilot | 2026-06-01 | Removed scripts/01_backfill_sa_name_matcher_diagnostic.sql and scripts/02_backfill_populate_sa_employee_code.sql | ☑ |
 
 ### 4.3 RLS Policy Hardening
