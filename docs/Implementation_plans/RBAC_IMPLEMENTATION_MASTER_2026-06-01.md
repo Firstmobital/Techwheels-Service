@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 18:35 UTC  
+**Last Updated**: 2026-06-01 19:30 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -21,6 +21,7 @@
 - SA update blocker root cause identified: trigger function `enforce_service_reception_sa_update()` still used legacy `sa_name` ownership check.
 - Mitigation executed: 20260601173000_fix_sa_update_guard_to_employee_code.sql (trigger guard now employee-code based).
 - Floor Incharge technician assignment options are now restricted to Employee Master rows with `role = TECHNICIAN` (web + mobile parity).
+- Floor Incharge visibility requirement clarified: screen rows must render by Floor Incharge role and fuel-type scope, with fuel-type differentiation derived from employee mapping (`SA CODE` -> role + fuel_type in Employee Master).
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -53,6 +54,7 @@
 3. Enforce mapping validation against Dealer Code Profile rules (UI + API).
 4. Run staging test matrix for multi-mapping users across multiple dealer codes.
 5. Complete staging verification that Floor Incharge dropdowns exclude non-TECHNICIAN roles in web and mobile.
+6. Implement and validate Floor Incharge row-scope filter by (`role = Floor Incharge`) + matching `fuel_type` context resolved from mapped `SA CODE`.
 
 ---
 
@@ -163,6 +165,13 @@ Phase 1B is complete (schema + backfill strategy + RLS + superadmin hardening). 
 - Floor Incharge assignment dropdowns (web + mobile) now source users from `employee_master` where `role = 'TECHNICIAN'` (case-insensitive).
 - Guard exists at app layer today and should remain aligned with future role-catalog normalization.
 - This prevents accidental assignment to SA/CRM/other non-technician roles.
+
+#### Floor Incharge Row Visibility Scope (Authoritative Requirement)
+- Floor Incharge screen row rendering must be constrained by user scope: `role = Floor Incharge`.
+- Fuel-type differentiation must be enforced for displayed rows based on Employee Master mapping resolved through `SA CODE`.
+- Canonical identity path: `auth user -> user_employee_links.employee_code (SA CODE) -> employee_master(role, fuel_type)`.
+- Operational rule: a Floor Incharge user should see only rows within their permitted fuel_type scope (for their mapped SA CODE context).
+- This is separate from technician assignment dropdown filtering (which remains `role = TECHNICIAN`).
 
 #### Privilege Posture
 - Broad `GRANT ALL ON TABLE ... TO authenticated` on:
@@ -452,6 +461,8 @@ Included in **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`):
 - **E2E**: SA cannot modify rows outside assignment via direct API
 - **Integration**: Floor Incharge technician list includes only `employee_master.role = TECHNICIAN` users
 - **E2E**: Non-technician employees never appear in technician assignment dropdown (web + mobile)
+- **Integration**: Floor Incharge row list is filtered by `role = Floor Incharge` scope and mapped `fuel_type`
+- **E2E**: Floor Incharge user with PV scope sees only PV rows; EV scope sees only EV rows
 - **Security**: Direct RLS bypass attempt (e.g., raw Supabase query) returns zero rows
 - **Performance**: SA filter query executes <100ms
 
@@ -536,6 +547,9 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 5.8 | Auto-suggest branch/fuel in mapping + reception forms from dealer-code profile | ⚪ Not Started | TBD | — | Dynamic behavior for new dealer codes | ☐ |
 | 5.9 | Restrict Floor Incharge dropdown to TECHNICIAN role (web) | ✓ Done | Copilot | 2026-06-01 | src/pages/FloorInchargePage.tsx now filters employee_master by role technician | ☑ |
 | 5.10 | Restrict Floor Incharge dropdown to TECHNICIAN role (mobile) | ✓ Done | Copilot | 2026-06-01 | mobile/src/app/(tabs)/floor-incharge.tsx now filters employee_master by role technician | ☑ |
+| 5.11 | Define Floor Incharge row-scope contract (role + fuel_type via SA CODE) | ✓ Done | Copilot + User | 2026-06-01 | Documented as authoritative requirement in this master plan | ☑ |
+| 5.12 | Implement Floor Incharge row filtering by mapped fuel_type (web) | ⚪ Not Started | TBD | — | Scope rows by `role = Floor Incharge` and fuel_type context from SA CODE mapping | ☐ |
+| 5.13 | Implement Floor Incharge row filtering by mapped fuel_type (mobile) | ⚪ Not Started | TBD | — | Scope rows by `role = Floor Incharge` and fuel_type context from SA CODE mapping | ☐ |
 
 ### 4.6 Testing & Validation
 
@@ -552,6 +566,8 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 6.9 | Performance test: SA filter query <100ms | ⚪ Not Started | TBD | — | With 41 employees, 2-100 reception rows | ☐ |
 | 6.10 | Integration test: web Floor Incharge excludes non-technician roles in dropdown | ⚪ Not Started | TBD | — | Verify only TECHNICIAN role options shown | ☐ |
 | 6.11 | Integration test: mobile Floor Incharge excludes non-technician roles in picker | ⚪ Not Started | TBD | — | Verify only TECHNICIAN role options shown | ☐ |
+| 6.12 | Integration test: web Floor Incharge PV/EV row filtering by mapped SA CODE scope | ⚪ Not Started | TBD | — | Verify rows match mapped fuel_type for Floor Incharge role | ☐ |
+| 6.13 | Integration test: mobile Floor Incharge PV/EV row filtering by mapped SA CODE scope | ⚪ Not Started | TBD | — | Verify rows match mapped fuel_type for Floor Incharge role | ☐ |
 
 ### 4.7 Rollout & Documentation
 
@@ -624,6 +640,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.1 | 2026-06-01 | Copilot + User | Active | Phase 1A migrations executed; authoritative dump refreshed; moved to Phase 1B |
 | 1.2 | 2026-06-01 | Copilot + User | Active | Phase 1B completed; dealer-code business semantics locked; Phase 1C dynamic employee mapping requirements updated |
 | 1.3 | 2026-06-01 | Copilot + User | Active | Added TECHNICIAN role parity documentation for Floor Incharge dropdown filtering (web + mobile) |
+| 1.4 | 2026-06-01 | Copilot + User | Active | Added authoritative Floor Incharge row visibility requirement: role = Floor Incharge with fuel_type scope via SA CODE mapping |
 
 ---
 
