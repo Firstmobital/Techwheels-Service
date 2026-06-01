@@ -4,9 +4,10 @@ import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
+  listReceptionEmployees,
   listReceptionEntries,
-  listReceptionSaNames,
   listServiceBranches,
+  type ReceptionEmployeeOption,
   type ReceptionEntryInput,
   type ReceptionEntryRow,
   updateReceptionEntry,
@@ -26,7 +27,7 @@ type FormState = {
   reg_number: string
   model: string
   service_type: string
-  sa_name: string
+  sa_employee_code: string
   jc_number: string
   owner_name: string
   owner_phone: string
@@ -38,7 +39,7 @@ const EMPTY_FORM: FormState = {
   reg_number: '',
   model: '',
   service_type: '',
-  sa_name: '',
+  sa_employee_code: '',
   jc_number: '',
   owner_name: '',
   owner_phone: '',
@@ -54,7 +55,7 @@ const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   reg_number: ['reg_number', 'registration no', 'registration number', 'vehicle registration number', 'vrn'],
   model: ['model', 'vehicle model'],
   service_type: ['service_type', 'service type'],
-  sa_name: ['sa_name', 'sa name', 'service advisor'],
+  sa_employee_code: ['sa_employee_code', 'employee_code', 'sa code', 'employee code', 'sa_code'],
   jc_number: ['jc_number', 'job card number', 'job card numbe', 'job card no'],
   owner_name: ['owner_name', 'owner name'],
   owner_phone: ['owner_phone', 'owner phone'],
@@ -83,7 +84,7 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
         let headerIndex = 0
         for (let i = 0; i < Math.min(normalizedRows.length, 8); i += 1) {
           const candidate = normalizedRows[i].map((col) => normalizeHeader(col))
-          if (candidate.some((col) => HEADER_ALIASES.reg_number.includes(col) || HEADER_ALIASES.sa_name.includes(col))) {
+          if (candidate.some((col) => HEADER_ALIASES.reg_number.includes(col) || HEADER_ALIASES.sa_employee_code.includes(col))) {
             headerIndex = i
             break
           }
@@ -103,8 +104,8 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
           }
         })
 
-        if (indexMap.reg_number < 0 || indexMap.sa_name < 0 || indexMap.service_type < 0) {
-          reject(new Error('Missing required headers. Required: reg_number, service_type, sa_name'))
+        if (indexMap.reg_number < 0 || indexMap.sa_employee_code < 0 || indexMap.service_type < 0) {
+          reject(new Error('Missing required headers. Required: reg_number, service_type, sa_employee_code'))
           return
         }
 
@@ -116,13 +117,13 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
 
           const regNumber = row[indexMap.reg_number]?.trim() ?? ''
           const serviceType = row[indexMap.service_type]?.trim() ?? ''
-          const saName = row[indexMap.sa_name]?.trim() ?? ''
+          const saEmployeeCode = row[indexMap.sa_employee_code]?.trim() ?? ''
 
-          if (!regNumber && !serviceType && !saName) {
+          if (!regNumber && !serviceType && !saEmployeeCode) {
             continue
           }
 
-          if (!regNumber || !serviceType || !saName) {
+          if (!regNumber || !serviceType || !saEmployeeCode) {
             skipped += 1
             continue
           }
@@ -131,7 +132,7 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
             reg_number: regNumber,
             model: indexMap.model >= 0 ? row[indexMap.model]?.trim() ?? '' : '',
             service_type: serviceType,
-            sa_name: saName,
+            sa_employee_code: saEmployeeCode,
             jc_number: indexMap.jc_number >= 0 ? row[indexMap.jc_number]?.trim() ?? '' : '',
             owner_name: indexMap.owner_name >= 0 ? row[indexMap.owner_name]?.trim() ?? '' : '',
             owner_phone: indexMap.owner_phone >= 0 ? row[indexMap.owner_phone]?.trim() ?? '' : '',
@@ -159,7 +160,7 @@ function formatDate(value: string): string {
 export default function ReceptionPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<ReceptionEntryRow[]>([])
-  const [saOptions, setSaOptions] = useState<string[]>([])
+  const [employeeOptions, setEmployeeOptions] = useState<ReceptionEmployeeOption[]>([])
   const [branchOptions, setBranchOptions] = useState<string[]>([])
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -173,17 +174,17 @@ export default function ReceptionPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const sortedSaOptions = useMemo(() => {
-    const values = [...saOptions]
-    values.sort((a, b) => a.localeCompare(b))
+  const sortedEmployeeOptions = useMemo(() => {
+    const values = [...employeeOptions]
+    values.sort((a, b) => a.employee_name.localeCompare(b.employee_name))
     return values
-  }, [saOptions])
+  }, [employeeOptions])
 
   async function loadData() {
     setLoading(true)
     setError(null)
 
-    const [entriesRes, saRes, branchRes] = await Promise.all([listReceptionEntries(), listReceptionSaNames(), listServiceBranches()])
+    const [entriesRes, employeeRes, branchRes] = await Promise.all([listReceptionEntries(), listReceptionEmployees(), listServiceBranches()])
 
     if (entriesRes.error) {
       setError(entriesRes.error)
@@ -192,8 +193,8 @@ export default function ReceptionPage() {
       setEntries(entriesRes.data ?? [])
     }
 
-    if (!saRes.error) {
-      setSaOptions(saRes.data ?? [])
+    if (!employeeRes.error) {
+      setEmployeeOptions(employeeRes.data ?? [])
     }
     if (!branchRes.error) {
       setBranchOptions(branchRes.data ?? [])
@@ -216,8 +217,8 @@ export default function ReceptionPage() {
     setNotice(null)
     setError(null)
 
-    if (!form.reg_number.trim() || !form.service_type.trim() || !form.sa_name.trim() || !form.source.trim() || !form.branch.trim()) {
-      setError('Please fill all required fields: Registration No, Service Type, SA Name, Source, Branch')
+    if (!form.reg_number.trim() || !form.service_type.trim() || !form.sa_employee_code.trim() || !form.source.trim() || !form.branch.trim()) {
+      setError('Please fill all required fields: Registration No, Service Type, Employee Code, Source, Branch')
       return
     }
 
@@ -232,7 +233,7 @@ export default function ReceptionPage() {
       reg_number: form.reg_number,
       model: form.model,
       service_type: form.service_type,
-      sa_name: form.sa_name,
+      sa_employee_code: form.sa_employee_code,
       jc_number: form.jc_number,
       owner_name: form.owner_name,
       owner_phone: form.owner_phone,
@@ -263,7 +264,7 @@ export default function ReceptionPage() {
       reg_number: entry.reg_number,
       model: entry.model ?? '',
       service_type: entry.service_type,
-      sa_name: entry.sa_name,
+      sa_employee_code: entry.sa_employee_code ?? '',
       jc_number: entry.jc_number ?? '',
       owner_name: entry.owner_name ?? '',
       owner_phone: entry.owner_phone ?? '',
@@ -404,12 +405,12 @@ export default function ReceptionPage() {
           </label>
 
           <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">SA Name *</span>
+            <span className="mb-1 block font-medium">Employee Code *</span>
             <input
-              list="reception-sa-options"
-              value={form.sa_name}
-              onChange={(event) => setForm((prev) => ({ ...prev, sa_name: event.target.value }))}
-              placeholder="Select or type"
+              list="reception-employee-options"
+              value={form.sa_employee_code}
+              onChange={(event) => setForm((prev) => ({ ...prev, sa_employee_code: event.target.value.toUpperCase() }))}
+              placeholder="Select or type employee code"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
             />
           </label>
@@ -483,9 +484,9 @@ export default function ReceptionPage() {
           </label>
         </div>
 
-        <datalist id="reception-sa-options">
-          {sortedSaOptions.map((name) => (
-            <option key={name} value={name} />
+        <datalist id="reception-employee-options">
+          {sortedEmployeeOptions.map((employee) => (
+            <option key={employee.employee_code} value={employee.employee_code}>{employee.employee_name}</option>
           ))}
         </datalist>
 
@@ -535,7 +536,7 @@ export default function ReceptionPage() {
                   <th className="px-3 py-2 text-left">Reg No</th>
                   <th className="px-3 py-2 text-left">Model</th>
                   <th className="px-3 py-2 text-left">Service Type</th>
-                  <th className="px-3 py-2 text-left">SA Name</th>
+                  <th className="px-3 py-2 text-left">Employee</th>
                   <th className="px-3 py-2 text-left">JC Number</th>
                   <th className="px-3 py-2 text-left">Owner Name</th>
                   <th className="px-3 py-2 text-left">Owner Phone</th>
@@ -551,7 +552,7 @@ export default function ReceptionPage() {
                     <td className="whitespace-nowrap px-3 py-2 font-medium">{entry.reg_number}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.model ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.service_type}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.sa_name}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{entry.sa_name} ({entry.sa_employee_code ?? '—'})</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.jc_number ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.owner_name ?? '-'}</td>
                     <td className="whitespace-nowrap px-3 py-2">{entry.owner_phone ?? '-'}</td>

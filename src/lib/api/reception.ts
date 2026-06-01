@@ -9,6 +9,8 @@ export interface ReceptionEntryRow {
   model: string | null
   service_type: string
   sa_name: string
+  sa_employee_code: string | null
+  sa_display_name: string | null
   jc_number: string | null
   owner_name: string | null
   owner_phone: string | null
@@ -31,12 +33,17 @@ export interface ReceptionEntryInput {
   reg_number: string
   model?: string | null
   service_type: string
-  sa_name: string
+  sa_employee_code: string
   jc_number?: string | null
   owner_name?: string | null
   owner_phone?: string | null
   source: string
   branch?: string | null
+}
+
+export interface ReceptionEmployeeOption {
+  employee_code: string
+  employee_name: string
 }
 
 export interface ServiceAdvisorEntryUpdateInput {
@@ -56,13 +63,24 @@ function normalizePayload(input: ReceptionEntryInput) {
     reg_number: input.reg_number.trim().toUpperCase(),
     model: input.model?.trim() || null,
     service_type: input.service_type.trim(),
-    sa_name: input.sa_name.trim(),
+    sa_employee_code: input.sa_employee_code.trim().toUpperCase(),
     jc_number: input.jc_number?.trim() || null,
     owner_name: input.owner_name?.trim() || null,
     owner_phone: normalizePhone(input.owner_phone),
     source: input.source.trim(),
     branch: input.branch?.trim() || null,
   }
+}
+
+async function getEmployeeNameByCode(employeeCode: string): Promise<ApiResult<string>> {
+  const { data, error } = await supabase
+    .from('employee_master')
+    .select('employee_name')
+    .eq('employee_code', employeeCode)
+    .single()
+
+  if (error) return fail(error)
+  return ok(String(data?.employee_name ?? '').trim())
 }
 
 function sanitizeFileNamePart(value: string): string {
@@ -126,16 +144,25 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
 
   if (!payload.reg_number) return fail('Registration number is required')
   if (!payload.service_type) return fail('Service type is required')
-  if (!payload.sa_name) return fail('SA Name is required')
+  if (!payload.sa_employee_code) return fail('Employee code is required')
   if (!payload.source) return fail('Source is required')
 
   if (payload.owner_phone && payload.owner_phone.length !== 10) {
     return fail('Owner phone must be exactly 10 digits')
   }
 
+  const employeeNameRes = await getEmployeeNameByCode(payload.sa_employee_code)
+  if (employeeNameRes.error || !employeeNameRes.data) {
+    return fail(employeeNameRes.error ?? `Employee code '${payload.sa_employee_code}' not found`)
+  }
+
   const { data, error } = await supabase
     .from('service_reception_entries')
-    .insert(payload)
+    .insert({
+      ...payload,
+      sa_name: employeeNameRes.data,
+      sa_display_name: employeeNameRes.data,
+    })
     .select('*')
     .single()
 
@@ -148,16 +175,25 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
 
   if (!payload.reg_number) return fail('Registration number is required')
   if (!payload.service_type) return fail('Service type is required')
-  if (!payload.sa_name) return fail('SA Name is required')
+  if (!payload.sa_employee_code) return fail('Employee code is required')
   if (!payload.source) return fail('Source is required')
 
   if (payload.owner_phone && payload.owner_phone.length !== 10) {
     return fail('Owner phone must be exactly 10 digits')
   }
 
+  const employeeNameRes = await getEmployeeNameByCode(payload.sa_employee_code)
+  if (employeeNameRes.error || !employeeNameRes.data) {
+    return fail(employeeNameRes.error ?? `Employee code '${payload.sa_employee_code}' not found`)
+  }
+
   const { data, error } = await supabase
     .from('service_reception_entries')
-    .update(payload)
+    .update({
+      ...payload,
+      sa_name: employeeNameRes.data,
+      sa_display_name: employeeNameRes.data,
+    })
     .eq('id', id)
     .select('*')
     .single()
@@ -179,40 +215,69 @@ export async function deleteReceptionEntry(id: number): Promise<ApiResult<null>>
 export async function bulkCreateReceptionEntries(rows: ReceptionEntryInput[]): Promise<ApiResult<number>> {
   if (rows.length === 0) return ok(0)
 
-  const payload = rows.map(normalizePayload).filter((row) => row.reg_number && row.sa_name && row.service_type && row.source)
+  const payload = rows.map(normalizePayload).filter((row) => row.reg_number && row.sa_employee_code && row.service_type && row.source)
 
   if (payload.length === 0) return fail('No valid rows found to import')
 
   const invalidPhone = payload.find((row) => row.owner_phone && row.owner_phone.length !== 10)
   if (invalidPhone) return fail('One or more owner phone values are not 10 digits')
 
+  const employeeCodes = Array.from(new Set(payload.map((row) => row.sa_employee_code)))
+  const { data: employeeRows, error: employeeError } = await supabase
+    .from('employee_master')
+    .select('employee_code, employee_name')
+    .in('employee_code', employeeCodes)
+
+  if (employeeError) return fail(employeeError)
+
+  const employeeNameMap = new Map(
+    (employeeRows ?? []).map((row) => [String(row.employee_code), String(row.employee_name ?? '').trim()]),
+  )
+
+  const enrichedPayload = payload
+    .filter((row) => employeeNameMap.has(row.sa_employee_code))
+    .map((row) => ({
+      ...row,
+      sa_name: employeeNameMap.get(row.sa_employee_code) ?? row.sa_employee_code,
+      sa_display_name: employeeNameMap.get(row.sa_employee_code) ?? row.sa_employee_code,
+    }))
+
+  if (enrichedPayload.length === 0) {
+    return fail('No valid employee codes found in import file')
+  }
+
   const { data, error } = await supabase
     .from('service_reception_entries')
-    .insert(payload)
+    .insert(enrichedPayload)
     .select('id')
 
   if (error) return fail(error)
   return ok((data ?? []).length)
 }
 
-export async function listReceptionSaNames(): Promise<ApiResult<string[]>> {
+export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmployeeOption[]>> {
   const { data, error } = await supabase
     .from('employee_master')
-    .select('employee_name, role')
+    .select('employee_code, employee_name')
     .order('employee_name', { ascending: true })
 
   if (error) return fail(error)
 
-  const values = (data ?? [])
-    .filter((row) => {
-      const role = String(row.role ?? '').trim().toLowerCase()
-      return role === 'sa' || role === 'service advisor' || role === 'service_advisor'
-    })
-    .map((row) => String(row.employee_name ?? '').trim())
-    .filter((name) => name.length > 0)
+  const options = (data ?? [])
+    .map((row) => ({
+      employee_code: String(row.employee_code ?? '').trim(),
+      employee_name: String(row.employee_name ?? '').trim(),
+    }))
+    .filter((row) => row.employee_code.length > 0)
 
-  const uniqueNames = Array.from(new Set(values))
-  return ok(uniqueNames)
+  return ok(options)
+}
+
+// Backward compatibility export for old callers.
+export const listReceptionSaNames = async (): Promise<ApiResult<string[]>> => {
+  const result = await listReceptionEmployees()
+  if (result.error || !result.data) return fail(result.error ?? 'Failed to list reception employees')
+  return ok(result.data.map((row) => row.employee_name))
 }
 
 export async function updateServiceAdvisorEntry(

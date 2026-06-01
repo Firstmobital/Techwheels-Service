@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 16:05 UTC  
+**Last Updated**: 2026-06-01 16:35 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -15,6 +15,7 @@
 - Malformed admin user (id 1661d961-d73d-411e-9eab-cff26bbc048b) deleted and dump refreshed 2026-06-01.
 - Authority: local_folder/backups/full_database.sql (post-cleanup, final state for Phase 1B).
 - Multi-code ownership migration executed: 20260601154000_enable_multi_employee_code_visibility.sql.
+- Reception app-layer migration to `sa_employee_code` implemented (web API/UI). Existing rows still require backfill/edit if code is null.
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -496,8 +497,8 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | # | Task | Status | Owner | Due | Notes | Verified |
 |---|------|--------|-------|-----|-------|----------|
 | 4.1 | Update `listServiceAdvisorEntries()` API | ⚪ Not Started | TBD | — | RLS now enforces filtering; app-layer no change needed | ☐ |
-| 4.2 | Update reception entry create payload | ⚪ Not Started | TBD | — | Accept sa_employee_code parameter | ☐ |
-| 4.3 | Update reception entry edit payload | ⚪ Not Started | TBD | — | Accept sa_employee_code parameter | ☐ |
+| 4.2 | Update reception entry create payload | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/reception.ts (`createReceptionEntry`) with employee-code validation | ☑ |
+| 4.3 | Update reception entry edit payload | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/reception.ts (`updateReceptionEntry`) with employee-code validation | ☑ |
 | 4.4 | Create admin API: list user-employee mappings | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/userEmployeeLinks.ts (`listUserEmployeeLinks`) | ☑ |
 | 4.5 | Create admin API: create user-employee mapping | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/userEmployeeLinks.ts (`createUserEmployeeLink`) with validation | ☑ |
 | 4.6 | Create admin API: update mapping (is_primary, is_active) | ✓ Done | Copilot | 2026-06-01 | Implemented in src/lib/api/userEmployeeLinks.ts (`updateUserEmployeeLink`) | ☑ |
@@ -512,7 +513,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 |---|------|--------|-------|-----|-------|----------|
 | 5.1 | Create AdminMappingTab component | 🟡 In Progress | Copilot | 2026-06-01 | Integrated directly in AdminPage.tsx; extract to component pending | ☐ |
 | 5.2 | Add mapping tab to AdminPage.tsx | ✓ Done | Copilot | 2026-06-01 | Added Employee Mappings tab + create/toggle/deactivate controls | ☑ |
-| 5.3 | Update reception entry form | ⚪ Not Started | TBD | — | Accept/display sa_employee_code | ☐ |
+| 5.3 | Update reception entry form | ✓ Done | Copilot | 2026-06-01 | Implemented in src/pages/ReceptionPage.tsx (employee code selector + import parser updates) | ☑ |
 | 5.4 | Update service advisor page (if UI changes needed) | ⚪ Not Started | TBD | — | RLS enforces filtering; display already works | ☐ |
 | 5.5 | Add validation: admin cannot remove active mapping if SA has assigned rows | ⚪ Not Started | TBD | — | Prevent data stranding | ☐ |
 | 5.6 | Test permission gating in dev with test users | ⚪ Not Started | TBD | — | Verify nav/route guards work | ☐ |
