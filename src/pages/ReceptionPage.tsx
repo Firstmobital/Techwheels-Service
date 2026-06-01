@@ -104,8 +104,8 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
           }
         })
 
-        if (indexMap.reg_number < 0 || indexMap.sa_employee_code < 0 || indexMap.service_type < 0) {
-          reject(new Error('Missing required headers. Required: reg_number, service_type, sa_employee_code'))
+        if (indexMap.reg_number < 0 || indexMap.sa_employee_code < 0) {
+          reject(new Error('Missing required headers. Required: reg_number, sa_employee_code'))
           return
         }
 
@@ -123,7 +123,7 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
             continue
           }
 
-          if (!regNumber || !serviceType || !saEmployeeCode) {
+          if (!regNumber || !saEmployeeCode) {
             skipped += 1
             continue
           }
@@ -217,8 +217,8 @@ export default function ReceptionPage() {
     setNotice(null)
     setError(null)
 
-    if (!form.reg_number.trim() || !form.service_type.trim() || !form.sa_employee_code.trim() || !form.source.trim() || !form.branch.trim()) {
-      setError('Please fill all required fields: Registration No, Service Type, SA Name, Source, Branch')
+    if (!form.reg_number.trim() || !form.sa_employee_code.trim() || !form.source.trim() || !form.branch.trim()) {
+      setError('Please fill all required fields: Registration No, SA Name, Source, Branch')
       return
     }
 
@@ -399,7 +399,7 @@ export default function ReceptionPage() {
           </label>
 
           <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Service Type *</span>
+            <span className="mb-1 block font-medium">Service Type</span>
             <input
               list="reception-service-types"
               value={form.service_type}

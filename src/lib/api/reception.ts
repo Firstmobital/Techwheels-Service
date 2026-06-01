@@ -143,7 +143,6 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
   const payload = normalizePayload(input)
 
   if (!payload.reg_number) return fail('Registration number is required')
-  if (!payload.service_type) return fail('Service type is required')
   if (!payload.sa_employee_code) return fail('Employee code is required')
   if (!payload.source) return fail('Source is required')
 
@@ -174,7 +173,6 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
   const payload = normalizePayload(input)
 
   if (!payload.reg_number) return fail('Registration number is required')
-  if (!payload.service_type) return fail('Service type is required')
   if (!payload.sa_employee_code) return fail('Employee code is required')
   if (!payload.source) return fail('Source is required')
 
@@ -215,7 +213,7 @@ export async function deleteReceptionEntry(id: number): Promise<ApiResult<null>>
 export async function bulkCreateReceptionEntries(rows: ReceptionEntryInput[]): Promise<ApiResult<number>> {
   if (rows.length === 0) return ok(0)
 
-  const payload = rows.map(normalizePayload).filter((row) => row.reg_number && row.sa_employee_code && row.service_type && row.source)
+  const payload = rows.map(normalizePayload).filter((row) => row.reg_number && row.sa_employee_code && row.source)
 
   if (payload.length === 0) return fail('No valid rows found to import')
 
