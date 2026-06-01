@@ -1,6 +1,15 @@
 // src/pages/AdminPage.tsx
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import {
+  listUserEmployeeLinks,
+  getUserEmployeeLinks,
+  createUserEmployeeLink,
+  updateUserEmployeeLink,
+  deactivateUserEmployeeLink,
+  listServiceAdvisors,
+  type UserEmployeeLinkRow,
+} from '../lib/api/userEmployeeLinks'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type UserRole = 'admin' | 'manager' | 'staff' | 'viewer'
@@ -117,10 +126,11 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string> {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const [tab, setTab]         = useState<'users' | 'permissions' | 'modules'>('users')
+  const [tab, setTab]         = useState<'users' | 'permissions' | 'modules' | 'mappings'>('users')
   const [users, setUsers]     = useState<AppUser[]>([])
   const [modules, setModules] = useState<Module[]>([])
   const [search, setSearch]   = useState('')
+  const [showInactive, setShowInactive] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toast, setToast]     = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [supportsDealerColumns, setSupportsDealerColumns] = useState(true)
@@ -148,9 +158,20 @@ export default function AdminPage() {
   const [pendingPerms, setPendingPerms]     = useState<Record<number, Permission>>({})
   const [savingPerms, setSavingPerms]       = useState(false)
 
+  // Mappings tab
+  const [mappings, setMappings]             = useState<UserEmployeeLinkRow[]>([])
+  const [serviceAdvisors, setServiceAdvisors] = useState<Array<{ employee_code: string; employee_name: string }>>([])
+  const [mappingsLoading, setMappingsLoading] = useState(false)
+  const [showAddMapping, setShowAddMapping] = useState(false)
+  const [mapUserId, setMapUserId]           = useState('')
+  const [mapEmployeeCode, setMapEmployeeCode] = useState('')
+  const [mapDealerCode, setMapDealerCode]   = useState('')
+  const [mapIsPrimary, setMapIsPrimary]     = useState(false)
+  const [savingMapping, setSavingMapping]   = useState(false)
+
   // ── Load ───────────────────────────────────────────────────────────────────
   useEffect(() => {
-    Promise.all([loadUsers(), loadModules()]).finally(() => setLoading(false))
+    Promise.all([loadUsers(), loadModules(), loadMappings(), loadServiceAdvisors()]).finally(() => setLoading(false))
   }, [])
 
   async function loadUsers() {
@@ -195,6 +216,74 @@ export default function AdminPage() {
   async function loadModules() {
     const { data } = await supabase.from('modules').select('*').order('sort_order')
     setModules(data ?? [])
+  }
+
+  async function loadMappings() {
+    setMappingsLoading(true)
+    const result = await listUserEmployeeLinks()
+    if (result.ok) {
+      setMappings(result.value)
+    } else {
+      showToastMsg(result.error, 'error')
+    }
+    setMappingsLoading(false)
+  }
+
+  async function loadServiceAdvisors() {
+    const result = await listServiceAdvisors()
+    if (result.ok) {
+      setServiceAdvisors(result.value)
+    }
+  }
+
+  async function createMapping() {
+    if (!mapUserId || !mapEmployeeCode || !mapDealerCode) {
+      showToastMsg('User, Employee Code, and Dealer Code are required', 'error')
+      return
+    }
+    setSavingMapping(true)
+    const result = await createUserEmployeeLink({
+      user_id: mapUserId,
+      employee_code: mapEmployeeCode,
+      dealer_code: mapDealerCode,
+      is_primary: mapIsPrimary,
+    })
+    setSavingMapping(false)
+    if (result.ok) {
+      showToastMsg('Mapping created')
+      setShowAddMapping(false)
+      setMapUserId('')
+      setMapEmployeeCode('')
+      setMapDealerCode('')
+      setMapIsPrimary(false)
+      await loadMappings()
+    } else {
+      showToastMsg(result.error, 'error')
+    }
+  }
+
+  async function toggleMappingPrimary(mapping: UserEmployeeLinkRow) {
+    setSavingMapping(true)
+    const result = await updateUserEmployeeLink(mapping.id, { is_primary: !mapping.is_primary })
+    setSavingMapping(false)
+    if (result.ok) {
+      showToastMsg('Mapping updated')
+      await loadMappings()
+    } else {
+      showToastMsg(result.error, 'error')
+    }
+  }
+
+  async function deactivateMapping(mapping: UserEmployeeLinkRow) {
+    setSavingMapping(true)
+    const result = await deactivateUserEmployeeLink(mapping.id)
+    setSavingMapping(false)
+    if (result.ok) {
+      showToastMsg('Mapping deactivated')
+      await loadMappings()
+    } else {
+      showToastMsg(result.error, 'error')
+    }
   }
 
   function showToastMsg(msg: string, type: 'success' | 'error' = 'success') {
@@ -425,9 +514,11 @@ export default function AdminPage() {
   }
 
   const filteredUsers = users.filter(u =>
-    (u.full_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase()) ||
-    (u.dealer_code ?? '').toLowerCase().includes(search.toLowerCase())
+    (showInactive || u.is_active) && (
+      (u.full_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      (u.dealer_code ?? '').toLowerCase().includes(search.toLowerCase())
+    )
   )
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -444,7 +535,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 border-b border-gray-200">
-        {(['users', 'permissions', 'modules'] as const).map(t => (
+        {(['users', 'permissions', 'modules', 'mappings'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -455,7 +546,7 @@ export default function AdminPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-800',
             ].join(' ')}
           >
-            {t === 'users' ? '👤 Users' : t === 'permissions' ? '🔐 Permissions' : '🧩 Modules'}
+            {t === 'users' ? '👤 Users' : t === 'permissions' ? '🔐 Permissions' : t === 'modules' ? '🧩 Modules' : '🔗 SA Mappings'}
           </button>
         ))}
       </div>
@@ -471,6 +562,15 @@ export default function AdminPage() {
               onChange={e => setSearch(e.target.value)}
               className="max-w-xs flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={e => setShowInactive(e.target.checked)}
+                className="h-4 w-4 rounded accent-blue-600"
+              />
+              Show Inactive
+            </label>
             <button
               onClick={() => setShowAddUser(true)}
               className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
@@ -659,6 +759,84 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ── MAPPINGS TAB ── */}
+      {tab === 'mappings' && (
+        <div>
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="text-sm font-semibold text-gray-900">User → Service Advisor Mappings</h2>
+            <button
+              onClick={() => setShowAddMapping(true)}
+              className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              + Add Mapping
+            </button>
+          </div>
+
+          {mappingsLoading ? (
+            <div className="flex h-40 items-center justify-center text-sm text-gray-400">Loading mappings…</div>
+          ) : mappings.length === 0 ? (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+              No mappings yet. Create one to link a user to a Service Advisor.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="border-b border-gray-200 bg-gray-50">
+                  <tr>
+                    {['User', 'Employee Code', 'Name', 'Dealer', 'Primary', 'Status', 'Actions'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {mappings.map(m => {
+                    const user = users.find(u => u.id === m.user_id)
+                    const sa = serviceAdvisors.find(s => s.employee_code === m.employee_code)
+                    return (
+                      <tr key={m.id} className="transition-colors hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{user?.full_name || user?.email || m.user_id}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-gray-600">{m.employee_code}</td>
+                        <td className="px-4 py-3 text-gray-600">{sa?.employee_name || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{m.dealer_code}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => toggleMappingPrimary(m)}
+                            disabled={savingMapping}
+                            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold transition-colors ${
+                              m.is_primary
+                                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            } disabled:opacity-50`}
+                          >
+                            {m.is_primary ? '⭐ Primary' : 'Secondary'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            m.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                          }`}>
+                            {m.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => deactivateMapping(m)}
+                            disabled={savingMapping || !m.is_active}
+                            className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Deactivate
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── MODULES TAB ── */}
       {tab === 'modules' && (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -835,6 +1013,72 @@ export default function AdminPage() {
             <button onClick={() => setTempPasswordForm(null)} className={BTN_SECONDARY}>Cancel</button>
             <button onClick={setTemporaryPassword} disabled={settingTempPassword} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50">
               {settingTempPassword ? 'Setting…' : 'Set Temp Password'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── ADD MAPPING MODAL ── */}
+      {showAddMapping && (
+        <Modal title="Create SA Mapping" onClose={() => setShowAddMapping(false)}>
+          <div className="space-y-4">
+            <Field label="User *">
+              <select
+                value={mapUserId}
+                onChange={e => setMapUserId(e.target.value)}
+                className={INPUT}
+                autoFocus
+              >
+                <option value="">— select user —</option>
+                {users.filter(u => u.is_active).map(u => (
+                  <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Service Advisor *">
+              <input
+                list="sa-list"
+                value={mapEmployeeCode}
+                onChange={e => setMapEmployeeCode(e.target.value.toUpperCase())}
+                placeholder="Search by code or name…"
+                className={INPUT}
+              />
+              <datalist id="sa-list">
+                {serviceAdvisors.map(sa => (
+                  <option key={sa.employee_code} value={sa.employee_code}>{sa.employee_name}</option>
+                ))}
+              </datalist>
+            </Field>
+
+            <Field label="Dealer Code *">
+              <input
+                value={mapDealerCode}
+                onChange={e => setMapDealerCode(e.target.value.toUpperCase())}
+                placeholder="e.g. TN123456"
+                className={INPUT}
+              />
+            </Field>
+
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mapIsPrimary}
+                onChange={e => setMapIsPrimary(e.target.checked)}
+                className="h-4 w-4 rounded accent-blue-600"
+              />
+              Set as primary mapping for this user + dealer
+            </label>
+          </div>
+
+          <p className="mt-3 text-xs text-gray-500">
+            The primary mapping is used by default in reception forms. Set to secondary if user has multiple dealer assignments.
+          </p>
+
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setShowAddMapping(false)} className={BTN_SECONDARY}>Cancel</button>
+            <button onClick={createMapping} disabled={savingMapping} className={BTN_PRIMARY}>
+              {savingMapping ? 'Creating…' : 'Create Mapping'}
             </button>
           </div>
         </Modal>

@@ -1,9 +1,9 @@
 # RBAC Dynamic Access Control — Master Implementation Plan
 
 **Version**: 2026-06-01  
-**Status**: Phase 1B In Progress - Validation + Superadmin Auto-Grant Hardening  
+**Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 14:05 UTC  
+**Last Updated**: 2026-06-01 14:30 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -12,6 +12,8 @@
 - Fresh post-migration dump created at local_folder/backups/full_database.sql.
 - Authority advanced forward to local_folder/backups/full_database.sql and must never downgrade to older snapshots.
 - Latest full_database.sql refresh remains authoritative after superadmin parity updates.
+- Malformed admin user (id 1661d961-d73d-411e-9eab-cff26bbc048b) deleted and dump refreshed 2026-06-01.
+- Authority: local_folder/backups/full_database.sql (post-cleanup, final state for Phase 1B).
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -441,7 +443,11 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.7 | Execute migrations in staging DB | ✓ Done | User | 2026-06-01 | Executed successfully in SQL Editor in order 1→2→3→4→5 | ☑ |
 | 1.8 | Test schema integrity post-migration | ✓ Done | User | 2026-06-01 | Post-run checks passed during execution flow | ☑ |
 | 1.9 | Create fresh authoritative full dump | ✓ Done | User | 2026-06-01 | local_folder/backups/full_database.sql refreshed after migrations | ☑ |
-| 1.10 | Enforce superadmin auto-grant defaults | 🟡 In Progress | Copilot + User | 2026-06-01 | File: 20260601080000_enable_superadmin_auto_module_grants.sql | ☐ |
+| 1.10 | Enforce superadmin auto-grant defaults | ✓ Done | Copilot + User | 2026-06-01 | File: 20260601080000_enable_superadmin_auto_module_grants.sql; parity verified (12/12/12 for active admins) | ☑ |
+| 1.11 | Deactivate malformed duplicate admin user | ✓ Done | User | 2026-06-01 | User id 1661d961-d73d-411e-9eab-cff26bbc048b set to viewer + inactive | ☑ |
+| 1.12 | Delete malformed admin user from database | ✓ Done | User | 2026-06-01 | Harddelete of id 1661d961-d73d-411e-9eab-cff26bbc048b and all references | ☑ |
+| 1.13 | Update AdminPage to hide inactive users by default | ✓ Done | Copilot | 2026-06-01 | File: src/pages/AdminPage.tsx; added showInactive toggle; inactive users filtered by default | ☑ |
+| 1.14 | Create fresh authoritative full dump post-cleanup | ✓ Done | User | 2026-06-01 | local_folder/backups/full_database.sql refreshed; authority locked post-malformed-user deletion | ☑ |
 
 ### 4.2 Data Backfill & Validation
 
@@ -451,7 +457,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 2.2 | Run fresh-start migration (cleanup + seed) | ✓ Done | User | 2026-06-01 | File: 20260601050000_fresh_start_cleanup_and_seed_user_employee_links.sql | ☑ |
 | 2.3 | Resolve remaining unmapped SA users manually | 🟡 In Progress | Admin | 2026-06-01 | Deepak mapped via 20260601060000; Riteshmamodiya blocked (no employee_master record yet) | ☐ |
 | 2.4 | Validate mapping integrity and unmapped count | ✓ Done | User | 2026-06-01 | Verification executed in 20260601060000; current expected unmapped count = 1 (Ritesh) | ☑ |
-| 2.6 | Decide Ritesh handling path | 🟡 In Progress | Admin | 2026-06-01 | Option A: create employee_master record then map; Option B: keep as admin-only without SA mapping | ☐ |
+| 2.6 | Decide Ritesh handling path | ✓ Done | Admin | 2026-06-01 | Chosen Option B: keep as superadmin/admin without SA mapping until employee_master record exists | ☑ |
 | 2.5 | Archive/remove obsolete backfill scripts | ✓ Done | Copilot | 2026-06-01 | Removed scripts/01_backfill_sa_name_matcher_diagnostic.sql and scripts/02_backfill_populate_sa_employee_code.sql | ☑ |
 
 ### 4.3 RLS Policy Hardening
