@@ -8,15 +8,15 @@
 -- - sa_name = original CRM SA_NAME (immutable, kept as audit/alias reference only)
 
 ALTER TABLE public.service_reception_entries
-  ADD COLUMN sa_employee_code text REFERENCES public.employee_master(employee_code),
-  ADD COLUMN sa_display_name text;
+  ADD COLUMN IF NOT EXISTS sa_employee_code text REFERENCES public.employee_master(employee_code),
+  ADD COLUMN IF NOT EXISTS sa_display_name text;
 
 -- Index for fast SA lookup by employee code (only internal queries use this)
-CREATE INDEX idx_service_reception_sa_lookup 
+CREATE INDEX IF NOT EXISTS idx_service_reception_sa_lookup 
   ON public.service_reception_entries(dealer_code, sa_employee_code, created_at DESC);
 
 -- Index for display name searches (optional, for reporting)
-CREATE INDEX idx_service_reception_sa_display 
+CREATE INDEX IF NOT EXISTS idx_service_reception_sa_display 
   ON public.service_reception_entries(dealer_code, sa_display_name);
 
 COMMENT ON COLUMN public.service_reception_entries.sa_employee_code IS 

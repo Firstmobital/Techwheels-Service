@@ -5,6 +5,11 @@
 -- Enable RLS on sensitive tables (if not already enabled)
 ALTER TABLE public.employee_master ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS employee_master_select_all ON public.employee_master;
+DROP POLICY IF EXISTS employee_master_insert_admin ON public.employee_master;
+DROP POLICY IF EXISTS employee_master_update_admin ON public.employee_master;
+DROP POLICY IF EXISTS employee_master_delete_admin ON public.employee_master;
+
 -- Policy for employee_master: everyone can view active employees (read-only)
 -- Admin only can modify/delete
 CREATE POLICY employee_master_select_all ON public.employee_master

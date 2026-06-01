@@ -19,6 +19,12 @@ DROP POLICY IF EXISTS service_reception_entries_select_public ON public.service_
 DROP POLICY IF EXISTS service_reception_entries_insert_public ON public.service_reception_entries;
 DROP POLICY IF EXISTS service_reception_entries_update_public ON public.service_reception_entries;
 DROP POLICY IF EXISTS service_reception_entries_delete_public ON public.service_reception_entries;
+DROP POLICY IF EXISTS service_reception_select_rbac ON public.service_reception_entries;
+DROP POLICY IF EXISTS service_reception_insert_rbac ON public.service_reception_entries;
+DROP POLICY IF EXISTS service_reception_update_rbac ON public.service_reception_entries;
+DROP POLICY IF EXISTS service_reception_delete_rbac ON public.service_reception_entries;
+DROP POLICY IF EXISTS service_reception_select_sa ON public.service_reception_entries;
+DROP POLICY IF EXISTS service_reception_update_sa ON public.service_reception_entries;
 
 -- Recreate reception policies with correct semantics
 CREATE POLICY service_reception_select_rbac ON public.service_reception_entries

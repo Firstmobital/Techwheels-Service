@@ -3,7 +3,7 @@
 -- Date: 2026-06-01
 
 -- Function 1: Resolve current user's primary SA employee code for their dealer
-CREATE FUNCTION public.my_sa_employee_code()
+CREATE OR REPLACE FUNCTION public.my_sa_employee_code()
 RETURNS text
 LANGUAGE sql
 STABLE
@@ -25,7 +25,7 @@ COMMENT ON FUNCTION public.my_sa_employee_code() IS
    Used in RLS policies to filter service_reception_entries by SA ownership.';
 
 -- Function 2: Unified action-based permission check dispatcher
-CREATE FUNCTION public.has_module_action(p_module text, p_action text)
+CREATE OR REPLACE FUNCTION public.has_module_action(p_module text, p_action text)
 RETURNS boolean
 LANGUAGE sql
 STABLE

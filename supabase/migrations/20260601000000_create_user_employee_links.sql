@@ -14,8 +14,7 @@ CREATE TABLE public.user_employee_links (
   updated_at timestamptz NOT NULL DEFAULT now(),
   
   -- Uniqueness constraints to prevent duplicate/conflicting mappings
-  UNIQUE (user_id, employee_code, dealer_code),
-  UNIQUE (user_id, dealer_code) WHERE is_primary = true AND is_active = true
+  UNIQUE (user_id, employee_code, dealer_code)
 );
 
 -- Indexes for fast lookup
@@ -28,6 +27,11 @@ CREATE INDEX idx_user_employee_links_employee_code
 CREATE INDEX idx_user_employee_links_dealer_code 
   ON public.user_employee_links(dealer_code);
 
+-- Partial unique index to ensure only one active primary mapping per user+dealer
+CREATE UNIQUE INDEX uq_user_employee_links_primary_active_per_dealer
+  ON public.user_employee_links(user_id, dealer_code)
+  WHERE is_primary = true AND is_active = true;
+
 -- Comments for documentation
 COMMENT ON TABLE public.user_employee_links IS 
   'Stable mapping from auth users (signup identity) to operational employee identities (CRM records). 
@@ -36,7 +40,7 @@ COMMENT ON TABLE public.user_employee_links IS
    This is the authoritative linkage; UI displays user.full_name (signup name) but uses employee_code internally.';
 
 COMMENT ON COLUMN public.user_employee_links.is_primary IS 
-  'Only one active primary mapping per user+dealer combination (enforced by unique constraint).';
+  'Only one active primary mapping per user+dealer combination (enforced by partial unique index).';
 
 COMMENT ON COLUMN public.user_employee_links.is_active IS 
   'Allows deactivation without deletion, preserving audit trail.';
