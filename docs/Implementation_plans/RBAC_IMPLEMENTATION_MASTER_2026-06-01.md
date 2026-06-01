@@ -1,9 +1,9 @@
 # RBAC Dynamic Access Control — Master Implementation Plan
 
 **Version**: 2026-06-01  
-**Status**: Phase 1B In Progress - Data Backfill & Validation  
+**Status**: Phase 1B In Progress - Validation + Superadmin Auto-Grant Hardening  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 12:40 UTC  
+**Last Updated**: 2026-06-01 14:05 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -11,6 +11,14 @@
 - All 5 Phase 1A migrations were executed successfully in Supabase SQL Editor (1→5 in order).
 - Fresh post-migration dump created at local_folder/backups/full_database.sql.
 - Authority advanced forward to local_folder/backups/full_database.sql and must never downgrade to older snapshots.
+- Latest full_database.sql refresh remains authoritative after superadmin parity updates.
+
+### Superadmin Default Access Policy (Locked)
+
+- Superadmin model in this project is users.role = admin with is_active = true.
+- All active admin users must always have full permissions (view/modify/delete) on all active modules.
+- Any newly created or newly activated module must be auto-granted to all active admins without manual action.
+- Any user promoted to active admin must be auto-granted all active modules without manual action.
 
 ### Documentation Governance (No Confusion Policy)
 
@@ -20,10 +28,10 @@
 
 ### Immediate Next Steps (Phase 1B)
 
-1. Run scripts/01_backfill_sa_name_matcher_diagnostic.sql and capture match/ambiguous/unmatched output.
-2. Resolve ambiguities (if any) and run scripts/03_backfill_seed_user_employee_links.sql.
-3. Run scripts/02_backfill_populate_sa_employee_code.sql.
-4. Run scripts/04_backfill_validate_integrity.sql and record pass/fail in Part 4.2.
+1. Run migration 20260601080000_enable_superadmin_auto_module_grants.sql.
+2. Confirm verification 2 returns zero rows for missing active-module admin grants.
+3. Refresh full_database.sql and keep it as updated authority snapshot.
+4. Continue API/UI implementation tasks for dynamic role/permission administration.
 
 ---
 
@@ -433,6 +441,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.7 | Execute migrations in staging DB | ✓ Done | User | 2026-06-01 | Executed successfully in SQL Editor in order 1→2→3→4→5 | ☑ |
 | 1.8 | Test schema integrity post-migration | ✓ Done | User | 2026-06-01 | Post-run checks passed during execution flow | ☑ |
 | 1.9 | Create fresh authoritative full dump | ✓ Done | User | 2026-06-01 | local_folder/backups/full_database.sql refreshed after migrations | ☑ |
+| 1.10 | Enforce superadmin auto-grant defaults | 🟡 In Progress | Copilot + User | 2026-06-01 | File: 20260601080000_enable_superadmin_auto_module_grants.sql | ☐ |
 
 ### 4.2 Data Backfill & Validation
 
