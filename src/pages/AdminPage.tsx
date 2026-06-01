@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   listUserEmployeeLinks,
-  getUserEmployeeLinks,
   createUserEmployeeLink,
   updateUserEmployeeLink,
   deactivateUserEmployeeLink,
@@ -221,18 +220,18 @@ export default function AdminPage() {
   async function loadMappings() {
     setMappingsLoading(true)
     const result = await listUserEmployeeLinks()
-    if (result.ok) {
-      setMappings(result.value)
+    if (result.data) {
+      setMappings(result.data)
     } else {
-      showToastMsg(result.error, 'error')
+      showToastMsg(result.error ?? 'Failed to load mappings', 'error')
     }
     setMappingsLoading(false)
   }
 
   async function loadServiceAdvisors() {
     const result = await listServiceAdvisors()
-    if (result.ok) {
-      setServiceAdvisors(result.value)
+    if (result.data) {
+      setServiceAdvisors(result.data)
     }
   }
 
@@ -249,7 +248,7 @@ export default function AdminPage() {
       is_primary: mapIsPrimary,
     })
     setSavingMapping(false)
-    if (result.ok) {
+    if (result.data) {
       showToastMsg('Mapping created')
       setShowAddMapping(false)
       setMapUserId('')
@@ -258,7 +257,7 @@ export default function AdminPage() {
       setMapIsPrimary(false)
       await loadMappings()
     } else {
-      showToastMsg(result.error, 'error')
+      showToastMsg(result.error ?? 'Failed to create mapping', 'error')
     }
   }
 
@@ -266,11 +265,11 @@ export default function AdminPage() {
     setSavingMapping(true)
     const result = await updateUserEmployeeLink(mapping.id, { is_primary: !mapping.is_primary })
     setSavingMapping(false)
-    if (result.ok) {
+    if (result.data) {
       showToastMsg('Mapping updated')
       await loadMappings()
     } else {
-      showToastMsg(result.error, 'error')
+      showToastMsg(result.error ?? 'Failed to update mapping', 'error')
     }
   }
 
@@ -278,11 +277,11 @@ export default function AdminPage() {
     setSavingMapping(true)
     const result = await deactivateUserEmployeeLink(mapping.id)
     setSavingMapping(false)
-    if (result.ok) {
+    if (!result.error) {
       showToastMsg('Mapping deactivated')
       await loadMappings()
     } else {
-      showToastMsg(result.error, 'error')
+      showToastMsg(result.error ?? 'Failed to deactivate mapping', 'error')
     }
   }
 

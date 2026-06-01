@@ -196,14 +196,7 @@ export async function deactivateUserEmployeeLink(id: number): Promise<ApiResult<
  */
 export async function listServiceAdvisors(): Promise<ApiResult<Array<{ employee_code: string; employee_name: string }>>> {
   try {
-    const { data, error } = await supabase
-      .from('employee_master')
-      .select('employee_code, employee_name')
-      .or('role.ilike.%sa%,role.ilike.%service%advisor%')
-      .eq('employee_code', '') // placeholder to force WHERE clause
-      .order('employee_name')
-
-    // Because of the above filter complexity, fetch all and filter in JS
+    // Fetch all employee_master records and filter in JS since complex role filtering is easier there
     const { data: allData, error: allError } = await supabase
       .from('employee_master')
       .select('employee_code, employee_name, role')
