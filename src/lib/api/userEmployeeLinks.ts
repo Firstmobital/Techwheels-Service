@@ -20,6 +20,8 @@ export interface UserEmployeeLinkInput {
 }
 
 export interface UserEmployeeLinkUpdate {
+  employee_code?: string
+  dealer_code?: string
   is_primary?: boolean
   is_active?: boolean
 }
@@ -135,30 +137,52 @@ export async function updateUserEmployeeLink(
   update: UserEmployeeLinkUpdate
 ): Promise<ApiResult<UserEmployeeLinkRow>> {
   try {
-    // Validation: If marking as primary, deactivate other primary mappings
-    if (update.is_primary === true) {
-      const { data: current } = await supabase
-        .from('user_employee_links')
-        .select('user_id, dealer_code')
-        .eq('id', id)
+    const { data: current, error: currentError } = await supabase
+      .from('user_employee_links')
+      .select('user_id, dealer_code')
+      .eq('id', id)
+      .single()
+
+    if (currentError || !current) {
+      return fail(`Mapping '${id}' not found`)
+    }
+
+    const normalizedUpdate: UserEmployeeLinkUpdate = {
+      ...update,
+      employee_code: update.employee_code?.trim().toUpperCase(),
+      dealer_code: update.dealer_code?.trim().toUpperCase(),
+    }
+
+    // Validation: If employee code changed, ensure it exists.
+    if (normalizedUpdate.employee_code) {
+      const { data: empData, error: empError } = await supabase
+        .from('employee_master')
+        .select('employee_code')
+        .eq('employee_code', normalizedUpdate.employee_code)
         .single()
 
-      if (current) {
-        await supabase
-          .from('user_employee_links')
-          .update({ is_primary: false })
-          .match({
-            user_id: current.user_id,
-            dealer_code: current.dealer_code,
-            is_primary: true,
-          })
-          .neq('id', id)
+      if (empError || !empData) {
+        return fail(`Employee code '${normalizedUpdate.employee_code}' not found`)
       }
+    }
+
+    // Validation: If marking as primary, deactivate other primary mappings
+    const targetDealerCode = normalizedUpdate.dealer_code ?? current.dealer_code
+    if (normalizedUpdate.is_primary === true) {
+      await supabase
+        .from('user_employee_links')
+        .update({ is_primary: false })
+        .match({
+          user_id: current.user_id,
+          dealer_code: targetDealerCode,
+          is_primary: true,
+        })
+        .neq('id', id)
     }
 
     const { data, error } = await supabase
       .from('user_employee_links')
-      .update(update)
+      .update(normalizedUpdate)
       .eq('id', id)
       .select()
       .single()

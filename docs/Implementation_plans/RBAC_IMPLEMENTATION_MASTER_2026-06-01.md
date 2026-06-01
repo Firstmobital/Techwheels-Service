@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 15:40 UTC  
+**Last Updated**: 2026-06-01 16:05 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -14,7 +14,7 @@
 - Latest full_database.sql refresh remains authoritative after superadmin parity updates.
 - Malformed admin user (id 1661d961-d73d-411e-9eab-cff26bbc048b) deleted and dump refreshed 2026-06-01.
 - Authority: local_folder/backups/full_database.sql (post-cleanup, final state for Phase 1B).
-- Multi-code ownership migration prepared: 20260601154000_enable_multi_employee_code_visibility.sql (run pending).
+- Multi-code ownership migration executed: 20260601154000_enable_multi_employee_code_visibility.sql.
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -465,7 +465,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.12 | Delete malformed admin user from database | ✓ Done | User | 2026-06-01 | Harddelete of id 1661d961-d73d-411e-9eab-cff26bbc048b and all references | ☑ |
 | 1.13 | Update AdminPage to hide inactive users by default | ✓ Done | Copilot | 2026-06-01 | File: src/pages/AdminPage.tsx; added showInactive toggle; inactive users filtered by default | ☑ |
 | 1.14 | Create fresh authoritative full dump post-cleanup | ✓ Done | User | 2026-06-01 | local_folder/backups/full_database.sql refreshed; authority locked post-malformed-user deletion | ☑ |
-| 1.15 | Enable multi-employee-code SA ownership policies | 🟡 In Progress | User + Copilot | 2026-06-01 | Migration prepared: 20260601154000_enable_multi_employee_code_visibility.sql; apply pending | ☐ |
+| 1.15 | Enable multi-employee-code SA ownership policies | ✓ Done | User + Copilot | 2026-06-01 | Migration 20260601154000 executed in Supabase SQL Editor | ☑ |
 
 ### 4.2 Data Backfill & Validation
 

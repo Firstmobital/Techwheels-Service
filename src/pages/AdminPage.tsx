@@ -162,6 +162,7 @@ export default function AdminPage() {
   const [employeeCatalog, setEmployeeCatalog] = useState<Array<{ employee_code: string; employee_name: string }>>([])
   const [mappingsLoading, setMappingsLoading] = useState(false)
   const [showAddMapping, setShowAddMapping] = useState(false)
+  const [editMapping, setEditMapping]       = useState<UserEmployeeLinkRow | null>(null)
   const [mapUserId, setMapUserId]           = useState('')
   const [mapEmployeeCode, setMapEmployeeCode] = useState('')
   const [mapDealerCode, setMapDealerCode]   = useState('')
@@ -282,6 +283,40 @@ export default function AdminPage() {
       await loadMappings()
     } else {
       showToastMsg(result.error ?? 'Failed to deactivate mapping', 'error')
+    }
+  }
+
+  function openEditMapping(mapping: UserEmployeeLinkRow) {
+    setEditMapping(mapping)
+    setMapEmployeeCode(mapping.employee_code)
+    setMapDealerCode(mapping.dealer_code)
+    setMapIsPrimary(mapping.is_primary)
+  }
+
+  async function saveEditedMapping() {
+    if (!editMapping) return
+    if (!mapEmployeeCode || !mapDealerCode) {
+      showToastMsg('Employee Code and Dealer Code are required', 'error')
+      return
+    }
+
+    setSavingMapping(true)
+    const result = await updateUserEmployeeLink(editMapping.id, {
+      employee_code: mapEmployeeCode,
+      dealer_code: mapDealerCode,
+      is_primary: mapIsPrimary,
+    })
+    setSavingMapping(false)
+
+    if (result.data) {
+      showToastMsg('Mapping updated')
+      setEditMapping(null)
+      setMapEmployeeCode('')
+      setMapDealerCode('')
+      setMapIsPrimary(false)
+      await loadMappings()
+    } else {
+      showToastMsg(result.error ?? 'Failed to update mapping', 'error')
     }
   }
 
@@ -818,13 +853,22 @@ export default function AdminPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => deactivateMapping(m)}
-                            disabled={savingMapping || !m.is_active}
-                            className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-                          >
-                            Deactivate
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openEditMapping(m)}
+                              disabled={savingMapping}
+                              className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deactivateMapping(m)}
+                              disabled={savingMapping || !m.is_active}
+                              className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                            >
+                              Deactivate
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1078,6 +1122,63 @@ export default function AdminPage() {
             <button onClick={() => setShowAddMapping(false)} className={BTN_SECONDARY}>Cancel</button>
             <button onClick={createMapping} disabled={savingMapping} className={BTN_PRIMARY}>
               {savingMapping ? 'Creating…' : 'Create Mapping'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── EDIT MAPPING MODAL ── */}
+      {editMapping && (
+        <Modal title="Edit Employee Mapping" onClose={() => setEditMapping(null)}>
+          <div className="space-y-4">
+            <Field label="User">
+              <input
+                value={users.find(u => u.id === editMapping.user_id)?.full_name || users.find(u => u.id === editMapping.user_id)?.email || editMapping.user_id}
+                disabled
+                className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+              />
+            </Field>
+
+            <Field label="Employee *">
+              <input
+                list="emp-list-edit"
+                value={mapEmployeeCode}
+                onChange={e => setMapEmployeeCode(e.target.value.toUpperCase())}
+                placeholder="Search by code or name…"
+                className={INPUT}
+                autoFocus
+              />
+              <datalist id="emp-list-edit">
+                {employeeCatalog.map(emp => (
+                  <option key={emp.employee_code} value={emp.employee_code}>{emp.employee_name}</option>
+                ))}
+              </datalist>
+            </Field>
+
+            <Field label="Dealer Code *">
+              <input
+                value={mapDealerCode}
+                onChange={e => setMapDealerCode(e.target.value.toUpperCase())}
+                placeholder="e.g. 3000840"
+                className={INPUT}
+              />
+            </Field>
+
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mapIsPrimary}
+                onChange={e => setMapIsPrimary(e.target.checked)}
+                className="h-4 w-4 rounded accent-blue-600"
+              />
+              Set as primary mapping for this user + dealer
+            </label>
+          </div>
+
+          <div className="mt-5 flex justify-end gap-3">
+            <button onClick={() => setEditMapping(null)} className={BTN_SECONDARY}>Cancel</button>
+            <button onClick={saveEditedMapping} disabled={savingMapping} className={BTN_PRIMARY}>
+              {savingMapping ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
         </Modal>
