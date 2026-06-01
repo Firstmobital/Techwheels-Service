@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
+import { listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,33 @@ interface JobCard {
   open_for_days: number | null
   product_line: string | null
   chassis_number: string | null
+}
+
+function calculateOpenDays(createdAt: string | null): number | null {
+  if (!createdAt) return null
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) return null
+
+  const diffMs = Date.now() - created.getTime()
+  if (diffMs < 0) return 0
+
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
+function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
+  return {
+    id: row.id,
+    job_card_number: row.jc_number?.trim() || `RECEPTION-${row.id}`,
+    branch: row.branch?.trim() || '—',
+    status: null,
+    vehicle_registration_number: row.reg_number ?? null,
+    sr_type: row.service_type ?? null,
+    sr_assigned_to: row.sa_name ?? null,
+    created_date_time: row.created_at ?? null,
+    open_for_days: calculateOpenDays(row.created_at ?? null),
+    product_line: row.model ?? null,
+    chassis_number: null,
+  }
 }
 
 interface Employee {
@@ -53,14 +81,8 @@ export default function FloorInchargePage() {
   async function fetchAll() {
     setLoading(true)
     try {
-      const [jcRes, empRes] = await Promise.all([
-        supabase
-          .from('open_job_cards')
-          .select(
-            'id, job_card_number, branch, status, vehicle_registration_number, sr_type, sr_assigned_to, created_date_time, open_for_days, product_line, chassis_number'
-          )
-          .order('created_at', { ascending: false })
-          .limit(500),
+      const [receptionRes, empRes] = await Promise.all([
+        listReceptionEntries(),
         supabase
           .from('employee_master')
           .select('id, employee_code, employee_name, department, location')
@@ -68,7 +90,11 @@ export default function FloorInchargePage() {
           .order('employee_name'),
       ])
 
-      setJobCards(jcRes.data ?? [])
+      const receptionRows = receptionRes.error || !receptionRes.data
+        ? []
+        : receptionRes.data.map(mapReceptionRowToJobCard)
+
+      setJobCards(receptionRows)
       setEmployees(empRes.data ?? [])
 
       // Try to fetch assignments — graceful fallback if table doesn't exist yet
