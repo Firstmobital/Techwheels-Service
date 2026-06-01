@@ -65,6 +65,28 @@ const DEALER_CODE_RULES = [
   { key: '3001440', location: 'Ajmer Road', fuel_type: 'PV' },
 ] as const
 
+const SETTINGS_MODELS_STORAGE_KEY = 'settings.models.v1'
+
+const DEFAULT_MODEL_OPTIONS = [
+  'Nexon',
+  'Punch EV',
+  'Tiago EV',
+  'Tigor EV',
+  'Altroz',
+  'Curvv',
+  'Curvv EV',
+  'Harrier',
+  'Harrier EV',
+  'Hexa',
+  'Nexon EV',
+  'Punch',
+  'Punch CNG',
+  'Safari',
+  'Sierra',
+  'Tiago',
+  'Tigor',
+] as const
+
 function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
@@ -349,6 +371,10 @@ export default function SettingsPage() {
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [models, setModels] = useState<string[]>([...DEFAULT_MODEL_OPTIONS])
+  const [newModelName, setNewModelName] = useState('')
+  const [editingModelIndex, setEditingModelIndex] = useState<number | null>(null)
+  const [editingModelValue, setEditingModelValue] = useState('')
 
   const employeeOptions = useMemo(
     () => employees.map((employee) => ({ code: employee.employee_code, name: employee.employee_name })),
@@ -393,6 +419,34 @@ export default function SettingsPage() {
     return { total, byBranch }
   }, [issues])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const raw = window.localStorage.getItem(SETTINGS_MODELS_STORAGE_KEY)
+    if (!raw) return
+
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return
+
+      const cleaned = parsed
+        .map((value) => String(value ?? '').trim().replace(/\s+/g, ' '))
+        .filter(Boolean)
+
+      const unique = Array.from(new Set(cleaned))
+      if (unique.length > 0) {
+        setModels(unique)
+      }
+    } catch {
+      // Ignore invalid local storage payloads and keep defaults.
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(SETTINGS_MODELS_STORAGE_KEY, JSON.stringify(models))
+  }, [models])
+
   const settingsCards = useMemo(
     () => [
       {
@@ -408,6 +462,12 @@ export default function SettingsPage() {
         stat: `${employees.length} employees`,
       },
       {
+        id: 'models',
+        title: 'Models',
+        description: 'Manage dropdown model values for future use.',
+        stat: `${models.length} models`,
+      },
+      {
         id: 'autodoc-rate-cards',
         title: 'AutoDoc Rate Cards',
         description: 'Import and activate city-category labour rate cards.',
@@ -420,7 +480,7 @@ export default function SettingsPage() {
         stat: `${issues.length} issues`,
       },
     ],
-    [branches.length, employees.length, issues.length, rateCards.length],
+    [branches.length, employees.length, issues.length, models.length, rateCards.length],
   )
 
   const openSettingReference = useCallback((sectionId: string) => {
@@ -1250,6 +1310,79 @@ export default function SettingsPage() {
     setMessage(`Branch "${name}" deleted`)
   }
 
+  function normalizeModelInput(value: string): string {
+    return value.trim().replace(/\s+/g, ' ')
+  }
+
+  function modelExists(value: string, excludeIndex?: number): boolean {
+    const normalized = normalizeModelInput(value).toLowerCase()
+    return models.some((model, index) => {
+      if (excludeIndex !== undefined && index === excludeIndex) return false
+      return normalizeModelInput(model).toLowerCase() === normalized
+    })
+  }
+
+  function handleAddModel() {
+    setError(null)
+    setMessage(null)
+
+    const normalized = normalizeModelInput(newModelName)
+    if (!normalized) {
+      setError('Model name cannot be empty.')
+      return
+    }
+
+    if (modelExists(normalized)) {
+      setError(`Model "${normalized}" already exists.`)
+      return
+    }
+
+    setModels((prev) => [...prev, normalized])
+    setNewModelName('')
+    setMessage(`Model "${normalized}" added.`)
+  }
+
+  function handleStartEditModel(index: number) {
+    setEditingModelIndex(index)
+    setEditingModelValue(models[index] ?? '')
+    setError(null)
+    setMessage(null)
+  }
+
+  function handleSaveModelEdit(index: number) {
+    setError(null)
+    setMessage(null)
+
+    const normalized = normalizeModelInput(editingModelValue)
+    if (!normalized) {
+      setError('Model name cannot be empty.')
+      return
+    }
+
+    if (modelExists(normalized, index)) {
+      setError(`Model "${normalized}" already exists.`)
+      return
+    }
+
+    setModels((prev) => prev.map((model, modelIndex) => (modelIndex === index ? normalized : model)))
+    setEditingModelIndex(null)
+    setEditingModelValue('')
+    setMessage(`Model updated to "${normalized}".`)
+  }
+
+  function handleDeleteModel(index: number) {
+    const value = models[index]
+    if (!value) return
+    if (!window.confirm(`Delete model "${value}"?`)) return
+
+    setModels((prev) => prev.filter((_, modelIndex) => modelIndex !== index))
+    if (editingModelIndex === index) {
+      setEditingModelIndex(null)
+      setEditingModelValue('')
+    }
+    setMessage(`Model "${value}" deleted.`)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -1278,7 +1411,7 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-gray-900">Settings Sections</h2>
             <p className="mt-0.5 text-xs text-gray-500">Open any card to jump directly to that setting.</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {settingsCards.map((card) => (
               <button
                 key={card.id}
@@ -1307,6 +1440,127 @@ export default function SettingsPage() {
             ))}
           </div>
         </section>
+
+        {selectedSectionId === 'models' && (
+        <section id="models" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Models</h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Manage vehicle model dropdown values. These values are stored in browser settings for now.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4 p-5">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newModelName}
+                onChange={(event) => setNewModelName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    handleAddModel()
+                  }
+                }}
+                placeholder="Add new model name"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none ring-blue-100 focus:border-blue-500 focus:ring"
+              />
+              <button
+                type="button"
+                onClick={handleAddModel}
+                disabled={!newModelName.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                + Add Model
+              </button>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                    <th className="px-3 py-2 font-semibold">#</th>
+                    <th className="px-3 py-2 font-semibold">Model Name</th>
+                    <th className="px-3 py-2 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {models.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={3}>No models configured.</td>
+                    </tr>
+                  ) : (
+                    models.map((model, index) => (
+                      <tr key={`${model}-${index}`} className="border-b border-gray-100">
+                        <td className="px-3 py-2 text-gray-500">{index + 1}</td>
+                        <td className="px-3 py-2">
+                          {editingModelIndex === index ? (
+                            <input
+                              value={editingModelValue}
+                              onChange={(event) => setEditingModelValue(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  handleSaveModelEdit(index)
+                                }
+                              }}
+                              className="w-full rounded border border-gray-300 px-2 py-1"
+                            />
+                          ) : (
+                            <span className="font-medium text-gray-800">{model}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-2">
+                            {editingModelIndex === index ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveModelEdit(index)}
+                                  className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingModelIndex(null)
+                                    setEditingModelValue('')
+                                  }}
+                                  className="rounded bg-gray-500 px-3 py-1 text-xs font-medium text-white"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditModel(index)}
+                                className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteModel(index)}
+                              className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        )}
 
         {selectedSectionId === 'branch-management' && (
         <section id="branch-management" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
