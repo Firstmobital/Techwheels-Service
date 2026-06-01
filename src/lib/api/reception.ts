@@ -258,12 +258,15 @@ export async function bulkCreateReceptionEntries(rows: ReceptionEntryInput[]): P
 export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmployeeOption[]>> {
   const { data, error } = await supabase
     .from('employee_master')
-    .select('employee_code, employee_name')
+    .select('employee_code, employee_name, role')
     .order('employee_name', { ascending: true })
 
   if (error) return fail(error)
 
+  const allowedRoles = new Set(['sa', 'service advisor', 'service_advisor'])
+
   const options = (data ?? [])
+    .filter((row) => allowedRoles.has(String((row as { role?: string | null }).role ?? '').trim().toLowerCase()))
     .map((row) => ({
       employee_code: String(row.employee_code ?? '').trim(),
       employee_name: String(row.employee_name ?? '').trim(),
