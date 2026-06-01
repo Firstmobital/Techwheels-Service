@@ -10,7 +10,7 @@ DROP POLICY IF EXISTS employee_master_insert_admin ON public.employee_master;
 DROP POLICY IF EXISTS employee_master_update_admin ON public.employee_master;
 DROP POLICY IF EXISTS employee_master_delete_admin ON public.employee_master;
 
--- Policy for employee_master: everyone can view active employees (read-only)
+-- Policy for employee_master: everyone can view employee records (read-only)
 -- Admin only can modify/delete
 CREATE POLICY employee_master_select_all ON public.employee_master
   FOR SELECT TO authenticated
