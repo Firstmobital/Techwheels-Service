@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getDateRangeBounds } from '../../../lib/reportQueries'
 import { applyBranchFilterToQuery } from '../../../lib/branches'
 import { supabase } from '../../../lib/supabase'
+import { buildEmployeeLookupIndex, resolveEmployeeForSr, type EmployeeRecord } from '../../../lib/employeeMatcher'
 import type { ReportViewProps } from '../types'
 
 interface ServiceInvoiceOrderRow {
@@ -13,6 +14,7 @@ interface ServiceInvoiceOrderRow {
   created_date_time: string | null
   closed_date_time: string | null
   sr_assigned_to: string | null
+  sr_assigned_to_name: string | null
   account: string | null
 }
 
@@ -34,11 +36,35 @@ function formatDateTime(dateString: string | null): string {
   }
 }
 
-export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewProps) {
+export default function JobCardDetailsReport({ branch, dateFilter, fuelType }: ReportViewProps) {
   const [rows, setRows] = useState<ServiceInvoiceOrderRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedKPI, setSelectedKPI] = useState<KPIType>(null)
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([])
+
+  // Fetch employees once on mount
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const { data, error: empError } = await supabase
+          .from('employee_master')
+          .select('employee_code, employee_name, location, department, role')
+          .limit(5000)
+
+        if (empError) throw new Error(empError.message)
+        setEmployees((data as EmployeeRecord[]) ?? [])
+      } catch (err) {
+        console.error('Failed to fetch employees:', err)
+        setEmployees([])
+      }
+    }
+
+    void fetchEmployees()
+  }, [])
+
+  // Build employee lookup index
+  const employeeIndex = useMemo(() => buildEmployeeLookupIndex(employees), [employees])
 
   useEffect(() => {
     let cancelled = false
@@ -57,6 +83,10 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
 
         query = applyBranchFilterToQuery(query, branch)
 
+        if (fuelType && fuelType !== 'ALL') {
+          query = query.eq('fuel_type', fuelType)
+        }
+
         if (bounds) {
           query = query.gte('created_date_time', bounds.from).lt('created_date_time', bounds.toExclusive)
         }
@@ -66,8 +96,19 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
 
         const allRows = (data as ServiceInvoiceOrderRow[] | null) ?? []
 
+        // Map sr_assigned_to with employee names
+        const mappedRows = allRows.map((row) => {
+          const matchResult = resolveEmployeeForSr(row.sr_assigned_to, employeeIndex)
+          const matchedEmployee = employees.find((e) => e.employee_code === matchResult.employeeCode)
+
+          return {
+            ...row,
+            sr_assigned_to_name: matchedEmployee?.employee_name ?? row.sr_assigned_to,
+          }
+        })
+
         if (!cancelled) {
-          setRows(allRows)
+          setRows(mappedRows)
         }
       } catch (err) {
         if (!cancelled) {
@@ -86,7 +127,7 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
     return () => {
       cancelled = true
     }
-  }, [branch, dateFilter])
+  }, [branch, dateFilter, fuelType])
 
   const summary = useMemo(() => {
     let cancelledCount = 0
@@ -222,7 +263,10 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
                       <td className="px-4 py-3 font-medium text-gray-900">{row.job_card_number ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-700">{row.status ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-700">{row.sr_type ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-700">{row.sr_assigned_to ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-700">
+                        <div className="text-gray-900 font-medium">{row.sr_assigned_to_name ?? '—'}</div>
+                        <div className="text-[11px] text-gray-500">{row.sr_assigned_to ?? '—'}</div>
+                      </td>
                       <td className="px-4 py-3 text-gray-700">{formatDateTime(row.created_date_time)}</td>
                       <td className="px-4 py-3 text-gray-700">{row.account ?? '—'}</td>
                     </tr>
