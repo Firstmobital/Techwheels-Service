@@ -11,31 +11,55 @@
 
 -- Step 1: Identify users with SA permission and match to employee records by name
 -- Create primary mappings for them
+WITH candidate_matches AS (
+  SELECT
+    u.id as user_id,
+    em.employee_code,
+    COALESCE(u.branch, 'default') as dealer_code,
+    u.is_active
+  FROM public.users u
+  INNER JOIN public.user_module_permissions ump
+    ON u.id = ump.user_id
+  INNER JOIN public.modules m
+    ON ump.module_id = m.id
+    AND LOWER(m.name) IN ('service_advisor', 'sa')
+    AND ump.can_view = true
+  INNER JOIN public.employee_master em
+    ON LOWER(TRIM(u.full_name)) = LOWER(TRIM(em.employee_name))
+  WHERE u.is_active = true
+),
+unambiguous_matches AS (
+  SELECT user_id, dealer_code, MIN(employee_code) AS employee_code, MAX(is_active) AS is_active
+  FROM candidate_matches
+  GROUP BY user_id, dealer_code
+  HAVING COUNT(DISTINCT employee_code) = 1
+)
 INSERT INTO public.user_employee_links 
   (user_id, employee_code, dealer_code, is_primary, is_active)
-SELECT DISTINCT
-  u.id as user_id,
-  em.employee_code as employee_code,  -- SA_CODE from CRM (immutable)
-  COALESCE(u.branch, 'default') as dealer_code,
+SELECT
+  um.user_id,
+  um.employee_code,  -- SA_CODE from CRM (immutable)
+  um.dealer_code,
   true as is_primary,
-  u.is_active
-FROM public.users u
-INNER JOIN public.user_module_permissions ump 
-  ON u.id = ump.user_id
-INNER JOIN public.modules m 
-  ON ump.module_id = m.id 
-  AND LOWER(m.name) IN ('service_advisor', 'sa')
-  AND ump.can_view = true
-INNER JOIN public.employee_master em 
-  ON LOWER(TRIM(u.full_name)) = LOWER(TRIM(em.employee_name))
-    OR LOWER(TRIM(u.full_name)) LIKE '%' || LOWER(TRIM(SPLIT_PART(em.employee_name, ',', 1))) || '%'
-    OR LOWER(TRIM(SPLIT_PART(u.full_name, ' ', 1))) = LOWER(TRIM(SPLIT_PART(em.employee_name, ' ', 1)))
-WHERE u.is_active = true
+  um.is_active
+FROM unambiguous_matches um
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.user_employee_links uel
+    WHERE uel.user_id = um.user_id
+      AND uel.dealer_code = um.dealer_code
+      AND uel.is_primary = true
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM candidate_matches cm
+    WHERE cm.user_id = um.user_id
+      AND cm.dealer_code = um.dealer_code
+      AND cm.employee_code <> um.employee_code
+  )
   AND NOT EXISTS (
     SELECT 1 FROM public.user_employee_links uel
-    WHERE uel.user_id = u.id 
-      AND uel.dealer_code = COALESCE(u.branch, 'default')
-      AND uel.is_primary = true
+    WHERE uel.user_id = um.user_id
+      AND uel.dealer_code = um.dealer_code
+      AND uel.employee_code = um.employee_code
   )
 ON CONFLICT (user_id, dealer_code) WHERE is_primary = true AND is_active = true 
   DO NOTHING;

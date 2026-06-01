@@ -1,24 +1,42 @@
 # RBAC Dynamic Access Control — Master Implementation Plan
 
 **Version**: 2026-06-01  
-**Status**: Phase 1A - Executing Schema Migrations  
+**Status**: Phase 1B In Progress - Data Backfill & Validation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 16:00 UTC  
+**Last Updated**: 2026-06-01 12:40 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-06-01)
+
+- All 5 Phase 1A migrations were executed successfully in Supabase SQL Editor (1→5 in order).
+- Fresh post-migration dump created at local_folder/backups/full_database.sql.
+- Authority advanced forward to local_folder/backups/full_database.sql and must never downgrade to older snapshots.
+
+### Documentation Governance (No Confusion Policy)
+
+- This file is the canonical implementation and status tracker.
+- Phase-1 split docs were removed after migration completion to prevent duplicate guidance.
+- Do not create additional phase markdown files unless explicitly requested.
+
+### Immediate Next Steps (Phase 1B)
+
+1. Run scripts/01_backfill_sa_name_matcher_diagnostic.sql and capture match/ambiguous/unmatched output.
+2. Resolve ambiguities (if any) and run scripts/03_backfill_seed_user_employee_links.sql.
+3. Run scripts/02_backfill_populate_sa_employee_code.sql.
+4. Run scripts/04_backfill_validate_integrity.sql and record pass/fail in Part 4.2.
 
 ---
 
 ## EXECUTIVE SUMMARY
 
 ### Current State
-The Techwheels Service web application has a usable module-permission foundation (modules + user_module_permissions tables, permission helper functions), but **critical security and identity gaps exist**:
+Phase 1A database hardening is complete (schema + functions + RLS). Remaining work is Phase 1B backfill/validation and Phase 1C+ application integration:
 
-1. **Service Advisor row ownership by mutable name** — SA visibility linked to `sa_name` (text field), not stable identity key
-2. **Permission semantics broken** — INSERT/UPDATE/DELETE policies use `has_module_view()` instead of `can_modify`/`can_delete`
-3. **No user-employee mapping layer** — No persistent link between auth users and operational employee identities
-4. **Hardcoded role taxonomy** — Role enums hardcoded in Admin UI vs free-text employee role field
-5. **Hardcoded frontend routes** — Module-to-route mapping requires code edits, not catalog-driven
-6. **Broad DB grants + RLS dependency** — Single point of failure if RLS policies are incomplete or incorrect
+1. **Data backfill pending** — Existing reception rows still need verified `sa_employee_code` population and unresolved-case handling
+2. **User-employee mapping seed pending** — Initial `user_employee_links` data must be seeded and validated
+3. **Hardcoded role taxonomy** — Role enums hardcoded in Admin UI vs free-text employee role field
+4. **Hardcoded frontend routes** — Module-to-route mapping requires code edits, not catalog-driven
+5. **Admin mapping UX pending** — Mapping operations still SQL-first until UI/API work is delivered
 
 **Risk**: Authenticated users can access/modify data outside intended scope if they bypass UI controls.
 
@@ -84,7 +102,7 @@ The Techwheels Service web application has a usable module-permission foundation
 
 ### 1.2 Authoritative Dump Audit (Schema & Policies)
 
-**Source**: local_folder/backups/full_database.sql (Verified 2026-06-01)
+**Source**: local_folder/backups/full_database.sql (post-migration snapshot, refreshed 2026-06-01)
 
 #### Schema Facts
 | Table | Rows | Key Findings |
@@ -93,15 +111,15 @@ The Techwheels Service web application has a usable module-permission foundation
 | `public.employee_master` | 41 | employee_code (unique), employee_name, location, department, fuel_type, role (freetext), timestamps. **Missing**: no user_id FK |
 | `public.user_module_permissions` | 63 | user_id FK, module_id FK, can_view, can_modify, can_delete, granted_by FK, granted_at. Unique (user_id, module_id) |
 | `public.modules` | — | name (unique), label, description, icon, route, sort_order, is_active, created_at |
-| `public.service_reception_entries` | 2 | dealer_code, reg_number, model, sa_name (TEXT, mutable), jc_number, owner_name, owner_phone, source, created_by, created_at, updated_at, remark, estimate_* fields. **Missing**: no sa_employee_code column |
-| `public.user_employee_links` | — | **DOES NOT EXIST** — proposed in this plan |
+| `public.service_reception_entries` | 2 | dealer_code, reg_number, model, sa_name, sa_employee_code, sa_display_name, jc_number, owner_name, owner_phone, source, created_by, created_at, updated_at, remark, estimate_* fields |
+| `public.user_employee_links` | 0+ | Table now exists with user_id/employee_code/dealer_code mapping + active/primary flags |
 
-#### Critical Policy Semantics Gaps
+#### Policy Semantics Status
 | Policy | Current | Broken | Should Be |
 |--------|---------|--------|-----------|
-| `service_reception_entries` INSERT | `has_module_view('reception')` | ✗ View permission allows create | `has_module_modify('reception')` |
-| `service_reception_entries` UPDATE | `has_module_view('service_advisor')` | ✗ View permission allows modify | `has_module_modify('service_advisor')` |
-| `service_reception_entries` DELETE | `has_module_view('reception')` | ✗ View permission allows delete | `has_module_delete('reception')` |
+| `service_reception_entries` INSERT | `has_module_modify('reception')` | ✓ Fixed | `has_module_modify('reception')` |
+| `service_reception_entries` UPDATE | `has_module_modify('service_advisor')` | ✓ Fixed | `has_module_modify('service_advisor')` |
+| `service_reception_entries` DELETE | `has_module_delete('reception')` | ✓ Fixed | `has_module_delete('reception')` |
 
 #### SA Identity Binding (Fragile)
 - **`public.my_sa_name()` function** (dump line ~1353):
@@ -128,12 +146,12 @@ The Techwheels Service web application has a usable module-permission foundation
 - `is_admin()`: Checks users.role = 'admin' AND is_active
 - `has_module_view/modify/delete(p_module)`: Action-based checks
 
-#### Missing Objects
-- **No `user_employee_links` table**
-- **No `sa_employee_code` column** in service_reception_entries
-- **No `my_sa_employee_code()` function**
-- **No RLS policies** on employee_master, technician_assignments, service_branches
-- **No audit log table** for governance decisions
+#### Object Status
+- **`user_employee_links` table**: Created
+- **`sa_employee_code` + `sa_display_name` columns**: Added to service_reception_entries
+- **`my_sa_employee_code()` + `has_module_action()`**: Created
+- **employee_master RLS hardening**: Applied
+- **Audit log table**: Not yet implemented (future enhancement)
 
 ### 1.3 Cardinality Gap Confirms Distinct Domains
 From dump COPY sections:
@@ -161,12 +179,14 @@ CREATE TABLE public.user_employee_links (
   updated_at timestamptz NOT NULL DEFAULT now(),
   
   -- Uniqueness constraints
-  UNIQUE (user_id, employee_code, dealer_code),
-  UNIQUE (user_id, dealer_code) WHERE is_primary = true AND is_active = true
+  UNIQUE (user_id, employee_code, dealer_code)
 );
 
 CREATE INDEX idx_user_employee_links_user_id ON public.user_employee_links(user_id);
 CREATE INDEX idx_user_employee_links_employee_code ON public.user_employee_links(employee_code);
+CREATE UNIQUE INDEX uq_user_employee_links_primary_active_per_dealer
+  ON public.user_employee_links(user_id, dealer_code)
+  WHERE is_primary = true AND is_active = true;
 ```
 
 **Purpose**: Stable 1:N mapping from auth user to employee identities; supports multi-dealer and multi-role users.
@@ -186,7 +206,7 @@ CREATE INDEX idx_service_reception_sa_lookup
 
 **Function 1: `public.my_sa_employee_code()`**
 ```sql
-CREATE FUNCTION public.my_sa_employee_code()
+CREATE OR REPLACE FUNCTION public.my_sa_employee_code()
 RETURNS text
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
@@ -206,7 +226,7 @@ COMMENT ON FUNCTION public.my_sa_employee_code() IS
 
 **Function 2: `public.has_module_action(p_module text, p_action text)`**
 ```sql
-CREATE FUNCTION public.has_module_action(p_module text, p_action text)
+CREATE OR REPLACE FUNCTION public.has_module_action(p_module text, p_action text)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
@@ -348,7 +368,7 @@ Add bounded sections inside Admin workspace:
 
 #### 1.1 Schema Migrations
 
-**Authoritative Source**: Individual files in `supabase/migrations/20260601*.sql` (tracked in version control; applied by Supabase CLI)
+**Authoritative Source**: Individual files in `supabase/migrations/20260601*.sql` (tracked in version control; executed in Supabase SQL Editor)
 
 - **Migration 1** (`20260601000000_create_user_employee_links.sql`): Create `user_employee_links` table with 3 indexes
 - **Migration 2** (`20260601010000_add_sa_employee_code_to_reception.sql`): Add `sa_employee_code` + `sa_display_name` columns + 2 indexes
@@ -356,7 +376,7 @@ Add bounded sections inside Admin workspace:
 - **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`): Drop old name-based SA policies; create new employee-code-based policies with correct action semantics
 - **Migration 5** (`20260601040000_harden_sensitive_table_rls.sql`): Enable RLS on `employee_master`; add admin-only policies
 
-**Important**: Do NOT create duplicate consolidated SQL files. Individual migration files are the single source of truth to prevent drift and support automated Supabase CLI deployments.
+**Important**: Do NOT create duplicate consolidated SQL files. Individual migration files are the single source of truth to prevent drift.
 
 #### 1.2 Data Backfill & Validation
 - **Script 1**: Match existing `sa_name` values to `employee_master.employee_name` (normalized: trim, lowercase, compare)
@@ -410,30 +430,29 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.4 | Fix RLS policies (action semantics + employee-code filtering) | ✓ Done | Copilot | 2026-06-01 | File: 20260601030000_fix_reception_rls_policies.sql | ☑ |
 | 1.5 | Harden sensitive table RLS (employee_master, etc.) | ✓ Done | Copilot | 2026-06-01 | File: 20260601040000_harden_sensitive_table_rls.sql | ☑ |
 | 1.6 | Review all 5 migrations for syntax/correctness | ✓ Done | Copilot | 2026-06-01 | All files reviewed; syntax correct | ☑ |
-| 1.7 | Execute migrations in staging DB | 🟡 In Progress | User | 2026-06-01 | Use Phase 1A guide; execute in order 1→2→3→4→5 | ☐ |
-| 1.8 | Test schema integrity post-migration | ⚪ Not Started | User | 2026-06-01 | After 1.7; verify FK, indexes, RLS policies | ☐ |
+| 1.7 | Execute migrations in staging DB | ✓ Done | User | 2026-06-01 | Executed successfully in SQL Editor in order 1→2→3→4→5 | ☑ |
+| 1.8 | Test schema integrity post-migration | ✓ Done | User | 2026-06-01 | Post-run checks passed during execution flow | ☑ |
+| 1.9 | Create fresh authoritative full dump | ✓ Done | User | 2026-06-01 | local_folder/backups/full_database.sql refreshed after migrations | ☑ |
 
 ### 4.2 Data Backfill & Validation
 
 | # | Task | Status | Owner | Due | Notes | Verified |
 |---|------|--------|-------|-----|-------|----------|
-| 2.1 | Write sa_name → employee_name matcher script | ✓ Done | Copilot | 2026-06-01 | File: 01_backfill_sa_name_matcher_diagnostic.sql; diagnostic only (read-only) | ☑ |
-| 2.2 | Run matcher; produce match/mismatch report | ⚪ Not Started | User | 2026-06-01 | Execute diagnostic script first; review output before proceeding | ☐ |
-| 2.3 | Manual resolution of ambiguous mappings | ⚪ Not Started | Admin | 2026-06-01 | If any ambiguities found in 2.2; admin decides SA assignment | ☐ |
-| 2.4 | Populate sa_employee_code for reception rows | ⚪ Not Started | User | 2026-06-01 | File: 02_backfill_populate_sa_employee_code.sql; Unresolved → NULL | ☐ |
-| 2.5 | Seed user_employee_links from SA users | ⚪ Not Started | User | 2026-06-01 | File: 03_backfill_seed_user_employee_links.sql; Create initial mappings | ☐ |
-| 2.6 | Validate backfill: no orphans, FKs intact | ⚪ Not Started | User | 2026-06-01 | File: 04_backfill_validate_integrity.sql; Query audit | ☐ |
-| 2.7 | Validate backfill coverage % | ⚪ Not Started | User | 2026-06-01 | >95% of SA users mapped; document any unmapped | ☐ |
+| 2.1 | Choose fresh-start path (delete legacy reception rows) | ✓ Done | User | 2026-06-01 | Legacy reception entries removed via 20260601050000 migration | ☑ |
+| 2.2 | Run fresh-start migration (cleanup + seed) | ✓ Done | User | 2026-06-01 | File: 20260601050000_fresh_start_cleanup_and_seed_user_employee_links.sql | ☑ |
+| 2.3 | Resolve remaining unmapped SA users manually | 🟡 In Progress | Admin | 2026-06-01 | Unmapped: Deepak Sharma, Riteshmamodiya | ☐ |
+| 2.4 | Validate mapping integrity and unmapped count | ⚪ Not Started | User | 2026-06-01 | Run verification query after manual inserts | ☐ |
+| 2.5 | Archive/remove obsolete backfill scripts | ✓ Done | Copilot | 2026-06-01 | Removed scripts/01_backfill_sa_name_matcher_diagnostic.sql and scripts/02_backfill_populate_sa_employee_code.sql | ☑ |
 
 ### 4.3 RLS Policy Hardening
 
 | # | Task | Status | Owner | Due | Notes | Verified |
 |---|------|--------|-------|-----|-------|----------|
-| 3.1 | Create migration to drop old SA name-based policies | ⚪ Not Started | TBD | — | Policies: select_sa_v1, update_sa_v1 | ☐ |
-| 3.2 | Create migration for new employee-code-based SA policies | ⚪ Not Started | TBD | — | Use my_sa_employee_code() | ☐ |
-| 3.3 | Create migration to fix reception write policies | ⚪ Not Started | TBD | — | Replace has_module_view with has_module_modify/delete | ☐ |
-| 3.4 | Audit all user-facing tables for RLS coverage | ⚪ Not Started | TBD | — | Check dump for gaps | ☐ |
-| 3.5 | Create/harden RLS on identified sensitive tables | ⚪ Not Started | TBD | — | E.g., employee_master, technician_assignments | ☐ |
+| 3.1 | Create migration to drop old SA name-based policies | ✓ Done | Copilot | 2026-06-01 | Included in 20260601030000_fix_reception_rls_policies.sql | ☑ |
+| 3.2 | Create migration for new employee-code-based SA policies | ✓ Done | Copilot | 2026-06-01 | Included in 20260601030000_fix_reception_rls_policies.sql | ☑ |
+| 3.3 | Create migration to fix reception write policies | ✓ Done | Copilot | 2026-06-01 | Reception write policies now use modify/delete semantics | ☑ |
+| 3.4 | Audit all user-facing tables for RLS coverage | ✓ Done | Copilot | 2026-06-01 | Audit completed from authoritative dump and policies reviewed | ☑ |
+| 3.5 | Create/harden RLS on identified sensitive tables | ✓ Done | Copilot | 2026-06-01 | Included in 20260601040000_harden_sensitive_table_rls.sql | ☑ |
 | 3.6 | Test all policies in staging with test users | ⚪ Not Started | TBD | — | Verify view/modify/delete semantics | ☐ |
 | 3.7 | Test SA policy: user with mapping sees assigned rows only | ⚪ Not Started | TBD | — | Staging, full data set | ☐ |
 | 3.8 | Test SA policy: user without mapping sees nothing | ⚪ Not Started | TBD | — | Staging | ☐ |
@@ -494,15 +513,15 @@ Use this section as the real-time status dashboard. Update immediately after eac
 
 **Phase 1 completion checklist** (all must be true):
 
-- ✓ **Schema**: `user_employee_links`, `sa_employee_code`, `my_sa_employee_code()` all deployed and tested
-- ✓ **Data**: 100% of SA users have active primary mappings; ambiguous cases logged and resolved
-- ✓ **Semantics**: `can_view`/`can_modify`/`can_delete` enforced uniformly at DB layer for all module tables
-- ✓ **Ownership**: SA row visibility guaranteed by employee_code, not name; name-based policies removed
-- ✓ **Security**: Direct API queries from unauthorized users respect RLS; zero data leakage
-- ✓ **Admin UX**: Non-technical admin can manage user-employee mappings via UI without SQL
-- ✓ **Testing**: All tests in Part 4.6 passing in staging environment
-- ✓ **Performance**: All permission checks complete <10ms (p99)
-- ✓ **Production**: Migrated and monitored successfully; zero permission-related incidents first 48h
+- ✓ **Schema**: `user_employee_links`, `sa_employee_code`, `my_sa_employee_code()` all deployed
+- ⚪ **Data**: 100% of SA users have active primary mappings; ambiguous cases logged and resolved
+- ✓ **Semantics**: `can_view`/`can_modify`/`can_delete` enforced uniformly at DB layer for reception policies
+- ⚪ **Ownership**: SA row visibility fully verified by employee_code after backfill completion
+- ⚪ **Security**: Direct API queries from unauthorized users validated via staging test matrix
+- ⚪ **Admin UX**: Non-technical admin can manage user-employee mappings via UI without SQL
+- ⚪ **Testing**: All tests in Part 4.6 passing in staging environment
+- ⚪ **Performance**: All permission checks complete <10ms (p99) with production-like load
+- ⚪ **Production**: Migrated and monitored successfully; zero permission-related incidents first 48h
 
 ---
 
@@ -544,6 +563,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | Version | Date | Author | Status | Notes |
 |---------|------|--------|--------|-------|
 | 1.0 | 2026-06-01 | Engineering Lead (TBD) | Draft | Consolidated from 3 separate plans; ready for Phase 1 kickoff |
+| 1.1 | 2026-06-01 | Copilot + User | Active | Phase 1A migrations executed; authoritative dump refreshed; moved to Phase 1B |
 
 ---
 
@@ -551,4 +571,4 @@ Use this section as the real-time status dashboard. Update immediately after eac
 **All previous separate RBAC plan files (RBAC_SA_DYNAMIC_CONTROL_PLAN_2026-06-01.md, RBAC_FULL_DUMP_AUDIT_2026-06-01.md, RBAC_MASTER_IMPLEMENTATION_PLAN_2026-06-01.md) are superseded and should be archived.**
 
 Last updated: 2026-06-01  
-Next review: Upon Phase 1 completion
+Next review: After Phase 1B backfill + validation execution
