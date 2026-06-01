@@ -1,7 +1,7 @@
 import { useCallback, useId, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
-import { broadcastLastUpdated } from '../hooks/useLastUpdated'
+import { broadcastLastUpdated, useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
 import {
   mapVasHeaders,
@@ -811,12 +811,23 @@ interface ImportCardProps {
 }
 
 function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload, onReset }: ImportCardProps) {
+  const { lastUpdated } = useLastUpdated(config.tableName)
   const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
   const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
   const progressPercent =
     state.uploadProgress.totalBranches > 0
       ? Math.round((state.uploadProgress.processedBranches / state.uploadProgress.totalBranches) * 100)
       : 0
+
+  const lastUpdatedLabel = lastUpdated
+    ? lastUpdated.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -826,6 +837,7 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
           <div>
             <h2 className="text-sm font-semibold text-gray-900">{config.title}</h2>
             <p className="mt-0.5 text-xs text-gray-500">{config.description}</p>
+            {lastUpdatedLabel && <p className="mt-1 text-[11px] text-gray-400">Last updated: {lastUpdatedLabel}</p>}
           </div>
           <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] text-gray-400">
             {config.tableName}
