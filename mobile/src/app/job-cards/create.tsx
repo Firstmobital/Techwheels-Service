@@ -1088,9 +1088,9 @@ export default function CreateJobCardScreen() {
         </View>
 
         <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
-          <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 14 }}>Vehicle Lookup</Text>
+          <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 10 }}>Vehicle Lookup</Text>
 
-          <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Registration number<Text style={{ color: '#cf3858' }}>*</Text></Text>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Registration number<Text style={{ color: '#cf3858' }}>*</Text></Text>
           <TextInput
             value={form.regNumber}
             onChangeText={(value) => {
@@ -1100,10 +1100,10 @@ export default function CreateJobCardScreen() {
             placeholder="MH12 KJ 4471"
             placeholderTextColor="#a7a99f"
             autoCapitalize="characters"
-            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21', marginBottom: 14 }}
+            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
           />
 
-          <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Job card number<Text style={{ color: '#cf3858' }}>*</Text></Text>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Job card number<Text style={{ color: '#cf3858' }}>*</Text></Text>
           <TextInput
             value={form.jcNumber}
             onChangeText={(value) => {
@@ -1112,11 +1112,11 @@ export default function CreateJobCardScreen() {
             }}
             placeholder="JC-2026-0432"
             placeholderTextColor="#a7a99f"
-            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21', marginBottom: 14 }}
+            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
           />
 
-          <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>KM reading<Text style={{ color: '#cf3858' }}>*</Text></Text>
-          <View style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 6, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>KM reading<Text style={{ color: '#cf3858' }}>*</Text></Text>
+          <View style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 4, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
             <TextInput
               value={form.kmReading}
               onChangeText={(value) => {
@@ -1126,9 +1126,9 @@ export default function CreateJobCardScreen() {
               placeholder="28450"
               placeholderTextColor="#a7a99f"
               keyboardType="number-pad"
-              style={{ flex: 1, fontSize: 16, color: '#1a1b21', paddingVertical: 8 }}
+              style={{ flex: 1, fontSize: 14, color: '#1a1b21', paddingVertical: 8 }}
             />
-            <Text style={{ fontSize: 16, fontWeight: '600', color: '#7d8090' }}>km</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#7d8090' }}>km</Text>
           </View>
 
           <TouchableOpacity
@@ -1136,22 +1136,22 @@ export default function CreateJobCardScreen() {
               borderWidth: 1,
               borderColor: '#d8d2c6',
               borderRadius: 16,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              marginBottom: 12,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              marginBottom: 10,
               flexDirection: 'row',
               alignItems: 'center',
             }}
             onPress={onPickWalkaround}
           >
-            <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-              <Icon name="video" size={24} color="#505462" strokeWidth={2} />
+            <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+              <Icon name="video" size={22} color="#505462" strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1b21' }}>Walkaround video</Text>
-              <Text style={{ fontSize: 12, color: '#7d8090' }}>{uploadingWalkaround ? 'Uploading...' : walkaroundVideoName || 'Capture or pick a 360° video'}</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>Walkaround video</Text>
+              <Text style={{ fontSize: 11, color: '#7d8090' }}>{uploadingWalkaround ? 'Uploading...' : walkaroundVideoName || 'Capture or pick a 360° video'}</Text>
             </View>
-            <Icon name="cloud-upload" size={24} color="#7d8090" strokeWidth={1.8} />
+            <Icon name="cloud-upload" size={20} color="#7d8090" strokeWidth={1.8} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1159,28 +1159,28 @@ export default function CreateJobCardScreen() {
               borderWidth: 1,
               borderColor: '#d8d2c6',
               borderRadius: 16,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              marginBottom: 16,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              marginBottom: 12,
               flexDirection: 'row',
               alignItems: 'center',
             }}
             onPress={onPickCarImage}
           >
-            <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-              <Icon name="camera" size={24} color="#505462" strokeWidth={2} />
+            <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+              <Icon name="camera" size={22} color="#505462" strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1b21' }}>Car image</Text>
-              <Text style={{ fontSize: 12, color: '#7d8090' }}>{uploadingCarImage ? 'Uploading...' : carImageName || 'GPS-tagged exterior shot'}</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>Car image</Text>
+              <Text style={{ fontSize: 11, color: '#7d8090' }}>{uploadingCarImage ? 'Uploading...' : carImageName || 'GPS-tagged exterior shot'}</Text>
             </View>
-            <Icon name="cloud-upload" size={24} color="#7d8090" strokeWidth={1.8} />
+            <Icon name="cloud-upload" size={20} color="#7d8090" strokeWidth={1.8} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={{
               borderRadius: 14,
-              paddingVertical: 14,
+              paddingVertical: 12,
               alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: lookupBusy || !lookupReady ? '#eeece5' : '#2a4cd0',
@@ -1190,16 +1190,16 @@ export default function CreateJobCardScreen() {
             onPress={onFetchFromDb}
             disabled={lookupBusy || !lookupReady}
           >
-            <Icon name="rotate-cw" size={20} color={lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff'} strokeWidth={2} />
-            <Text style={{ fontSize: 16, fontWeight: '700', color: lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff' }}>
+            <Icon name="rotate-cw" size={18} color={lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff'} strokeWidth={2} />
+            <Text style={{ fontSize: 15, fontWeight: '700', color: lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff' }}>
               {lookupBusy ? 'Fetching...' : 'Fetch from DB'}
             </Text>
           </TouchableOpacity>
 
-          <View style={{ marginTop: 14, borderRadius: 14, backgroundColor: '#f3f1eb', paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row' }}>
-            <Icon name="info" size={18} color="#7d8090" strokeWidth={1.8} />
-            <Text style={{ marginLeft: 10, flex: 1, fontSize: 12, color: '#7d8090', lineHeight: 20 }}>
-              Enter reg, JC & KM, then attach the walkaround video and a GPS-tagged car image to enable fetch.
+          <View style={{ marginTop: 10, borderRadius: 14, backgroundColor: '#f3f1eb', paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row' }}>
+            <Icon name="info" size={16} color="#7d8090" strokeWidth={1.8} />
+            <Text style={{ marginLeft: 8, flex: 1, fontSize: 11, color: '#7d8090', lineHeight: 18 }}>
+              Enter reg, JC & KM, then attach walkaround video and GPS-tagged car image.
             </Text>
           </View>
 
@@ -1217,28 +1217,28 @@ export default function CreateJobCardScreen() {
         </View>
 
         {showVehicleDetailsForm ? (
-          <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 14 }}>Vehicle details</Text>
+          <View style={{ marginHorizontal: 20, marginTop: 10, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 18 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 10 }}>Vehicle details</Text>
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>VIN / Chassis no.</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>VIN / Chassis no.</Text>
             <TextInput
               value={form.vin}
               onChangeText={(value) => setForm((prev) => ({ ...prev, vin: value }))}
               placeholder="17-char VIN"
               placeholderTextColor="#a7a99f"
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21', marginBottom: 14 }}
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
             />
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Model</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Model</Text>
             <ModelChipSelector
               value={form.model}
               options={modelChipOptions}
               onChange={(value) => setForm((prev) => ({ ...prev, model: value }))}
             />
 
-            <View style={{ flexDirection: 'row', marginTop: 14 }}>
+            <View style={{ flexDirection: 'row', marginTop: 10 }}>
               <View style={{ width: '48%', marginRight: '4%' }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Year</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Year</Text>
                 <NativeSelectField
                   value={form.year}
                   placeholder="Select year"
@@ -1247,7 +1247,7 @@ export default function CreateJobCardScreen() {
                 />
               </View>
               <View style={{ width: '48%' }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Colour</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Colour</Text>
                 <NativeSelectField
                   value={form.colour}
                   placeholder="Select colour"
@@ -1257,7 +1257,7 @@ export default function CreateJobCardScreen() {
               </View>
             </View>
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Paint type</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Paint type</Text>
             <NativeSelectField
               value={form.paintType}
               placeholder="Select paint type"
@@ -1265,30 +1265,30 @@ export default function CreateJobCardScreen() {
               onChange={(value) => setForm((prev) => ({ ...prev, paintType: value }))}
             />
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Date of Sale</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Date of Sale</Text>
             <DatePickerField
               value={form.dateOfSale}
               placeholder="YYYY-MM-DD"
               onChange={(value) => setForm((prev) => ({ ...prev, dateOfSale: value }))}
             />
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Car Ageing (auto-calc)</Text>
-            <View style={{ borderRadius: 16, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 14, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Icon name="clock" size={20} color="#2a4cd0" strokeWidth={2} />
-              <Text style={{ fontSize: 17, fontWeight: '700', color: '#2a4cd0' }}>{calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'}</Text>
-              <Text style={{ fontSize: 17, fontWeight: '600', color: '#4b4e59' }}>days car ageing</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Car Ageing (auto-calc)</Text>
+            <View style={{ borderRadius: 16, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 12, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Icon name="clock" size={18} color="#2a4cd0" strokeWidth={2} />
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#2a4cd0' }}>{calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'}</Text>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: '#4b4e59' }}>days</Text>
             </View>
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Owner name</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Owner name</Text>
             <TextInput
               value={form.ownerName}
               onChangeText={(value) => setForm((prev) => ({ ...prev, ownerName: value }))}
               placeholder="Full name"
               placeholderTextColor="#a7a99f"
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21' }}
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
             />
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginTop: 14, marginBottom: 8 }}>Owner phone</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Owner phone</Text>
             <TextInput
               value={form.ownerPhone}
               onChangeText={(value) => setForm((prev) => ({ ...prev, ownerPhone: normalizeOwnerPhoneInput(value) }))}
@@ -1296,23 +1296,23 @@ export default function CreateJobCardScreen() {
               placeholderTextColor="#a7a99f"
               keyboardType="phone-pad"
               maxLength={10}
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21' }}
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
             />
 
-            <View style={{ flexDirection: 'row', marginTop: 14 }}>
+            <View style={{ flexDirection: 'row' }}>
               <View style={{ width: '52%', marginRight: '4%' }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Dealer city</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Dealer city</Text>
                 <TextInput
                   value={form.dealerCity}
                   onChangeText={(value) => setForm((prev) => ({ ...prev, dealerCity: value }))}
                   placeholder="Jaipur"
                   placeholderTextColor="#a7a99f"
-                  style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, color: '#1a1b21' }}
+                  style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21' }}
                 />
               </View>
               <View style={{ width: '44%' }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>BP category</Text>
-                <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, padding: 3, backgroundColor: '#f1efea' }}>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>BP category</Text>
+                <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, padding: 2, backgroundColor: '#f1efea' }}>
                   {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).slice(0, 3).map((option) => {
                     const active = form.bpCityCategory === option
                     return (
@@ -1321,7 +1321,7 @@ export default function CreateJobCardScreen() {
                         style={{ flex: 1, borderRadius: 999, paddingVertical: 8, alignItems: 'center', backgroundColor: active ? '#ffffff' : 'transparent' }}
                         onPress={() => setForm((prev) => ({ ...prev, bpCityCategory: option }))}
                       >
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#1a1b21' : '#7d8090' }}>{option}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#1a1b21' : '#7d8090' }}>{option}</Text>
                       </TouchableOpacity>
                     )
                   })}
@@ -1329,7 +1329,7 @@ export default function CreateJobCardScreen() {
               </View>
             </View>
           </View>
-        ) : null}
+        ) : null}}
 
         {showVehicleDetailsForm ? (
           <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>

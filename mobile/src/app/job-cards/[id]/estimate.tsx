@@ -509,39 +509,39 @@ export default function JobCardEstimateScreen() {
               subtitle={`${completedEstimatePanels.size} of ${panels.length} panels estimate-ready`}
               variant="brand"
             >
-              <View className="mt-4 flex-row gap-3">
-                <View className="flex-1 rounded-xl bg-white bg-opacity-15 px-3 py-2.5">
-                  <Text className="text-[10px] font-semibold text-blue-100 uppercase tracking-wide">Parts</Text>
-                  <Text className="text-lg font-bold text-white mt-1">{formatCurrency(estimateTotals.parts)}</Text>
+              <View className="mt-3 flex-row gap-2">
+                <View className="flex-1 rounded-lg bg-white bg-opacity-15 px-2 py-2">
+                  <Text className="text-[9px] font-semibold text-blue-100 uppercase">Parts</Text>
+                  <Text className="text-base font-bold text-white mt-0.5">{formatCurrency(estimateTotals.parts)}</Text>
                 </View>
-                <View className="flex-1 rounded-xl bg-white bg-opacity-15 px-3 py-2.5">
-                  <Text className="text-[10px] font-semibold text-blue-100 uppercase tracking-wide">Paint + Labour</Text>
-                  <Text className="text-lg font-bold text-white mt-1">{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
+                <View className="flex-1 rounded-lg bg-white bg-opacity-15 px-2 py-2">
+                  <Text className="text-[9px] font-semibold text-blue-100 uppercase">Paint + Labour</Text>
+                  <Text className="text-base font-bold text-white mt-0.5">{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
                 </View>
               </View>
-              <Text className="text-xs mt-3 text-blue-50">
+              <Text className="text-[11px] mt-2 text-blue-50">
                 Rate Card Status:{' '}
                 {!resolvedModelName || !resolvedCityCategory ? (
                   <Text className="text-blue-100">Awaiting model/city category</Text>
                 ) : loadingModelRates ? (
                   <Text className="text-blue-100">Loading rates...</Text>
                 ) : activeModelRates.length > 0 ? (
-                  <Text className="text-emerald-100 font-semibold">{activeModelRates.length} panel rates active: {resolvedModelName} / {resolvedCityCategory}</Text>
+                  <Text className="text-emerald-100 font-semibold">{activeModelRates.length} panel rates active</Text>
                 ) : (
                   <Text className="text-amber-100">No active rates found</Text>
                 )}
               </Text>
             </HeroBlock>
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
-              <Text className="text-xs uppercase tracking-wide text-slate-500">Panel Estimate Readiness</Text>
+            <View className="bg-white border border-slate-200 rounded-xl p-3 mt-2">
+              <Text className="text-[11px] uppercase tracking-wide text-slate-500">Panel Readiness</Text>
               {panelReadiness.length === 0 ? (
                 <Text className="text-sm text-slate-600 mt-2">No panels selected in Damage stage yet.</Text>
               ) : (
                 panelReadiness.map((item) => (
-                  <View key={item.panelName} className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <View key={item.panelName} className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2">
                     <Text className="text-sm font-semibold text-slate-900">{item.panelName}</Text>
-                    <View className="flex-row mt-2 gap-2">
+                    <View className="flex-row mt-1.5 gap-1.5">
                       <Pill
                         label={item.hasPreRepair ? 'Pre-Repair OK' : 'Pre-Repair Missing'}
                         variant={item.hasPreRepair ? 'post' : 'warning'}
@@ -558,19 +558,19 @@ export default function JobCardEstimateScreen() {
               )}
 
               {missingEstimatePanels.length > 0 && (
-                <Text className="text-xs text-amber-700 mt-3">
-                  Pending estimate completion for: {missingEstimatePanels.map((x) => x.panelName).join(', ')}
+                <Text className="text-[11px] text-amber-700 mt-2">
+                  Pending: {missingEstimatePanels.map((x) => x.panelName).join(', ')}
                 </Text>
               )}
             </View>
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
-              <Text className="text-lg font-bold text-slate-900">Estimate Panels</Text>
-              <Text className="text-xs text-slate-500 mt-1">Panels are auto-synced from Damage selection (same as web flow).</Text>
+            <View className="bg-white border border-slate-200 rounded-xl p-3 mt-2">
+              <Text className="text-base font-bold text-slate-900">Estimate Panels</Text>
+              <Text className="text-[11px] text-slate-500 mt-0.5">Auto-synced from Damage selection.</Text>
 
               {rows.length === 0 && (
-                <View className="mt-3 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3">
-                  <Text className="text-sm text-amber-800">Select panels in Damage stage to generate estimate cards.</Text>
+                <View className="mt-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2">
+                  <Text className="text-[11px] text-amber-800">Select panels in Damage stage to generate estimate cards.</Text>
                 </View>
               )}
 
@@ -579,18 +579,18 @@ export default function JobCardEstimateScreen() {
                 const rowTotal = (Number(row.ndpValue || '0') || 0) + (Number(row.paintCharges || '0') || 0) + (Number(row.labourCharges || '0') || 0)
 
                 return (
-                  <View key={row.id} className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <View key={row.id} className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
                     <View className="flex-row items-center justify-between mb-2">
                       <View>
-                        <Text className="text-[11px] uppercase tracking-wide text-slate-500">Panel {index + 1}</Text>
-                        <Text className="text-base font-bold text-slate-900 mt-1">{row.panelName}</Text>
+                        <Text className="text-[10px] uppercase text-slate-500">Panel {index + 1}</Text>
+                        <Text className="text-sm font-bold text-slate-900 mt-0.5">{row.panelName}</Text>
                       </View>
-                      <Text className={`text-[11px] px-2 py-1 rounded ${isEstimateComplete(row) ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                      <Text className={`text-[10px] px-2 py-0.5 rounded ${isEstimateComplete(row) ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
                         {isEstimateComplete(row) ? 'Ready' : 'Pending'}
                       </Text>
                     </View>
 
-                    <Text className="text-xs text-slate-600 mb-1">Action *</Text>
+                    <Text className="text-[11px] text-slate-600 mb-1">Action *</Text>
                     <NativeSelectField
                       value={canonicalizeEstimateAction(row.action)}
                       placeholder="Select action"
@@ -598,7 +598,7 @@ export default function JobCardEstimateScreen() {
                       onChange={(value) => updateLocalRow(row.id, { action: canonicalizeEstimateAction(value) })}
                     />
 
-                    <Text className="text-xs text-slate-600 mt-3 mb-1">Defect *</Text>
+                    <Text className="text-[11px] text-slate-600 mt-2 mb-1">Defect *</Text>
                     <NativeSelectField
                       value={row.defect}
                       placeholder="Select defect"
@@ -606,70 +606,70 @@ export default function JobCardEstimateScreen() {
                       onChange={(value) => updateLocalRow(row.id, { defect: value })}
                     />
 
-                    <Text className="text-xs text-slate-600 mt-3 mb-1">Part Number {isReplaceAction(row.action) ? '*' : ''}</Text>
+                    <Text className="text-[11px] text-slate-600 mt-2 mb-1">Part Number {isReplaceAction(row.action) ? '*' : ''}</Text>
                     <TextInput
                       value={isRepaint ? '-' : row.partNumber}
                       editable={!isRepaint}
                       onChangeText={(value) => updateLocalRow(row.id, { partNumber: value })}
                       placeholder={isRepaint ? 'Not required for repaint' : 'Part number'}
-                      className={`border rounded-xl px-3 py-3 ${isRepaint ? 'border-slate-200 bg-slate-100 text-slate-500' : 'border-slate-300 bg-white text-slate-900'}`}
+                      className={`border rounded-lg px-2.5 py-2 text-sm ${isRepaint ? 'border-slate-200 bg-slate-100 text-slate-500' : 'border-slate-300 bg-white text-slate-900'}`}
                     />
 
-                    <View className="flex-row mt-3">
-                      <View className="flex-1 mr-2">
-                        <Text className="text-xs text-slate-600 mb-1">Qty *</Text>
+                    <View className="flex-row mt-2">
+                      <View className="flex-1 mr-1.5">
+                        <Text className="text-[11px] text-slate-600 mb-1">Qty *</Text>
                         <TextInput
                           value={row.qty}
                           onChangeText={(value) => updateLocalRow(row.id, { qty: value })}
                           keyboardType="number-pad"
-                          className="border border-slate-300 rounded-xl px-3 py-3 bg-white text-slate-900"
+                          className="border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 text-sm"
                         />
                       </View>
-                      <View className="flex-1 ml-2">
-                        <Text className="text-xs text-slate-600 mb-1">Parts Price (Rs)</Text>
+                      <View className="flex-1 ml-1.5">
+                        <Text className="text-[11px] text-slate-600 mb-1">Parts (Rs)</Text>
                         <TextInput
                           value={isRepaint ? '0' : row.ndpValue}
                           editable={!isRepaint}
                           onChangeText={(value) => updateLocalRow(row.id, { ndpValue: value })}
                           keyboardType="decimal-pad"
-                          className={`border rounded-xl px-3 py-3 ${isRepaint ? 'border-slate-200 bg-slate-100 text-slate-500' : 'border-slate-300 bg-white text-slate-900'}`}
+                          className={`border rounded-lg px-2.5 py-2 text-sm ${isRepaint ? 'border-slate-200 bg-slate-100 text-slate-500' : 'border-slate-300 bg-white text-slate-900'}`}
                         />
                       </View>
                     </View>
 
-                    <View className="flex-row mt-3">
-                      <View className="flex-1 mr-2">
-                        <Text className="text-xs text-slate-600 mb-1">Paint Price (Rs)</Text>
+                    <View className="flex-row mt-2">
+                      <View className="flex-1 mr-1.5">
+                        <Text className="text-[11px] text-slate-600 mb-1">Paint (Rs)</Text>
                         <TextInput
                           value={row.paintCharges}
                           onChangeText={(value) => updateLocalRow(row.id, { paintCharges: value })}
                           keyboardType="decimal-pad"
-                          className="border border-slate-300 rounded-xl px-3 py-3 bg-white text-slate-900"
+                          className="border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 text-sm"
                         />
                       </View>
-                      <View className="flex-1 ml-2">
-                        <Text className="text-xs text-slate-600 mb-1">Labour (Rs)</Text>
+                      <View className="flex-1 ml-1.5">
+                        <Text className="text-[11px] text-slate-600 mb-1">Labour (Rs)</Text>
                         <TextInput
                           value={row.labourCharges}
                           onChangeText={(value) => updateLocalRow(row.id, { labourCharges: value })}
                           keyboardType="decimal-pad"
-                          className="border border-slate-300 rounded-xl px-3 py-3 bg-white text-slate-900"
+                          className="border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 text-sm"
                         />
                       </View>
                     </View>
 
-                    <View className="mt-3 rounded-xl border border-blue-300 bg-blue-100 bg-opacity-40 px-3 py-3">
-                      <Text className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Row Total</Text>
-                      <Text className="text-xl font-bold text-blue-700 mt-1">{formatCurrency(rowTotal)}</Text>
+                    <View className="mt-2 rounded-lg border border-blue-300 bg-blue-100 bg-opacity-40 px-2.5 py-2">
+                      <Text className="text-[10px] font-semibold text-blue-700 uppercase">Row Total</Text>
+                      <Text className="text-lg font-bold text-blue-700 mt-0.5">{formatCurrency(rowTotal)}</Text>
                     </View>
 
                     <TouchableOpacity
-                      className={`mt-3 rounded-xl py-3 items-center ${savingRowId === row.id ? 'bg-blue-300' : 'bg-blue-600'}`}
+                      className={`mt-2 rounded-lg py-2.5 items-center ${savingRowId === row.id ? 'bg-blue-300' : 'bg-blue-600'}`}
                       onPress={() => saveRow(row)}
                       disabled={savingRowId === row.id}
                     >
-                      <Text className="text-white text-sm font-semibold">
-                        {savingRowId === row.id ? 'Saving...' : 'Save Panel Estimate'}
+                      <Text className="text-white text-[13px] font-semibold">
+                        {savingRowId === row.id ? 'Saving...' : 'Save Estimate'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -678,31 +678,31 @@ export default function JobCardEstimateScreen() {
             </View>
 
             {rows.length > 0 && (
-              <View className="bg-white border border-slate-200 rounded-2xl p-4 mt-3">
-                <Text className="text-xs uppercase tracking-wide text-slate-500">Estimate Summary</Text>
-                <View className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                  <Text className="text-sm text-slate-700">Parts Total: {formatCurrency(estimateTotals.parts)}</Text>
-                  <Text className="text-sm text-slate-700 mt-1">Paint Total: {formatCurrency(estimateTotals.paint)}</Text>
-                  <Text className="text-sm text-slate-700 mt-1">Labour Total: {formatCurrency(estimateTotals.labour)}</Text>
-                  <Text className="text-base font-bold text-slate-900 mt-2">Grand Total: {formatCurrency(grandTotal)}</Text>
+              <View className="bg-white border border-slate-200 rounded-xl p-3 mt-2">
+                <Text className="text-[11px] uppercase text-slate-500">Summary</Text>
+                <View className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <Text className="text-[13px] text-slate-700">Parts: {formatCurrency(estimateTotals.parts)}</Text>
+                  <Text className="text-[13px] text-slate-700 mt-0.5">Paint: {formatCurrency(estimateTotals.paint)}</Text>
+                  <Text className="text-[13px] text-slate-700 mt-0.5">Labour: {formatCurrency(estimateTotals.labour)}</Text>
+                  <Text className="text-sm font-bold text-slate-900 mt-1">Total: {formatCurrency(grandTotal)}</Text>
                 </View>
 
                 <TouchableOpacity
-                  className={`mt-3 rounded-xl py-3 items-center ${exporting ? 'bg-indigo-300' : 'bg-indigo-600'}`}
+                  className={`mt-2 rounded-lg py-2.5 items-center ${exporting ? 'bg-indigo-300' : 'bg-indigo-600'}`}
                   disabled={exporting}
                   onPress={() => void onExportEstimate()}
                 >
-                  <Text className="text-white font-semibold">{exporting ? 'Exporting...' : 'Export Estimate Excel'}</Text>
+                  <Text className="text-white text-[13px] font-semibold">{exporting ? 'Exporting...' : 'Export Estimate'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  className="mt-3 rounded-xl py-3 items-center bg-slate-800"
+                  className="mt-2 rounded-lg py-2.5 items-center bg-slate-800"
                   onPress={() => {
                     if (!jobCardId) return
                     router.push(`/job-cards/${jobCardId}/submit`)
                   }}
                 >
-                  <Text className="text-white font-semibold">Next: Submit Stage</Text>
+                  <Text className="text-white text-[13px] font-semibold">Next: Submit</Text>
                 </TouchableOpacity>
               </View>
             )}

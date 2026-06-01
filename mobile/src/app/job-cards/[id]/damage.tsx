@@ -37,15 +37,15 @@ type DamageStage = 'pre-repair' | 'under-repair' | 'post-repair'
 const DAMAGE_STAGES: Array<{ key: DamageStage; label: string }> = [
   {
     key: 'pre-repair',
-    label: 'Pre-Repair',
+    label: 'Pre',
   },
   {
     key: 'under-repair',
-    label: 'Under-Repair',
+    label: 'Under',
   },
   {
     key: 'post-repair',
-    label: 'Post-Repair',
+    label: 'Post',
   },
 ]
 
@@ -399,17 +399,17 @@ export default function DamageStageScreen() {
           </View>
         ) : (
           <>
-            <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 24, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 16 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 40, fontWeight: '700', color: '#1a1b21' }}>Affected panels</Text>
-                <View style={{ borderWidth: 1, borderColor: '#9fb9f2', backgroundColor: '#dbe7fb', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#2a4cd0' }}>{selectedPanels.length} selected</Text>
+            <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>Affected panels</Text>
+                <View style={{ borderWidth: 1, borderColor: '#9fb9f2', backgroundColor: '#dbe7fb', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, flexShrink: 0 }}>
+                  <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', color: '#2a4cd0' }}>{selectedPanels.length} selected</Text>
                 </View>
               </View>
 
-              <Text style={{ fontSize: 13, color: '#7d8090', marginTop: 6 }}>{panelSourceNote.replace('Model-wise rate card panels ', 'From the model rate card · ')}</Text>
+              <Text style={{ fontSize: 12, color: '#7d8090', marginTop: 4 }}>{panelSourceNote.replace('Model-wise rate card panels ', 'From the model rate card · ')}</Text>
 
-              <View style={{ marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {panelOptions.map((panelName) => {
                   const active = selectedPanels.includes(panelName)
                   const photoCount = panelPhotoCountByName.get(panelName.toLowerCase()) ?? 0
@@ -426,16 +426,16 @@ export default function DamageStageScreen() {
                         borderWidth: 1,
                         borderColor: active ? '#2a4cd0' : '#d8d2c6',
                         backgroundColor: active ? '#2a4cd0' : '#ffffff',
-                        paddingHorizontal: 14, // Adjusted padding
-                        paddingVertical: 10, // Adjusted padding
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
                         opacity: syncingPanels ? 0.65 : 1,
                       }}
                     >
-                      {active ? <Icon name="check" size={12} color="#ffffff" strokeWidth={2.5} /> : null}
-                      <Text style={{ marginLeft: active ? 6 : 0, fontSize: 16, fontWeight: '700', color: active ? '#ffffff' : '#4b4e59' }}>{panelName}</Text>
+                      {active ? <Icon name="check" size={11} color="#ffffff" strokeWidth={2.5} /> : null}
+                      <Text style={{ marginLeft: active ? 5 : 0, fontSize: 12, fontWeight: '600', color: active ? '#ffffff' : '#4b4e59' }}>{panelName}</Text>
                       {active && photoCount > 0 ? (
-                        <View style={{ marginLeft: 6, borderRadius: 8, backgroundColor: '#5b7de0', paddingHorizontal: 6, paddingVertical: 1 }}>
-                          <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '700' }}>{photoCount}</Text>
+                        <View style={{ marginLeft: 5, borderRadius: 6, backgroundColor: '#5b7de0', paddingHorizontal: 5, paddingVertical: 1 }}>
+                          <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '600' }}>{photoCount}</Text>
                         </View>
                       ) : null}
                     </TouchableOpacity>
@@ -444,18 +444,18 @@ export default function DamageStageScreen() {
               </View>
 
               {selectedPanels.length === 0 ? (
-                <View style={{ marginTop: 12, borderRadius: 11, backgroundColor: '#fbefdd', borderWidth: 1, borderColor: '#f1dcb8', paddingHorizontal: 12, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Icon name="alert-circle" size={15} color="#c9751b" strokeWidth={2} />
-                  <Text style={{ fontSize: 12, color: '#c9751b', fontWeight: '600', flex: 1 }}>Select at least one panel to unlock stage-wise photo upload.</Text>
+                <View style={{ marginTop: 10, borderRadius: 10, backgroundColor: '#fbefdd', borderWidth: 1, borderColor: '#f1dcb8', paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Icon name="alert-circle" size={14} color="#c9751b" strokeWidth={2} />
+                  <Text style={{ fontSize: 11, color: '#c9751b', fontWeight: '600', flex: 1 }}>Select at least one panel to unlock stage-wise photo upload.</Text>
                 </View>
               ) : null}
             </View>
 
             {selectedPanels.length > 0 && activeStage ? (
               <>
-                <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 24, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 16 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#7d8090', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12 }}>Repair Stage</Text>
-                  <View style={{ flexDirection: 'row', gap: 9 }}>
+                <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 12 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#7d8090', textTransform: 'uppercase', marginBottom: 10 }}>Repair Stage</Text>
+                  <View style={{ flexDirection: 'row', gap: 7 }}>
                     {DAMAGE_STAGES.map((stage) => {
                       const active = activeStage === stage.key
                       const value = stage.key === 'pre-repair' ? totals.pre : stage.key === 'under-repair' ? totals.under : totals.post
@@ -467,7 +467,7 @@ export default function DamageStageScreen() {
                           onPress={() => setActiveStage(stage.key)}
                           style={{
                             flex: 1,
-                            borderRadius: 13,
+                            borderRadius: 12,
                             borderWidth: 1.5,
                             borderColor: active ? accent : '#e7e3d9',
                             backgroundColor: active
@@ -477,13 +477,13 @@ export default function DamageStageScreen() {
                                   ? '#e9f0fd'
                                   : '#e4f4ec'
                               : '#ffffff',
-                            paddingHorizontal: 14,
-                            paddingVertical: 13,
+                            paddingHorizontal: 12,
+                            paddingVertical: 11,
                           }}
                         >
-                          <Text style={{ fontSize: 14, fontWeight: '800', color: accent, lineHeight: 18, textTransform: 'uppercase' }}>{stage.label}</Text>
-                          <Text style={{ fontSize: 40, fontWeight: '700', color: active ? accent : '#1a1b21', marginTop: 6 }}>{value}</Text>
-                          <Text style={{ fontSize: 13, color: '#7d8090', fontWeight: '600', marginTop: 1 }}>photos</Text>
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: accent, lineHeight: 16, textTransform: 'uppercase' }}>{stage.label}</Text>
+                          <Text style={{ fontSize: 28, fontWeight: '700', color: active ? accent : '#1a1b21', marginTop: 4 }}>{value}</Text>
+                          <Text style={{ fontSize: 12, color: '#7d8090', fontWeight: '600', marginTop: 0.5 }}>photos</Text>
                         </TouchableOpacity>
                       )
                     })}
@@ -491,37 +491,37 @@ export default function DamageStageScreen() {
                 </View>
 
                 <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 24, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 16 }}>
-                  <Text style={{ fontSize: 42, fontWeight: '700', color: '#1a1b21', marginBottom: 12 }}>{DAMAGE_STAGES.find((s) => s.key === activeStage)?.label} uploads</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', marginBottom: 12 }}>{DAMAGE_STAGES.find((s) => s.key === activeStage)?.label} uploads</Text>
 
-                  <View style={{ gap: 10 }}>
+                  <View style={{ gap: 8 }}>
                     {selectedPanelRows.map((panel) => {
                       const count = stageCountForPanel(panel, activeStage)
                       const done = count > 0
 
                       return (
                         <View key={panel.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, borderColor: '#e7e3d9', backgroundColor: '#fbfaf6', paddingHorizontal: 12, paddingVertical: 12 }}>
-                          <View style={{ width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: done ? '#e4f4ec' : '#f1efea' }}>
-                            <Icon name={done ? 'check' : 'camera'} size={19} color={done ? '#1c8f63' : '#8b90a0'} strokeWidth={done ? 2.5 : 2} />
+                          <View style={{ width: 38, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: done ? '#e4f4ec' : '#f1efea' }}>
+                            <Icon name={done ? 'check' : 'camera'} size={18} color={done ? '#1c8f63' : '#8b90a0'} strokeWidth={done ? 2.5 : 2} />
                           </View>
 
                           <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1b21' }}>{panel.panelName}</Text>
-                            <Text style={{ fontSize: 13, color: '#7d8090', marginTop: 1 }}>{count} photo{count === 1 ? '' : 's'}</Text>
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: '#1a1b21' }}>{panel.panelName}</Text>
+                            <Text style={{ fontSize: 12, color: '#7d8090', marginTop: 0.5 }}>{count} photo{count === 1 ? '' : 's'}</Text>
                           </View>
 
                           <TouchableOpacity
                             onPress={() => goToCapture(panel, activeStage)}
-                            style={{ borderRadius: 12, borderWidth: 1, borderColor: '#a8c2f2', backgroundColor: '#d5e1f8', paddingHorizontal: 14, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                            style={{ borderRadius: 10, borderWidth: 1, borderColor: '#a8c2f2', backgroundColor: '#d5e1f8', paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 5 }}
                           >
-                            <Icon name="plus" size={16} color="#2a4cd0" strokeWidth={2.5} />
-                            <Text style={{ fontSize: 17, fontWeight: '700', color: '#2a4cd0' }}>Add</Text>
+                            <Icon name="plus" size={15} color="#2a4cd0" strokeWidth={2.5} />
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#2a4cd0' }}>Add</Text>
                           </TouchableOpacity>
 
                           <TouchableOpacity
                             onPress={() => goToPanelPhotos(panel)}
-                            style={{ borderRadius: 12, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', paddingHorizontal: 14, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' }}
+                            style={{ borderRadius: 10, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', paddingHorizontal: 10, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' }}
                           >
-                            <Icon name="eye" size={16} color="#1a1b21" strokeWidth={2} />
+                            <Icon name="eye" size={15} color="#1a1b21" strokeWidth={2} />
                           </TouchableOpacity>
                         </View>
                       )
@@ -533,7 +533,7 @@ export default function DamageStageScreen() {
 
             <View style={{ marginHorizontal: 16, marginTop: 14 }}>
               <TouchableOpacity
-                style={{ borderRadius: 16, backgroundColor: selectedPanels.length === 0 || totals.pre === 0 ? '#a8b6f1' : '#2a4cd0', paddingVertical: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 9 }}
+                style={{ borderRadius: 12, backgroundColor: selectedPanels.length === 0 || totals.pre === 0 ? '#a8b6f1' : '#2a4cd0', paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 7 }}
                 disabled={selectedPanels.length === 0 || totals.pre === 0}
                 onPress={() => {
                   if (!jobCardId) return
@@ -552,8 +552,8 @@ export default function DamageStageScreen() {
                   router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })
                 }}
               >
-                <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: '700' }}>Next · Estimate stage</Text>
-                <Icon name="arrow-right" size={20} color="#ffffff" strokeWidth={2} />
+                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>Next · Estimate stage</Text>
+                <Icon name="arrow-right" size={18} color="#ffffff" strokeWidth={2} />
               </TouchableOpacity>
             </View>
           </>

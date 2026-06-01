@@ -4,14 +4,20 @@ import { Platform } from 'react-native'
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+const hasSupabaseEnv = !!supabaseUrl && !!supabaseAnonKey
+const FALLBACK_SUPABASE_URL = 'https://invalid.local'
+const FALLBACK_SUPABASE_ANON_KEY = 'invalid-anon-key'
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and Anon Key are required')
+if (!hasSupabaseEnv) {
+  console.warn('[supabase] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY')
 }
 
 const isStaticWebRender = Platform.OS === 'web' && typeof window === 'undefined'
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(
+  hasSupabaseEnv ? supabaseUrl : FALLBACK_SUPABASE_URL,
+  hasSupabaseEnv ? supabaseAnonKey : FALLBACK_SUPABASE_ANON_KEY,
+  {
   auth: isStaticWebRender
     ? {
         autoRefreshToken: false,
@@ -24,7 +30,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         persistSession: true,
         detectSessionInUrl: false,
       },
-})
+  }
+)
 
-export const hasSupabaseEnv = !!supabaseUrl && !!supabaseAnonKey
-export const SUPABASE_URL = supabaseUrl
+export { hasSupabaseEnv }
+export const SUPABASE_URL = hasSupabaseEnv ? supabaseUrl : FALLBACK_SUPABASE_URL
