@@ -299,8 +299,9 @@ export default function FloorInchargePage() {
                 : 'No rows are visible in your Floor Incharge scope right now.'}
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-[1600px] divide-y divide-gray-100 text-sm">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created At</th>
@@ -374,7 +375,8 @@ export default function FloorInchargePage() {
                   )
                 })}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         )}
       </div>
