@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 17:30 UTC  
+**Last Updated**: 2026-06-01 17:45 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -19,7 +19,7 @@
 - Dealer-context mismatch root cause identified: `service_reception_entries.dealer_code` defaults to `my_dealer_code()` at insert time.
 - Mitigation executed: 20260601170500_make_sa_visibility_dealer_agnostic.sql (dealer-agnostic SA visibility active).
 - SA update blocker root cause identified: trigger function `enforce_service_reception_sa_update()` still used legacy `sa_name` ownership check.
-- Mitigation prepared: 20260601173000_fix_sa_update_guard_to_employee_code.sql (run pending).
+- Mitigation executed: 20260601173000_fix_sa_update_guard_to_employee_code.sql (trigger guard now employee-code based).
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -472,7 +472,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.14 | Create fresh authoritative full dump post-cleanup | ✓ Done | User | 2026-06-01 | local_folder/backups/full_database.sql refreshed; authority locked post-malformed-user deletion | ☑ |
 | 1.15 | Enable multi-employee-code SA ownership policies | ✓ Done | User + Copilot | 2026-06-01 | Migration 20260601154000 executed in Supabase SQL Editor | ☑ |
 | 1.16 | Make SA visibility dealer-agnostic (employee-code driven) | ✓ Done | User + Copilot | 2026-06-01 | Migration 20260601170500 executed and verified via pg_policies/function checks | ☑ |
-| 1.17 | Fix SA update guard to employee-code ownership | 🟡 In Progress | User + Copilot | 2026-06-01 | Migration prepared: 20260601173000_fix_sa_update_guard_to_employee_code.sql; apply pending | ☐ |
+| 1.17 | Fix SA update guard to employee-code ownership | ✓ Done | User + Copilot | 2026-06-01 | Migration 20260601173000 executed; trigger function verified in DB | ☑ |
 
 ### 4.2 Data Backfill & Validation
 
