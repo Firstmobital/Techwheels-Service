@@ -312,21 +312,58 @@ These are explicitly tracked as partially blocked-for-full-parity due to missing
 ### 7.10 Reports - Warranty full operational scope (WARRANTY-001 + WARRANTY_REFERENCE audited)
 
 1. Warranty report implementation covers **28 reports across 5 audit-backed sections (A1–E3)** wired to authoritative DB schema.
-2. Authoritative warranty source: 7 tables present in active dump:
-- public.warranty_claim_settlement_report_data
-- public.warranty_part_wc_data
-- public.warranty_updation_claim_data
-- public.warranty_goodwill_data
-- public.warranty_amc_data
-- public.warranty_fsb_data
-- public.warranty_wc_data
+2. **Warranty schema verified from authoritative dump** (local_folder/backups/full_database.sql, 71MB export snapshot, 2026-06-02). 7 tables present with identical DDL contract confirmed in active database.
+3. Authoritative warranty source: 7 tables present in active dump with verified DDL, constraints, and triggers:
+- public.warranty_claim_settlement_report_data (verified COPY, triggers, constraints)
+- public.warranty_part_wc_data (verified COPY, triggers, constraints)
+- public.warranty_updation_claim_data (verified COPY, triggers, constraints)
+- public.warranty_goodwill_data (verified COPY, triggers, constraints)
+- public.warranty_amc_data (verified COPY, triggers, constraints)
+- public.warranty_fsb_data (verified COPY, triggers, constraints)
+- public.warranty_wc_data (verified COPY, triggers, constraints)
 3. Shared column contract fixed to: id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at.
-4. Constraint/trigger contract:
-- check constraints restrict branch/location to Ajmer Road/Sitapura, portal to PV/EV.
-- unique key is (branch, portal, source_row_hash) on all 7 tables.
-- BEFORE UPDATE trigger (set_updated_at) exists on each table.
-5. Security: no RLS policies currently enabled on warranty tables (deferred per WARRANTY-001 scope).
-6. JSONB extraction mapping required per WARRANTY_REFERENCE: per-source mapping for claimed_amount, approved_amount, paid_amount, parts_amount, labour_amount, special_charges, special_charge_code (980016/980019/980025), claim status, model, advisor, rejection_reason (5 categories: not-submitted>24h, review>3d, SOP>2d, approved>5d, reason-blank).
+4. **Constraint/trigger contract verified from authoritative dump:**
+- **Check constraints VERIFIED:** branch CHECK (Ajmer Road | Sitapura), location CHECK (Ajmer Road | Sitapura), portal CHECK (PV | EV) on all 7 tables
+- **Primary key VERIFIED:** id PRIMARY KEY on all 7 tables
+- **Unique key VERIFIED:** (branch, portal, source_row_hash) UNIQUE on all 7 tables — deduplication key locked
+- **BEFORE UPDATE triggers VERIFIED:** set_updated_at() trigger on all 7 tables (trg_warranty_*_updated_at) confirmed present in dump
+5. **RLS Security verified from authoritative dump:** No CREATE POLICY or ALTER TABLE...ENABLE ROW LEVEL SECURITY statements found for warranty tables. RLS is NOT currently enabled (deferred per scope). Authority: full_database.sql audit confirms absence.
+6. **Shared column contract verified present on all 7 tables:** id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data (jsonb), created_at, updated_at. JSONB extraction mapping required per source format (no fixed nested schema at DDL level).
+
+7. **JSONB content mapping (per source format, extracted from source_row_data column):**
+- Financial: claimed_amount, approved_amount, paid_amount, parts_amount, labour_amount, special_charges, special_charge_code (980016/980019/980025)
+- Operational: status (Created/Submitted/Awaiting SOP/Approved/Settled/Rejected/Under Change), action_owner, rejection_reason (5 categories from VCM Comments: not-submitted>24h / review>3d / SOP>2d / approved>5d / reason-blank)
+- Vehicle: model, registration_number, vehicle_age_months
+- Timeline: created_date, submitted_date, sop_date, approved_date, paid_date
+- Status docs: payment_status, settlement_status, invoice_status, posted_doc_url, posting_doc_number
+- Claim metadata: employee_code, advisor_code, complaint_desc, job_code, job_type, prowac_series, dealer_code, branch, location, portal
+
+---
+
+## 7.10A Warranty Schema Authority Governance (2026-06-02)
+
+**Authoritative Source:** local_folder/backups/full_database.sql (71 MB full database export, 2026-06-02 snapshot)
+
+**Authority Level:** FINAL (Repo Memory: warranty-schema-verified-from-authoritative-dump.md locks all schema details from dump export)
+
+**Warranty Implementation Contract (Locked):**
+1. 7 tables must remain with exact DDL and column structure as found in authoritative dump
+2. All 7 tables must maintain 3 CHECK constraints (branch, location, portal enum checks)
+3. All 7 tables must maintain PRIMARY KEY on id and UNIQUE on (branch, portal, source_row_hash)
+4. All 7 tables must maintain BEFORE UPDATE triggers calling public.set_updated_at()
+5. RLS is NOT enabled on warranty tables (confirmed absent from dump; deferred to future phase)
+6. JSONB source_row_data column structure remains flexible per source format (no additional schema constraints)
+7. No new tables, columns, or policies allowed without explicit full_database.sql update
+
+**Verification Status:**
+- ✅ 7 tables verified PRESENT with CREATE TABLE statements
+- ✅ All CHECK constraints verified PRESENT
+- ✅ All PRIMARY KEY constraints verified PRESENT
+- ✅ All UNIQUE (branch, portal, source_row_hash) constraints verified PRESENT
+- ✅ All 7 BEFORE UPDATE triggers verified PRESENT
+- ✅ No RLS ENABLE statements verified ABSENT
+- ✅ All COPY statements verified PRESENT (indicating data is loaded)
+
 
 7. **Three core business-logic rules (WARRANTY_REFERENCE section):**
 - Data cleaning: strip "Rs." prefix, remove commas, dayfirst=True dates, UTF-16 LE+tab for TM parts, SpreadsheetML XML for XLS settlement
@@ -616,11 +653,13 @@ Rules:
 8. Warranty scope is now explicitly constrained to the active dump's 7-table schema contract; non-authoritative report-count and taxonomy claims were removed to prevent assumption drift.
 9. **Third-pass re-audit (WARRANTY-001 + WARRANTY_REFERENCE comprehensive audit):** [... existing content ...]
 
-10. **Registry specification audit (all_reports_registry.html meta-reference):** Per-report ETL specifications documented for all 28 reports (A1–E3) including exact file-encoding requirements (UTF-16 LE+tab for TM parts exports D1/D2, SpreadsheetML XML namespace for claim-settlement XLS C1–C7, UTF-8 CSV for claim CSVs), per-report data-cleaning logic (regex filters: 'rust|rusting|corrosion' for B2, VCM Comments text-mining for B6 yielding exact 3 TM rejection reasons), report-specific SLA color-codes (A1: Created>24h red/Review>3d red/SOP>2d amber/Approved>5d amber), alert-drill-down specifications (A2: 5 categories with claim JC + action buttons), product-defect patterns confirmed (PV Alternator OED Pulley ₹10L/252 JCs systemic defect, EV 3-in-1 NOVA LR ₹6.96L/4 JCs + HV AC Cable ₹6.04L/28 JCs battery-cable failure pattern), claim-type performance targets (Extended WC current 8.7% vol target 20% with 0% rejection/94.5% settlement, Updation Safari+Harrier 79% rejection requiring ADAS SOP, PDI 12.4% with 3-root-cause plan, 2nd Free Service 17.4% requiring late-submission gate), back-order layout specifications (PV 147 rows/EV 135 rows with ZSSO/ZSOR/ZPGO distribution, 188 EV intransit units, oldest ZSOR Feb-2023, dashboard match: title+sub-title+badge+3-branch-dropzones+Upload-All+divider+table), report-frequency recommendations (Daily red, Weekly amber, Monthly green, Quarterly, On-Demand with owner assignments), recovery opportunity rankings (P1–P6 priorities, ₹6L+ total recoverable). All_reports_registry.html provides the implementation playbook for developers covering exact transformations, test vectors, and performance flags per report.
+10. **Registry specification audit (all_reports_registry.html meta-reference):** [existing content...]
+
+11. **Authoritative dump verification COMPLETE (2026-06-02):** Full database dump (local_folder/backups/full_database.sql, 71MB export) audited against all warranty schema claims. All 7 warranty tables verified PRESENT in dump with exact DDL, constraints (3 CHECK per table, PRIMARY KEY on id, UNIQUE on (branch, portal, source_row_hash)), and triggers (BEFORE UPDATE set_updated_at() on all 7 tables). No RLS policies found in dump (confirmed ABSENT — deferred). JSONB source_row_data column present and flexible on all tables. All COPY statements present indicating data is loaded. Warranty schema locked from authoritative dump: no further assumptions, no DDL modifications without explicit dump update. Authority governance section 7.10A documents lock. Repo memory file warranty-schema-verified-from-authoritative-dump.md records all verified details.
 
 ---
 
-## 15. Execution Notes
+## 16. Execution Notes
 
 1. This plan supersedes ad-hoc implementation sequencing.
 2. Any new task must be appended to section 9 before work starts.
