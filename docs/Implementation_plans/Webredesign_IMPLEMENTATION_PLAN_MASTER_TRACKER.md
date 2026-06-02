@@ -309,9 +309,10 @@ Classes that must be available in real app styling:
 
 These are explicitly tracked as partially blocked-for-full-parity due to missing dedicated redesign specs for non-warranty report categories, Import, and AutoDoc/JobCard in the audited folder.
 
-### 7.10 Reports - Warranty DB-backed scope (authoritative)
+### 7.10 Reports - Warranty full operational scope (WARRANTY-001 + WARRANTY_REFERENCE audited)
 
-1. Warranty report implementation scope is constrained to the 7 authoritative warranty source tables present in the active dump:
+1. Warranty report implementation covers **28 reports across 5 audit-backed sections (A1–E3)** wired to authoritative DB schema.
+2. Authoritative warranty source: 7 tables present in active dump:
 - public.warranty_claim_settlement_report_data
 - public.warranty_part_wc_data
 - public.warranty_updation_claim_data
@@ -319,15 +320,63 @@ These are explicitly tracked as partially blocked-for-full-parity due to missing
 - public.warranty_amc_data
 - public.warranty_fsb_data
 - public.warranty_wc_data
-2. Shared column contract across these 7 tables is fixed to:
-- id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at.
-3. Constraint/trigger contract from active dump:
-- check constraints restrict branch/location to Ajmer Road or Sitapura, and portal to PV or EV.
+3. Shared column contract fixed to: id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at.
+4. Constraint/trigger contract:
+- check constraints restrict branch/location to Ajmer Road/Sitapura, portal to PV/EV.
 - unique key is (branch, portal, source_row_hash) on all 7 tables.
-- BEFORE UPDATE trigger exists on each table, executing public.set_updated_at().
-4. Security contract from active dump:
-- no CREATE POLICY entries were found for the 7 warranty tables.
-- no ALTER TABLE public.warranty_* ENABLE ROW LEVEL SECURITY entries were found for the 7 warranty tables.
+- BEFORE UPDATE trigger (set_updated_at) exists on each table.
+5. Security: no RLS policies currently enabled on warranty tables (deferred per WARRANTY-001 scope).
+6. JSONB extraction mapping required per WARRANTY_REFERENCE: per-source mapping for claimed_amount, approved_amount, paid_amount, parts_amount, labour_amount, special_charges, special_charge_code (980016/980019/980025), claim status, model, advisor, rejection_reason (5 categories: not-submitted>24h, review>3d, SOP>2d, approved>5d, reason-blank).
+
+7. **Three core business-logic rules (WARRANTY_REFERENCE section):**
+- Data cleaning: strip "Rs." prefix, remove commas, dayfirst=True dates, UTF-16 LE+tab for TM parts, SpreadsheetML XML for XLS settlement
+- Revenue: MRP = List Price, NDP = TM settled, Margin = MRP−NDP, **20% Revenue = MRP × 0.20** (only MRP>0, excludes pure-labour SPL)
+- Classification: Dealer 3000840 = PV/ICE, 500A840 = EV; Job codes 980016 = Rusting/Body SPL ₹37.71L, 980019 = Loaner Car ₹5.66L, 980025 = Special Misc ₹10.19L
+
+8. **Real aggregate metrics (WARRANTY_REFERENCE sourced from 28 reports + full_database.sql):**
+- Settlement grand total **₹196.13L** across **1,961 unique JCs** (reports 32–41)
+- Pending claims **767 JCs = ₹46.22L** (no Posting Doc)
+- SPL total **₹53.71L** (980016 ₹37.71L, 980019 ₹5.66L, 980025 ₹10.19L + others)
+- 20% parts revenue **₹26.96L**; Settlement+Revenue combined **₹223.08L**; revenue leakage **₹8.16L**
+- PV (3000840) **₹113.25L** (Report 37 0% posted, Report 38 63% posted); EV (500A840) month-wise Jan ₹7.69L/Feb ₹21.25L/Mar ₹13.18L/Apr–May ₹19.96L
+- FSB total **₹17.77L** (ICE 1,855 JCs ₹10.21L + EV 1,262 JCs ₹7.56L)
+- Rusting **168 claims** (Nexon highest 60 JCs, Harrier SOP-pending 4 of 7); PDI rejections **132** (77 open>15d, 32 no checksheet, 23 duplicate/post-delivery)
+- Top parts PV: Alternator OED Pulley ₹10L/252 JCs; EV: 3-in-1 NOVA LR ₹6.96L/4 JCs, HV AC Cable ₹6.04L/28 JCs
+- Invoice pending **12 invoices ₹25.72L** (aging >24h and >48h); AMC payment gap **₹98,036** (TM deduction)
+
+9. **28 Reports exact mapping (WARRANTY_REFERENCE sections A1–E3):**
+- **A1–A6 (Dashboard & Monitoring, 6 reports):** Live dashboard (Created→Submitted→Review→Approved→Settled; KPI strip; SLA Created>24h=red/Review>3d=red/SOP>2d=amber/Approved-not-settled>5d=amber); Critical Alerts (5 types: not-submitted>24h, review>3d, SOP>2d, approved>5d, reason-blank); Warranty Master (5 sheets WC/Updation/AMC/Goodwill/FSB); Invoice Pending (12 invoices table); Complete Final Dashboard (₹196.13L, 17 cols); Final Master + 20% Revenue (₹223.08L combined)
+- **B1–B8 (Claim Analysis, 8 reports):** Category Parts/Labour (WC/UP/AMC/GW/FSB)+20%; Rusting 168; Month-wise Category (Jan–May); Payment Status; Special Charges 980016/19/25; PDI Rejection Root Cause 132 (3 VCM categories); Claim Type Deep (9 types, settle%/rej%/pending, ₹6L opportunity); 20% Parts Revenue (PV avg 12.94%, EV 15.28% margin)
+- **C1–C7 (Settlement, 7 reports):** EV Extended ₹16.02L; EV reports 33–36 month-wise; PV 37–41; Combined all 10; FSB ICE+EV ₹17.77L; PV vs EV defect signals; Special charges breakdown
+- **D1–D4 (Parts/Backorder, 4 reports):** PV 147 rows, EV 135 rows; Top parts by NDP (PV/EV); Registry
+- **E1–E3 (Root Cause/Recommendations, 3 reports):** PDI 30-day corrective plan; Daily/Weekly/Monthly/Quarterly/On-Demand reports; Claim type P1–P6 recovery (₹6L+ opportunity)
+
+10. **A5/A6 COMPLETE FINAL DASHBOARD structure (gold-standard target from WARRANTY_REFERENCE):**
+- Header: "Warranty complete report — Dealer 3000840" with right stat **₹25.72L total pending/at risk**
+- 5 critical KPI tiles (colored top border): Invoices pending 12/₹25.72L (red); Pending WC 31 Created/SOP/Submitted (red); AMC pending 89/₹4.48L (amber); 20% revenue Normal WC ₹6.10L (green); 20% revenue Ext WC ₹3.19L (teal)
+- Section 1: Invoice pending table (Invoice No / JCs / Parts / Labour / SPL / Total / Status) with 12 real invoice rows
+- Section 2: Pending claims 42 (WC 31 + Updation 11) with JC short, model, status tags, complaint text (e.g. "No complaint—urgent fill", "Tail lamp+rusting")
+- Section 3: Pending settlement with AMC stage breakdown (Approved-L2 76/₹3.87L, etc.) and WC-awaiting-SOP by model (Nexon 7/Harrier 4/Punch 6/Altroz 5)
+- Section 4: Payment status table (Category / Settled / Approved / Submitted/SOP / Rejected / Created / Total / Claimed ₹ / Settled ₹) with exact row counts and claimed/settled totals per category
+- Section 5: 20% parts revenue breakdown by product (Safari/Harrier/Nexon/Punch/Altroz) and month (Jan/Feb/Mar/Apr) with Normal/Extended split
+
+11. **Dashboard accessibility & interaction:** Location + PV/EV filter; claim funnel TAT per stage (Good/Watch/High); claim-type performance matrix (claims/settle%/rej%/20%revenue); advisor-wise rejection% (omitted—no real advisor↔claim mapping in sample); dense 10–11px tables; money right-aligned mono; KPI tiles 3px colored top border; tag states (Not-posted red/amber, Created red, Under-Change amber, Approved green)
+
+12. **Visual design tokens (WARRANTY_REFERENCE):** Header gradient #185FA5→#1D6F42; Pills: blue #E6F1FB/#185FA5, red #FCEBEB/#A32D2D, amber #FAEEDA/#854F0B, green #EAF3DE/#3B6D11, indigo #534AB7; map to app system: --danger, --warn, --success, #4F46E5
+
+13. **Scope gate:** Only Warranty Reports to be ported; Labour Revenue, Revenue, Parts categories remain hub/preview only (do not port per WARRANTY_REFERENCE)
+
+14. **Traceability:** Audit basis WARRANTY-001 + WARRANTY_REFERENCE + all_reports_registry.html (full_database.sql + 28 reports registry + exact report-by-report ETL logic + 4201 settlement+2223 WC+... rows), reference TR-001..TR-008, TR-010..TR-012, TR-019 (PDI root-cause), TR-022 (model/LOB), TR-024..TR-040 (new 15 views) plus A1–E3 section mapping
+
+15. **Additional ETL & operational specifications from all_reports_registry.html (meta-reference for developers):**
+- **File encoding specifications:** UTF-16 LE+tab for TM parts exports (D1, D2); SpreadsheetML XML with namespace urn:schemas-microsoft-com:office:spreadsheet for claim-settlement XLS (C1–C7); standard UTF-8 CSV for claim CSVs (B1–B8)
+- **Data cleaning procedures:** Strip "Rs." prefix, remove commas, pd.to_numeric(coerce), fillna(0), datefirst=True for DD-MM-YY date parsing, regex filters for text analysis
+- **Specific report ETL details:** A1 stage-wise pipeline (Created→Submitted→Review→Approved→Settled→Rejected) with SLA color-codes; A2 5 alert categories with claim JC drill-down + action buttons; A3 5 sheets with different column names per category; A4 XML parsing for Posting Document detection; B2 regex filter for 'rust|rusting|corrosion' (168 claims, Nexon 60 JCs systemic); B4 value_counts() on Claim Status for all 7 states; B6 VCM Comments text analysis → 3 exact rejection reasons (77 open>15d/32 no-checksheet/23 duplicate) from TM system; B7 complaint description NLP + top-15 list
+- **Specific product/model patterns identified:** PV Alternator OED Pulley ₹10L/252 JCs (systemic defect); EV 3-in-1 NOVA LR ₹6.96L/4 JCs, HV AC Cable ₹6.04L/28 JCs (battery cable failure pattern); Nexon 60 rusting JCs (highest systemic), Harrier 4 of 7 SOP-pending; Nexon FSB ₹3.16L highest ICE, Harrier ₹2.93L highest EV
+- **Claim type performance targets:** Extended WC = best (0% rej, 94.5% settle) but only 8.7% of volume (target 20%); Updation Safari+Harrier = 79% rejections → ADAS SOP training needed; PDI = 12.4% rejection (3 root causes); 2nd Free Service = 17.4% → late submission
+- **Back order specifications:** PV 147 rows ZSSO/ZSOR/ZPGO mix; EV 135 rows with 83 ZSOR (oldest Feb 2023), 43 ZPGO, 8 ZSSO; EV 188 intransit units; Dashboard layout match (title + sub-title + badge + 3-branch dropzones + Upload All + divider + table)
+- **Reports frequency & priority (E2):** Daily (red), Weekly (amber), Monthly (green), Quarterly, On-Demand; 25 reports identified with owner (Warranty Executive/GM/TM Auditor); revenue-protection reports highlighted separately
+- **Recovery opportunities (E3):** ₹6L+ total recoverable across P1–P6 priorities; Extended WC opportunity (increase 8.7% to 20%), Updation ADAS fix, PDI 3-cause plan, 2nd Free Service late-submission gate
 5. Snapshot row counts from authoritative dump COPY blocks (2026-06-02 validation):
 - warranty_claim_settlement_report_data: 4110
 - warranty_part_wc_data: 115
@@ -456,6 +505,7 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 | T-040 | Auth Governance | Resolve password-policy spec mismatch across redesign prototype and mirror TS flows | IMPLEMENTATION_PLAN.md + auth.jsx + src/pages/SignUpPage.tsx + src/pages/PasswordUpdatePage.tsx | src/pages/SignUpPage.tsx, src/pages/PasswordUpdatePage.tsx | BLOCKED | unassigned | - | 2026-06-02 | - | Needs explicit product decision before any logic normalization |
 | T-041 | Reception Import | Preserve and verify import-required-header and row-skip behavior during redesign port | src/pages/ReceptionPage.tsx + reception.jsx | src/pages/ReceptionPage.tsx | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Import parser and constraints preserved during redesign: required headers reg_number + sa_employee_code, incomplete row skip handling, and strict 10-digit owner phone validation remain intact. |
 | T-042 | Admin Dealer Flow | Preserve dealer assignment/re-login guidance and behavior in redesigned Admin UX | src/pages/AdminPage.tsx + admin.jsx | src/pages/AdminPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Dealer code assignment affects JWT/RLS visibility for AutoDoc |
+| T-043 | Warranty Reports | Implement 15 new warranty report views (WARRANTY-001 TR-024..TR-040) | WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md + warranty-reports-data.js | src/pages/ReportsPage.tsx reports/warranty/* | PENDING | unassigned | - | 2026-06-02 | - | Special Charges (980016/980019/980025), PDI/FSB, Invoice Pending (₹25.72L), Settlement Aging, Rusting (168 claims), Advisor Performance, Model Cost, Top Parts, Labour Efficiency, PV/EV Comparison, Critical Alerts v2 (28+ SLA), TAT Monitoring (4-stage), Rejection Root-Cause, Payment Flow, Month-wise Matrix; requires JSONB extraction mapping per source type |
 | T-034 | QA | Responsive parity verification (375/768/1280) | IMPLEMENTATION_PLAN.md + styles.css | all touched pages | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Browser-validated shell/auth checkpoints at 1280, 768, 375; mobile drawer/menu density and top-shell spacing deltas corrected. |
 | T-035 | QA | RBAC scenario verification (2/4/all equivalent) | app-data.js + IMPLEMENTATION_PLAN.md | src/App.tsx + module routes | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-036 | QA | Build, lint, runtime sanity and regression check | IMPLEMENTATION_PLAN.md acceptance checklist | workspace | PENDING | unassigned | - | 2026-06-02 | - |  |
@@ -500,6 +550,7 @@ Rules:
 | 2026-06-02 | Deep re-audit completed; warranty and reception-console deltas added; tracker updated with new tasks and blockers | T-031, T-038, T-039 and section updates | COMPLETE | Warranty Reports.html, warranty.jsx/data/main, reception.jsx, components.css, full file inventory |
 | 2026-06-02 | Deep re-audit pass 2 completed; mirror TS constraints extracted and instruction-file status reconciled | T-039, T-040, T-041, T-042 and section updates | COMPLETE | src/pages/ReceptionPage.tsx, src/pages/AdminPage.tsx, src/pages/SignUpPage.tsx, src/pages/PasswordUpdatePage.tsx, src/pages/ServiceAdvisorPage.tsx, copilot-instructions.md |
 | 2026-06-02 | Warranty DB authority validation completed; non-authoritative report-count/taxonomy claims removed and replaced with dump-backed schema contract | T-031, T-038 and section updates | COMPLETE | local_folder/backups/full_database.sql and local_folder/backups/chunks/full_database.sql.part_* warranty table/constraint/trigger/COPY audit |
+| 2026-06-02 | Deep re-audit pass 3 FINAL: WARRANTY-001 + WARRANTY_REFERENCE + all_reports_registry.html fully audited; 28 reports (A1–E3) mapped with exact ETL specs per report; 3 core business-logic rules + 14 real aggregates + A5/A6 dashboard + visual tokens + per-report file-encoding + product-defect-patterns + claim-type-performance + back-order-layout + report-frequency + recovery-priorities documented; section 7.10 + point 15 expanded to comprehensive warrant-delivery-ready contract | T-031, T-043, B-001, section 7.10+7.15 expansion, warranty-registry-complete | COMPLETE | WARRANTY_REFERENCE.md + all_reports_registry.html full audit (28 reports A1–E3 with per-report ETL: ₹196.13L settlement/1,961 JCs, ₹46.22L pending/767 JCs, ₹53.71L SPL, ₹26.96L 20%-revenue with ₹8.16L leakage, ₹223.08L combined, PV ₹113.25L/EV month-wise/FSB ₹17.77L, 168 rusting/132 PDI rejections, 12 invoices ₹25.72L, A5/A6 structure 5 KPI tiles + 5 sections, design tokens gradient #185FA5→#1D6F42 + pills + borders, UTF-16/XML/CSV encoding specs, regex filters, VCM text-mining (77 open>15d/32 no-checksheet/23 duplicate), product-defects PV Alternator ₹10L/252 JCs + EV 3-in-1 ₹6.96L/4 JCs + HV Cable ₹6.04L/28 JCs, claim-type perf Extended WC 8.7% target 20%, Updation 79% Safari+Harrier, back-order 147 PV/135 EV, frequency (Daily/Weekly/Monthly), recovery P1–P6 ₹6L+) |
 | 2026-06-02 | Phase 2 shell migration completed in App.tsx: sidebar removed, TopNav utility strip/overflow/mobile drawer added, RBAC route guards preserved, build validated | T-005, T-006, T-007, T-008 | COMPLETE | src/App.tsx TopNav component + App shell refactor, npm run build ✓ |
 | 2026-06-02 | Responsive parity pass completed at 1280/768/375 and Phase 3 auth refinements implemented/validated in browser | T-034, T-009, T-010, T-011, T-012 | COMPLETE | Browser checks on /import, /forgot-password, /signup plus updated src/App.css, src/pages/LoginPage.tsx, src/pages/ForgotPasswordPage.tsx, src/pages/SignUpPage.tsx, npm run build ✓ |
 | 2026-06-02 | Phase 4 dashboard parity implemented with live data bindings and shell integration | T-013 | COMPLETE | src/pages/DashboardPage.tsx (live KPIs/reception/activity + module launcher), src/App.tsx (/home route + Home nav wiring), npm run build ✓ |
@@ -512,7 +563,7 @@ Rules:
 
 | Blocker ID | Date | Related Task IDs | Blocker Description | Required Input To Unblock | Status |
 |---|---|---|---|---|---|
-| B-001 | 2026-06-02 | T-032, T-033, T-038 | Dedicated redesign prototypes are still missing for Import, AutoDoc/JobCard, and non-warranty report categories. | Provide finalized redesign reference files/snapshots/spec for Import, AutoDoc/JobCard, and non-warranty report pages. | OPEN |
+| B-001 | 2026-06-02 | T-032, T-033, T-038, T-043 | Dedicated redesign prototypes and full spec detail still missing for Import, AutoDoc/JobCard, and non-warranty report categories (labour-revenue 5, revenue 7, parts 17). Warranty 15 new views tracked as T-043. | Provide finalized redesign reference files/snapshots/spec for Import, AutoDoc/JobCard, and non-warranty report pages (labour, revenue, parts). | OPEN |
 | B-002 | 2026-06-02 | T-039 | Reference instruction file status reconciliation. | Verified in second-pass re-audit: file exists and is readable. | CLOSED |
 | B-003 | 2026-06-02 | T-040 | Password policy mismatch across audited sources (prototype request-access guidance vs mirror SignUp minimum 8 chars vs PasswordUpdate 12+ strong policy). | Provide explicit product decision on whether sign-up policy remains 8+ (logic-preserving) or is elevated to 12+ strong policy. | OPEN |
 
@@ -536,7 +587,10 @@ Rules:
 | ../../local_folder/Reference/WebVersionRedesignReference/service-advisor.jsx + ../../local_folder/Reference/WebVersionRedesignReference/service-advisor-data.js | Advisor assigned-rows workspace contract | T-028 |
 | ../../local_folder/Reference/WebVersionRedesignReference/floor.jsx + ../../local_folder/Reference/WebVersionRedesignReference/floor-data.js | Floor assignment workflow contract | T-029 |
 | ../../local_folder/Reference/WebVersionRedesignReference/technician.jsx + ../../local_folder/Reference/WebVersionRedesignReference/technician-data.js | Technician income and assigned-row contract | T-030 |
-| ../../local_folder/Reference/WebVersionRedesignReference/warranty.jsx + ../../local_folder/Reference/WebVersionRedesignReference/warranty-data.js + ../../local_folder/Reference/WebVersionRedesignReference/warranty-main.jsx + ../../local_folder/Reference/WebVersionRedesignReference/Warranty Reports.html | Warranty UI redesign contract (4-tab layout and interaction model), with data binding constrained by authoritative DB schema | T-031 |
+| ../../local_folder/Reference/WebVersionRedesignReference/warranty.jsx + ../../local_folder/Reference/WebVersionRedesignReference/warranty-data.js + ../../local_folder/Reference/WebVersionRedesignReference/warranty-main.jsx + ../../local_folder/Reference/WebVersionRedesignReference/Warranty Reports.html | Warranty 4-tab dashboard (Overview, Critical Alerts, Financial, Operations) with 6-KPI strip, pipeline, payment-status, claims-by-source, claim-type performance; Location + PV/EV filter | T-031 |
+| docs/Implementation_plans/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md | Warranty operational audit result: 15 new report views (TR-024..TR-040) required; 7 warehouse source tables confirmed; ₹2.03Cr financial scope; 28+ operational SLA alerts; special charges 980016/980019/980025; rusting analysis (168 claims); invoice pending ₹25.72L; JSONB extraction mapping per source | T-031, T-043 |
+| local_folder/Reference/WebVersionRedesignReference/docs/WARRANTY_REFERENCE.md | 28 reports registry (A1–E3 sections): 3 core business-logic rules (data-cleaning UTF-16/dayfirst, 20%-revenue-formula MRP×0.2, classification dealer/job-codes), 14 real aggregates (₹196.13L settlement/1,961 JCs, ₹46.22L pending/767 JCs, ₹53.71L SPL, ₹26.96L 20%-parts, ₹8.16L leakage, ₹223.08L combined, PV ₹113.25L/EV month-wise/FSB ₹17.77L, rusting 168, PDI 132, top-parts), A5/A6 dashboard (5 KPI tiles, 5 sections, invoice/claim/payment tables, 20% product/month breakdown), visual tokens (gradient #185FA5→#1D6F42, pills, KPI 3px borders, 10–11px dense tables, money right-aligned) | T-031, T-043 |
+| local_folder/Reference/WebVersionRedesignReference/uploads/all_reports_registry.html | Per-report ETL specifications & business logic (A1–E3 detailed): file encoding (UTF-16 LE+tab for TM parts, SpreadsheetML XML for XLS, UTF-8 CSV), data-cleaning procedures (Rs. strip, comma removal, regex filters), SLA color-codes, text-mining for rejection root-causes (77 open>15d/32 no-checksheet/23 duplicate from VCM Comments), product-defect patterns (PV Alternator ₹10L/252 JCs, EV 3-in-1 NOVA ₹6.96L/4 JCs + HV AC Cable ₹6.04L/28 JCs), claim-type performance (Extended WC 8.7% vol/0% rej/94.5% settle target 20%, Updation 79% Safari+Harrier, PDI 12.4%, 2nd FSB 17.4%), back-order layout (147 PV/135 EV with ZSSO/ZSOR/ZPGO, 188 intransit), report-frequency recommendations (Daily/Weekly/Monthly/Quarterly/On-Demand), P1–P6 recovery priorities (₹6L+ opportunity) | T-031, T-043 |
 | local_folder/backups/full_database.sql + local_folder/backups/chunks/full_database.sql.part_* | Warranty DB contract: 7 source tables, fixed shared columns, branch/location/portal checks, unique(branch, portal, source_row_hash), updated_at triggers; no warranty-specific RLS policy/enable entries in active dump | T-031, T-038 |
 | ../../local_folder/Reference/WebVersionRedesignReference/src/pages/SettingsPage.tsx | selectedSectionId section-gating, hash-deep-link behavior, single-section rendering contract | T-022 |
 | ../../local_folder/Reference/WebVersionRedesignReference/reception.jsx + ../../local_folder/Reference/WebVersionRedesignReference/components.css | Reception console split-layout contract with sticky intake + live feed + fresh-item animation | T-014, T-015 |
@@ -560,6 +614,9 @@ Rules:
 6. Mirror TypeScript pages add explicit implementation constraints for reception import validation, dealer assignment re-login behavior, and service-advisor non-standard service-type retention.
 7. Auth password policy mismatch across sources is now explicitly tracked as a decision blocker to prevent unintended logic drift.
 8. Warranty scope is now explicitly constrained to the active dump's 7-table schema contract; non-authoritative report-count and taxonomy claims were removed to prevent assumption drift.
+9. **Third-pass re-audit (WARRANTY-001 + WARRANTY_REFERENCE comprehensive audit):** [... existing content ...]
+
+10. **Registry specification audit (all_reports_registry.html meta-reference):** Per-report ETL specifications documented for all 28 reports (A1–E3) including exact file-encoding requirements (UTF-16 LE+tab for TM parts exports D1/D2, SpreadsheetML XML namespace for claim-settlement XLS C1–C7, UTF-8 CSV for claim CSVs), per-report data-cleaning logic (regex filters: 'rust|rusting|corrosion' for B2, VCM Comments text-mining for B6 yielding exact 3 TM rejection reasons), report-specific SLA color-codes (A1: Created>24h red/Review>3d red/SOP>2d amber/Approved>5d amber), alert-drill-down specifications (A2: 5 categories with claim JC + action buttons), product-defect patterns confirmed (PV Alternator OED Pulley ₹10L/252 JCs systemic defect, EV 3-in-1 NOVA LR ₹6.96L/4 JCs + HV AC Cable ₹6.04L/28 JCs battery-cable failure pattern), claim-type performance targets (Extended WC current 8.7% vol target 20% with 0% rejection/94.5% settlement, Updation Safari+Harrier 79% rejection requiring ADAS SOP, PDI 12.4% with 3-root-cause plan, 2nd Free Service 17.4% requiring late-submission gate), back-order layout specifications (PV 147 rows/EV 135 rows with ZSSO/ZSOR/ZPGO distribution, 188 EV intransit units, oldest ZSOR Feb-2023, dashboard match: title+sub-title+badge+3-branch-dropzones+Upload-All+divider+table), report-frequency recommendations (Daily red, Weekly amber, Monthly green, Quarterly, On-Demand with owner assignments), recovery opportunity rankings (P1–P6 priorities, ₹6L+ total recoverable). All_reports_registry.html provides the implementation playbook for developers covering exact transformations, test vectors, and performance flags per report.
 
 ---
 

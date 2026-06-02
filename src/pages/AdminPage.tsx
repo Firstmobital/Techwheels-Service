@@ -1,5 +1,5 @@
 // src/pages/AdminPage.tsx
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import {
@@ -124,6 +124,12 @@ export default function AdminPage() {
   const [modules, setModules] = useState<Module[]>([])
   const [search, setSearch]   = useState('')
   const [showInactive, setShowInactive] = useState(false)
+  const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all')
+  const [permissionsSearch, setPermissionsSearch] = useState('')
+  const [moduleSearch, setModuleSearch] = useState('')
+  const [showInactiveModules, setShowInactiveModules] = useState(true)
+  const [mappingSearch, setMappingSearch] = useState('')
+  const [showInactiveMappings, setShowInactiveMappings] = useState(true)
   const [loading, setLoading] = useState(true)
   const [toast, setToast]     = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [supportsDealerColumns, setSupportsDealerColumns] = useState(true)
@@ -512,6 +518,15 @@ export default function AdminPage() {
     }))
   }
 
+  function quickSetAll(mode: 'full' | 'none') {
+    const full = mode === 'full'
+    const next: Record<number, Permission> = { ...pendingPerms }
+    modules.filter(m => m.is_active).forEach((m) => {
+      next[m.id] = { module_id: m.id, can_view: full, can_modify: full, can_delete: full }
+    })
+    setPendingPerms(next)
+  }
+
   async function savePerms() {
     if (!selectedUserId) return
     setSavingPerms(true)
@@ -538,13 +553,46 @@ export default function AdminPage() {
     showToastMsg('Module updated')
   }
 
-  const filteredUsers = users.filter(u =>
-    (showInactive || u.is_active) && (
-      (u.full_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      (u.dealer_code ?? '').toLowerCase().includes(search.toLowerCase())
+  const userLookup = useMemo(() => new Map(users.map(u => [u.id, u] as const)), [users])
+
+  const filteredUsers = users.filter(u => {
+    const term = search.toLowerCase()
+    return (showInactive || u.is_active) &&
+      (roleFilter === 'all' || u.role === roleFilter) &&
+      (
+        (u.full_name ?? '').toLowerCase().includes(term) ||
+        u.email.toLowerCase().includes(term) ||
+        (u.dealer_code ?? '').toLowerCase().includes(term)
+      )
+  })
+
+  const filteredPermissionModules = modules.filter(m =>
+    m.is_active && (
+      m.label.toLowerCase().includes(permissionsSearch.toLowerCase()) ||
+      m.name.toLowerCase().includes(permissionsSearch.toLowerCase()) ||
+      (m.route ?? '').toLowerCase().includes(permissionsSearch.toLowerCase())
     )
   )
+
+  const filteredAdminModules = modules.filter(m =>
+    (showInactiveModules || m.is_active) && (
+      m.label.toLowerCase().includes(moduleSearch.toLowerCase()) ||
+      m.name.toLowerCase().includes(moduleSearch.toLowerCase()) ||
+      (m.route ?? '').toLowerCase().includes(moduleSearch.toLowerCase()) ||
+      (m.description ?? '').toLowerCase().includes(moduleSearch.toLowerCase())
+    )
+  )
+
+  const filteredMappings = mappings.filter((m) => {
+    const linkedUser = userLookup.get(m.user_id)
+    const term = mappingSearch.toLowerCase()
+    return (showInactiveMappings || m.is_active) && (
+      (linkedUser?.full_name ?? '').toLowerCase().includes(term) ||
+      (linkedUser?.email ?? '').toLowerCase().includes(term) ||
+      m.employee_code.toLowerCase().includes(term) ||
+      m.dealer_code.toLowerCase().includes(term)
+    )
+  })
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
@@ -608,6 +656,18 @@ export default function AdminPage() {
                 onChange={e => setSearch(e.target.value)}
               />
             </span>
+            <select
+              className="sel"
+              style={{ maxWidth: 160 }}
+              value={roleFilter}
+              onChange={e => setRoleFilter(e.target.value as 'all' | UserRole)}
+            >
+              <option value="all">All roles</option>
+              <option value="admin">Admin</option>
+              <option value="manager">Manager</option>
+              <option value="staff">Staff</option>
+              <option value="viewer">Viewer</option>
+            </select>
             <label className="switch">
               <input
                 type="checkbox"
@@ -617,6 +677,9 @@ export default function AdminPage() {
               <span className="track" />
               Show inactive
             </label>
+            <span className="badge badge--muted">
+              Showing {filteredUsers.length} of {users.length}
+            </span>
             <button
               className="btn btn--primary"
               style={{ marginLeft: 'auto' }}
@@ -730,10 +793,26 @@ export default function AdminPage() {
                 <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
               ))}
             </select>
+            <span className="inp-wrap" style={{ maxWidth: 280, flex: 1 }}>
+              <span className="icon-l"><Icon name="search" size={16} strokeWidth={1.7} /></span>
+              <input
+                className="inp"
+                placeholder="Search modules..."
+                value={permissionsSearch}
+                onChange={e => setPermissionsSearch(e.target.value)}
+                disabled={!selectedUserId}
+              />
+            </span>
             {selectedUserId && (
               <span className="badge badge--muted" style={{ marginLeft: 16 }}>
                 {Object.values(pendingPerms).filter(p => p.can_view).length} / {modules.filter(m => m.is_active).length} modules granted
               </span>
+            )}
+            {selectedUserId && (
+              <>
+                <button className="mini" onClick={() => quickSetAll('full')}>Grant all</button>
+                <button className="mini mini--off" onClick={() => quickSetAll('none')}>Revoke all</button>
+              </>
             )}
             {selectedUserId && (
               <button
@@ -768,7 +847,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {modules.filter(m => m.is_active).map(m => {
+                    {filteredPermissionModules.map(m => {
                       const p = pendingPerms[m.id] ?? { can_view: false, can_modify: false, can_delete: false }
                       return (
                         <tr key={m.id}>
@@ -790,6 +869,13 @@ export default function AdminPage() {
                         </tr>
                       )
                     })}
+                    {filteredPermissionModules.length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '40px 4px', color: 'var(--faint)' }}>
+                          No active modules match this search
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -800,7 +886,30 @@ export default function AdminPage() {
 
       {/* ── MODULES TAB ── */}
       {tab === 'modules' && (
-        <div className="card">
+        <div>
+          <div className="toolbar">
+            <span className="inp-wrap" style={{ maxWidth: 340, flex: 1 }}>
+              <span className="icon-l"><Icon name="search" size={16} strokeWidth={1.7} /></span>
+              <input
+                className="inp"
+                placeholder="Search label, name, route, or description..."
+                value={moduleSearch}
+                onChange={e => setModuleSearch(e.target.value)}
+              />
+            </span>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={showInactiveModules}
+                onChange={e => setShowInactiveModules(e.target.checked)}
+              />
+              <span className="track" />
+              Show inactive
+            </label>
+            <span className="badge badge--active">Active: {modules.filter(m => m.is_active).length}</span>
+            <span className="badge badge--muted">Inactive: {modules.filter(m => !m.is_active).length}</span>
+          </div>
+          <div className="card">
           <div className="tbl-wrap scroll">
             <table className="tbl">
               <thead>
@@ -815,7 +924,7 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {modules.map(m => (
+                {filteredAdminModules.map(m => (
                   <tr key={m.id}>
                     <td style={{ color: 'var(--faint)', fontFamily: 'var(--mono)' }}>{m.sort_order}</td>
                     <td>
@@ -835,9 +944,17 @@ export default function AdminPage() {
                     </td>
                   </tr>
                 ))}
+                {filteredAdminModules.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px 4px', color: 'var(--faint)' }}>
+                      No modules match this search
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       )}
 
@@ -845,6 +962,25 @@ export default function AdminPage() {
       {tab === 'mappings' && (
         <div>
           <div className="toolbar">
+            <span className="inp-wrap" style={{ maxWidth: 340, flex: 1 }}>
+              <span className="icon-l"><Icon name="search" size={16} strokeWidth={1.7} /></span>
+              <input
+                className="inp"
+                placeholder="Search user, email, employee code, dealer..."
+                value={mappingSearch}
+                onChange={e => setMappingSearch(e.target.value)}
+              />
+            </span>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={showInactiveMappings}
+                onChange={e => setShowInactiveMappings(e.target.checked)}
+              />
+              <span className="track" />
+              Show inactive
+            </label>
+            <span className="badge badge--muted">Showing {filteredMappings.length} / {mappings.length}</span>
             <div style={{ fontSize: 13.5, color: 'var(--muted)' }}>User ↔ employee-code links control which advisor/technician rows a login owns.</div>
             <button className="btn btn--primary" style={{ marginLeft: 'auto' }} onClick={() => setShowAddMapping(true)}>
               <Icon name="plus" size={16} strokeWidth={2} /> Add mapping
@@ -865,11 +1001,11 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mappings.map(m => (
+                  {filteredMappings.map(m => (
                     <tr key={m.id}>
                       <td>
-                        <span className="strong">{users.find(u => u.id === m.user_id)?.full_name || users.find(u => u.id === m.user_id)?.email || m.user_id}</span>
-                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{users.find(u => u.id === m.user_id)?.email}</div>
+                        <span className="strong">{userLookup.get(m.user_id)?.full_name || userLookup.get(m.user_id)?.email || m.user_id}</span>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{userLookup.get(m.user_id)?.email}</div>
                       </td>
                       <td><code className="k k--b mono">{m.employee_code}</code></td>
                       <td><span className="code-badge">{m.dealer_code}</span></td>
@@ -886,10 +1022,10 @@ export default function AdminPage() {
                       </td>
                     </tr>
                   ))}
-                  {mappings.length === 0 && (
+                  {filteredMappings.length === 0 && (
                     <tr>
                       <td colSpan={6} style={{ textAlign: 'center', padding: '40px 4px', color: 'var(--faint)' }}>
-                        No mappings yet
+                        No mappings match this filter
                       </td>
                     </tr>
                   )}
@@ -1174,16 +1310,6 @@ export default function AdminPage() {
         </Modal>
       )}
 
-      {/* ── TOAST ── */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 rounded-xl border px-4 py-3 text-sm font-medium shadow-lg transition-all ${
-          toast.type === 'success'
-            ? 'border-green-200 bg-green-50 text-green-800'
-            : 'border-red-200 bg-red-50 text-red-800'
-        }`}>
-          {toast.type === 'success' ? '✅' : '❌'} {toast.msg}
-        </div>
-      )}
     </div>
   )
 }
