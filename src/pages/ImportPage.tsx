@@ -1895,17 +1895,45 @@ export default function ImportPage() {
 
         await insertMappingIssues(mappingIssues)
 
-        // Upsert import_metadata
+        // Persist import_metadata robustly (works even if unique constraint on table_name is missing)
         const now = new Date().toISOString()
-        const { error: importMetadataError } = await supabase
-          .from('import_metadata')
-          .upsert({ table_name: tableName, last_updated_at: now }, { onConflict: 'table_name' })
+        let persistedLastUpdated = now
 
-        if (importMetadataError) {
-          console.warn(`import_metadata upsert failed for ${tableName}: ${importMetadataError.message}`)
+        const { data: updatedRows, error: updateMetadataError } = await supabase
+          .from('import_metadata')
+          .update({ last_updated_at: now })
+          .eq('table_name', tableName)
+          .select('last_updated_at')
+
+        if (updateMetadataError) {
+          console.warn(`import_metadata update failed for ${tableName}: ${updateMetadataError.message}`)
         }
 
-        broadcastLastUpdated(tableName, now)
+        if (!updateMetadataError && (updatedRows?.length ?? 0) > 0) {
+          const latest = updatedRows
+            .map((row) => String(row.last_updated_at ?? '').trim())
+            .filter((value) => value.length > 0)
+            .sort()
+            .at(-1)
+
+          if (latest) {
+            persistedLastUpdated = latest
+          }
+        } else {
+          const { data: insertedRow, error: insertMetadataError } = await supabase
+            .from('import_metadata')
+            .insert({ table_name: tableName, last_updated_at: now })
+            .select('last_updated_at')
+            .maybeSingle()
+
+          if (insertMetadataError) {
+            console.warn(`import_metadata insert failed for ${tableName}: ${insertMetadataError.message}`)
+          } else if (insertedRow?.last_updated_at) {
+            persistedLastUpdated = insertedRow.last_updated_at
+          }
+        }
+
+        broadcastLastUpdated(tableName, persistedLastUpdated)
 
         updateCard(tableName, (prev) => ({
           ...prev,

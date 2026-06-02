@@ -241,13 +241,6 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
           }
         })
 
-        // Apply branch filter AFTER merge using employee_master location
-        if (branchSelection !== 'ALL') {
-          mappedRows = mappedRows.filter((row) =>
-            matchesBranchSelection(row.employee_location, branchSelection),
-          )
-        }
-
         // Apply fuel filter AFTER merge using employee_master fuel_type
         if (fuelSelection) {
           mappedRows = mappedRows.filter((row) => {

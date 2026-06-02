@@ -19,6 +19,12 @@ function readLastUpdatedFromStorage(tableName: string): Date | null {
   }
 }
 
+function pickLatestDate(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b
+  if (!b) return a
+  return a.getTime() >= b.getTime() ? a : b
+}
+
 export function setLastUpdatedCache(tableName: string, value: string | Date): Date {
   const date = value instanceof Date ? value : new Date(value)
   const safeDate = Number.isNaN(date.getTime()) ? new Date() : date
@@ -46,24 +52,32 @@ export function useLastUpdated(tableName: string): {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(() => readLastUpdatedFromStorage(tableName))
 
   const refresh = useCallback(async () => {
+    const localCached = readLastUpdatedFromStorage(tableName)
+
     const { data, error } = await supabase
       .from('import_metadata')
       .select('last_updated_at')
       .eq('table_name', tableName)
-      .maybeSingle()
+      .order('last_updated_at', { ascending: false, nullsFirst: false })
+      .limit(1)
 
     if (error) {
-      setLastUpdated(readLastUpdatedFromStorage(tableName))
+      setLastUpdated(localCached)
       return
     }
 
-    if (data?.last_updated_at) {
-      const next = setLastUpdatedCache(tableName, data.last_updated_at)
-      setLastUpdated(next)
-      return
+    const serverValue = data?.[0]?.last_updated_at
+      ? new Date(data[0].last_updated_at)
+      : null
+
+    const safeServerValue = serverValue && !Number.isNaN(serverValue.getTime()) ? serverValue : null
+    const next = pickLatestDate(localCached, safeServerValue)
+
+    if (next) {
+      setLastUpdatedCache(tableName, next)
     }
 
-    setLastUpdated(readLastUpdatedFromStorage(tableName))
+    setLastUpdated(next)
   }, [tableName])
 
   useEffect(() => {
