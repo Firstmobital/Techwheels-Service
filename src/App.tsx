@@ -26,15 +26,15 @@ import type { User } from '@supabase/supabase-js'
 // ─── Nav items ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { to: '/import', label: 'Import', icon: 'import' },
-  { to: '/reports', label: 'Reports', icon: 'reports' },
-  { to: '/settings', label: 'Settings', icon: 'settings' },
-  { to: '/admin', label: 'Admin', icon: 'admin' },
-  { to: '/autodoc', label: 'AutoDoc', icon: 'autodoc' },
   { to: '/reception', label: 'Reception', icon: 'reception' },
-  { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
+  { to: '/import', label: 'Imports', icon: 'import' },
+  { to: '/reports', label: 'Reports', icon: 'reports' },
+  { to: '/autodoc', label: 'AutoDoc', icon: 'autodoc' },
+  { to: '/settings', label: 'Settings', icon: 'settings' },
+  { to: '/admin', label: 'Admin', icon: 'admin' },
+  { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
 ]
 
 type ModuleName =
@@ -100,6 +100,9 @@ function TopNav({
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [windowWidth, setWindowWidth] = useState<number>(
+    typeof window !== 'undefined' ? window.innerWidth : 1440,
+  )
   const navRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -114,9 +117,25 @@ function TopNav({
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [])
 
-  const MAX_INLINE = 6
-  const inlineItems = visibleItems.length > MAX_INLINE ? visibleItems.slice(0, MAX_INLINE - 1) : visibleItems
-  const overflowItems = visibleItems.length > MAX_INLINE ? visibleItems.slice(MAX_INLINE - 1) : []
+  useEffect(() => {
+    function handleResize() {
+      setWindowWidth(window.innerWidth)
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const maxInlineItems = useMemo(() => {
+    if (windowWidth >= 1700) return 8
+    if (windowWidth >= 1520) return 7
+    if (windowWidth >= 1360) return 6
+    if (windowWidth >= 1240) return 5
+    return 4
+  }, [windowWidth])
+
+  const inlineItems = visibleItems.slice(0, maxInlineItems)
+  const overflowItems = visibleItems.slice(maxInlineItems)
 
   const userName = user?.user_metadata?.full_name || user?.email || 'User'
   const userEmail = user?.email || ''
@@ -437,9 +456,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null
       setUser((prev) => (prev?.id === nextUser?.id ? prev : nextUser))
+      if (event === 'SIGNED_IN' && nextUser) {
+        navigate(HOME_ROUTE, { replace: true })
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
