@@ -21,6 +21,8 @@ const SERVICE_TYPE_OPTIONS = [
   'Second Free Service',
   'Third Free Service',
   'Paid Service',
+  'Accidental',
+  'Updation',
 ]
 
 const EMPTY_DRAFT: RowDraft = {
