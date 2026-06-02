@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getDateRangeBounds } from '../../../lib/reportQueries'
-import { applyBranchFilterToQuery, matchesBranchSelection } from '../../../lib/branches'
+import { applyBranchFilterToQuery } from '../../../lib/branches'
 import { supabase } from '../../../lib/supabase'
 import { buildEmployeeLookupIndex, resolveEmployeeForSr, type EmployeeRecord } from '../../../lib/employeeMatcher'
 import type { ReportViewProps } from '../types'
