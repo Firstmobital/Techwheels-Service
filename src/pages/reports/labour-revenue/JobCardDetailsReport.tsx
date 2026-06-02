@@ -47,6 +47,16 @@ function isClosedStatus(value: string | null): boolean {
   return status.includes('close')
 }
 
+function getKpiBucket(row: ServiceInvoiceOrderRow): 'cancelled' | 'closed-not-invoiced' | 'open' {
+  const invoiced = isTruthyInvoiceValue(row.invoiced)
+  const isCancelled = isCancelledStatus(row.status)
+  const isClosed = isClosedStatus(row.status)
+
+  if (isCancelled) return 'cancelled'
+  if (isClosed && !invoiced) return 'closed-not-invoiced'
+  return 'open'
+}
+
 function formatDateTime(dateString: string | null): string {
   if (!dateString) return '—'
   try {
@@ -368,9 +378,11 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
   }, [selectedKPI])
 
   const handleExport = () => {
-    if (!selectedKPI || filteredRows.length === 0) return
+    const exportSourceRows = selectedKPI ? filteredRows : rows
+    if (exportSourceRows.length === 0) return
 
-    const exportData = filteredRows.map((row) => ({
+    const exportData = exportSourceRows.map((row) => ({
+      kpiBucket: getKpiBucket(row),
       branch: row.branch ?? '',
       jobCardNumber: row.job_card_number ?? '',
       status: row.status ?? '',
@@ -383,7 +395,7 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
       account: row.account ?? '',
     }))
 
-    const filename = generateExportFilename(`job-card-details-${selectedKPI}`)
+    const filename = generateExportFilename(`job-card-details-${selectedKPI ?? 'all'}`)
     exportToCSV(exportData, filename)
   }
 
@@ -397,7 +409,21 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
             <h2 className="text-lg font-semibold text-gray-900">Job Card Details</h2>
             <p className="mt-1 text-sm text-gray-600">Source: service_invoice_order_data</p>
           </div>
-          {loading && <span className="text-sm text-gray-500">Loading...</span>}
+          <div className="flex items-center gap-2">
+            {(selectedKPI ? filteredRows.length > 0 : rows.length > 0) && (
+              <button
+                onClick={handleExport}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                title={selectedKPI ? `Export ${selectedKpiLabel} to CSV` : 'Export all Job Card Details to CSV'}
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Export
+              </button>
+            )}
+            {loading && <span className="text-sm text-gray-500">Loading...</span>}
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
