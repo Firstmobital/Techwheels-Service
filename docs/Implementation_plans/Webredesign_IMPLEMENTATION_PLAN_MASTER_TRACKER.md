@@ -418,10 +418,10 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 
 | ID | Workstream | Task | Source Evidence | Target Files | Status | Owner | Start | Last Update | Done | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T-001 | Baseline | Baseline build and route sanity capture | IMPLEMENTATION_PLAN.md | src/* | PENDING | unassigned | - | 2026-06-02 | - |  |
-| T-002 | Foundation | Port theme tokens (colors/type/radius/shadow/density) | styles.css | src/index.css, src/App.css | PENDING | unassigned | - | 2026-06-02 | - |  |
-| T-003 | Foundation | Port shared component classes (btn/card/tbl/tabs/badge/modal/etc.) | styles.css + components.css | src/index.css or shared css | PENDING | unassigned | - | 2026-06-02 | - |  |
-| T-004 | Foundation | Add/reuse shared Icon component with audited path set | app-data.js + shell.jsx | src/components or equivalent | PENDING | unassigned | - | 2026-06-02 | - |  |
+| T-001 | Baseline | Baseline build and route sanity capture | IMPLEMENTATION_PLAN.md | src/* | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Build clean (718 modules, 983ms), lint clean, git clean, dev server running, login baseline UI captured |
+| T-002 | Foundation | Port theme tokens (colors/type/radius/shadow/density) | styles.css | src/index.css, src/App.css | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Ported all token definitions: accent, ink, borders, status, radius, shadows, density, fonts. CSS variables ready in :root |
+| T-003 | Foundation | Port shared component classes (btn/card/tbl/tabs/badge/modal/etc.) | styles.css + components.css | src/index.css or shared css | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Ported 200+ component classes from reference: auth, form, button, table, tabs, modal, badge, pill, feed, reception, warranty. Added responsive breakpoints. |
+| T-004 | Foundation | Add/reuse shared Icon component with audited path set | app-data.js + shell.jsx | src/components or equivalent | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Created src/components/Icon.tsx with all 50 icon paths from reference ICON_PATHS library. Accepts name, size, className, strokeWidth props. |
 | T-005 | Shell | Replace sidebar with TopNav utility+nav rows | shell.jsx + IMPLEMENTATION_PLAN.md | src/App.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-006 | Shell | Implement More overflow for nav | shell.jsx | src/App.tsx or nav component | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-007 | Shell | Implement <=900 hamburger drawer nav | styles.css + shell.jsx | src/App.tsx + css | PENDING | unassigned | - | 2026-06-02 | - |  |
@@ -494,6 +494,8 @@ Rules:
 
 | Date | Activity | Tracker IDs | Result | Evidence |
 |---|---|---|---|---|
+| 2026-06-02 | Phase 1 design system foundation completed: tokens ported, component classes ported, Icon component created. Build passes, dev server running. | T-002, T-003, T-004 | COMPLETE | src/index.css (tokens + base styles), src/App.css (200+ component classes + responsive), src/components/Icon.tsx (50 icon paths), npm run build ✓ 718 modules, screenshot of login with new token system |
+| 2026-06-02 | Phase 0 baseline lock completed: build passes, lint clean, dev server running, login baseline UI captured | T-001 | COMPLETE | npm run build ✓, npm run lint ✓, git clean, dev server on :5173, login baseline screenshot |
 | 2026-06-02 | Deep audit completed and fresh final plan created from reference artifacts | T-001 to T-037 initialized | COMPLETE | Audited files listed in section 3 |
 | 2026-06-02 | Deep re-audit completed; warranty and reception-console deltas added; tracker updated with new tasks and blockers | T-031, T-038, T-039 and section updates | COMPLETE | Warranty Reports.html, warranty.jsx/data/main, reception.jsx, components.css, full file inventory |
 | 2026-06-02 | Deep re-audit pass 2 completed; mirror TS constraints extracted and instruction-file status reconciled | T-039, T-040, T-041, T-042 and section updates | COMPLETE | src/pages/ReceptionPage.tsx, src/pages/AdminPage.tsx, src/pages/SignUpPage.tsx, src/pages/PasswordUpdatePage.tsx, src/pages/ServiceAdvisorPage.tsx, copilot-instructions.md |

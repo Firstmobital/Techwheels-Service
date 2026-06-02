@@ -1,8 +1,102 @@
-@import "tailwindcss";
+/* ─────────────────────────────────────────────────────────────────────────────
+   Techwheels Service — Design System Foundation
+   Theme tokens ported from reference/WebVersionRedesignReference/styles.css
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Accent (tweakable) */
+  --accent: #2563EB;
+  --accent-press: color-mix(in srgb, var(--accent) 82%, #000);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, #fff);
+  --accent-soft-2: color-mix(in srgb, var(--accent) 16%, #fff);
+  --accent-ring: color-mix(in srgb, var(--accent) 22%, transparent);
+  --on-accent: #fff;
+
+  /* Ink / neutrals — cool slate */
+  --ink:    #0E1726;
+  --ink-2:  #2B3852;
+  --muted:  #62708A;
+  --faint:  #94A0B5;
+
+  --border:        #E5E9F0;
+  --border-strong: #D3DAE6;
+
+  --surface: #FFFFFF;
+  --raised:  #FBFCFE;
+  --canvas:  #F3F6FB;
+
+  --success:    #0E7C5A;
+  --success-bg: #E6F6EF;
+  --danger:     #D23A4B;
+  --danger-bg:  #FCEDEE;
+  --warn:       #B26A00;
+  --warn-bg:    #FBF1E0;
+
+  /* Radius */
+  --r-xs: 7px;
+  --r-sm: 10px;
+  --r:    13px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+
+  /* Shadows */
+  --sh-1: 0 1px 2px rgba(14,23,38,.05), 0 1px 1px rgba(14,23,38,.04);
+  --sh-2: 0 4px 14px -4px rgba(14,23,38,.12), 0 2px 6px -2px rgba(14,23,38,.07);
+  --sh-3: 0 18px 48px -16px rgba(14,23,38,.28), 0 6px 18px -8px rgba(14,23,38,.14);
+  --sh-pop: 0 12px 34px -10px rgba(14,23,38,.26), 0 2px 8px rgba(14,23,38,.08);
+
+  /* Density (tweakable via [data-density]) */
+  --nav-h: 60px;
+  --util-h: 46px;
+  --gap: 22px;
+  --pad: 22px;
+  --row-h: 46px;
+  --field-h: 42px;
+
+  --maxw: 1680px;
+
+  --font: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", "Roboto Mono", monospace;
+}
+
+[data-density="compact"] {
+  --nav-h: 52px;
+  --util-h: 40px;
+  --gap: 16px;
+  --pad: 16px;
+  --row-h: 38px;
+  --field-h: 38px;
+}
+
+/* Base element styles */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--canvas);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+#root { height: 100%; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+::selection { background: var(--accent-ring); }
+
+/* Scrollbars */
+.scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll::-webkit-scrollbar-thumb { background: #d3dae6; border-radius: 99px; border: 3px solid transparent; background-clip: content-box; }
+.scroll::-webkit-scrollbar-thumb:hover { background: #b9c2d4; background-clip: content-box; }
 
 /* Hide scrollbar track while keeping scroll functionality */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Safe-area bottom padding for iOS home indicator */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+@import "tailwindcss";
 
 /* Safe-area bottom padding for iOS home indicator */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
