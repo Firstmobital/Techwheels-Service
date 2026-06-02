@@ -1,6 +1,7 @@
 // src/pages/AdminPage.tsx
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import Icon from '../components/Icon'
 import {
   listUserEmployeeLinks,
   createUserEmployeeLink,
@@ -63,13 +64,6 @@ function isMissingDealerColumnError(error: unknown): boolean {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const roleBadge: Record<UserRole, string> = {
-  admin:   'bg-blue-100 text-blue-700',
-  manager: 'bg-purple-100 text-purple-700',
-  staff:   'bg-green-100 text-green-700',
-  viewer:  'bg-gray-100 text-gray-600',
-}
-
 function generateTemporaryPassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()_+-='
   let value = ''
@@ -160,7 +154,6 @@ export default function AdminPage() {
   // Mappings tab
   const [mappings, setMappings]             = useState<UserEmployeeLinkRow[]>([])
   const [employeeCatalog, setEmployeeCatalog] = useState<Array<{ employee_code: string; employee_name: string }>>([])
-  const [mappingsLoading, setMappingsLoading] = useState(false)
   const [showAddMapping, setShowAddMapping] = useState(false)
   const [editMapping, setEditMapping]       = useState<UserEmployeeLinkRow | null>(null)
   const [mapUserId, setMapUserId]           = useState('')
@@ -219,14 +212,12 @@ export default function AdminPage() {
   }
 
   async function loadMappings() {
-    setMappingsLoading(true)
     const result = await listUserEmployeeLinks()
     if (result.data) {
       setMappings(result.data)
     } else {
       showToastMsg(result.error ?? 'Failed to load mappings', 'error')
     }
-    setMappingsLoading(false)
   }
 
   async function loadEmployeeCatalog() {
@@ -557,162 +548,167 @@ export default function AdminPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading…</div>
+    <div className="page">
+      <div className="flex h-64 items-center justify-center text-sm" style={{ color: 'var(--faint)' }}>Loading…</div>
+    </div>
   )
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900">Admin Panel</h1>
-        <p className="mt-1 text-sm text-gray-500">Manage users, dealer assignments, and module access</p>
+    <div className="page">
+      <div className="pagehead">
+        <div>
+          <p className="greet"><Icon name="settings" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Admin Panel</p>
+          <h1>User management & access control</h1>
+          <p>Manage users, module permissions, and employee mappings.</p>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-6 flex gap-1 border-b border-gray-200">
-        {(['users', 'permissions', 'modules', 'mappings'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={[
-              'border-b-2 -mb-px px-4 py-2 text-sm font-medium capitalize transition-colors',
-              tab === t
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-gray-500 hover:text-gray-800',
-            ].join(' ')}
-          >
-            {t === 'users' ? '👤 Users' : t === 'permissions' ? '🔐 Permissions' : t === 'modules' ? '🧩 Modules' : '🔗 Employee Mappings'}
-          </button>
-        ))}
+      <div className="tabs">
+        {(['users', 'permissions', 'modules', 'mappings'] as const).map(t => {
+          const tabDefs: Record<typeof t, { icon: string; label: string; count?: () => number }> = {
+            users: { icon: 'user', label: 'Users', count: () => users.length },
+            permissions: { icon: 'shield', label: 'Permissions' },
+            modules: { icon: 'grid', label: 'Modules', count: () => modules.length },
+            mappings: { icon: 'admin', label: 'Mappings', count: () => mappings.length },
+          }
+          const def = tabDefs[t]
+          return (
+            <button
+              key={t}
+              className={`tab${tab === t ? ' is-active' : ''}`}
+              onClick={() => setTab(t)}
+            >
+              <span className="ic"><Icon name={def.icon} size={16} strokeWidth={1.7} /></span>
+              {def.label}
+              {def.count && <span className="count">{def.count()}</span>}
+            </button>
+          )
+        })}
       </div>
+
+      {tab === 'users' && (
+        <div className="summary">
+          <div className="schip"><span className="ic"><Icon name="user" size={16} strokeWidth={1.9} /></span><div><div className="n">{users.length}</div><div className="l">Total users</div></div></div>
+          <div className="schip"><span className="ic"><Icon name="shield" size={16} strokeWidth={1.9} /></span><div><div className="n">{users.filter(u => u.role === 'admin').length}</div><div className="l">Admins</div></div></div>
+          <div className="schip"><span className="ic"><Icon name="checksm" size={16} strokeWidth={1.9} /></span><div><div className="n">{users.filter(u => u.is_active).length}</div><div className="l">Active</div></div></div>
+          <div className="schip"><span className="ic" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}><Icon name="clock" size={16} strokeWidth={1.9} /></span><div><div className="n">{users.filter(u => !u.is_active).length}</div><div className="l">Inactive</div></div></div>
+        </div>
+      )}
 
       {/* ── USERS TAB ── */}
       {tab === 'users' && (
         <div>
-          <div className="mb-4 flex items-center gap-3">
-            <input
-              type="text"
-              placeholder="Search by name, email, or dealer code…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="max-w-xs flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <div className="toolbar">
+            <span className="inp-wrap" style={{ maxWidth: 340, flex: 1 }}>
+              <span className="icon-l"><Icon name="search" size={16} strokeWidth={1.7} /></span>
+              <input
+                className="inp"
+                placeholder="Search name, email, or dealer code…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </span>
+            <label className="switch">
               <input
                 type="checkbox"
                 checked={showInactive}
                 onChange={e => setShowInactive(e.target.checked)}
-                className="h-4 w-4 rounded accent-blue-600"
               />
-              Show Inactive
+              <span className="track" />
+              Show inactive
             </label>
             <button
+              className="btn btn--primary"
+              style={{ marginLeft: 'auto' }}
               onClick={() => setShowAddUser(true)}
-              className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
-              + Add User
+              <Icon name="plus" size={16} strokeWidth={2} /> Add user
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50">
-                <tr>
-                  {['Name', 'Email', 'Dealer', 'Role', 'Branch', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map(u => (
-                  <tr key={u.id} className="transition-colors hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{u.full_name || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{u.email}</td>
-                    <td className="px-4 py-3">
-                      {u.dealer_code ? (
-                        <div>
-                          <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-600/20">
-                            {u.dealer_code}
-                          </span>
-                          {u.dealer_name && (
-                            <p className="mt-0.5 text-xs text-gray-400">{u.dealer_name}</p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs italic text-amber-600">Not set</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleBadge[u.role]}`}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{u.branch || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                        {u.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => openDealerEdit(u)}
-                          className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-blue-50 hover:text-blue-700"
-                          title="Set dealer code"
-                        >
-                          Set Dealer
-                        </button>
-                        <button
-                          onClick={() => { setTab('permissions'); loadPermsForUser(u.id) }}
-                          className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-gray-100"
-                        >
-                          Perms
-                        </button>
-                        <button
-                          onClick={() => openTempPasswordModal(u)}
-                          className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
-                          title="Set a temporary password without sending email"
-                        >
-                          Temp Password
-                        </button>
-                        <button
-                          onClick={() => toggleUserActive(u)}
-                          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                            u.is_active
-                              ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                              : 'bg-green-50 text-green-700 hover:bg-green-100'
-                          }`}
-                        >
-                          {u.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredUsers.length === 0 && (
+          <div className="card">
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
-                      No users found
-                    </td>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Dealer</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredUsers.map(u => (
+                    <tr key={u.id}>
+                      <td className="strong">{u.full_name || u.email}</td>
+                      <td style={{ color: 'var(--muted)' }}>{u.email}</td>
+                      <td>
+                        {u.dealer_code ? (
+                          <>
+                            <span className="code-badge">{u.dealer_code}</span>
+                            {u.dealer_name && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{u.dealer_name}</div>}
+                          </>
+                        ) : (
+                          <span className="notset">Not set</span>
+                        )}
+                      </td>
+                      <td><span className={`badge badge--${u.role}`}>{u.role}</span></td>
+                      <td><span className={`badge badge--${u.is_active ? 'active' : 'inactive'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>
+                      <td>
+                        <div className="tactions" style={{ justifyContent: 'flex-end' }}>
+                          <button
+                            className="tbtn"
+                            onClick={() => { setTab('permissions'); loadPermsForUser(u.id) }}
+                          >
+                            <Icon name="shield" size={13} strokeWidth={1.9} /> Perms
+                          </button>
+                          <button
+                            className="tbtn"
+                            onClick={() => openDealerEdit(u)}
+                          >
+                            <Icon name="building" size={13} strokeWidth={1.9} /> Dealer
+                          </button>
+                          <button
+                            className="tbtn"
+                            onClick={() => openTempPasswordModal(u)}
+                          >
+                            <Icon name="key" size={13} strokeWidth={1.9} /> Pwd
+                          </button>
+                          <button
+                            className={`tbtn ${u.is_active ? 'tbtn--danger' : 'tbtn--accent'}`}
+                            onClick={() => toggleUserActive(u)}
+                          >
+                            {u.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px 4px', color: 'var(--faint)' }}>
+                        No users found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Dealer assignment info box */}
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-            <strong>Dealer assignment:</strong> Each user must have a Dealer Code set before they can see AutoDoc job cards.
-            The code must exactly match the <code className="rounded bg-amber-100 px-1">dealer_code</code> column in the{' '}
-            <code className="rounded bg-amber-100 px-1">vehicles</code> table. After changing a dealer code, the user
-            must <strong>sign out and back in</strong> for the updated JWT to take effect.
+          <div className="note note--warn" style={{ marginTop: 16 }}>
+            <span className="ic"><Icon name="shield" size={17} strokeWidth={1.9} /></span>
+            <div>
+              <b>Dealer assignment:</b> Each user needs a Dealer Code matching the <code>dealer_code</code> column
+              in <code>vehicles</code> before they can see AutoDoc job cards. After a change the user must
+              sign out and back in for the new JWT to take effect.
+            </div>
           </div>
           {!supportsDealerColumns && (
-            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-              Admin compatibility mode: current DB schema does not have
-              <code className="mx-1 rounded bg-amber-100 px-1">public.users.dealer_code</code>
-              or
-              <code className="mx-1 rounded bg-amber-100 px-1">public.users.dealer_name</code>.
-                Users are listed, and dealer assignment is handled via auth metadata/JWT.
+            <div className="note note--warn" style={{ marginTop: 12 }}>
+              Admin compatibility mode: current DB schema does not have <code>public.users.dealer_code</code> or <code>public.users.dealer_name</code>. Users are listed, and dealer assignment is handled via auth metadata/JWT.
             </div>
           )}
         </div>
@@ -721,12 +717,13 @@ export default function AdminPage() {
       {/* ── PERMISSIONS TAB ── */}
       {tab === 'permissions' && (
         <div>
-          <div className="mb-6 flex items-center gap-4">
-            <label className="whitespace-nowrap text-sm text-gray-500">Select User:</label>
+          <div className="toolbar">
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--muted)' }}>Select user</span>
             <select
+              className="sel"
+              style={{ maxWidth: 340 }}
               value={selectedUserId}
               onChange={e => loadPermsForUser(e.target.value)}
-              className="min-w-[260px] rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">— choose a user —</option>
               {users.filter(u => u.is_active).map(u => (
@@ -734,147 +731,68 @@ export default function AdminPage() {
               ))}
             </select>
             {selectedUserId && (
+              <span className="badge badge--muted" style={{ marginLeft: 16 }}>
+                {Object.values(pendingPerms).filter(p => p.can_view).length} / {modules.filter(m => m.is_active).length} modules granted
+              </span>
+            )}
+            {selectedUserId && (
               <button
-                onClick={savePerms}
+                className="btn btn--primary"
+                style={{ marginLeft: 'auto' }}
                 disabled={savingPerms}
-                className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                onClick={savePerms}
               >
-                {savingPerms ? 'Saving…' : '💾 Save Permissions'}
+                <Icon name="checksm" size={16} strokeWidth={2.2} /> Save permissions
               </button>
             )}
           </div>
 
           {!selectedUserId ? (
-            <div className="py-12 text-center text-sm text-gray-400">Select a user to manage their permissions</div>
+            <div className="card">
+              <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--faint)' }}>
+                <Icon name="shield" size={30} strokeWidth={1.7} />
+                <p style={{ marginTop: 10, fontSize: 14 }}>Select a user to manage their module permissions</p>
+              </div>
+            </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-              <table className="w-full text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Module</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">View</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Modify</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Delete</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">Quick Set</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {modules.filter(m => m.is_active).map(m => {
-                    const p = pendingPerms[m.id] ?? { can_view: false, can_modify: false, can_delete: false }
-                    return (
-                      <tr key={m.id} className="transition-colors hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{m.icon} {m.label}</div>
-                          {m.description && <div className="mt-0.5 text-xs text-gray-400">{m.description}</div>}
-                        </td>
-                        {(['can_view', 'can_modify', 'can_delete'] as const).map(field => (
-                          <td key={field} className="px-4 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              checked={p[field]}
-                              onChange={e => setPerm(m.id, field, e.target.checked)}
-                              className="h-4 w-4 cursor-pointer rounded accent-blue-600"
-                            />
+            <div className="card">
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Module</th>
+                      <th className="ctr">View</th>
+                      <th className="ctr">Modify</th>
+                      <th className="ctr">Delete</th>
+                      <th className="ctr">Quick set</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modules.filter(m => m.is_active).map(m => {
+                      const p = pendingPerms[m.id] ?? { can_view: false, can_modify: false, can_delete: false }
+                      return (
+                        <tr key={m.id}>
+                          <td>
+                            <div className="modtag">
+                              <span className="mi"><Icon name={m.icon ?? 'grid'} size={16} strokeWidth={1.7} /></span>
+                              <span className="ml"><b>{m.label}</b>{m.description && <span>{m.description}</span>}</span>
+                            </div>
                           </td>
-                        ))}
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex justify-center gap-1">
-                            <button onClick={() => quickSet(m.id, 'full')} className="rounded border border-gray-200 px-2 py-1 text-xs transition-colors hover:bg-blue-50 hover:text-blue-700">Full</button>
-                            <button onClick={() => quickSet(m.id, 'none')} className="rounded border border-gray-200 px-2 py-1 text-xs transition-colors hover:bg-gray-100">None</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── MAPPINGS TAB ── */}
-      {tab === 'mappings' && (
-        <div>
-          <div className="mb-4 flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-gray-900">User → Employee Mappings</h2>
-            <button
-              onClick={() => setShowAddMapping(true)}
-              className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-            >
-              + Add Mapping
-            </button>
-          </div>
-
-          {mappingsLoading ? (
-            <div className="flex h-40 items-center justify-center text-sm text-gray-400">Loading mappings…</div>
-          ) : mappings.length === 0 ? (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-              No mappings yet. Create one to link a user to an employee.
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-              <table className="w-full text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50">
-                  <tr>
-                    {['User', 'Employee Code', 'Name', 'Dealer', 'Primary', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {mappings.map(m => {
-                    const user = users.find(u => u.id === m.user_id)
-                    const linkedEmployee = employeeCatalog.find(s => s.employee_code === m.employee_code)
-                    return (
-                      <tr key={m.id} className="transition-colors hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{user?.full_name || user?.email || m.user_id}</td>
-                        <td className="px-4 py-3 font-mono text-sm text-gray-600">{m.employee_code}</td>
-                        <td className="px-4 py-3 text-gray-600">{linkedEmployee?.employee_name || '—'}</td>
-                        <td className="px-4 py-3 text-gray-600">{m.dealer_code}</td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => toggleMappingPrimary(m)}
-                            disabled={savingMapping}
-                            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold transition-colors ${
-                              m.is_primary
-                                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            } disabled:opacity-50`}
-                          >
-                            {m.is_primary ? '⭐ Primary' : 'Secondary'}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            m.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-                          }`}>
-                            {m.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => openEditMapping(m)}
-                              disabled={savingMapping}
-                              className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => deactivateMapping(m)}
-                              disabled={savingMapping || !m.is_active}
-                              className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-                            >
-                              Deactivate
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          <td className="ctr"><input className="cbx" type="checkbox" checked={p.can_view} onChange={e => setPerm(m.id, 'can_view', e.target.checked)} /></td>
+                          <td className="ctr"><input className="cbx" type="checkbox" checked={p.can_modify} onChange={e => setPerm(m.id, 'can_modify', e.target.checked)} /></td>
+                          <td className="ctr"><input className="cbx" type="checkbox" checked={p.can_delete} onChange={e => setPerm(m.id, 'can_delete', e.target.checked)} /></td>
+                          <td className="ctr">
+                            <div style={{ display: 'inline-flex', gap: 6 }}>
+                              <button className="mini" onClick={() => quickSet(m.id, 'full')}>Full</button>
+                              <button className="mini mini--off" onClick={() => quickSet(m.id, 'none')}>None</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -882,40 +800,112 @@ export default function AdminPage() {
 
       {/* ── MODULES TAB ── */}
       {tab === 'modules' && (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50">
-              <tr>
-                {['#', 'Module', 'DB Name', 'Route', 'Description', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {modules.map(m => (
-                <tr key={m.id} className="transition-colors hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-400">{m.sort_order}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{m.icon} {m.label}</td>
-                  <td className="px-4 py-3"><code className="rounded bg-purple-50 px-2 py-0.5 text-xs text-purple-600">{m.name}</code></td>
-                  <td className="px-4 py-3"><code className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-600">{m.route}</code></td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{m.description || '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {m.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleModule(m)}
-                      className="rounded-md border border-gray-200 px-3 py-1 text-xs font-medium transition-colors hover:bg-gray-100"
-                    >
-                      {m.is_active ? 'Disable' : 'Enable'}
-                    </button>
-                  </td>
+        <div className="card">
+          <div className="tbl-wrap scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>#</th>
+                  <th>Module</th>
+                  <th>DB name</th>
+                  <th>Route</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {modules.map(m => (
+                  <tr key={m.id}>
+                    <td style={{ color: 'var(--faint)', fontFamily: 'var(--mono)' }}>{m.sort_order}</td>
+                    <td>
+                      <div className="modtag">
+                        <span className="mi"><Icon name={m.icon ?? 'grid'} size={16} strokeWidth={1.7} /></span>
+                        <span className="ml"><b>{m.label}</b></span>
+                      </div>
+                    </td>
+                    <td><code className="k k--p">{m.name}</code></td>
+                    <td><code className="k k--b">{m.route}</code></td>
+                    <td style={{ color: 'var(--muted)', whiteSpace: 'normal', maxWidth: 320 }}>{m.description}</td>
+                    <td><span className={`badge badge--${m.is_active ? 'active' : 'muted'}`}>{m.is_active ? 'Active' : 'Inactive'}</span></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="tbtn" onClick={() => toggleModule(m)}>
+                        {m.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── MAPPINGS TAB ── */}
+      {tab === 'mappings' && (
+        <div>
+          <div className="toolbar">
+            <div style={{ fontSize: 13.5, color: 'var(--muted)' }}>User ↔ employee-code links control which advisor/technician rows a login owns.</div>
+            <button className="btn btn--primary" style={{ marginLeft: 'auto' }} onClick={() => setShowAddMapping(true)}>
+              <Icon name="plus" size={16} strokeWidth={2} /> Add mapping
+            </button>
+          </div>
+
+          <div className="card">
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Employee code</th>
+                    <th>Dealer</th>
+                    <th>Primary</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mappings.map(m => (
+                    <tr key={m.id}>
+                      <td>
+                        <span className="strong">{users.find(u => u.id === m.user_id)?.full_name || users.find(u => u.id === m.user_id)?.email || m.user_id}</span>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{users.find(u => u.id === m.user_id)?.email}</div>
+                      </td>
+                      <td><code className="k k--b mono">{m.employee_code}</code></td>
+                      <td><span className="code-badge">{m.dealer_code}</span></td>
+                      <td>{m.is_primary ? <span className="badge badge--admin badge--no">Primary</span> : <span style={{ color: 'var(--faint)' }}>—</span>}</td>
+                      <td><span className={`badge badge--${m.is_active ? 'active' : 'muted'}`}>{m.is_active ? 'Active' : 'Inactive'}</span></td>
+                      <td>
+                        <div className="tactions" style={{ justifyContent: 'flex-end' }}>
+                          {m.is_active && <button className="tbtn" disabled={savingMapping} onClick={() => toggleMappingPrimary(m)}>
+                            {m.is_primary ? 'Unset Primary' : 'Set Primary'}
+                          </button>}
+                          <button className="tbtn" onClick={() => openEditMapping(m)}>Edit</button>
+                          <button className="tbtn tbtn--danger" disabled={!m.is_active} onClick={() => deactivateMapping(m)}>Deactivate</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {mappings.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px 4px', color: 'var(--faint)' }}>
+                        No mappings yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', zIndex: 90,
+          background: 'var(--ink)', color: '#fff', padding: '11px 18px', borderRadius: 99, fontSize: 13.5,
+          fontWeight: 600, boxShadow: 'var(--sh-3)', display: 'flex', gap: 9, alignItems: 'center' }}>
+          <Icon name={toast.type === 'error' ? 'alert' : 'checksm'} size={16} strokeWidth={2.2} />{toast.msg}
         </div>
       )}
 
