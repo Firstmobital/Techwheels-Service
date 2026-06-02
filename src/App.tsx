@@ -19,6 +19,7 @@ import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
+import { getDealerContext } from './lib/api/auth'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
 import { useOnline } from './hooks/useOnline'
 import type { User } from '@supabase/supabase-js'
@@ -90,6 +91,8 @@ function TopNav({
   onSignOut,
   user,
   isDirty,
+  effectiveDealerCode,
+  effectiveDealerName,
 }: {
   visibleItems: NavItem[]
   pathname: string
@@ -97,6 +100,8 @@ function TopNav({
   onSignOut: () => void
   user: User | null
   isDirty: boolean
+  effectiveDealerCode: string | null
+  effectiveDealerName: string | null
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
@@ -146,8 +151,8 @@ function TopNav({
     .join('')
     .toUpperCase()
 
-  const dealerName = user?.user_metadata?.dealer_name || 'No dealer assigned'
-  const dealerCode = user?.user_metadata?.dealer_code || 'NO-DEALER'
+  const dealerName = effectiveDealerName || user?.user_metadata?.dealer_name || 'No dealer assigned'
+  const dealerCode = effectiveDealerCode || user?.user_metadata?.dealer_code || 'NO-DEALER'
 
   const navToReportsCategory = (categoryId: string) => onNavigate(`/reports/${categoryId}`)
 
@@ -547,6 +552,8 @@ function AppInner() {
   const online         = useOnline()
   const { isDirty }    = useDirty()
   const [user,          setUser]          = useState<User | null>(null)
+  const [effectiveDealerCode, setEffectiveDealerCode] = useState<string | null>(null)
+  const [effectiveDealerName, setEffectiveDealerName] = useState<string | null>(null)
   const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set())
   const [permissionsLoading, setPermissionsLoading] = useState(true)
 
@@ -560,6 +567,37 @@ function AppInner() {
   }, [])
 
   const userId = user?.id ?? null
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadDealerContext() {
+      if (!userId) {
+        if (mounted) {
+          setEffectiveDealerCode(null)
+          setEffectiveDealerName(null)
+        }
+        return
+      }
+
+      const resolved = await getDealerContext()
+      if (!mounted) return
+
+      if (resolved.data) {
+        setEffectiveDealerCode(resolved.data.dealerCode)
+        setEffectiveDealerName(resolved.data.dealerName)
+      } else {
+        setEffectiveDealerCode(null)
+        setEffectiveDealerName(null)
+      }
+    }
+
+    void loadDealerContext()
+
+    return () => {
+      mounted = false
+    }
+  }, [userId])
 
   useEffect(() => {
     let mounted = true
@@ -666,6 +704,8 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
           onSignOut={handleSignOut}
           user={user}
           isDirty={isDirty}
+          effectiveDealerCode={effectiveDealerCode}
+          effectiveDealerName={effectiveDealerName}
         />
 
         <main className="main">

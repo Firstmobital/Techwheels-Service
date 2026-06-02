@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { getDealerContext } from './auth'
 import { fail, ok, type ApiResult } from './types'
 
 export interface ReceptionEntryRow {
@@ -333,13 +334,8 @@ export async function uploadServiceAdvisorEstimate(
 ): Promise<ApiResult<ReceptionEntryRow>> {
   const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
   const safeName = sanitizeFileNamePart(file.name || `estimate.${extension}`)
-  const sessionForPath = await supabase.auth.getSession()
-  const user = sessionForPath.data.session?.user
-  const dealerCode = String(
-    user?.user_metadata?.dealer_code
-    ?? user?.app_metadata?.dealer_code
-    ?? 'unknown',
-  ).trim() || 'unknown'
+  const dealerCtx = await getDealerContext()
+  const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
   const storagePath = `${dealerCode}/service-advisor-estimates/${id}/${Date.now()}_${safeName}`
 
   const uploadRes = await supabase.storage

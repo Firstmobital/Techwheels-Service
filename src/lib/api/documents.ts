@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
+import { getDealerContext } from './auth'
 import { resolveExistingJobCardId, type JobReferenceHints } from './jobCards'
 import { fail, ok, type ApiResult, type DocType, type DocumentInsert, type DocumentRow } from './types'
 
@@ -230,12 +231,8 @@ export async function uploadDocumentFile(input: {
   const timestamp = Date.now()
 
   const { data: sessionRes } = await supabase.auth.getSession()
-  const user = sessionRes.session?.user
-  const dealerCode = String(
-    user?.user_metadata?.dealer_code
-    ?? user?.app_metadata?.dealer_code
-    ?? 'unknown',
-  ).trim() || 'unknown'
+  const dealerCtx = await getDealerContext()
+  const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
 
   const storagePath = `${dealerCode}/${resolvedJobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
   console.log('[autodoc-upload-debug] Computed storage path for document upload', {

@@ -78,18 +78,21 @@ async function syncDealerToAuthMeta(
   userId:      string,
   dealerCode:  string | null,
   dealerName:  string | null,
-) {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const { error } = await supabase.functions.invoke('sync-dealer-metadata', {
       body: { userId, dealerCode, dealerName },
     })
     if (error) {
-      console.warn('sync-dealer-metadata failed:', error)
-      // Non-fatal: user can re-login to pick up JWT changes
+      const message = await extractFunctionErrorMessage(error)
+      console.warn('sync-dealer-metadata failed:', message)
+      return { ok: false, error: message }
     }
+    return { ok: true }
   } catch (err) {
-    console.warn('Edge function call failed:', err)
-    // Non-fatal: user can re-login to pick up JWT changes
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn('Edge function call failed:', message)
+    return { ok: false, error: message }
   }
 }
 
@@ -202,11 +205,28 @@ export default function AdminPage() {
       return
     }
 
+    const mappingRes = await supabase
+      .from('user_employee_links')
+      .select('user_id, dealer_code, is_primary, updated_at')
+      .eq('is_active', true)
+      .order('is_primary', { ascending: false })
+      .order('updated_at', { ascending: false })
+
+    const fallbackDealerByUser = new Map<string, string>()
+    if (!mappingRes.error) {
+      for (const row of (mappingRes.data ?? []) as Array<{ user_id?: string | null; dealer_code?: string | null }>) {
+        const userId = String(row.user_id ?? '').trim()
+        if (!userId || fallbackDealerByUser.has(userId)) continue
+        const code = String(row.dealer_code ?? '').trim().toUpperCase()
+        if (code) fallbackDealerByUser.set(userId, code)
+      }
+    }
+
     setSupportsDealerColumns(false)
     setUsers(
       ((fallback.data ?? []) as Array<Omit<AppUser, 'dealer_code' | 'dealer_name'>>).map((u) => ({
         ...u,
-        dealer_code: null,
+        dealer_code: fallbackDealerByUser.get(u.id) ?? null,
         dealer_name: null,
       }))
     )
@@ -233,6 +253,33 @@ export default function AdminPage() {
     }
   }
 
+  async function syncDealerFromActiveMapping(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const mappingRes = await supabase
+      .from('user_employee_links')
+      .select('dealer_code, is_primary, updated_at')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('is_primary', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .limit(1)
+
+    if (mappingRes.error) {
+      return { ok: false, error: mappingRes.error.message }
+    }
+
+    const mappingRow = (mappingRes.data ?? [])[0] as { dealer_code?: string | null } | undefined
+    const mappedDealerCode = String(mappingRow?.dealer_code ?? '').trim().toUpperCase()
+
+    if (!mappedDealerCode) {
+      const syncRes = await syncDealerToAuthMeta(userId, null, null)
+      return syncRes.ok ? { ok: true } : syncRes
+    }
+
+    const linkedUser = users.find((u) => u.id === userId)
+    const mappedDealerName = linkedUser?.dealer_name ?? null
+    return syncDealerToAuthMeta(userId, mappedDealerCode, mappedDealerName)
+  }
+
   async function createMapping() {
     if (!mapUserId || !mapEmployeeCode || !mapDealerCode) {
       showToastMsg('User, Employee Code, and Dealer Code are required', 'error')
@@ -247,7 +294,12 @@ export default function AdminPage() {
     })
     setSavingMapping(false)
     if (result.data) {
-      showToastMsg('Mapping created')
+      const syncResult = await syncDealerFromActiveMapping(mapUserId)
+      if (!syncResult.ok) {
+        showToastMsg(`Mapping created, but dealer metadata sync failed: ${syncResult.error}`, 'error')
+      } else {
+        showToastMsg('Mapping created')
+      }
       setShowAddMapping(false)
       setMapUserId('')
       setMapEmployeeCode('')
@@ -264,7 +316,12 @@ export default function AdminPage() {
     const result = await updateUserEmployeeLink(mapping.id, { is_primary: !mapping.is_primary })
     setSavingMapping(false)
     if (result.data) {
-      showToastMsg('Mapping updated')
+      const syncResult = await syncDealerFromActiveMapping(mapping.user_id)
+      if (!syncResult.ok) {
+        showToastMsg(`Mapping updated, but dealer metadata sync failed: ${syncResult.error}`, 'error')
+      } else {
+        showToastMsg('Mapping updated')
+      }
       await loadMappings()
     } else {
       showToastMsg(result.error ?? 'Failed to update mapping', 'error')
@@ -276,7 +333,12 @@ export default function AdminPage() {
     const result = await deactivateUserEmployeeLink(mapping.id)
     setSavingMapping(false)
     if (!result.error) {
-      showToastMsg('Mapping deactivated')
+      const syncResult = await syncDealerFromActiveMapping(mapping.user_id)
+      if (!syncResult.ok) {
+        showToastMsg(`Mapping deactivated, but dealer metadata sync failed: ${syncResult.error}`, 'error')
+      } else {
+        showToastMsg('Mapping deactivated')
+      }
       await loadMappings()
     } else {
       showToastMsg(result.error ?? 'Failed to deactivate mapping', 'error')
@@ -306,7 +368,12 @@ export default function AdminPage() {
     setSavingMapping(false)
 
     if (result.data) {
-      showToastMsg('Mapping updated')
+      const syncResult = await syncDealerFromActiveMapping(editMapping.user_id)
+      if (!syncResult.ok) {
+        showToastMsg(`Mapping updated, but dealer metadata sync failed: ${syncResult.error}`, 'error')
+      } else {
+        showToastMsg('Mapping updated')
+      }
       setEditMapping(null)
       setMapEmployeeCode('')
       setMapDealerCode('')
@@ -438,7 +505,12 @@ export default function AdminPage() {
     }
 
     // 2. Sync into auth.users.raw_user_meta_data so JWT contains dealer_code on next login
-    await syncDealerToAuthMeta(dealerEditUser.id, code, name)
+    const syncResult = await syncDealerToAuthMeta(dealerEditUser.id, code, name)
+    if (!syncResult.ok) {
+      showToastMsg(`Dealer metadata sync failed: ${syncResult.error}`, 'error')
+      setSavingDealer(false)
+      return
+    }
 
     setSavingDealer(false)
     setDealerEditUser(null)
