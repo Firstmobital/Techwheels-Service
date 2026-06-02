@@ -63,7 +63,7 @@ function getFuelScopedBranch(branch: string): string {
 function parseBranchSelectionFromFilter(branch: string): string {
   const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 
-  if (normalized === 'all' || normalized === 'all_pv' || normalized === 'all_ev') {
+  if (normalized === 'all' || normalized === 'all branches' || normalized === 'all_pv' || normalized === 'all_ev') {
     return 'ALL'
   }
 
