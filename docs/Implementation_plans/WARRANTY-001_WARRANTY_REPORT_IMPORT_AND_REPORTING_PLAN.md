@@ -2,11 +2,118 @@
 
 **Plan ID:** WARRANTY-001  
 **Created:** 2026-05-28  
+**Last Audit:** 2026-06-02  
 **Owner:** Techwheels Product + Dev Team + GitHub Copilot  
 **Priority:** High  
-**Status:** In Progress
+**Status:** In Progress (Audit Complete – 15 New Tasks Added)
 
 **Audited Reference:** https://claude.ai/share/3ec32255-d0d4-46a6-8090-66d7ed2a6d7b
+
+**Reference Lock (Do Not Remove):**
+1. Primary external reference for this plan remains fixed: https://claude.ai/share/3ec32255-d0d4-46a6-8090-66d7ed2a6d7b
+2. Any new requirement from chat must be added to this plan before implementation.
+3. If a requirement is not represented in the traceability matrix below, it is considered out of scope until added.
+
+---
+
+## 🔍 Audit Summary (2026-06-02)
+
+**Audit Trigger:** Comprehensive review of attached warranty dashboards and settlement reports  
+**Audit Scope:** 12 HTML reports + attached data sets spanning Jan-May 2026 warranty operations  
+**Finding:** 15 major missing dashboard views and 2 critical schema enhancements required
+
+### Key Discoveries
+
+#### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
+- WC: ₹48.2L claims  
+- FSB: ₹42.1L claims  
+- Updation: ₹31.5L claims  
+- Goodwill: ₹28.9L claims  
+- AMC: ₹18.2L claims  
+- Part WC: ₹22.3L claims  
+- Settlement Reports (Rpt 32-41): ₹40.8L PV + ₹33.7L EV  
+
+#### 2. **Operational Alerts** (28+ Critical)
+- Not submitted > 24 hours: 8 claims  
+- Review stuck > 3 days: 10 claims  
+- SOP pending > 2 days: 4 claims  
+- Approved not settled > 5 days: 3 claims  
+- Rejection reason blank: 3 claims  
+
+#### 3. **Special Charges** (₹23.52L Total from Job Codes)
+- 980016 (Rusting/Special Labour): ₹2,85,240 · 28 JCs  
+- 980019 (Loaner Car): ₹1,07,389 · 11 JCs  
+- 980025 (Misc): Present in other invoices  
+
+#### 4. **Rusting Claims**
+- 168 total claims  
+- ₹3.02L parts paid  
+- Root cause tracking required (paint, body integrity, environment)  
+
+#### 5. **Invoice Pending Upload**
+- 12 invoices ₹25.72L awaiting TM portal upload  
+- Aging: 8 pending > 24h, 4 pending > 48h  
+- Status tracking: Awaiting, Pending Upload, Uploaded, Failed  
+
+#### 6. **Settlement & Payment Flow**
+- Approved claims not yet settled: 3 pending > 5 days  
+- Payment status visibility required: Paid, Not Paid, Pending  
+- Settlement staging: Processing, Initiated, Completed, Failed  
+
+#### 7. **Parts Revenue Analysis**
+- 20% MRP rule for parts revenue projection  
+- Top 20 parts by frequency + cost  
+- Parts margin leakage: ₹4,37,242 (Rpt 39) to ₹2,38,615 (Rpt 37)  
+
+#### 8. **Labour Analysis**
+- ICE vs EV labour cost differential  
+- FSB (First Service By) cost breakdown  
+- Labour efficiency per location  
+
+#### 9. **PV vs EV Comparison**
+- PV: Reports 32-41 historical data  
+- EV: Reports 32-36 settled  
+- Settlement differential analysis  
+
+#### 10. **Advisor & Model Tracking**
+- Advisor-wise claim quality metrics  
+- Model-wise warranty cost as % of sales  
+- Skill-level mapping to labour assignments  
+
+### Missing Data Fields (Schema Enhancement)
+
+Currently NOT in warranty import tables but REQUIRED:
+- `claim_id`, `advisor_id`, `advisor_name`  
+- `model`, `vehicle_age_months`, `manufacturing_date`  
+- `status` (Initial, Submitted, Review, SOP, Approved, Rejected, Settled, Paid)  
+- `created_date`, `submitted_date`, `review_date`, `sop_date`, `approved_date`, `settled_date`, `paid_date`  
+- `parts_amount`, `labour_amount`, `special_charges`, `special_charge_code`  
+- `claimed_amount`, `approved_amount`, `paid_amount`  
+- `rejection_reason`, `corrective_action`, `action_owner`  
+- `payment_status`, `settlement_status`, `invoice_status`  
+- `posted_doc_url`, `registration_number`  
+
+### New Report Views Required (15)
+
+1. **Special Charges Dashboard** – 980016, 980019, 980025 breakdown  
+2. **PDI & FSB Separated Report** – distinct analysis  
+3. **Invoice Pending Upload Report** – TM portal status  
+4. **Settlement Aging Report** – Approved not settled  
+5. **Rusting Analysis Report** – 168 claims deep dive  
+6. **Advisor Performance Report** – quality by advisor  
+7. **Model Cost Analysis Report** – loss by model  
+8. **Top Parts Analysis Report** – 20 by frequency + cost  
+9. **Labour Efficiency Report** – ICE vs EV  
+10. **PV vs EV Settlement Comparison** – Reports 32-41  
+11. **Critical Alerts v2** – 28+ with ownership  
+12. **TAT Monitoring Dashboard** – 4-stage SLA tracking  
+13. **Rejection Root-Cause Report** – reason + action + effectiveness  
+14. **Payment Flow Dashboard** – claim→settlement→paid visibility  
+15. **Month-wise Category Matrix** – historical trends  
+
+**Action:** All 15 new report views + schema enhancement added to Traceability Matrix below. See TR-024 through TR-040.
+
+---
 
 **Reference Lock (Do Not Remove):**
 1. Primary external reference for this plan remains fixed: https://claude.ai/share/3ec32255-d0d4-46a6-8090-66d7ed2a6d7b
@@ -217,6 +324,21 @@ Use this for closure control per phase:
 | P6 | UAT with real branch files and role workflows | Pending | Ops + Product | Validate values against OEM sheets and action flow usability |
 | P6 | Production rollout checklist | Pending | Dev Team | Smoke tests, performance checks, rollback plan |
 | P7 | Add strict RBAC/RLS policies for all 7 warranty tables | Deferred | Dev Team | Intentionally postponed; execute after current import/report stabilization |
+| **P5-NEW** | **Create schema enhancement migration (v2 fields)** | **Pending** | **Dev Team** | **Add claim_id, advisor, model, TAT dates, financial breakdown, status fields** |
+| **P5-NEW** | **Build Special Charges Dashboard (980016, 980019, 980025)** | **Pending** | **Dev Team** | **PV vs EV breakdown + top claims + margin impact** |
+| **P5-NEW** | **Build Invoice Pending Upload Report** | **Pending** | **Dev Team** | **12 invoices ₹25.72L + aging buckets (24h, 48h, 5+ days)** |
+| **P5-NEW** | **Build Settlement Aging Report** | **Pending** | **Dev Team** | **Approved-not-settled tracking + payment status visibility** |
+| **P5-NEW** | **Build TAT Monitoring Dashboard** | **Pending** | **Dev Team** | **4 stages: Initial→Submission (0d) / Submission→Review (2d SLA 3d) / Review→Approval (1d SLA 2d) / Approval→Settlement (5d SLA 7d)** |
+| **P5-NEW** | **Build Rusting Analysis Report** | **Pending** | **Dev Team** | **168 claims ₹3.02L + model/batch correlation + preventive actions** |
+| **P5-NEW** | **Build Advisor Performance Report** | **Pending** | **Dev Team** | **Claim count, rejection rate, avg value, quality trends by advisor** |
+| **P5-NEW** | **Build Model Cost Analysis Report** | **Pending** | **Dev Team** | **Cost per model, warranty % of sales, top problem parts, leakage** |
+| **P5-NEW** | **Build Top Parts Analysis Report** | **Pending** | **Dev Team** | **Top 20 by frequency + cost + margin impact (20% rule) + rejection rate** |
+| **P5-NEW** | **Build Labour Efficiency Report (ICE vs EV)** | **Pending** | **Dev Team** | **FSB labour breakdown, cost per JC, skill mapping** |
+| **P5-NEW** | **Build PV vs EV Settlement Comparison** | **Pending** | **Dev Team** | **Reports 32-41 historical, side-by-side financial, cost variance** |
+| **P5-NEW** | **Build PDI & FSB Separated Report** | **Pending** | **Dev Team** | **PDI rejections vs FSB labour costs, acceptance rates** |
+| **P5-NEW** | **Enhance Critical Alerts (v2)** | **Partial** | **Dev Team** | **28+ alerts with ownership + action required + aging buckets** |
+| **P5-NEW** | **Build Rejection Root-Cause Report** | **Pending** | **Dev Team** | **Top reasons + corrective action assignment + completion tracking + effectiveness** |
+| **P5-NEW** | **Build Payment Flow Dashboard** | **Pending** | **Dev Team** | **Claim→Settlement→Payment stage visibility + status transitions** |
 
 ---
 
@@ -246,9 +368,212 @@ Use this for closure control per phase:
 
 ---
 
+## Additional Dashboard Views & Reports (Audit Findings)
+
+Based on warranty report audit, the following additional reporting surfaces are required:
+
+### Required Dashboard Sections (Discovered from Audited References)
+
+1. **Special Charges Dashboard**
+   - Job codes: 980016 (Rusting), 980019 (Loaner Car), 980025 (Misc)
+   - PV vs EV breakdown of special charges
+   - Top claims analysis by charge type
+   - Impact on margins and settlement
+
+2. **PDI & FSB Separated Analysis**
+   - PDI rejections tracking separately from warranty claims
+   - FSB (First Service By) labor costs segregated by ICE vs EV
+   - FSB acceptance rate and trend
+
+3. **Invoice Pending Upload Report**
+   - 12 invoices ₹25.72L pending upload to TM portal
+   - Invoice aging (which invoices pending > 24hrs, 48hrs, 5+ days)
+   - Status: Awaiting Invoice, Pending Upload, Upload Failed, Uploaded
+
+4. **Payment Status Tracking**
+   - Paid vs Not Paid visibility per claim
+   - Payment aging report
+   - Pending settlement (Approved but payment not received)
+   - Settlement staging (Processing, Initiated, Completed)
+
+5. **Settlement Aging Report**
+   - Approved claims > 5 days not yet settled
+   - Settlement delay impact by branch/location
+   - Claim-level settlement trace with dates
+
+6. **Rusting Claims Deep Dive**
+   - 168 rusting claims total, ₹3.02L parts paid
+   - Rusting by model and production batch
+   - Root cause analysis (paint, body integrity, environment)
+   - Preventive action effectiveness
+
+7. **Advisor-wise Quality Report**
+   - Claims count by advisor
+   - Rejection rate by advisor
+   - Average claim value by advisor
+   - Quality trends over time
+
+8. **Model-wise Loss Analysis**
+   - Parts and labour cost per model
+   - Warranty cost as % of sales
+   - Top problem parts by model
+   - Leakage by model
+
+9. **Top Parts Analysis**
+   - Top 20 parts by frequency
+   - Top 20 parts by cost
+   - Parts margin impact (20% rule)
+   - Parts with highest rejection rate
+
+10. **Labour Analysis (FSB ICE vs EV)**
+    - FSB labour costs ICE vs EV comparison
+    - Labour headcount per location
+    - Labour efficiency metrics
+    - Skill-level mapping to labour costs
+
+11. **PV vs EV Settlement Comparison**
+    - PV settlement reports (multiple batches)
+    - EV settlement reports (multiple batches)
+    - Side-by-side financial comparison
+    - PV/EV cost variance analysis
+
+12. **Critical Alerts Enhanced**
+    - 28+ active alerts categorized:
+      - Not submitted > 24 hours (8 claims)
+      - Review stuck > 3 days (10 claims)
+      - SOP pending > 2 days (4 claims)
+      - Approved not settled > 5 days (3 claims)
+      - Rejection reason blank (3 claims)
+    - Each alert must show: claim ID, advance amount, days pending, assigned owner, action required
+
+13. **Month-wise Category Matrix**
+    - Categories: WC, FSB, Updation, Goodwill, AMC, Part WC, Settlement
+    - Columns: Count, Claimed, Settled, Pending, Rejection Rate, Avg Value
+    - Monthly historical view with YTD rollup
+
+14. **TAT (Turn-Around Time) Monitoring**
+    - Initial -> Submission: target 0 days
+    - Submission -> Review: target 2 days (SLA: 3 days)
+    - Review -> Approval: target 1 day (SLA: 2 days)
+    - Approval -> Settlement: target 5 days (SLA: 7 days)
+    - Actual vs Target by claim stage with trend
+
+15. **Rejection Root-Cause Report**
+    - Top rejection reasons with frequency
+    - Corrective action owner assignment
+    - Action completion status tracking
+    - Effectiveness metrics (same claim re-submission after action)
+
+---
+
+## Enhanced Data Model Requirements
+
+Additional fields required in warranty import tables (discovered from audited reports):
+
+### Common Fields (All Tables)
+- `claim_id` / `job_card_id` (primary reference)
+- `advisor_id` / `advisor_name` (track by advisor)
+- `model` / `variant` (vehicle model for loss analysis)
+- `vehicle_age_months` (correlate to warranty period)
+- `manufacturing_date` (batch/production trace)
+- `registration_number` (VIN/registration for dedup)
+- `status` (Initial, Submitted, Review, SOP, Approved, Rejected, Settled, Paid)
+- `created_date`, `submitted_date`, `review_date`, `sop_date`, `approved_date`, `settled_date`, `paid_date` (TAT tracking)
+- `posted_doc_url` (invoice/document link)
+
+### Specific Fields
+- `parts_amount`, `labour_amount`, `special_charges` (amount breakdown)
+- `special_charge_code` (980016, 980019, 980025 mapping)
+- `claimed_amount`, `approved_amount`, `paid_amount` (financial trace)
+- `rejection_reason`, `corrective_action`, `action_owner` (root cause & owner)
+- `payment_status` (Paid, Not Paid, Pending)
+- `settlement_status` (Processing, Initiated, Completed, Failed)
+- `invoice_status` (Awaiting, Pending Upload, Uploaded, Failed)
+
+---
+
+## Updated Traceability Matrix (Extended)
+
+| Ref ID | Claude Requirement | Techwheels Target (Report/Widget) | File Path(s) | Status | Validation Method |
+|---|---|---|---|---|---|
+| (Previous 23 rows: TR-001 through TR-023 remain as-is) | | | | | |
+| TR-024 | Special charges dashboard (980016, 980019, 980025) | Special Charges Report tab | src/pages/reports/warranty/SpecialChargesReport.tsx | Pending | Charge code breakdown validation |
+| TR-025 | PDI & FSB separated analysis | PDI & FSB Separation tab | src/pages/reports/warranty/PDIFSBReport.tsx | Pending | PDI acceptance rate vs claim rate |
+| TR-026 | Invoice pending upload aging report | Invoice Upload Status Report | src/pages/reports/warranty/InvoiceUploadReport.tsx | Pending | Invoice count by aging bucket |
+| TR-027 | Payment status and settlement aging | Settlement Aging Report | src/pages/reports/warranty/SettlementAgingReport.tsx | Pending | Approved-not-settled amount reconciliation |
+| TR-028 | Rusting claims root cause deep dive | Rusting Analysis Report | src/pages/reports/warranty/RustingAnalysisReport.tsx | Pending | Rusting claim count + cost validation |
+| TR-029 | Advisor-wise quality and performance | Advisor Performance Report | src/pages/reports/warranty/AdvisorPerformanceReport.tsx | Pending | Advisor-level aggregation and TAT variance |
+| TR-030 | Model-wise loss and warranty cost | Model Cost Analysis Report | src/pages/reports/warranty/ModelCostAnalysisReport.tsx | Pending | Model-level cost-per-claim validation |
+| TR-031 | Top 20 parts by frequency and cost | Parts Analysis Report | src/pages/reports/warranty/PartsAnalysisReport.tsx | Pending | Parts ranking and margin impact |
+| TR-032 | Labour analysis ICE vs EV | Labour Efficiency Report | src/pages/reports/warranty/LabourAnalysisReport.tsx | Pending | Labour cost per JC by fuel type |
+| TR-033 | PV vs EV settlement comparison | PV/EV Settlement Report | src/pages/reports/warranty/PVEVSettlementReport.tsx | Pending | Settlement report number comparison (Rpt 32-41) |
+| TR-034 | Enhanced critical alerts (28+ alerts) | Critical Alerts v2 with ownership | src/pages/reports/warranty/CriticalAlertsReport.tsx | Partial | Alert count by severity bucket |
+| TR-035 | Month-wise category matrix (7 categories) | Month Category Matrix | src/pages/reports/warranty/MonthWiseCategoryReport.tsx | Partial | Category totals validation by month |
+| TR-036 | TAT monitoring by claim stage | TAT Monitoring Dashboard | src/pages/reports/warranty/TATMonitoringReport.tsx | Pending | Stage-wise TAT vs SLA validation |
+| TR-037 | Rejection root-cause with corrective actions | Rejection Analysis Report | src/pages/reports/warranty/RejectionAnalysisReport.tsx | Pending | Root cause -> action -> effectiveness trace |
+| TR-038 | Enhanced data fields in all warranty tables | Warranty table schema v2 | supabase/migrations/20260530*_warranty_schema_enhancement.sql | Pending | Schema audit + field presence check |
+| TR-039 | Claim-to-settlement payment flow visibility | Payment Flow Dashboard | src/pages/reports/warranty/PaymentFlowReport.tsx | Pending | Status stage transition validation |
+| TR-040 | Invoice document tracking and URL linking | Invoice Document Repository | src/pages/reports/warranty/InvoiceDocumentReport.tsx | Pending | Posted doc URL accessibility and format |
+
+---
+
+## Data Schema Enhancement Migration (Required)
+
+Create new migration file: `supabase/migrations/20260530*_warranty_schema_enhancement.sql`
+
+This migration must add to all 7 warranty tables:
+
+```sql
+-- Common fields for TAT tracking and accountability
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS claim_id TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS advisor_id TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS advisor_name TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS vehicle_age_months INTEGER;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS manufacturing_date DATE;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS registration_number TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS status TEXT; -- Initial, Submitted, Review, SOP, Approved, Rejected, Settled, Paid
+
+-- Financial breakdown fields
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS parts_amount DECIMAL(12,2);
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS labour_amount DECIMAL(12,2);
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS special_charges DECIMAL(12,2);
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS special_charge_code TEXT; -- 980016, 980019, 980025
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS claimed_amount DECIMAL(12,2);
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS approved_amount DECIMAL(12,2);
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(12,2);
+
+-- Date fields for TAT calculation
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS submitted_date TIMESTAMP;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS review_date TIMESTAMP;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS sop_date TIMESTAMP;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS approved_date TIMESTAMP;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS settled_date TIMESTAMP;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS paid_date TIMESTAMP;
+
+-- Status and ownership fields
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS corrective_action TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS action_owner TEXT;
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS payment_status TEXT; -- Paid, Not Paid, Pending
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS settlement_status TEXT; -- Processing, Initiated, Completed, Failed
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS invoice_status TEXT; -- Awaiting, Pending Upload, Uploaded, Failed
+
+-- Document linking
+ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS posted_doc_url TEXT;
+```
+
+---
+
 ## Next Immediate Steps
 
 1. Validate dashboard totals against sample source files (category-wise and month-wise).
 2. Freeze column mapping contract for each of the 7 warranty source report formats.
 3. Replace heuristic value parsing with explicit formula mapping per source table.
 4. Add owner/action columns in critical alert rows for daily operations handoff.
+5. **[NEW]** Create schema enhancement migration with expanded field set for all 7 warranty tables.
+6. **[NEW]** Implement PV vs EV settlement comparison report (Reports 32-41 historical data).
+7. **[NEW]** Build special charges dashboard with 980xxx job code breakdown.
+8. **[NEW]** Add invoice pending upload report with TM portal status tracking.
+9. **[NEW]** Implement TAT monitoring dashboard with stage-wise SLA visibility.
+10. **[NEW]** Create rusting analysis deep-dive with model and batch correlation.

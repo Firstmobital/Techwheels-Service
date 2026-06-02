@@ -7,6 +7,7 @@ Primary source folder: local_folder/Reference/WebVersionRedesignReference
 Reference root (from this file): ../../local_folder/Reference/WebVersionRedesignReference
 Reference root (workspace-relative): local_folder/Reference/WebVersionRedesignReference
 Re-audit pass: 2026-06-02 (deep inventory + artifact delta capture)
+Re-audit pass 2: 2026-06-02 (mirror TS constraints + instruction file reconciliation)
 
 Path convention in this plan:
 1. Any bare reference filename (for example IMPLEMENTATION_PLAN.md, styles.css, shell.jsx) resolves under ../../local_folder/Reference/WebVersionRedesignReference.
@@ -33,8 +34,7 @@ This document is also the live activity tracker. Every completed, in-progress, b
 3. Prototype source files under ../../local_folder/Reference/WebVersionRedesignReference (styles.css, components.css, app-data.js, screen JSX, screen data JS)
 4. Screenshot evidence under ../../local_folder/Reference/WebVersionRedesignReference/screens/
 5. Mirror src/pages TypeScript files under ../../local_folder/Reference/WebVersionRedesignReference/src/pages/ for implementation behavior confirmation
-
-Note: ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md is currently missing in this re-audit and is tracked in blocker log.
+6. ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md (currently present; reinstated in authority set)
 
 ### 2.2 Non-negotiable constraints (audited)
 
@@ -63,7 +63,7 @@ If any implementation point is missing from audited artifacts:
 ### 3.1 Core plan/instruction files
 
 1. ../../local_folder/Reference/WebVersionRedesignReference/IMPLEMENTATION_PLAN.md
-2. ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md (missing in current re-audit)
+2. ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md
 
 ### 3.2 Shared design system and shell primitives
 
@@ -232,6 +232,11 @@ Classes that must be available in real app styling:
 2. Forgot password dedicated state/screen behavior using existing reset flow
 3. Request access redesign in SignUpPage.tsx with password strength rules aligned with existing constraints
 4. Preserve auth API calls and validation paths
+5. Explicit auth constraint reconciliation required:
+- SignUpPage mirror flow currently enforces minimum 8 chars.
+- PasswordUpdate flow enforces 12+ with upper/lower/number/special.
+- Prototype request-access design guidance expects 12+ strength-meter behavior.
+- Final execution must preserve existing runtime logic unless user explicitly requests logic change.
 
 ### 7.2 Home and shell
 
@@ -248,6 +253,10 @@ Classes that must be available in real app styling:
 3. Source option set parity
 4. Console split layout parity: left sticky intake form + right live recent intake feed with newest-first prepend behavior
 5. Feed item visual states parity including fresh-entry highlight animation
+6. Import parser constraints from mirror TS implementation:
+- required headers: reg_number and sa_employee_code
+- row-level skip behavior when required fields are missing
+- owner phone validation remains exact 10 digits
 
 ### 7.4 Admin
 
@@ -257,6 +266,9 @@ Classes that must be available in real app styling:
 4. Modules tab table visual parity
 5. Mappings tab table visual parity
 6. Toast and modal visual parity
+7. Dealer assignment constraint must remain explicit in UX/help text:
+- dealer code is required for AutoDoc visibility
+- user must sign out and sign back in after dealer updates for JWT/claims refresh
 
 ### 7.5 Settings
 
@@ -274,6 +286,7 @@ Classes that must be available in real app styling:
 2. Per-row editable controls parity (service type, JC number, remark)
 3. Estimate upload/replace visual actions parity
 4. Per-row save affordance parity
+5. Service type editor must preserve current non-standard values by retaining current value as selectable option when it is outside standard option list
 
 ### 7.7 Floor Incharge
 
@@ -295,6 +308,20 @@ Classes that must be available in real app styling:
 3. AutoDocPage.tsx and JobCardPage.tsx - shell + design system parity only until dedicated reference arrives
 
 These are explicitly tracked as partially blocked-for-full-parity due to missing dedicated redesign specs for non-warranty report categories, Import, and AutoDoc/JobCard in the audited folder.
+
+### 7.10 Reports - Warranty full refactor scope (explicit)
+
+1. Warranty report redesign is treated as a full 28-report refactor package for the warranty category.
+2. Coverage basis is the reference note "Warranty dashboard v3 (full 28-report refactor)" backed by warranty-reports-data.js aggregates sourced from 15 uploaded report files now represented in DB-backed truth.
+3. Tab-level scope contract for parity:
+- Overview: portfolio KPIs, pipeline split including rejected lane, claims-by-source, claim-type performance, model risk and theme matrix insights.
+- Critical Alerts: SLA aging buckets and exception queues with JC drilldown behavior.
+- Financial: claimed/invoiced/pending, 20 percent revenue analysis, pending-invoice and special-charge views.
+- Operations: queue health, SOP wait signals, root-cause and parts-defect operational insights.
+4. Taxonomy/traceability contract:
+- category-count decomposition remains labour-revenue 5, revenue 7, parts 17, warranty 1.
+- warranty redesign must preserve mapping consistency to the audited traceability references (TR-001..TR-008, TR-010..TR-012, TR-019, TR-022; TR-018 remains heuristic as noted in source).
+5. Non-warranty report categories remain blocked for full redesign parity until dedicated visual references are supplied (tracked under T-038/B-001).
 
 ---
 
@@ -405,11 +432,14 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 | T-028 | Service Advisor | Redesign advisor assigned-rows workspace | service-advisor.jsx + service-advisor-data.js | src/pages/ServiceAdvisorPage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-029 | Floor Incharge | Redesign assignment workspace and controls | floor.jsx + floor-data.js | src/pages/FloorInchargePage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-030 | Technician | Redesign technician picker/income/rows workspace | technician.jsx + technician-data.js | src/pages/TechnicianPage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
-| T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | PENDING | unassigned | - | 2026-06-02 | - | Warranty redesign spec available and should be ported fully |
+| T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | PENDING | unassigned | - | 2026-06-02 | - | Includes explicit full 28-report refactor scope and 4-tab A1-E3 parity contract |
 | T-032 | Remaining Modules | Apply shell + design-system parity to Import | IMPLEMENTATION_PLAN.md section pending | src/pages/ImportPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Full redesign spec not present in audited files |
 | T-033 | Remaining Modules | Apply shell + design-system parity to AutoDoc and JobCard | IMPLEMENTATION_PLAN.md section pending | src/pages/AutoDocPage.tsx, src/pages/JobCardPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Full redesign spec not present in audited files |
 | T-038 | Reports | Keep non-warranty report categories in blocked/pending state until dedicated redesign artifacts arrive | IMPLEMENTATION_PLAN.md + folder audit | src/pages/ReportsPage.tsx and reports/* (non-warranty) | BLOCKED | unassigned | - | 2026-06-02 | - | Needs dedicated redesign prototypes for labour-revenue, revenue, parts categories |
-| T-039 | Governance | Resolve missing reference instruction artifact in bundle (copilot-instructions.md) | folder audit recheck | local_folder/Reference/WebVersionRedesignReference | BLOCKED | unassigned | - | 2026-06-02 | - | Source file absent in current bundle |
+| T-039 | Governance | Reconcile reference instruction artifact status (copilot-instructions.md) | folder audit recheck | local_folder/Reference/WebVersionRedesignReference | DONE | unassigned | - | 2026-06-02 | 2026-06-02 | File present in second-pass re-audit; blocker closed |
+| T-040 | Auth Governance | Resolve password-policy spec mismatch across redesign prototype and mirror TS flows | IMPLEMENTATION_PLAN.md + auth.jsx + src/pages/SignUpPage.tsx + src/pages/PasswordUpdatePage.tsx | src/pages/SignUpPage.tsx, src/pages/PasswordUpdatePage.tsx | BLOCKED | unassigned | - | 2026-06-02 | - | Needs explicit product decision before any logic normalization |
+| T-041 | Reception Import | Preserve and verify import-required-header and row-skip behavior during redesign port | src/pages/ReceptionPage.tsx + reception.jsx | src/pages/ReceptionPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Required headers reg_number and sa_employee_code are explicit constraints |
+| T-042 | Admin Dealer Flow | Preserve dealer assignment/re-login guidance and behavior in redesigned Admin UX | src/pages/AdminPage.tsx + admin.jsx | src/pages/AdminPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Dealer code assignment affects JWT/RLS visibility for AutoDoc |
 | T-034 | QA | Responsive parity verification (375/768/1280) | IMPLEMENTATION_PLAN.md + styles.css | all touched pages | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-035 | QA | RBAC scenario verification (2/4/all equivalent) | app-data.js + IMPLEMENTATION_PLAN.md | src/App.tsx + module routes | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-036 | QA | Build, lint, runtime sanity and regression check | IMPLEMENTATION_PLAN.md acceptance checklist | workspace | PENDING | unassigned | - | 2026-06-02 | - |  |
@@ -450,6 +480,8 @@ Rules:
 |---|---|---|---|---|
 | 2026-06-02 | Deep audit completed and fresh final plan created from reference artifacts | T-001 to T-037 initialized | COMPLETE | Audited files listed in section 3 |
 | 2026-06-02 | Deep re-audit completed; warranty and reception-console deltas added; tracker updated with new tasks and blockers | T-031, T-038, T-039 and section updates | COMPLETE | Warranty Reports.html, warranty.jsx/data/main, reception.jsx, components.css, full file inventory |
+| 2026-06-02 | Deep re-audit pass 2 completed; mirror TS constraints extracted and instruction-file status reconciled | T-039, T-040, T-041, T-042 and section updates | COMPLETE | src/pages/ReceptionPage.tsx, src/pages/AdminPage.tsx, src/pages/SignUpPage.tsx, src/pages/PasswordUpdatePage.tsx, src/pages/ServiceAdvisorPage.tsx, copilot-instructions.md |
+| 2026-06-02 | Warranty 28-report refactor additional info normalized into explicit execution scope and task notes | T-031, T-038 and section updates | COMPLETE | IMPLEMENTATION_PLAN.md change-log note (warranty dashboard v3), reports category decomposition, warranty tab contracts |
 
 ---
 
@@ -458,7 +490,8 @@ Rules:
 | Blocker ID | Date | Related Task IDs | Blocker Description | Required Input To Unblock | Status |
 |---|---|---|---|---|---|
 | B-001 | 2026-06-02 | T-032, T-033, T-038 | Dedicated redesign prototypes are still missing for Import, AutoDoc/JobCard, and non-warranty report categories. | Provide finalized redesign reference files/snapshots/spec for Import, AutoDoc/JobCard, and non-warranty report pages. | OPEN |
-| B-002 | 2026-06-02 | T-039 | Reference instruction file ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md is missing in current audited folder state. | Restore/provide the missing copilot-instructions.md artifact if it is intended to be authoritative. | OPEN |
+| B-002 | 2026-06-02 | T-039 | Reference instruction file status reconciliation. | Verified in second-pass re-audit: file exists and is readable. | CLOSED |
+| B-003 | 2026-06-02 | T-040 | Password policy mismatch across audited sources (prototype request-access guidance vs mirror SignUp minimum 8 chars vs PasswordUpdate 12+ strong policy). | Provide explicit product decision on whether sign-up policy remains 8+ (logic-preserving) or is elevated to 12+ strong policy. | OPEN |
 
 ---
 
@@ -480,9 +513,15 @@ Rules:
 | ../../local_folder/Reference/WebVersionRedesignReference/service-advisor.jsx + ../../local_folder/Reference/WebVersionRedesignReference/service-advisor-data.js | Advisor assigned-rows workspace contract | T-028 |
 | ../../local_folder/Reference/WebVersionRedesignReference/floor.jsx + ../../local_folder/Reference/WebVersionRedesignReference/floor-data.js | Floor assignment workflow contract | T-029 |
 | ../../local_folder/Reference/WebVersionRedesignReference/technician.jsx + ../../local_folder/Reference/WebVersionRedesignReference/technician-data.js | Technician income and assigned-row contract | T-030 |
-| ../../local_folder/Reference/WebVersionRedesignReference/warranty.jsx + ../../local_folder/Reference/WebVersionRedesignReference/warranty-data.js + ../../local_folder/Reference/WebVersionRedesignReference/warranty-main.jsx + ../../local_folder/Reference/WebVersionRedesignReference/Warranty Reports.html | Warranty reports redesign contract (overview, alerts, financial, operations; pipeline and settlement views) | T-031 |
+| ../../local_folder/Reference/WebVersionRedesignReference/warranty.jsx + ../../local_folder/Reference/WebVersionRedesignReference/warranty-data.js + ../../local_folder/Reference/WebVersionRedesignReference/warranty-main.jsx + ../../local_folder/Reference/WebVersionRedesignReference/Warranty Reports.html | Warranty reports redesign contract (full 28-report refactor context, 4-tab A1-E3 parity, pipeline/settlement and operations coverage) | T-031 |
+| ../../local_folder/Reference/WebVersionRedesignReference/IMPLEMENTATION_PLAN.md (reports categories + warranty v3 change-log note) | Report taxonomy decomposition 5+7+17+1 and warranty v3 aggregate contract sourced from 15 uploaded files / DB truth | T-031, T-038 |
 | ../../local_folder/Reference/WebVersionRedesignReference/src/pages/SettingsPage.tsx | selectedSectionId section-gating, hash-deep-link behavior, single-section rendering contract | T-022 |
 | ../../local_folder/Reference/WebVersionRedesignReference/reception.jsx + ../../local_folder/Reference/WebVersionRedesignReference/components.css | Reception console split-layout contract with sticky intake + live feed + fresh-item animation | T-014, T-015 |
+| ../../local_folder/Reference/WebVersionRedesignReference/src/pages/ReceptionPage.tsx | Reception import contract: required headers reg_number and sa_employee_code, row skip handling, exact 10-digit owner phone validation | T-041 |
+| ../../local_folder/Reference/WebVersionRedesignReference/src/pages/AdminPage.tsx | Dealer assignment contract: dealer code required for AutoDoc visibility and re-login required after dealer update | T-042 |
+| ../../local_folder/Reference/WebVersionRedesignReference/src/pages/ServiceAdvisorPage.tsx | Service type selector contract: preserve non-standard existing values as selectable option | T-028 |
+| ../../local_folder/Reference/WebVersionRedesignReference/src/pages/SignUpPage.tsx + ../../local_folder/Reference/WebVersionRedesignReference/src/pages/PasswordUpdatePage.tsx + ../../local_folder/Reference/WebVersionRedesignReference/auth.jsx + ../../local_folder/Reference/WebVersionRedesignReference/IMPLEMENTATION_PLAN.md | Auth password-policy conflict map requiring explicit product decision before logic normalization | T-040, B-003 |
+| ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md | Copilot instruction rule lock confirmed present in second-pass re-audit | T-039 |
 | ../../local_folder/Reference/WebVersionRedesignReference/*.html + ../../local_folder/Reference/WebVersionRedesignReference/*-main.jsx entrypoints | Per-screen composition wiring and role context assumptions for preview | T-005, T-013 to T-030 |
 | ../../local_folder/Reference/WebVersionRedesignReference/screens/* | Visual parity evidence set | T-037 |
 
@@ -494,7 +533,10 @@ Rules:
 2. Reception prototype is now an explicit front-desk console (form + live feed) and should be ported accordingly.
 3. Components stylesheet includes reception and warranty-specific primitives that were not fully listed in first-pass tracker.
 4. Mirror TypeScript settings page confirms hash-driven section selection behavior in addition to selectedSectionId gating.
-5. copilot-instructions.md is currently missing from the reference folder and is now tracked as an explicit blocker.
+5. Second-pass re-audit confirms copilot-instructions.md is present; prior missing-file blocker is closed.
+6. Mirror TypeScript pages add explicit implementation constraints for reception import validation, dealer assignment re-login behavior, and service-advisor non-standard service-type retention.
+7. Auth password policy mismatch across sources is now explicitly tracked as a decision blocker to prevent unintended logic drift.
+8. Warranty scope has been expanded in this tracker from generic parity wording to an explicit 28-report refactor contract so execution cannot drift on report breadth.
 
 ---
 
