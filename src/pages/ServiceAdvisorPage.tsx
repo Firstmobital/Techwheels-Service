@@ -237,25 +237,7 @@ export default function ServiceAdvisorPage() {
     <div>
       {/* Toast Notification */}
       {toastMsg && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 22,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 90,
-            background: 'var(--ink)',
-            color: '#fff',
-            padding: '11px 18px',
-            borderRadius: 99,
-            fontSize: 13.5,
-            fontWeight: 600,
-            boxShadow: 'var(--sh-3)',
-            display: 'flex',
-            gap: 9,
-            alignItems: 'center',
-          }}
-        >
+        <div className="sa-toast">
           <Icon name="checksm" size={16} strokeWidth={2.4} />
           {toastMsg}
         </div>
@@ -264,7 +246,7 @@ export default function ServiceAdvisorPage() {
       {/* Page Head */}
       <div className="pagehead">
         <div>
-          <p className="greet"><Icon name="admin" size={13} strokeWidth={2} style={{ verticalAlign: '-2px', marginRight: 5 }} />Service Advisor</p>
+          <p className="greet"><Icon name="admin" size={13} strokeWidth={2} className="icon-inline-shift" />Service Advisor</p>
         <h1>
           {isAdmin ? 'All assigned vehicles' : 'My assigned vehicles'}
         </h1>
@@ -276,22 +258,22 @@ export default function ServiceAdvisorPage() {
             </>
           ) : (
             <>
-              Showing only rows assigned to <b style={{ color: 'var(--ink-2)' }}>{advisorName}</b> ({advisorCode}). Edit service type, JC number, remark, and upload the estimate.
+              Showing only rows assigned to <b className="text-ink-2">{advisorName}</b> ({advisorCode}). Edit service type, JC number, remark, and upload the estimate.
             </>
           )}
         </p>
         </div>
 
         {error && (
-          <div className="alert alert--error" style={{ marginTop: 12 }}>
+          <div className="alert alert--error mt-12">
             {error}
           </div>
         )}
 
         {/* Branch Filter (Admin Only) */}
         {isAdmin && availableBranches.length > 0 && (
-          <div className="toolbar" style={{ marginBottom: 0 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-2)' }}>Filter by branch:</span>
+          <div className="toolbar toolbar--tight">
+            <span className="toolbar__label">Filter by branch:</span>
             <button
               type="button"
               onClick={() => setSelectedBranch('all')}
@@ -336,7 +318,7 @@ export default function ServiceAdvisorPage() {
           </div>
 
           <div className="schip">
-            <span className="ic" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}><Icon name="doc" size={16} strokeWidth={2} /></span>
+            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
             <div>
               <div className="n">{pendingEstimateCount}</div>
               <div className="l">Estimates pending</div>
@@ -358,7 +340,7 @@ export default function ServiceAdvisorPage() {
         <div className="card__head">
           <div>
             <h3>
-              Assigned entries <span style={{ color: 'var(--muted)', fontWeight: 600 }}>({displayedRows.length})</span>
+              Assigned entries <span className="subcount">({displayedRows.length})</span>
             </h3>
             <div className="sub">
               {isAdmin ? 'Showing all intakes from filtered branch · edits save per row' : 'Each row is one intake assigned to you · edits save per row'}
@@ -366,11 +348,11 @@ export default function ServiceAdvisorPage() {
           </div>
         </div>
 
-        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+        <div className="card__body card__body--table-tight">
           {loading ? (
-            <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--muted)' }}>Loading assigned rows...</div>
+            <div className="empty-state">Loading assigned rows...</div>
           ) : !hasRows ? (
-            <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--muted)' }}>
+            <div className="empty-state">
               {isAdmin ? 'No rows found for this branch filter.' : 'No rows are assigned to your advisor account.'}
             </div>
           ) : (
@@ -397,7 +379,7 @@ export default function ServiceAdvisorPage() {
 
                     return (
                       <tr key={row.id}>
-                        <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{formatDate(row.created_at)}</td>
+                        <td className="td-muted-nowrap">{formatDate(row.created_at)}</td>
                         <td>
                           <span className={`pill ${toneColor}`.trim()}>
                             {row.source}
@@ -409,8 +391,7 @@ export default function ServiceAdvisorPage() {
                           <select
                             value={draft.service_type}
                             onChange={(event) => patchDraft(row.id, { service_type: event.target.value })}
-                            className="sel"
-                            style={{ height: 36, minWidth: 170 }}
+                            className="sel sel--service-type"
                           >
                             <option value="">Select service type</option>
                             {SERVICE_TYPE_OPTIONS.map((option) => (
@@ -427,14 +408,13 @@ export default function ServiceAdvisorPage() {
                             onChange={(event) =>
                               patchDraft(row.id, { jc_number: event.target.value.toUpperCase() })
                             }
-                            style={{ height: 36, minWidth: 200, fontSize: 12.5, textTransform: 'uppercase' }}
                             placeholder="JC number"
-                            className="inp mono"
+                            className="inp mono inp--jc"
                           />
                         </td>
-                        <td style={{ minWidth: 150 }}>
-                          <div className="strong" style={{ whiteSpace: 'normal' }}>{row.owner_name || '-'}</div>
-                          <div className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>{row.owner_phone || '-'}</div>
+                        <td className="td-owner">
+                          <div className="strong owner-name">{row.owner_name || '-'}</div>
+                          <div className="mono owner-phone">{row.owner_phone || '-'}</div>
                         </td>
                         <td>
                           <textarea
@@ -442,26 +422,24 @@ export default function ServiceAdvisorPage() {
                             onChange={(event) => patchDraft(row.id, { remark: event.target.value })}
                             placeholder="Add remark…"
                             rows={1}
-                            className="inp"
-                            style={{ minWidth: 200, minHeight: 36, height: 36, padding: '8px 11px' }}
+                            className="inp inp--remark"
                           />
                         </td>
-                        <td style={{ minWidth: 190 }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                        <td className="td-estimate">
+                          <div className="estimate-col">
                             {row.estimate_storage_path ? (
                               <>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
+                                <span className="estimate-status">
                                   <Icon name="checksm" size={13} strokeWidth={2.4} />
                                   {row.estimate_file_name || 'Estimate uploaded'}
                                 </span>
-                                <div style={{ display: 'flex', gap: 6 }}>
+                                <div className="estimate-actions">
                                   {row.estimate_drive_url && (
                                     <a
                                       href={row.estimate_drive_url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="linkbtn"
-                                      style={{ fontSize: 12.5 }}
+                                      className="linkbtn linkbtn--sm"
                                     >
                                       View estimate
                                     </a>
@@ -470,8 +448,7 @@ export default function ServiceAdvisorPage() {
                                     type="button"
                                     onClick={() => fileInputRefs.current[row.id]?.click()}
                                     disabled={uploadingId === row.id}
-                                    className="tbtn"
-                                    style={{ height: 26 }}
+                                    className="tbtn tbtn--compact"
                                   >
                                     Replace
                                   </button>
@@ -505,8 +482,10 @@ export default function ServiceAdvisorPage() {
                               type="button"
                               onClick={() => void saveRow(row.id)}
                               disabled={savingId === row.id || !isDirty}
-                              className="btn btn--primary btn--sm"
-                              style={{ opacity: savingId === row.id || isDirty ? 1 : 0.5 }}
+                              className={[
+                                'btn btn--primary btn--sm',
+                                !isDirty && savingId !== row.id ? 'btn--dim' : '',
+                              ].join(' ').trim()}
                             >
                               {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
                             </button>

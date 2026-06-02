@@ -450,7 +450,7 @@ export default function ReceptionPage() {
         ref={fileInputRef}
         type="file"
         accept=".xlsx,.xls,.csv"
-        style={{ display: 'none' }}
+        className="hidden"
         onChange={handleImportChange}
       />
 
@@ -472,8 +472,8 @@ export default function ReceptionPage() {
         )}
       </div>
 
-      {error && <div className="alert alert--err" style={{ marginBottom: 'var(--gap)' }}>{error}</div>}
-      {notice && <div className="alert alert--ok" style={{ marginBottom: 'var(--gap)' }}>{notice}</div>}
+      {error && <div className="alert alert--err mb-gap">{error}</div>}
+      {notice && <div className="alert alert--ok mb-gap">{notice}</div>}
 
       <div className="recep-grid">
         <form onSubmit={handleSubmit} className="card recep-form">
@@ -494,14 +494,13 @@ export default function ReceptionPage() {
                     reg_number: event.target.value.toUpperCase(),
                   }))
                 }
-                style={{ textTransform: 'uppercase' }}
                 autoCapitalize="characters"
                 placeholder="RJ14AB1234"
-                className="inp"
+                className="inp inp--uc"
               />
             </label>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="form-grid-2">
               <label className="field">
                 <span className="label">Model</span>
                 <select
@@ -548,8 +547,8 @@ export default function ReceptionPage() {
               </select>
             </label>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <label className="field" style={{ marginBottom: 0 }}>
+            <div className="form-grid-2">
+              <label className="field field--no-gap">
                 <span className="label">Owner Name</span>
                 <input
                   value={form.owner_name}
@@ -558,7 +557,7 @@ export default function ReceptionPage() {
                 />
               </label>
 
-              <label className="field" style={{ marginBottom: 0 }}>
+              <label className="field field--no-gap">
                 <span className="label">Owner Phone</span>
                 <input
                   value={form.owner_phone}
@@ -575,7 +574,7 @@ export default function ReceptionPage() {
               </label>
             </div>
 
-            <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
+            <div className="form-actions">
               <button
                 type="submit"
                 disabled={saving}
@@ -602,23 +601,22 @@ export default function ReceptionPage() {
               <h3>Reception entries</h3>
               <div className="sub">Newest first · {filteredEntries.length} shown</div>
             </div>
-            <span className="inp-wrap" style={{ width: 240 }}>
+            <span className="inp-wrap recep-search">
               <span className="icon-l">⌕</span>
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="inp"
+                className="inp inp--compact"
                 placeholder="Search reg / model / SA"
-                style={{ height: 38 }}
               />
             </span>
           </div>
 
           <div className="card__body recep-feed__body scroll">
             {loading ? (
-              <div style={{ padding: '30px 4px', color: 'var(--faint)', fontSize: 14, textAlign: 'center' }}>Loading reception entries...</div>
+              <div className="empty-state empty-state--lg">Loading reception entries...</div>
             ) : filteredEntries.length === 0 ? (
-              <div style={{ padding: '30px 4px', color: 'var(--faint)', fontSize: 14, textAlign: 'center' }}>No entries match your search.</div>
+              <div className="empty-state empty-state--lg">No entries match your search.</div>
             ) : (
               filteredEntries.map((entry) => (
                 <div className="recep-item" key={entry.id}>
@@ -638,7 +636,7 @@ export default function ReceptionPage() {
                       <span className="dot2" />
                       <span>By {entry.created_by}</span>
                     </div>
-                    <div className="tactions" style={{ marginTop: 8 }}>
+                    <div className="tactions tactions--mt">
                       <button
                         type="button"
                         onClick={() => startEdit(entry)}

@@ -252,7 +252,7 @@ export default function DashboardPage({
               Open Reception <Icon name="arrowr" size={15} />
             </button>
           </div>
-          <div className="card__body" style={{ padding: '6px 18px 12px' }}>
+          <div className="card__body card__body--table">
             <div className="tbl-wrap scroll">
               <table className="tbl">
                 <thead>
@@ -273,12 +273,12 @@ export default function DashboardPage({
                       <td className="mono strong">{row.reg_number}</td>
                       <td>{row.model || '—'}</td>
                       <td className="strong">{row.sa_name || '—'}</td>
-                      <td style={{ color: 'var(--muted)' }}>{row.service_type || '—'}</td>
+                      <td className="text-muted">{row.service_type || '—'}</td>
                     </tr>
                   ))}
                   {!loading && receptionRows.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ color: 'var(--muted)' }}>No reception entries found.</td>
+                      <td colSpan={6} className="text-muted">No reception entries found.</td>
                     </tr>
                   )}
                 </tbody>
@@ -294,12 +294,12 @@ export default function DashboardPage({
               <div className="sub">Across all modules</div>
             </div>
           </div>
-          <div className="card__body" style={{ paddingTop: 6, paddingBottom: 6 }}>
+          <div className="card__body card__body--feed-tight">
             <div className="feed">
               {activityRows.map((activity) => (
                 <div className="feed__row" key={activity.id}>
                   <span className="feed__ic"><Icon name={activity.icon} size={16} /></span>
-                  <div style={{ minWidth: 0 }}>
+                  <div className="feed__main">
                     <div className="feed__t">{activity.title}</div>
                     <div className="feed__m">{activity.message}</div>
                   </div>
@@ -317,7 +317,7 @@ export default function DashboardPage({
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 'var(--gap)' }}>
+      <div className="card card--mt-gap">
         <div className="card__head">
           <div>
             <h3>Your modules</h3>

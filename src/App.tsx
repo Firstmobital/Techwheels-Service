@@ -156,7 +156,7 @@ function TopNav({
     const hasMenu = item.to === '/reports'
 
     return (
-      <div key={item.to} style={{ position: 'relative' }}>
+      <div key={item.to} className="navrel">
         <button
           type="button"
           className={[`navitem`, active ? 'is-active' : '', open === item.to ? 'open' : ''].join(' ').trim()}
@@ -176,7 +176,7 @@ function TopNav({
         </button>
 
         {hasMenu && open === item.to && (
-          <div className="menu" style={{ left: 0 }}>
+          <div className="menu menu--left">
             <div className="menu__label">Reports categories</div>
             {REPORT_CATEGORIES.map((category, idx) => (
               <button
@@ -205,7 +205,7 @@ function TopNav({
     <>
       <div className="util">
         <div className="util__dealer">
-          <Icon name="building" size={16} strokeWidth={1.7} style={{ color: 'var(--muted)' }} />
+          <Icon name="building" size={16} strokeWidth={1.7} className="util__ic-muted" />
           <span className="nm">{dealerName}</span>
           <span className="code-badge">
             <Icon name="shield" size={12} strokeWidth={2} />
@@ -257,7 +257,7 @@ function TopNav({
           {inlineItems.map((item) => renderNavItem(item))}
 
           {overflowItems.length > 0 && (
-            <div style={{ position: 'relative' }}>
+            <div className="navrel">
               <button
                 type="button"
                 className={[`navitem`, open === 'more' ? 'open' : '', overflowActive ? 'is-active' : ''].join(' ').trim()}
@@ -268,7 +268,7 @@ function TopNav({
                 <Icon name="chevron" size={14} strokeWidth={1.9} className="caret" />
               </button>
               {open === 'more' && (
-                <div className="menu" style={{ left: 0 }}>
+                <div className="menu menu--left">
                   <div className="menu__label">More modules</div>
                   {overflowItems.map((item) => (
                     <button
@@ -292,23 +292,23 @@ function TopNav({
 
         <div className="nav__sp" />
 
-        <div style={{ position: 'relative' }}>
+        <div className="navrel">
           <button type="button" className="userchip" onClick={() => setOpen(open === 'user' ? null : 'user')}>
             <span className="avatar">{userInitials || 'U'}</span>
-            <span className="ucmeta" style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', minWidth: 0, lineHeight: 1.15 }}>
-              <span className="nm" style={{ whiteSpace: 'nowrap' }}>{userName}</span>
-              <span className="rl" style={{ whiteSpace: 'nowrap' }}>{dealerCode}</span>
+            <span className="ucmeta userchip__meta">
+              <span className="nm userchip__nm-nowrap">{userName}</span>
+              <span className="rl userchip__rl-nowrap">{dealerCode}</span>
             </span>
-            <Icon name="chevron" size={14} strokeWidth={1.9} className="ucmeta" style={{ color: 'var(--faint)' }} />
+            <Icon name="chevron" size={14} strokeWidth={1.9} className="ucmeta userchip__caret" />
           </button>
 
           {open === 'user' && (
-            <div className="menu" style={{ right: 0, minWidth: 248 }}>
-              <div style={{ padding: '8px 10px 10px', display: 'flex', gap: 10, alignItems: 'center' }}>
-                <span className="avatar" style={{ width: 36, height: 36 }}>{userInitials || 'U'}</span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>{userName}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userEmail}</div>
+            <div className="menu menu--right-wide">
+              <div className="menu__user-head">
+                <span className="avatar avatar--lg">{userInitials || 'U'}</span>
+                <div className="menu__user-meta">
+                  <div className="menu__user-name">{userName}</div>
+                  <div className="menu__user-email">{userEmail}</div>
                 </div>
               </div>
               <div className="menu__sep" />
@@ -325,8 +325,8 @@ function TopNav({
                 Preferences
               </button>
               <div className="menu__sep" />
-              <button type="button" className="menu__item" onClick={onSignOut} style={{ color: 'var(--danger)' }}>
-                <span className="ic" style={{ color: 'var(--danger)' }}><Icon name="signout" size={16} strokeWidth={2} /></span>
+              <button type="button" className="menu__item menu__item--danger" onClick={onSignOut}>
+                <span className="ic"><Icon name="signout" size={16} strokeWidth={2} /></span>
                 Sign out
               </button>
             </div>
@@ -360,7 +360,7 @@ function TopNav({
             >
               <span className="ic"><Icon name={item.icon} size={18} strokeWidth={1.9} /></span>
               {item.label}
-              {item.to === '/autodoc' && isDirty && <span className="dirty" style={{ marginLeft: 'auto' }} />}
+              {item.to === '/autodoc' && isDirty && <span className="dirty dirty--end" />}
             </button>
           ))}
         </div>
@@ -396,34 +396,32 @@ function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
 
 function AccessDenied() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-2xl">
-        <div className="rounded-xl border border-amber-200 bg-white p-8 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0">
-              <svg className="h-8 w-8 text-amber-600" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c.866-1.5 2.845-2.501 4.953-2.501h10.7c2.108 0 4.087 1.001 4.953 2.501M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+    <div className="page access-denied">
+      <div className="card access-denied__card">
+        <div className="card__head">
+          <div className="access-denied__head">
+            <span className="access-denied__icon"><Icon name="alert" size={20} strokeWidth={1.7} /></span>
+            <div>
+              <h3>Module access required</h3>
+              <div className="sub">Your account is active, but no modules are currently assigned to your role.</div>
             </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-gray-900">Module access required</h2>
-              <p className="mt-2 text-sm text-gray-600">
-                Your account is active, but you don't have permission to access any modules yet. Contact your administrator to request access to:
-              </p>
-              <ul className="mt-3 space-y-1 text-sm text-gray-600">
-                <li>• <strong>Job Cards</strong> — Create and manage service jobs</li>
-                <li>• <strong>Reports</strong> — View cross-module analytics and dashboards</li>
-                <li>• <strong>Employees</strong> — Manage employee master data</li>
-                <li>• <strong>AutoDoc</strong> — Build vehicle documentation and estimates</li>
-                <li>• <strong>Reception</strong> — Capture front-desk intake entries</li>
-                <li>• <strong>Service Advisor</strong> — Work only assigned intake rows</li>
-                <li>• <strong>Floor Incharge</strong> — Assign technicians to open job cards</li>
-                <li>• <strong>Technician</strong> — View assigned rows and day-wise income tracker</li>
-              </ul>
-              <p className="mt-4 text-xs text-gray-500">
-                If you believe this is a mistake, ask your administrator to check your module assignments in the Admin Panel.
-              </p>
-            </div>
+          </div>
+        </div>
+        <div className="card__body">
+          <p className="access-denied__copy">Contact your administrator to request access to:</p>
+          <ul className="access-denied__list">
+            <li><strong>Job Cards</strong> - Create and manage service jobs</li>
+            <li><strong>Reports</strong> - View cross-module analytics and dashboards</li>
+            <li><strong>Employees</strong> - Manage employee master data</li>
+            <li><strong>AutoDoc</strong> - Build vehicle documentation and estimates</li>
+            <li><strong>Reception</strong> - Capture front-desk intake entries</li>
+            <li><strong>Service Advisor</strong> - Work only assigned intake rows</li>
+            <li><strong>Floor Incharge</strong> - Assign technicians to open job cards</li>
+            <li><strong>Technician</strong> - View assigned rows and day-wise income tracker</li>
+          </ul>
+          <div className="note note--info access-denied__note">
+            <span className="ic"><Icon name="alert" size={16} /></span>
+            <div>If you believe this is a mistake, ask your administrator to verify module assignments in Admin.</div>
           </div>
         </div>
       </div>
