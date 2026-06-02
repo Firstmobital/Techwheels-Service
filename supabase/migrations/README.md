@@ -16,6 +16,14 @@ This keeps `supabase/migrations/` focused on pending-to-apply files only.
 
 Do **not** keep full schema/data dump files here because they can be executed as active migrations and cause drift/conflicts.
 
-The previous full dump has been moved to:
+- Canonical authoritative dump for this repo is:
+
+- `local_folder/backups/full_database.sql`
+
+- For large-file reads, use chunk files:
+
+- `local_folder/backups/chunks/full_database.sql.part_*`
+
+- Historical fallback/reference dump (not canonical authority) is kept at:
 
 - `supabase/backups/full_dump.sql`

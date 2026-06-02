@@ -38,6 +38,8 @@ Version Context: Techwheels Service v1.0 (current workspace state)
 ## DB Governance State
 
 - Authoritative schema reference: `local_folder/backups/full_database.sql`.
+- Large-file access layer: `local_folder/backups/chunks/full_database.sql.part_*`.
+- Historical fallback reference (non-canonical): `supabase/backups/full_dump.sql`.
 - DB change tracking file introduced: `docs/Project_Handbook/DB_CHANGE_LEDGER.md`.
 - Mandatory DB workflow file introduced: `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`.
 - RBAC daily execution tracking file introduced: `docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md`.

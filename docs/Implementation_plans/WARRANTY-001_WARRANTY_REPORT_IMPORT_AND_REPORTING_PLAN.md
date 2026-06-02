@@ -80,18 +80,73 @@
 - Model-wise warranty cost as % of sales  
 - Skill-level mapping to labour assignments  
 
-### Missing Data Fields (Schema Enhancement)
+### Missing Data Fields (Corrected – Stored in JSONB, NOT in Schema)
 
-Currently NOT in warranty import tables but REQUIRED:
-- `claim_id`, `advisor_id`, `advisor_name`  
-- `model`, `vehicle_age_months`, `manufacturing_date`  
-- `status` (Initial, Submitted, Review, SOP, Approved, Rejected, Settled, Paid)  
-- `created_date`, `submitted_date`, `review_date`, `sop_date`, `approved_date`, `settled_date`, `paid_date`  
-- `parts_amount`, `labour_amount`, `special_charges`, `special_charge_code`  
-- `claimed_amount`, `approved_amount`, `paid_amount`  
-- `rejection_reason`, `corrective_action`, `action_owner`  
-- `payment_status`, `settlement_status`, `invoice_status`  
-- `posted_doc_url`, `registration_number`  
+**CRITICAL CLARIFICATION (2026-06-02 Audit):**
+
+The following fields are **NOT missing from the database schema** because the JSONB design intentionally stores them inside `source_row_data` as unstructured data, NOT as separate columns. This is by design.
+
+Fields that SHOULD be extractable from `source_row_data` for each warrant source type:
+
+**Financial Fields (All Types):**
+- claimed_amount, approved_amount, paid_amount
+- parts_amount, labour_amount, special_charges
+- special_charge_code (980016, 980019, 980025)
+
+**Operational Fields (All Types):**
+- claim_id / job_card_id
+- status (Initial, Submitted, Review, SOP, Approved, Rejected, Settled, Paid)
+
+**Accountability Fields (All Types):**
+- advisor_id, advisor_name
+- action_owner, rejection_reason, corrective_action
+
+**Vehicle/Asset Fields (Most Types):**
+- model, variant
+- vehicle_age_months, manufacturing_date
+- registration_number
+
+**Timeline Fields (All Types):**
+- created_date, submitted_date, review_date, sop_date, approved_date, settled_date, paid_date
+
+**Status & Documentation Fields (All Types):**
+- payment_status (Paid, Not Paid, Pending)
+- settlement_status (Processing, Initiated, Completed, Failed)
+- invoice_status (Awaiting, Pending Upload, Uploaded, Failed)
+- posted_doc_url (invoice/document link)
+
+### Why JSONB Design?
+
+1. **Heterogeneous sources:** Each of the 7 warranty report types may have different columns
+2. **No schema churn:** New source formats don't require new table migrations
+3. **Source fidelity:** Preserves original structure for audit trail
+4. **Flexible extraction:** Application layer decides what to parse and normalize
+
+### Required: JSONB Extraction Mapping
+
+Instead of schema migration, define **per-source extraction contracts** that specify:
+- Which JSONB keys map to which semantic fields
+- Parsing rules (date formats, amount normalization, etc.)
+- Validation rules per source type
+- Fallback values when keys are missing
+
+**Example:**
+```json
+{
+  "warranty_claim_settlement_report_data": {
+    "claim_id": "JP#",
+    "advisor_id": "Advisor ID",
+    "model": "Model",
+    "claimed_amount": "Claimed Amt",
+    ...
+  },
+  "warranty_fsb_data": {
+    "claim_id": "Job Card #",
+    "labour_amount": "Labour Cost",
+    ...
+  }
+}
+```  
 
 ### New Report Views Required (15)
 
@@ -196,9 +251,75 @@ All schema changes are delivered as migration SQL files and must be run manually
 
 ---
 
-## Data Model (Implemented Foundation)
+## 🔴 CRITICAL SCHEMA CORRECTION REQUIRED (2026-06-02 Final Audit)
 
-Seven tables:
+### Discrepancy Between Current Schema and Operational Reality
+
+**Current Migration File (20260528155000) Defines:**
+```sql
+branch CHECK (branch IN ('Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'))
+location CHECK (location IN ('Ajmer Road', 'Sitapura'))
+portal CHECK (portal IN ('PV', 'EV'))
+```
+
+**Actual Operational Design:**
+- **branch column** should store ONLY location name: `'Ajmer Road'`, `'Sitapura'`
+- **portal column** stores vehicle fuel type: `'PV'` (ICE), `'EV'` (Electric)
+- **Why:** The import UI labels show "Ajmer Road PV", "Ajmer Road EV" etc., but this is ONLY for user clarity during file selection—the actual column values are separated
+
+### Impact
+
+The **branch CHECK constraint is overly restrictive** and combines semantically separate concerns:
+
+1. ❌ **branch constraint too complex** – Stores location + fuel type as composite value
+2. ⚠️ **Violates data normalization** – Location and fuel type are different attributes
+3. ❌ **Will cause data entry errors** – Stores "Ajmer Road PV" but should store "Ajmer Road"
+
+### Required Action: Corrective Migration
+
+Create new migration file: `20260602*_warranty_schema_corrections.sql`
+
+```sql
+-- Fix branch constraint to accept location names only
+ALTER TABLE warranty_claim_settlement_report_data DROP CONSTRAINT warranty_claim_settlement_report_data_branch_check;
+ALTER TABLE warranty_claim_settlement_report_data ADD CONSTRAINT warranty_claim_settlement_report_data_branch_check 
+  CHECK (branch IN ('Ajmer Road', 'Sitapura'));
+
+ALTER TABLE warranty_part_wc_data DROP CONSTRAINT warranty_part_wc_data_branch_check;
+ALTER TABLE warranty_part_wc_data ADD CONSTRAINT warranty_part_wc_data_branch_check 
+  CHECK (branch IN ('Ajmer Road', 'Sitapura'));
+
+-- Repeat for all 7 tables:
+-- warranty_updation_claim_data, warranty_goodwill_data, warranty_amc_data, warranty_fsb_data, warranty_wc_data
+
+-- Optionally rename 'portal' to 'fuel_type' for semantic clarity (non-breaking if skipped)
+-- ALTER TABLE warranty_claim_settlement_report_data RENAME COLUMN portal TO fuel_type;
+```
+
+### UI/Import Labels vs. Database Values
+
+**Import UI (Frontend)** shows location + fuel type for user clarity:
+- "Ajmer Road PV" → User sees this when selecting file for Ajmer Road PV data
+- "Ajmer Road EV" → User sees this when selecting file for Ajmer Road EV data
+- "Sitapura PV" → User sees this when selecting file for Sitapura PV data
+- "Sitapura EV" → User sees this when selecting file for Sitapura EV data
+
+**Database Values (Backend storage)** separate location and fuel type:
+```
+branch='Ajmer Road', location='Ajmer Road', portal='PV'
+branch='Ajmer Road', location='Ajmer Road', portal='EV'
+branch='Sitapura',   location='Sitapura',   portal='PV'
+branch='Sitapura',   location='Sitapura',   portal='EV'
+```
+
+---
+
+## Data Model (Authoritative Schema – REQUIRES CORRECTION 2026-06-02)
+
+**Source Migration:** `supabase/exec_success_migrations/20260528155000_create_warranty_import_tables.sql`  
+**Migration Status:** ✅ Applied and verified in database
+
+### Seven Warranty Import Tables (All Active)
 
 1. warranty_claim_settlement_report_data
 2. warranty_part_wc_data
@@ -208,26 +329,47 @@ Seven tables:
 6. warranty_fsb_data
 7. warranty_wc_data
 
-Shared shape:
+### Authoritative Column Structure (JSONB Design – WITH CORRECTION)
 
-1. branch (4-tab constrained)
-2. location (Ajmer Road/Sitapura)
-3. portal (PV/EV)
-4. source_row_hash (dedupe/upsert key)
-5. source_row_number
-6. source_file_name
-7. source_row_data (jsonb normalized raw row)
-8. created_at / updated_at
+Each table has **exactly 10 columns** (no variations):
 
-Unique key:
+| Column | Type | Current Constraint | ✅ Correct Constraint | Purpose |
+|---|---|---|---|---|
+| id | bigint | PK, auto-increment | PK, auto-increment | Row identifier |
+| branch | text | ❌ ('Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV') | ✅ ('Ajmer Road', 'Sitapura') | Location/branch name (non-composite) |
+| location | text | ✅ ('Ajmer Road', 'Sitapura') | ✅ ('Ajmer Road', 'Sitapura') | Geographic location |
+| portal | text | ✅ ('PV', 'EV') | ✅ ('PV', 'EV') | Vehicle fuel type (PV=ICE, EV=Electric) |
+| source_row_hash | text | NOT NULL | NOT NULL | Dedupe key (hash of source row) |
+| source_row_number | integer | nullable | nullable | Line number in source file |
+| source_file_name | text | nullable | nullable | Original Excel/CSV file name |
+| source_row_data | jsonb | NOT NULL, DEFAULT '{}' | NOT NULL, DEFAULT '{}' | **All claim details stored here** |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | NOT NULL, DEFAULT now() | Record creation timestamp |
+| updated_at | timestamptz | NOT NULL, DEFAULT now() | NOT NULL, DEFAULT now() | Record update timestamp |
 
-1. (branch, source_row_hash)
+### Unique Constraint (Correct)
 
-Upload strategy:
+```sql
+UNIQUE (branch, source_row_hash)  -- Dedupes at (location + row_hash) level
+```
 
-1. Upsert on (branch, source_row_hash)
-2. Existing rows updated
-3. New rows inserted
+### Upsert Strategy
+
+- **On Upload:** Insert or update on `(branch, source_row_hash)` conflict
+- **Behavior:** Existing rows updated, new rows inserted
+- **Dedupe Key:** Stable hash of normalized source row
+- **Trigger:** `set_updated_at()` maintains updated_at on every change
+
+### Important: JSONB Design Philosophy
+
+**All detailed warranty claim fields (claim_id, advisor, model, status, amounts, dates, etc.) are stored INSIDE `source_row_data` as unstructured JSONB, NOT as separate columns.**
+
+This design choice allows:
+- Storage of heterogeneous source formats without schema churn
+- Preservation of original source structure
+- Flexibility for future source type additions
+- Data extraction/transformation happens in application layer, not database layer
+
+**Consequence:** Reporting requires JSONB path extraction (e.g., `source_row_data->>'claim_id'`) or computed columns.
 
 ---
 
@@ -306,39 +448,42 @@ Use this for closure control per phase:
 
 ---
 
-## Implementation Tracker
+## Implementation Tracker (Corrected – Database-Backed 2026-06-02)
 
 | Phase | Task | Status | Owner | Notes |
 |---|---|---|---|---|
-| P0 | Audit authoritative dump for warranty table existence | Done | Copilot | Confirmed no dedicated warranty import tables in full_database.sql |
+| P0 | Audit authoritative dump for warranty table existence | Done | Copilot | Confirmed in full_database.sql – all 7 tables exist with JSONB design |
 | P1 | Add Import group card "Warranty Report" | Done | Copilot | Added collapsed group in Import page |
 | P1 | Add 7 sub-cards under Warranty Report | Done | Copilot | Claim-Settlement-Report, Part WC, Updation Claim, Goodwill, AMC, FSB, WC |
 | P1 | Add 4 branch tabs for warranty cards | Done | Copilot | Ajmer Road PV, Ajmer Road EV, Sitapura PV, Sitapura EV |
-| P2 | Add migration for 7 warranty import tables | Done | Copilot | Migration file created under supabase/migrations |
+| P2 | Add migration for 7 warranty import tables | Done | Copilot | Migration file created + executed: 20260528155000_create_warranty_import_tables.sql |
 | P2 | Register warranty tables in import_metadata | Done | Copilot | Included in migration |
 | P3 | Add warranty upload upsert behavior | Done | Copilot | branch+hash conflict key used for update/insert |
 | P4 | Add Reports sidebar category "Warranty Reports" | Done | Copilot | Added category + starter report entry |
 | P4 | Build full Warranty Overview dashboard shell | Done | Copilot | Implemented KPI strip + tabs + pipeline + alerts + financial + operations |
-| P5 | Lock per-source metric formulas and column contract | Pending | Product + Dev | Convert heuristic extraction to explicit formula map per source file type |
-| P5 | Add data quality validation rules | Pending | Dev Team | Mandatory columns, date/amount parsing, branch mismatch checks |
-| P6 | UAT with real branch files and role workflows | Pending | Ops + Product | Validate values against OEM sheets and action flow usability |
+| P5 | Lock per-source metric formulas and column contract | Pending | Product + Dev | **CORRECTED:** Define JSONB extraction mappings per source type (not schema changes) |
+| P5 | Add data quality validation rules | Pending | Dev Team | Validate JSONB keys present + types match + required fields non-null |
+| P6 | UAT with real branch files and role workflows | Pending | Ops + Product | Validate extracted values against OEM sheets and action flow usability |
 | P6 | Production rollout checklist | Pending | Dev Team | Smoke tests, performance checks, rollback plan |
 | P7 | Add strict RBAC/RLS policies for all 7 warranty tables | Deferred | Dev Team | Intentionally postponed; execute after current import/report stabilization |
-| **P5-NEW** | **Create schema enhancement migration (v2 fields)** | **Pending** | **Dev Team** | **Add claim_id, advisor, model, TAT dates, financial breakdown, status fields** |
-| **P5-NEW** | **Build Special Charges Dashboard (980016, 980019, 980025)** | **Pending** | **Dev Team** | **PV vs EV breakdown + top claims + margin impact** |
-| **P5-NEW** | **Build Invoice Pending Upload Report** | **Pending** | **Dev Team** | **12 invoices ₹25.72L + aging buckets (24h, 48h, 5+ days)** |
-| **P5-NEW** | **Build Settlement Aging Report** | **Pending** | **Dev Team** | **Approved-not-settled tracking + payment status visibility** |
-| **P5-NEW** | **Build TAT Monitoring Dashboard** | **Pending** | **Dev Team** | **4 stages: Initial→Submission (0d) / Submission→Review (2d SLA 3d) / Review→Approval (1d SLA 2d) / Approval→Settlement (5d SLA 7d)** |
-| **P5-NEW** | **Build Rusting Analysis Report** | **Pending** | **Dev Team** | **168 claims ₹3.02L + model/batch correlation + preventive actions** |
-| **P5-NEW** | **Build Advisor Performance Report** | **Pending** | **Dev Team** | **Claim count, rejection rate, avg value, quality trends by advisor** |
-| **P5-NEW** | **Build Model Cost Analysis Report** | **Pending** | **Dev Team** | **Cost per model, warranty % of sales, top problem parts, leakage** |
-| **P5-NEW** | **Build Top Parts Analysis Report** | **Pending** | **Dev Team** | **Top 20 by frequency + cost + margin impact (20% rule) + rejection rate** |
-| **P5-NEW** | **Build Labour Efficiency Report (ICE vs EV)** | **Pending** | **Dev Team** | **FSB labour breakdown, cost per JC, skill mapping** |
-| **P5-NEW** | **Build PV vs EV Settlement Comparison** | **Pending** | **Dev Team** | **Reports 32-41 historical, side-by-side financial, cost variance** |
-| **P5-NEW** | **Build PDI & FSB Separated Report** | **Pending** | **Dev Team** | **PDI rejections vs FSB labour costs, acceptance rates** |
-| **P5-NEW** | **Enhance Critical Alerts (v2)** | **Partial** | **Dev Team** | **28+ alerts with ownership + action required + aging buckets** |
-| **P5-NEW** | **Build Rejection Root-Cause Report** | **Pending** | **Dev Team** | **Top reasons + corrective action assignment + completion tracking + effectiveness** |
-| **P5-NEW** | **Build Payment Flow Dashboard** | **Pending** | **Dev Team** | **Claim→Settlement→Payment stage visibility + status transitions** |
+| **P5-CORRECTED** | **Audit source files + document JSONB key mappings** | **Pending** | **Dev Team** | **Sample each of 7 warranty types + create extraction contract docs** |
+| **P5-CORRECTED** | **Choose JSONB extraction strategy (App vs DB views)** | **Pending** | **Product + Dev** | **Decide between TypeScript extraction or SQL views for performance/maintainability** |
+| **P5-CORRECTED** | **Build JSONB extraction utilities (TypeScript)** | **Pending** | **Dev Team** | **src/lib/warranty/jsonExtraction.ts with type safety + validation** |
+| **P5-CORRECTED** | **Create reporting views (Optional – if choosing DB views)** | **Pending** | **Dev Team** | **supabase/migrations/20260602*_warranty_reporting_views.sql** |
+| **P5-CORRECTED** | **Build Special Charges Dashboard (980016, 980019, 980025)** | **Pending** | **Dev Team** | **PV vs EV breakdown + top claims + margin impact** |
+| **P5-CORRECTED** | **Build Invoice Pending Upload Report** | **Pending** | **Dev Team** | **12 invoices ₹25.72L + aging buckets (24h, 48h, 5+ days)** |
+| **P5-CORRECTED** | **Build Settlement Aging Report** | **Pending** | **Dev Team** | **Approved-not-settled tracking + payment status visibility** |
+| **P5-CORRECTED** | **Build TAT Monitoring Dashboard** | **Pending** | **Dev Team** | **4 stages: Initial→Submission (0d) / Submission→Review (2d SLA 3d) / Review→Approval (1d SLA 2d) / Approval→Settlement (5d SLA 7d)** |
+| **P5-CORRECTED** | **Build Rusting Analysis Report** | **Pending** | **Dev Team** | **168 claims ₹3.02L + model/batch correlation + preventive actions** |
+| **P5-CORRECTED** | **Build Advisor Performance Report** | **Pending** | **Dev Team** | **Claim count, rejection rate, avg value, quality trends by advisor** |
+| **P5-CORRECTED** | **Build Model Cost Analysis Report** | **Pending** | **Dev Team** | **Cost per model, warranty % of sales, top problem parts, leakage** |
+| **P5-CORRECTED** | **Build Top Parts Analysis Report** | **Pending** | **Dev Team** | **Top 20 by frequency + cost + margin impact (20% rule) + rejection rate** |
+| **P5-CORRECTED** | **Build Labour Efficiency Report (ICE vs EV)** | **Pending** | **Dev Team** | **FSB labour breakdown, cost per JC, skill mapping** |
+| **P5-CORRECTED** | **Build PV vs EV Settlement Comparison** | **Pending** | **Dev Team** | **Reports 32-41 historical, side-by-side financial, cost variance** |
+| **P5-CORRECTED** | **Build PDI & FSB Separated Report** | **Pending** | **Dev Team** | **PDI rejections vs FSB labour costs, acceptance rates** |
+| **P5-CORRECTED** | **Enhance Critical Alerts (v2)** | **Partial** | **Dev Team** | **28+ alerts with ownership + action required + aging buckets** |
+| **P5-CORRECTED** | **Build Rejection Root-Cause Report** | **Pending** | **Dev Team** | **Top reasons + corrective action assignment + completion tracking + effectiveness** |
+| **P5-CORRECTED** | **Build Payment Flow Dashboard** | **Pending** | **Dev Team** | **Claim→Settlement→Payment stage visibility + status transitions** |
 
 ---
 
@@ -492,88 +637,253 @@ Additional fields required in warranty import tables (discovered from audited re
 
 ---
 
-## Updated Traceability Matrix (Extended)
+## Updated Traceability Matrix (Database-Backed – Corrected 2026-06-02)
+
+### Important Correction
+
+**Schema is COMPLETE.** All 7 warranty tables are created with JSONB design. No schema migration needed. Focus shifts to **data extraction/transformation** from JSONB.
 
 | Ref ID | Claude Requirement | Techwheels Target (Report/Widget) | File Path(s) | Status | Validation Method |
 |---|---|---|---|---|---|
 | (Previous 23 rows: TR-001 through TR-023 remain as-is) | | | | | |
-| TR-024 | Special charges dashboard (980016, 980019, 980025) | Special Charges Report tab | src/pages/reports/warranty/SpecialChargesReport.tsx | Pending | Charge code breakdown validation |
-| TR-025 | PDI & FSB separated analysis | PDI & FSB Separation tab | src/pages/reports/warranty/PDIFSBReport.tsx | Pending | PDI acceptance rate vs claim rate |
-| TR-026 | Invoice pending upload aging report | Invoice Upload Status Report | src/pages/reports/warranty/InvoiceUploadReport.tsx | Pending | Invoice count by aging bucket |
-| TR-027 | Payment status and settlement aging | Settlement Aging Report | src/pages/reports/warranty/SettlementAgingReport.tsx | Pending | Approved-not-settled amount reconciliation |
-| TR-028 | Rusting claims root cause deep dive | Rusting Analysis Report | src/pages/reports/warranty/RustingAnalysisReport.tsx | Pending | Rusting claim count + cost validation |
-| TR-029 | Advisor-wise quality and performance | Advisor Performance Report | src/pages/reports/warranty/AdvisorPerformanceReport.tsx | Pending | Advisor-level aggregation and TAT variance |
-| TR-030 | Model-wise loss and warranty cost | Model Cost Analysis Report | src/pages/reports/warranty/ModelCostAnalysisReport.tsx | Pending | Model-level cost-per-claim validation |
-| TR-031 | Top 20 parts by frequency and cost | Parts Analysis Report | src/pages/reports/warranty/PartsAnalysisReport.tsx | Pending | Parts ranking and margin impact |
-| TR-032 | Labour analysis ICE vs EV | Labour Efficiency Report | src/pages/reports/warranty/LabourAnalysisReport.tsx | Pending | Labour cost per JC by fuel type |
-| TR-033 | PV vs EV settlement comparison | PV/EV Settlement Report | src/pages/reports/warranty/PVEVSettlementReport.tsx | Pending | Settlement report number comparison (Rpt 32-41) |
-| TR-034 | Enhanced critical alerts (28+ alerts) | Critical Alerts v2 with ownership | src/pages/reports/warranty/CriticalAlertsReport.tsx | Partial | Alert count by severity bucket |
-| TR-035 | Month-wise category matrix (7 categories) | Month Category Matrix | src/pages/reports/warranty/MonthWiseCategoryReport.tsx | Partial | Category totals validation by month |
-| TR-036 | TAT monitoring by claim stage | TAT Monitoring Dashboard | src/pages/reports/warranty/TATMonitoringReport.tsx | Pending | Stage-wise TAT vs SLA validation |
-| TR-037 | Rejection root-cause with corrective actions | Rejection Analysis Report | src/pages/reports/warranty/RejectionAnalysisReport.tsx | Pending | Root cause -> action -> effectiveness trace |
-| TR-038 | Enhanced data fields in all warranty tables | Warranty table schema v2 | supabase/migrations/20260530*_warranty_schema_enhancement.sql | Pending | Schema audit + field presence check |
-| TR-039 | Claim-to-settlement payment flow visibility | Payment Flow Dashboard | src/pages/reports/warranty/PaymentFlowReport.tsx | Pending | Status stage transition validation |
-| TR-040 | Invoice document tracking and URL linking | Invoice Document Repository | src/pages/reports/warranty/InvoiceDocumentReport.tsx | Pending | Posted doc URL accessibility and format |
+| **TR-024** | **Special charges dashboard (980016, 980019, 980025)** | **Special Charges Report tab** | **src/pages/reports/warranty/SpecialChargesReport.tsx** | **Pending** | **Extract special_charge_code from source_row_data + validate job code frequency** |
+| **TR-025** | **PDI & FSB separated analysis** | **PDI & FSB Separation tab** | **src/pages/reports/warranty/PDIFSBReport.tsx** | **Pending** | **Filter by claim type in source_row_data + calculate acceptance rates** |
+| **TR-026** | **Invoice pending upload aging report** | **Invoice Upload Status Report** | **src/pages/reports/warranty/InvoiceUploadReport.tsx** | **Pending** | **Extract invoice_status from source_row_data + aging by submitted_date** |
+| **TR-027** | **Payment status and settlement aging** | **Settlement Aging Report** | **src/pages/reports/warranty/SettlementAgingReport.tsx** | **Pending** | **Extract payment_status + approved_date + settled_date from source_row_data** |
+| **TR-028** | **Rusting claims root cause deep dive** | **Rusting Analysis Report** | **src/pages/reports/warranty/RustingAnalysisReport.tsx** | **Pending** | **Filter by special_charge_code='980016' + extract model + cost from source_row_data** |
+| **TR-029** | **Advisor-wise quality and performance** | **Advisor Performance Report** | **src/pages/reports/warranty/AdvisorPerformanceReport.tsx** | **Pending** | **Extract advisor_id + aggregate rejection_reason from source_row_data by advisor** |
+| **TR-030** | **Model-wise loss and warranty cost** | **Model Cost Analysis Report** | **src/pages/reports/warranty/ModelCostAnalysisReport.tsx** | **Pending** | **Extract model + labour_amount from source_row_data + group by model** |
+| **TR-031** | **Top 20 parts by frequency and cost** | **Parts Analysis Report** | **src/pages/reports/warranty/PartsAnalysisReport.tsx** | **Pending** | **Parse parts array from source_row_data + count + sum cost** |
+| **TR-032** | **Labour analysis ICE vs EV** | **Labour Efficiency Report** | **src/pages/reports/warranty/LabourAnalysisReport.tsx** | **Pending** | **Extract labour_amount by portal (PV vs EV) from source_row_data** |
+| **TR-033** | **PV vs EV settlement comparison** | **PV/EV Settlement Report** | **src/pages/reports/warranty/PVEVSettlementReport.tsx** | **Pending** | **Filter by portal + extract settled_amount from warranty_claim_settlement_report_data** |
+| **TR-034** | **Enhanced critical alerts (28+ alerts)** | **Critical Alerts v2 with ownership** | **src/pages/reports/warranty/CriticalAlertsReport.tsx** | **Partial** | **Calculate TAT from dates in source_row_data + check status field for SLA breaches** |
+| **TR-035** | **Month-wise category matrix (7 categories)** | **Month Category Matrix** | **src/pages/reports/warranty/MonthWiseCategoryReport.tsx** | **Partial** | **Group by month + table (warranty_*_data) + sum claimed/settled from source_row_data** |
+| **TR-036** | **TAT monitoring by claim stage** | **TAT Monitoring Dashboard** | **src/pages/reports/warranty/TATMonitoringReport.tsx** | **Pending** | **Calculate stage durations from date fields in source_row_data vs SLA targets** |
+| **TR-037** | **Rejection root-cause with corrective actions** | **Rejection Analysis Report** | **src/pages/reports/warranty/RejectionAnalysisReport.tsx** | **Pending** | **Extract rejection_reason + corrective_action + action_owner from source_row_data** |
+| **TR-038-CORRECTED** | **Define JSONB extraction mappings per source type (REPLACES schema migration)** | **Extraction contract documentation** | **docs/Implementation_plans/WARRANTY-001_JSONB_EXTRACTION_MAPPINGS.md** | **Pending** | **Audit source files + document field→JSONB path mappings** |
+| **TR-039** | **Claim-to-settlement payment flow visibility** | **Payment Flow Dashboard** | **src/pages/reports/warranty/PaymentFlowReport.tsx** | **Pending** | **Extract status + payment_status stages + trace through source_row_data** |
+| **TR-040** | **Invoice document tracking and URL linking** | **Invoice Document Repository** | **src/pages/reports/warranty/InvoiceDocumentReport.tsx** | **Pending** | **Extract posted_doc_url from source_row_data + validate URL accessibility** |
+| **TR-041-NEW** | **Build per-source JSONB extraction functions** | **TypeScript extraction utilities** | **src/lib/warranty/jsonExtraction.ts** | **Pending** | **Unit tests for each source type's key extraction + type safety** |
+| **TR-042-NEW** | **Create computed columns or materialized views for reporting** | **Supabase views for warranty analytics** | **supabase/migrations/20260602*_warranty_reporting_views.sql** | **Pending** | **Test view performance + data completeness vs raw JSONB** |
 
 ---
 
-## Data Schema Enhancement Migration (Required)
+## JSONB Data Extraction Strategy (Corrected – No Schema Migration Needed)
 
-Create new migration file: `supabase/migrations/20260530*_warranty_schema_enhancement.sql`
+### The Reality: Schema is Complete ✅
 
-This migration must add to all 7 warranty tables:
+Migration `20260528155000_create_warranty_import_tables.sql` has already created all 7 tables with the correct JSONB design. **No schema enhancement migration is required.**
 
-```sql
--- Common fields for TAT tracking and accountability
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS claim_id TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS advisor_id TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS advisor_name TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS model TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS vehicle_age_months INTEGER;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS manufacturing_date DATE;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS registration_number TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS status TEXT; -- Initial, Submitted, Review, SOP, Approved, Rejected, Settled, Paid
+### What's Next: Define Extraction Contracts
 
--- Financial breakdown fields
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS parts_amount DECIMAL(12,2);
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS labour_amount DECIMAL(12,2);
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS special_charges DECIMAL(12,2);
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS special_charge_code TEXT; -- 980016, 980019, 980025
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS claimed_amount DECIMAL(12,2);
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS approved_amount DECIMAL(12,2);
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(12,2);
+Instead of adding columns, define **per-source JSONB key mappings** that specify:
+1. Which keys exist in each source type's source_row_data
+2. How to parse and validate values
+3. Type conversions and date formats
+4. Fallback strategies for missing keys
 
--- Date fields for TAT calculation
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS submitted_date TIMESTAMP;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS review_date TIMESTAMP;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS sop_date TIMESTAMP;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS approved_date TIMESTAMP;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS settled_date TIMESTAMP;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS paid_date TIMESTAMP;
+### Recommended Approach
 
--- Status and ownership fields
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS corrective_action TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS action_owner TEXT;
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS payment_status TEXT; -- Paid, Not Paid, Pending
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS settlement_status TEXT; -- Processing, Initiated, Completed, Failed
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS invoice_status TEXT; -- Awaiting, Pending Upload, Uploaded, Failed
-
--- Document linking
-ALTER TABLE warranty_* ADD COLUMN IF NOT EXISTS posted_doc_url TEXT;
+**Option A: Application-Layer Extraction (TypeScript)**
+```typescript
+// src/lib/warranty/jsonExtraction.ts
+export const warrantyClaim SettlementExtraction = {
+  claim_id: { jsonPath: '$.JP#', type: 'string' },
+  advisor_id: { jsonPath: '$.Advisor ID', type: 'string' },
+  claimed_amount: { jsonPath: '$.Claimed Amt', type: 'decimal' },
+  approved_amount: { jsonPath: '$.Approved Amt', type: 'decimal' },
+  status: { jsonPath: '$.Status', type: 'enum', values: [...] },
+  submitted_date: { jsonPath: '$.Submitted Date', type: 'date', format: 'DD-MM-YYYY' },
+  // ... etc
+};
 ```
 
+**Option B: Database Views (SQL)**
+```sql
+-- supabase/migrations/20260602*_warranty_reporting_views.sql
+CREATE OR REPLACE VIEW warranty_claim_settlement_normalized AS
+SELECT
+  id, branch, location, portal,
+  source_row_data->>'JP#' AS claim_id,
+  source_row_data->>'Advisor ID' AS advisor_id,
+  (source_row_data->>'Claimed Amt')::decimal AS claimed_amount,
+  (source_row_data->>'Approved Amt')::decimal AS approved_amount,
+  source_row_data->>'Status' AS status,
+  ...
+FROM warranty_claim_settlement_report_data;
+```
+
+**Option C: Hybrid (Computed Columns)**
+```sql
+-- Add non-materialized computed columns
+ALTER TABLE warranty_claim_settlement_report_data
+ADD COLUMN claim_id TEXT GENERATED ALWAYS AS (source_row_data->>'JP#') STORED;
+-- (Only if performance requires materialization)
+```
+
+### Action Items
+
+1. **Audit source files** – Sample each of the 7 warranty report types
+2. **Document JSONB keys** – Map expected keys per source type
+3. **Choose extraction strategy** – Application vs Database views
+4. **Implement extraction** – Build parser with type safety and validation
+5. **Create reporting layer** – Views or services that expose normalized data
+6. **Test extraction** – Validate against sample data + edge cases
+
+### No Migration File Required
+
+The database schema is already correct. Focus on **data transformation, not schema changes**.
+
+## Next Immediate Steps (Corrected – Database-Backed 2026-06-02)
+
+### ✅ What's Already Done
+- 7 warranty tables created with JSONB design
+- ⚠️ Branch constraint (needs correction – see below)
+- Upsert strategy implemented (branch + source_row_hash unique constraint)
+- Import UI and upload flow functional
+- Overview dashboard shell deployed
+
+### 🔴 CRITICAL BLOCKER – Must Do First
+
+**[P0] Apply corrective migration to fix branch constraint**
+- **File:** `supabase/migrations/20260602*_warranty_schema_corrections.sql`
+- **Why:** Current branch constraint stores composite 'Ajmer Road PV' instead of separate 'Ajmer Road' + fuel_type
+- **Scope:** All 7 warranty tables (claim_settlement, part_wc, updation, goodwill, amc, fsb, wc)
+- **Change:**
+  ```sql
+  ALTER TABLE warranty_* DROP CONSTRAINT warranty_*_branch_check;
+  ALTER TABLE warranty_* ADD CONSTRAINT warranty_*_branch_check 
+    CHECK (branch IN ('Ajmer Road', 'Sitapura'));
+  ```
+- **Impact:** Without this, branch values will be stored incorrectly in future uploads
+- **Timeline:** Before any large-scale data imports; can update existing data with script if needed
+
+### 🔄 What Needs Immediate Attention (After P0)
+
+1. **[CRITICAL]** Sample actual source files from all 7 warranty types
+   - Extract sample rows from uploaded Excel files
+   - Document what keys exist in source_row_data for each type
+   - Identify any keys that are inconsistent or missing
+   - Create JSONB extraction contract doc (WARRANTY-001_JSONB_EXTRACTION_MAPPINGS.md)
+
+2. **[CRITICAL]** Choose JSONB extraction strategy
+   - **Option A:** Application-layer parsing (TypeScript utilities)
+   - **Option B:** Database views (SQL computed columns)
+   - **Option C:** Hybrid (Materialized views for high-volume reports)
+   - **Decision criteria:** Performance, maintainability, type safety
+
+3. **[HIGH]** Build JSONB extraction layer
+   - Create `src/lib/warranty/jsonExtraction.ts` with extraction utilities
+   - Add type-safe parsers for each source type
+   - Add validation + error handling for missing/malformed data
+   - Unit test against sample data
+
+4. **[HIGH]** Freeze per-source field mappings
+   - Claim Settlement: claim_id, advisor, model, amounts, dates, status
+   - Part WC: parts, labour, claim reference, cost breakdown
+   - Updation: update type, model variant, cost
+   - FSB: labour cost, model, labour type (ICE vs EV)
+   - Goodwill: goodwill reason, cost, approval status
+   - AMC: service type, model, costs
+   - WC: warranty claim type, root cause, claim amount
+
+5. **[HIGH]** Validate extraction against audited financial data
+   - Total claimed amounts should match ₹2.03 Crore across all 7 types
+   - Category totals (WC, FSB, Updation, etc.) should reconcile
+   - Month-wise summaries should match source files
+
+6. **Build reporting dashboards (in priority order)**
+   - Invoice Pending Upload (₹25.72L, 12 invoices, TM portal status)
+   - Settlement Aging (3 claims pending > 5 days, payment visibility)
+   - TAT Monitoring (4-stage flow with SLA thresholds)
+   - Special Charges (980016 rusting, 980019 loaner, 980025 misc)
+   - Critical Alerts v2 (28+ with ownership)
+   - PV vs EV Settlement Comparison (Rpt 32-41)
+   - Rusting Analysis (168 claims, ₹3.02L, model correlation)
+   - Advisor Performance, Model Cost, Top Parts, Labour (ICE vs EV)
 ---
 
-## Next Immediate Steps
+## Database Validation Summary (Authoritative – 2026-06-02)
 
-1. Validate dashboard totals against sample source files (category-wise and month-wise).
-2. Freeze column mapping contract for each of the 7 warranty source report formats.
-3. Replace heuristic value parsing with explicit formula mapping per source table.
-4. Add owner/action columns in critical alert rows for daily operations handoff.
-5. **[NEW]** Create schema enhancement migration with expanded field set for all 7 warranty tables.
-6. **[NEW]** Implement PV vs EV settlement comparison report (Reports 32-41 historical data).
-7. **[NEW]** Build special charges dashboard with 980xxx job code breakdown.
-8. **[NEW]** Add invoice pending upload report with TM portal status tracking.
-9. **[NEW]** Implement TAT monitoring dashboard with stage-wise SLA visibility.
-10. **[NEW]** Create rusting analysis deep-dive with model and batch correlation.
+### What Was Verified Against `supabase/exec_success_migrations/20260528155000_create_warranty_import_tables.sql`
+
+| Check | Result | Details |
+|---|---|---|
+| **7 Tables Exist** | ✅ Yes | warranty_claim_settlement_report_data, warranty_part_wc_data, warranty_updation_claim_data, warranty_goodwill_data, warranty_amc_data, warranty_fsb_data, warranty_wc_data |
+| **Column Count (per table)** | ✅ 10 | id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at |
+| **Unique Constraint** | ✅ Applied | (branch, source_row_hash) per table |
+| **CHECK Constraints (Branch)** | ❌ INCORRECT | Current: ('Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV') · Should be: ('Ajmer Road', 'Sitapura') |
+| **CHECK Constraints (Location)** | ✅ Correct | ('Ajmer Road', 'Sitapura') |
+| **CHECK Constraints (Portal)** | ✅ Correct | ('PV', 'EV') – vehicle fuel types |
+| **JSONB Column** | ✅ Present | source_row_data (jsonb, NOT NULL, DEFAULT '{}') |
+| **Triggers** | ✅ Present | set_updated_at() on every table for automatic updated_at |
+| **Indexes** | ✅ Present | idx_warranty_*_branch_portal on each table |
+| **Import Metadata** | ✅ Registered | All 7 tables in import_metadata table |
+| **Schema Migration Status** | ⚠️ Executed but needs correction | Migration 20260528155000 executed; needs follow-up migration for branch constraint fix |
+| **Schema Matches Code** | ⚠️ Partial match | src/lib/getTableColumns.ts shows 4-value branch; should show 2-value branch |
+| **Matches Operational Reality** | ❌ NO | Branch constraint is overly restrictive; stores composite location+fuel_type instead of separate values |
+
+### Critical Finding
+
+**The plan assumed SEPARATE columns for claim_id, advisor, model, etc. – THIS WAS WRONG.**
+- ✅ CORRECTED: All fields are in JSONB, not separate columns
+
+**NEW (2026-06-02 Final):** Branch constraint combines location + fuel type as composite value
+- ❌ Current design: branch stores 'Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'
+- ✅ Correct design: branch stores only 'Ajmer Road', 'Sitapura' · fuel type in portal column
+- **Impact:** Data normalization violation; will cause confusion in queries and reporting
+- **Action Required:** Run corrective migration (20260602*) to fix branch CHECK constraint
+
+### Critical Finding
+
+**The plan assumed SEPARATE columns for claim_id, advisor, model, etc. – THIS WAS WRONG.**
+
+**ACTUAL DESIGN:** All detailed fields are stored INSIDE source_row_data as unstructured JSONB. This is intentional and correct.
+
+**CONSEQUENCE:** 
+- No schema migration needed (or should be run)
+- Focus shifts to JSONB extraction layer (application or database views)
+- Reporting requires parsing JSONB paths, not querying columns
+- Data contracts must specify JSONB key paths per source type
+
+### Critical Finding
+
+**The plan assumed SEPARATE columns for claim_id, advisor, model, etc. – THIS WAS WRONG.**
+
+**ACTUAL DESIGN:** All detailed fields are stored INSIDE source_row_data as unstructured JSONB. This is intentional and correct.
+
+**CONSEQUENCE:** 
+- No schema migration needed (or should be run)
+- Focus shifts to JSONB extraction layer (application or database views)
+- Reporting requires parsing JSONB paths, not querying columns
+- Data contracts must specify JSONB key paths per source type
+
+### Plan Amendments Applied
+
+1. ❌ Removed assumption about adding 24+ new columns
+2. ❌ Removed task "Create schema enhancement migration" (for JSONB fields)
+3. ✅ Added task "Audit source files + document JSONB key mappings"
+4. ✅ Added task "Choose JSONB extraction strategy"
+5. ✅ Added task "Build JSONB extraction utilities"
+6. ✅ Updated TR-038 from schema migration → extraction contract documentation
+7. ✅ Updated Implementation Tracker to reflect database-backed reality
+8. **🔴 [NEW]** ✅ Discovered branch constraint design error (composite location+fuel_type)
+9. **🔴 [NEW]** ✅ Created corrective migration plan (20260602*) for branch constraint fix
+10. **🔴 [NEW]** ✅ Documented UI labels vs. database value separation
+
+### Authority Lock (With Operational Truth – 2026-06-02 Final)
+
+This validation is based on:
+- **Authoritative source (Schema):** `supabase/exec_success_migrations/20260528155000_create_warranty_import_tables.sql`
+- **Code truth (UI Config):** `src/lib/getTableColumns.ts` + `src/pages/ImportPage.tsx`
+- **Operational truth (Actual Data Structure):** User confirmation that:
+  - **Branches (locations):** Ajmer Road, Sitapura (2 total)
+  - **Fuel types:** PV (ICE), EV (Electric) – stored in `portal` column
+  - **Import UI labels:** Show location + fuel type for user clarity (e.g., "Ajmer Road PV") but database stores them separately
+- **Last verified:** 2026-06-02
+
+**Correction Required:** Branch CHECK constraint incorrectly stores composite location+fuel_type. Must be fixed via corrective migration (20260602*) to separate concerns.
+
+**Authority direction:** Operational truth (location ≠ fuel_type) takes precedence. Schema must be corrected before large-scale uploads.
+
+Authority never downgrades. Any future changes must build forward from this validated state.

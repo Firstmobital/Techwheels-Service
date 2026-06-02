@@ -1,5 +1,13 @@
 # React + TypeScript + Vite
 
+## Database Authority Rule (Project Policy)
+
+- Canonical schema and full dump source: `local_folder/backups/full_database.sql`
+- Large-file access layer for AI/tools: `local_folder/backups/chunks/full_database.sql.part_*`
+- Historical fallback reference only (non-canonical): `supabase/backups/full_dump.sql`
+
+If any code, docs, or migration assumptions conflict with the canonical dump, treat `local_folder/backups/full_database.sql` as truth until a new migration is authored, executed, and verified.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

@@ -10,6 +10,8 @@ Prevent schema drift and prevent assumption-based development by enforcing one w
 ## Authority Rule
 
 - Authoritative source: local_folder/backups/full_database.sql
+- AI/large-file access layer: local_folder/backups/chunks/full_database.sql.part_*
+- Fallback reference only (non-canonical): supabase/backups/full_dump.sql
 - If code and migration assumptions differ from authority, authority wins until a new migration is authored and approved.
 
 ## Required Workflow

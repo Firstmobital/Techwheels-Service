@@ -106,7 +106,7 @@
 - **File:** [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md)
 - **Risk Level:** 🔴 HIGH (strict no-drift visual parity + schema-truth data contract)
 - **Status:** In progress (planning complete, implementation pending)
-- **Latest Update:** 2026-05-31 - Created full screen inventory tracker with DB-authoritative field mapping from `supabase/backups/full_database.sql` and Body & Paint-first execution lane.
+- **Latest Update:** 2026-05-31 - Created full screen inventory tracker with DB-authoritative field mapping from `local_folder/backups/full_database.sql` and Body & Paint-first execution lane (use `local_folder/backups/chunks/full_database.sql.part_*` for large-file reads).
 - **Next Step:** Start BP-01 implementation for `mobile/src/app/(tabs)/autodoc.tsx` using exact reference `bp` artboard parity.
 
 ---

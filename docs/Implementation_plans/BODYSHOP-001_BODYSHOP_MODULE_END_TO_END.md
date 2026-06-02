@@ -39,7 +39,8 @@ This plan translates that SOP into an implementable app module in the same Techw
 
 ## Authoritative Schema Baseline (Audited 2026-05-22)
 
-**Authority Source:** `local_folder/backups/full_database_20260522_170319.sql`  
+**Authority Source:** `local_folder/backups/full_database.sql`  
+**Large-file access layer:** `local_folder/backups/chunks/full_database.sql.part_*`  
 **Authority Rule:** If any conflict appears between docs/code and schema assumptions, the dump wins without reconciliation.
 
 ### Confirmed Existing Public Objects (Use As-Is)
@@ -179,7 +180,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 
 ### Phase 0
 ```
-✅ 0.1 | Audit authoritative dump baseline | GitHub Copilot | 2026-05-22 | 2026-05-22 | Source fixed to full_database_20260522_170319.sql
+✅ 0.1 | Audit authoritative dump baseline | GitHub Copilot | 2026-05-22 | 2026-05-22 | Source fixed to local_folder/backups/full_database.sql
 ✅ 0.2 | Verify RLS/policies/triggers/storage constraints | GitHub Copilot | 2026-05-22 | 2026-05-22 | Dealer-isolated RLS confirmed on core tables
 ✅ 0.3 | Register schema gaps and no-invention rule | GitHub Copilot | 2026-05-22 | 2026-05-22 | No Bodyshop-specific schema found in dump
 ```
@@ -241,7 +242,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 
 ## Dependencies & Prerequisites
 
-- [ ] Authoritative dump baseline accepted: `full_database_20260522_170319.sql`.
+- [ ] Authoritative dump baseline accepted: `local_folder/backups/full_database.sql`.
 - [ ] Final SOP sign-off for all stage definitions and mandatory checkpoints.
 - [ ] Role mapping confirmation for Advisor, CRM, BSM, SM, GM, CCM.
 - [ ] Approved data fields for insurance, surveyor, DO, and payment records.
@@ -289,7 +290,7 @@ This plan translates that SOP into an implementable app module in the same Techw
 - Critical control points defined as mandatory system guardrails.
 
 ### 2026-05-22 - Authority Audit Applied
-- Audited `full_database_20260522_170319.sql` and locked it as schema authority for this plan.
+- Audited `local_folder/backups/full_database.sql` and locked it as schema authority for this plan.
 - Confirmed core AutoDoc entities, dealer-isolated RLS policies, and `autodoc` storage bucket/policies.
 - Confirmed no Bodyshop-dedicated schema currently exists; additive migration planning is required for full SOP persistence.
 

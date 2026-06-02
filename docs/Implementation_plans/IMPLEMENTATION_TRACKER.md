@@ -39,7 +39,8 @@
 
 **Scope Lock**:
 - Reference design source: `local_folder/Reference/MobileAppRedesignReference/Techwheels-Service Mobile App`
-- Authoritative DB contract: `supabase/backups/full_database.sql`
+- Authoritative DB contract: `local_folder/backups/full_database.sql`
+- Large-file access layer: `local_folder/backups/chunks/full_database.sql.part_*`
 - Activity tracker includes all screens (Auth, Shell, Body & Paint, Reports, Operations)
 
 ---
