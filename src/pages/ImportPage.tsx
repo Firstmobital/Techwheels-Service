@@ -1865,7 +1865,7 @@ export default function ImportPage() {
             const insertRows = rawRows.map((rawRow, rowIdx) => {
               const sourceRowData = normalizeWarrantyRow(rawRow)
               return {
-                branch,
+                branch: standardBranch,
                 location,
                 portal,
                 source_row_number: rowIdx + 2,
@@ -1875,7 +1875,7 @@ export default function ImportPage() {
               }
             })
 
-            totalInserted += await upsertOrInsertRows(insertRows, ['branch,source_row_hash'])
+            totalInserted += await upsertOrInsertRows(insertRows, ['branch,portal,source_row_hash'])
           } else {
             // Other tables: use original logic
             const insertRows = buildInsertRows(rawRows, tableColumns, standardBranch)
