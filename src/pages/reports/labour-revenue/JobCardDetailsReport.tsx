@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getDateRangeBounds } from '../../../lib/reportQueries'
 import { applyBranchFilterToQuery } from '../../../lib/branches'
+import { exportToCSV, generateExportFilename } from '../../../lib/exportUtils'
 import { supabase } from '../../../lib/supabase'
 import { buildEmployeeLookupIndex, resolveEmployeeForSr, type EmployeeRecord } from '../../../lib/employeeMatcher'
 import type { ReportViewProps } from '../types'
@@ -359,6 +360,33 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
 
   const previewRows = useMemo(() => filteredRows.slice(0, 100), [filteredRows])
 
+  const selectedKpiLabel = useMemo(() => {
+    if (selectedKPI === 'cancelled') return 'Cancelled Job Cards'
+    if (selectedKPI === 'closed-not-invoiced') return 'JC Closed But Not Invoiced'
+    if (selectedKPI === 'open') return 'Open Job Cards'
+    return 'Job Cards'
+  }, [selectedKPI])
+
+  const handleExport = () => {
+    if (!selectedKPI || filteredRows.length === 0) return
+
+    const exportData = filteredRows.map((row) => ({
+      branch: row.branch ?? '',
+      jobCardNumber: row.job_card_number ?? '',
+      status: row.status ?? '',
+      serviceType: row.sr_type ?? '',
+      serviceAdvisorName: row.sr_assigned_to_name ?? '',
+      serviceAdvisorCode: row.sr_assigned_to ?? '',
+      createdDateTime: row.created_date_time ?? '',
+      closedDateTime: row.closed_date_time ?? '',
+      invoiced: row.invoiced ?? '',
+      account: row.account ?? '',
+    }))
+
+    const filename = generateExportFilename(`job-card-details-${selectedKPI}`)
+    exportToCSV(exportData, filename)
+  }
+
   return (
     <div className="space-y-4">
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -412,14 +440,26 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
       {selectedKPI && (
         <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 bg-gray-50 px-5 py-3">
-            <h3 className="font-semibold text-gray-900">
-              {selectedKPI === 'cancelled' && 'Cancelled Job Cards'}
-              {selectedKPI === 'closed-not-invoiced' && 'JC Closed But Not Invoiced'}
-              {selectedKPI === 'open' && 'Open Job Cards'}
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Showing {previewRows.length} of {filteredRows.length} records
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-gray-900">{selectedKpiLabel}</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Showing {previewRows.length} of {filteredRows.length} records
+                </p>
+              </div>
+              {filteredRows.length > 0 && (
+                <button
+                  onClick={handleExport}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                  title={`Export ${selectedKpiLabel} to CSV`}
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Export
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
