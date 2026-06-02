@@ -67,12 +67,20 @@ function parseBranchSelectionFromFilter(branch: string): string {
     return 'ALL'
   }
 
-  if (normalized === 'sitapura pv' || normalized === 'sitapura ev') {
+  if (normalized === 'sitapura' || normalized === 'sitapura pv' || normalized === 'sitapura ev' || normalized === 'sitapura (pv+ev)') {
     return 'Sitapura'
   }
 
-  if (normalized === 'ajmer road pv' || normalized === 'ajmer road ev') {
+  if (normalized === 'ajmer road' || normalized === 'ajmer road pv' || normalized === 'ajmer road ev' || normalized === 'ajmer road (pv+ev)') {
     return 'Ajmer Road'
+  }
+
+  if (normalized === 'tonk') {
+    return 'Tonk'
+  }
+
+  if (normalized === 'shahpura') {
+    return 'Shahpura'
   }
 
   return branch
