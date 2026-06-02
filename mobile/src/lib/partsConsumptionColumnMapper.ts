@@ -391,15 +391,40 @@ export function buildPartsConsumptionInsertRow(
   const safeUnitCost = normalizeNonNegative(parseOptionalNumber(headerMapping.unitCost, 'unit_cost'))
   const safeTotalCost = normalizeNonNegative(parseOptionalNumber(headerMapping.totalCost, 'total_cost'))
 
-  const computedQuantityConsumed = (safeOtcQuantity ?? 0) + (safeWsQuantity ?? 0)
-  const totalConsumption = safeTotalFromFile ?? computedQuantityConsumed
+  let normalizedOtcQuantity = safeOtcQuantity
+  let normalizedWsQuantity = safeWsQuantity
+
+  // Keep DB-consumed quantities consistent with strict sum checks:
+  // quantity_consumed / total_consumption must equal otc_quantity + ws_quantity.
+  // When file provides only total, map it into OTC by default.
+  if (normalizedOtcQuantity == null && normalizedWsQuantity == null) {
+    if (safeTotalFromFile != null) {
+      normalizedOtcQuantity = safeTotalFromFile
+      normalizedWsQuantity = 0
+    }
+  } else if (normalizedOtcQuantity != null && normalizedWsQuantity == null) {
+    if (safeTotalFromFile != null) {
+      normalizedWsQuantity = Math.max(0, safeTotalFromFile - normalizedOtcQuantity)
+    } else {
+      normalizedWsQuantity = 0
+    }
+  } else if (normalizedOtcQuantity == null && normalizedWsQuantity != null) {
+    if (safeTotalFromFile != null) {
+      normalizedOtcQuantity = Math.max(0, safeTotalFromFile - normalizedWsQuantity)
+    } else {
+      normalizedOtcQuantity = 0
+    }
+  }
+
+  const computedQuantityConsumed = (normalizedOtcQuantity ?? 0) + (normalizedWsQuantity ?? 0)
+  const totalConsumption = computedQuantityConsumed
 
   const row: Record<string, unknown> = {
     part_number: partNumber,
     part_description: headerMapping.partDescription ? String(excelRow[headerMapping.partDescription] ?? '').trim() || null : null,
     transaction_date: transactionDate,
-    otc_quantity: safeOtcQuantity ?? 0,
-    ws_quantity: safeWsQuantity ?? 0,
+    otc_quantity: normalizedOtcQuantity ?? 0,
+    ws_quantity: normalizedWsQuantity ?? 0,
     quantity_consumed: totalConsumption,
     total_consumption: totalConsumption,
     fiscal_year: parseOptionalFiscalYear(headerMapping.fiscalYear, 'fiscal_year'),
