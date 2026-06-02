@@ -309,19 +309,35 @@ Classes that must be available in real app styling:
 
 These are explicitly tracked as partially blocked-for-full-parity due to missing dedicated redesign specs for non-warranty report categories, Import, and AutoDoc/JobCard in the audited folder.
 
-### 7.10 Reports - Warranty full refactor scope (explicit)
+### 7.10 Reports - Warranty DB-backed scope (authoritative)
 
-1. Warranty report redesign is treated as a full 28-report refactor package for the warranty category.
-2. Coverage basis is the reference note "Warranty dashboard v3 (full 28-report refactor)" backed by warranty-reports-data.js aggregates sourced from 15 uploaded report files now represented in DB-backed truth.
-3. Tab-level scope contract for parity:
-- Overview: portfolio KPIs, pipeline split including rejected lane, claims-by-source, claim-type performance, model risk and theme matrix insights.
-- Critical Alerts: SLA aging buckets and exception queues with JC drilldown behavior.
-- Financial: claimed/invoiced/pending, 20 percent revenue analysis, pending-invoice and special-charge views.
-- Operations: queue health, SOP wait signals, root-cause and parts-defect operational insights.
-4. Taxonomy/traceability contract:
-- category-count decomposition remains labour-revenue 5, revenue 7, parts 17, warranty 1.
-- warranty redesign must preserve mapping consistency to the audited traceability references (TR-001..TR-008, TR-010..TR-012, TR-019, TR-022; TR-018 remains heuristic as noted in source).
-5. Non-warranty report categories remain blocked for full redesign parity until dedicated visual references are supplied (tracked under T-038/B-001).
+1. Warranty report implementation scope is constrained to the 7 authoritative warranty source tables present in the active dump:
+- public.warranty_claim_settlement_report_data
+- public.warranty_part_wc_data
+- public.warranty_updation_claim_data
+- public.warranty_goodwill_data
+- public.warranty_amc_data
+- public.warranty_fsb_data
+- public.warranty_wc_data
+2. Shared column contract across these 7 tables is fixed to:
+- id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at.
+3. Constraint/trigger contract from active dump:
+- check constraints restrict branch/location to Ajmer Road or Sitapura, and portal to PV or EV.
+- unique key is (branch, portal, source_row_hash) on all 7 tables.
+- BEFORE UPDATE trigger exists on each table, executing public.set_updated_at().
+4. Security contract from active dump:
+- no CREATE POLICY entries were found for the 7 warranty tables.
+- no ALTER TABLE public.warranty_* ENABLE ROW LEVEL SECURITY entries were found for the 7 warranty tables.
+5. Snapshot row counts from authoritative dump COPY blocks (2026-06-02 validation):
+- warranty_claim_settlement_report_data: 4110
+- warranty_part_wc_data: 115
+- warranty_updation_claim_data: 1939
+- warranty_goodwill_data: 97
+- warranty_amc_data: 403
+- warranty_fsb_data: 2554
+- warranty_wc_data: 2365
+6. UI tab layout (Overview/Critical Alerts/Financial/Operations) remains a reference-driven redesign concern, but must only read from the DB-backed table/column contract above.
+7. Non-warranty report categories remain blocked for full redesign parity until dedicated visual references are supplied (tracked under T-038/B-001).
 
 ---
 
@@ -432,7 +448,7 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 | T-028 | Service Advisor | Redesign advisor assigned-rows workspace | service-advisor.jsx + service-advisor-data.js | src/pages/ServiceAdvisorPage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-029 | Floor Incharge | Redesign assignment workspace and controls | floor.jsx + floor-data.js | src/pages/FloorInchargePage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-030 | Technician | Redesign technician picker/income/rows workspace | technician.jsx + technician-data.js | src/pages/TechnicianPage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
-| T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | PENDING | unassigned | - | 2026-06-02 | - | Includes explicit full 28-report refactor scope and 4-tab A1-E3 parity contract |
+| T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | PENDING | unassigned | - | 2026-06-02 | - | Scope locked to 7 warranty source tables + shared metadata columns from authoritative dump; no inferred report-count taxonomy claims |
 | T-032 | Remaining Modules | Apply shell + design-system parity to Import | IMPLEMENTATION_PLAN.md section pending | src/pages/ImportPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Full redesign spec not present in audited files |
 | T-033 | Remaining Modules | Apply shell + design-system parity to AutoDoc and JobCard | IMPLEMENTATION_PLAN.md section pending | src/pages/AutoDocPage.tsx, src/pages/JobCardPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Full redesign spec not present in audited files |
 | T-038 | Reports | Keep non-warranty report categories in blocked/pending state until dedicated redesign artifacts arrive | IMPLEMENTATION_PLAN.md + folder audit | src/pages/ReportsPage.tsx and reports/* (non-warranty) | BLOCKED | unassigned | - | 2026-06-02 | - | Needs dedicated redesign prototypes for labour-revenue, revenue, parts categories |
@@ -481,7 +497,7 @@ Rules:
 | 2026-06-02 | Deep audit completed and fresh final plan created from reference artifacts | T-001 to T-037 initialized | COMPLETE | Audited files listed in section 3 |
 | 2026-06-02 | Deep re-audit completed; warranty and reception-console deltas added; tracker updated with new tasks and blockers | T-031, T-038, T-039 and section updates | COMPLETE | Warranty Reports.html, warranty.jsx/data/main, reception.jsx, components.css, full file inventory |
 | 2026-06-02 | Deep re-audit pass 2 completed; mirror TS constraints extracted and instruction-file status reconciled | T-039, T-040, T-041, T-042 and section updates | COMPLETE | src/pages/ReceptionPage.tsx, src/pages/AdminPage.tsx, src/pages/SignUpPage.tsx, src/pages/PasswordUpdatePage.tsx, src/pages/ServiceAdvisorPage.tsx, copilot-instructions.md |
-| 2026-06-02 | Warranty 28-report refactor additional info normalized into explicit execution scope and task notes | T-031, T-038 and section updates | COMPLETE | IMPLEMENTATION_PLAN.md change-log note (warranty dashboard v3), reports category decomposition, warranty tab contracts |
+| 2026-06-02 | Warranty DB authority validation completed; non-authoritative report-count/taxonomy claims removed and replaced with dump-backed schema contract | T-031, T-038 and section updates | COMPLETE | local_folder/backups/full_database.sql and local_folder/backups/chunks/full_database.sql.part_* warranty table/constraint/trigger/COPY audit |
 
 ---
 
@@ -513,8 +529,8 @@ Rules:
 | ../../local_folder/Reference/WebVersionRedesignReference/service-advisor.jsx + ../../local_folder/Reference/WebVersionRedesignReference/service-advisor-data.js | Advisor assigned-rows workspace contract | T-028 |
 | ../../local_folder/Reference/WebVersionRedesignReference/floor.jsx + ../../local_folder/Reference/WebVersionRedesignReference/floor-data.js | Floor assignment workflow contract | T-029 |
 | ../../local_folder/Reference/WebVersionRedesignReference/technician.jsx + ../../local_folder/Reference/WebVersionRedesignReference/technician-data.js | Technician income and assigned-row contract | T-030 |
-| ../../local_folder/Reference/WebVersionRedesignReference/warranty.jsx + ../../local_folder/Reference/WebVersionRedesignReference/warranty-data.js + ../../local_folder/Reference/WebVersionRedesignReference/warranty-main.jsx + ../../local_folder/Reference/WebVersionRedesignReference/Warranty Reports.html | Warranty reports redesign contract (full 28-report refactor context, 4-tab A1-E3 parity, pipeline/settlement and operations coverage) | T-031 |
-| ../../local_folder/Reference/WebVersionRedesignReference/IMPLEMENTATION_PLAN.md (reports categories + warranty v3 change-log note) | Report taxonomy decomposition 5+7+17+1 and warranty v3 aggregate contract sourced from 15 uploaded files / DB truth | T-031, T-038 |
+| ../../local_folder/Reference/WebVersionRedesignReference/warranty.jsx + ../../local_folder/Reference/WebVersionRedesignReference/warranty-data.js + ../../local_folder/Reference/WebVersionRedesignReference/warranty-main.jsx + ../../local_folder/Reference/WebVersionRedesignReference/Warranty Reports.html | Warranty UI redesign contract (4-tab layout and interaction model), with data binding constrained by authoritative DB schema | T-031 |
+| local_folder/backups/full_database.sql + local_folder/backups/chunks/full_database.sql.part_* | Warranty DB contract: 7 source tables, fixed shared columns, branch/location/portal checks, unique(branch, portal, source_row_hash), updated_at triggers; no warranty-specific RLS policy/enable entries in active dump | T-031, T-038 |
 | ../../local_folder/Reference/WebVersionRedesignReference/src/pages/SettingsPage.tsx | selectedSectionId section-gating, hash-deep-link behavior, single-section rendering contract | T-022 |
 | ../../local_folder/Reference/WebVersionRedesignReference/reception.jsx + ../../local_folder/Reference/WebVersionRedesignReference/components.css | Reception console split-layout contract with sticky intake + live feed + fresh-item animation | T-014, T-015 |
 | ../../local_folder/Reference/WebVersionRedesignReference/src/pages/ReceptionPage.tsx | Reception import contract: required headers reg_number and sa_employee_code, row skip handling, exact 10-digit owner phone validation | T-041 |
@@ -536,7 +552,7 @@ Rules:
 5. Second-pass re-audit confirms copilot-instructions.md is present; prior missing-file blocker is closed.
 6. Mirror TypeScript pages add explicit implementation constraints for reception import validation, dealer assignment re-login behavior, and service-advisor non-standard service-type retention.
 7. Auth password policy mismatch across sources is now explicitly tracked as a decision blocker to prevent unintended logic drift.
-8. Warranty scope has been expanded in this tracker from generic parity wording to an explicit 28-report refactor contract so execution cannot drift on report breadth.
+8. Warranty scope is now explicitly constrained to the active dump's 7-table schema contract; non-authoritative report-count and taxonomy claims were removed to prevent assumption drift.
 
 ---
 
