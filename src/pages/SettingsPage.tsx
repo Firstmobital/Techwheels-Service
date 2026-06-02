@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
+import Icon from '../components/Icon'
 import {
   activateRateCard,
   createRateCardWithRows,
@@ -69,6 +70,22 @@ const DEALER_CODE_RULES = [
   { key: '500A840', location: 'Sitapura', fuel_type: 'EV' },
   { key: '3001440', location: 'Ajmer Road', fuel_type: 'PV' },
 ] as const
+
+const SETTINGS_SECTION_IDS = [
+  'branch-management',
+  'employee-master',
+  'models',
+  'autodoc-rate-cards',
+  'unmapped-sr-entries',
+] as const
+
+type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
+
+const DEFAULT_SETTINGS_SECTION_ID: SettingsSectionId = 'branch-management'
+
+function isSettingsSectionId(value: string): value is SettingsSectionId {
+  return (SETTINGS_SECTION_IDS as readonly string[]).includes(value)
+}
 
 function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -292,6 +309,27 @@ export default function SettingsPage() {
     fuel_type: '',
     role: '',
   })
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false)
+
+  const filteredEmployees = useMemo(() => {
+    const query = employeeSearch.trim().toLowerCase()
+    if (!query) return employees
+
+    return employees.filter((employee) => {
+      const haystack = [
+        employee.employee_code,
+        employee.employee_name,
+        employee.location ?? '',
+        employee.department ?? '',
+        employee.fuel_type ?? '',
+        employee.role ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [employees, employeeSearch])
 
   const handleExportEmployees = useCallback(() => {
     if (employees.length === 0) {
@@ -353,7 +391,7 @@ export default function SettingsPage() {
   const [selectedIssueIds, setSelectedIssueIds] = useState<Record<number, boolean>>({})
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [selectedSectionId, setSelectedSectionId] = useState<SettingsSectionId>(DEFAULT_SETTINGS_SECTION_ID)
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [newModelName, setNewModelName] = useState('')
@@ -405,6 +443,8 @@ export default function SettingsPage() {
     return { total, byBranch }
   }, [issues])
 
+  const selectedIssueCount = useMemo(() => Object.values(selectedIssueIds).filter(Boolean).length, [selectedIssueIds])
+
   async function loadModelOptions() {
     setLoadingModels(true)
     const result = await listModelOptions()
@@ -422,34 +462,41 @@ export default function SettingsPage() {
     void loadModelOptions()
   }, [])
 
-  const settingsCards = useMemo(
+  const settingsCards = useMemo<
+    Array<{ id: SettingsSectionId; icon: string; title: string; description: string; stat: string }>
+  >(
     () => [
       {
         id: 'branch-management',
+        icon: 'building',
         title: 'Branch Management',
         description: 'Add and remove branches used across modules.',
         stat: `${branches.length} branches`,
       },
       {
         id: 'employee-master',
+        icon: 'user',
         title: 'Employee Master',
         description: 'Upload, edit, and maintain employee mapping data.',
         stat: `${employees.length} employees`,
       },
       {
         id: 'models',
+        icon: 'truck',
         title: 'Models',
         description: 'Manage dropdown model values for future use.',
         stat: `${modelOptions.length} models`,
       },
       {
         id: 'autodoc-rate-cards',
+        icon: 'doc',
         title: 'AutoDoc Rate Cards',
         description: 'Import and activate city-category labour rate cards.',
         stat: `${rateCards.length} cards`,
       },
       {
         id: 'unmapped-sr-entries',
+        icon: 'alert',
         title: 'Unmapped SR Entries (All Pendencies)',
         description: 'Review and resolve unresolved SR mapping issues.',
         stat: `${issues.length} issues`,
@@ -458,27 +505,29 @@ export default function SettingsPage() {
     [branches.length, employees.length, issues.length, modelOptions.length, rateCards.length],
   )
 
-  const openSettingReference = useCallback((sectionId: string) => {
+  const openSettingReference = useCallback((sectionId: SettingsSectionId) => {
     setSelectedSectionId(sectionId)
     window.history.replaceState(null, '', `#${sectionId}`)
   }, [])
 
   useEffect(() => {
-    const sectionId = window.location.hash.replace('#', '').trim()
-    if (!sectionId) {
-      setSelectedSectionId(null)
-      return
+    const syncSectionFromHash = () => {
+      const sectionId = window.location.hash.replace('#', '').trim()
+      if (isSettingsSectionId(sectionId)) {
+        setSelectedSectionId(sectionId)
+        return
+      }
+
+      setSelectedSectionId(DEFAULT_SETTINGS_SECTION_ID)
+      window.history.replaceState(null, '', `#${DEFAULT_SETTINGS_SECTION_ID}`)
     }
-    const exists = settingsCards.some((card) => card.id === sectionId)
-    if (!exists) {
-      setSelectedSectionId(null)
-      return
-    }
-    setSelectedSectionId(sectionId)
-  }, [settingsCards])
+
+    syncSectionFromHash()
+    window.addEventListener('hashchange', syncSectionFromHash)
+    return () => window.removeEventListener('hashchange', syncSectionFromHash)
+  }, [])
 
   useEffect(() => {
-    if (!selectedSectionId) return
     const element = document.getElementById(selectedSectionId)
     if (!element) return
     window.requestAnimationFrame(() => {
@@ -1408,35 +1457,49 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="mb-3">
+        <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-100 bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 px-5 py-4">
             <h2 className="text-sm font-semibold text-gray-900">Settings Sections</h2>
-            <p className="mt-0.5 text-xs text-gray-500">Open any card to jump directly to that setting.</p>
+            <p className="mt-1 text-xs text-gray-600">Open any card to jump directly to that setting.</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5">
             {settingsCards.map((card) => (
               <button
                 key={card.id}
                 type="button"
                 onClick={() => openSettingReference(card.id)}
                 className={[
-                  'group rounded-xl border p-4 text-left transition',
+                  'group rounded-xl border p-4 text-left transition-all duration-200',
                   selectedSectionId === card.id
-                    ? 'border-blue-300 bg-blue-50'
-                    : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50',
+                    ? 'border-blue-300 bg-blue-50 shadow-sm'
+                    : 'border-gray-200 bg-gray-50/70 hover:border-blue-300 hover:bg-blue-50/70 hover:shadow-sm',
                 ].join(' ')}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">{card.title}</div>
-                    <p className="mt-1 text-xs text-gray-600">{card.description}</p>
-                  </div>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-600 shadow-sm">
-                    {card.stat}
+                <div className="flex items-start gap-3">
+                  <span
+                    className={[
+                      'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
+                      selectedSectionId === card.id
+                        ? 'border-blue-200 bg-white text-blue-700'
+                        : 'border-gray-200 bg-white text-gray-600 group-hover:text-blue-700',
+                    ].join(' ')}
+                  >
+                    <Icon name={card.icon} size={16} strokeWidth={2} />
                   </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-gray-900">{card.title}</div>
+                    <p className="mt-1 text-xs leading-5 text-gray-600">{card.description}</p>
+                    <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{card.stat}</p>
+                  </div>
                 </div>
-                <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-blue-700 group-hover:text-blue-800">
-                  Open Section →
+                <div
+                  className={[
+                    'mt-3 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide',
+                    selectedSectionId === card.id ? 'text-blue-700' : 'text-gray-500 group-hover:text-blue-700',
+                  ].join(' ')}
+                >
+                  {selectedSectionId === card.id ? 'Opened' : 'Open section'}
+                  <Icon name={selectedSectionId === card.id ? 'chevron' : 'arrowr'} size={13} strokeWidth={2.2} />
                 </div>
               </button>
             ))}
@@ -1447,15 +1510,17 @@ export default function SettingsPage() {
         <section id="models" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Models</h2>
+              <h2 className="text-sm font-semibold text-gray-900">
+                Models <span className="font-medium text-gray-500">({modelOptions.length})</span>
+              </h2>
               <p className="mt-0.5 text-xs text-gray-500">
-                Manage vehicle model dropdown values. These values are stored in browser settings for now.
+                Vehicle model dropdown values used across intake and job cards.
               </p>
             </div>
           </div>
 
           <div className="space-y-4 p-5">
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:max-w-xl sm:flex-row">
               <input
                 type="text"
                 value={newModelName}
@@ -1473,11 +1538,88 @@ export default function SettingsPage() {
                 type="button"
                 onClick={handleAddModel}
                 disabled={!newModelName.trim() || savingModel}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {savingModel ? 'Saving...' : '+ Add Model'}
+                <Icon name="plus" size={14} strokeWidth={2.2} />
+                {savingModel ? 'Saving...' : 'Add Model'}
               </button>
             </div>
+
+            {loadingModels ? (
+              <p className="py-3 text-sm text-gray-400">Loading models...</p>
+            ) : modelOptions.length === 0 ? (
+              <p className="py-3 text-sm text-gray-400">No models configured.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {modelOptions.map((model) => (
+                  <div
+                    key={model.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-xs"
+                  >
+                    {editingModelId === model.id ? (
+                      <>
+                        <input
+                          value={editingModelValue}
+                          onChange={(event) => setEditingModelValue(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              void handleSaveModelEdit(model)
+                            }
+                          }}
+                          className="min-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleSaveModelEdit(model)
+                          }}
+                          disabled={savingModel}
+                          className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700"
+                        >
+                          {savingModel ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingModelId(null)
+                            setEditingModelValue('')
+                          }}
+                          disabled={savingModel}
+                          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="px-1 font-semibold text-gray-700">{model.model_name}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditModel(model)}
+                          disabled={deletingModelId === model.id || savingModel}
+                          className="rounded-full border border-amber-200 bg-amber-50 p-1 text-amber-700"
+                          aria-label={`Edit model ${model.model_name}`}
+                        >
+                          <Icon name="dots" size={11} strokeWidth={2.2} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleDeleteModel(model)
+                          }}
+                          disabled={deletingModelId === model.id}
+                          className="rounded-full border border-red-200 bg-red-50 p-1 text-red-700"
+                          aria-label={`Delete model ${model.model_name}`}
+                        >
+                          <Icon name="x" size={11} strokeWidth={2.4} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
@@ -1502,65 +1644,25 @@ export default function SettingsPage() {
                       <tr key={model.id} className="border-b border-gray-100">
                         <td className="px-3 py-2 text-gray-500">{index + 1}</td>
                         <td className="px-3 py-2">
-                          {editingModelId === model.id ? (
-                            <input
-                              value={editingModelValue}
-                              onChange={(event) => setEditingModelValue(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  void handleSaveModelEdit(model)
-                                }
-                              }}
-                              className="w-full rounded border border-gray-300 px-2 py-1"
-                            />
-                          ) : (
-                            <span className="font-medium text-gray-800">{model.model_name}</span>
-                          )}
+                          <span className="font-medium text-gray-800">{model.model_name}</span>
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex gap-2">
-                            {editingModelId === model.id ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    void handleSaveModelEdit(model)
-                                  }}
-                                  disabled={savingModel}
-                                  className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white"
-                                >
-                                  {savingModel ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingModelId(null)
-                                    setEditingModelValue('')
-                                  }}
-                                  disabled={savingModel}
-                                  className="rounded bg-gray-500 px-3 py-1 text-xs font-medium text-white"
-                                >
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditModel(model)}
-                                disabled={deletingModelId === model.id || savingModel}
-                                className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white"
-                              >
-                                Edit
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditModel(model)}
+                              disabled={deletingModelId === model.id || savingModel}
+                              className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700"
+                            >
+                              Edit
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
                                 void handleDeleteModel(model)
                               }}
                               disabled={deletingModelId === model.id}
-                              className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white"
+                              className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700"
                             >
                               {deletingModelId === model.id ? 'Deleting...' : 'Delete'}
                             </button>
@@ -1580,51 +1682,78 @@ export default function SettingsPage() {
         <section id="branch-management" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Branch Management</h2>
-              <p className="mt-0.5 text-xs text-gray-500">Add or remove service branches. These appear as options in the Reception module.</p>
+              <h2 className="text-sm font-semibold text-gray-900">
+                Branch Management <span className="font-medium text-gray-500">({branches.length})</span>
+              </h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Service branches used across modules. These appear as options in the Reception module.
+              </p>
             </div>
           </div>
-          <div className="p-5 space-y-4">
-            {/* Add branch */}
-            <div className="flex gap-2">
+          <div className="space-y-4 p-5">
+            <div className="flex flex-col gap-2 sm:max-w-xl sm:flex-row">
               <input
                 type="text"
                 value={newBranchName}
                 onChange={(e) => setNewBranchName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddBranch() } }}
-                placeholder="e.g. Sitapura, Ajmer Road, Shahpura…"
+                placeholder="e.g. Sitapura, Ajmer Road, Shahpura"
                 className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none ring-blue-100 focus:border-blue-500 focus:ring"
               />
               <button
                 type="button"
                 onClick={() => void handleAddBranch()}
                 disabled={branchSaving || !newBranchName.trim()}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {branchSaving ? 'Adding…' : '+ Add Branch'}
+                <Icon name="plus" size={14} strokeWidth={2.2} />
+                {branchSaving ? 'Adding...' : 'Add Branch'}
               </button>
             </div>
-            {/* Branch list */}
+
             {branches.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">No branches yet. Add your first branch above.</p>
+              <p className="py-4 text-center text-sm text-gray-400">No branches yet. Add your first branch above.</p>
             ) : (
-              <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 overflow-hidden">
-                {branches.map((b) => (
-                  <div key={b.id} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">📍</span>
-                      <span className="text-sm font-medium text-gray-800">{b.name}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteBranch(b.id, b.name)}
-                      disabled={branchDeleting === b.id}
-                      className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                    >
-                      {branchDeleting === b.id ? 'Deleting…' : 'Delete'}
-                    </button>
-                  </div>
-                ))}
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="min-w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                      <th className="px-3 py-2 font-semibold">Sort</th>
+                      <th className="px-3 py-2 font-semibold">Branch</th>
+                      <th className="px-3 py-2 font-semibold">Status</th>
+                      <th className="px-3 py-2 text-right font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branches.map((branch, index) => (
+                      <tr key={branch.id} className="border-b border-gray-100">
+                        <td className="px-3 py-2 font-mono text-gray-400">{index + 1}</td>
+                        <td className="px-3 py-2">
+                          <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700">
+                            <Icon name="building" size={13} strokeWidth={2.2} />
+                            <span className="font-medium">{branch.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                            Active
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteBranch(branch.id, branch.name)}
+                            disabled={branchDeleting === branch.id}
+                            className="inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          >
+                            <Icon name="trash" size={12} strokeWidth={2.2} />
+                            {branchDeleting === branch.id ? 'Deleting...' : 'Remove'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -1635,24 +1764,38 @@ export default function SettingsPage() {
         <section id="employee-master" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Employee Master</h2>
-              <p className="mt-0.5 text-xs text-gray-500">Expected headers: SA CODE, SA NAME, department. Location and Fuel Type are auto-derived from SA CODE rules.</p>
+              <h2 className="text-sm font-semibold text-gray-900">
+                Employee Master <span className="font-medium text-gray-500">({employees.length})</span>
+              </h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Service-advisor master list used for SR to employee mapping. Location and Fuel Type auto-derive from SA code rules.
+              </p>
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => void handleExportEmployees()}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Export Employees
+                <Icon name="download" size={13} strokeWidth={2.2} />
+                Export
               </button>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {uploading ? 'Uploading...' : 'Upload Employee File'}
+                <Icon name="upload" size={13} strokeWidth={2.2} />
+                {uploading ? 'Uploading...' : 'Import'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddEmployeeForm((prev) => !prev)}
+                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+              >
+                <Icon name={showAddEmployeeForm ? 'x' : 'plus'} size={13} strokeWidth={2.3} />
+                {showAddEmployeeForm ? 'Cancel' : 'Add'}
               </button>
             </div>
             <input
@@ -1670,8 +1813,24 @@ export default function SettingsPage() {
             />
           </div>
 
-          <div className="px-5 py-4">
-            <div className="grid grid-cols-7 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="space-y-4 px-5 py-4">
+            <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:max-w-sm">
+                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-400">
+                  <Icon name="search" size={14} strokeWidth={2.2} />
+                </span>
+                <input
+                  value={employeeSearch}
+                  onChange={(event) => setEmployeeSearch(event.target.value)}
+                  placeholder="Search code, name, role, location"
+                  className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
+                />
+              </div>
+              <span className="text-xs font-medium text-gray-500">{filteredEmployees.length} shown</span>
+            </div>
+
+            {showAddEmployeeForm && (
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-7">
               <input
                 value={newEmployee.employee_code}
                 onChange={(event) => {
@@ -1717,18 +1876,20 @@ export default function SettingsPage() {
                 placeholder="Role"
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
-              <div className="flex items-center">
+              <div className="flex items-center md:justify-end">
                 <button
                   type="button"
                   onClick={() => void handleAddEmployee()}
-                  className="rounded bg-gray-800 px-3 py-1 text-xs font-medium text-white"
+                  className="inline-flex items-center gap-1 rounded bg-gray-800 px-3 py-1 text-xs font-semibold text-white"
                 >
-                  Add
+                  <Icon name="plus" size={12} strokeWidth={2.3} />
+                  Save Employee
                 </button>
               </div>
             </div>
+            )}
 
-            <div className="mt-4 overflow-x-auto">
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -1746,12 +1907,14 @@ export default function SettingsPage() {
                     <tr>
                       <td className="px-3 py-3 text-gray-400" colSpan={7}>Loading employees...</td>
                     </tr>
-                  ) : employees.length === 0 ? (
+                  ) : filteredEmployees.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={7}>No employees found.</td>
+                      <td className="px-3 py-3 text-gray-400" colSpan={7}>
+                        {employees.length === 0 ? 'No employees found.' : 'No matching employees for current search.'}
+                      </td>
                     </tr>
                   ) : (
-                    employees.map((employee) => (
+                    filteredEmployees.map((employee) => (
                       <tr key={employee.id} className="border-b border-gray-100">
                         <td className="px-3 py-2">
                           <input
@@ -1885,7 +2048,7 @@ export default function SettingsPage() {
                               <button
                                 type="button"
                                 onClick={() => setEditingEmployeeId(employee.id)}
-                                className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white"
+                                className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700"
                               >
                                 Edit
                               </button>
@@ -1894,8 +2057,9 @@ export default function SettingsPage() {
                               type="button"
                               onClick={() => void handleDeleteEmployee(employee)}
                               disabled={deletingEmployeeId === employee.id || savingCode === employee.employee_code}
-                              className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
+                              <Icon name="trash" size={11} strokeWidth={2.2} />
                               {deletingEmployeeId === employee.id ? 'Deleting...' : 'Delete'}
                             </button>
                           </div>
@@ -1914,7 +2078,9 @@ export default function SettingsPage() {
         <section id="autodoc-rate-cards" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">AutoDoc Rate Cards</h2>
+              <h2 className="text-sm font-semibold text-gray-900">
+                AutoDoc Rate Cards <span className="font-medium text-gray-500">({rateCards.length})</span>
+              </h2>
               <p className="mt-0.5 text-xs text-gray-500">
                 Upload model-wise panel labour rates (PP / PM / PS) and activate per city category.
               </p>
@@ -1924,16 +2090,18 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => void handleExportRateFile()}
                 disabled={exportingRates || uploadingRates}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
+                <Icon name="download" size={13} strokeWidth={2.2} />
                 {exportingRates ? 'Exporting...' : 'Export'}
               </button>
               <button
                 type="button"
                 onClick={() => rateFileInputRef.current?.click()}
                 disabled={uploadingRates || exportingRates}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
+                <Icon name="upload" size={13} strokeWidth={2.2} />
                 {uploadingRates ? 'Importing...' : 'Import'}
               </button>
             </div>
@@ -1953,39 +2121,39 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4 px-5 py-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-700">Card Name</label>
+            <div className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-4 md:items-end">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">Card Name</label>
                 <input
                   value={rateUploadConfig.name}
                   onChange={(event) => setRateUploadConfig((prev) => ({ ...prev, name: event.target.value }))}
                   placeholder="Water base paint labour rates"
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                  className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-700">City Category</label>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">City Category</label>
                 <select
                   value={rateUploadConfig.cityCategory}
                   onChange={(event) => setRateUploadConfig((prev) => ({ ...prev, cityCategory: event.target.value }))}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                  className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
                 >
                   <option value="A">A</option>
                   <option value="B">B</option>
                   <option value="C">C</option>
                 </select>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-700">Notes</label>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">Notes</label>
                 <input
                   value={rateUploadConfig.notes}
                   onChange={(event) => setRateUploadConfig((prev) => ({ ...prev, notes: event.target.value }))}
                   placeholder="e.g. incl. 6% water-base premium"
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                  className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
                 />
               </div>
-              <div className="flex items-end">
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700">
+              <div className="flex h-full items-end">
+                <label className="inline-flex items-center gap-2 rounded border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700">
                   <input
                     type="checkbox"
                     checked={rateUploadConfig.setActive}
@@ -1997,7 +2165,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
@@ -2020,8 +2188,17 @@ export default function SettingsPage() {
                   ) : (
                     rateCards.map((card) => (
                       <tr key={card.id} className="border-b border-gray-100">
-                        <td className="px-3 py-2 font-medium text-gray-800">{card.name}</td>
-                        <td className="px-3 py-2">{card.city_category}</td>
+                        <td className="px-3 py-2">
+                          <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700">
+                            <Icon name="doc" size={12} strokeWidth={2.2} />
+                            <span className="font-semibold text-gray-800">{card.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                            {card.city_category}
+                          </span>
+                        </td>
                         <td className="px-3 py-2">
                           <span className={[
                             'rounded-full px-2 py-0.5 text-[11px] font-semibold',
@@ -2036,7 +2213,7 @@ export default function SettingsPage() {
                             type="button"
                             onClick={() => void handleActivateRateCard(card.id)}
                             disabled={card.is_active || activatingRateCardId === card.id}
-                            className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {activatingRateCardId === card.id ? 'Activating...' : card.is_active ? 'Active' : 'Activate'}
                           </button>
@@ -2053,25 +2230,41 @@ export default function SettingsPage() {
 
         {selectedSectionId === 'unmapped-sr-entries' && (
         <section id="unmapped-sr-entries" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Unmapped SR Entries (All Pendencies)</h2>
-              <p className="mt-0.5 text-xs text-gray-500">All issues captured while importing VAS and JC closed data, including open and resolved.</p>
+          <div className="space-y-4 border-b border-gray-100 px-5 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Unmapped SR Entries (All Pendencies) <span className="font-medium text-gray-500">({issues.length})</span>
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  All issues captured while importing VAS and JC closed data, including open and resolved.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleExportIssues()}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Icon name="download" size={13} strokeWidth={2.2} />
+                Export Issues
+              </button>
             </div>
-            <div className="flex gap-2">
+
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => void handleAutoAssignAllPendencies()}
                 disabled={loadingIssues || issues.length === 0 || loadingEmployees}
-                className="rounded-lg bg-red-700 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                ⚡ Auto-Assign ALL Pendencies
+                <Icon name="sparkles" size={13} strokeWidth={2.2} />
+                Auto-Assign ALL Pendencies
               </button>
               <button
                 type="button"
                 onClick={() => void handleBulkAutoAssignAllVasJc()}
                 disabled={loadingIssues || issues.length === 0 || loadingEmployees}
-                className="rounded-lg bg-red-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Auto-Assign ALL VAS JC
               </button>
@@ -2079,7 +2272,7 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => void handleAutoResolveVasJcByCode()}
                 disabled={loadingIssues || issues.length === 0 || loadingEmployees}
-                className="rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Assign VAS JC Names
               </button>
@@ -2087,69 +2280,58 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => void handleAutoResolveByCode()}
                 disabled={loadingIssues || issues.length === 0 || loadingEmployees}
-                className="rounded-lg bg-orange-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Auto-Resolve by Code
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleExportIssues()}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Export Issues
               </button>
             </div>
           </div>
 
-          {/* Mapping Stats */}
           {!loadingIssues && issues.length > 0 && (
             <div className="border-b border-gray-100 px-5 py-3">
-              <div className="grid grid-cols-4 gap-3">
-                <div className="rounded-lg bg-blue-50 p-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
                   <div className="text-xs font-semibold text-blue-900">Total Issues</div>
                   <div className="mt-1 text-lg font-bold text-blue-600">{mappingStats.total}</div>
                 </div>
                 {Array.from(mappingStats.byBranch.entries()).map(([branch, stats]) => (
-                  <div key={branch} className="rounded-lg bg-orange-50 p-3">
+                  <div key={branch} className="rounded-lg border border-orange-100 bg-orange-50 p-3">
                     <div className="text-xs font-semibold text-orange-900">{branch}</div>
-                    <div className="mt-1 text-lg font-bold text-orange-600">
-                      {stats.unmapped}/{stats.total}
-                    </div>
+                    <div className="mt-1 text-lg font-bold text-orange-600">{stats.unmapped}/{stats.total}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Search Filters */}
           <div className="border-b border-gray-100 px-5 py-4">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Search Job Card</label>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Search Job Card</label>
                 <input
                   type="text"
-                  placeholder="Filter by job card number..."
+                  placeholder="Filter by job card number"
                   value={filterJobCard}
                   onChange={(event) => setFilterJobCard(event.target.value)}
-                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                  className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Search SR Name</label>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Search SR Name</label>
                 <input
                   type="text"
-                  placeholder="Filter by SR assigned to..."
+                  placeholder="Filter by SR assigned to"
                   value={filterSrName}
                   onChange={(event) => setFilterSrName(event.target.value)}
-                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                  className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Filter Branch</label>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">Filter Branch</label>
                 <select
                   value={filterBranch}
                   onChange={(event) => setFilterBranch(event.target.value)}
-                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                  className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
                 >
                   <option value="">All branches</option>
                   {uniqueBranches.map((branch) => (
@@ -2162,15 +2344,15 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Bulk Resolve Controls */}
           {!loadingIssues && filteredIssues.length > 0 && (
-            <div className="border-b border-gray-100 px-5 py-3 bg-blue-50">
-              <div className="flex items-center gap-3">
+            <div className="border-b border-gray-100 bg-blue-50 px-5 py-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                <span className="text-xs font-semibold text-blue-700">{selectedIssueCount} selected</span>
                 <div className="flex-1">
                   <select
                     value={bulkEmployeeCode}
                     onChange={(event) => setBulkEmployeeCode(event.target.value)}
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                    className="w-full rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
                   >
                     <option value="">Select employee for bulk assignment</option>
                     {employeeOptions.map((option) => (
@@ -2183,121 +2365,121 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => void handleBulkResolve()}
-                  disabled={
-                    bulkResolving ||
-                    !bulkEmployeeCode ||
-                    Object.values(selectedIssueIds).filter(Boolean).length === 0
-                  }
-                  className="rounded bg-emerald-600 px-4 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={bulkResolving || !bulkEmployeeCode || selectedIssueCount === 0}
+                  className="rounded bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {bulkResolving
-                    ? 'Resolving...'
-                    : `Bulk Resolve (${Object.values(selectedIssueIds).filter(Boolean).length})`}
+                  {bulkResolving ? 'Resolving...' : `Bulk Resolve (${selectedIssueCount})`}
                 </button>
               </div>
             </div>
           )}
 
-          <div className="overflow-x-auto px-5 py-4">
-            <table className="min-w-full border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
-                  <th className="px-3 py-2 font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={
-                        filteredIssues.length > 0 &&
-                        filteredIssues.every((issue) => selectedIssueIds[issue.id])
-                      }
-                      onChange={(event) => {
-                        const newSelection: Record<number, boolean> = {}
-                        filteredIssues.forEach((issue) => {
-                          newSelection[issue.id] = event.target.checked
-                        })
-                        setSelectedIssueIds(newSelection)
-                      }}
-                      className="rounded border-gray-300"
-                    />
-                  </th>
-                  <th className="px-3 py-2 font-semibold">When</th>
-                  <th className="px-3 py-2 font-semibold">Source</th>
-                  <th className="px-3 py-2 font-semibold">Branch</th>
-                  <th className="px-3 py-2 font-semibold">Row</th>
-                  <th className="px-3 py-2 font-semibold">Job Card</th>
-                  <th className="px-3 py-2 font-semibold">SR Assigned To</th>
-                  <th className="px-3 py-2 font-semibold">Assign Employee</th>
-                  <th className="px-3 py-2 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loadingIssues ? (
-                  <tr>
-                    <td className="px-3 py-3 text-gray-400" colSpan={9}>Loading issues...</td>
+          <div className="overflow-x-auto p-5">
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                    <th className="px-3 py-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredIssues.length > 0 &&
+                          filteredIssues.every((issue) => selectedIssueIds[issue.id])
+                        }
+                        onChange={(event) => {
+                          const newSelection: Record<number, boolean> = {}
+                          filteredIssues.forEach((issue) => {
+                            newSelection[issue.id] = event.target.checked
+                          })
+                          setSelectedIssueIds(newSelection)
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                    </th>
+                    <th className="px-3 py-2 font-semibold">When</th>
+                    <th className="px-3 py-2 font-semibold">Source</th>
+                    <th className="px-3 py-2 font-semibold">Branch</th>
+                    <th className="px-3 py-2 font-semibold">Row</th>
+                    <th className="px-3 py-2 font-semibold">Job Card</th>
+                    <th className="px-3 py-2 font-semibold">SR Assigned To</th>
+                    <th className="px-3 py-2 font-semibold">Assign Employee</th>
+                    <th className="px-3 py-2 font-semibold">Action</th>
                   </tr>
-                ) : issues.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-3 text-gray-400" colSpan={9}>No open mapping issues.</td>
-                  </tr>
-                ) : filteredIssues.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-3 text-gray-400" colSpan={9}>No issues match the applied filters.</td>
-                  </tr>
-                ) : (
-                  filteredIssues.map((issue) => (
-                    <tr key={issue.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedIssueIds[issue.id] ?? false}
-                          onChange={(event) =>
-                            setSelectedIssueIds((prev) => ({
-                              ...prev,
-                              [issue.id]: event.target.checked,
-                            }))
-                          }
-                          className="rounded border-gray-300"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-gray-500">{new Date(issue.created_at).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2">{issue.source_table}</td>
-                      <td className="px-3 py-2">{issue.branch}</td>
-                      <td className="px-3 py-2">{issue.row_number ?? '-'}</td>
-                      <td className="px-3 py-2 font-mono">{issue.job_card_number ?? '-'}</td>
-                      <td className="px-3 py-2">{issue.sr_assigned_to ?? '-'}</td>
-                      <td className="px-3 py-2">
-                        <select
-                          value={issueCodeSelections[issue.id] ?? ''}
-                          onChange={(event) =>
-                            setIssueCodeSelections((prev) => ({
-                              ...prev,
-                              [issue.id]: event.target.value,
-                            }))
-                          }
-                          className="rounded border border-gray-300 px-2 py-1"
-                        >
-                          <option value="">Select employee</option>
-                          {employeeOptions.map((option) => (
-                            <option key={option.code} value={option.code}>
-                              {option.code} - {option.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleResolveIssue(issue)}
-                          disabled={resolvingIssueId === issue.id}
-                          className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {resolvingIssueId === issue.id ? 'Applying...' : 'Apply'}
-                        </button>
-                      </td>
+                </thead>
+                <tbody>
+                  {loadingIssues ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={9}>Loading issues...</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : issues.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={9}>No open mapping issues.</td>
+                    </tr>
+                  ) : filteredIssues.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={9}>No issues match the applied filters.</td>
+                    </tr>
+                  ) : (
+                    filteredIssues.map((issue) => (
+                      <tr key={issue.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedIssueIds[issue.id] ?? false}
+                            onChange={(event) =>
+                              setSelectedIssueIds((prev) => ({
+                                ...prev,
+                                [issue.id]: event.target.checked,
+                              }))
+                            }
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-gray-500">{new Date(issue.created_at).toLocaleString('en-IN')}</td>
+                        <td className="px-3 py-2">
+                          <span className="rounded bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                            {issue.source_table}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">{issue.branch}</td>
+                        <td className="px-3 py-2 text-gray-500">{issue.row_number ?? '-'}</td>
+                        <td className="px-3 py-2 font-mono">{issue.job_card_number ?? '-'}</td>
+                        <td className="px-3 py-2">{issue.sr_assigned_to ?? '-'}</td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={issueCodeSelections[issue.id] ?? ''}
+                            onChange={(event) =>
+                              setIssueCodeSelections((prev) => ({
+                                ...prev,
+                                [issue.id]: event.target.value,
+                              }))
+                            }
+                            className="rounded border border-gray-300 px-2 py-1.5"
+                          >
+                            <option value="">Select employee</option>
+                            {employeeOptions.map((option) => (
+                              <option key={option.code} value={option.code}>
+                                {option.code} - {option.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleResolveIssue(issue)}
+                            disabled={resolvingIssueId === issue.id}
+                            className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {resolvingIssueId === issue.id ? 'Applying...' : 'Apply'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
         )}
