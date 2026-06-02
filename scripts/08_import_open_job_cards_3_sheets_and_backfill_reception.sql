@@ -200,12 +200,12 @@ SELECT total AS open_job_cards_upserted
 FROM upsert_count;
 
 -- -----------------------------------------------------------------------------
--- C) Backfill reception entries from open_job_cards with JC dedupe
+-- C) Backfill reception entries from service_invoice_order_data with JC dedupe
 -- -----------------------------------------------------------------------------
 WITH params AS (
   SELECT
     '3000840'::text AS target_dealer_code,
-    'Open Job Cards Backfill (3 sheets 2026-06-02)'::text AS backfill_source
+    'Invoice Order Open Status Backfill (2026-06-02)'::text AS backfill_source
 ),
 canonical_models AS (
   SELECT
@@ -230,9 +230,10 @@ source_rows AS (
       ELSE NULL
     END AS reception_branch,
     coalesce(o.created_date_time, o.closed_date_time, now()) AS source_ts
-  FROM public.open_job_cards o
+  FROM public.service_invoice_order_data o
   WHERE nullif(btrim(o.job_card_number), '') IS NOT NULL
     AND upper(btrim(o.job_card_number)) LIKE 'JC-%'
+    AND lower(btrim(coalesce(o.status, ''))) NOT IN ('closed', 'cancelled')
 ),
 normalized AS (
   SELECT

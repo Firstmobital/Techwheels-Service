@@ -596,13 +596,13 @@ export default function AdminPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div className="page">
+    <div>
       <div className="flex h-64 items-center justify-center text-sm" style={{ color: 'var(--faint)' }}>Loading…</div>
     </div>
   )
 
   return (
-    <div className="page">
+    <div>
       <div className="pagehead">
         <div>
           <p className="greet"><Icon name="settings" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />Admin Panel</p>
