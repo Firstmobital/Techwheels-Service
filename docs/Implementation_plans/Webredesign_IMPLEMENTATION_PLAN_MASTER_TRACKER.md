@@ -46,6 +46,8 @@ This document is also the live activity tracker. Every completed, in-progress, b
 6. Responsive behavior must satisfy 375, 768, 1280 checkpoints.
 7. No new dependencies unless explicitly required.
 8. Do not port tweaks-panel.jsx (preview-only tooling).
+9. Every post-login page must use one shared redesign class/token grammar from src/App.css and src/index.css; do not mix ad-hoc utility-first styling that overrides spacing, type scale, card rhythm, or table density.
+10. Do not wrap module pages in an extra nested page container that duplicates shell spacing; page content must inherit a single shell flow for synchronized rendering across routes.
 
 ### 2.3 Unknown handling protocol (no assumptions)
 
@@ -202,6 +204,13 @@ Classes that must be available in real app styling:
 5. <=420: KPI 1-column fallback
 6. all widths: data tables in horizontal scroll container
 
+### 5.4 Visual Synchronization Contract (All Web Pages)
+
+1. Shared layout primitives must be reused across modules: pagehead, card/card__head/card__body, tbl/tbl-wrap, summary/schip, kpis.
+2. Typography and spacing scale must come from shared tokens and classes, not per-page one-off utility stacks.
+3. Home (dashboard) is the baseline rhythm for page-head, summary, card, and table density; all operational pages must align to this flow.
+4. Any discovered visual drift (font-size, row height, padding, chip scale, header rhythm) is a tracker defect and must be resolved before task closure.
+
 ---
 
 ## 6. Navigation And RBAC Contract
@@ -246,6 +255,12 @@ Classes that must be available in real app styling:
 4. Activity feed visual redesign
 5. RBAC module launcher visual redesign
 
+### 7.2A Cross-Page Synchronization Rule (Mandatory)
+
+1. Home page establishes canonical post-login layout rhythm.
+2. Service Advisor, Reception, Admin, Settings, Floor Incharge, Technician, Reports, Import, AutoDoc, and JobCard must match canonical rhythm using shared design-system classes.
+3. Mixed styling systems on the same page are not acceptable for final web redesign sign-off.
+
 ### 7.3 Reception
 
 1. Intake form layout parity
@@ -287,6 +302,7 @@ Classes that must be available in real app styling:
 3. Estimate upload/replace visual actions parity
 4. Per-row save affordance parity
 5. Service type editor must preserve current non-standard values by retaining current value as selectable option when it is outside standard option list
+6. Service Advisor must remain synchronized with Home page flow (shared pagehead/card/tbl/summary grammar; no independent spacing/font scale drift).
 
 ### 7.7 Floor Incharge
 
@@ -531,7 +547,8 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 | T-025 | Settings | Redesign Models section | settings.jsx + settings-data.js | src/pages/SettingsPage.tsx | REVIEW | Vinod | 2026-06-02 | 2026-06-02 | - | Models section redesigned to chip-first management layout with inline rename controls and refined action styling while preserving add/edit/delete handlers. Diagnostics and build passed; shared browser session redirected to Home/module-gated state during validation attempts. |
 | T-026 | Settings | Redesign AutoDoc Rate Cards section | settings.jsx + settings-data.js | src/pages/SettingsPage.tsx | REVIEW | Vinod | 2026-06-02 | 2026-06-02 | - | AutoDoc Rate Cards redesigned with counted heading, iconized export/import controls, structured config strip, and refreshed table badges/chips while preserving import/export/activate behavior. Diagnostics, build, and browser rendering checks passed. |
 | T-027 | Settings | Redesign Unmapped SR Entries section | settings.jsx + settings-data.js | src/pages/SettingsPage.tsx | REVIEW | Vinod | 2026-06-02 | 2026-06-02 | - | Unmapped SR section redesigned with structured action bar, stats cards, filter strip, selected-count bulk resolve bar, and refreshed table badges/actions while preserving existing resolve and auto-assign logic. Diagnostics/build passed; shared browser session currently module-access gated. |
-| T-028 | Service Advisor | Redesign advisor assigned-rows workspace | service-advisor.jsx + service-advisor-data.js | src/pages/ServiceAdvisorPage.tsx | DONE | Vinod | 2026-06-02 | 2026-06-02 | - | Service Advisor page redesigned to reference-style layout: page head with greeting icon + title + description (showing advisor name/code for SA view, "All assigned vehicles" for admin view), summary chips (Assigned to me, Estimates pending, Branch), assigned entries table with restructured columns (Created, Source as pill chips with tone colors, Reg No, Model, Service Type select with non-standard value preservation, JC Number input uppercase, Owner name+phone, Remark textarea), estimate upload/replace/view workflow, dirty state tracking for Save button, and toast notifications. Admin role detection added: super admin sees all entries with branch filter controls (All, Ajmer Road, Shahpura, Sitapura, Tonk) to scope results. All existing handlers and business logic preserved. Browser verified: admin sees 243 total entries, branch filter works correctly, filtered counts update properly. Diagnostics clean, npm run build ✓ built in 849ms. |
+| T-028 | Service Advisor | Redesign advisor assigned-rows workspace | service-advisor.jsx + service-advisor-data.js | src/pages/ServiceAdvisorPage.tsx | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Service Advisor visual system synchronized with Home baseline: aligned to shared pagehead/card/tbl/summary primitives and shared token scales, removed mixed utility-style drift patterns and duplicate page-container spacing, preserved service-type non-standard value retention and existing save/upload business logic. Build validated (npm run build ✓). |
+| T-044 | Governance | Enforce cross-page visual synchronization lock (no design-system drift) | home.jsx + service-advisor.jsx + styles.css + components.css | docs/Implementation_plans/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md, src/App.css, src/pages/* | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Added explicit no-drift governance rules: single class/token grammar across pages, no nested duplicate page containers, and mandatory acceptance checks for spacing/font/table-density parity anchored to Home baseline flow. |
 | T-029 | Floor Incharge | Redesign assignment workspace and controls | floor.jsx + floor-data.js | src/pages/FloorInchargePage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-030 | Technician | Redesign technician picker/income/rows workspace | technician.jsx + technician-data.js | src/pages/TechnicianPage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | PENDING | unassigned | - | 2026-06-02 | - | Scope locked to 7 warranty source tables + shared metadata columns from authoritative dump; no inferred report-count taxonomy claims |
@@ -574,6 +591,9 @@ Rules:
 6. Tables use horizontal overflow wrappers where needed.
 7. Build passes clean.
 8. Runtime has no new console errors tied to redesign.
+9. No mixed styling-system drift per page (for example, shared redesign classes mixed with standalone utility-first typography/spacing that changes rhythm).
+10. No duplicate nested page-container spacing in post-login module routes.
+11. Service Advisor and other operational modules remain visually synchronized to Home baseline spacing/type/card/table flow.
 
 ---
 
@@ -581,6 +601,7 @@ Rules:
 
 | Date | Activity | Tracker IDs | Result | Evidence |
 |---|---|---|---|---|
+| 2026-06-02 | Visual drift governance update completed: locked cross-page synchronization rules to prevent web redesign divergence (Home baseline mandated across all modules), and recorded Service Advisor parity alignment to shared pagehead/card/tbl/summary system | T-028, T-044 | COMPLETE | docs/Implementation_plans/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md (sections 2.2, 5.4, 7.2A, 7.6, 9, 11 updated), src/pages/ServiceAdvisorPage.tsx, src/App.css, npm run build ✓ built in 858ms |
 | 2026-06-02 | T-028 implemented in Service Advisor page: redesigned to reference-style layout with page head (greeting icon + title + advisor name/code description), summary chips (Assigned to me, Estimates pending, Branch), restructured table columns (Created, Source pills with tone colors, Reg No, Model, Service Type select preserving non-standard values, JC Number uppercase input, Owner name+phone, Remark textarea, Estimate upload/replace/view/save), dirty state tracking for Save button affordance, and toast notifications while preserving all existing handlers and business logic | T-028 | REVIEW | src/pages/ServiceAdvisorPage.tsx redesigned, Icon import added, dirty tracking via Set<number>, advisor metadata derived from rows (advisorName, advisorCode, advisorBranch), get_errors clean, npm run build ✓ built in 886ms |
 | 2026-06-02 | T-027 implemented in Settings page: Unmapped SR Entries redesigned to workflow-style action controls, stats/filter strips, selected-count bulk resolve bar, and refined table badges/actions while preserving all existing resolution logic | T-027 | REVIEW | src/pages/SettingsPage.tsx (unmapped-sr-entries section + selectedIssueCount), get_errors clean, npm run build ✓ built in 905ms, browser session on /settings#unmapped-sr-entries currently module-access gated |
 | 2026-06-02 | T-026 implemented in Settings page: AutoDoc Rate Cards redesigned to reference-style action row + config strip + refined table presentation while keeping existing rate-card flow intact | T-026 | REVIEW | src/pages/SettingsPage.tsx (autodoc-rate-cards section), get_errors clean, npm run build ✓ built in 876ms, browser verified on /settings#autodoc-rate-cards |
@@ -620,6 +641,7 @@ Rules:
 
 | Source Artifact | Extracted Requirement | Tracker IDs |
 |---|---|---|
+| src/pages/DashboardPage.tsx + src/pages/ServiceAdvisorPage.tsx + src/App.css | Cross-page visual synchronization baseline: module pages must share redesign grammar (pagehead, card, tbl, summary) and token scale to prevent spacing/font drift | T-028, T-044 |
 | ../../local_folder/Reference/WebVersionRedesignReference/IMPLEMENTATION_PLAN.md | Golden rules, no-fabrication, presentational-only lock, screen mapping, acceptance checks | T-001 to T-037 |
 | ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md | Rule lock for logic preservation, no guessing, nav replacement, responsive requirements | T-005, T-008, T-012, T-034, T-035 |
 | ../../local_folder/Reference/WebVersionRedesignReference/styles.css | Token palette, layout primitives, responsive breakpoints, shell anatomy | T-002, T-003, T-005, T-007, T-034 |

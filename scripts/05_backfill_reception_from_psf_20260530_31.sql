@@ -10,6 +10,9 @@
 --    when source labels differ across backfill runs.
 -- 5) Existing 30-31 May reception rows WILL NOT be reinserted (dedupe by dealer+reg+jc).
 --    Any technician_assignments work on those rows is preserved.
+-- 6) Model normalization is canonicalized from public.settings_model_options (active rows),
+--    so variant/product-line strings (for example "Harrier EV Empowered AWD75ACFC")
+--    are stored as canonical model names (for example "Harrier EV").
 --
 -- OPTIONAL: To preview rows that will be inserted (without committing), replace the final SELECT
 -- with a verification query to count rows that would be inserted.
@@ -28,7 +31,7 @@ source_rows AS (
     j.branch,
     nullif(btrim(j.job_card_number), '') AS jc_number,
     upper(nullif(btrim(j.vehicle_registration_number), '')) AS reg_number,
-    nullif(btrim(j.product_line), '') AS model,
+    nullif(btrim(j.product_line), '') AS model_raw,
     coalesce(nullif(btrim(j.sr_type), ''), 'Running Repair') AS service_type,
     coalesce(nullif(btrim(j.sr_assigned_to), ''), nullif(btrim(j.employee_code), ''), 'UNKNOWN') AS sa_name,
     nullif(btrim(j.first_name), '') AS first_name,
@@ -49,7 +52,7 @@ normalized AS (
     s.branch,
     s.jc_number,
     s.reg_number,
-    s.model,
+    s.model_raw,
     s.service_type,
     s.sa_name,
     CASE
@@ -63,12 +66,44 @@ normalized AS (
     s.source_ts
   FROM source_rows s
 ),
+canonical_models AS (
+  SELECT
+    m.model_name,
+    lower(regexp_replace(m.model_name, '[^a-z0-9]+', '', 'g')) AS model_key
+  FROM public.settings_model_options m
+  WHERE m.is_active = true
+),
+normalized_with_model AS (
+  SELECT
+    n.branch,
+    n.jc_number,
+    n.reg_number,
+    coalesce(cm.model_name, n.model_raw) AS model,
+    n.service_type,
+    n.sa_name,
+    n.owner_name,
+    n.owner_phone,
+    n.employee_code_raw,
+    n.source_ts
+  FROM normalized n
+  LEFT JOIN LATERAL (
+    SELECT c.model_name
+    FROM canonical_models c
+    WHERE
+      lower(regexp_replace(coalesce(n.model_raw, ''), '[^a-z0-9]+', '', 'g')) = c.model_key
+      OR lower(n.model_raw) LIKE lower(c.model_name) || ' %'
+      OR lower(n.model_raw) LIKE lower(c.model_name) || '-%'
+      OR lower(n.model_raw) LIKE lower(c.model_name) || '(%'
+    ORDER BY length(c.model_name) DESC
+    LIMIT 1
+  ) cm ON true
+),
 with_sa_code AS (
   SELECT
     n.*,
     em.employee_code AS sa_employee_code,
     em.employee_name AS sa_display_name
-  FROM normalized n
+  FROM normalized_with_model n
   LEFT JOIN public.employee_master em
     ON upper(em.employee_code) = upper(n.employee_code_raw)
 ),
