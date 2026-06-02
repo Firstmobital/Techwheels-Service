@@ -60,6 +60,11 @@ type Branch = string
 type Portal = 'EV' | 'PV'
 type CardStatus = 'idle' | 'uploading' | 'success' | 'error'
 
+interface LocationPortal {
+  location: 'Ajmer Road' | 'Sitapura'
+  portal: Portal
+}
+
 interface SlotState {
   file: File | null
   rowCount: number | null
@@ -217,6 +222,12 @@ const WARRANTY_REPORT_TABLES = new Set([
 ])
 
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
+
+const DEALER_CODE_LOCATION_PORTAL_RULES = [
+  { key: '3000840', location: 'Sitapura', portal: 'PV' },
+  { key: '500A840', location: 'Sitapura', portal: 'EV' },
+  { key: '3001440', location: 'Ajmer Road', portal: 'PV' },
+] as const
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -620,6 +631,7 @@ function buildInsertRows(
 function buildPartsSourceRowHash(
   tableName: string,
   branch: Branch,
+  portal: Portal,
   row: Record<string, unknown>,
   rowNumber: number,
 ): string {
@@ -637,8 +649,20 @@ function buildPartsSourceRowHash(
       ? row.ordered_quantity
       : row.on_hand_quantity
 
-  const raw = `${tableName}|${branch}|${partNumber}|${String(dateKey ?? '')}|${String(qtyKey ?? '')}|${rowNumber}`
+  const raw = `${tableName}|${branch}|${portal}|${partNumber}|${String(dateKey ?? '')}|${String(qtyKey ?? '')}|${rowNumber}`
   return raw.replace(/\s+/g, ' ').trim()
+}
+
+function resolveDealerCodeLocationAndPortal(rawDealerCode: unknown): LocationPortal | null {
+  if (rawDealerCode === null || rawDealerCode === undefined) return null
+
+  const dealerCode = String(rawDealerCode).trim().toUpperCase()
+  if (!dealerCode) return null
+
+  const match = DEALER_CODE_LOCATION_PORTAL_RULES.find((rule) => dealerCode.includes(rule.key))
+  if (!match) return null
+
+  return { location: match.location, portal: match.portal }
 }
 
 function toWarrantyColumnKey(input: string): string {
@@ -682,10 +706,14 @@ function hashWarrantyRow(payload: Record<string, string>): string {
   return (hash >>> 0).toString(16)
 }
 
-function resolveWarrantyLocationAndPortal(branch: string): { location: 'Ajmer Road' | 'Sitapura'; portal: Portal } {
+function resolveLocationAndPortalFromSlotBranch(branch: string): LocationPortal {
   const portal: Portal = branch.endsWith('EV') ? 'EV' : 'PV'
   const location = branch.startsWith('Ajmer Road') ? 'Ajmer Road' : 'Sitapura'
   return { location, portal }
+}
+
+function resolveStandardBranchFromSlot(branch: string): 'Ajmer Road' | 'Sitapura' {
+  return resolveLocationAndPortalFromSlotBranch(branch).location
 }
 
 // ─── SlotDropzone ──────────────────────────────────────────────────────────────
@@ -1370,6 +1398,9 @@ export default function ImportPage() {
           const slot = cardState.slots[branch]
           if (!slot.file || slot.parseError || slot.rowCount === null) continue
 
+          const slotLocationPortal = resolveLocationAndPortalFromSlotBranch(branch)
+          const standardBranch = resolveStandardBranchFromSlot(branch)
+
           const rawRows = await parseWorkbook(slot.file, tableName)
 
           if (isVasTable && vasHeaderMapping) {
@@ -1381,14 +1412,14 @@ export default function ImportPage() {
             const { error: deleteExistingError } = await supabase
               .from(tableName)
               .delete()
-              .eq('branch', branch)
+              .eq('branch', standardBranch)
 
             if (deleteExistingError) {
               throw new Error(`Failed to clear existing VAS rows for ${branch}: ${deleteExistingError.message}`)
             }
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
-              const { row, errors } = buildVasInsertRow(rawRows[rowIdx], branch, vasHeaderMapping, rowIdx + 2) // +2 because row 1 is header
+              const { row, errors } = buildVasInsertRow(rawRows[rowIdx], standardBranch, vasHeaderMapping, rowIdx + 2) // +2 because row 1 is header
               if (errors.length > 0) {
                 allParseErrors.push(...errors)
               } else if (row) {
@@ -1400,7 +1431,7 @@ export default function ImportPage() {
                   if (matched.reason === 'no_employee_match') {
                     mappingIssues.push({
                       source_table: 'service_vas_jc_data',
-                      branch,
+                      branch: standardBranch,
                       row_number: rowIdx + 2,
                       job_card_number:
                         row.job_card_number == null ? null : String(row.job_card_number),
@@ -1410,7 +1441,7 @@ export default function ImportPage() {
                   }
                 }
                 // Ensure branch is always set (fallback to selected branch if not set)
-                if (!row.branch) row.branch = branch
+                if (!row.branch) row.branch = standardBranch
                 insertRows.push(row)
               }
             }
@@ -1431,7 +1462,7 @@ export default function ImportPage() {
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildJcClosedInsertRow(
                 rawRows[rowIdx],
-                branch,
+                standardBranch,
                 jcHeaderMapping,
                 rowIdx + 2,
               )
@@ -1487,12 +1518,12 @@ export default function ImportPage() {
                     // Never insert an unknown employee_code because FK requires it to exist in employee_master.
                     row.employee_code = byCodeMatch ? byCodeMatch.employee_code : null
                     // If SA code is valid, prefer employee location-derived branch.
-                    row.branch = byCodeMatch ? normalizeEmployeeBranch(byCodeMatch.location) ?? branch : branch
+                    row.branch = byCodeMatch ? normalizeEmployeeBranch(byCodeMatch.location) ?? standardBranch : standardBranch
 
                     if (!byCodeMatch) {
                       mappingIssues.push({
                         source_table: 'job_card_closed_data',
-                        branch,
+                        branch: standardBranch,
                         row_number: rowIdx + 2,
                         job_card_number:
                           row.job_card_number == null ? null : String(row.job_card_number),
@@ -1505,12 +1536,12 @@ export default function ImportPage() {
                     const matched = resolveEmployeeForSr(srAssignedTo, employeeLookup)
                     row.employee_code = matched.employeeCode
                     // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
-                    row.branch = matched.employeeBranch ?? branch
+                    row.branch = matched.employeeBranch ?? standardBranch
 
                     if (matched.reason === 'no_employee_match') {
                       mappingIssues.push({
                         source_table: 'job_card_closed_data',
-                        branch,
+                        branch: standardBranch,
                         row_number: rowIdx + 2,
                         job_card_number:
                           row.job_card_number == null ? null : String(row.job_card_number),
@@ -1521,7 +1552,7 @@ export default function ImportPage() {
                   }
                 }
                 // Ensure branch is always set (fallback to selected branch if not set)
-                if (!row.branch) row.branch = branch
+                if (!row.branch) row.branch = standardBranch
                 insertRows.push(row)
               }
             }
@@ -1558,7 +1589,7 @@ export default function ImportPage() {
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildInvoiceInsertRow(
                 rawRows[rowIdx],
-                branch,
+                standardBranch,
                 invoiceHeaderMapping,
                 rowIdx + 2,
               ) // +2 because row 1 is header
@@ -1615,7 +1646,7 @@ export default function ImportPage() {
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildInvoiceOrderInsertRow(
                 rawRows[rowIdx],
-                branch,
+                standardBranch,
                 invoiceOrderHeaderMapping,
                 rowIdx + 2,
               )
@@ -1637,13 +1668,19 @@ export default function ImportPage() {
           } else if (isPartsConsumptionTable && partsConsumptionHeaderMapping) {
             const parseErrors: PartsConsumptionParseError[] = []
             const insertRows: Record<string, unknown>[] = []
-            const portal = cardState.portal ?? 'EV'
+            const portal = slotLocationPortal.portal
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
-              const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
+              const sourceRowHash = buildPartsSourceRowHash(
+                tableName,
+                slotLocationPortal.location,
+                portal,
+                rawRows[rowIdx],
+                rowIdx + 2,
+              )
               const { row, errors } = buildPartsConsumptionInsertRow(
                 rawRows[rowIdx],
-                branch,
+                slotLocationPortal.location,
                 portal,
                 partsConsumptionHeaderMapping,
                 rowIdx + 2,
@@ -1660,6 +1697,9 @@ export default function ImportPage() {
                   }
                   delete row.dealer_code
                 }
+
+                row.branch = slotLocationPortal.location
+                row.portal = portal
                 insertRows.push(row)
               }
             }
@@ -1682,7 +1722,7 @@ export default function ImportPage() {
           } else if (isPartsOrderTable && partsOrderHeaderMapping) {
             const parseErrors: PartsOrderParseError[] = []
             const insertRows: Record<string, unknown>[] = []
-            const portal = cardState.portal ?? 'EV'
+            const portal = slotLocationPortal.portal
 
             // Get current user's dealer code for RLS compliance
             let userDealerCode: string | null = null
@@ -1696,10 +1736,16 @@ export default function ImportPage() {
             }
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
-              const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
+              const sourceRowHash = buildPartsSourceRowHash(
+                tableName,
+                slotLocationPortal.location,
+                portal,
+                rawRows[rowIdx],
+                rowIdx + 2,
+              )
               const { row, errors } = buildPartsOrderInsertRow(
                 rawRows[rowIdx],
-                branch,
+                slotLocationPortal.location,
                 portal,
                 partsOrderHeaderMapping,
                 rowIdx + 2,
@@ -1738,7 +1784,7 @@ export default function ImportPage() {
                 const rowSourceHash =
                   row.source_row_hash == null ? '' : String(row.source_row_hash).trim()
                 if (!rowSourceHash) {
-                  const fallbackSourceHash = `${tableName}|${branch}|${String(
+                  const fallbackSourceHash = `${tableName}|${slotLocationPortal.location}|${portal}|${String(
                     row.part_number ?? '',
                   )
                     .trim()
@@ -1747,6 +1793,11 @@ export default function ImportPage() {
                   )}|${rowIdx + 2}`
                   row.source_row_hash = fallbackSourceHash.replace(/\s+/g, ' ').trim()
                 }
+
+                const dealerDerived = resolveDealerCodeLocationAndPortal(row.dealer_code)
+                const resolved = dealerDerived ?? slotLocationPortal
+                row.branch = resolved.location
+                row.portal = resolved.portal
 
                 insertRows.push(row)
               }
@@ -1767,13 +1818,19 @@ export default function ImportPage() {
           } else if (isPartsStockTable && partsStockHeaderMapping) {
             const parseErrors: PartsStockParseError[] = []
             const insertRows: Record<string, unknown>[] = []
-            const portal = cardState.portal ?? 'EV'
+            const portal = slotLocationPortal.portal
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
-              const sourceRowHash = buildPartsSourceRowHash(tableName, branch, rawRows[rowIdx], rowIdx + 2)
+              const sourceRowHash = buildPartsSourceRowHash(
+                tableName,
+                slotLocationPortal.location,
+                portal,
+                rawRows[rowIdx],
+                rowIdx + 2,
+              )
               const { row, errors } = buildPartsStockInsertRow(
                 rawRows[rowIdx],
-                branch,
+                slotLocationPortal.location,
                 portal,
                 partsStockHeaderMapping,
                 rowIdx + 2,
@@ -1783,6 +1840,8 @@ export default function ImportPage() {
               if (errors.length > 0) {
                 parseErrors.push(...errors)
               } else if (row) {
+                row.branch = slotLocationPortal.location
+                row.portal = portal
                 insertRows.push(row)
               }
             }
@@ -1802,7 +1861,7 @@ export default function ImportPage() {
               ],
             )
           } else if (isWarrantyTable) {
-            const { location, portal } = resolveWarrantyLocationAndPortal(branch)
+            const { location, portal } = resolveLocationAndPortalFromSlotBranch(branch)
             const insertRows = rawRows.map((rawRow, rowIdx) => {
               const sourceRowData = normalizeWarrantyRow(rawRow)
               return {
@@ -1819,7 +1878,7 @@ export default function ImportPage() {
             totalInserted += await upsertOrInsertRows(insertRows, ['branch,source_row_hash'])
           } else {
             // Other tables: use original logic
-            const insertRows = buildInsertRows(rawRows, tableColumns, branch)
+            const insertRows = buildInsertRows(rawRows, tableColumns, standardBranch)
             totalInserted += await insertRowsWithDuplicateSkip(insertRows)
           }
 
