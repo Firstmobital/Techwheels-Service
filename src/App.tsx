@@ -28,13 +28,13 @@ import type { User } from '@supabase/supabase-js'
 const NAV_ITEMS = [
   { to: '/reception', label: 'Reception', icon: 'reception' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
+  { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
   { to: '/import', label: 'Imports', icon: 'import' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
   { to: '/autodoc', label: 'AutoDoc', icon: 'autodoc' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
   { to: '/admin', label: 'Admin', icon: 'admin' },
-  { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
 ]
 
 type ModuleName =
