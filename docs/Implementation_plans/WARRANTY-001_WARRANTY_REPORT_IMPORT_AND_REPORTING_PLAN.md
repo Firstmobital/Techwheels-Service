@@ -251,70 +251,27 @@ All schema changes are delivered as migration SQL files and must be run manually
 
 ---
 
-## 🔴 CRITICAL SCHEMA CORRECTION REQUIRED (2026-06-02 Final Audit)
+## Schema Validation Snapshot (Authoritative Dump-Backed – 2026-06-02)
 
-### Discrepancy Between Current Schema and Operational Reality
+Validated against `local_folder/backups/full_database.sql` using mirrored chunk access under `local_folder/backups/chunks/full_database.sql.part_*`.
 
-**Current Migration File (20260528155000) Defines:**
-```sql
-branch CHECK (branch IN ('Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'))
-location CHECK (location IN ('Ajmer Road', 'Sitapura'))
-portal CHECK (portal IN ('PV', 'EV'))
-```
+### Confirmed from Authoritative Dump
 
-**Actual Operational Design:**
-- **branch column** should store ONLY location name: `'Ajmer Road'`, `'Sitapura'`
-- **portal column** stores vehicle fuel type: `'PV'` (ICE), `'EV'` (Electric)
-- **Why:** The import UI labels show "Ajmer Road PV", "Ajmer Road EV" etc., but this is ONLY for user clarity during file selection—the actual column values are separated
+1. `branch` CHECK is exactly `('Ajmer Road', 'Sitapura')` on all 7 warranty tables.
+2. `location` CHECK is exactly `('Ajmer Road', 'Sitapura')` on all 7 warranty tables.
+3. `portal` CHECK is exactly `('PV', 'EV')` on all 7 warranty tables.
+4. Unique key is **not** `(branch, source_row_hash)`; it is `(branch, portal, source_row_hash)`.
+5. Trigger `set_updated_at()` exists on all 7 warranty tables.
+6. No RLS enablement/policies for warranty tables were found in the dump.
 
-### Impact
+### Observed Stored Values in Dump Data
 
-The **branch CHECK constraint is overly restrictive** and combines semantically separate concerns:
+From `COPY` sections in the authoritative dump, warranty rows currently contain combinations such as:
+- `Ajmer Road | Ajmer Road | PV`
+- `Sitapura | Sitapura | PV`
+- `Sitapura | Sitapura | EV`
 
-1. ❌ **branch constraint too complex** – Stores location + fuel type as composite value
-2. ⚠️ **Violates data normalization** – Location and fuel type are different attributes
-3. ❌ **Will cause data entry errors** – Stores "Ajmer Road PV" but should store "Ajmer Road"
-
-### Required Action: Corrective Migration
-
-Create new migration file: `20260602*_warranty_schema_corrections.sql`
-
-```sql
--- Fix branch constraint to accept location names only
-ALTER TABLE warranty_claim_settlement_report_data DROP CONSTRAINT warranty_claim_settlement_report_data_branch_check;
-ALTER TABLE warranty_claim_settlement_report_data ADD CONSTRAINT warranty_claim_settlement_report_data_branch_check 
-  CHECK (branch IN ('Ajmer Road', 'Sitapura'));
-
-ALTER TABLE warranty_part_wc_data DROP CONSTRAINT warranty_part_wc_data_branch_check;
-ALTER TABLE warranty_part_wc_data ADD CONSTRAINT warranty_part_wc_data_branch_check 
-  CHECK (branch IN ('Ajmer Road', 'Sitapura'));
-
--- Repeat for all 7 tables:
--- warranty_updation_claim_data, warranty_goodwill_data, warranty_amc_data, warranty_fsb_data, warranty_wc_data
-
--- Optionally rename 'portal' to 'fuel_type' for semantic clarity (non-breaking if skipped)
--- ALTER TABLE warranty_claim_settlement_report_data RENAME COLUMN portal TO fuel_type;
-```
-
-### UI/Import Labels vs. Database Values
-
-**Import UI (Frontend)** shows location + fuel type for user clarity:
-- "Ajmer Road PV" → User sees this when selecting file for Ajmer Road PV data
-- "Ajmer Road EV" → User sees this when selecting file for Ajmer Road EV data
-- "Sitapura PV" → User sees this when selecting file for Sitapura PV data
-- "Sitapura EV" → User sees this when selecting file for Sitapura EV data
-
-**Database Values (Backend storage)** separate location and fuel type:
-```
-branch='Ajmer Road', location='Ajmer Road', portal='PV'
-branch='Ajmer Road', location='Ajmer Road', portal='EV'
-branch='Sitapura',   location='Sitapura',   portal='PV'
-branch='Sitapura',   location='Sitapura',   portal='EV'
-```
-
----
-
-## Data Model (Authoritative Schema – REQUIRES CORRECTION 2026-06-02)
+## Data Model (Authoritative Schema – Verified 2026-06-02)
 
 **Source Migration:** `supabase/exec_success_migrations/20260528155000_create_warranty_import_tables.sql`  
 **Migration Status:** ✅ Applied and verified in database
@@ -329,32 +286,32 @@ branch='Sitapura',   location='Sitapura',   portal='EV'
 6. warranty_fsb_data
 7. warranty_wc_data
 
-### Authoritative Column Structure (JSONB Design – WITH CORRECTION)
+### Authoritative Column Structure (JSONB Design)
 
 Each table has **exactly 10 columns** (no variations):
 
-| Column | Type | Current Constraint | ✅ Correct Constraint | Purpose |
-|---|---|---|---|---|
-| id | bigint | PK, auto-increment | PK, auto-increment | Row identifier |
-| branch | text | ❌ ('Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV') | ✅ ('Ajmer Road', 'Sitapura') | Location/branch name (non-composite) |
-| location | text | ✅ ('Ajmer Road', 'Sitapura') | ✅ ('Ajmer Road', 'Sitapura') | Geographic location |
-| portal | text | ✅ ('PV', 'EV') | ✅ ('PV', 'EV') | Vehicle fuel type (PV=ICE, EV=Electric) |
-| source_row_hash | text | NOT NULL | NOT NULL | Dedupe key (hash of source row) |
-| source_row_number | integer | nullable | nullable | Line number in source file |
-| source_file_name | text | nullable | nullable | Original Excel/CSV file name |
-| source_row_data | jsonb | NOT NULL, DEFAULT '{}' | NOT NULL, DEFAULT '{}' | **All claim details stored here** |
-| created_at | timestamptz | NOT NULL, DEFAULT now() | NOT NULL, DEFAULT now() | Record creation timestamp |
-| updated_at | timestamptz | NOT NULL, DEFAULT now() | NOT NULL, DEFAULT now() | Record update timestamp |
+| Column | Type | Constraints | Purpose |
+|---|---|---|---|
+| id | bigint | PK, identity | Row identifier |
+| branch | text | NOT NULL, CHECK ('Ajmer Road', 'Sitapura') | Branch/location label |
+| location | text | NOT NULL, CHECK ('Ajmer Road', 'Sitapura') | Location field |
+| portal | text | NOT NULL, CHECK ('PV', 'EV') | Portal/fuel-type channel as stored |
+| source_row_hash | text | NOT NULL | Dedupe hash of source row |
+| source_row_number | integer | nullable | Line number in source file |
+| source_file_name | text | nullable | Original Excel/CSV file name |
+| source_row_data | jsonb | NOT NULL, DEFAULT '{}' | All detailed fields are JSONB |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | Record creation timestamp |
+| updated_at | timestamptz | NOT NULL, DEFAULT now() | Record update timestamp |
 
-### Unique Constraint (Correct)
+### Unique Constraint
 
 ```sql
-UNIQUE (branch, source_row_hash)  -- Dedupes at (location + row_hash) level
+UNIQUE (branch, portal, source_row_hash)
 ```
 
 ### Upsert Strategy
 
-- **On Upload:** Insert or update on `(branch, source_row_hash)` conflict
+- **On Upload:** Insert or update on `(branch, portal, source_row_hash)` conflict
 - **Behavior:** Existing rows updated, new rows inserted
 - **Dedupe Key:** Stable hash of normalized source row
 - **Trigger:** `set_updated_at()` maintains updated_at on every change
@@ -738,27 +695,12 @@ The database schema is already correct. Focus on **data transformation, not sche
 
 ### ✅ What's Already Done
 - 7 warranty tables created with JSONB design
-- ⚠️ Branch constraint (needs correction – see below)
-- Upsert strategy implemented (branch + source_row_hash unique constraint)
+- Branch/location/portal CHECK constraints validated from authoritative dump
+- Upsert strategy implemented (branch + portal + source_row_hash unique constraint)
 - Import UI and upload flow functional
 - Overview dashboard shell deployed
 
-### 🔴 CRITICAL BLOCKER – Must Do First
-
-**[P0] Apply corrective migration to fix branch constraint**
-- **File:** `supabase/migrations/20260602*_warranty_schema_corrections.sql`
-- **Why:** Current branch constraint stores composite 'Ajmer Road PV' instead of separate 'Ajmer Road' + fuel_type
-- **Scope:** All 7 warranty tables (claim_settlement, part_wc, updation, goodwill, amc, fsb, wc)
-- **Change:**
-  ```sql
-  ALTER TABLE warranty_* DROP CONSTRAINT warranty_*_branch_check;
-  ALTER TABLE warranty_* ADD CONSTRAINT warranty_*_branch_check 
-    CHECK (branch IN ('Ajmer Road', 'Sitapura'));
-  ```
-- **Impact:** Without this, branch values will be stored incorrectly in future uploads
-- **Timeline:** Before any large-scale data imports; can update existing data with script if needed
-
-### 🔄 What Needs Immediate Attention (After P0)
+### 🔄 What Needs Immediate Attention
 
 1. **[CRITICAL]** Sample actual source files from all 7 warranty types
    - Extract sample rows from uploaded Excel files
@@ -803,87 +745,36 @@ The database schema is already correct. Focus on **data transformation, not sche
    - Advisor Performance, Model Cost, Top Parts, Labour (ICE vs EV)
 ---
 
-## Database Validation Summary (Authoritative – 2026-06-02)
+## Database Validation Summary (Authoritative Dump – 2026-06-02)
 
-### What Was Verified Against `supabase/exec_success_migrations/20260528155000_create_warranty_import_tables.sql`
+### Validation Source
+
+- Primary authority: `local_folder/backups/full_database.sql`
+- Access mirror used for large-file reads: `local_folder/backups/chunks/full_database.sql.part_*`
+
+### Dump-Backed Findings
 
 | Check | Result | Details |
 |---|---|---|
 | **7 Tables Exist** | ✅ Yes | warranty_claim_settlement_report_data, warranty_part_wc_data, warranty_updation_claim_data, warranty_goodwill_data, warranty_amc_data, warranty_fsb_data, warranty_wc_data |
 | **Column Count (per table)** | ✅ 10 | id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at |
-| **Unique Constraint** | ✅ Applied | (branch, source_row_hash) per table |
-| **CHECK Constraints (Branch)** | ❌ INCORRECT | Current: ('Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV') · Should be: ('Ajmer Road', 'Sitapura') |
-| **CHECK Constraints (Location)** | ✅ Correct | ('Ajmer Road', 'Sitapura') |
-| **CHECK Constraints (Portal)** | ✅ Correct | ('PV', 'EV') – vehicle fuel types |
-| **JSONB Column** | ✅ Present | source_row_data (jsonb, NOT NULL, DEFAULT '{}') |
-| **Triggers** | ✅ Present | set_updated_at() on every table for automatic updated_at |
-| **Indexes** | ✅ Present | idx_warranty_*_branch_portal on each table |
-| **Import Metadata** | ✅ Registered | All 7 tables in import_metadata table |
-| **Schema Migration Status** | ⚠️ Executed but needs correction | Migration 20260528155000 executed; needs follow-up migration for branch constraint fix |
-| **Schema Matches Code** | ⚠️ Partial match | src/lib/getTableColumns.ts shows 4-value branch; should show 2-value branch |
-| **Matches Operational Reality** | ❌ NO | Branch constraint is overly restrictive; stores composite location+fuel_type instead of separate values |
+| **CHECK (branch)** | ✅ Present | `branch IN ('Ajmer Road', 'Sitapura')` on all 7 tables |
+| **CHECK (location)** | ✅ Present | `location IN ('Ajmer Road', 'Sitapura')` on all 7 tables |
+| **CHECK (portal)** | ✅ Present | `portal IN ('PV', 'EV')` on all 7 tables |
+| **Unique Constraint** | ✅ Applied | `(branch, portal, source_row_hash)` on all 7 tables |
+| **JSONB Column** | ✅ Present | `source_row_data jsonb NOT NULL DEFAULT '{}'` |
+| **Triggers** | ✅ Present | `trg_warranty_*_updated_at` executes `set_updated_at()` on update |
+| **Indexes** | ✅ Present | `idx_warranty_*_branch_portal` on each table |
+| **Import Metadata** | ✅ Registered | All 7 warranty tables present in `import_metadata` COPY data |
+| **RLS/Policies on Warranty Tables** | ➖ Not Found | No `ENABLE ROW LEVEL SECURITY` / `CREATE POLICY` entries for `warranty_*` in dump |
 
-### Critical Finding
+### Observed Warranty Data Combinations in Dump
 
-**The plan assumed SEPARATE columns for claim_id, advisor, model, etc. – THIS WAS WRONG.**
-- ✅ CORRECTED: All fields are in JSONB, not separate columns
+Distinct combinations observed in `COPY` data (table|branch|location|portal):
+- `warranty_*|Ajmer Road|Ajmer Road|PV`
+- `warranty_*|Sitapura|Sitapura|PV`
+- `warranty_*|Sitapura|Sitapura|EV`
 
-**NEW (2026-06-02 Final):** Branch constraint combines location + fuel type as composite value
-- ❌ Current design: branch stores 'Ajmer Road PV', 'Ajmer Road EV', 'Sitapura PV', 'Sitapura EV'
-- ✅ Correct design: branch stores only 'Ajmer Road', 'Sitapura' · fuel type in portal column
-- **Impact:** Data normalization violation; will cause confusion in queries and reporting
-- **Action Required:** Run corrective migration (20260602*) to fix branch CHECK constraint
+### Final Authority Lock
 
-### Critical Finding
-
-**The plan assumed SEPARATE columns for claim_id, advisor, model, etc. – THIS WAS WRONG.**
-
-**ACTUAL DESIGN:** All detailed fields are stored INSIDE source_row_data as unstructured JSONB. This is intentional and correct.
-
-**CONSEQUENCE:** 
-- No schema migration needed (or should be run)
-- Focus shifts to JSONB extraction layer (application or database views)
-- Reporting requires parsing JSONB paths, not querying columns
-- Data contracts must specify JSONB key paths per source type
-
-### Critical Finding
-
-**The plan assumed SEPARATE columns for claim_id, advisor, model, etc. – THIS WAS WRONG.**
-
-**ACTUAL DESIGN:** All detailed fields are stored INSIDE source_row_data as unstructured JSONB. This is intentional and correct.
-
-**CONSEQUENCE:** 
-- No schema migration needed (or should be run)
-- Focus shifts to JSONB extraction layer (application or database views)
-- Reporting requires parsing JSONB paths, not querying columns
-- Data contracts must specify JSONB key paths per source type
-
-### Plan Amendments Applied
-
-1. ❌ Removed assumption about adding 24+ new columns
-2. ❌ Removed task "Create schema enhancement migration" (for JSONB fields)
-3. ✅ Added task "Audit source files + document JSONB key mappings"
-4. ✅ Added task "Choose JSONB extraction strategy"
-5. ✅ Added task "Build JSONB extraction utilities"
-6. ✅ Updated TR-038 from schema migration → extraction contract documentation
-7. ✅ Updated Implementation Tracker to reflect database-backed reality
-8. **🔴 [NEW]** ✅ Discovered branch constraint design error (composite location+fuel_type)
-9. **🔴 [NEW]** ✅ Created corrective migration plan (20260602*) for branch constraint fix
-10. **🔴 [NEW]** ✅ Documented UI labels vs. database value separation
-
-### Authority Lock (With Operational Truth – 2026-06-02 Final)
-
-This validation is based on:
-- **Authoritative source (Schema):** `supabase/exec_success_migrations/20260528155000_create_warranty_import_tables.sql`
-- **Code truth (UI Config):** `src/lib/getTableColumns.ts` + `src/pages/ImportPage.tsx`
-- **Operational truth (Actual Data Structure):** User confirmation that:
-  - **Branches (locations):** Ajmer Road, Sitapura (2 total)
-  - **Fuel types:** PV (ICE), EV (Electric) – stored in `portal` column
-  - **Import UI labels:** Show location + fuel type for user clarity (e.g., "Ajmer Road PV") but database stores them separately
-- **Last verified:** 2026-06-02
-
-**Correction Required:** Branch CHECK constraint incorrectly stores composite location+fuel_type. Must be fixed via corrective migration (20260602*) to separate concerns.
-
-**Authority direction:** Operational truth (location ≠ fuel_type) takes precedence. Schema must be corrected before large-scale uploads.
-
-Authority never downgrades. Any future changes must build forward from this validated state.
+All schema and data-shape statements in this plan are now anchored to the local authoritative dump. If any future conflict appears between narrative text and dump content, dump content wins without reconciliation.
