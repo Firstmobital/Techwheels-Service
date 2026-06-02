@@ -24,10 +24,26 @@ interface ServiceInvoiceOrderRow {
 
 type KPIType = 'cancelled' | 'closed-not-invoiced' | 'open' | null
 
+const QUERY_PAGE_SIZE = 1000
+
 function isTruthyInvoiceValue(value: string | null): boolean {
   if (!value) return false
   const normalized = value.trim().toLowerCase()
   return ['yes', 'y', 'true', '1', 'invoiced', 'done'].includes(normalized)
+}
+
+function normalizeStatus(value: string | null): string {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function isCancelledStatus(value: string | null): boolean {
+  const status = normalizeStatus(value)
+  return status.includes('cancel')
+}
+
+function isClosedStatus(value: string | null): boolean {
+  const status = normalizeStatus(value)
+  return status.includes('close')
 }
 
 function formatDateTime(dateString: string | null): string {
@@ -218,21 +234,34 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
         const branchSelection = parseBranchSelectionFromFilter(branch)
         const queryBranch = fuelSelection ? getFuelScopedBranch(branch) : branchSelection
 
-        let query = supabase
-          .from('service_invoice_order_data')
-          .select('branch, job_card_number, status, invoiced, sr_type, created_date_time, closed_date_time, sr_assigned_to, account')
-          .limit(5000)
+        let from = 0
+        const allRows: ServiceInvoiceOrderRow[] = []
 
-        query = applyBranchFilterToQuery(query, queryBranch)
+        while (true) {
+          let query = supabase
+            .from('service_invoice_order_data')
+            .select('branch, job_card_number, status, invoiced, sr_type, created_date_time, closed_date_time, sr_assigned_to, account')
+            .order('created_date_time', { ascending: false })
+            .range(from, from + QUERY_PAGE_SIZE - 1)
 
-        if (bounds) {
-          query = query.gte('created_date_time', bounds.from).lt('created_date_time', bounds.toExclusive)
+          query = applyBranchFilterToQuery(query, queryBranch)
+
+          if (bounds) {
+            query = query.gte('created_date_time', bounds.from).lt('created_date_time', bounds.toExclusive)
+          }
+
+          const { data, error: fetchError } = await query
+          if (fetchError) throw new Error(fetchError.message)
+
+          const batch = (data as ServiceInvoiceOrderRow[] | null) ?? []
+          allRows.push(...batch)
+
+          if (batch.length < QUERY_PAGE_SIZE) {
+            break
+          }
+
+          from += QUERY_PAGE_SIZE
         }
-
-        const { data, error: fetchError } = await query
-        if (fetchError) throw new Error(fetchError.message)
-
-        const allRows = (data as ServiceInvoiceOrderRow[] | null) ?? []
 
         // Map sr_assigned_to with employee names and fuel buckets from employee_master
         let mappedRows = allRows.map((row) => {
@@ -287,19 +316,17 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
     let openCount = 0
 
     for (const row of rows) {
-      const status = (row.status ?? '').trim().toLowerCase()
       const invoiced = isTruthyInvoiceValue(row.invoiced)
+      const isCancelled = isCancelledStatus(row.status)
+      const isClosed = isClosedStatus(row.status)
 
-      // Cancelled: status is "cancelled" (or contains "cancel" but not part of another word)
-      if (status === 'cancelled' || status === 'cancel') {
+      if (isCancelled) {
         cancelledCount += 1
       }
-      // Closed Not Invoiced: status is "closed" AND invoiced is NOT true
-      else if ((status === 'closed' || status.includes('closed')) && !invoiced) {
+      else if (isClosed && !invoiced) {
         closedNotInvoicedCount += 1
       }
-      // Open: status is "open" or other non-closed, non-cancelled statuses
-      else if (status === 'open' || (status !== 'closed' && status !== 'cancelled' && status !== 'cancel')) {
+      else {
         openCount += 1
       }
     }
@@ -315,15 +342,16 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
     if (!selectedKPI) return []
 
     return rows.filter((row) => {
-      const status = (row.status ?? '').trim().toLowerCase()
       const invoiced = isTruthyInvoiceValue(row.invoiced)
+      const isCancelled = isCancelledStatus(row.status)
+      const isClosed = isClosedStatus(row.status)
 
       if (selectedKPI === 'cancelled') {
-        return status === 'cancelled' || status === 'cancel'
+        return isCancelled
       } else if (selectedKPI === 'closed-not-invoiced') {
-        return (status === 'closed' || status.includes('closed')) && !invoiced
+        return isClosed && !invoiced
       } else if (selectedKPI === 'open') {
-        return status === 'open' || (status !== 'closed' && status !== 'cancelled' && status !== 'cancel')
+        return !isCancelled && !isClosed
       }
       return false
     })
