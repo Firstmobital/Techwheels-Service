@@ -445,7 +445,7 @@ export default function ReceptionPage() {
   }
 
   return (
-    <div className="page">
+    <div>
       <input
         ref={fileInputRef}
         type="file"
