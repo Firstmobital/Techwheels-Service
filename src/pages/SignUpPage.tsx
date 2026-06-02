@@ -1,29 +1,62 @@
 import { useState } from 'react'
+import { AuthShell } from '../components/AuthShell'
+import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
 
 interface Props {
   onSwitchToLogin: () => void
 }
 
+const PITCH = {
+  request: {
+    title: "Request access to Techwheels Service.",
+    body: "Create your account, then an administrator assigns the modules your role needs - Reception, Reports, AutoDoc and more.",
+    features: [
+      { icon: "user",      t: "Tell us your role",  m: "We pre-suggest the right module set" },
+      { icon: "admin",     t: "Admin approval",     m: "Your manager grants permissions via RBAC" },
+      { icon: "sparkles",  t: "Ready fast",         m: "Start working the moment access lands" },
+    ],
+  },
+}
+
+const ROLE_OPTS = [
+  { id: 'reception',     label: 'Reception',      icon: 'reception',     desc: 'Vehicle intake & customer communication' },
+  { id: 'advisor',       label: 'Service Advisor', icon: 'tech',          desc: 'Job card management & labor tracking' },
+  { id: 'floor',         label: 'Floor Incharge',  icon: 'floor',         desc: 'Technician allocation & job progress' },
+  { id: 'admin',         label: 'Administrator',   icon: 'shield',        desc: 'System access control & user management' },
+]
+
+const PW_RULES = [
+  { id: 'len', label: 'At least 12 characters', test: (pw: string) => pw.length >= 12 },
+  { id: 'case', label: 'Both uppercase & lowercase', test: (pw: string) => /[a-z]/.test(pw) && /[A-Z]/.test(pw) },
+  { id: 'num', label: 'At least one number', test: (pw: string) => /[0-9]/.test(pw) },
+  { id: 'sym', label: 'At least one symbol (!@#$%)', test: (pw: string) => /[!@#$%^&*]/.test(pw) },
+]
+
 export default function SignUpPage({ onSwitchToLogin }: Props) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [selectedRole, setSelectedRole] = useState<string | null>(null)
   const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+
+  // Calculate password strength
+  const pwScore = PW_RULES.filter(r => r.test(password)).length
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
-    if (password !== confirm) {
-      setError('Passwords do not match.')
+    if (!selectedRole) {
+      setError('Please select a role.')
       return
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
+
+    if (pwScore < 4) {
+      setError('Password does not meet all requirements.')
       return
     }
 
@@ -32,7 +65,7 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
       email,
       password,
       options: {
-        data: { full_name: fullName },
+        data: { full_name: fullName, role: selectedRole },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
@@ -41,143 +74,145 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
     if (error) {
       setError(error.message)
     } else {
-      setSuccess(true)
+      setSubmitted(true)
     }
   }
 
-  if (success) {
+  if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-5">
-            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Account created!</h2>
-          <p className="text-sm text-gray-600 mb-6">
-            Please check your email to confirm your address. Once confirmed, an administrator will assign you module permissions to access the system.
-          </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
-            <p className="text-xs text-blue-800">
-              💡 <strong>Next step:</strong> After email confirmation, you'll see a "No module access assigned" message. Contact your administrator to request access to Job Cards, Reports, or other modules.
-            </p>
-          </div>
-          <button
-            onClick={onSwitchToLogin}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition"
-          >
-            Back to Sign in
-          </button>
+      <AuthShell pitch={PITCH.request}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="bigcheck"><Icon name="check" size={28} strokeWidth={2.2} /></div>
+          <h1 style={{ fontSize: 24, margin: '0 0 8px' }}>Request submitted</h1>
+          <p className="authcard__sub">Confirm your email, then an administrator will assign your module permissions.</p>
         </div>
-      </div>
+
+        <div className="access-note" style={{ marginTop: 22, textAlign: 'left' }}>
+          <span className="ic"><Icon name="shield" size={17} /></span>
+          <div><b>Next: admin grants access</b>
+            <p>Until then you'll see a no-modules-assigned notice. We've flagged <b>{ROLE_OPTS.find((r) => r.id === selectedRole)?.label}</b> as your requested role.</p>
+          </div>
+        </div>
+
+        <button type="button" className="btn btn--primary btn--block" onClick={onSwitchToLogin} style={{ marginTop: 6 }}>
+          Back to sign in
+        </button>
+      </AuthShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Techwheels Service</h1>
-          <p className="text-sm text-gray-500 mt-1">Create your account</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-          <form onSubmit={handleSignUp} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Full name
-              </label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                placeholder="Rahul Sharma"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Email address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@firstmobital.com"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Min. 8 characters"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Confirm password
-              </label>
-              <input
-                type="password"
-                required
-                value={confirm}
-                onChange={e => setConfirm(e.target.value)}
-                placeholder="Re-enter password"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
-              />
-            </div>
-
-            {error && (
-              <div className="rounded-lg bg-red-50 border border-red-200 px-3.5 py-2.5 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              {loading ? 'Creating account…' : 'Create account'}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500">
-              Already have an account?{' '}
-              <button
-                onClick={onSwitchToLogin}
-                className="font-medium text-blue-600 hover:text-blue-700 transition"
-              >
-                Sign in
-              </button>
-            </p>
-          </div>
-        </div>
-
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Techwheels Service v1.0 · Firstmobital
-        </p>
+    <AuthShell pitch={PITCH.request}>
+      <div className="authcard__head">
+        <button type="button" className="btn btn--quiet btn--sm" onClick={onSwitchToLogin} style={{ marginLeft: -10, marginBottom: 14 }}>
+          <Icon name="back" size={16} /> Back to sign in
+        </button>
+        <div className="authcard__eyebrow">Create account</div>
+        <h1>Request access</h1>
+        <p className="authcard__sub">Set up your account - an admin assigns modules after.</p>
       </div>
-    </div>
+
+      <form onSubmit={handleSignUp} className="space-y-5">
+        <label className="field">
+          <span className="label">Full name <span className="req">*</span></span>
+          <span className="inp-wrap">
+            <span className="icon-l"><Icon name="user" size={17} /></span>
+            <input
+              className="inp"
+              type="text"
+              placeholder="John Doe"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              required
+            />
+          </span>
+        </label>
+
+        <label className="field">
+          <span className="label">Work email <span className="req">*</span></span>
+          <span className="inp-wrap">
+            <span className="icon-l"><Icon name="mail" size={17} /></span>
+            <input
+              className="inp"
+              type="email"
+              placeholder="john@firstmobital.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+          </span>
+        </label>
+
+        <div className="field">
+          <span className="label" style={{ display: 'block', marginBottom: 9 }}>Which role do you need?</span>
+          <div className="roles">
+            {ROLE_OPTS.map(role => (
+              <button
+                key={role.id}
+                type="button"
+                className={`rolepick ${selectedRole === role.id ? 'sel' : ''}`}
+                onClick={() => setSelectedRole(role.id)}
+              >
+                <span className="ic"><Icon name={role.icon} size={16} /></span>
+                <span>
+                  <b>{role.label}</b>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label className="field" style={{ marginBottom: 8 }}>
+          <span className="label">Password <span className="req">*</span></span>
+          <span className="inp-wrap">
+            <span className="icon-l"><Icon name="lock" size={17} /></span>
+            <input
+              className="inp"
+              type={showPassword ? "text" : "password"}
+              placeholder="••••••••••••"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              className="toggle-eye"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label="Toggle password visibility"
+            >
+              <Icon name={showPassword ? "eyeoff" : "eye"} size={17} />
+            </button>
+          </span>
+        </label>
+
+        <div className="pwbar">
+          {[0, 1, 2, 3].map((i) => {
+            const color = pwScore <= 1 ? 'var(--danger)' : pwScore === 2 ? 'var(--warn)' : pwScore === 3 ? '#3B82F6' : 'var(--success)'
+            return <i key={i} style={{ background: i < pwScore ? color : undefined }} />
+          })}
+        </div>
+        <ul className="pwreq">
+          {PW_RULES.map((rule) => (
+            <li key={rule.id} className={rule.test(password) ? 'ok' : ''}>
+              <Icon name="checksm" size={13} strokeWidth={2.6} style={{ opacity: rule.test(password) ? 1 : 0.4 }} />
+              {rule.label}
+            </li>
+          ))}
+        </ul>
+
+        {error && (
+          <div className="alert alert--err">
+            <Icon name="alert" size={17} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <button className="btn btn--primary btn--block" type="submit" disabled={loading || pwScore < 4 || !selectedRole}>
+          {loading ? 'Submitting…' : <>Request access <Icon name="arrowr" size={17} /></>}
+        </button>
+      </form>
+
+      <p className="authcard__foot">Already have an account? <button type="button" className="linkbtn" onClick={onSwitchToLogin}>Sign in</button></p>
+    </AuthShell>
   )
 }

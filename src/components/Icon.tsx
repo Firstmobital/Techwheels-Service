@@ -46,6 +46,7 @@ interface IconProps {
   className?: string
   strokeWidth?: number
   size?: number
+  style?: React.CSSProperties
 }
 
 /**
@@ -57,7 +58,7 @@ interface IconProps {
  *
  * Supports both single-path and multi-path icons (arrays of paths).
  */
-export function Icon({ name, className = '', strokeWidth = 1.5, size = 24 }: IconProps) {
+export function Icon({ name, className = '', strokeWidth = 1.5, size = 24, style }: IconProps) {
   const paths = ICON_PATHS[name]
 
   if (!paths) {
@@ -78,6 +79,7 @@ export function Icon({ name, className = '', strokeWidth = 1.5, size = 24 }: Ico
       viewBox="0 0 24 24"
       width={size}
       height={size}
+      style={style}
     >
       {pathArray.map((path, idx) => (
         <path key={idx} d={path} />

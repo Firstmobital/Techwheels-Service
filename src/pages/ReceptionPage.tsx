@@ -167,7 +167,20 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
 function formatDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function sourceTone(source: string): string {
+  const value = source.trim().toLowerCase()
+  if (value === 'walk-in') return 'g'
+  if (value === 'self') return 'w'
+  if (value === 'driver pickup' || value === 'rsa') return 'b'
+  return ''
 }
 
 export default function ReceptionPage() {
@@ -187,12 +200,34 @@ export default function ReceptionPage() {
 
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   const sortedEmployeeOptions = useMemo(() => {
     const values = [...employeeOptions]
     values.sort((a, b) => a.employee_name.localeCompare(b.employee_name))
     return values
   }, [employeeOptions])
+
+  const filteredEntries = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return entries
+
+    return entries.filter((entry) => {
+      const joined = [
+        entry.reg_number,
+        entry.model ?? '',
+        entry.sa_name,
+        entry.owner_name ?? '',
+        entry.owner_phone ?? '',
+        entry.source,
+        entry.created_by,
+      ]
+        .join(' ')
+        .toLowerCase()
+
+      return joined.includes(query)
+    })
+  }, [entries, search])
 
   async function loadModelOptions() {
     const result = await getModelNames()
@@ -410,210 +445,223 @@ export default function ReceptionPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl p-4 md:p-6 space-y-5">
-      <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Reception</h1>
-            <p className="mt-1 text-sm text-gray-500">Capture front desk intake records and assign service advisor.</p>
-          </div>
-          {canImport && (
-            <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={handleImportChange}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {uploading ? 'Importing...' : 'Import XLSX/CSV'}
-              </button>
-            </div>
-          )}
-        </div>
+    <div className="page">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        style={{ display: 'none' }}
+        onChange={handleImportChange}
+      />
 
-        {error && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-        {notice && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</div>}
+      <div className="pagehead">
+        <div>
+          <p className="greet"><span className="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 6h14v12H5z" stroke="currentColor" strokeWidth="2"/></svg></span>Reception</p>
+          <h1>Front-desk intake</h1>
+          <p>Capture intake records and assign a service advisor.</p>
+        </div>
+        {canImport && (
+          <button
+            type="button"
+            className="btn btn--soft"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? 'Importing...' : 'Import XLSX/CSV'}
+          </button>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Registration No *</span>
-            <input
-              value={form.reg_number}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  reg_number: event.target.value.toUpperCase(),
-                }))
-              }
-              style={{ textTransform: 'uppercase' }}
-              autoCapitalize="characters"
-              placeholder="RJ14AB1234"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            />
-          </label>
+      {error && <div className="alert alert--err" style={{ marginBottom: 'var(--gap)' }}>{error}</div>}
+      {notice && <div className="alert alert--ok" style={{ marginBottom: 'var(--gap)' }}>{notice}</div>}
 
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Model</span>
-            <select
-              value={form.model}
-              onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            >
-              <option value="">— Select Model —</option>
-              {modelOptions.map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">SA Name *</span>
-            <select
-              value={form.sa_employee_code}
-              onChange={(event) => setForm((prev) => ({ ...prev, sa_employee_code: event.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            >
-              <option value="">— Select SA —</option>
-              {sortedEmployeeOptions.map((employee) => (
-                <option key={employee.employee_code} value={employee.employee_code}>
-                  {employee.employee_name} ({employee.employee_code})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Owner Name</span>
-            <input
-              value={form.owner_name}
-              onChange={(event) => setForm((prev) => ({ ...prev, owner_name: event.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            />
-          </label>
-
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Owner Phone</span>
-            <input
-              value={form.owner_phone}
-              onChange={(event) => {
-                const digitsOnly = event.target.value.replace(/\D/g, '').slice(0, 10)
-                setForm((prev) => ({ ...prev, owner_phone: digitsOnly }))
-              }}
-              placeholder="10 digits"
-              inputMode="numeric"
-              pattern="[0-9]{10}"
-              maxLength={10}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            />
-          </label>
-
-          <label className="text-sm text-gray-700">
-            <span className="mb-1 block font-medium">Source *</span>
-            <select
-              value={form.source}
-              onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-            >
-              {SOURCE_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? 'Saving...' : editingId === null ? 'Create Entry' : 'Update Entry'}
-          </button>
-          {editingId !== null && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-      </form>
-
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
-          Reception Entries ({entries.length})
-        </div>
-
-        {loading ? (
-          <div className="p-4 text-sm text-gray-500">Loading reception entries...</div>
-        ) : entries.length === 0 ? (
-          <div className="p-4 text-sm text-gray-500">No reception entries found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">Created At</th>
-                  <th className="px-3 py-2 text-left">Created By</th>
-                  <th className="px-3 py-2 text-left">Source</th>
-                  <th className="px-3 py-2 text-left">Reg No</th>
-                  <th className="px-3 py-2 text-left">Model</th>
-                  <th className="px-3 py-2 text-left">SA Name</th>
-                  <th className="px-3 py-2 text-left">Owner Name</th>
-                  <th className="px-3 py-2 text-left">Owner Phone</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-gray-700">
-                {entries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="whitespace-nowrap px-3 py-2">{formatDate(entry.created_at)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.created_by}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.source}</td>
-                    <td className="whitespace-nowrap px-3 py-2 font-medium">{entry.reg_number}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.model ?? '-'}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.sa_name}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.owner_name ?? '-'}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{entry.owner_phone ?? '-'}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right">
-                      <div className="inline-flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(entry)}
-                          className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(entry.id)}
-                          disabled={deletingId === entry.id}
-                          className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {deletingId === entry.id ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="recep-grid">
+        <form onSubmit={handleSubmit} className="card recep-form">
+          <div className="card__head">
+            <div>
+              <h3>{editingId === null ? 'New intake' : 'Edit intake entry'}</h3>
+              <div className="sub">Fields marked * are required.</div>
+            </div>
           </div>
-        )}
+          <div className="card__body">
+            <label className="field">
+              <span className="label">Registration No <span className="req">*</span></span>
+              <input
+                value={form.reg_number}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    reg_number: event.target.value.toUpperCase(),
+                  }))
+                }
+                style={{ textTransform: 'uppercase' }}
+                autoCapitalize="characters"
+                placeholder="RJ14AB1234"
+                className="inp"
+              />
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <label className="field">
+                <span className="label">Model</span>
+                <select
+                  value={form.model}
+                  onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
+                  className="sel"
+                >
+                  <option value="">- Select Model -</option>
+                  {modelOptions.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <span className="label">Source <span className="req">*</span></span>
+                <select
+                  value={form.source}
+                  onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))}
+                  className="sel"
+                >
+                  {SOURCE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="field">
+              <span className="label">SA Name <span className="req">*</span></span>
+              <select
+                value={form.sa_employee_code}
+                onChange={(event) => setForm((prev) => ({ ...prev, sa_employee_code: event.target.value }))}
+                className="sel"
+              >
+                <option value="">- Select SA -</option>
+                {sortedEmployeeOptions.map((employee) => (
+                  <option key={employee.employee_code} value={employee.employee_code}>
+                    {employee.employee_name} ({employee.employee_code})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <label className="field" style={{ marginBottom: 0 }}>
+                <span className="label">Owner Name</span>
+                <input
+                  value={form.owner_name}
+                  onChange={(event) => setForm((prev) => ({ ...prev, owner_name: event.target.value }))}
+                  className="inp"
+                />
+              </label>
+
+              <label className="field" style={{ marginBottom: 0 }}>
+                <span className="label">Owner Phone</span>
+                <input
+                  value={form.owner_phone}
+                  onChange={(event) => {
+                    const digitsOnly = event.target.value.replace(/\D/g, '').slice(0, 10)
+                    setForm((prev) => ({ ...prev, owner_phone: digitsOnly }))
+                  }}
+                  placeholder="10 digits"
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  className="inp"
+                />
+              </label>
+            </div>
+
+            <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
+              <button
+                type="submit"
+                disabled={saving}
+                className="btn btn--primary"
+              >
+                {saving ? 'Saving...' : editingId === null ? 'Create entry' : 'Update entry'}
+              </button>
+              {editingId !== null && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="btn btn--ghost"
+                >
+                  Cancel edit
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+
+        <div className="card recep-feed">
+          <div className="card__head">
+            <div>
+              <h3>Reception entries</h3>
+              <div className="sub">Newest first · {filteredEntries.length} shown</div>
+            </div>
+            <span className="inp-wrap" style={{ width: 240 }}>
+              <span className="icon-l">⌕</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="inp"
+                placeholder="Search reg / model / SA"
+                style={{ height: 38 }}
+              />
+            </span>
+          </div>
+
+          <div className="card__body recep-feed__body scroll">
+            {loading ? (
+              <div style={{ padding: '30px 4px', color: 'var(--faint)', fontSize: 14, textAlign: 'center' }}>Loading reception entries...</div>
+            ) : filteredEntries.length === 0 ? (
+              <div style={{ padding: '30px 4px', color: 'var(--faint)', fontSize: 14, textAlign: 'center' }}>No entries match your search.</div>
+            ) : (
+              filteredEntries.map((entry) => (
+                <div className="recep-item" key={entry.id}>
+                  <div className="recep-item__main">
+                    <div className="recep-item__top">
+                      <span className="mono recep-item__reg">{entry.reg_number}</span>
+                      <span className={[`pill`, sourceTone(entry.source)].join(' ').trim()}>{entry.source}</span>
+                    </div>
+                    <div className="recep-item__meta">
+                      <span>{entry.model ?? '-'}</span>
+                      <span className="dot2" />
+                      <span>{entry.sa_name}</span>
+                      <span className="dot2" />
+                      <span>{entry.owner_name ?? '-'}</span>
+                      <span className="dot2" />
+                      <span>{entry.owner_phone ?? '-'}</span>
+                      <span className="dot2" />
+                      <span>By {entry.created_by}</span>
+                    </div>
+                    <div className="tactions" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(entry)}
+                        className="tbtn"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(entry.id)}
+                        disabled={deletingId === entry.id}
+                        className="tbtn tbtn--danger"
+                      >
+                        {deletingId === entry.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="recep-item__time">{formatDate(entry.created_at)}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
