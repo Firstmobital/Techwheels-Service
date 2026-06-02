@@ -30,11 +30,11 @@ const EMPTY_DRAFT: RowDraft = {
 }
 
 const SOURCE_TONE_MAP: Record<string, string> = {
-  'Driver Pickup': 'blue',
-  'Walk-in': 'green',
-  'Self': 'gray',
-  'RSA': 'blue',
-  'PSF Backfill': 'gray',
+  'Driver Pickup': 'b',
+  'Walk-in': 'g',
+  'Self': 'w',
+  'RSA': 'b',
+  'PSF Backfill': '',
 }
 
 function formatDate(value: string): string {
@@ -44,7 +44,7 @@ function formatDate(value: string): string {
 }
 
 function getSourceToneColor(source: string): string {
-  return SOURCE_TONE_MAP[source] || 'gray'
+  return SOURCE_TONE_MAP[source] || ''
 }
 
 export default function ServiceAdvisorPage() {
@@ -98,7 +98,7 @@ export default function ServiceAdvisorPage() {
       const { data: session } = await supabase.auth.getSession()
       if (!session.session?.user) {
         setIsAdmin(false)
-        return
+        return false
       }
 
       // Check user_module_permissions for 'reception' module with can_delete
@@ -109,9 +109,12 @@ export default function ServiceAdvisorPage() {
         .eq('module_id', 1) // Reception module ID
         .single()
 
-      setIsAdmin(perms?.can_delete === true && perms?.can_modify === true)
+      const nextIsAdmin = perms?.can_delete === true && perms?.can_modify === true
+      setIsAdmin(nextIsAdmin)
+      return nextIsAdmin
     } catch {
       setIsAdmin(false)
+      return false
     }
   }
 
@@ -120,11 +123,11 @@ export default function ServiceAdvisorPage() {
     setError(null)
 
     // Check if user is admin
-    await checkIfAdmin()
+    const nextIsAdmin = await checkIfAdmin()
 
     // Fetch appropriate data
     let res
-    if (isAdmin) {
+    if (nextIsAdmin) {
       res = await listReceptionEntries() // Admin: see all reception entries
     } else {
       res = await listServiceAdvisorEntries() // SA: see only assigned rows
@@ -141,7 +144,7 @@ export default function ServiceAdvisorPage() {
     }
 
     const data = res.data ?? []
-    if (isAdmin) {
+    if (nextIsAdmin) {
       setAllRows(data)
       setRows(data)
       setSelectedBranch('all')
@@ -229,25 +232,41 @@ export default function ServiceAdvisorPage() {
     await loadRows()
   }
   return (
-    <div className="page min-h-screen bg-gray-50">
+    <div>
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-gray-900 px-4 py-3 text-sm font-semibold text-white shadow-lg">
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 22,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 90,
+            background: 'var(--ink)',
+            color: '#fff',
+            padding: '11px 18px',
+            borderRadius: 99,
+            fontSize: 13.5,
+            fontWeight: 600,
+            boxShadow: 'var(--sh-3)',
+            display: 'flex',
+            gap: 9,
+            alignItems: 'center',
+          }}
+        >
           <Icon name="checksm" size={16} strokeWidth={2.4} />
           {toastMsg}
         </div>
       )}
 
       {/* Page Head */}
-      <div className="px-6 py-8 md:px-8 md:py-10">
-        <div className="flex items-center gap-3 mb-3">
-          <Icon name="admin" size={16} strokeWidth={2} className="text-gray-600" />
-          <p className="text-sm font-medium text-gray-600">Service Advisor</p>
-        </div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+      <div className="pagehead">
+        <div>
+          <p className="greet"><Icon name="admin" size={13} strokeWidth={2} style={{ verticalAlign: '-2px', marginRight: 5 }} />Service Advisor</p>
+        <h1>
           {isAdmin ? 'All assigned vehicles' : 'My assigned vehicles'}
         </h1>
-        <p className="text-base text-gray-600">
+        <p>
           {isAdmin ? (
             <>
               Showing all service advisor entries across all advisors.
@@ -255,27 +274,29 @@ export default function ServiceAdvisorPage() {
             </>
           ) : (
             <>
-              Showing only rows assigned to <span className="font-semibold text-gray-900">{advisorName}</span> ({advisorCode}). Edit service type, JC number, remark, and upload the estimate.
+              Showing only rows assigned to <b style={{ color: 'var(--ink-2)' }}>{advisorName}</b> ({advisorCode}). Edit service type, JC number, remark, and upload the estimate.
             </>
           )}
         </p>
+        </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="alert alert--error" style={{ marginTop: 12 }}>
             {error}
           </div>
         )}
 
         {/* Branch Filter (Admin Only) */}
         {isAdmin && availableBranches.length > 0 && (
-          <div className="mt-6 flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-medium text-gray-700">Filter by branch:</span>
+          <div className="toolbar" style={{ marginBottom: 0 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-2)' }}>Filter by branch:</span>
             <button
+              type="button"
               onClick={() => setSelectedBranch('all')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              className={`btn btn--sm ${
                 selectedBranch === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? 'btn--primary'
+                  : 'btn--ghost'
               }`}
             >
               All ({allRows.length})
@@ -285,11 +306,12 @@ export default function ServiceAdvisorPage() {
               return (
                 <button
                   key={branch}
+                  type="button"
                   onClick={() => setSelectedBranch(branch)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  className={`btn btn--sm ${
                     selectedBranch === branch
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
                   }`}
                 >
                   {branch} ({count})
@@ -302,100 +324,91 @@ export default function ServiceAdvisorPage() {
 
       {/* Summary Chips */}
       {hasRows && (
-        <div className="px-6 md:px-8 mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-              <Icon name="admin" size={18} strokeWidth={2} className="text-blue-600" />
-            </div>
+        <div className="summary">
+          <div className="schip">
+            <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
             <div>
-              <div className="text-xl font-bold text-gray-900">{rows.length}</div>
-              <div className="text-sm text-gray-600">Assigned to me</div>
+              <div className="n">{displayedRows.length}</div>
+              <div className="l">Assigned to me</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
-              <Icon name="doc" size={18} strokeWidth={2} className="text-amber-600" />
-            </div>
+          <div className="schip">
+            <span className="ic" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}><Icon name="doc" size={16} strokeWidth={2} /></span>
             <div>
-              <div className="text-xl font-bold text-gray-900">{pendingEstimateCount}</div>
-              <div className="text-sm text-gray-600">Estimates pending</div>
+              <div className="n">{pendingEstimateCount}</div>
+              <div className="l">Estimates pending</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
-              <Icon name="building" size={18} strokeWidth={2} className="text-indigo-600" />
-            </div>
+          <div className="schip">
+            <span className="ic"><Icon name="building" size={16} strokeWidth={2} /></span>
             <div>
-              <div className="text-xl font-bold text-gray-900">{advisorBranch}</div>
-              <div className="text-sm text-gray-600">Branch</div>
+              <div className="n">{advisorBranch}</div>
+              <div className="l">Branch</div>
             </div>
           </div>
         </div>
       )}
 
       {/* Assigned Entries Card */}
-      <div className="px-6 md:px-8 pb-8">
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-gray-100 px-6 py-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Assigned entries <span className="text-gray-500 font-normal">({displayedRows.length})</span>
+      <div className="card">
+        <div className="card__head">
+          <div>
+            <h3>
+              Assigned entries <span style={{ color: 'var(--muted)', fontWeight: 600 }}>({displayedRows.length})</span>
             </h3>
-            <p className="mt-1 text-sm text-gray-600">
+            <div className="sub">
               {isAdmin ? 'Showing all intakes from filtered branch · edits save per row' : 'Each row is one intake assigned to you · edits save per row'}
-            </p>
+            </div>
           </div>
+        </div>
 
+        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
           {loading ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-500">Loading assigned rows...</div>
+            <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--muted)' }}>Loading assigned rows...</div>
           ) : !hasRows ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-500">
+            <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--muted)' }}>
               {isAdmin ? 'No rows found for this branch filter.' : 'No rows are assigned to your advisor account.'}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Created</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Source</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Reg No</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Model</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Service Type</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">JC Number</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Owner</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Remark</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 whitespace-nowrap">Estimate</th>
+                  <tr>
+                    <th>Created</th>
+                    <th>Source</th>
+                    <th>Reg No</th>
+                    <th>Model</th>
+                    <th>Service Type</th>
+                    <th>JC Number</th>
+                    <th>Owner</th>
+                    <th>Remark</th>
+                    <th>Estimate</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody>
                   {displayedRows.map((row) => {
                     const draft = drafts[row.id] ?? EMPTY_DRAFT
                     const isDirty = dirtyRowIds.has(row.id)
                     const toneColor = getSourceToneColor(row.source)
 
-                    const toneClasses: Record<string, string> = {
-                      blue: 'bg-blue-50 text-blue-700',
-                      green: 'bg-green-50 text-green-700',
-                      gray: 'bg-gray-100 text-gray-700',
-                    }
-
                     return (
-                      <tr key={row.id} className="hover:bg-gray-50/50">
-                        <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">{formatDate(row.created_at)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`inline-block rounded-full px-2 py-1 text-xs font-medium ${toneClasses[toneColor] || toneClasses.gray}`}>
+                      <tr key={row.id}>
+                        <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{formatDate(row.created_at)}</td>
+                        <td>
+                          <span className={`pill ${toneColor}`.trim()}>
                             {row.source}
                           </span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-gray-900">{row.reg_number}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-gray-700">{row.model || '-'}</td>
-                        <td className="px-4 py-3">
+                        <td className="mono strong">{row.reg_number}</td>
+                        <td>{row.model || '-'}</td>
+                        <td>
                           <select
                             value={draft.service_type}
                             onChange={(event) => patchDraft(row.id, { service_type: event.target.value })}
-                            className="block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            className="sel"
+                            style={{ height: 36, minWidth: 170 }}
                           >
                             <option value="">Select service type</option>
                             {SERVICE_TYPE_OPTIONS.map((option) => (
@@ -406,45 +419,47 @@ export default function ServiceAdvisorPage() {
                             )}
                           </select>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <input
                             value={draft.jc_number}
                             onChange={(event) =>
                               patchDraft(row.id, { jc_number: event.target.value.toUpperCase() })
                             }
-                            style={{ textTransform: 'uppercase' }}
+                            style={{ height: 36, minWidth: 200, fontSize: 12.5, textTransform: 'uppercase' }}
                             placeholder="JC number"
-                            className="block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-mono text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            className="inp mono"
                           />
                         </td>
-                        <td className="px-4 py-3 min-w-[140px]">
-                          <div className="font-semibold text-gray-900">{row.owner_name || '-'}</div>
-                          <div className="text-xs font-mono text-gray-600">{row.owner_phone || '-'}</div>
+                        <td style={{ minWidth: 150 }}>
+                          <div className="strong" style={{ whiteSpace: 'normal' }}>{row.owner_name || '-'}</div>
+                          <div className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>{row.owner_phone || '-'}</div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <textarea
                             value={draft.remark}
                             onChange={(event) => patchDraft(row.id, { remark: event.target.value })}
                             placeholder="Add remark…"
                             rows={1}
-                            className="block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            className="inp"
+                            style={{ minWidth: 200, minHeight: 36, height: 36, padding: '8px 11px' }}
                           />
                         </td>
-                        <td className="px-4 py-3 min-w-[200px]">
-                          <div className="flex flex-col gap-1">
+                        <td style={{ minWidth: 190 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
                             {row.estimate_storage_path ? (
                               <>
-                                <div className="flex items-center gap-1.5 text-xs font-semibold text-green-700">
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
                                   <Icon name="checksm" size={13} strokeWidth={2.4} />
                                   {row.estimate_file_name || 'Estimate uploaded'}
-                                </div>
-                                <div className="flex gap-1">
+                                </span>
+                                <div style={{ display: 'flex', gap: 6 }}>
                                   {row.estimate_drive_url && (
                                     <a
                                       href={row.estimate_drive_url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                                      className="linkbtn"
+                                      style={{ fontSize: 12.5 }}
                                     >
                                       View estimate
                                     </a>
@@ -453,7 +468,8 @@ export default function ServiceAdvisorPage() {
                                     type="button"
                                     onClick={() => fileInputRefs.current[row.id]?.click()}
                                     disabled={uploadingId === row.id}
-                                    className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="tbtn"
+                                    style={{ height: 26 }}
                                   >
                                     Replace
                                   </button>
@@ -464,7 +480,7 @@ export default function ServiceAdvisorPage() {
                                 type="button"
                                 onClick={() => fileInputRefs.current[row.id]?.click()}
                                 disabled={uploadingId === row.id}
-                                className="flex items-center justify-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="tbtn tbtn--accent"
                               >
                                 <Icon name="upload" size={13} strokeWidth={2} />
                                 {uploadingId === row.id ? 'Uploading...' : 'Upload file'}
@@ -487,7 +503,8 @@ export default function ServiceAdvisorPage() {
                               type="button"
                               onClick={() => void saveRow(row.id)}
                               disabled={savingId === row.id || !isDirty}
-                              className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="btn btn--primary btn--sm"
+                              style={{ opacity: savingId === row.id || isDirty ? 1 : 0.5 }}
                             >
                               {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
                             </button>
