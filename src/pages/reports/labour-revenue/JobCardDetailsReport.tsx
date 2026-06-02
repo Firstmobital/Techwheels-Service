@@ -100,6 +100,64 @@ function normalizeFuelBucket(rawFuel: unknown): 'PV' | 'EV' | null {
   return null
 }
 
+function normalizeJobCardNumber(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null
+
+  const normalized = String(raw).trim().replace(/\s+/g, ' ').toUpperCase()
+  if (!normalized) return null
+
+  const withoutDecimalSuffix = normalized.replace(/\.0+$/, '')
+  return withoutDecimalSuffix || null
+}
+
+function parseTime(value: string | null): number {
+  if (!value) return Number.NaN
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? Number.NaN : parsed
+}
+
+function getRowRecency(row: ServiceInvoiceOrderRow): number {
+  const createdAt = parseTime(row.created_date_time)
+  const closedAt = parseTime(row.closed_date_time)
+
+  if (!Number.isNaN(createdAt) && !Number.isNaN(closedAt)) {
+    return Math.max(createdAt, closedAt)
+  }
+
+  if (!Number.isNaN(closedAt)) return closedAt
+  if (!Number.isNaN(createdAt)) return createdAt
+  return Number.NEGATIVE_INFINITY
+}
+
+function dedupeRowsByJobCard(rows: ServiceInvoiceOrderRow[]): ServiceInvoiceOrderRow[] {
+  const deduped = new Map<string, ServiceInvoiceOrderRow>()
+  const noJobCardRows: ServiceInvoiceOrderRow[] = []
+
+  for (const row of rows) {
+    const jobCard = normalizeJobCardNumber(row.job_card_number)
+    const branchKey = String(row.branch ?? '').trim().toUpperCase()
+
+    if (!jobCard) {
+      noJobCardRows.push(row)
+      continue
+    }
+
+    const key = `${branchKey}::${jobCard}`
+    const existing = deduped.get(key)
+
+    if (!existing) {
+      deduped.set(key, row)
+      continue
+    }
+
+    if (getRowRecency(row) >= getRowRecency(existing)) {
+      deduped.set(key, row)
+    }
+  }
+
+  return [...deduped.values(), ...noJobCardRows]
+}
+
 export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<ServiceInvoiceOrderRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -198,8 +256,10 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
           })
         }
 
+        const uniqueRows = dedupeRowsByJobCard(mappedRows)
+
         if (!cancelled) {
-          setRows(mappedRows)
+          setRows(uniqueRows)
         }
       } catch (err) {
         if (!cancelled) {
