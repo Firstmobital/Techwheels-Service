@@ -1,6 +1,7 @@
 import { useCallback, useId, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
+import { Icon } from '../components/Icon'
 import { broadcastLastUpdated, useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
 import {
@@ -739,13 +740,13 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
   )
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold tracking-wide text-gray-500">{branch}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.05em', color: 'var(--muted)' }}>{branch}</span>
         {slot.file && (
           <button
             onClick={() => onClear(branch)}
-            className="text-[10px] text-gray-400 transition-colors hover:text-red-500"
+            style={{ fontSize: '10px', color: 'var(--faint)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
           >
             Remove
           </button>
@@ -754,14 +755,16 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
 
       {slot.file ? (
         <div
-          className={[
-            'rounded-lg border px-3 py-2 text-xs leading-snug',
-            slot.parseError
-              ? 'border-red-200 bg-red-50 text-red-600'
-              : slot.rowCount === null
-              ? 'border-gray-200 bg-gray-50 text-gray-400'
-              : 'border-green-200 bg-green-50 text-green-700',
-          ].join(' ')}
+          style={{
+            padding: '6px 9px',
+            fontSize: '12px',
+            lineHeight: 1.4,
+            borderRadius: '4px',
+            border: '1px solid',
+            borderColor: slot.parseError ? 'var(--danger)' : slot.rowCount === null ? 'var(--muted-bg)' : 'var(--success)',
+            backgroundColor: slot.parseError ? 'rgba(239, 68, 68, 0.05)' : slot.rowCount === null ? 'var(--muted-bg)' : 'rgba(34, 197, 94, 0.05)',
+            color: slot.parseError ? 'var(--danger)' : slot.rowCount === null ? 'var(--muted)' : 'var(--success)',
+          }}
         >
           {slot.parseError ? (
             <span>{slot.parseError}</span>
@@ -769,8 +772,8 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
             <span>Parsing…</span>
           ) : (
             <>
-              <span className="truncate font-medium">{slot.file.name}</span>
-              <span className="ml-2 text-green-500">· {slot.rowCount.toLocaleString()} rows</span>
+              <span style={{ display: 'block', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{slot.file.name}</span>
+              <span style={{ marginTop: '2px', display: 'block', color: 'var(--success)', fontSize: '11px' }}>· {slot.rowCount.toLocaleString()} rows</span>
             </>
           )}
         </div>
@@ -788,39 +791,36 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
             const file = e.dataTransfer.files[0]
             if (file) handleFile(file)
           }}
-          className={[
-            'flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-3 py-3 text-xs transition-colors',
-            isDragging
-              ? 'border-blue-400 bg-blue-50 text-blue-600'
-              : 'border-gray-200 text-gray-400 hover:border-blue-300 hover:bg-blue-50/40 hover:text-blue-500',
-          ].join(' ')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            cursor: 'pointer',
+            padding: '9px',
+            borderRadius: '4px',
+            border: '2px dashed',
+            borderColor: isDragging ? 'var(--accent)' : 'var(--muted-bg)',
+            backgroundColor: isDragging ? 'rgba(14, 165, 233, 0.05)' : 'transparent',
+            color: isDragging ? 'var(--accent)' : 'var(--faint)',
+            fontSize: '12px',
+            transition: 'all 0.2s',
+          }}
         >
-          <svg
-            className="h-3.5 w-3.5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-            />
-          </svg>
+          <Icon name="upload" size={14} />
           Drop or click to browse
           <input
-              id={inputId}
+            id={inputId}
             type="file"
             accept=".xlsx,.xls,.csv"
-              className="hidden"
+            style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) handleFile(file)
               e.target.value = ''
             }}
           />
-          </label>
+        </label>
       )}
     </div>
   )
@@ -858,28 +858,21 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
     : null
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="card">
       {/* Header */}
-      <div className="border-b border-gray-100 px-5 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">{config.title}</h2>
-            <p className="mt-0.5 text-xs text-gray-500">{config.description}</p>
-            {lastUpdatedLabel && <p className="mt-1 text-[11px] text-gray-400">Last updated: {lastUpdatedLabel}</p>}
-          </div>
-          <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] text-gray-400">
-            {config.tableName}
-          </span>
+      <div className="card__head">
+        <div>
+          <h3>{config.title}</h3>
+          <div className="sub">{config.description}</div>
+          {lastUpdatedLabel && <div className="sub" style={{ fontSize: '10.5px', marginTop: '4px' }}>Last updated: {lastUpdatedLabel}</div>}
         </div>
+        <span className="mono" style={{ fontSize: '10px', padding: '3px 6px', backgroundColor: 'var(--muted-bg)', borderRadius: '3px', whiteSpace: 'nowrap' }}>
+          {config.tableName}
+        </span>
       </div>
 
       {/* Slot grid */}
-      <div
-        className={[
-          'grid gap-3 px-5 py-4',
-          branches.length === 4 ? 'grid-cols-2 xl:grid-cols-4' : 'grid-cols-1 md:grid-cols-3',
-        ].join(' ')}
-      >
+      <div className="card__body" style={{ padding: '9px 18px 12px', display: 'grid', gridTemplateColumns: branches.length === 4 ? 'repeat(2, 1fr)' : 'repeat(1, 1fr)', gap: '9px' }}>
         {branches.map((branch) => (
           <SlotDropzone
             key={branch}
@@ -892,16 +885,16 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-5 py-3">
-        <span className="text-xs text-gray-400">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', fontSize: '12px', color: 'var(--faint)' }}>
+        <span>
           {hasValidFile && totalRows > 0 ? `${totalRows.toLocaleString()} rows ready` : ''}
         </span>
 
-        <div className="flex items-center gap-3">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
           {state.status === 'success' && (
             <button
               onClick={onReset}
-              className="text-xs text-gray-500 underline underline-offset-2 hover:text-gray-700"
+              style={{ fontSize: '12px', color: 'var(--muted)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
             >
               Import more
             </button>
@@ -910,20 +903,18 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
           <button
             onClick={onUpload}
             disabled={!hasValidFile || state.status === 'uploading' || state.status === 'success'}
-            className={[
-              'inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-              state.status === 'success'
-                ? 'bg-green-500 text-white'
-                : state.status === 'uploading'
-                ? 'cursor-not-allowed bg-blue-400 text-white'
-                : 'bg-blue-600 text-white hover:bg-blue-700',
-            ].join(' ')}
+            className="btn"
+            style={{
+              backgroundColor: state.status === 'success' ? 'var(--success)' : state.status === 'uploading' ? 'var(--accent)' : 'var(--accent)',
+              opacity: !hasValidFile || state.status === 'uploading' || state.status === 'success' ? 0.5 : 1,
+              cursor: !hasValidFile || state.status === 'uploading' || state.status === 'success' ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
           >
             {state.status === 'uploading' && (
-              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
+              <Icon name="upload" size={13} />
             )}
             {state.status === 'success'
               ? `Uploaded ${state.insertedCount.toLocaleString()} rows`
@@ -935,21 +926,25 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       </div>
 
       {state.status === 'uploading' && state.uploadProgress.totalBranches > 0 && (
-        <div className="border-t border-gray-100 px-5 py-3">
-          <div className="flex items-center justify-between text-xs text-gray-500">
+        <div style={{ padding: '9px 18px', borderTop: '1px solid var(--muted-bg)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>
             <span>Upload progress</span>
             <span>
               {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
             </span>
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+          <div style={{ height: '4px', backgroundColor: 'var(--muted-bg)', borderRadius: '2px', overflow: 'hidden' }}>
             <div
-              className="h-full rounded-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
+              style={{
+                height: '100%',
+                backgroundColor: 'var(--accent)',
+                width: `${progressPercent}%`,
+                transition: 'width 0.3s ease',
+              }}
             />
           </div>
           {state.uploadProgress.currentBranch && (
-            <p className="mt-2 text-[11px] text-gray-400">
+            <p style={{ marginTop: '6px', fontSize: '11px', color: 'var(--faint)' }}>
               Uploading {state.uploadProgress.currentBranch}…
             </p>
           )}
@@ -958,23 +953,11 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
 
       {/* Error banner */}
       {state.status === 'error' && state.uploadError && (
-        <div className="mx-5 mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
-          <svg
-            className="mt-0.5 h-4 w-4 shrink-0"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-            />
-          </svg>
-          <div>
-            <p className="font-medium">Upload failed</p>
-            <p className="mt-0.5 text-red-600">{state.uploadError}</p>
+        <div style={{ padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'rgba(239, 68, 68, 0.03)', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+          <Icon name="alert" size={14} style={{ color: 'var(--danger)', marginTop: '2px', flexShrink: 0 }} />
+          <div style={{ fontSize: '12px' }}>
+            <p style={{ fontWeight: 600, color: 'var(--danger)' }}>Upload failed</p>
+            <p style={{ marginTop: '3px', color: 'var(--muted)', fontSize: '11px' }}>{state.uploadError}</p>
           </div>
         </div>
       )}
@@ -1976,41 +1959,46 @@ export default function ImportPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gray-50 px-6 py-8">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Import Data</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Upload .xlsx, .xls, or .csv files for each portal ID. Column names are matched
-            case-insensitively to the target table.
-          </p>
-        </div>
+    <div>
+      <div className="pagehead">
+        <h1>Import Data</h1>
+        <p>
+          Upload .xlsx, .xls, or .csv files for each portal ID. Column names are matched
+          case-insensitively to the target table.
+        </p>
+      </div>
 
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
         {revenueReportCards.length > 0 && (
-          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <section className="card">
             <button
               type="button"
               onClick={() => toggleGroup('revenue_report')}
-              className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+              style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '12px 18px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', transition: 'background-color 0.2s' }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--muted-bg)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               aria-expanded={!!expandedGroups.revenue_report}
               aria-controls="revenue-report-group-content"
             >
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">Revenue Report</h2>
-                <p className="mt-0.5 text-xs text-gray-500">
+                <h3>Revenue Report</h3>
+                <p className="sub">
                   Upload PSF Revenue Report, Invoice Data, and VAS Data in one grouped section to reduce confusion.
                 </p>
               </div>
 
-              <div className="mt-0.5 flex shrink-0 items-center gap-2 text-xs text-gray-500">
-                <span className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5">
+              <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)', flexShrink: 0 }}>
+                <span style={{ padding: '3px 6px', borderRadius: '3px', backgroundColor: 'var(--muted-bg)', fontSize: '11px' }}>
                   {revenueReportCards.length} cards
                 </span>
                 <svg
-                  className={[
-                    'h-4 w-4 text-gray-400 transition-transform duration-200',
-                    expandedGroups.revenue_report ? 'rotate-180' : 'rotate-0',
-                  ].join(' ')}
+                  style={{
+                    width: '14px',
+                    height: '14px',
+                    color: 'var(--muted)',
+                    transition: 'transform 0.2s',
+                    transform: expandedGroups.revenue_report ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}
@@ -2022,7 +2010,7 @@ export default function ImportPage() {
             </button>
 
             {expandedGroups.revenue_report && (
-              <div id="revenue-report-group-content" className="space-y-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4">
+              <div id="revenue-report-group-content" style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'var(--muted-bg)' }}>
                 {revenueReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
@@ -2041,30 +2029,35 @@ export default function ImportPage() {
         )}
 
         {partsReportCards.length > 0 && (
-          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <section className="card">
             <button
               type="button"
               onClick={() => toggleGroup('parts_report')}
-              className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+              style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '12px 18px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', transition: 'background-color 0.2s' }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--muted-bg)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               aria-expanded={!!expandedGroups.parts_report}
               aria-controls="parts-report-group-content"
             >
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">Parts Report</h2>
-                <p className="mt-0.5 text-xs text-gray-500">
+                <h3>Parts Report</h3>
+                <p className="sub">
                   Upload Parts Consumption, Parts Order, and Parts In Stock in one grouped section.
                 </p>
               </div>
 
-              <div className="mt-0.5 flex shrink-0 items-center gap-2 text-xs text-gray-500">
-                <span className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5">
+              <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)', flexShrink: 0 }}>
+                <span style={{ padding: '3px 6px', borderRadius: '3px', backgroundColor: 'var(--muted-bg)', fontSize: '11px' }}>
                   {partsReportCards.length} cards
                 </span>
                 <svg
-                  className={[
-                    'h-4 w-4 text-gray-400 transition-transform duration-200',
-                    expandedGroups.parts_report ? 'rotate-180' : 'rotate-0',
-                  ].join(' ')}
+                  style={{
+                    width: '14px',
+                    height: '14px',
+                    color: 'var(--muted)',
+                    transition: 'transform 0.2s',
+                    transform: expandedGroups.parts_report ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}
@@ -2076,7 +2069,7 @@ export default function ImportPage() {
             </button>
 
             {expandedGroups.parts_report && (
-              <div id="parts-report-group-content" className="space-y-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4">
+              <div id="parts-report-group-content" style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'var(--muted-bg)' }}>
                 {partsReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
@@ -2095,30 +2088,35 @@ export default function ImportPage() {
         )}
 
         {warrantyReportCards.length > 0 && (
-          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <section className="card">
             <button
               type="button"
               onClick={() => toggleGroup('warranty_report')}
-              className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-50"
+              style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '12px 18px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', transition: 'background-color 0.2s' }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--muted-bg)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               aria-expanded={!!expandedGroups.warranty_report}
               aria-controls="warranty-report-group-content"
             >
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">Warranty Report</h2>
-                <p className="mt-0.5 text-xs text-gray-500">
+                <h3>Warranty Report</h3>
+                <p className="sub">
                   Upload Claim-Settlement-Report, Part WC, Updation Claim, Goodwill, AMC, FSB, and WC across four branches.
                 </p>
               </div>
 
-              <div className="mt-0.5 flex shrink-0 items-center gap-2 text-xs text-gray-500">
-                <span className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5">
+              <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)', flexShrink: 0 }}>
+                <span style={{ padding: '3px 6px', borderRadius: '3px', backgroundColor: 'var(--muted-bg)', fontSize: '11px' }}>
                   {warrantyReportCards.length} cards
                 </span>
                 <svg
-                  className={[
-                    'h-4 w-4 text-gray-400 transition-transform duration-200',
-                    expandedGroups.warranty_report ? 'rotate-180' : 'rotate-0',
-                  ].join(' ')}
+                  style={{
+                    width: '14px',
+                    height: '14px',
+                    color: 'var(--muted)',
+                    transition: 'transform 0.2s',
+                    transform: expandedGroups.warranty_report ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}
@@ -2130,7 +2128,7 @@ export default function ImportPage() {
             </button>
 
             {expandedGroups.warranty_report && (
-              <div id="warranty-report-group-content" className="space-y-4 border-t border-gray-100 bg-gray-50/40 px-4 py-4">
+              <div id="warranty-report-group-content" style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'var(--muted-bg)' }}>
                 {warrantyReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
