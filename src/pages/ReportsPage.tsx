@@ -353,6 +353,22 @@ export default function ReportsPage() {
     shouldShowServiceAdvisorFilter,
   ])
 
+  // Render warranty report full-page without parent Reports layout
+  if (selectedReport?.id === 'warranty-overview') {
+    return (
+      <div className="page">
+        <selectedReport.Component
+          branch={effectiveBranchFilter}
+          dateFilter={dateFilter}
+          fuelType={fuelType}
+          serviceTypeFilter={serviceTypeFilter}
+          parentProductLineFilter={parentProductLineFilter}
+          serviceAdvisorFilter={serviceAdvisorFilter}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">

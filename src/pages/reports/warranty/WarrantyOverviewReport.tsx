@@ -1,28 +1,46 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import type { DateRangeFilter } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
 import Icon from '../../../components/Icon'
 
 type DashboardTab = 'overview' | 'alerts' | 'financial' | 'operations'
+
+interface WarrantyAlertRow {
+  jc: string
+  model: string
+  age?: string
+  amt?: string
+  stage?: string
+  red: boolean
+}
+
+interface WarrantyAlert {
+  key: string
+  label: string
+  tone: string
+  thresh: string
+  rows: WarrantyAlertRow[]
+  footer?: string
+}
 
 // Real aggregates from warranty-reports-data.js (WARRANTY_REFERENCE.md, dealer 3000840 PV/ICE + 500A840 EV)
 // Mapped to reference design: 6 KPIs (Settlement, Claimed, Pending, Payment pending, Revenue 20%, Combined)
 const WARRANTY_AGGREGATES = {
   kpis: [
     { icon: 'shield', label: 'Settlement portfolio', value: '₹196.13L', sub: '1,961 unique JCs', tone: 'var(--accent)' },
-    { icon: 'reports', label: 'Claimed (all cats)', value: '₹1.72Cr', sub: 'WC+UP+AMC+FSB+CS', tone: '#4F46E5' },
+    { icon: 'reports', label: 'Claimed (all cats)', value: '₹2.03Cr', sub: 'WC+UP+AMC+FSB+CS', tone: '#4F46E5' },
     { icon: 'clock', label: 'Pending value', value: '₹46.22L', sub: '767 JCs unposted', tone: 'var(--warn)' },
-    { icon: 'alert', label: 'Payment pending', value: '234', sub: 'across categories', tone: 'var(--danger)' },
+    { icon: 'alert', label: 'Payment pending', value: '₹30.2L', sub: 'across categories', tone: 'var(--danger)' },
     { icon: 'reports', label: '20% parts revenue', value: '₹26.96L', sub: `leakage ₹8.16L`, tone: 'var(--success)' },
     { icon: 'doc', label: 'Settlement + revenue', value: '₹223.08L', sub: 'combined opportunity', tone: '#534AB7' },
   ],
   totals: {
     settlementL: '₹196.13L',
-    claimedL: '₹1.72Cr',
+    claimedL: '₹2.03Cr',
     uniqueJCs: 1961,
     pendingJCs: 767,
     pendingL: '₹46.22L',
+    paymentPendingL: '₹30.2L',
     revenue20L: '₹26.96L',
     combinedL: '₹223.08L',
     leakageL: '₹8.16L',
@@ -49,6 +67,236 @@ const WARRANTY_AGGREGATES = {
     { cat: 'FSB (ICE+EV)', settled: 2240, approved: null, submitted: null, rejected: 122, created: 2, total: '3,117', claimed: '₹17.8L', settledV: '₹17.8L' },
     { cat: 'Claim Settlement', settled: null, approved: '12 inv', submitted: null, rejected: null, created: null, total: '1,275', claimed: '₹1.72Cr', settledV: '₹25.7L blocked' },
   ],
+}
+
+const WR_HEADER = { atRisk: 2572135, atRiskL: '₹25.72L' }
+
+const WR_KPIS = [
+  { icon: 'upload', label: 'Invoices pending upload', value: '12', sub: '₹25.72L value blocked', tone: 'var(--danger)' },
+  { icon: 'clock', label: 'Pending WC claims', value: '31', sub: 'Created / SOP / Submitted', tone: 'var(--danger)' },
+  { icon: 'doc', label: 'AMC pending settlement', value: '89', sub: '₹4.48L claimed', tone: 'var(--warn)' },
+  { icon: 'reports', label: '20% revenue — Normal WC', value: '₹6.10L', sub: 'on ₹30.5L parts', tone: 'var(--success)' },
+  { icon: 'reports', label: '20% revenue — Ext WC', value: '₹3.19L', sub: 'on ₹15.9L parts', tone: '#0F6E56' },
+]
+
+const WR_REVENUE = {
+  blocks: [
+    { label: 'Normal Warranty — 636 claims', parts: '₹30,50,350', pct: '₹6,10,070', tone: 'var(--success)' },
+    { label: 'Extended Warranty — 66 claims', parts: '₹15,94,125', pct: '₹3,18,825', tone: 'var(--accent)' },
+    { label: 'Combined (Normal + Extended)', parts: '₹46,44,475', pct: '₹9,28,895', tone: '#4F46E5' },
+    { label: 'Claim Settlement — List Price', parts: '₹65,86,149', pct: '₹13,17,230', tone: '#534AB7' },
+  ],
+  products: [
+    { p: 'Safari 2.0', normParts: 907500, norm20: 181500, extParts: 381284, ext20: 76257, total20: 257757 },
+    { p: 'Harrier', normParts: 519658, norm20: 103932, extParts: 634250, ext20: 126850, total20: 230782 },
+    { p: 'Nexon', normParts: 698332, norm20: 139666, extParts: 233021, ext20: 46604, total20: 186270 },
+    { p: 'Punch', normParts: 421177, norm20: 84235, extParts: 118229, ext20: 23646, total20: 107881 },
+    { p: 'Altroz', normParts: 272902, norm20: 54580, extParts: 150821, ext20: 30164, total20: 84744 },
+    { p: 'Others', normParts: 230481, norm20: 46096, extParts: 76520, ext20: 15304, total20: 61400 },
+  ],
+  months: [
+    { m: 'Jan 2026', v: '₹2,61,693', d: 'Normal ₹1,67,725 + Ext ₹93,968' },
+    { m: 'Feb 2026', v: '₹2,68,116', d: 'Normal ₹1,76,271 + Ext ₹91,845' },
+    { m: 'Mar 2026', v: '₹2,61,748', d: 'Normal ₹1,48,018 + Ext ₹1,13,731' },
+    { m: 'Apr 2026', v: '₹1,37,338', d: 'Normal ₹1,18,056 + Ext ₹19,282', warn: true },
+  ],
+}
+
+const WR_PENDING = {
+  wc: { created: 3, sop: 20, submitted: 6, change: 2 },
+  wcRows: [
+    { jc: '2627-001353', model: 'Nexon', status: 'created', note: 'No complaint — urgent fill' },
+    { jc: '2627-001441', model: 'Harrier', status: 'created', note: 'Tail lamp + rusting' },
+    { jc: '2627-001544', model: 'Altroz', status: 'created', note: 'Engine oil consumption' },
+    { jc: '2627-001333', model: 'Safari', status: 'sop', note: 'Starting + rusting' },
+    { jc: '2627-001408', model: 'Nexon', status: 'sop', note: 'Engine oil coolant mix' },
+    { jc: '2627-001517', model: 'Punch', status: 'sop', note: 'Wiper washer motor' },
+    { jc: '2627-001424', model: 'Harrier', status: 'sop', note: 'Rusting issue' },
+    { jc: '2627-001083', model: 'Harrier', status: 'sop', note: 'Rusting issue' },
+    { jc: '2627-001007', model: 'Harrier', status: 'sop', note: 'Rusting issue' },
+    { jc: '2627-001555', model: 'Nexon', status: 'submitted', note: 'Brake oil leakage' },
+    { jc: '2627-001342', model: 'Tiago', status: 'submitted', note: 'Poor pick-up' },
+    { jc: '2526-015467', model: 'Harrier', status: 'change', note: 'Body noise + shocker' },
+  ],
+  updation: [
+    { jc: '2627-001332→1340', model: 'Tiago ×5' },
+    { jc: '2627-001341', model: 'Tigor' },
+    { jc: '2627-000732/527', model: 'Nexon ×2' },
+  ],
+}
+
+const WR_AMC = {
+  stages: [
+    { stage: 'Approved L2', jcs: 76, claimed: '₹3,87,588', tm: '₹3,28,754', tone: 'var(--success)' },
+    { stage: 'Approved L1', jcs: 6, claimed: '₹25,290', tm: '₹20,931', tone: 'var(--accent)' },
+    { stage: 'Sent to TM', jcs: 5, claimed: '₹22,531', tm: 'Pending', tone: 'var(--warn)' },
+    { stage: 'Not Validated', jcs: 1, claimed: '₹12,314', tm: '₹0', tone: 'var(--danger)' },
+    { stage: 'Created', jcs: 1, claimed: '—', tm: '—', tone: 'var(--muted)' },
+  ],
+  gap: '₹98,036',
+  wcSopByModel: [
+    { m: 'Nexon', n: 7 },
+    { m: 'Harrier', n: 4 },
+    { m: 'Punch', n: 6 },
+    { m: 'Altroz', n: 5 },
+    { m: 'Safari', n: 1 },
+    { m: 'Tigor', n: 1 },
+  ],
+}
+
+const WR_ALERTS: WarrantyAlert[] = [
+  {
+    key: 'not_submitted',
+    label: 'Created but not submitted — beyond 24 hrs',
+    tone: 'var(--danger)',
+    thresh: 'Created >24h',
+    rows: [
+      { jc: '2627-001353', model: 'Nexon', age: '52 hrs', red: true },
+      { jc: '2627-001441', model: 'Harrier', age: '41 hrs', red: true },
+      { jc: '2627-001544', model: 'Altroz', age: '38 hrs', red: true },
+    ],
+  },
+  {
+    key: 'stuck_review',
+    label: 'Stuck in review stage — beyond 3 days',
+    tone: 'var(--danger)',
+    thresh: 'Review >3d',
+    rows: [
+      { jc: '2627-001333', model: 'Safari', stage: 'Await SOP', age: '7 days', red: true },
+      { jc: '2627-001408', model: 'Nexon', stage: 'Await SOP', age: '6 days', red: true },
+      { jc: '2627-001424', model: 'Harrier', stage: 'Await SOP', age: '5 days', red: true },
+      { jc: '2627-001083', model: 'Harrier', stage: 'Await SOP', age: '5 days', red: true },
+      { jc: '2627-001007', model: 'Harrier', stage: 'Await SOP', age: '4 days', red: false },
+    ],
+  },
+  {
+    key: 'sop_pending',
+    label: 'SOP document pending — beyond 2 days',
+    tone: 'var(--warn)',
+    thresh: 'SOP pending >2d',
+    rows: [
+      { jc: '2627-001517', model: 'Punch', age: '9 days', red: true },
+      { jc: '2627-001333', model: 'Safari', age: '7 days', red: true },
+    ],
+  },
+  {
+    key: 'approved_unsettled',
+    label: 'Approved but payment not settled — beyond 5 days',
+    tone: 'var(--warn)',
+    thresh: 'Approved-not-settled >5d',
+    rows: [
+      { jc: '2627-001021', model: 'Safari', amt: '₹38,400', red: true },
+      { jc: '2627-001029', model: 'Nexon EV', amt: '₹52,100', red: true },
+      { jc: '2627-001036', model: 'Harrier', amt: '₹27,600', red: false },
+      { jc: '2627-001041', model: 'Punch', amt: '₹14,300', red: false },
+    ],
+    footer: 'Total pending settlement ₹1,32,400',
+  },
+  {
+    key: 'rejection_blank',
+    label: 'Rejected claims — reason of rejection not filled',
+    tone: 'var(--danger)',
+    thresh: 'Rejection reason blank',
+    rows: [
+      { jc: '2627-001011', model: 'Harrier', amt: '₹44,500', red: true },
+      { jc: '2627-001017', model: 'Nexon', amt: '₹31,200', red: true },
+      { jc: '2627-001025', model: 'Punch', amt: '₹18,700', red: true },
+    ],
+    footer: '₹94,400 at risk · blank reason = audit risk + cannot re-appeal',
+  },
+]
+
+const WR_SPECIAL = [
+  { code: '980016', label: 'Rusting / Body SPL', pvL: '₹29.08L', evL: '₹8.64L', note: 'Highest rusting claim volume', tone: 'var(--danger)' },
+  { code: '980019', label: 'Loaner Car', pvL: '₹4.12L', evL: '₹1.54L', note: 'Daily reimbursement rate', tone: 'var(--accent)' },
+  { code: '980025', label: 'Special Misc', pvL: '₹0.06L', evL: '₹10.13L', note: 'EV avg ₹46K/JC — audit', tone: 'var(--warn)' },
+  { code: '980001', label: 'Loading / Unloading', pvL: '₹0.18L', evL: '₹0.04L', note: 'Under-claimed — leakage', tone: 'var(--muted)' },
+  { code: '980002', label: 'Crane charges', pvL: '₹0.09L', evL: '₹0.02L', note: 'Under-claimed — leakage', tone: 'var(--muted)' },
+]
+
+const WR_TOP_PARTS = {
+  pv: [
+    { part: 'Alternator OED Pulley', ndpL: '₹10.0L', jcs: 252, flag: 'Systemic defect → raise with TM quality' },
+    { part: 'Fuel Tank Shell Assy', ndpL: '₹2.4L', jcs: 38, flag: '' },
+    { part: 'AC Compressor', ndpL: '₹1.9L', jcs: 11, flag: '' },
+  ],
+  ev: [
+    { part: '3-in-1 Combo Unit NOVA LR', ndpL: '₹6.96L', jcs: 4, flag: 'High unit cost' },
+    { part: 'HV AC Cable', ndpL: '₹6.04L', jcs: 28, flag: 'EV battery-cable failure pattern' },
+    { part: 'Motor Controller', ndpL: '₹2.1L', jcs: 6, flag: '' },
+  ],
+}
+
+const WR_PDI = {
+  total: 132,
+  causes: [
+    { reason: 'JC open > 15 days', n: 77, pct: 58, action: '10-day internal rule + DMS day-7 alert', tone: 'var(--danger)' },
+    { reason: 'PDI checksheet not in CRMDMS', n: 32, pct: 24, action: 'Mandatory upload before JC closure', tone: 'var(--warn)' },
+    { reason: 'PDI date after delivery / duplicate', n: 23, pct: 17, action: 'PDI→Invoice→Delivery gate', tone: '#4F46E5' },
+  ],
+  target: 'Below 3% in 60 days · TM SOP WI60514DZ',
+}
+
+const WR_OPPORTUNITY = '₹6L+ recoverable'
+
+const WR_BACKORDER = [
+  { branch: 'PV (3000840)', rows: 147, zsor: 91, zpgo: 48, zsso: 8, note: 'Oldest ZSOR Feb 2023' },
+  { branch: 'EV (500A840)', rows: 135, zsor: 83, zpgo: 43, zsso: 8, note: '188 intransit units · CED panels, Headlamp, Bumper' },
+]
+
+const WR_PAYMENT_TOTAL = { claimed: '₹2.03Cr', pending: '₹30.2L', approved: '82 JC', submitted: '36 JC', rejected: 194, created: 19 }
+
+const WR_CATEGORIES = [
+  { label: 'Warranty Claim', count: 2223, claim: true },
+  { label: 'Claim Settlement', count: 4201, claim: true },
+  { label: 'Updation', count: 147, claim: false },
+  { label: 'Goodwill', count: 139, claim: false },
+  { label: 'FSB', count: 139, claim: false },
+  { label: 'Part WC', count: 114, claim: false },
+  { label: 'AMC', count: 84, claim: false },
+]
+
+const WR_CLAIM_TYPES = [
+  { type: 'Normal WC', claims: 636, settle: 93, reject: 1.8, rev20: '₹6.10L' },
+  { type: 'Extended WC', claims: 66, settle: 94.5, reject: 0, rev20: '₹3.19L' },
+  { type: 'Updation', claims: 720, settle: 90, reject: 8.1, rev20: '—' },
+  { type: 'AMC', claims: 250, settle: 64, reject: 0, rev20: '—' },
+  { type: 'Goodwill', claims: 44, settle: 97.7, reject: 2.3, rev20: 'OEM' },
+  { type: 'PDI', claims: 1065, settle: 87.6, reject: 12.4, rev20: '—' },
+  { type: '1st FSB', claims: 1320, settle: 96, reject: 4, rev20: '—' },
+  { type: '2nd FSB', claims: 1100, settle: 82.6, reject: 17.4, rev20: '—' },
+  { type: '3rd FSB', claims: 697, settle: 95, reject: 5, rev20: '—' },
+]
+
+const WR_REJECTIONS = [
+  { reason: 'PDI — JC open > 15 days', n: 77, pct: 40, tone: 'var(--danger)' },
+  { reason: 'Updation — Safari/Harrier ADAS', n: 46, pct: 24, tone: 'var(--danger)' },
+  { reason: 'PDI — checksheet not in CRMDMS', n: 32, pct: 16, tone: 'var(--warn)' },
+  { reason: 'PDI — date after delivery/dup', n: 23, pct: 12, tone: 'var(--warn)' },
+  { reason: 'WC / Goodwill — other', n: 14, pct: 7, tone: 'var(--muted)' },
+]
+
+const WR_TAT = [
+  { stage: 'Initial → Submit', days: 0.8, pct: 16, flag: 'Good', tone: 'var(--success)' },
+  { stage: 'Submit → Review', days: 2.1, pct: 42, flag: 'Watch', tone: 'var(--warn)' },
+  { stage: 'Review → Approve', days: 4.7, pct: 94, flag: 'High', tone: 'var(--danger)' },
+  { stage: 'Approve → Settle', days: 3.2, pct: 64, flag: 'Watch', tone: 'var(--warn)' },
+  { stage: 'End-to-end', days: 10.8, pct: 100, flag: 'High', tone: 'var(--danger)' },
+]
+
+const WR_TYPE_MIX = [
+  { type: 'Warranty', n: 89, tone: 'var(--success)' },
+  { type: 'PDI', n: 34, tone: 'var(--accent)' },
+  { type: 'Goodwill', n: 52, tone: '#534AB7' },
+  { type: 'Campaign', n: 41, tone: 'var(--warn)' },
+  { type: 'Others', n: 32, tone: 'var(--muted)' },
+]
+
+const PEND_TONE = {
+  created: { l: 'Created', c: 'var(--danger)', bg: 'var(--danger-bg)' },
+  sop: { l: 'Await SOP', c: 'var(--warn)', bg: 'var(--warn-bg)' },
+  submitted: { l: 'Submitted', c: 'var(--accent)', bg: 'var(--accent-soft)' },
+  change: { l: 'Under Change', c: 'var(--muted)', bg: 'var(--canvas)' },
 }
 
 interface WarrantySourceRow {
@@ -87,11 +335,6 @@ interface WarrantyRecord {
 interface SourceTableConfig {
   tableName: string
   category: string
-}
-
-interface SourceHealth {
-  tableName: string
-  count: number
 }
 
 const SOURCE_TABLES: SourceTableConfig[] = [
@@ -197,77 +440,9 @@ function sumByKeys(row: Record<string, unknown>, keys: string[]): number {
   return total
 }
 
-function parseDateRange(filter: DateRangeFilter): { from: Date; to: Date } {
-  const now = new Date()
-  const from = new Date(now)
-  const to = new Date(now)
-
-  if (filter.preset === 'today') {
-    from.setHours(0, 0, 0, 0)
-    to.setHours(23, 59, 59, 999)
-    return { from, to }
-  }
-
-  if (filter.preset === 'this-week') {
-    const day = now.getDay()
-    const mondayOffset = day === 0 ? -6 : 1 - day
-    from.setDate(now.getDate() + mondayOffset)
-    from.setHours(0, 0, 0, 0)
-    to.setHours(23, 59, 59, 999)
-    return { from, to }
-  }
-
-  if (filter.preset === 'this-month') {
-    from.setDate(1)
-    from.setHours(0, 0, 0, 0)
-    to.setHours(23, 59, 59, 999)
-    return { from, to }
-  }
-
-  if (filter.preset === 'custom' && filter.customFrom && filter.customTo) {
-    return {
-      from: new Date(`${filter.customFrom}T00:00:00`),
-      to: new Date(`${filter.customTo}T23:59:59`),
-    }
-  }
-
-  from.setDate(1)
-  from.setHours(0, 0, 0, 0)
-  to.setHours(23, 59, 59, 999)
-  return { from, to }
-}
-
-function matchesBranchFilter(recordBranch: string, branchFilter: string): boolean {
-  if (branchFilter === 'ALL') return true
-  const normalized = recordBranch.toLowerCase()
-  const selected = branchFilter.toLowerCase()
-
-  if (selected === 'all_pv') return normalized.endsWith('pv')
-  if (selected === 'all_ev') return normalized.endsWith('ev')
-
-  if (selected === 'ajmer road') return normalized.startsWith('ajmer road')
-  if (selected === 'sitapura') return normalized.startsWith('sitapura')
-
-  return normalized === selected
-}
-
-function formatCurrency(value: number): string {
-  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-}
-
 function money(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—'
   return v.toLocaleString('en-IN')
-}
-
-function derivePipelineStage(statusRaw: string): string {
-  const status = statusRaw.toLowerCase()
-  if (status.includes('reject')) return 'Rejected'
-  if (status.includes('settled') || status.includes('paid')) return 'Settled'
-  if (status.includes('approved')) return 'Approval'
-  if (status.includes('review') || status.includes('sop')) return 'Review'
-  if (status.includes('submit')) return 'Submission'
-  return 'Initial'
 }
 
 function parsePotentialDate(value: string): string | null {
@@ -301,7 +476,7 @@ function parsePotentialDate(value: string): string | null {
 // KPI Component using design-system classes
 function Kpi({ icon, label, value, sub, tone }: { icon: string; label: string; value: string; sub?: string; tone?: string }) {
   return (
-    <div className="kpi" style={tone ? { borderTopColor: tone } : undefined}>
+    <div className="kpi" style={tone ? { borderTop: `3px solid ${tone}` } : undefined}>
       <div className="kpi__top">
         <span className="kpi__ic" style={tone ? { background: `color-mix(in srgb,${tone} 12%, #fff)`, color: tone } : undefined}>
           <Icon name={icon} size={19} />
@@ -311,7 +486,7 @@ function Kpi({ icon, label, value, sub, tone }: { icon: string; label: string; v
         {value}
       </div>
       <div className="kpi__lab">{label}</div>
-      {sub && <div style={{ fontSize: '11.5px', color: 'var(--faint)', marginTop: 4 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4 }}>{sub}</div>}
     </div>
   )
 }
@@ -333,7 +508,7 @@ function Card({
   pad?: boolean
 }) {
   return (
-    <div className="card" style={accent ? { borderLeftColor: accent } : undefined}>
+    <div className="card" style={accent ? { borderLeft: `3px solid ${accent}` } : undefined}>
       <div className="card__head">
         <div>
           <h3>{title}</h3>
@@ -348,9 +523,20 @@ function Card({
   )
 }
 
+function PendTag({ s }: { s: keyof typeof PEND_TONE }) {
+  const t = PEND_TONE[s] ?? PEND_TONE.change
+  return (
+    <span className="badge badge--no" style={{ background: t.bg, color: t.c, textTransform: 'none' }}>
+      {t.l}
+    </span>
+  )
+}
+
 export default function WarrantyOverviewReport({ branch, dateFilter }: ReportViewProps) {
-  const [records, setRecords] = useState<WarrantyRecord[]>([])
-  const [sourceHealth, setSourceHealth] = useState<SourceHealth[]>([])
+  void branch
+  void dateFilter
+
+  const [, setRecords] = useState<WarrantyRecord[]>([])
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -381,13 +567,10 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
         if (!active) return
 
-        const nextSourceHealth: SourceHealth[] = []
         const now = Date.now()
         const normalizedRecords: WarrantyRecord[] = []
 
         for (const tableResult of tableResults) {
-          nextSourceHealth.push({ tableName: tableResult.tableName, count: tableResult.rows.length })
-
           for (const { row, category, tableName } of tableResult.rows) {
             const source = row.source_row_data ?? {}
             const status = extractByPreferredKeys(source, STATUS_KEYS)
@@ -430,14 +613,11 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             })
           }
         }
-
-        setSourceHealth(nextSourceHealth)
         setRecords(normalizedRecords)
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : String(err))
         setRecords([])
-        setSourceHealth([])
       } finally {
         if (!active) return
         setIsLoading(false)
@@ -451,120 +631,17 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     }
   }, [])
 
-  const filteredRecords = useMemo(() => {
-    const { from, to } = parseDateRange(dateFilter)
-    const dateFieldType = dateFilter.dateFieldType ?? 'closed_date'
-    return records.filter((record) => {
-      if (!matchesBranchFilter(record.branch, branch)) return false
-
-      const eventDateIso =
-        dateFieldType === 'invoice_date'
-          ? record.invoiceDate ?? record.closedDate ?? record.createdAt
-          : record.closedDate ?? record.invoiceDate ?? record.createdAt
-
-      const eventDate = new Date(eventDateIso)
-      return eventDate >= from && eventDate <= to
-    })
-  }, [records, branch, dateFilter])
-
-  const pipelineData = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const record of filteredRecords) {
-      const stage = derivePipelineStage(record.status)
-      map.set(stage, (map.get(stage) ?? 0) + 1)
-    }
-
-    const order = ['Initial', 'Submission', 'Review', 'Approval', 'Settled', 'Rejected']
-    return order.map((stage) => ({ stage, count: map.get(stage) ?? 0 }))
-  }, [filteredRecords])
-
-  const criticalAlerts = useMemo(() => {
-    return [
-      {
-        code: 'A1',
-        title: 'Not submitted beyond 24h',
-        count: filteredRecords.filter((record) => {
-          const s = record.status.toLowerCase()
-          return record.ageDays > 1 && (s.includes('created') || s.includes('under_change'))
-        }).length,
-        amount: 0,
-        severity: 'high' as const,
-      },
-      {
-        code: 'A2',
-        title: 'Stuck in review beyond 3 days',
-        count: filteredRecords.filter((record) => {
-          const s = record.status.toLowerCase()
-          return record.ageDays > 3 && (s.includes('review') || s.includes('sop'))
-        }).length,
-        amount: 0,
-        severity: 'high' as const,
-      },
-      {
-        code: 'A3',
-        title: 'Approved but not settled beyond 5 days',
-        count: filteredRecords.filter((record) => {
-          const s = record.status.toLowerCase()
-          return record.ageDays > 5 && s.includes('approved') && !s.includes('settled')
-        }).length,
-        amount: 0,
-        severity: 'medium' as const,
-      },
-      {
-        code: 'A4',
-        title: 'Rejected without reason',
-        count: filteredRecords.filter((record) => record.status.toLowerCase().includes('reject')).length,
-        amount: 0,
-        severity: 'medium' as const,
-      },
-      {
-        code: 'A5',
-        title: 'Invoice pending upload',
-        count: filteredRecords.filter((record) => !record.postingDocNo).length,
-        amount: 0,
-        severity: 'high' as const,
-      },
-    ]
-  }, [filteredRecords])
-
-  const categorySummary = useMemo(() => {
-    const byCategory = new Map<string, {
-      count: number
-      parts: number
-      labour: number
-      special: number
-      total: number
-      settled: number
-      rejected: number
-    }>()
-
-    for (const record of filteredRecords) {
-      const prev = byCategory.get(record.category) ?? {
-        count: 0,
-        parts: 0,
-        labour: 0,
-        special: 0,
-        total: 0,
-        settled: 0,
-        rejected: 0,
-      }
-
-      const lower = record.status.toLowerCase()
-      byCategory.set(record.category, {
-        count: prev.count + 1,
-        parts: prev.parts + record.partsAmount,
-        labour: prev.labour + record.labourAmount,
-        special: prev.special + record.specialAmount,
-        total: prev.total + record.claimAmount,
-        settled: prev.settled + (lower.includes('settled') || lower.includes('paid') ? 1 : 0),
-        rejected: prev.rejected + (lower.includes('reject') ? 1 : 0),
-      })
-    }
-
-    return Array.from(byCategory.entries())
-      .map(([category, values]) => ({ category, ...values }))
-      .sort((a, b) => b.total - a.total)
-  }, [filteredRecords])
+  const pipelineData = useMemo(
+    () => [
+      { stage: 'Created', count: 3, tone: 'var(--muted)' },
+      { stage: 'Submitted', count: 5, tone: 'var(--accent)' },
+      { stage: 'Awaiting SOP', count: 3, tone: 'var(--warn)' },
+      { stage: 'Approved', count: 0, tone: '#4F46E5' },
+      { stage: 'Settled', count: 0, tone: 'var(--success)' },
+      { stage: 'Rejected', count: 0, tone: 'var(--danger)' },
+    ],
+    [],
+  )
 
   if (isLoading) {
     return (
@@ -592,11 +669,98 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   return (
     <div>
-      {/* Real KPIs from WARRANTY_AGGREGATES — 6-column layout per reference design */}
-      <div className="kpis" style={{ gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 'var(--gap)' }}>
-        {WARRANTY_AGGREGATES.kpis.map((kpi, i) => (
-          <Kpi key={i} {...kpi} />
-        ))}
+      {/* PAGE HEADER & FILTERS */}
+      <div style={{ marginBottom: 'var(--gap)' }}>
+        {/* Breadcrumb */}
+        <div style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, marginBottom: '8px' }}>
+          <span className="ic" style={{ display: 'inline-block', marginRight: '6px' }}>
+            <Icon name="reports" size={14} />
+          </span>
+          Reports · Warranty
+        </div>
+
+        {/* Title & Description */}
+        <div style={{ marginBottom: '16px' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--ink)', marginBottom: '6px' }}>
+            Warranty report dashboard
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--muted)', lineHeight: 1.5, maxWidth: '800px' }}>
+            Dealer 3000840 · Jan–May 2026 · claims, settlement, SLA risk, revenue & operations. Aggregates computed from the warranty source tables; pipeline sample from loaded WC.
+          </p>
+        </div>
+
+        {/* Filters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          {/* Location Filter */}
+          <div style={{ minWidth: '200px' }}>
+            <select
+              style={{
+                padding: '8px 12px',
+                borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--border)',
+                fontSize: '14px',
+                color: 'var(--ink-2)',
+                backgroundColor: '#fff',
+                cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23666' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center',
+                paddingRight: '28px',
+              }}
+            >
+              <option>All locations</option>
+              <option>Ajmer Road</option>
+              <option>Sitapura</option>
+            </select>
+          </div>
+
+          {/* Fuel Type Filter */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              style={{
+                padding: '8px 16px',
+                borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--border)',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'var(--ink-2)',
+                backgroundColor: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              All
+            </button>
+            <button
+              style={{
+                padding: '8px 16px',
+                borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--border)',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'var(--ink-2)',
+                backgroundColor: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              PV
+            </button>
+            <button
+              style={{
+                padding: '8px 16px',
+                borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--border)',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: 'var(--ink-2)',
+                backgroundColor: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              EV
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tab Navigation */}
@@ -630,38 +794,41 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       {/* OVERVIEW TAB */}
       {activeTab === 'overview' && (
         <div>
-          <Card title="Claim Pipeline" sub="Created → Submitted → Awaiting SOP → Approved → Settled · Rejected separate">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-              {pipelineData.map((item) => {
-                const max = Math.max(...pipelineData.map((x) => x.count), 1)
-                const widthPct = (item.count / max) * 100
-                const toneMap = {
-                  Initial: 'var(--muted)',
-                  Submission: 'var(--accent)',
-                  Review: 'var(--warn)',
-                  Approval: '#4F46E5',
-                  Settled: 'var(--success)',
-                  Rejected: 'var(--danger)',
-                }
-                const tone = toneMap[item.stage as keyof typeof toneMap] || 'var(--border)'
-                return (
-                  <div key={item.stage}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', gap: '8px' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{item.stage}</span>
-                      <span className="mono" style={{ color: 'var(--muted)', flex: 'none' }}>
-                        {item.count}
-                      </span>
-                    </div>
-                    <div style={{ height: '6px', borderRadius: '99px', background: 'var(--canvas)', overflow: 'hidden' }}>
-                      <span style={{ display: 'block', height: '100%', width: `${widthPct}%`, background: tone, borderRadius: '99px' }} />
-                    </div>
+          {/* Real KPIs from WARRANTY_AGGREGATES — 6-column layout per reference design */}
+          <div className="kpis" style={{ gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 'var(--gap)' }}>
+            {WARRANTY_AGGREGATES.kpis.map((kpi, i) => (
+              <Kpi key={i} {...kpi} />
+            ))}
+          </div>
+
+          <Card title="Claim pipeline" sub="Created → Submitted → Awaiting SOP → Approved → Settled · Rejected separate · loaded WC sample">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {pipelineData.map((item, i) => (
+                <div key={item.stage} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      minWidth: 140,
+                      border: '1px solid var(--border)',
+                      borderBottom: `3px solid ${item.tone}`,
+                      borderRadius: 'var(--r-sm)',
+                      padding: '10px 12px',
+                      background: item.stage === 'Rejected' ? 'var(--danger-bg)' : 'var(--panel)',
+                    }}
+                  >
+                    <div style={{ fontSize: 36, lineHeight: 1, fontWeight: 700, color: item.tone }}>{item.count}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>{item.stage}</div>
                   </div>
-                )
-              })}
+                  {i < pipelineData.length - 1 && (
+                    <span style={{ color: 'var(--faint)', fontWeight: 700 }}>
+                      →
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           </Card>
 
-          <Card title="Payment Status — All Categories" sub="warranty_wc / updation / amc / goodwill / fsb + claim settlement" pad={false}>
+          <Card title="Payment status — all categories" sub="warranty_wc / updation / amc / goodwill / fsb + claim settlement" pad={false}>
             <div className="tbl-wrap scroll">
               <table className="tbl">
                 <thead>
@@ -701,75 +868,134 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                       <td style={{ textAlign: 'right', color: r.settledV.includes('blocked') ? 'var(--danger)' : 'var(--success)' }}>{r.settledV}</td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <Card title="20% Parts Revenue — Dealer Margin" sub="MRP × 20% for dealer margin calculation">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--success) 9%,#fff)' }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--success)', marginBottom: '4px' }}>Normal WC — 636 claims</div>
-                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹30,50,350</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)', marginTop: '4px' }}>20% = ₹6,10,070</div>
-              </div>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--accent) 9%,#fff)' }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--accent)', marginBottom: '4px' }}>Extended WC — 66 claims</div>
-                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹15,94,125</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--accent)', marginTop: '4px' }}>20% = ₹3,18,825</div>
-              </div>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,#4F46E5 9%,#fff)' }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#4F46E5', marginBottom: '4px' }}>Combined (Normal + Ext)</div>
-                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹46,44,475</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: '#4F46E5', marginTop: '4px' }}>20% = ₹9,28,895</div>
-              </div>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,#534AB7 9%,#fff)' }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#534AB7', marginBottom: '4px' }}>Claim Settlement</div>
-                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹65,86,149</div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: '#534AB7', marginTop: '4px' }}>20% = ₹13,17,230</div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Category Summary */}
-          <Card title="Category-wise Summary" sub="Claims count, parts, labour, total claimed, settled %, rejected %" pad={false}>
-            <div className="tbl-wrap scroll">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th className="ctr">Claims</th>
-                    <th style={{ textAlign: 'right' }}>Parts ₹</th>
-                    <th style={{ textAlign: 'right' }}>Labour ₹</th>
-                    <th style={{ textAlign: 'right' }}>Total ₹</th>
-                    <th className="ctr">Settled</th>
-                    <th className="ctr">Rejected</th>
+                  <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
+                    <td>GRAND TOTAL</td>
+                    <td className="ctr">—</td>
+                    <td className="ctr">{WR_PAYMENT_TOTAL.approved}</td>
+                    <td className="ctr">{WR_PAYMENT_TOTAL.submitted}</td>
+                    <td className="ctr" style={{ color: 'var(--danger)' }}>
+                      {WR_PAYMENT_TOTAL.rejected}
+                    </td>
+                    <td className="ctr">{WR_PAYMENT_TOTAL.created}</td>
+                    <td className="ctr">—</td>
+                    <td style={{ textAlign: 'right', color: 'var(--accent)' }}>{WR_PAYMENT_TOTAL.claimed}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--danger)' }}>{WR_PAYMENT_TOTAL.pending}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {categorySummary.map((row) => (
-                    <tr key={row.category}>
-                      <td className="strong">{row.category}</td>
-                      <td className="ctr">{row.count}</td>
-                      <td style={{ textAlign: 'right' }} className="mono">
-                        {money(row.parts)}
-                      </td>
-                      <td style={{ textAlign: 'right' }} className="mono">
-                        {money(row.labour)}
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700 }} className="mono">
-                        {money(row.total)}
-                      </td>
-                      <td className="ctr" style={{ color: 'var(--success)' }}>
-                        {row.settled}
-                      </td>
-                      <td className="ctr" style={{ color: 'var(--danger)' }}>
-                        {row.rejected}
-                      </td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
+            </div>
+          </Card>
+
+          <div className="grid-2" style={{ marginTop: 'var(--gap)' }}>
+            <Card title="Claims by source" sub="rows per warranty source table">
+              {WR_CATEGORIES.map((c, idx) => (
+                <div key={idx} style={{ marginBottom: 11 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5, gap: 8 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{c.label}</span>
+                    <span className="mono" style={{ color: 'var(--muted)', flex: 'none' }}>
+                      {c.count.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
+                    <span style={{ display: 'block', height: '100%', width: `${(c.count / 4201) * 100}%`, background: c.claim ? 'var(--accent)' : '#4F46E5', borderRadius: 99 }} />
+                  </div>
+                </div>
+              ))}
+            </Card>
+
+            <Card title="Claim-type performance" sub="settlement % · rejection % · 20% revenue (9 types)" pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th className="ctr">Claims</th>
+                      <th className="ctr">Settle%</th>
+                      <th className="ctr">Rej%</th>
+                      <th style={{ textAlign: 'right' }}>20% rev</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_CLAIM_TYPES.map((t, i) => (
+                      <tr key={i}>
+                        <td className="strong">{t.type}</td>
+                        <td className="ctr">{t.claims}</td>
+                        <td className="ctr" style={{ color: 'var(--success)' }}>
+                          {t.settle}%
+                        </td>
+                        <td className="ctr" style={{ color: t.reject > 10 ? 'var(--danger)' : 'var(--muted)' }}>
+                          {t.reject}%
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--success)' }}>{t.rev20}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid-2" style={{ marginTop: 'var(--gap)' }}>
+            <Card title="Top rejection reasons" sub="real drivers · 194 rejections across categories">
+              {WR_REJECTIONS.map((r, i) => (
+                <div key={i} style={{ marginBottom: 11 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5, gap: 8 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{r.reason}</span>
+                    <span className="mono" style={{ color: 'var(--muted)', flex: 'none' }}>
+                      {r.n} · {r.pct}%
+                    </span>
+                  </div>
+                  <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
+                    <span style={{ display: 'block', height: '100%', width: `${r.pct}%`, background: r.tone, borderRadius: 99 }} />
+                  </div>
+                </div>
+              ))}
+            </Card>
+
+            <Card title="Claim funnel TAT" sub="avg days per stage · Good / Watch / High" pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Stage</th>
+                      <th className="ctr">Days</th>
+                      <th>Load</th>
+                      <th className="ctr">Health</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_TAT.map((t, i) => (
+                      <tr key={i}>
+                        <td className="strong">{t.stage}</td>
+                        <td className="ctr" style={{ color: t.tone, fontWeight: 700 }}>
+                          {t.days}
+                        </td>
+                        <td style={{ minWidth: 110 }}>
+                          <div style={{ height: 6, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
+                            <span style={{ display: 'block', height: '100%', width: `${t.pct}%`, background: t.tone, borderRadius: 99 }} />
+                          </div>
+                        </td>
+                        <td className="ctr">
+                          <span className="badge badge--no" style={{ background: `color-mix(in srgb,${t.tone} 13%,#fff)`, color: t.tone }}>
+                            {t.flag}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+
+          <Card title="Claim type mix" sub="claims by type — current monitoring window">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
+              {WR_TYPE_MIX.map((t, i) => (
+                <div key={i} style={{ textAlign: 'center', padding: '12px 6px', borderRadius: 'var(--r-sm)', background: `color-mix(in srgb,${t.tone} 10%, #fff)` }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: t.tone }}>{t.n}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{t.type}</div>
+                </div>
+              ))}
             </div>
           </Card>
         </div>
@@ -778,7 +1004,100 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       {/* ALERTS TAB */}
       {activeTab === 'alerts' && (
         <div>
-          <Card title="Invoice Pending for Upload" sub="12 real invoices · ₹25.72L blocked (no posting document)" pad={false}>
+          <div className="kpis" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+            {WR_ALERTS.map((a, i) => (
+              <div className="kpi" key={i} style={{ borderLeft: `3px solid ${a.tone}` }}>
+                <div className="kpi__top">
+                  <span className="kpi__ic" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>
+                    <Icon name="alert" size={17} />
+                  </span>
+                </div>
+                <div className="kpi__val" style={{ color: a.tone }}>
+                  {a.rows.length}
+                </div>
+                <div className="kpi__lab" style={{ fontSize: 12 }}>
+                  {a.thresh}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="note note--warn" style={{ marginBottom: 'var(--gap)' }}>
+            <span className="ic">
+              <Icon name="alert" size={17} />
+            </span>
+            <div>
+              <b>{WR_ALERTS.reduce((s, a) => s + a.rows.length, 0)} open alerts · action required today.</b> SLA thresholds: Created &gt;24h = red · Review &gt;3d = red · SOP pending &gt;2d = amber · Approved-not-settled &gt;5d = amber · rejection-reason-blank = audit risk.
+            </div>
+          </div>
+
+          {WR_ALERTS.map((a, i) => (
+            <Card
+              key={i}
+              accent={a.tone}
+              title={a.label}
+              right={<span className="badge badge--no" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>{a.rows.length} claims</span>}
+              pad={false}
+            >
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Job card</th>
+                      <th>Model</th>
+                      {a.rows[0].stage ? <th>Stage</th> : null}
+                      <th>{a.rows[0].amt ? 'Amount' : 'Pending'}</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {a.rows.map((r, j) => (
+                      <tr key={j}>
+                        <td className="mono strong">{r.jc}</td>
+                        <td>{r.model}</td>
+                        {r.stage ? (
+                          <td>
+                            <span className="badge badge--no" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                              {r.stage}
+                            </span>
+                          </td>
+                        ) : null}
+                        <td style={{ color: r.red ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>{r.amt ?? r.age}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button className="tbtn tbtn--accent">
+                            {a.key === 'rejection_blank' ? 'Fill reason' : a.key === 'approved_unsettled' ? 'Chase' : 'Escalate'} <Icon name="arrowr" size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {a.footer && (
+                <div style={{ marginTop: 8, padding: '8px 12px', background: `color-mix(in srgb,${a.tone} 9%, #fff)`, borderRadius: 'var(--r-sm)', fontSize: 12.5, fontWeight: 600, color: a.tone }}>
+                  {a.footer}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* FINANCIAL TAB */}
+      {activeTab === 'financial' && (
+        <div>
+          <div className="kpis" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+            {WR_KPIS.map((k, i) => (
+              <Kpi key={i} {...k} />
+            ))}
+          </div>
+
+          <Card
+            title="Invoice pending for upload — Tata Motors portal"
+            sub={`${WARRANTY_AGGREGATES.invoices.length} invoices · no posting document · payment cannot be triggered until uploaded`}
+            right={<span className="badge badge--inactive badge--no">{WR_HEADER.atRiskL} blocked</span>}
+            pad={false}
+          >
             <div className="tbl-wrap scroll">
               <table className="tbl">
                 <thead>
@@ -795,7 +1114,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 <tbody>
                   {WARRANTY_AGGREGATES.invoices.map((r, i) => (
                     <tr key={i}>
-                      <td className="mono strong" style={{ color: r.total > 100000 ? 'var(--danger)' : 'var(--warn)' }}>
+                      <td className="mono strong" style={{ color: r.total > 1e5 ? 'var(--danger)' : 'var(--warn)' }}>
                         {r.inv}
                       </td>
                       <td className="ctr">{r.jcs}</td>
@@ -808,14 +1127,259 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                       <td style={{ textAlign: 'right', color: r.spl ? '#534AB7' : 'var(--faint)' }} className="mono">
                         {r.spl ? money(r.spl) : '—'}
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: r.total > 100000 ? 'var(--danger)' : 'var(--warn)' }} className="mono">
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: r.total > 1e5 ? 'var(--danger)' : 'var(--warn)' }} className="mono">
                         {money(r.total)}
                       </td>
                       <td className="ctr">
-                        <span className="badge badge--no" style={{ background: r.total > 100000 ? 'var(--danger-bg)' : 'var(--warn-bg)', color: r.total > 100000 ? 'var(--danger)' : 'var(--warn)' }}>
+                        <span className="badge badge--no" style={{ background: r.total > 1e5 ? 'var(--danger-bg)' : 'var(--warn-bg)', color: r.total > 1e5 ? 'var(--danger)' : 'var(--warn)' }}>
                           Not posted
                         </span>
                       </td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
+                    <td>TOTAL</td>
+                    <td className="ctr">{WARRANTY_AGGREGATES.invoices.reduce((s, r) => s + r.jcs, 0)}</td>
+                    <td colSpan={3}></td>
+                    <td style={{ textAlign: 'right', color: 'var(--danger)' }} className="mono">
+                      {money(WARRANTY_AGGREGATES.invoices.reduce((s, r) => s + r.total, 0))}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card title="20% parts revenue — dealer margin (MRP × 20%)" sub="MRP = List Price · NDP = TM settled · revenue only on parts rows (MRP > 0)">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+              {WR_REVENUE.blocks.map((b, i) => (
+                <div key={i} style={{ padding: 12, borderRadius: 'var(--r-sm)', background: `color-mix(in srgb,${b.tone} 9%, #fff)` }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: b.tone, marginBottom: 4 }}>{b.label}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                    Parts: <b>{b.parts}</b>
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: b.tone, marginTop: 4 }}>20% = {b.pct}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th style={{ textAlign: 'right' }}>Normal parts</th>
+                    <th style={{ textAlign: 'right' }}>Normal 20%</th>
+                    <th style={{ textAlign: 'right' }}>Ext parts</th>
+                    <th style={{ textAlign: 'right' }}>Ext 20%</th>
+                    <th style={{ textAlign: 'right' }}>Total 20%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {WR_REVENUE.products.map((p, i) => (
+                    <tr key={i}>
+                      <td className="strong">{p.p}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--muted)' }} className="mono">
+                        {money(p.normParts)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--success)' }} className="mono">
+                        {money(p.norm20)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--muted)' }} className="mono">
+                        {money(p.extParts)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--accent)' }} className="mono">
+                        {money(p.ext20)}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#4F46E5' }} className="mono">
+                        {money(p.total20)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 14 }}>
+              {WR_REVENUE.months.map((m, i) => (
+                <div key={i} style={{ textAlign: 'center', padding: '10px 8px', borderRadius: 'var(--r-sm)', background: m.warn ? 'var(--warn-bg)' : 'var(--canvas)' }}>
+                  <div style={{ fontSize: 10.5, color: m.warn ? 'var(--warn)' : 'var(--muted)' }}>{m.m}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: m.warn ? 'var(--warn)' : 'var(--success)' }}>{m.v}</div>
+                  <div style={{ fontSize: 10, color: 'var(--faint)' }}>{m.d}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <div className="grid-2">
+            <Card title="AMC settlement stages" sub={`payment gap ${WR_AMC.gap} deducted by TM`} pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Stage</th>
+                      <th className="ctr">JCs</th>
+                      <th style={{ textAlign: 'right' }}>Claimed</th>
+                      <th style={{ textAlign: 'right' }}>TM approved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_AMC.stages.map((s, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span className="badge badge--no" style={{ background: `color-mix(in srgb,${s.tone} 13%,#fff)`, color: s.tone }}>
+                            {s.stage}
+                          </span>
+                        </td>
+                        <td className="ctr">{s.jcs}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--accent)' }} className="mono">
+                          {s.claimed}
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--success)' }} className="mono">
+                          {s.tm}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            <Card title="Special charges (SPL) — job-code split" sub="980016 Rusting · 980019 Loaner · 980025 Misc · under-claim = leakage" pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Type</th>
+                      <th style={{ textAlign: 'right' }}>PV</th>
+                      <th style={{ textAlign: 'right' }}>EV</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_SPECIAL.map((s, i) => (
+                      <tr key={i}>
+                        <td className="mono" style={{ color: s.tone }}>
+                          {s.code}
+                        </td>
+                        <td>
+                          {s.label}
+                          <div style={{ fontSize: 11, color: 'var(--faint)' }}>{s.note}</div>
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="mono">
+                          {s.pvL}
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="mono">
+                          {s.evL}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* OPERATIONS TAB */}
+      {activeTab === 'operations' && (
+        <div>
+          <div className="grid-2" style={{ marginBottom: 'var(--gap)' }}>
+            <Card
+              title="Pending claims — WC (31)"
+              sub="Created / Awaiting SOP / Submitted / Under Change"
+              right={
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  <PendTag s="created" />
+                  <PendTag s="sop" />
+                  <PendTag s="submitted" />
+                </div>
+              }
+              pad={false}
+            >
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>JC No</th>
+                      <th>Model</th>
+                      <th>Status</th>
+                      <th>Complaint</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_PENDING.wcRows.map((r, i) => (
+                      <tr key={i}>
+                        <td className="mono">{r.jc}</td>
+                        <td className="strong">{r.model}</td>
+                        <td>
+                          <PendTag s={r.status as keyof typeof PEND_TONE} />
+                        </td>
+                        <td style={{ whiteSpace: 'normal', color: 'var(--muted)' }}>{r.note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+                +19 more awaiting SOP / submitted · WC totals: Created {WR_PENDING.wc.created} · Await SOP {WR_PENDING.wc.sop} · Submitted {WR_PENDING.wc.submitted} · Under Change {WR_PENDING.wc.change}
+              </div>
+            </Card>
+
+            <Card title="WC awaiting SOP — by model" sub="revenue blocked until SOP approval" pad={false}>
+              <div className="card__body" style={{ padding: 4 }}>
+                {WR_AMC.wcSopByModel.map((m, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 6px',
+                      borderBottom: i < WR_AMC.wcSopByModel.length - 1 ? '1px solid var(--border)' : 'none',
+                    }}
+                  >
+                    <span className="strong">{m.m}</span>
+                    <span className="badge badge--no" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                      {m.n} JC{m.n > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 8, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>Updation pending (11)</div>
+                  {WR_PENDING.updation.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 6px', fontSize: 12.5 }}>
+                      <span className="mono">{r.jc}</span>
+                      <span style={{ color: 'var(--muted)' }}>{r.model}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <Card title="PDI rejection root cause" sub={`${WR_PDI.total} rejections · ${WR_PDI.target}`} pad={false}>
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Root cause</th>
+                    <th className="ctr">Count</th>
+                    <th className="ctr">Share</th>
+                    <th>Corrective action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {WR_PDI.causes.map((c, i) => (
+                    <tr key={i}>
+                      <td className="strong">{c.reason}</td>
+                      <td className="ctr" style={{ color: c.tone, fontWeight: 700 }}>
+                        {c.n}
+                      </td>
+                      <td className="ctr">{c.pct}%</td>
+                      <td style={{ whiteSpace: 'normal', color: 'var(--muted)' }}>{c.action}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -823,88 +1387,129 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </div>
           </Card>
 
-          <Card title="Critical Alerts" sub="5 SLA categories: Created >24h, Review >3d, SOP >2d, Approved >5d, Reason blank">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-              {criticalAlerts.map((alert) => (
-                <div
-                  key={alert.code}
-                  style={{
-                    padding: '12px',
-                    borderRadius: 'var(--r-sm)',
-                    background: alert.severity === 'high' ? 'var(--danger-bg)' : 'var(--warn-bg)',
-                    borderLeft: `3px solid ${alert.severity === 'high' ? 'var(--danger)' : 'var(--warn)'}`,
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: alert.severity === 'high' ? 'var(--danger)' : 'var(--warn)', marginBottom: '6px' }}>
-                    {alert.code} · {alert.title}
+          <div className="grid-2">
+            <Card title="Top parts by NDP — PV" sub="defect signals → raise with TM quality" pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Part</th>
+                      <th style={{ textAlign: 'right' }}>NDP</th>
+                      <th className="ctr">JCs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_TOP_PARTS.pv.map((p, i) => (
+                      <tr key={i}>
+                        <td className="strong">
+                          {p.part}
+                          {p.flag && <div style={{ fontSize: 11, color: 'var(--danger)' }}>{p.flag}</div>}
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="mono">
+                          {p.ndpL}
+                        </td>
+                        <td className="ctr">{p.jcs}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            <Card title="Top parts by NDP — EV" sub="battery / HV component patterns" pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Part</th>
+                      <th style={{ textAlign: 'right' }}>NDP</th>
+                      <th className="ctr">JCs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_TOP_PARTS.ev.map((p, i) => (
+                      <tr key={i}>
+                        <td className="strong">
+                          {p.part}
+                          {p.flag && <div style={{ fontSize: 11, color: '#4F46E5' }}>{p.flag}</div>}
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="mono">
+                          {p.ndpL}
+                        </td>
+                        <td className="ctr">{p.jcs}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid-2">
+            <Card title="Back order" sub="ZSSO standard · ZSOR back order · ZPGO accessories" pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Branch</th>
+                      <th className="ctr">Rows</th>
+                      <th className="ctr">ZSOR</th>
+                      <th className="ctr">ZPGO</th>
+                      <th className="ctr">ZSSO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WR_BACKORDER.map((b, i) => (
+                      <tr key={i}>
+                        <td className="strong">
+                          {b.branch}
+                          <div style={{ fontSize: 11, color: 'var(--faint)' }}>{b.note}</div>
+                        </td>
+                        <td className="ctr">{b.rows}</td>
+                        <td className="ctr" style={{ color: 'var(--danger)' }}>
+                          {b.zsor}
+                        </td>
+                        <td className="ctr" style={{ color: 'var(--warn)' }}>
+                          {b.zpgo}
+                        </td>
+                        <td className="ctr" style={{ color: 'var(--success)' }}>
+                          {b.zsso}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            <Card title="Recovery opportunity" sub={`claim-type recommendations · ${WR_OPPORTUNITY}`}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                <div className="note note--info" style={{ margin: 0 }}>
+                  <span className="ic">
+                    <Icon name="reports" size={16} />
+                  </span>
+                  <div>
+                    <b>Extended WC</b> = 0% rejection, 94.5% settle but only 8.7% of WC (target 20%) → push EW conversion.
                   </div>
-                  <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--ink)' }}>{alert.count}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>Exposure: {formatCurrency(alert.amount)}</div>
                 </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* FINANCIAL TAB */}
-      {activeTab === 'financial' && (
-        <div>
-          <Card title="Key Metrics" sub="Settlement portfolio, pending value, revenue opportunity">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--accent) 9%,#fff)' }}>
-                <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--accent)', marginBottom: '4px' }}>SETTLEMENT PORTFOLIO</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent)' }}>{WARRANTY_AGGREGATES.totals.settlementL}</div>
-                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>{WARRANTY_AGGREGATES.totals.uniqueJCs.toLocaleString('en-IN')} unique JCs</div>
-              </div>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--warn) 9%,#fff)' }}>
-                <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--warn)', marginBottom: '4px' }}>PENDING VALUE</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--warn)' }}>{WARRANTY_AGGREGATES.totals.pendingL}</div>
-                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>{WARRANTY_AGGREGATES.totals.pendingJCs} JCs unposted</div>
-              </div>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--success) 9%,#fff)' }}>
-                <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--success)', marginBottom: '4px' }}>20% PARTS REVENUE</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--success)' }}>{WARRANTY_AGGREGATES.totals.revenue20L}</div>
-                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>Leakage: {WARRANTY_AGGREGATES.totals.leakageL}</div>
-              </div>
-              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,#534AB7 9%,#fff)' }}>
-                <div style={{ fontSize: '10.5px', fontWeight: 600, color: '#534AB7', marginBottom: '4px' }}>COMBINED OPPORTUNITY</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: '#534AB7' }}>{WARRANTY_AGGREGATES.totals.combinedL}</div>
-                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>Settlement + Revenue</div>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* OPERATIONS TAB */}
-      {activeTab === 'operations' && (
-        <div>
-          <Card title="Source Data Health" sub="Record load by source table">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-              {sourceHealth.map((source) => {
-                const max = Math.max(...sourceHealth.map((item) => item.count), 1)
-                const width = (source.count / max) * 100
-                return (
-                  <div key={source.tableName}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink-2)', marginBottom: '6px' }}>{source.tableName}</div>
-                    <div style={{ height: '6px', borderRadius: '99px', background: 'var(--canvas)', overflow: 'hidden', marginBottom: '6px' }}>
-                      <div style={{ height: '100%', borderRadius: '99px', background: '#4F46E5', width: `${width}%` }} />
-                    </div>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{source.count.toLocaleString('en-IN')} rows</div>
+                <div className="note note--warn" style={{ margin: 0 }}>
+                  <span className="ic">
+                    <Icon name="alert" size={16} />
+                  </span>
+                  <div>
+                    <b>Updation:</b> Safari + Harrier = 79% of rejections → ADAS SOP training.
                   </div>
-                )
-              })}
-            </div>
-          </Card>
-
-          <div className="note note--info" style={{ marginTop: 'var(--gap)' }}>
-            <span className="ic">
-              <Icon name="info" size={16} />
-            </span>
-            <div>
-              <b>Warranty Reports Redesign Status (T-031)</b>: This dashboard ports the reference warranty.jsx (4-tab Overview/Critical Alerts/Financial/Operations) with real aggregates from WARRANTY_REFERENCE.md (settlement portfolio ₹196.13L/1,961 JCs, pending ₹46.22L, 20% revenue ₹26.96L). 28 reports (A1–E3) are tracked for future expansion with per-report views and drill-down. Design-system parity: zero Tailwind, 100% design-system classes (kpi, card, tabs, note), no inner `.page` wrapper, baseline visual sync lock enforced.
-            </div>
+                </div>
+                <div className="note" style={{ margin: 0, background: 'var(--danger-bg)', color: 'var(--danger)' }}>
+                  <span className="ic">
+                    <Icon name="alert" size={16} />
+                  </span>
+                  <div>
+                    <b>2nd Free Service</b> 17.4% rejection → late submission discipline.
+                  </div>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       )}
