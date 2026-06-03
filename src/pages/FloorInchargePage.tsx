@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
+import Icon from '../components/Icon'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,33 +57,6 @@ function formatTimestamp(value: string | null | undefined): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
-}
-
-function formatInterval(value: string | null | undefined): string {
-  if (!value) return '—'
-
-  const input = value.trim()
-
-  const dayMatch = input.match(/(-?\d+)\s+day/)
-  const timeMatch = input.match(/(-?\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?/)
-
-  const days = dayMatch ? Number(dayMatch[1]) : 0
-  const hours = timeMatch ? Number(timeMatch[1]) : 0
-  const minutes = timeMatch ? Number(timeMatch[2]) : 0
-
-  if ([days, hours, minutes].some((n) => Number.isNaN(n))) {
-    return input
-  }
-
-  const totalMinutes = (days * 24 * 60) + (hours * 60) + minutes
-  const safeMinutes = Math.max(0, totalMinutes)
-
-  const outDays = Math.floor(safeMinutes / (24 * 60))
-  const remAfterDays = safeMinutes % (24 * 60)
-  const outHours = Math.floor(remAfterDays / 60)
-  const outMinutes = remAfterDays % 60
-
-  return `${outDays}D-${String(outHours).padStart(2, '0')}H-${String(outMinutes).padStart(2, '0')}M`
 }
 
 function normalizeStageValue(value: string | null | undefined): string {
@@ -393,229 +367,271 @@ export default function FloorInchargePage() {
   const unassignedCount = filtered.length - assignedCount
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="page">
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white transition-all ${
-            toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-          }`}
+          style={{
+            position: 'fixed',
+            bottom: 22,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 90,
+            background: toast.type === 'error' ? 'var(--danger)' : 'var(--ink)',
+            color: '#fff',
+            padding: '11px 18px',
+            borderRadius: 99,
+            fontSize: 13.5,
+            fontWeight: 600,
+            boxShadow: 'var(--sh-3)',
+            display: 'flex',
+            gap: 9,
+            alignItems: 'center',
+          }}
         >
+          <Icon name={toast.type === 'error' ? 'alert' : 'checksm'} size={16} strokeWidth={2.4} />
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
+      {/* Page Head */}
+      <div className="pagehead">
+        <div>
+          <p className="greet">
+            <Icon name="floor" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />
+            Floor Incharge
+          </p>
+          <h1>Assign technicians</h1>
+          <p>Reception job cards with floor assignment controls — set bay, technician, work status, and remark.</p>
+        </div>
+      </div>
+
+      {/* Summary */}
+      <div className="summary">
+        <div className="schip">
+          <span className="ic">
+            <Icon name="floor" size={16} />
+          </span>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Floor Incharge</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Reception rows with Floor Incharge assignment controls</p>
+            <div className="n">{filtered.length}</div>
+            <div className="l">Job cards</div>
           </div>
-          <button
-            onClick={fetchAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-            </svg>
-            Refresh
-          </button>
         </div>
-
-        {dataError && (
-          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            {dataError}
+        <div className="schip">
+          <span className="ic">
+            <Icon name="checksm" size={16} />
+          </span>
+          <div>
+            <div className="n">{assignedCount}</div>
+            <div className="l">Assigned</div>
           </div>
-        )}
-
-        {/* Stats */}
-        <div className="flex gap-4 mt-4">
-          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
-            <span className="text-2xl font-bold text-blue-700">{filtered.length}</span>
-            <span className="text-xs text-blue-600">Total Job Cards</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg">
-            <span className="text-2xl font-bold text-green-700">{assignedCount}</span>
-            <span className="text-xs text-green-600">Assigned</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg">
-            <span className="text-2xl font-bold text-amber-700">{unassignedCount}</span>
-            <span className="text-xs text-amber-600">Unassigned</span>
+        </div>
+        <div className="schip">
+          <span className="ic" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+            <Icon name="clock" size={16} />
+          </span>
+          <div>
+            <div className="n">{unassignedCount}</div>
+            <div className="l">Unassigned</div>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search JC no, reg. no, SA name, owner…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      {/* Card */}
+      <div className="card">
+        <div className="card__head">
+          <div>
+            <h3>
+              Job cards <span style={{ color: 'var(--muted)', fontWeight: 600 }}>({filtered.length})</span>
+            </h3>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <select
+              className="sel"
+              style={{ height: 38, width: 150 }}
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+            >
+              {branches.map((b) => (
+                <option key={b} value={b}>
+                  {b === 'All' ? 'All branches' : b}
+                </option>
+              ))}
+            </select>
+            <span className="inp-wrap" style={{ width: 240 }}>
+              <span className="icon-l">
+                <Icon name="search" size={16} />
+              </span>
+              <input
+                className="inp"
+                placeholder="Search JC / reg / SA / owner"
+                style={{ height: 38 }}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </span>
+          </div>
         </div>
-        <select
-          value={branchFilter}
-          onChange={(e) => setBranchFilter(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-        >
-          {branches.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
-      </div>
+        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--faint)', fontSize: 13 }}>
+              Loading job cards…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--faint)', fontSize: 13 }}>
+              {dataError
+                ? 'Rows are hidden due to access/scope rules. Please verify Floor Incharge module permission.'
+                : search.trim() || branchFilter !== 'All'
+                  ? 'No job cards match your filters'
+                  : 'No job cards are visible in your Floor Incharge scope right now.'}
+            </div>
+          ) : (
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Created</th>
+                    <th>Reg No</th>
+                    <th>Model</th>
+                    <th>Service Type</th>
+                    <th>SA Name</th>
+                    <th>JC Number</th>
+                    <th>Branch</th>
+                    <th>Assign Technician</th>
+                    <th>IN TS</th>
+                    <th>Bay</th>
+                    <th>Status</th>
+                    <th>Remark</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((jc) => {
+                    const assignment = assignments[jc.assignment_key]
+                    const isSaving = saving === jc.assignment_key
+                    const draft = stageDrafts[jc.assignment_key] ?? {
+                      bay_no: assignment?.bay_no ?? '',
+                      work_status: assignment?.work_status ?? 'work_inprocess',
+                      remark: assignment?.remark ?? '',
+                    }
+                    const bayOptions = buildBayOptions(jc.fuel_type)
+                    const canEditStage = Boolean(assignment) && !isSaving
+                    const hasStageChanges = Boolean(assignment) && (
+                      normalizeStageValue(draft.bay_no) !== normalizeStageValue(assignment?.bay_no) ||
+                      normalizeStatusValue(draft.work_status) !== normalizeStatusValue(assignment?.work_status) ||
+                      normalizeStageValue(draft.remark) !== normalizeStageValue(assignment?.remark)
+                    )
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto px-6 py-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
-            <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            Loading job cards…
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
-            {dataError
-              ? 'Rows are hidden due to access/scope rules. Please verify Floor Incharge module permission and role/fuel mapping.'
-              : search.trim() || branchFilter !== 'All'
-                ? 'No rows match your current filters.'
-                : 'No rows are visible in your Floor Incharge scope right now.'}
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-[1600px] divide-y divide-gray-100 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created At</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created By</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Source</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Reg No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Model</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Service Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SA Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">JC Number</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Owner Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Owner Phone</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Branch</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bay No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">IN TS</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-56">Assign Technician</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">OUT TS</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time Diff</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remark</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map((jc) => {
-                  const assignment = assignments[jc.assignment_key]
-                  const isSaving = saving === jc.assignment_key
-                  const draft = stageDrafts[jc.assignment_key] ?? {
-                    bay_no: assignment?.bay_no ?? '',
-                    work_status: assignment?.work_status ?? 'work_inprocess',
-                    remark: assignment?.remark ?? '',
-                  }
-                  const bayOptions = buildBayOptions(jc.fuel_type)
-                  const canEditStage = Boolean(assignment) && !isSaving
-                  const hasStageChanges = Boolean(assignment) && (
-                    normalizeStageValue(draft.bay_no) !== normalizeStageValue(assignment?.bay_no)
-                    || normalizeStatusValue(draft.work_status) !== normalizeStatusValue(assignment?.work_status)
-                    || normalizeStageValue(draft.remark) !== normalizeStageValue(assignment?.remark)
-                  )
-
-                  return (
-                    <tr key={jc.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(jc.created_at)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.created_by || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.source || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap font-medium text-blue-700">{jc.reg_number || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.model || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.service_type || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.sa_name || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.jc_number || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.owner_name || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.owner_phone || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{jc.branch || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <select
-                          value={draft.bay_no}
-                          onChange={(e) => patchStageDraft(jc.assignment_key, { bay_no: e.target.value })}
-                          disabled={!canEditStage}
-                          className="w-28 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
-                        >
-                          <option value="">— Select —</option>
-                          {bayOptions.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{formatTimestamp(assignment?.assigned_at)}</td>
-                      <td className="px-4 py-3 w-56">
-                        <select
-                          value={assignment?.technician_code ?? ''}
-                          onChange={(e) => assignTechnician(jc.assignment_key, e.target.value)}
-                          disabled={isSaving}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
-                        >
-                          <option value="">— Select Technician —</option>
-                          {employees.map((emp) => (
-                            <option key={emp.employee_code} value={emp.employee_code}>
-                              {emp.employee_name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={draft.work_status}
-                          onChange={(e) => patchStageDraft(jc.assignment_key, { work_status: e.target.value })}
-                          disabled={!canEditStage}
-                          className="w-36 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
-                        >
-                          {STATUS_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{formatTimestamp(assignment?.out_ts)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{formatInterval(assignment?.time_diff)}</td>
-                      <td className="px-4 py-3">
-                        <input
-                          value={draft.remark}
-                          onChange={(e) => patchStageDraft(jc.assignment_key, { remark: e.target.value })}
-                          disabled={!canEditStage}
-                          placeholder="Add remark"
-                          className="w-44 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => void saveStage(jc.assignment_key)}
-                          disabled={!canEditStage || !hasStageChanges}
-                          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isSaving ? 'Saving...' : assignment ? 'Save Stage' : 'Assign First'}
-                        </button>
+                    return (
+                      <tr key={jc.id}>
+                        <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>
+                          {formatDate(jc.created_at)}
+                        </td>
+                        <td className="mono strong" style={{ color: 'var(--accent)' }}>
+                          {jc.reg_number || '—'}
+                        </td>
+                        <td>{jc.model || '—'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{jc.service_type || '—'}</td>
+                        <td className="strong" style={{ whiteSpace: 'nowrap' }}>
+                          {jc.sa_name || '—'}
+                        </td>
+                        <td className="mono" style={{ fontSize: 12.5 }}>
+                          {jc.jc_number || '—'}
+                        </td>
+                        <td>{jc.branch || '—'}</td>
+                        <td>
+                          <select
+                            className="sel"
+                            style={{ height: 34, minWidth: 170 }}
+                            value={assignment?.technician_code ?? ''}
+                            onChange={(e) => assignTechnician(jc.assignment_key, e.target.value)}
+                            disabled={isSaving}
+                          >
+                            <option value="">— Select Technician —</option>
+                            {employees.map((emp) => (
+                              <option key={emp.employee_code} value={emp.employee_code}>
+                                {emp.employee_name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>
+                          {formatTimestamp(assignment?.assigned_at) || '—'}
+                        </td>
+                        <td>
+                          <select
+                            className="sel"
+                            style={{ height: 34, width: 96 }}
+                            value={draft.bay_no}
+                            disabled={!canEditStage}
+                            onChange={(e) => patchStageDraft(jc.assignment_key, { bay_no: e.target.value })}
+                          >
+                            <option value="">—</option>
+                            {bayOptions.map((b) => (
+                              <option key={b} value={b}>
+                                {b}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          {assignment ? (
+                            <select
+                              className="sel"
+                              style={{ height: 34, width: 150 }}
+                              value={draft.work_status}
+                              onChange={(e) =>
+                                patchStageDraft(jc.assignment_key, { work_status: e.target.value })
+                              }
+                              disabled={!canEditStage}
+                            >
+                              {STATUS_OPTIONS.map((s) => (
+                                <option key={s.value} value={s.value}>
+                                  {s.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span style={{ color: 'var(--faint)', fontSize: 12.5 }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          <input
+                            className="inp"
+                            style={{ height: 34, width: 150 }}
+                            value={draft.remark}
+                            disabled={!canEditStage}
+                            placeholder="Add remark"
+                            onChange={(e) => patchStageDraft(jc.assignment_key, { remark: e.target.value })}
+                          />
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            className="btn btn--primary btn--sm"
+                            disabled={!assignment || !hasStageChanges}
+                            style={{ opacity: assignment && hasStageChanges ? 1 : 0.5 }}
+                            onClick={() => {
+                              saveStage(jc.assignment_key)
+                            }}
+                          >
+                            {assignment ? 'Save stage' : 'Assign first'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={13} style={{ textAlign: 'center', padding: 40, color: 'var(--faint)' }}>
+                        No job cards match your filters
                       </td>
                     </tr>
-                  )
-                })}
-              </tbody>
+                  )}
+                </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
