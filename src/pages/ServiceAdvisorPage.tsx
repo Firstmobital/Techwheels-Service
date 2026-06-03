@@ -158,7 +158,7 @@ export default function ServiceAdvisorPage() {
     [displayedRows],
   )
 
-  // Detect if user is admin by checking module permissions
+  // Detect admin from canonical users.role so admin bypass is stable across module-id changes.
   async function checkIfAdmin() {
     try {
       const { data: session } = await supabase.auth.getSession()
@@ -167,15 +167,15 @@ export default function ServiceAdvisorPage() {
         return false
       }
 
-      // Check user_module_permissions for 'reception' module with can_delete
-      const { data: perms } = await supabase
-        .from('user_module_permissions')
-        .select('can_modify, can_delete')
-        .eq('user_id', session.session.user.id)
-        .eq('module_id', 1) // Reception module ID
-        .single()
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role, is_active')
+        .eq('id', session.session.user.id)
+        .maybeSingle()
 
-      const nextIsAdmin = perms?.can_delete === true && perms?.can_modify === true
+      const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+      const isActive = (profile as { is_active?: boolean | null } | null)?.is_active === true
+      const nextIsAdmin = role === 'admin' && isActive
       setIsAdmin(nextIsAdmin)
       return nextIsAdmin
     } catch {

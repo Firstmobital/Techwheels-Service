@@ -1,9 +1,9 @@
 # RBAC Dynamic Access Control — Master Implementation Plan
 
 **Version**: 2026-06-01  
-**Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
+**Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-03 14:20 UTC  
+**Last Updated**: 2026-06-03 22:30 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -31,6 +31,29 @@
 - Admin Set Dealer popup contract clarified and locked: popup updates fallback dealer metadata only; it must not create/update `user_employee_links` mappings.
 - Dealer scope precedence documented for frontend auth resolution: mapping first, then metadata fallback, then users-table fallback.
 - Cross-layer precedence drift identified for follow-up: SQL `my_dealer_code()` may still resolve metadata before mapping depending on deployed migration order; this must be aligned before production hardening.
+
+### Execution Update (2026-06-03)
+
+- Migration executed in Supabase SQL Editor: `20260603170500_admin_unrestricted_rls_bypass.sql`.
+- Policy hardening objective: active admin users should not be blocked by dealer-bound RLS predicates on touched tables.
+- Tables/policy families touched by this execution include dealer-bound policies on:
+  - `public.service_parts_order_data`
+  - `public.service_reception_entries`
+  - `public.settings_model_options`
+  - `public.vehicles`
+  - `storage.objects` (autodoc bucket policies)
+- Frontend alignment completed for admin-unrestricted module/scope handling:
+  - `src/lib/api/auth.ts` (admin scope source path)
+  - `src/App.tsx` (admin module-access unblock for route guards)
+  - `src/pages/ServiceAdvisorPage.tsx` (canonical admin detection via `users.role` + `is_active`)
+- Post-execution verification completed using `20260603171500_admin_unrestricted_rls_bypass_verify.sql` with expected admin-bypass policy counts:
+  - `public.service_parts_order_data` = 4
+  - `public.service_reception_entries` = 4
+  - `public.settings_model_options` = 4
+  - `public.vehicles` = 3
+  - `storage.objects` = 4
+- Verification conclusion: targeted dealer-bound policy families now include explicit `public.is_admin()` bypass and are considered hardened for Phase 1C scope.
+- Remaining governance step: include this verified state in the next authoritative dump refresh and policy text re-audit from `local_folder/backups/full_database.sql`.
 
 ### Superadmin Default Access Policy (Locked)
 

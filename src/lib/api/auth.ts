@@ -10,7 +10,37 @@ export type DealerScopeContext = {
   dealerCode: string
   dealerCodes: string[]
   dealerName: string | null
-  source: 'mapping' | 'metadata' | 'users_table'
+  source: 'admin' | 'mapping' | 'metadata' | 'users_table'
+}
+
+async function isActiveAdmin(userId: string): Promise<boolean> {
+  const roleRes = await supabase
+    .from('users')
+    .select('role, is_active')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (roleRes.error) return false
+
+  const row = roleRes.data as { role?: string | null; is_active?: boolean | null } | null
+  const role = String(row?.role ?? '').trim().toLowerCase()
+  return role === 'admin' && row?.is_active === true
+}
+
+async function resolveGlobalDealerCodesForAdmin(): Promise<string[]> {
+  const mappingRes = await supabase
+    .from('user_employee_links')
+    .select('dealer_code')
+
+  if (mappingRes.error) return []
+
+  return Array.from(
+    new Set(
+      (mappingRes.data ?? [])
+        .map((row) => String((row as { dealer_code?: string | null }).dealer_code ?? '').trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  )
 }
 
 async function resolveDealerFromMappings(userId: string): Promise<DealerContext | null> {
@@ -108,13 +138,6 @@ export async function getDealerScopeContext(): Promise<ApiResult<DealerScopeCont
   const user = data.session?.user
   const userId = user?.id
 
-  if (userId) {
-    const fromMappingsScope = await resolveDealerScopeFromMappings(userId)
-    if (fromMappingsScope) {
-      return ok(fromMappingsScope)
-    }
-  }
-
   const userMetadata = (user?.user_metadata ?? {}) as Record<string, unknown>
   const appMetadata = (user?.app_metadata ?? {}) as Record<string, unknown>
 
@@ -129,6 +152,38 @@ export async function getDealerScopeContext(): Promise<ApiResult<DealerScopeCont
         .map((value) => String(value ?? '').trim().toUpperCase())
         .filter(Boolean)
     : []
+
+  if (userId && await isActiveAdmin(userId)) {
+    const [globalMappedDealerCodes, usersTableDealer] = await Promise.all([
+      resolveGlobalDealerCodesForAdmin(),
+      resolveDealerFromUsersTable(userId),
+    ])
+
+    const mergedDealerCodes = Array.from(
+      new Set([
+        ...globalMappedDealerCodes,
+        ...dealerCodesFromMeta,
+        dealerCode,
+        String(usersTableDealer?.dealerCode ?? '').trim().toUpperCase(),
+      ].filter(Boolean)),
+    )
+
+    if (mergedDealerCodes.length > 0) {
+      return ok({
+        dealerCode: mergedDealerCodes[0],
+        dealerCodes: mergedDealerCodes,
+        dealerName: dealerName || usersTableDealer?.dealerName || null,
+        source: 'admin',
+      })
+    }
+  }
+
+  if (userId) {
+    const fromMappingsScope = await resolveDealerScopeFromMappings(userId)
+    if (fromMappingsScope) {
+      return ok(fromMappingsScope)
+    }
+  }
 
   if (dealerCode) {
     return ok({

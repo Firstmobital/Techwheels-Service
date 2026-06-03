@@ -178,42 +178,6 @@ const WR_BACKORDER = [
   { branch: 'EV (500A840)', rows: 135, zsor: 83, zpgo: 43, zsso: 8, note: '188 intransit units · CED panels, Headlamp, Bumper' },
 ]
 
-const WR_CLAIM_TYPES = [
-  { type: 'Normal WC', claims: 636, settle: 93, reject: 1.8, rev20: '₹6.10L' },
-  { type: 'Extended WC', claims: 66, settle: 94.5, reject: 0, rev20: '₹3.19L' },
-  { type: 'Updation', claims: 720, settle: 90, reject: 8.1, rev20: '—' },
-  { type: 'AMC', claims: 250, settle: 64, reject: 0, rev20: '—' },
-  { type: 'Goodwill', claims: 44, settle: 97.7, reject: 2.3, rev20: 'OEM' },
-  { type: 'PDI', claims: 1065, settle: 87.6, reject: 12.4, rev20: '—' },
-  { type: '1st FSB', claims: 1320, settle: 96, reject: 4, rev20: '—' },
-  { type: '2nd FSB', claims: 1100, settle: 82.6, reject: 17.4, rev20: '—' },
-  { type: '3rd FSB', claims: 697, settle: 95, reject: 5, rev20: '—' },
-]
-
-const WR_REJECTIONS = [
-  { reason: 'PDI — JC open > 15 days', n: 77, pct: 40, tone: 'var(--danger)' },
-  { reason: 'Updation — Safari/Harrier ADAS', n: 46, pct: 24, tone: 'var(--danger)' },
-  { reason: 'PDI — checksheet not in CRMDMS', n: 32, pct: 16, tone: 'var(--warn)' },
-  { reason: 'PDI — date after delivery/dup', n: 23, pct: 12, tone: 'var(--warn)' },
-  { reason: 'WC / Goodwill — other', n: 14, pct: 7, tone: 'var(--muted)' },
-]
-
-const WR_TAT = [
-  { stage: 'Initial → Submit', days: 0.8, pct: 16, flag: 'Good', tone: 'var(--success)' },
-  { stage: 'Submit → Review', days: 2.1, pct: 42, flag: 'Watch', tone: 'var(--warn)' },
-  { stage: 'Review → Approve', days: 4.7, pct: 94, flag: 'High', tone: 'var(--danger)' },
-  { stage: 'Approve → Settle', days: 3.2, pct: 64, flag: 'Watch', tone: 'var(--warn)' },
-  { stage: 'End-to-end', days: 10.8, pct: 100, flag: 'High', tone: 'var(--danger)' },
-]
-
-const WR_TYPE_MIX = [
-  { type: 'Warranty', n: 89, tone: 'var(--success)' },
-  { type: 'PDI', n: 34, tone: 'var(--accent)' },
-  { type: 'Goodwill', n: 52, tone: '#534AB7' },
-  { type: 'Campaign', n: 41, tone: 'var(--warn)' },
-  { type: 'Others', n: 32, tone: 'var(--muted)' },
-]
-
 const PEND_TONE = {
   created: { l: 'Created', c: 'var(--danger)', bg: 'var(--danger-bg)' },
   sop: { l: 'Await SOP', c: 'var(--warn)', bg: 'var(--warn-bg)' },
@@ -239,24 +203,6 @@ function formatAmountShort(value: number): string {
 
 function normalizeText(value: string | null | undefined): string {
   return String(value ?? '').trim().toLowerCase()
-}
-
-function normalizeRole(value: string | null | undefined): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-}
-
-function isBusinessOwnerRole(roleValue: string | null | undefined): boolean {
-  const normalized = normalizeRole(roleValue)
-  if (!normalized) return false
-  return (
-    normalized === 'admin' ||
-    normalized === 'owner' ||
-    normalized === 'businessowner' ||
-    normalized === 'superadmin'
-  )
 }
 
 function inferPortal(record: WarrantyRecord): 'PV' | 'EV' {
@@ -564,7 +510,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   void dateFilter
 
   const [records, setRecords] = useState<WarrantyRecord[]>([])
-  const [viewerRole, setViewerRole] = useState<string>('')
   const [viewerDealerCodes, setViewerDealerCodes] = useState<string[]>([])
   const [selectedLocation, setSelectedLocation] = useState<LocationFilter>('ALL')
   const [selectedFuelType, setSelectedFuelType] = useState<FuelTypeFilter>('ALL')
@@ -577,51 +522,14 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
     const loadViewerContext = async () => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!active || !user) return
-
-        const [{ data: profile }, { data: modules }, scopeResult] = await Promise.all([
-          supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
-          supabase.from('modules').select('id, name, route').eq('is_active', true),
-          getDealerScopeContext(),
-        ])
+        const scopeResult = await getDealerScopeContext()
 
         if (!active) return
-
-        const reportsModule = ((modules as Array<{ id: number; name?: string | null; route?: string | null }> | null) ?? []).find((module) => {
-          const moduleName = normalizeText(module.name)
-          const moduleRoute = normalizeText(module.route)
-          return moduleName === 'reports' || moduleRoute === '/reports'
-        })
-
-        let hasAdminLikeReportsPermission = false
-        if (reportsModule?.id) {
-          const { data: reportPerm } = await supabase
-            .from('user_module_permissions')
-            .select('can_modify, can_delete')
-            .eq('user_id', user.id)
-            .eq('module_id', reportsModule.id)
-            .maybeSingle()
-
-          const perms = reportPerm as { can_modify?: boolean; can_delete?: boolean } | null
-          hasAdminLikeReportsPermission = perms?.can_modify === true && perms?.can_delete === true
-        }
-
-        const roleFromProfile = String((profile as { role?: string } | null)?.role ?? '').trim()
-        const roleFromUserMeta = String((user.user_metadata?.role as string | undefined) ?? '').trim()
-        const roleFromAppMeta = String((user.app_metadata?.role as string | undefined) ?? '').trim()
-        const resolvedRole = roleFromProfile || roleFromUserMeta || roleFromAppMeta
-        const normalizedRole = normalizeRole(resolvedRole)
-        setViewerRole(hasAdminLikeReportsPermission ? 'admin' : normalizedRole)
 
         const uniqueDealerCodes = Array.from(new Set(scopeResult.data?.dealerCodes ?? []))
         setViewerDealerCodes(uniqueDealerCodes)
       } catch {
         if (!active) return
-        setViewerRole('')
         setViewerDealerCodes([])
       }
     }
@@ -636,6 +544,33 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   useEffect(() => {
     let active = true
 
+    const fetchAllRowsForTable = async (tableName: string): Promise<WarrantySourceRow[]> => {
+      const pageSize = 1000
+      let from = 0
+      const allRows: WarrantySourceRow[] = []
+
+      while (true) {
+        const to = from + pageSize - 1
+        const { data, error: pageError } = await supabase
+          .from(tableName)
+          .select('id, branch, location, portal, source_file_name, source_row_data, created_at')
+          .order('id', { ascending: true })
+          .range(from, to)
+
+        if (pageError) {
+          throw new Error(`${tableName}: ${pageError.message}`)
+        }
+
+        const rows = (data as WarrantySourceRow[] | null) ?? []
+        allRows.push(...rows)
+
+        if (rows.length < pageSize) break
+        from += pageSize
+      }
+
+      return allRows
+    }
+
     const load = async () => {
       setIsLoading(true)
       setError(null)
@@ -643,16 +578,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       try {
         const tableResults = await Promise.all(
           SOURCE_TABLES.map(async ({ tableName, category }) => {
-            const { data, error: tableError } = await supabase
-              .from(tableName)
-              .select('id, branch, location, portal, source_file_name, source_row_data, created_at')
-              .limit(12000)
-
-            if (tableError) {
-              throw new Error(`${tableName}: ${tableError.message}`)
-            }
-
-            const rows = ((data as WarrantySourceRow[] | null) ?? []).map((row) => ({ row, category, tableName }))
+            const data = await fetchAllRowsForTable(tableName)
+            const rows = data.map((row) => ({ row, category, tableName }))
             return { tableName, rows }
           }),
         )
@@ -724,13 +651,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [])
 
   const scopedDealerRules = useMemo(() => {
-    if (isBusinessOwnerRole(viewerRole)) return DEALER_CODE_RULES
     if (viewerDealerCodes.length === 0) return []
 
     return DEALER_CODE_RULES.filter((rule) =>
       viewerDealerCodes.some((dealerCode) => dealerCode.includes(rule.key)),
     )
-  }, [viewerDealerCodes, viewerRole])
+  }, [viewerDealerCodes])
 
   const locationOptions = useMemo(() => {
     return Array.from(new Set(scopedDealerRules.map((rule) => rule.location))) as Array<'Ajmer Road' | 'Sitapura'>
@@ -929,6 +855,150 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     })
   }, [filteredRecords])
 
+  const computedClaimTypeRows = useMemo(() => {
+    const warrantyRows = filteredRecords.filter((record) => record.category === 'Warranty Claim')
+    const normalWcRows = warrantyRows.filter((record) => !normalizeText(record.model).includes('ev'))
+    const extWcRows = warrantyRows.filter((record) => normalizeText(record.model).includes('ev'))
+
+    const buildRow = (label: string, rows: WarrantyRecord[], revenueMode: 'parts20' | 'none' | 'oem' | 'na' = 'none') => {
+      const total = rows.length
+      const settled = rows.filter((record) => normalizeStatusBucket(record.status) === 'settled').length
+      const rejected = rows.filter((record) => normalizeStatusBucket(record.status) === 'rejected').length
+      const settlePct = total > 0 ? Number(((settled / total) * 100).toFixed(1)) : 0
+      const rejectPct = total > 0 ? Number(((rejected / total) * 100).toFixed(1)) : 0
+
+      let rev20 = '—'
+      if (revenueMode === 'parts20') {
+        rev20 = formatAmountShort(rows.reduce((sum, record) => sum + Math.max(record.partsAmount, 0) * 0.2, 0))
+      } else if (revenueMode === 'oem') {
+        rev20 = 'OEM'
+      } else if (revenueMode === 'na') {
+        rev20 = 'N/A'
+      }
+
+      return {
+        type: label,
+        claims: total,
+        settle: settlePct,
+        reject: rejectPct,
+        rev20,
+      }
+    }
+
+    return [
+      buildRow('Normal WC', normalWcRows, 'parts20'),
+      buildRow('Extended WC', extWcRows, 'parts20'),
+      buildRow('Updation', filteredRecords.filter((record) => record.category === 'Updation')),
+      buildRow('AMC', filteredRecords.filter((record) => record.category === 'AMC')),
+      buildRow('Goodwill', filteredRecords.filter((record) => record.category === 'Goodwill'), 'oem'),
+      buildRow('PDI', [], 'na'),
+      buildRow('1st FSB', [], 'na'),
+      buildRow('2nd FSB', [], 'na'),
+      buildRow('3rd FSB', [], 'na'),
+    ]
+  }, [filteredRecords])
+
+  const computedRejectionRows = useMemo(() => {
+    const rejectedRows = filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'rejected')
+    const grouped = new Map<string, number>()
+    for (const row of rejectedRows) {
+      const reason = String(row.rejectionReason || '').trim() || '(blank reason)'
+      grouped.set(reason, (grouped.get(reason) ?? 0) + 1)
+    }
+
+    const totalRejected = rejectedRows.length
+    const ranked = Array.from(grouped.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+
+    return ranked.map(([reason, count], index) => ({
+      reason,
+      n: count,
+      pct: totalRejected > 0 ? Math.max(1, Math.round((count / totalRejected) * 100)) : 0,
+      tone: index < 2 ? 'var(--danger)' : index < 4 ? 'var(--warn)' : 'var(--muted)',
+    }))
+  }, [filteredRecords])
+
+  const computedTatRows = useMemo(() => {
+    const stageBuckets = {
+      created: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'created'),
+      submitted: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'submitted'),
+      awaiting_sop: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'awaiting_sop'),
+      approved: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'approved'),
+      settled: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'settled'),
+    }
+
+    const totalRows = Math.max(1, filteredRecords.length)
+    const avgAge = (rows: WarrantyRecord[]) => {
+      if (rows.length === 0) return 0
+      return Number((rows.reduce((sum, row) => sum + row.ageDays, 0) / rows.length).toFixed(1))
+    }
+    const stageLoad = (rows: WarrantyRecord[]) => Math.round((rows.length / totalRows) * 100)
+    const health = (days: number) => {
+      if (days <= 2) return { flag: 'Good', tone: 'var(--success)' }
+      if (days <= 5) return { flag: 'Watch', tone: 'var(--warn)' }
+      return { flag: 'High', tone: 'var(--danger)' }
+    }
+
+    const initialToSubmit = stageBuckets.created.concat(stageBuckets.submitted)
+    const submitToReview = stageBuckets.submitted
+    const reviewToApprove = stageBuckets.awaiting_sop
+    const approveToSettle = stageBuckets.approved
+    const settledRows = stageBuckets.settled
+
+    const rows = [
+      { stage: 'Initial → Submit', rows: initialToSubmit },
+      { stage: 'Submit → Review', rows: submitToReview },
+      { stage: 'Review → Approve', rows: reviewToApprove },
+      { stage: 'Approve → Settle', rows: approveToSettle },
+      { stage: 'End-to-end', rows: settledRows.length > 0 ? settledRows : filteredRecords },
+    ]
+
+    return rows.map((entry) => {
+      const days = avgAge(entry.rows)
+      const { flag, tone } = health(days)
+      return {
+        stage: entry.stage,
+        days,
+        pct: entry.stage === 'End-to-end' ? 100 : stageLoad(entry.rows),
+        flag,
+        tone,
+      }
+    })
+  }, [filteredRecords])
+
+  const computedTypeMix = useMemo(() => {
+    const groups = [
+      {
+        type: 'Warranty',
+        n: filteredRecords.filter((record) => record.category === 'Warranty Claim' || record.category === 'Claim Settlement' || record.category === 'Part WC').length,
+        tone: 'var(--success)',
+      },
+      {
+        type: 'FSB',
+        n: filteredRecords.filter((record) => record.category === 'FSB').length,
+        tone: 'var(--accent)',
+      },
+      {
+        type: 'Updation',
+        n: filteredRecords.filter((record) => record.category === 'Updation').length,
+        tone: '#534AB7',
+      },
+      {
+        type: 'AMC',
+        n: filteredRecords.filter((record) => record.category === 'AMC').length,
+        tone: 'var(--warn)',
+      },
+      {
+        type: 'Goodwill',
+        n: filteredRecords.filter((record) => record.category === 'Goodwill').length,
+        tone: 'var(--muted)',
+      },
+    ]
+
+    return groups
+  }, [filteredRecords])
+
   const computedAlerts = useMemo(() => {
     // Alert 1: Created but not submitted — beyond 24 hrs
     const notSubmitted = filteredRecords.filter((record) => {
@@ -1065,14 +1135,13 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const dealerScopeLabel = useMemo(() => {
-    if (isBusinessOwnerRole(viewerRole)) return 'All dealer codes'
     if (viewerDealerCodes.length > 0) return viewerDealerCodes.join(', ')
     return 'No dealer mapping assigned'
-  }, [viewerDealerCodes, viewerRole])
+  }, [viewerDealerCodes])
 
   const hasMissingDealerScope = useMemo(() => {
-    return !isBusinessOwnerRole(viewerRole) && viewerDealerCodes.length === 0
-  }, [viewerDealerCodes, viewerRole])
+    return viewerDealerCodes.length === 0
+  }, [viewerDealerCodes])
 
   if (isLoading) {
     return (
@@ -1367,7 +1436,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                     </tr>
                   </thead>
                   <tbody>
-                    {WR_CLAIM_TYPES.map((t, i) => (
+                    {computedClaimTypeRows.map((t, i) => (
                       <tr key={i}>
                         <td className="strong">{t.type}</td>
                         <td className="ctr">{t.claims}</td>
@@ -1388,19 +1457,23 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
           <div className="grid-2" style={{ marginTop: 'var(--gap)' }}>
             <Card title="Top rejection reasons" sub="real drivers · 194 rejections across categories">
-              {WR_REJECTIONS.map((r, i) => (
-                <div key={i} style={{ marginBottom: 11 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5, gap: 8 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{r.reason}</span>
-                    <span className="mono" style={{ color: 'var(--muted)', flex: 'none' }}>
-                      {r.n} · {r.pct}%
-                    </span>
-                  </div>
-                  <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
-                    <span style={{ display: 'block', height: '100%', width: `${r.pct}%`, background: r.tone, borderRadius: 99 }} />
-                  </div>
-                </div>
-              ))}
+                    {computedRejectionRows.length === 0 ? (
+                      <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>No rejected rows in current scope.</div>
+                    ) : (
+                      computedRejectionRows.map((r, i) => (
+                        <div key={i} style={{ marginBottom: 11 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5, gap: 8 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{r.reason}</span>
+                            <span className="mono" style={{ color: 'var(--muted)', flex: 'none' }}>
+                              {r.n} · {r.pct}%
+                            </span>
+                          </div>
+                          <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
+                            <span style={{ display: 'block', height: '100%', width: `${r.pct}%`, background: r.tone, borderRadius: 99 }} />
+                          </div>
+                        </div>
+                      ))
+                    )}
             </Card>
 
             <Card title="Claim funnel TAT" sub="avg days per stage · Good / Watch / High" pad={false}>
@@ -1415,7 +1488,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                     </tr>
                   </thead>
                   <tbody>
-                    {WR_TAT.map((t, i) => (
+                    {computedTatRows.map((t, i) => (
                       <tr key={i}>
                         <td className="strong">{t.stage}</td>
                         <td className="ctr" style={{ color: t.tone, fontWeight: 700 }}>
@@ -1441,7 +1514,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
           <Card title="Claim type mix" sub="claims by type — current monitoring window">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
-              {WR_TYPE_MIX.map((t, i) => (
+              {computedTypeMix.map((t, i) => (
                 <div key={i} style={{ textAlign: 'center', padding: '12px 6px', borderRadius: 'var(--r-sm)', background: `color-mix(in srgb,${t.tone} 10%, #fff)` }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: t.tone }}>{t.n}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{t.type}</div>

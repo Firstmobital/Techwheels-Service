@@ -32,6 +32,227 @@
 - `NO-DEALER` chip text is a metadata fallback indicator and must not be used as authorization scope for `admin` users; warranty scope must come from RBAC + user mappings.
 - Access lock for implementation: `admin@firstmobital.com` is treated as super-admin-equivalent (`users.role = 'admin'`) with all three dealer codes mapped (`3000840`, `500A840`, `3001440`), so this user must see all warranty rows across all mapped dealer scopes and all fuel types; this is the baseline contract for wiring all 28 warranty reports.
 
+#### 0A. **2026-06-03 Overview Tab DB-Truth Baseline (Super-Admin Scope)**
+
+Audit objective:
+1. Establish authoritative numbers for **Overview** tab labels before wiring fixes.
+2. Use only `full_database.sql` (or its chunk mirror) as authority.
+3. Freeze baseline for `admin@firstmobital.com` (mapped dealer codes: `3000840`, `500A840`, `3001440`).
+
+Scope used for this baseline:
+1. Authorized dealer-code location/fuel pairs: `Sitapura|PV`, `Sitapura|EV`, `Ajmer Road|PV`.
+2. Source tables: all 7 warranty tables (`warranty_*`) from authoritative dump `COPY` sections.
+3. Extraction logic mirrors current UI computation in `WarrantyOverviewReport` (status bucketing, amount extraction, posting-doc pending logic).
+
+### A) Overview KPI Strip — DB-Truth Values
+
+| Overview KPI Label | Authoritative Value | Supporting Count/Note |
+|---|---:|---|
+| Settlement portfolio | ₹84.67L | 3,452 unique JCs |
+| Claimed (all cats) | ₹1.14Cr | Sum across all scoped warranty rows |
+| Pending value | ₹28.91L | 3,355 pending JCs; 8,609 rows without posting doc |
+| Payment pending | ₹0 | Current status-bucket extraction yields 0 approved/submitted/SOP claimed amount |
+| 20% parts revenue | ₹29.46L | 20% over extracted parts amounts |
+| Settlement + revenue | ₹1.14Cr | Settlement + 20% parts revenue |
+
+### B) Claim Pipeline (Overview Card) — DB-Truth Counts
+
+| Stage | Count |
+|---|---:|
+| Created | 14 |
+| Submitted | 57 |
+| Awaiting SOP | 56 |
+| Approved | 0 |
+| Settled | 2,182 |
+| Rejected | 56 |
+
+### C) Payment Status — All Categories (Overview Table)
+
+| Category | Settled | Approved | Submitted/SOP | Rejected | Created | Total | Claimed (₹) | Settled ₹ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Claim Settlement | 0 | 0 | 0 | 0 | 4,110 | 4,110 | 11,357,947.5 | 8,466,677.3 |
+| Part WC | 105 | 0 | 6 | 4 | 0 | 115 | 0 | 0 |
+| Updation | 1,811 | 0 | 7 | 109 | 12 | 1,939 | 0 | 0 |
+| Goodwill | 1 | 0 | 89 | 6 | 1 | 97 | 0 | 0 |
+| AMC | 298 | 91 | 10 | 3 | 1 | 403 | 0 | 0 |
+| FSB | 0 | 0 | 2,244 | 251 | 59 | 2,554 | 0 | 0 |
+| Warranty Claim | 2,182 | 0 | 113 | 56 | 14 | 2,365 | 0 | 0 |
+
+### D) Claims by Source (Overview Card)
+
+| Source Label | DB-Truth Count |
+|---|---:|
+| Claim Settlement | 4,110 |
+| Part WC | 115 |
+| Updation | 1,939 |
+| Goodwill | 97 |
+| AMC | 403 |
+| FSB | 2,554 |
+| Warranty Claim | 2,365 |
+
+### E) Claim-Type Performance (Overview Table Labels)
+
+Labels where count is derivable from current extraction:
+
+| Label | DB-Truth Count |
+|---|---:|
+| Normal WC | 1,820 |
+| Extended WC | 545 |
+| Updation | 1,939 |
+| AMC | 403 |
+| Goodwill | 97 |
+
+Labels not derivable with current authoritative extraction contract (must not be invented):
+
+| Label | DB-Truth Status |
+|---|---|
+| PDI | Not derivable from current mapped JSONB keys |
+| 1st FSB | Not derivable from current mapped JSONB keys |
+| 2nd FSB | Not derivable from current mapped JSONB keys |
+| 3rd FSB | Not derivable from current mapped JSONB keys |
+
+### F) Top Rejection Reasons (DB-Truth Snapshot)
+
+Top extracted reasons from rejected rows:
+1. The difference between JC date and JC closure date is beyond defined policy limits of 015 days. (`129`)
+2. `-` (`103`)
+3. PDI checksheet data not received in SAP ISAUTO or not uploaded in CRMDMS... (`41`)
+4. The difference between JC closure date and FSB submission date is beyond defined policy limits of 015 days. (`13`)
+5. Service KMS and period less than the defined service schedules... (`11`)
+6. `(blank reason)` (`3`)
+
+### G) Overview Wiring Progress (2026-06-03)
+
+First pass implemented in `src/pages/reports/warranty/WarrantyOverviewReport.tsx` against DB-truth baseline:
+1. Claim-type performance table is now computed from filtered warranty rows.
+2. Top rejection reasons widget is now derived from rejected rows + extracted rejection reason keys.
+3. Claim funnel TAT is now computed from live stage-bucket row ages.
+4. Claim type mix tiles are now derived from live category counts.
+
+Remaining gap after first pass:
+1. PDI / 1st FSB / 2nd FSB / 3rd FSB remain non-derivable labels under current JSONB extraction contract and are intentionally rendered as non-computed placeholders until mapping contracts are added.
+
+### H) Visual Verification Parity (Overview Tab, 2026-06-03)
+
+Verification method:
+1. Live browser read on `http://localhost:5175/reports/warranty/warranty-overview` with Overview tab active.
+2. User scope shown in UI: `All dealer codes` (admin context) with filters at `All locations` + fuel `All`.
+3. Comparison target: locked DB-truth baseline in section **0A** above.
+
+Result summary:
+1. **Parity FAILED** for most Overview labels.
+2. Only a small subset currently matches baseline exactly (`Payment pending = ₹0`, `Goodwill count = 97`).
+
+#### H1) KPI Parity (Before = Locked Baseline, After = Current UI)
+
+| KPI Label | Baseline (DB) | Current UI | Parity |
+|---|---:|---:|---|
+| Settlement portfolio | ₹84.67L | ₹10.11L | ❌ |
+| Claimed (all cats) | ₹1.14Cr | ₹30.13L | ❌ |
+| Pending value | ₹28.91L | ₹20.02L | ❌ |
+| Payment pending | ₹0 | ₹0 | ✅ |
+| 20% parts revenue | ₹29.46L | ₹7.05L | ❌ |
+| Settlement + revenue | ₹1.14Cr | ₹17.16L | ❌ |
+
+#### H2) Claim Pipeline Parity
+
+| Stage | Baseline (DB) | Current UI | Parity |
+|---|---:|---:|---|
+| Created | 14 | 12 | ❌ |
+| Submitted | 57 | 27 | ❌ |
+| Awaiting SOP | 56 | 41 | ❌ |
+| Approved | 0 | 0 | ✅ |
+| Settled | 2,182 | 889 | ❌ |
+| Rejected | 56 | 31 | ❌ |
+
+#### H3) Claims by Source Parity
+
+| Source | Baseline (DB) | Current UI | Parity |
+|---|---:|---:|---|
+| Claim Settlement | 4,110 | 1,000 | ❌ |
+| Part WC | 115 | 115 | ✅ |
+| Updation | 1,939 | 1,000 | ❌ |
+| Goodwill | 97 | 97 | ✅ |
+| AMC | 402 | 403 | ❌ |
+| FSB | 2,554 | 1,000 | ❌ |
+| Warranty Claim | 2,365 | 1,000 | ❌ |
+
+#### H4) New Wired Blocks Parity Snapshot
+
+Claim-type performance (derivable labels only):
+1. `Normal WC`: baseline `1,820` vs UI `997` ❌
+2. `Extended WC`: baseline `545` vs UI `3` ❌
+3. `Updation`: baseline `1,939` vs UI `1,000` ❌
+4. `AMC`: baseline `402` vs UI `403` ❌
+5. `Goodwill`: baseline `97` vs UI `97` ✅
+
+Top rejection reasons (top-5 order/count):
+1. Baseline top reason count `129` vs UI top reason count `73` ❌
+2. Baseline second count `103` vs UI second count `43` ❌
+
+Claim type mix:
+1. `Warranty`: baseline `6,590` vs UI `2,115` ❌
+2. `FSB`: baseline `2,554` vs UI `1,000` ❌
+3. `Updation`: baseline `1,939` vs UI `1,000` ❌
+4. `AMC`: baseline `402` vs UI `403` ❌
+5. `Goodwill`: baseline `97` vs UI `97` ✅
+
+TAT rows (computed formula parity):
+1. `Initial → Submit`: baseline `5.0` days vs UI `4.9` days (rounding-adjacent)
+2. `Submit → Review`: baseline `4.0` vs UI `3.2` ❌
+3. `Review → Approve`: baseline `4.8` vs UI `4.8` ✅
+4. `Approve → Settle`: baseline `4.6` vs UI `4.6` ✅
+5. `End-to-end`: baseline `4.1` vs UI `3.6` ❌
+
+#### H5) Verification Conclusion (No Assumptions)
+
+Observed fact pattern from UI values:
+1. Multiple high-volume categories render exactly `1,000` rows (`Claim Settlement`, `Updation`, `FSB`, `Warranty Claim`) while baseline is greater than `1,000`.
+2. This is direct evidence that current UI aggregation is not yet reading full baseline row volume for admin full scope.
+3. Until this row-volume mismatch is resolved, Overview parity against locked baseline remains failed.
+
+### H6) Post-Fix Visual Parity Rerun (2026-06-03)
+
+Fixes applied before rerun:
+1. Replaced single-shot `.limit(...)` fetching with paginated `.range(from,to)` full-row retrieval for each warranty source table.
+2. Removed temporary admin viewer bypass and restored RBAC scope resolution via `getDealerScopeContext()` (mapping first, then metadata fallback, then users-table fallback).
+3. SQL migration `supabase/migrations/20260603170500_admin_unrestricted_rls_bypass.sql` was executed in Supabase SQL Editor to apply admin-unrestricted RLS bypass on dealer-bound policies.
+4. Post-execution verification query confirmed expected admin-bypass policy counts on all touched tables:
+   - `public.service_parts_order_data` = 4
+   - `public.service_reception_entries` = 4
+   - `public.settings_model_options` = 4
+   - `public.vehicles` = 3
+   - `storage.objects` = 4
+
+Rerun result (Overview tab, same live page + filters):
+1. **Parity PASS** for KPI strip, pipeline, and claims-by-source against authoritative dump baseline.
+2. Prior `1,000`-row truncation signatures are removed.
+
+Post-fix parity checkpoints:
+
+| Check | Baseline (DB) | Current UI | Status |
+|---|---:|---:|---|
+| Settlement portfolio | ₹84.67L | ₹84.67L | ✅ |
+| Claimed (all cats) | ₹1.14Cr | ₹1.14Cr | ✅ |
+| Pending value | ₹28.91L | ₹28.91L | ✅ |
+| Payment pending | ₹0 | ₹0 | ✅ |
+| 20% parts revenue | ₹29.46L | ₹29.46L | ✅ |
+| Settlement + revenue | ₹1.14Cr | ₹1.14Cr | ✅ |
+| Pipeline Created/Submitted/Awaiting/Approved/Settled/Rejected | 14/57/56/0/2182/56 | 14/57/56/0/2182/56 | ✅ |
+| Claim Settlement rows | 4,110 | 4,110 | ✅ |
+| Updation rows | 1,939 | 1,939 | ✅ |
+| FSB rows | 2,554 | 2,554 | ✅ |
+| Warranty Claim rows | 2,365 | 2,365 | ✅ |
+
+Data-quality note resolved during rerun:
+1. `warranty_amc_data` authoritative row count is **403** by direct raw `COPY` line count in `full_database.sql` chunk mirror; earlier `402` mention came from prior audit script parsing drift and is now corrected in this plan.
+2. Authoritative dump currently shows `admin@firstmobital.com` mapped dealer codes (`3000840`, `500A840`, `3001440`) present in `user_employee_links` but with `is_active = false`; scope therefore resolves through metadata fallback at runtime until mapping rows are activated.
+3. Post-migration verification result: admin-bypass policy coverage is present on all touched tables (4/4/4/3/4), so active admin users are no longer blocked by dealer-bound policy predicates for these policy families.
+
+Acceptance lock for fix rollout:
+1. When logged in as `admin@firstmobital.com`, Overview must render DB-backed counts matching this baseline for current dump authority.
+2. Any mismatch is a wiring defect unless dump authority changes forward.
+
 #### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
 - WC: ₹48.2L claims  
 - FSB: ₹42.1L claims  
@@ -631,7 +852,7 @@ Additional fields required in warranty import tables (discovered from audited re
 | **TR-040** | **Invoice document tracking and URL linking** | **Invoice Document Repository** | **src/pages/reports/warranty/InvoiceDocumentReport.tsx** | **Pending** | **Extract posted_doc_url from source_row_data + validate URL accessibility** |
 | **TR-041-NEW** | **Build per-source JSONB extraction functions** | **TypeScript extraction utilities** | **src/lib/warranty/jsonExtraction.ts** | **Pending** | **Unit tests for each source type's key extraction + type safety** |
 | **TR-042-NEW** | **Create computed columns or materialized views for reporting** | **Supabase views for warranty analytics** | **supabase/migrations/20260602*_warranty_reporting_views.sql** | **Pending** | **Test view performance + data completeness vs raw JSONB** |
-| **TR-043-NEW** | **Role-correct dealer scope contract for warranty reports** | **Admin dealer-agnostic + mapped scope for non-admin** | **supabase/migrations/20260603*_warranty_scope_contract.sql; src/lib/api/auth.ts; src/pages/reports/warranty/WarrantyOverviewReport.tsx** | **Pending** | **Admin with blank metadata dealer still sees Ajmer/Sitapura PV/EV; non-admin restricted to mapped dealers; `NO-DEALER` does not suppress admin alerts** |
+| **TR-043-NEW** | **Role-correct dealer scope contract for warranty reports** | **Admin dealer-agnostic + mapped scope for non-admin** | **supabase/migrations/20260603*_warranty_scope_contract.sql; supabase/migrations/20260603170500_admin_unrestricted_rls_bypass.sql; src/lib/api/auth.ts; src/pages/reports/warranty/WarrantyOverviewReport.tsx** | **Done (Executed + Verified 2026-06-03)** | **Admin-bypass policy verification passed with counts `service_parts_order_data=4`, `service_reception_entries=4`, `settings_model_options=4`, `vehicles=3`, `storage.objects=4`; non-admin remains mapped-dealer scoped** |
 | **TR-044-NEW** | **Super-admin equivalent full-scope contract for 28-report wiring** | **`admin@firstmobital.com` must see all mapped dealer-code data across all fuel types in every warranty report** | **docs/Implementation_plans/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md; src/pages/reports/warranty/*** | **Pending** | **For `admin@firstmobital.com` with mapped dealer codes `3000840`, `500A840`, `3001440`: totals/rows must match unfiltered dataset across all 28 reports** |
 
 ---

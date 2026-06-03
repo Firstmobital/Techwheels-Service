@@ -403,6 +403,12 @@ function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
   return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
 }
 
+const ALL_ROUTE_MODULES: ModuleName[] = Array.from(
+  new Set(
+    (Object.values(ROUTE_MODULE_MAP) as ModuleName[][]).flat(),
+  ),
+)
+
 function AccessDenied() {
   return (
     <div className="page access-denied">
@@ -626,6 +632,8 @@ function AppInner() {
       const nextModules = new Set<string>(((permissionRows ?? []) as PermissionRow[]).map((row) => row.module_name))
 
       if (profile?.role === 'admin') {
+        ALL_ROUTE_MODULES.forEach((moduleName) => nextModules.add(moduleName))
+
         const { data: activeModules } = await supabase
           .from('modules')
           .select('name')
