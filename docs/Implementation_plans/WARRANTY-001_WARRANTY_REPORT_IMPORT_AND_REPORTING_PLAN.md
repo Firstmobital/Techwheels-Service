@@ -24,6 +24,12 @@
 
 ### Key Discoveries
 
+#### 0. **2026-06-03 DB-Truth Wiring Audit Delta**
+- Authoritative dump confirms `public.users.role` enum is limited to `admin|manager|staff|viewer`; there is no `super_admin` role literal in schema constraint.
+- Authoritative dump confirms `public.modules` includes `reports` as module id `7`; module-scoped admin behavior must be derived from `public.user_module_permissions` (`can_modify` + `can_delete`) rather than relying on role-string variants.
+- Current runtime warranty registration exposes one report route (`warranty-overview`) while traceability tasks `TR-024..TR-040` remain pending/partial; therefore 28-report DB-truth parity is not complete yet.
+- Warranty overview still contains multiple reference-constant blocks for non-overview sections; these need phased replacement with JSONB extraction-driven queries per TR-024..TR-040.
+
 #### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
 - WC: ₹48.2L claims  
 - FSB: ₹42.1L claims  
