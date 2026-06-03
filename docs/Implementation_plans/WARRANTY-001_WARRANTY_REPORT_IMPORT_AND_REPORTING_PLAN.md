@@ -30,6 +30,7 @@
 - Current runtime warranty registration exposes one report route (`warranty-overview`) while traceability tasks `TR-024..TR-040` remain pending/partial; therefore 28-report DB-truth parity is not complete yet.
 - Warranty overview still contains multiple reference-constant blocks for non-overview sections; these need phased replacement with JSONB extraction-driven queries per TR-024..TR-040.
 - `NO-DEALER` chip text is a metadata fallback indicator and must not be used as authorization scope for `admin` users; warranty scope must come from RBAC + user mappings.
+- Access lock for implementation: `admin@firstmobital.com` is treated as super-admin-equivalent (`users.role = 'admin'`) with all three dealer codes mapped (`3000840`, `500A840`, `3001440`), so this user must see all warranty rows across all mapped dealer scopes and all fuel types; this is the baseline contract for wiring all 28 warranty reports.
 
 #### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
 - WC: ₹48.2L claims  
@@ -631,6 +632,7 @@ Additional fields required in warranty import tables (discovered from audited re
 | **TR-041-NEW** | **Build per-source JSONB extraction functions** | **TypeScript extraction utilities** | **src/lib/warranty/jsonExtraction.ts** | **Pending** | **Unit tests for each source type's key extraction + type safety** |
 | **TR-042-NEW** | **Create computed columns or materialized views for reporting** | **Supabase views for warranty analytics** | **supabase/migrations/20260602*_warranty_reporting_views.sql** | **Pending** | **Test view performance + data completeness vs raw JSONB** |
 | **TR-043-NEW** | **Role-correct dealer scope contract for warranty reports** | **Admin dealer-agnostic + mapped scope for non-admin** | **supabase/migrations/20260603*_warranty_scope_contract.sql; src/lib/api/auth.ts; src/pages/reports/warranty/WarrantyOverviewReport.tsx** | **Pending** | **Admin with blank metadata dealer still sees Ajmer/Sitapura PV/EV; non-admin restricted to mapped dealers; `NO-DEALER` does not suppress admin alerts** |
+| **TR-044-NEW** | **Super-admin equivalent full-scope contract for 28-report wiring** | **`admin@firstmobital.com` must see all mapped dealer-code data across all fuel types in every warranty report** | **docs/Implementation_plans/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md; src/pages/reports/warranty/*** | **Pending** | **For `admin@firstmobital.com` with mapped dealer codes `3000840`, `500A840`, `3001440`: totals/rows must match unfiltered dataset across all 28 reports** |
 
 ---
 
@@ -662,6 +664,17 @@ Acceptance checks:
 2. Non-admin user mapped to `3000840` only sees Sitapura PV scope.
 3. Non-admin user with no active mapping gets explicit empty-state guidance.
 4. UI chip may display `NO-DEALER`, but data visibility still follows RBAC scope contract.
+
+### Super-Admin Equivalent Coverage Lock (2026-06-03)
+
+Locked implementation baseline for this plan:
+
+1. Test/control user is `admin@firstmobital.com`.
+2. This user is super-admin-equivalent by project policy (`users.role = 'admin'`, active admin full-module access).
+3. Dealer mappings for this user are locked as `3000840`, `500A840`, `3001440` (per RBAC master plan).
+4. Therefore, every warranty report query for this user must operate as full-scope across all mapped dealer codes and all fuel types represented by those mappings.
+5. No UI metadata fallback (including `NO-DEALER` chip state) may reduce or suppress this user scope.
+6. This lock applies to all 28 report wires in this plan (existing and pending rows in TR-001..TR-040 plus newly added traceability rows).
 
 ---
 

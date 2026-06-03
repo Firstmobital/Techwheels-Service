@@ -20,6 +20,7 @@ interface WarrantyAlert {
   label: string
   tone: string
   thresh: string
+  count: number
   rows: WarrantyAlertRow[]
   footer?: string
 }
@@ -357,14 +358,7 @@ const SOURCE_TABLES: SourceTableConfig[] = [
   { tableName: 'warranty_wc_data', category: 'Warranty Claim' },
 ]
 
-const STATUS_KEYS = [
-  'status',
-  'claim_status',
-  'current_status',
-  'settlement_status',
-  'approval_status',
-  'stage',
-]
+const STATUS_KEYS = ['claim_status', 'current_status', 'settlement_status', 'approval_status', 'stage', 'status']
 
 const REJECTION_REASON_KEYS = [
   'rejection_reason',
@@ -448,6 +442,30 @@ function sumByKeys(row: Record<string, unknown>, keys: string[]): number {
     }
   }
   return total
+}
+
+function extractStatusValue(row: Record<string, unknown>): string {
+  // Avoid treating fields like status_code (e.g. "Sold Chassis") as workflow status.
+  for (const key of STATUS_KEYS) {
+    const exact = row[key]
+    if (exact != null && String(exact).trim() !== '') return String(exact).trim()
+  }
+
+  const normalizedKeyMap = new Map<string, string>()
+  for (const key of Object.keys(row)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!normalizedKeyMap.has(normalizedKey)) normalizedKeyMap.set(normalizedKey, key)
+  }
+
+  const normalizedStatusKeys = ['claimstatus', 'currentstatus', 'settlementstatus', 'approvalstatus', 'stage', 'status']
+  for (const normalizedCandidate of normalizedStatusKeys) {
+    const matchedKey = normalizedKeyMap.get(normalizedCandidate)
+    if (!matchedKey) continue
+    const value = row[matchedKey]
+    if (value != null && String(value).trim() !== '') return String(value).trim()
+  }
+
+  return ''
 }
 
 function money(v: number | null | undefined): string {
@@ -647,7 +665,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         for (const tableResult of tableResults) {
           for (const { row, category, tableName } of tableResult.rows) {
             const source = row.source_row_data ?? {}
-            const status = extractByPreferredKeys(source, STATUS_KEYS)
+            const status = extractStatusValue(source)
             const rejectionReason = extractByPreferredKeys(source, REJECTION_REASON_KEYS)
             const postingDocNo = extractByPreferredKeys(source, POSTING_DOC_KEYS)
             const invoiceDateRaw = extractByPreferredKeys(source, INVOICE_DATE_KEYS)
@@ -949,6 +967,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         label: 'Created but not submitted — beyond 24 hrs',
         tone: 'var(--danger)',
         thresh: 'Created >24h',
+        count: notSubmitted.length,
         rows: notSubmitted.slice(0, 5).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
@@ -961,6 +980,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         label: 'Stuck in review stage — beyond 3 days',
         tone: 'var(--danger)',
         thresh: 'Review >3d',
+        count: stuckReview.length,
         rows: stuckReview.slice(0, 5).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
@@ -974,6 +994,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         label: 'SOP document pending — beyond 2 days',
         tone: 'var(--warn)',
         thresh: 'SOP pending >2d',
+        count: sopPending.length,
         rows: sopPending.slice(0, 3).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
@@ -986,6 +1007,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         label: 'Approved but payment not settled — beyond 5 days',
         tone: 'var(--warn)',
         thresh: 'Approved-not-settled >5d',
+        count: approvedUnsettled.length,
         rows: approvedUnsettled.slice(0, 4).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
@@ -999,6 +1021,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         label: 'Rejected claims — reason of rejection not filled',
         tone: 'var(--danger)',
         thresh: 'Rejection reason blank',
+        count: rejectionBlank.length,
         rows: rejectionBlank.slice(0, 3).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
@@ -1441,7 +1464,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                   </span>
                 </div>
                 <div className="kpi__val" style={{ color: a.tone }}>
-                  {a.rows.length}
+                  {a.count}
                 </div>
                 <div className="kpi__lab" style={{ fontSize: 12 }}>
                   {a.thresh}
@@ -1455,7 +1478,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               <Icon name="alert" size={17} />
             </span>
             <div>
-              <b>{computedAlerts.reduce((s, a) => s + a.rows.length, 0)} open alerts · action required today.</b> SLA thresholds: Created &gt;24h = red · Review &gt;3d = red · SOP pending &gt;2d = amber · Approved-not-settled &gt;5d = amber · rejection-reason-blank = audit risk.
+              <b>{computedAlerts.reduce((s, a) => s + a.count, 0)} open alerts · action required today.</b> SLA thresholds: Created &gt;24h = red · Review &gt;3d = red · SOP pending &gt;2d = amber · Approved-not-settled &gt;5d = amber · rejection-reason-blank = audit risk.
             </div>
           </div>
 
@@ -1464,7 +1487,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               key={i}
               accent={a.tone}
               title={a.label}
-              right={<span className="badge badge--no" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>{a.rows.length} claims</span>}
+              right={<span className="badge badge--no" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>{a.count} claims</span>}
               pad={false}
             >
               <div className="tbl-wrap scroll">
