@@ -53,6 +53,15 @@ export interface ServiceAdvisorEntryUpdateInput {
   remark?: string | null
 }
 
+const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
+  'Running Repairs',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+  'Updation',
+]
+
 function normalizePhone(value?: string | null): string | null {
   const digits = String(value ?? '').replace(/\D/g, '')
   if (!digits) return null
@@ -144,6 +153,7 @@ export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEnt
   const { data, error } = await supabase
     .from('service_reception_entries')
     .select('*')
+    .in('service_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
     .order('created_at', { ascending: false })
 
   if (error) {
