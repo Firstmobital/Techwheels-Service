@@ -28,6 +28,17 @@ const DEFAULT_SERVICE_TYPE_OPTIONS = [
   'Updation',
 ]
 
+const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
+  'running repairs',
+  'first free service',
+  'second free service',
+  'third free service',
+  'paid service',
+  'updation',
+])
+
+type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
+
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
   jc_number: '',
@@ -76,6 +87,13 @@ function mergeServiceTypes(...groups: Array<string[]>): string[] {
   return [...defaults, ...extras]
 }
 
+function getCategoryForServiceType(serviceType: string | null | undefined): Exclude<CategoryFilter, 'all'> {
+  const normalized = normalizeServiceType(String(serviceType ?? '')).toLowerCase()
+  if (!normalized) return 'null'
+  if (FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES.has(normalized)) return 'floor'
+  return 'other'
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -85,6 +103,7 @@ export default function ServiceAdvisorPage() {
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set())
   const [isAdmin, setIsAdmin] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState<string | 'all'>('all')
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -93,15 +112,32 @@ export default function ServiceAdvisorPage() {
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
 
-  const displayedRows = useMemo(() => {
+  const branchFilteredRows = useMemo(() => {
     if (selectedBranch === 'all') return rows
     return rows.filter(r => r.branch === selectedBranch)
   }, [rows, selectedBranch])
+
+  const displayedRows = useMemo(() => {
+    if (selectedCategory === 'all') return branchFilteredRows
+    return branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+  }, [branchFilteredRows, selectedCategory])
 
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
     return Array.from(branches).sort()
   }, [allRows])
+
+  const categoryCounts = useMemo(() => {
+    const floor = branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
+    const other = branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'other').length
+    const nullCount = branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'null').length
+    return {
+      all: branchFilteredRows.length,
+      floor,
+      other,
+      null: nullCount,
+    }
+  }, [branchFilteredRows])
 
   const hasRows = useMemo(() => displayedRows.length > 0, [displayedRows.length])
   const advisorName = useMemo(() => {
@@ -303,37 +339,87 @@ export default function ServiceAdvisorPage() {
 
         {/* Branch Filter (Admin Only) */}
         {isAdmin && availableBranches.length > 0 && (
-          <div className="toolbar toolbar--tight">
-            <span className="toolbar__label">Filter by branch:</span>
-            <button
-              type="button"
-              onClick={() => setSelectedBranch('all')}
-              className={`btn btn--sm ${
-                selectedBranch === 'all'
-                  ? 'btn--primary'
-                  : 'btn--ghost'
-              }`}
-            >
-              All ({allRows.length})
-            </button>
-            {availableBranches.map((branch) => {
-              const count = allRows.filter(r => r.branch === branch).length
-              return (
-                <button
-                  key={branch}
-                  type="button"
-                  onClick={() => setSelectedBranch(branch)}
-                  className={`btn btn--sm ${
-                    selectedBranch === branch
-                      ? 'btn--primary'
-                      : 'btn--ghost'
-                  }`}
-                >
-                  {branch} ({count})
-                </button>
-              )
-            })}
-          </div>
+          <>
+            <div className="toolbar toolbar--tight">
+              <span className="toolbar__label">Filter by branch:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedBranch('all')}
+                className={`btn btn--sm ${
+                  selectedBranch === 'all'
+                    ? 'btn--primary'
+                    : 'btn--ghost'
+                }`}
+              >
+                All ({allRows.length})
+              </button>
+              {availableBranches.map((branch) => {
+                const count = allRows.filter(r => r.branch === branch).length
+                return (
+                  <button
+                    key={branch}
+                    type="button"
+                    onClick={() => setSelectedBranch(branch)}
+                    className={`btn btn--sm ${
+                      selectedBranch === branch
+                        ? 'btn--primary'
+                        : 'btn--ghost'
+                    }`}
+                  >
+                    {branch} ({count})
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="toolbar toolbar--tight">
+              <span className="toolbar__label">Filter by category:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className={`btn btn--sm ${
+                  selectedCategory === 'all'
+                    ? 'btn--primary'
+                    : 'btn--ghost'
+                }`}
+              >
+                All ({categoryCounts.all})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('floor')}
+                className={`btn btn--sm ${
+                  selectedCategory === 'floor'
+                    ? 'btn--primary'
+                    : 'btn--ghost'
+                }`}
+              >
+                Floor ({categoryCounts.floor})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('other')}
+                className={`btn btn--sm ${
+                  selectedCategory === 'other'
+                    ? 'btn--primary'
+                    : 'btn--ghost'
+                }`}
+              >
+                Other ({categoryCounts.other})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('null')}
+                className={`btn btn--sm ${
+                  selectedCategory === 'null'
+                    ? 'btn--primary'
+                    : 'btn--ghost'
+                }`}
+              >
+                Null ({categoryCounts.null})
+              </button>
+            </div>
+          </>
         )}
       </div>
 
