@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
       throw new Error('Missing environment variables')
     }
 
-    const { userId, dealerCode, dealerName } = await req.json()
+    const { userId, dealerCode, dealerName, dealerCodes } = await req.json()
 
     if (!userId || typeof userId !== 'string') {
       return new Response(JSON.stringify({ error: 'userId is required' }), {
@@ -26,6 +26,21 @@ Deno.serve(async (req) => {
         headers,
       })
     }
+
+    const normalizedCodes = Array.isArray(dealerCodes)
+      ? Array.from(
+          new Set(
+            dealerCodes
+              .map((value) => String(value ?? '').trim().toUpperCase())
+              .filter(Boolean),
+          ),
+        )
+      : []
+
+    const normalizedPrimary = String(dealerCode ?? '').trim().toUpperCase()
+    const finalCodes = normalizedPrimary
+      ? Array.from(new Set([normalizedPrimary, ...normalizedCodes]))
+      : normalizedCodes
 
     // Call Supabase Auth API to update metadata
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
@@ -37,8 +52,9 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         user_metadata: {
-          dealer_code: dealerCode,
+          dealer_code: normalizedPrimary || null,
           dealer_name: dealerName,
+          dealer_codes: finalCodes.length > 0 ? finalCodes : null,
         },
       }),
     })

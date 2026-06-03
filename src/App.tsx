@@ -19,7 +19,7 @@ import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
-import { getDealerContext } from './lib/api/auth'
+import { getDealerScopeContext } from './lib/api/auth'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
 import { useOnline } from './hooks/useOnline'
 import type { User } from '@supabase/supabase-js'
@@ -155,8 +155,8 @@ function TopNav({
     .join('')
     .toUpperCase()
 
-  const dealerName = effectiveDealerName || user?.user_metadata?.dealer_name || 'No dealer assigned'
-  const dealerCode = effectiveDealerCode || user?.user_metadata?.dealer_code || 'NO-DEALER'
+  const dealerName = effectiveDealerName || 'No dealer assigned'
+  const dealerCode = effectiveDealerCode || 'NO-DEALER'
 
   const navToReportsCategory = (categoryId: string) => onNavigate(`/reports/${categoryId}`)
 
@@ -585,7 +585,7 @@ function AppInner() {
         return
       }
 
-      const resolved = await getDealerContext()
+      const resolved = await getDealerScopeContext()
       if (!mounted) return
 
       if (resolved.data) {

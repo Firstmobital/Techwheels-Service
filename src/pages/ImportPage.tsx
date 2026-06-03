@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
 import { broadcastLastUpdated, useLastUpdated } from '../hooks/useLastUpdated'
 import { supabase } from '../lib/supabase'
+import { getDealerScopeContext } from '../lib/api/auth'
 import {
   mapVasHeaders,
   buildVasInsertRow,
@@ -1678,10 +1679,8 @@ export default function ImportPage() {
             // Get current user's dealer code for RLS compliance
             let userDealerCode: string | null = null
             try {
-              const { data: sessionData } = await supabase.auth.getSession()
-              if (sessionData?.session?.user?.user_metadata?.dealer_code) {
-                userDealerCode = sessionData.session.user.user_metadata.dealer_code
-              }
+              const scope = await getDealerScopeContext()
+              userDealerCode = scope.data?.dealerCode ?? null
             } catch {
               // Continue without dealer_code if session fetch fails
             }

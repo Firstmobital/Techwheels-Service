@@ -73,15 +73,18 @@ function generateTemporaryPassword(): string {
   return `${value}Aa1!`
 }
 
+
+
 /** Call Edge Function to sync dealer fields into user_metadata / JWT. */
 async function syncDealerToAuthMeta(
   userId:      string,
   dealerCode:  string | null,
   dealerName:  string | null,
+  dealerCodes?: string[] | null,
 ) {
   try {
     const { error } = await supabase.functions.invoke('sync-dealer-metadata', {
-      body: { userId, dealerCode, dealerName },
+      body: { userId, dealerCode, dealerName, dealerCodes },
     })
     if (error) {
       console.warn('sync-dealer-metadata failed:', error)
@@ -148,6 +151,7 @@ export default function AdminPage() {
   const [dealerEditUser, setDealerEditUser]   = useState<AppUser | null>(null)
   const [editDealerCode, setEditDealerCode]   = useState('')
   const [editDealerName, setEditDealerName]   = useState('')
+  const [editDealerCodes, setEditDealerCodes] = useState('')
   const [savingDealer, setSavingDealer]       = useState(false)
   const [tempPasswordForm, setTempPasswordForm] = useState<TempPasswordForm | null>(null)
   const [settingTempPassword, setSettingTempPassword] = useState(false)
@@ -412,14 +416,30 @@ export default function AdminPage() {
     setDealerEditUser(u)
     setEditDealerCode(u.dealer_code ?? '')
     setEditDealerName(u.dealer_name ?? '')
+    setEditDealerCodes(u.dealer_code ?? '')
   }
 
   async function saveDealer() {
     if (!dealerEditUser) return
-    setSavingDealer(true)
+    const parsedCodes = Array.from(
+      new Set(
+        editDealerCodes
+          .split(/[\s,]+/)
+          .map((value) => value.trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    )
 
-    const code = editDealerCode.trim().toUpperCase() || null
+    const explicitPrimary = editDealerCode.trim().toUpperCase()
+    const primaryCode = explicitPrimary || parsedCodes[0] || ''
+    const dealerCodes = primaryCode
+      ? Array.from(new Set([primaryCode, ...parsedCodes]))
+      : parsedCodes
+
+    const code = primaryCode || null
     const name = editDealerName.trim() || null
+
+    setSavingDealer(true)
 
     // 1. Update public.users (primary display source)
     const { error } = await supabase
@@ -437,16 +457,16 @@ export default function AdminPage() {
       setSupportsDealerColumns(false)
     }
 
-    // 2. Sync into auth.users.raw_user_meta_data so JWT contains dealer_code on next login
-    await syncDealerToAuthMeta(dealerEditUser.id, code, name)
+    // 2. Sync into auth.users.raw_user_meta_data so JWT contains dealer scope on next login
+    await syncDealerToAuthMeta(dealerEditUser.id, code, name, dealerCodes.length > 0 ? dealerCodes : null)
 
     setSavingDealer(false)
     setDealerEditUser(null)
     await loadUsers()
     showToastMsg(
       error && isMissingDealerColumnError(error)
-        ? 'Dealer metadata updated in auth. public.users dealer columns are not present in this schema, so dealer values are not shown in Admin users table.'
-        : 'Dealer code updated. User must re-login for changes to take effect in reports.'
+        ? 'Dealer fallback metadata updated in auth. public.users dealer columns are not present in this schema. Manage primary dealer scope in Admin → Mappings.'
+        : 'Dealer fallback metadata set (including additional dealer codes). Primary scope is from Mappings tab. User must re-login for JWT fallback updates.'
     )
   }
 
@@ -1110,11 +1130,11 @@ export default function AdminPage() {
           onClose={() => setDealerEditUser(null)}
         >
           <div className="space-y-4">
-            <Field label="Dealer Code">
+            <Field label="Dealer Code (Fallback Metadata)">
               <input
                 value={editDealerCode}
                 onChange={e => setEditDealerCode(e.target.value.toUpperCase())}
-                placeholder="e.g. TN123456"
+                placeholder="e.g. 3000840"
                 className={INPUT}
                 autoFocus
               />
@@ -1123,13 +1143,21 @@ export default function AdminPage() {
               <input
                 value={editDealerName}
                 onChange={e => setEditDealerName(e.target.value)}
-                placeholder="e.g. City Motors Pvt Ltd"
+                placeholder="e.g. Sitapura Service Center"
+                className={INPUT}
+              />
+            </Field>
+            <Field label="Additional Dealer Codes (comma or space separated)">
+              <input
+                value={editDealerCodes}
+                onChange={e => setEditDealerCodes(e.target.value.toUpperCase())}
+                placeholder="e.g. 3000840, 500A840, 3001440"
                 className={INPUT}
               />
             </Field>
           </div>
-          <p className="mt-3 text-xs text-amber-700">
-            The user must <strong>sign out and sign back in</strong> for the updated dealer code to take effect in their reports and RLS filters.
+          <p className="mt-3 text-xs text-gray-600">
+            This sets fallback metadata only. Primary dealer scope is managed in Admin → Mappings (from employee_master). User must sign out and sign back in for JWT fallback updates.
           </p>
           <div className="mt-5 flex justify-end gap-3">
             <button onClick={() => setDealerEditUser(null)} className={BTN_SECONDARY}>Cancel</button>

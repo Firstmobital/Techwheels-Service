@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { getDealerScopeContext } from '../../../lib/api/auth'
 import type { ReportViewProps } from '../types'
 import Icon from '../../../components/Icon'
 
@@ -71,13 +72,7 @@ const WARRANTY_AGGREGATES = {
 
 const WR_HEADER = { atRisk: 2572135, atRiskL: '₹25.72L' }
 
-const WR_KPIS = [
-  { icon: 'upload', label: 'Invoices pending upload', value: '12', sub: '₹25.72L value blocked', tone: 'var(--danger)' },
-  { icon: 'clock', label: 'Pending WC claims', value: '31', sub: 'Created / SOP / Submitted', tone: 'var(--danger)' },
-  { icon: 'doc', label: 'AMC pending settlement', value: '89', sub: '₹4.48L claimed', tone: 'var(--warn)' },
-  { icon: 'reports', label: '20% revenue — Normal WC', value: '₹6.10L', sub: 'on ₹30.5L parts', tone: 'var(--success)' },
-  { icon: 'reports', label: '20% revenue — Ext WC', value: '₹3.19L', sub: 'on ₹15.9L parts', tone: '#0F6E56' },
-]
+// Financial KPIs and Alerts are now computed from filteredRecords in useMemo hooks (see computedFinancialKpis and computedAlerts)
 
 const WR_REVENUE = {
   blocks: [
@@ -143,68 +138,6 @@ const WR_AMC = {
     { m: 'Tigor', n: 1 },
   ],
 }
-
-const WR_ALERTS: WarrantyAlert[] = [
-  {
-    key: 'not_submitted',
-    label: 'Created but not submitted — beyond 24 hrs',
-    tone: 'var(--danger)',
-    thresh: 'Created >24h',
-    rows: [
-      { jc: '2627-001353', model: 'Nexon', age: '52 hrs', red: true },
-      { jc: '2627-001441', model: 'Harrier', age: '41 hrs', red: true },
-      { jc: '2627-001544', model: 'Altroz', age: '38 hrs', red: true },
-    ],
-  },
-  {
-    key: 'stuck_review',
-    label: 'Stuck in review stage — beyond 3 days',
-    tone: 'var(--danger)',
-    thresh: 'Review >3d',
-    rows: [
-      { jc: '2627-001333', model: 'Safari', stage: 'Await SOP', age: '7 days', red: true },
-      { jc: '2627-001408', model: 'Nexon', stage: 'Await SOP', age: '6 days', red: true },
-      { jc: '2627-001424', model: 'Harrier', stage: 'Await SOP', age: '5 days', red: true },
-      { jc: '2627-001083', model: 'Harrier', stage: 'Await SOP', age: '5 days', red: true },
-      { jc: '2627-001007', model: 'Harrier', stage: 'Await SOP', age: '4 days', red: false },
-    ],
-  },
-  {
-    key: 'sop_pending',
-    label: 'SOP document pending — beyond 2 days',
-    tone: 'var(--warn)',
-    thresh: 'SOP pending >2d',
-    rows: [
-      { jc: '2627-001517', model: 'Punch', age: '9 days', red: true },
-      { jc: '2627-001333', model: 'Safari', age: '7 days', red: true },
-    ],
-  },
-  {
-    key: 'approved_unsettled',
-    label: 'Approved but payment not settled — beyond 5 days',
-    tone: 'var(--warn)',
-    thresh: 'Approved-not-settled >5d',
-    rows: [
-      { jc: '2627-001021', model: 'Safari', amt: '₹38,400', red: true },
-      { jc: '2627-001029', model: 'Nexon EV', amt: '₹52,100', red: true },
-      { jc: '2627-001036', model: 'Harrier', amt: '₹27,600', red: false },
-      { jc: '2627-001041', model: 'Punch', amt: '₹14,300', red: false },
-    ],
-    footer: 'Total pending settlement ₹1,32,400',
-  },
-  {
-    key: 'rejection_blank',
-    label: 'Rejected claims — reason of rejection not filled',
-    tone: 'var(--danger)',
-    thresh: 'Rejection reason blank',
-    rows: [
-      { jc: '2627-001011', model: 'Harrier', amt: '₹44,500', red: true },
-      { jc: '2627-001017', model: 'Nexon', amt: '₹31,200', red: true },
-      { jc: '2627-001025', model: 'Punch', amt: '₹18,700', red: true },
-    ],
-    footer: '₹94,400 at risk · blank reason = audit risk + cannot re-appeal',
-  },
-]
 
 const WR_SPECIAL = [
   { code: '980016', label: 'Rusting / Body SPL', pvL: '₹29.08L', evL: '₹8.64L', note: 'Highest rusting claim volume', tone: 'var(--danger)' },
@@ -632,14 +565,10 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
         if (!active || !user) return
 
-        const [{ data: profile }, { data: links }, { data: modules }] = await Promise.all([
-          supabase.from('users').select('role, dealer_code').eq('id', user.id).maybeSingle(),
-          supabase
-            .from('user_employee_links')
-            .select('dealer_code')
-            .eq('user_id', user.id)
-            .eq('is_active', true),
+        const [{ data: profile }, { data: modules }, scopeResult] = await Promise.all([
+          supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
           supabase.from('modules').select('id, name, route').eq('is_active', true),
+          getDealerScopeContext(),
         ])
 
         if (!active) return
@@ -670,13 +599,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         const normalizedRole = normalizeRole(resolvedRole)
         setViewerRole(hasAdminLikeReportsPermission ? 'admin' : normalizedRole)
 
-        const metadataDealer = String((user.user_metadata?.dealer_code as string | undefined) ?? '').trim().toUpperCase()
-        const profileDealer = String((profile as { dealer_code?: string | null } | null)?.dealer_code ?? '').trim().toUpperCase()
-        const linkedDealers = ((links as Array<{ dealer_code?: string | null }> | null) ?? [])
-          .map((row) => String(row.dealer_code ?? '').trim().toUpperCase())
-          .filter(Boolean)
-
-        const uniqueDealerCodes = Array.from(new Set([metadataDealer, profileDealer, ...linkedDealers].filter(Boolean)))
+        const uniqueDealerCodes = Array.from(new Set(scopeResult.data?.dealerCodes ?? []))
         setViewerDealerCodes(uniqueDealerCodes)
       } catch {
         if (!active) return
@@ -784,7 +707,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   const scopedDealerRules = useMemo(() => {
     if (isBusinessOwnerRole(viewerRole)) return DEALER_CODE_RULES
-    if (viewerDealerCodes.length === 0) return DEALER_CODE_RULES
+    if (viewerDealerCodes.length === 0) return []
 
     return DEALER_CODE_RULES.filter((rule) =>
       viewerDealerCodes.some((dealerCode) => dealerCode.includes(rule.key)),
@@ -988,10 +911,144 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     })
   }, [filteredRecords])
 
+  const computedAlerts = useMemo(() => {
+    // Alert 1: Created but not submitted — beyond 24 hrs
+    const notSubmitted = filteredRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record.status)
+      return bucket === 'created' && record.ageDays > 1
+    })
+
+    // Alert 2: Stuck in review stage — beyond 3 days
+    const stuckReview = filteredRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record.status)
+      return bucket === 'awaiting_sop' && record.ageDays > 3
+    })
+
+    // Alert 3: SOP document pending — beyond 2 days
+    const sopPending = filteredRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record.status)
+      return (bucket === 'awaiting_sop' || bucket === 'submitted') && record.ageDays > 2
+    })
+
+    // Alert 4: Approved but payment not settled — beyond 5 days
+    const approvedUnsettled = filteredRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record.status)
+      return bucket === 'approved' && record.ageDays > 5 && String(record.postingDocNo || '').trim() === ''
+    })
+
+    // Alert 5: Rejected claims — reason of rejection not filled
+    const rejectionBlank = filteredRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record.status)
+      return bucket === 'rejected' && String(record.rejectionReason || '').trim() === ''
+    })
+
+    // Always return all 5 alerts (matching static design), even if empty
+    const alerts: WarrantyAlert[] = [
+      {
+        key: 'not_submitted',
+        label: 'Created but not submitted — beyond 24 hrs',
+        tone: 'var(--danger)',
+        thresh: 'Created >24h',
+        rows: notSubmitted.slice(0, 5).map((r) => ({
+          jc: r.jobCardNumber,
+          model: r.model,
+          age: `${r.ageDays} days`,
+          red: r.ageDays > 2,
+        })),
+      },
+      {
+        key: 'stuck_review',
+        label: 'Stuck in review stage — beyond 3 days',
+        tone: 'var(--danger)',
+        thresh: 'Review >3d',
+        rows: stuckReview.slice(0, 5).map((r) => ({
+          jc: r.jobCardNumber,
+          model: r.model,
+          stage: 'Await SOP',
+          age: `${r.ageDays} days`,
+          red: r.ageDays > 5,
+        })),
+      },
+      {
+        key: 'sop_pending',
+        label: 'SOP document pending — beyond 2 days',
+        tone: 'var(--warn)',
+        thresh: 'SOP pending >2d',
+        rows: sopPending.slice(0, 3).map((r) => ({
+          jc: r.jobCardNumber,
+          model: r.model,
+          age: `${r.ageDays} days`,
+          red: r.ageDays > 7,
+        })),
+      },
+      {
+        key: 'approved_unsettled',
+        label: 'Approved but payment not settled — beyond 5 days',
+        tone: 'var(--warn)',
+        thresh: 'Approved-not-settled >5d',
+        rows: approvedUnsettled.slice(0, 4).map((r) => ({
+          jc: r.jobCardNumber,
+          model: r.model,
+          amt: formatAmountShort(r.claimAmount),
+          red: r.ageDays > 7,
+        })),
+        footer: approvedUnsettled.length > 0 ? `Total pending settlement ${formatAmountShort(approvedUnsettled.reduce((sum, r) => sum + r.claimAmount, 0))}` : undefined,
+      },
+      {
+        key: 'rejection_blank',
+        label: 'Rejected claims — reason of rejection not filled',
+        tone: 'var(--danger)',
+        thresh: 'Rejection reason blank',
+        rows: rejectionBlank.slice(0, 3).map((r) => ({
+          jc: r.jobCardNumber,
+          model: r.model,
+          amt: formatAmountShort(r.claimAmount),
+          red: true,
+        })),
+        footer: rejectionBlank.length > 0 ? `${formatAmountShort(rejectionBlank.reduce((sum, r) => sum + r.claimAmount, 0))} at risk · blank reason = audit risk + cannot re-appeal` : undefined,
+      },
+    ]
+
+    return alerts
+  }, [filteredRecords])
+
+  const computedFinancialKpis = useMemo(() => {
+    const normalWc = filteredRecords.filter((record) => {
+      return record.category === 'Warranty Claim' && !record.model?.toLowerCase().includes('ev')
+    })
+    const extendedWc = filteredRecords.filter((record) => {
+      return record.category === 'Warranty Claim' && record.model?.toLowerCase().includes('ev')
+    })
+
+    const normalRev = normalWc.reduce((sum, r) => sum + r.partsAmount * 0.2, 0)
+    const extRev = extendedWc.reduce((sum, r) => sum + r.partsAmount * 0.2, 0)
+
+    return [
+      { icon: 'upload', label: 'Invoices pending upload', value: String(filteredRecords.filter((r) => !r.postingDocNo).length), sub: formatAmountShort(filteredRecords.filter((r) => !r.postingDocNo).reduce((sum, r) => sum + r.claimAmount, 0)) + ' value blocked', tone: 'var(--danger)' },
+      { icon: 'clock', label: 'Pending WC claims', value: String(filteredRecords.filter((r) => {
+        const bucket = normalizeStatusBucket(r.status)
+        return (bucket === 'created' || bucket === 'awaiting_sop' || bucket === 'submitted') && r.category === 'Warranty Claim'
+      }).length), sub: 'Created / SOP / Submitted', tone: 'var(--danger)' },
+      { icon: 'doc', label: 'AMC pending settlement', value: String(filteredRecords.filter((r) => {
+        const bucket = normalizeStatusBucket(r.status)
+        return bucket !== 'settled' && r.category === 'AMC'
+      }).length), sub: formatAmountShort(filteredRecords.filter((r) => {
+        const bucket = normalizeStatusBucket(r.status)
+        return bucket !== 'settled' && r.category === 'AMC'
+      }).reduce((sum, r) => sum + r.claimAmount, 0)) + ' claimed', tone: 'var(--warn)' },
+      { icon: 'reports', label: '20% revenue — Normal WC', value: formatAmountShort(normalRev), sub: `on ${formatAmountShort(normalWc.reduce((sum, r) => sum + r.partsAmount, 0))} parts`, tone: 'var(--success)' },
+      { icon: 'reports', label: '20% revenue — Ext WC', value: formatAmountShort(extRev), sub: `on ${formatAmountShort(extendedWc.reduce((sum, r) => sum + r.partsAmount, 0))} parts`, tone: '#0F6E56' },
+    ]
+  }, [filteredRecords])
+
   const dealerScopeLabel = useMemo(() => {
     if (isBusinessOwnerRole(viewerRole)) return 'All dealer codes'
     if (viewerDealerCodes.length > 0) return viewerDealerCodes.join(', ')
-    return 'Dealer scope from mapping rules'
+    return 'No dealer mapping assigned'
+  }, [viewerDealerCodes, viewerRole])
+
+  const hasMissingDealerScope = useMemo(() => {
+    return !isBusinessOwnerRole(viewerRole) && viewerDealerCodes.length === 0
   }, [viewerDealerCodes, viewerRole])
 
   if (isLoading) {
@@ -1125,6 +1182,14 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           </div>
         </div>
       </div>
+
+      {hasMissingDealerScope && (
+        <div className="card" style={{ borderLeftColor: 'var(--warn)', marginBottom: 'var(--gap)' }}>
+          <div className="card__body" style={{ color: 'var(--muted)', fontSize: '13px' }}>
+            Dealer scope is not assigned for this user. Add an active dealer mapping in Admin -&gt; Mappings, or set dealer metadata fallback from Admin -&gt; Users.
+          </div>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="tabs" style={{ marginBottom: 'var(--gap)' }}>
@@ -1368,7 +1433,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       {activeTab === 'alerts' && (
         <div>
           <div className="kpis" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
-            {WR_ALERTS.map((a, i) => (
+            {computedAlerts.map((a, i) => (
               <div className="kpi" key={i} style={{ borderLeft: `3px solid ${a.tone}` }}>
                 <div className="kpi__top">
                   <span className="kpi__ic" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>
@@ -1390,11 +1455,11 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               <Icon name="alert" size={17} />
             </span>
             <div>
-              <b>{WR_ALERTS.reduce((s, a) => s + a.rows.length, 0)} open alerts · action required today.</b> SLA thresholds: Created &gt;24h = red · Review &gt;3d = red · SOP pending &gt;2d = amber · Approved-not-settled &gt;5d = amber · rejection-reason-blank = audit risk.
+              <b>{computedAlerts.reduce((s, a) => s + a.rows.length, 0)} open alerts · action required today.</b> SLA thresholds: Created &gt;24h = red · Review &gt;3d = red · SOP pending &gt;2d = amber · Approved-not-settled &gt;5d = amber · rejection-reason-blank = audit risk.
             </div>
           </div>
 
-          {WR_ALERTS.map((a, i) => (
+          {computedAlerts.map((a, i) => (
             <Card
               key={i}
               accent={a.tone}
@@ -1408,8 +1473,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                     <tr>
                       <th>Job card</th>
                       <th>Model</th>
-                      {a.rows[0].stage ? <th>Stage</th> : null}
-                      <th>{a.rows[0].amt ? 'Amount' : 'Pending'}</th>
+                      {a.rows[0]?.stage ? <th>Stage</th> : null}
+                      <th>{a.rows[0]?.amt ? 'Amount' : 'Pending'}</th>
                       <th style={{ textAlign: 'right' }}>Action</th>
                     </tr>
                   </thead>
@@ -1450,7 +1515,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       {activeTab === 'financial' && (
         <div>
           <div className="kpis" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
-            {WR_KPIS.map((k, i) => (
+            {computedFinancialKpis.map((k, i) => (
               <Kpi key={i} {...k} />
             ))}
           </div>

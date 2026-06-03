@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1B Complete - Ready for Phase 1C API/UI Implementation  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-01 11:16 UTC  
+**Last Updated**: 2026-06-03 14:20 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -28,6 +28,9 @@
 - Technician page implemented with super-admin selector: admin can choose any `TECHNICIAN` from Employee Master and view selected technician rows + day-wise earnings.
 - Technician RBAC migration executed: 20260601212000_add_technician_module_and_visibility_policies.sql.
 - Fresh full dump regenerated after Technician rollout; authority remains: local_folder/backups/full_database.sql (never downgrade).
+- Admin Set Dealer popup contract clarified and locked: popup updates fallback dealer metadata only; it must not create/update `user_employee_links` mappings.
+- Dealer scope precedence documented for frontend auth resolution: mapping first, then metadata fallback, then users-table fallback.
+- Cross-layer precedence drift identified for follow-up: SQL `my_dealer_code()` may still resolve metadata before mapping depending on deployed migration order; this must be aligned before production hardening.
 
 ### Superadmin Default Access Policy (Locked)
 
@@ -591,6 +594,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 7.5 | Monitor production 24h post-migration | ⚪ Not Started | Ops | — | Watch error logs, permission denials | ☐ |
 | 7.6 | Update user docs & runbooks | ⚪ Not Started | TBD | — | For admin/SA operators | ☐ |
 | 7.7 | Remove legacy name-based fallback (v2, post-validation) | ⚪ Not Started | TBD | — | After verified success | ☐ |
+| 7.8 | Document long-term RBAC/auth/visibility guardrails in master plan | ✓ Done | Copilot | 2026-06-03 | Added Part 8A operations playbook (scope precedence, popup contract, troubleshooting, drift controls) | ☑ |
 
 ---
 
@@ -643,6 +647,89 @@ Use this section as the real-time status dashboard. Update immediately after eac
 
 ---
 
+## PART 8A: FUTURE RBAC/AUTH/VISIBILITY OPERATIONS PLAYBOOK
+
+This section captures implementation guardrails that must remain stable across future refactors, onboarding, and incident response.
+
+### 8A.1 Scope Source of Truth Order (Required)
+
+For application-layer visibility resolution (frontend/API helper path), use this precedence and keep it explicit in code and docs:
+
+1. **Mappings first**: active `user_employee_links` for the authenticated user
+2. **Metadata fallback**: `auth.users.raw_user_meta_data` / JWT (`dealer_code`, optional `dealer_codes`)
+3. **Users-table fallback**: `public.users.dealer_code` only for compatibility mode
+
+Rationale:
+- Mapping is the canonical operational scope because it ties auth user to Employee Master identity and dealer context.
+- Metadata is a fallback only (for users with missing mappings or transitional states).
+- Users-table fallback is temporary compatibility and should not become a new source of truth.
+
+### 8A.2 Set Dealer Popup Contract (Required)
+
+Admin -> Users -> Dealer popup behavior must remain bounded:
+
+- Allowed:
+  - Update fallback dealer metadata fields (auth metadata / JWT path)
+  - Optionally mirror display columns in `public.users` where those columns exist
+- Not allowed:
+  - Creating/updating/deactivating `user_employee_links`
+  - Any implicit "sync to mappings" behavior
+
+Mapping lifecycle belongs only to Admin -> Mappings, seeded/validated against Employee Master.
+
+### 8A.3 Visibility Resolution Rules (Do Not Regress)
+
+- Module-level visibility is deny-by-default and must come from `user_module_permissions` (`can_view`).
+- Row-level visibility is always RLS-enforced; frontend guards are UX only.
+- SA ownership checks use `sa_employee_code` membership, never `sa_name` or `sa_display_name`.
+- Floor Incharge visibility remains role+fuel-scope constrained through mapped employee/dealer context.
+
+### 8A.4 Cross-Layer Drift Watchlist
+
+Known high-risk drift: dealer precedence mismatch between app layer and SQL helper functions.
+
+- App-layer helper path currently resolves mapping before metadata.
+- SQL helper function `my_dealer_code()` may resolve metadata before mapping (depending on deployed version).
+
+If these diverge, symptoms include:
+- UI showing one scope while SQL/RLS enforces another
+- "No rows" in one module but visible rows in another for same user
+- Inconsistent behavior immediately after dealer metadata updates
+
+Mitigation requirement:
+- Keep one documented precedence contract and align both app helper code and SQL helper functions to it.
+
+### 8A.5 Troubleshooting Checklist (Visibility Incidents)
+
+When a user reports missing or excess data visibility, validate in this order:
+
+1. User is active (`users.is_active = true`)
+2. Module permission exists (`can_view` for target module)
+3. At least one active mapping exists for user/dealer in `user_employee_links`
+4. Expected primary mapping state per dealer (if primary-dependent flow)
+5. Dealer code on target rows matches resolved scope
+6. User re-authenticated after metadata/mapping changes (JWT refresh)
+7. No stale compatibility fallback masking missing mapping
+
+Operational note:
+- Do not "fix" by broadening permissions first. Validate identity linkage and scope resolution before changing ACL.
+
+### 8A.6 Future Hardening Targets
+
+Short-term:
+- Add automated parity check that compares app-resolved dealer scope vs SQL-resolved scope for test users.
+- Add admin diagnostics panel showing scope source (`mapping` | `metadata` | `users_table`) for current user.
+
+Mid-term:
+- Remove `users_table` dealer fallback after full mapping adoption.
+- Move to multi-dealer aware SQL helper(s) where required by module queries.
+
+Long-term:
+- Add immutable audit events for permission grants/revocations and mapping changes.
+- Add time-bounded access grants with automatic expiry and reason codes.
+
+---
+
 ## PART 9: SIGN-OFF & HISTORY
 
 | Version | Date | Author | Status | Notes |
@@ -653,11 +740,12 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 1.3 | 2026-06-01 | Copilot + User | Active | Added TECHNICIAN role parity documentation for Floor Incharge dropdown filtering (web + mobile) |
 | 1.4 | 2026-06-01 | Copilot + User | Active | Added authoritative Floor Incharge row visibility requirement: role = Floor Incharge with fuel_type scope via SA CODE mapping |
 | 1.5 | 2026-06-01 | Copilot + User | Active | Executed Floor Incharge DB migrations for row-scope policy and stage workflow columns/triggers/RLS |
+| 1.6 | 2026-06-03 | Copilot + User | Active | Added Part 8A future operations playbook for RBAC/auth/visibility (scope precedence, popup contract, drift watchlist, troubleshooting/hardening targets) |
 
 ---
 
 **This document is the single source of truth for RBAC implementation.**  
 **All previous separate RBAC plan files (RBAC_SA_DYNAMIC_CONTROL_PLAN_2026-06-01.md, RBAC_FULL_DUMP_AUDIT_2026-06-01.md, RBAC_MASTER_IMPLEMENTATION_PLAN_2026-06-01.md) are superseded and should be archived.**
 
-Last updated: 2026-06-01  
+Last updated: 2026-06-03  
 Next review: After Phase 1C reception form + dealer-code profile delivery

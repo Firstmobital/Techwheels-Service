@@ -29,6 +29,7 @@
 - Authoritative dump confirms `public.modules` includes `reports` as module id `7`; module-scoped admin behavior must be derived from `public.user_module_permissions` (`can_modify` + `can_delete`) rather than relying on role-string variants.
 - Current runtime warranty registration exposes one report route (`warranty-overview`) while traceability tasks `TR-024..TR-040` remain pending/partial; therefore 28-report DB-truth parity is not complete yet.
 - Warranty overview still contains multiple reference-constant blocks for non-overview sections; these need phased replacement with JSONB extraction-driven queries per TR-024..TR-040.
+- `NO-DEALER` chip text is a metadata fallback indicator and must not be used as authorization scope for `admin` users; warranty scope must come from RBAC + user mappings.
 
 #### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
 - WC: ₹48.2L claims  
@@ -447,6 +448,7 @@ Use this for closure control per phase:
 | **P5-CORRECTED** | **Enhance Critical Alerts (v2)** | **Partial** | **Dev Team** | **28+ alerts with ownership + action required + aging buckets** |
 | **P5-CORRECTED** | **Build Rejection Root-Cause Report** | **Pending** | **Dev Team** | **Top reasons + corrective action assignment + completion tracking + effectiveness** |
 | **P5-CORRECTED** | **Build Payment Flow Dashboard** | **Pending** | **Dev Team** | **Claim→Settlement→Payment stage visibility + status transitions** |
+| **P8-NEW** | **Implement role-correct warranty scope contract (admin dealer-agnostic)** | **Pending** | **Dev Team** | **Use backend RBAC scope as source of truth; separate UI dealer chip state (`NO-DEALER`) from data visibility** |
 
 ---
 
@@ -628,6 +630,38 @@ Additional fields required in warranty import tables (discovered from audited re
 | **TR-040** | **Invoice document tracking and URL linking** | **Invoice Document Repository** | **src/pages/reports/warranty/InvoiceDocumentReport.tsx** | **Pending** | **Extract posted_doc_url from source_row_data + validate URL accessibility** |
 | **TR-041-NEW** | **Build per-source JSONB extraction functions** | **TypeScript extraction utilities** | **src/lib/warranty/jsonExtraction.ts** | **Pending** | **Unit tests for each source type's key extraction + type safety** |
 | **TR-042-NEW** | **Create computed columns or materialized views for reporting** | **Supabase views for warranty analytics** | **supabase/migrations/20260602*_warranty_reporting_views.sql** | **Pending** | **Test view performance + data completeness vs raw JSONB** |
+| **TR-043-NEW** | **Role-correct dealer scope contract for warranty reports** | **Admin dealer-agnostic + mapped scope for non-admin** | **supabase/migrations/20260603*_warranty_scope_contract.sql; src/lib/api/auth.ts; src/pages/reports/warranty/WarrantyOverviewReport.tsx** | **Pending** | **Admin with blank metadata dealer still sees Ajmer/Sitapura PV/EV; non-admin restricted to mapped dealers; `NO-DEALER` does not suppress admin alerts** |
+
+---
+
+## Warranty Role-Scope Contract (Long-Term Proper Fix)
+
+Problem observed:
+
+1. Header chip can show `NO-DEALER` when JWT metadata is missing.
+2. Warranty overview currently combines role-string checks and client-side dealer arrays.
+3. This can drift from authoritative RBAC (`public.is_admin()`, `get_my_permissions`, `user_employee_links`).
+
+Target contract:
+
+1. `admin` users are dealer-agnostic for warranty reporting.
+2. `manager|staff|viewer` users are restricted to active `user_employee_links` dealer mappings.
+3. `NO-DEALER` is UI-only metadata state, never an auth input.
+4. Location/fuel tabs are presentation filters after backend scope resolution, not security boundaries.
+
+Implementation direction:
+
+1. Add one scope RPC/helper that returns `is_admin` and effective `dealer_codes[]`.
+2. Use this scope in warranty query wiring before UI filters.
+3. Keep dealer-code-to-location/portal mapping for analytics facets only.
+4. Add regression checks for admin users with blank metadata dealer code.
+
+Acceptance checks:
+
+1. Admin user with blank metadata dealer code still sees Sitapura PV/EV and Ajmer Road PV records and alerts.
+2. Non-admin user mapped to `3000840` only sees Sitapura PV scope.
+3. Non-admin user with no active mapping gets explicit empty-state guidance.
+4. UI chip may display `NO-DEALER`, but data visibility still follows RBAC scope contract.
 
 ---
 

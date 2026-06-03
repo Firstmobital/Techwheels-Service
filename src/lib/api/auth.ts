@@ -6,6 +6,13 @@ export type DealerContext = {
   dealerName: string | null
 }
 
+export type DealerScopeContext = {
+  dealerCode: string
+  dealerCodes: string[]
+  dealerName: string | null
+  source: 'mapping' | 'metadata' | 'users_table'
+}
+
 async function resolveDealerFromMappings(userId: string): Promise<DealerContext | null> {
   const mappingRes = await supabase
     .from('user_employee_links')
@@ -27,6 +34,39 @@ async function resolveDealerFromMappings(userId: string): Promise<DealerContext 
   }
 
   return { dealerCode: mappedDealerCode, dealerName: null }
+}
+
+async function resolveDealerScopeFromMappings(userId: string): Promise<DealerScopeContext | null> {
+  const mappingRes = await supabase
+    .from('user_employee_links')
+    .select('dealer_code, is_primary, updated_at')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('is_primary', { ascending: false })
+    .order('updated_at', { ascending: false })
+
+  if (mappingRes.error) {
+    return null
+  }
+
+  const uniqueDealerCodes = Array.from(
+    new Set(
+      (mappingRes.data ?? [])
+        .map((row) => String((row as { dealer_code?: string | null }).dealer_code ?? '').trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  )
+
+  if (uniqueDealerCodes.length === 0) {
+    return null
+  }
+
+  return {
+    dealerCode: uniqueDealerCodes[0],
+    dealerCodes: uniqueDealerCodes,
+    dealerName: null,
+    source: 'mapping',
+  }
 }
 
 async function resolveDealerFromUsersTable(userId: string): Promise<DealerContext | null> {
@@ -54,35 +94,81 @@ async function resolveDealerFromUsersTable(userId: string): Promise<DealerContex
 }
 
 export async function getDealerContext(): Promise<ApiResult<DealerContext>> {
+  const scoped = await getDealerScopeContext()
+  if (scoped.data) {
+    return ok({ dealerCode: scoped.data.dealerCode, dealerName: scoped.data.dealerName })
+  }
+  return fail(scoped.error ?? 'No dealer code found in mapping, metadata, or users table. Contact admin to assign dealer data in at least one source.')
+}
+
+export async function getDealerScopeContext(): Promise<ApiResult<DealerScopeContext>> {
   const { data, error } = await supabase.auth.getSession()
   if (error) return fail(error)
 
   const user = data.session?.user
+  const userId = user?.id
+
+  if (userId) {
+    const fromMappingsScope = await resolveDealerScopeFromMappings(userId)
+    if (fromMappingsScope) {
+      return ok(fromMappingsScope)
+    }
+  }
+
   const userMetadata = (user?.user_metadata ?? {}) as Record<string, unknown>
   const appMetadata = (user?.app_metadata ?? {}) as Record<string, unknown>
 
   const rawDealerCode = userMetadata.dealer_code ?? appMetadata.dealer_code
   const rawDealerName = userMetadata.dealer_name ?? appMetadata.dealer_name
+  const rawDealerCodes = userMetadata.dealer_codes ?? appMetadata.dealer_codes
 
   const dealerCode = typeof rawDealerCode === 'string' ? rawDealerCode.trim().toUpperCase() : ''
   const dealerName = typeof rawDealerName === 'string' ? rawDealerName.trim() : null
+  const dealerCodesFromMeta = Array.isArray(rawDealerCodes)
+    ? rawDealerCodes
+        .map((value) => String(value ?? '').trim().toUpperCase())
+        .filter(Boolean)
+    : []
 
-  if (!dealerCode) {
-    const userId = user?.id
-    if (userId) {
-      const fromMappings = await resolveDealerFromMappings(userId)
-      if (fromMappings?.dealerCode) {
-        return ok(fromMappings)
-      }
-
-      const fromUsersTable = await resolveDealerFromUsersTable(userId)
-      if (fromUsersTable?.dealerCode) {
-        return ok(fromUsersTable)
-      }
-    }
-
-    return fail('No dealer code found in metadata, mapping, or users table. Contact admin to assign dealer data in at least one source.')
+  if (dealerCode) {
+    return ok({
+      dealerCode,
+      dealerCodes: Array.from(new Set([dealerCode, ...dealerCodesFromMeta])),
+      dealerName: dealerName || null,
+      source: 'metadata',
+    })
   }
 
-  return ok({ dealerCode, dealerName: dealerName || null })
+  if (dealerCodesFromMeta.length > 0) {
+    return ok({
+      dealerCode: dealerCodesFromMeta[0],
+      dealerCodes: Array.from(new Set(dealerCodesFromMeta)),
+      dealerName: dealerName || null,
+      source: 'metadata',
+    })
+  }
+
+  if (userId) {
+    const fromMappings = await resolveDealerFromMappings(userId)
+    if (fromMappings?.dealerCode) {
+      return ok({
+        dealerCode: fromMappings.dealerCode,
+        dealerCodes: [fromMappings.dealerCode],
+        dealerName: fromMappings.dealerName,
+        source: 'mapping',
+      })
+    }
+
+    const fromUsersTable = await resolveDealerFromUsersTable(userId)
+    if (fromUsersTable?.dealerCode) {
+      return ok({
+        dealerCode: fromUsersTable.dealerCode,
+        dealerCodes: [fromUsersTable.dealerCode],
+        dealerName: fromUsersTable.dealerName,
+        source: 'users_table',
+      })
+    }
+  }
+
+  return fail('No dealer code found in mapping, metadata, or users table. Contact admin to assign dealer data in at least one source.')
 }
