@@ -386,7 +386,7 @@ export default function TechnicianPage() {
           </p>
         </div>
         {isAdmin && (
-          <label className="field" style={{ marginBottom: 0, minWidth: 280 }}>
+          <label className="field field--no-gap tech-picker-field">
             <span className="label">Technician</span>
             <select
               className="sel sel-lg"
@@ -419,7 +419,7 @@ export default function TechnicianPage() {
       )}
 
       {/* Income tracker */}
-      <div className="card" style={{ marginBottom: 'var(--gap)' }}>
+      <div className="card mb-gap">
         <div className="card__head">
           <div>
             <h3>Income tracker</h3>
@@ -427,45 +427,16 @@ export default function TechnicianPage() {
               Computed per completed case: (Total Workshop Revenue ÷ 1.18) × 20% (PV) or 25% (EV).
             </div>
           </div>
-          <div
-            style={{
-              textAlign: 'right',
-              background: 'var(--success-bg)',
-              borderRadius: 'var(--r-sm)',
-              padding: '8px 14px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-              flex: 'none',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '10.5px',
-                fontWeight: 700,
-                letterSpacing: '.08em',
-                textTransform: 'uppercase',
-                color: 'var(--success)',
-                whiteSpace: 'nowrap',
-              }}
-            >
+          <div className="tech-income-total">
+            <div className="tech-income-total__label">
               Total earnings
             </div>
-            <div
-              style={{
-                fontSize: 20,
-                fontWeight: 700,
-                color: 'var(--success)',
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1.1,
-                whiteSpace: 'nowrap',
-              }}
-            >
+            <div className="tech-income-total__value">
               {formatCurrency(totalIncome)}
             </div>
           </div>
         </div>
-        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+        <div className="card__body dense">
           {loading ? (
             <div className="empty-state">Loading income tracker...</div>
           ) : incomeByDay.length === 0 ? (
@@ -480,9 +451,9 @@ export default function TechnicianPage() {
                   <tr>
                     <th>Date</th>
                     <th className="ctr">Cases</th>
-                    <th style={{ textAlign: 'right' }}>Gross Revenue</th>
-                    <th style={{ textAlign: 'right' }}>Net (ex GST)</th>
-                    <th style={{ textAlign: 'right' }}>Technician Income</th>
+                    <th className="text-right">Gross Revenue</th>
+                    <th className="text-right">Net (ex GST)</th>
+                    <th className="text-right">Technician Income</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -490,13 +461,13 @@ export default function TechnicianPage() {
                     <tr key={row.date}>
                       <td className="strong">{row.date}</td>
                       <td className="ctr">{row.jobsCount}</td>
-                      <td className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <td className="text-right num-tabular">
                         {formatCurrency(row.grossRevenue)}
                       </td>
-                      <td className="cell-muted text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <td className="cell-muted text-right num-tabular">
                         {formatCurrency(row.netBeforeShare)}
                       </td>
-                      <td className="text-right strong" style={{ color: 'var(--success)', fontVariantNumeric: 'tabular-nums' }}>
+                      <td className="text-right strong num-tabular tech-income-cell">
                         {formatCurrency(row.technicianIncome)}
                       </td>
                     </tr>
@@ -514,12 +485,12 @@ export default function TechnicianPage() {
           <div>
             <h3>
               Technician rows{' '}
-              <span style={{ color: 'var(--muted)', fontWeight: 600 }}>({assignments.length})</span>
+              <span className="count-badge">({assignments.length})</span>
             </h3>
             <div className="sub">{selectedTechnicianCode || '—'}</div>
           </div>
         </div>
-        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+        <div className="card__body dense">
           {loading ? (
             <div className="empty-state">Loading technician rows...</div>
           ) : assignments.length === 0 ? (

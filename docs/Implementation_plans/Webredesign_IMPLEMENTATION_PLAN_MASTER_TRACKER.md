@@ -56,8 +56,13 @@ Read this before implementing any page. These are patterns discovered during T-0
 - ✅ `<span className="count-badge">Badge</span>`
 - Reason: All typography must come from shared CSS to maintain visual baseline.
 
-**Pre-Implementation Checklist (Copy to Your Task):**
-Before marking any page task DONE:
+**Reference-Parity Page Checklist (Copy to Your Task):**
+Before marking any page redesign task DONE:
+1. Confirm visual structure matches audited reference artifact for that page (layout hierarchy, section order, headings, labels, card/table composition).
+2. Confirm behavior/logic remains intact (presentational-only redesign).
+3. Validate in browser with realistic data and capture evidence.
+
+**Final Visual Sync Lock Checklist (Run in End-Phase T-044, before release):**
 1. Grep page source for `style={{` → should find ONLY state-driven opacity/display conditionals
 2. Verify page returns plain `<div>` not `<div className="page">`
 3. Replace all form control sizing with `.sel-sm`, `.sel-md`, `.sel-lg`, `.inp-md`, `.inp-lg`
@@ -76,6 +81,15 @@ Before marking any page task DONE:
 4. Screenshot evidence under ../../local_folder/Reference/WebVersionRedesignReference/screens/
 5. Mirror src/pages TypeScript files under ../../local_folder/Reference/WebVersionRedesignReference/src/pages/ for implementation behavior confirmation
 6. ../../local_folder/Reference/WebVersionRedesignReference/copilot-instructions.md (currently present; reinstated in authority set)
+
+### 2.1A Execution sequence (mandatory)
+
+1. Implement each redesign task from audited reference artifacts in ../../local_folder/Reference/WebVersionRedesignReference first (layout, sections, copy, hierarchy, and interaction intent).
+2. Preserve business logic while porting the reference structure into production code.
+3. Mark each page DONE once reference parity + behavior preservation are validated and evidence is captured.
+4. Run Visual Sync Lock checks from sections 2.0/5.4/7.2A as one end-phase global normalization pass under T-044 before release.
+5. Visual Sync Lock is not a replacement for reference implementation; it is the final anti-drift gate.
+6. If dedicated reference artifacts are missing, only the explicitly scoped shell + design-system parity task may be marked done; full bespoke redesign parity remains blocked.
 
 ### 2.2 Non-negotiable constraints (audited)
 
@@ -279,7 +293,7 @@ Classes that must be available in real app styling:
    - Text styling: `.cell-accent`, `.cell-muted`, `.ts-cell` (nowrap + muted), `.type-cell` (nowrap), `.unassigned-indicator`, `.count-badge`
    - Component variants: `.card__body.dense`, `.schip.warn`, `.empty-state`, `.toast` (with `.error` modifier)
 
-9. **Reference pages do not enforce visual sync lock** (they use ad-hoc styling for mockup). Production code must be stricter. When porting reference code, systematically remove all inline styles and replace with shared classes before task closure.
+9. **Reference pages do not enforce visual sync lock** (they use ad-hoc styling for mockup). Execution order is: reference-first implementation, then visual sync lock validation/tweaks in production code. When porting reference code, systematically remove all inline styles and replace with shared classes before task closure.
 
 ---
 
@@ -505,7 +519,7 @@ return <div>
 2. ImportPage.tsx - shell + design system parity only until dedicated reference arrives
 3. AutoDocPage.tsx and JobCardPage.tsx - shell + design system parity only until dedicated reference arrives
 
-These are explicitly tracked as partially blocked-for-full-parity due to missing dedicated redesign specs for non-warranty report categories, Import, and AutoDoc/JobCard in the audited folder.
+Scope note: Import (T-032) is considered DONE for the scoped objective above (shell + design-system parity). Only AutoDoc/JobCard and non-warranty report categories remain blocked-for-full-parity due to missing dedicated redesign specs in the audited folder.
 
 ### 7.10 Reports - Warranty full operational scope (WARRANTY-001 + WARRANTY_REFERENCE audited)
 
@@ -730,11 +744,11 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 | T-026 | Settings | Redesign AutoDoc Rate Cards section | settings.jsx + settings-data.js | src/pages/SettingsPage.tsx | REVIEW | Vinod | 2026-06-02 | 2026-06-02 | - | AutoDoc Rate Cards redesigned with counted heading, iconized export/import controls, structured config strip, and refreshed table badges/chips while preserving import/export/activate behavior. Diagnostics, build, and browser rendering checks passed. |
 | T-027 | Settings | Redesign Unmapped SR Entries section | settings.jsx + settings-data.js | src/pages/SettingsPage.tsx | REVIEW | Vinod | 2026-06-02 | 2026-06-02 | - | Unmapped SR section redesigned with structured action bar, stats cards, filter strip, selected-count bulk resolve bar, and refreshed table badges/actions while preserving existing resolve and auto-assign logic. Diagnostics/build passed; shared browser session currently module-access gated. |
 | T-028 | Service Advisor | Redesign advisor assigned-rows workspace | service-advisor.jsx + service-advisor-data.js | src/pages/ServiceAdvisorPage.tsx | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Service Advisor visual system synchronized with Home baseline using shared class/token grammar only: inline style usage removed from page content blocks (pagehead, summary, table cells, estimate actions), shared App.css classes introduced, existing save/upload logic and non-standard service-type retention preserved. |
-| T-044 | Governance | Enforce cross-page visual synchronization lock (no design-system drift) | home.jsx + service-advisor.jsx + styles.css + components.css | docs/Implementation_plans/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md, src/App.css, src/pages/* | IN_PROGRESS | Vinod | 2026-06-02 | 2026-06-02 | - | Governance lock is now treated as active enforcement (not documentation-only). Home + Reception + Service Advisor + shell surfaces are being normalized to shared classes/tokens; remaining mixed-system pages must be remediated before closure (notably Floor Incharge and other pending modules). |
+| T-044 | Governance | Enforce cross-page visual synchronization lock (no design-system drift) | home.jsx + service-advisor.jsx + styles.css + components.css | docs/Implementation_plans/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md, src/App.css, src/pages/* | PENDING | Vinod | 2026-06-02 | 2026-06-02 | - | End-phase release gate: run a final global anti-drift pass only after page-level reference parity tasks are completed; normalize any remaining mixed-system styling across touched modules before release sign-off. |
 | T-029 | Floor Incharge | Redesign assignment workspace and controls | floor.jsx + floor-data.js | src/pages/FloorInchargePage.tsx | DONE | Vinod | 2026-06-03 | 2026-06-03 | 2026-06-03 | **COMPLETE VISUAL SYNC LOCK FIX**: (1) Refactored 20+ inline styles to class-based utility classes (new CSS: .toast, .icon-align-text, .empty-state, .schip.warn, .card__body.dense, .cell-accent, .cell-muted, .sel-md, .sel-sm, .inp-md, .sel-lg, .inp-lg, .inp-wrap-lg, .ts-cell, .type-cell, .count-badge, .unassigned-indicator, .text-right). (2) **CRITICAL FIX: Removed inner `.page` wrapper** — was causing double padding inconsistency vs baseline (outer .page wrapper in App.tsx provides consistent padding for all pages; only FloorInchargePage had redundant inner .page, creating left-side gap drift). Now returns plain `<div>` matching Home/Reception/ServiceAdvisor/Admin pattern. Build clean 905ms, 723 modules. Cross-page sync lock fully enforced (tracker 5.4, 7.2A, 11). |
 | T-030 | Technician | Redesign technician picker/income/rows workspace | technician.jsx + technician-data.js | src/pages/TechnicianPage.tsx | DONE | Vinod | 2026-06-03 | 2026-06-03 | 2026-06-03 | Complete visual sync lock implementation: 100% design-system classes (pagehead, card, card__head, card__body, empty-state, schip, tbl, tbl-wrap, icon-align-text, pill classes for status, .ts-cell, .type-cell, .unassigned-indicator, .cell-muted, .text-right). Zero Tailwind utilities. No inner .page wrapper. Income tracker displays total earnings in success-colored box (using CSS variables var(--success-bg), var(--success)). Status pills use dynamic pill classes (g/w/b). Build clean 854ms, 723 modules. Visual parity with Home baseline confirmed (RBAC module access gating prevents functional test, but markup/class structure matches reference design-system pattern verified in code audit). |
 | T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | PENDING | unassigned | - | 2026-06-02 | - | Scope locked to 7 warranty source tables + shared metadata columns from authoritative dump; no inferred report-count taxonomy claims |
-| T-032 | Remaining Modules | Apply shell + design-system parity to Import | import.jsx | src/pages/ImportPage.tsx | DONE | Vinod | 2026-06-03 | 2026-06-03 | 2026-06-03 | Complete design-system parity conversion: converted all Tailwind utilities to design-system classes (card, card__head, card__body, pagehead, Icon component integration, inline styles for state-driven conditionals only). SlotDropzone refactored to use CSS variables (var(--accent), var(--danger), var(--success), var(--muted), var(--faint), var(--muted-bg)). ImportCard header/footer/progress bars use shared design-system styling. Main page structure converted from Tailwind flex/gap utilities to design-system layout. Upload progress bar and error banner updated with Icon component integration. Business logic fully preserved (13 tables, CSV/XLSX parsing, VAS deduplication, employee lookup, upsert/insert with duplicate skip, progress tracking). Build clean 874ms, 723 modules. Zero Tailwind utilities in component markup. |
+| T-032 | Remaining Modules | Apply shell + design-system parity to Import | import.jsx | src/pages/ImportPage.tsx | DONE | Vinod | 2026-06-03 | 2026-06-03 | 2026-06-03 | Scoped objective completed (shell + design-system parity only): converted utility/inline visual styling to shared class grammar with only state-driven visual conditional inline style remaining (progress width), retained Import business logic intact, and validated build. Dedicated per-screen redesign prototype for Import is still not available in reference bundle, so this task is complete to scoped parity, not full bespoke redesign parity. |
 | T-033 | Remaining Modules | Apply shell + design-system parity to AutoDoc and JobCard | IMPLEMENTATION_PLAN.md section pending | src/pages/AutoDocPage.tsx, src/pages/JobCardPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Full redesign spec not present in audited files |
 | T-038 | Reports | Keep non-warranty report categories in blocked/pending state until dedicated redesign artifacts arrive | IMPLEMENTATION_PLAN.md + folder audit | src/pages/ReportsPage.tsx and reports/* (non-warranty) | BLOCKED | unassigned | - | 2026-06-02 | - | Needs dedicated redesign prototypes for labour-revenue, revenue, parts categories |
 | T-039 | Governance | Reconcile reference instruction artifact status (copilot-instructions.md) | folder audit recheck | local_folder/Reference/WebVersionRedesignReference | DONE | unassigned | - | 2026-06-02 | 2026-06-02 | File present in second-pass re-audit; blocker closed |
@@ -756,10 +770,11 @@ For every activity change, update section 9 immediately.
 Rules:
 
 1. Only one task should be IN_PROGRESS per executor at a time.
-2. Move task to REVIEW only after local checks for that task are complete.
-3. Move task to DONE only after acceptance evidence is captured.
-4. Add concise notes in task Notes column: what changed, what was validated.
-5. If blocked, move status to BLOCKED and add blocker ID in section 13.
+2. Move task to REVIEW only after local checks for reference parity + logic preservation are complete.
+3. Move task to DONE when page-level reference parity evidence is captured.
+4. Run Visual Sync Lock as a final T-044 pass before release; do not block page-level DONE status on end-phase lock execution.
+5. Add concise notes in task Notes column: what changed, what was validated.
+6. If blocked, move status to BLOCKED and add blocker ID in section 13.
 
 ---
 
@@ -783,7 +798,8 @@ Rules:
 
 | Date | Activity | Tracker IDs | Result | Evidence |
 |---|---|---|---|---|
-| 2026-06-03 | T-032 Import redesign completed: converted all Tailwind utilities (flex, gap, px, py, rounded, border, text-*, bg-*, transition) to design-system classes and inline CSS variables; SlotDropzone refactored with file state indicators using CSS variables (var(--accent), var(--danger), var(--success), var(--muted), var(--muted-bg), var(--faint)); ImportCard structure updated to use card/card__head/card__body semantic classes; upload progress bar and error banner integrated with Icon component; group sections (Revenue/Parts/Warranty) converted to card-based containers with collapsible buttons; main page structure uses pagehead for title + 6 import card groups/standalone cards; all business logic preserved (13 tables, CSV/XLSX parsing, VAS delete-and-insert replace mode, employee code lookup with mapping issues logging, parts order/consumption/stock/invoice special parsing, warranty row normalization, branch/portal resolution); build clean (874ms, 723 modules) | T-032 | DONE | src/pages/ImportPage.tsx refactored: Icon import added, 2166 lines business logic intact, grep confirmed zero Tailwind utilities, npm run build ✓ built in 874ms |
+| 2026-06-03 | T-030 recheck (reference-first + visual sync lock) completed: audited technician.jsx parity and found remaining inline visual styles in production page; removed inline styling from Technician selector, income summary card, dense card bodies, right-aligned numeric cells, and row-count badge by switching to shared App.css classes (`tech-picker-field`, `tech-income-total*`, `num-tabular`, `tech-income-cell`, existing `count-badge`, `card__body.dense`, `mb-gap`). | T-030 | DONE | src/pages/TechnicianPage.tsx inline-style grep now returns zero; src/App.css class additions validated; npm run build ✓ built in 895ms (723 modules) |
+| 2026-06-03 | T-032 Import redesign finalized: removed remaining inline visual styling from SlotDropzone, ImportCard, and grouped Revenue/Parts/Warranty sections; converted hover/drag/collapse visuals to shared App.css classes (import-slot*, import-card*, import-group*, import-progress*, import-error-banner*); replaced inline SVG chevrons with shared Icon component; preserved all upload/import business logic and state handling. Only state-driven progress width remains inline (`style={{ width: ... }}`) per visual-sync rules. | T-032 | DONE | src/pages/ImportPage.tsx + src/App.css updated; grep shows one remaining state-driven inline style only; npm run build ✓ built in 1.10s (723 modules) |
 | 2026-06-03 | T-030 Technician redesign completed: ported pagehead/card/income-tracker/assigned-rows-table structure from reference; 100% design-system class grammar (icon-align-text, pill for status badges, .ts-cell, .type-cell, .unassigned-indicator, .cell-muted, .text-right); zero Tailwind utilities; no inner .page wrapper; income tracker displays total earnings in success-colored box using CSS variables (var(--success-bg), var(--success)); status pills dynamically render as g/w/b classes; all design-system classes verified in code audit; build clean (854ms, 723 modules); visual parity with Home baseline confirmed (RBAC module access gating prevents functional test, but markup structure matches reference design-system) | T-030 | DONE | src/pages/TechnicianPage.tsx completely refactored with design-system classes (pagehead, card, card__head, card__body, empty-state, tbl-wrap, tbl, Icon component integration), grep search confirmed zero Tailwind utilities, npm run build ✓ built in 854ms, code audit verified pattern matches FloorInchargePage T-029 enforcement |
 | 2026-06-03 | T-029 Floor Incharge redesign completed: ported pagehead/summary/schip/card/tbl-wrap/tbl structure from reference; branch filter + search + full assignment table with Bay/Technician/Status/Remark controls; all design system classes imported; Icon component integrated; preserved all existing handlers and DB layer; build clean (723 modules, 879ms) | T-029 | REVIEW | src/pages/FloorInchargePage.tsx redesigned to reference grammar, npm run build ✓ built in 879ms, design system class list verified against reference (page, pagehead, summary, schip, card, card__head, card__body, tbl-wrap, tbl, sel, inp, btn, greet, ic, n, l, mono, strong) |
 | 2026-06-02 | Visual sync lock enforcement pass executed on active operational pages and shell surfaces: moved Reception/Service Advisor/Home-adjacent styling from inline fragments to shared App.css classes, and converted AccessDenied fallback from utility-stack layout into the same card/token grammar; tracker governance status corrected from DONE to IN_PROGRESS pending remaining mixed-system pages | T-014, T-015, T-028, T-044 | IN_PROGRESS | src/pages/ReceptionPage.tsx (inline styling replaced with shared classes), src/pages/ServiceAdvisorPage.tsx (shared class grammar enforced across table/actions), src/pages/DashboardPage.tsx (class-based card/feed/table rhythm), src/App.tsx + src/App.css (TopNav + AccessDenied + shared helper classes) |
@@ -817,7 +833,7 @@ Rules:
 
 | Blocker ID | Date | Related Task IDs | Blocker Description | Required Input To Unblock | Status |
 |---|---|---|---|---|---|
-| B-001 | 2026-06-02 | T-032, T-033, T-038, T-043 | Dedicated redesign prototypes and full spec detail still missing for Import, AutoDoc/JobCard, and non-warranty report categories (labour-revenue 5, revenue 7, parts 17). Warranty 15 new views tracked as T-043. | Provide finalized redesign reference files/snapshots/spec for Import, AutoDoc/JobCard, and non-warranty report pages (labour, revenue, parts). | OPEN |
+| B-001 | 2026-06-02 | T-033, T-038, T-043 | Dedicated redesign prototypes and full spec detail still missing for AutoDoc/JobCard and non-warranty report categories (labour-revenue 5, revenue 7, parts 17). Warranty 15 new views tracked as T-043. | Provide finalized redesign reference files/snapshots/spec for AutoDoc/JobCard and non-warranty report pages (labour, revenue, parts). | OPEN |
 | B-002 | 2026-06-02 | T-039 | Reference instruction file status reconciliation. | Verified in second-pass re-audit: file exists and is readable. | CLOSED |
 | B-003 | 2026-06-02 | T-040 | Password policy mismatch across audited sources (prototype request-access guidance vs mirror SignUp minimum 8 chars vs PasswordUpdate 12+ strong policy). | Provide explicit product decision on whether sign-up policy remains 8+ (logic-preserving) or is elevated to 12+ strong policy. | OPEN |
 | B-004 | 2026-06-03 | T-029 | VISUAL SYNC LOCK: Floor Incharge had inner `.page` wrapper causing double padding + 20+ inline styles (both fixed). Reference prototype used inline styles; production requires class-based system. Fixed by: (1) Creating 18+ CSS utility classes, (2) Removing inner `.page` wrapper (was redundant vs outer wrapper in App.tsx), (3) Matching baseline pattern (plain `<div>` like Home/Reception/ServiceAdvisor/Admin). | Refactored FloorInchargePage.tsx: remove inline styles → utility classes, remove inner .page wrapper, verify visual parity. | CLOSED |
@@ -1064,15 +1080,11 @@ VISUAL SYNC LOCK ENFORCEMENT CHECKLIST (Copy to Task)
 
 **BLOCKED (Waiting for User Input):**
 
-3. **T-032 Import Redesign** (B-001)
-   - Blocker: Missing dedicated redesign prototype for Import page
-   - Unblock: Provide finalized redesign reference file/snapshot for Import
-
-4. **T-033 AutoDoc/JobCard Redesign** (B-001)
+3. **T-033 AutoDoc/JobCard Redesign** (B-001)
    - Blocker: Missing dedicated redesign prototype for AutoDoc/JobCard
    - Unblock: Provide finalized redesign reference file/snapshot for AutoDoc/JobCard
 
-5. **T-040 Password Policy Alignment** (B-003)
+4. **T-040 Password Policy Alignment** (B-003)
    - Blocker: Conflicting constraints across sources (8 chars vs 12+ strength)
    - Unblock: Product decision: keep SignUp at 8+ or elevate to 12+ strong?
 

@@ -740,13 +740,13 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.05em', color: 'var(--muted)' }}>{branch}</span>
+    <div className="import-slot">
+      <div className="import-slot__head">
+        <span className="import-slot__branch">{branch}</span>
         {slot.file && (
           <button
             onClick={() => onClear(branch)}
-            style={{ fontSize: '10px', color: 'var(--faint)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
+            className="import-slot__clear"
           >
             Remove
           </button>
@@ -755,16 +755,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
 
       {slot.file ? (
         <div
-          style={{
-            padding: '6px 9px',
-            fontSize: '12px',
-            lineHeight: 1.4,
-            borderRadius: '4px',
-            border: '1px solid',
-            borderColor: slot.parseError ? 'var(--danger)' : slot.rowCount === null ? 'var(--muted-bg)' : 'var(--success)',
-            backgroundColor: slot.parseError ? 'rgba(239, 68, 68, 0.05)' : slot.rowCount === null ? 'var(--muted-bg)' : 'rgba(34, 197, 94, 0.05)',
-            color: slot.parseError ? 'var(--danger)' : slot.rowCount === null ? 'var(--muted)' : 'var(--success)',
-          }}
+          className={`import-slot__file ${slot.parseError ? 'is-error' : slot.rowCount === null ? 'is-pending' : 'is-success'}`}
         >
           {slot.parseError ? (
             <span>{slot.parseError}</span>
@@ -772,8 +763,8 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
             <span>Parsing…</span>
           ) : (
             <>
-              <span style={{ display: 'block', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{slot.file.name}</span>
-              <span style={{ marginTop: '2px', display: 'block', color: 'var(--success)', fontSize: '11px' }}>· {slot.rowCount.toLocaleString()} rows</span>
+              <span className="import-slot__filename">{slot.file.name}</span>
+              <span className="import-slot__rows">· {slot.rowCount.toLocaleString()} rows</span>
             </>
           )}
         </div>
@@ -791,21 +782,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
             const file = e.dataTransfer.files[0]
             if (file) handleFile(file)
           }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            cursor: 'pointer',
-            padding: '9px',
-            borderRadius: '4px',
-            border: '2px dashed',
-            borderColor: isDragging ? 'var(--accent)' : 'var(--muted-bg)',
-            backgroundColor: isDragging ? 'rgba(14, 165, 233, 0.05)' : 'transparent',
-            color: isDragging ? 'var(--accent)' : 'var(--faint)',
-            fontSize: '12px',
-            transition: 'all 0.2s',
-          }}
+          className={`import-slot__dropzone${isDragging ? ' is-dragging' : ''}`}
         >
           <Icon name="upload" size={14} />
           Drop or click to browse
@@ -813,7 +790,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
             id={inputId}
             type="file"
             accept=".xlsx,.xls,.csv"
-            style={{ display: 'none' }}
+            className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) handleFile(file)
@@ -864,15 +841,15 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
         <div>
           <h3>{config.title}</h3>
           <div className="sub">{config.description}</div>
-          {lastUpdatedLabel && <div className="sub" style={{ fontSize: '10.5px', marginTop: '4px' }}>Last updated: {lastUpdatedLabel}</div>}
+          {lastUpdatedLabel && <div className="sub import-card__updated">Last updated: {lastUpdatedLabel}</div>}
         </div>
-        <span className="mono" style={{ fontSize: '10px', padding: '3px 6px', backgroundColor: 'var(--muted-bg)', borderRadius: '3px', whiteSpace: 'nowrap' }}>
+        <span className="mono import-card__table-tag">
           {config.tableName}
         </span>
       </div>
 
       {/* Slot grid */}
-      <div className="card__body" style={{ padding: '9px 18px 12px', display: 'grid', gridTemplateColumns: branches.length === 4 ? 'repeat(2, 1fr)' : 'repeat(1, 1fr)', gap: '9px' }}>
+      <div className={`card__body import-card__slots${branches.length === 4 ? ' import-card__slots--quad' : ''}`}>
         {branches.map((branch) => (
           <SlotDropzone
             key={branch}
@@ -885,16 +862,16 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', fontSize: '12px', color: 'var(--faint)' }}>
-        <span>
+      <div className="import-card__footer">
+        <span className="import-card__ready">
           {hasValidFile && totalRows > 0 ? `${totalRows.toLocaleString()} rows ready` : ''}
         </span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+        <div className="import-card__actions">
           {state.status === 'success' && (
             <button
               onClick={onReset}
-              style={{ fontSize: '12px', color: 'var(--muted)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
+              className="import-card__reset"
             >
               Import more
             </button>
@@ -903,15 +880,7 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
           <button
             onClick={onUpload}
             disabled={!hasValidFile || state.status === 'uploading' || state.status === 'success'}
-            className="btn"
-            style={{
-              backgroundColor: state.status === 'success' ? 'var(--success)' : state.status === 'uploading' ? 'var(--accent)' : 'var(--accent)',
-              opacity: !hasValidFile || state.status === 'uploading' || state.status === 'success' ? 0.5 : 1,
-              cursor: !hasValidFile || state.status === 'uploading' || state.status === 'success' ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
+            className={`btn btn--primary import-upload-btn${state.status === 'success' ? ' is-success' : ''}`}
           >
             {state.status === 'uploading' && (
               <Icon name="upload" size={13} />
@@ -926,25 +895,21 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       </div>
 
       {state.status === 'uploading' && state.uploadProgress.totalBranches > 0 && (
-        <div style={{ padding: '9px 18px', borderTop: '1px solid var(--muted-bg)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>
+        <div className="import-progress">
+          <div className="import-progress__head">
             <span>Upload progress</span>
             <span>
               {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
             </span>
           </div>
-          <div style={{ height: '4px', backgroundColor: 'var(--muted-bg)', borderRadius: '2px', overflow: 'hidden' }}>
+          <div className="import-progress__track">
             <div
-              style={{
-                height: '100%',
-                backgroundColor: 'var(--accent)',
-                width: `${progressPercent}%`,
-                transition: 'width 0.3s ease',
-              }}
+              className="import-progress__bar"
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
           {state.uploadProgress.currentBranch && (
-            <p style={{ marginTop: '6px', fontSize: '11px', color: 'var(--faint)' }}>
+            <p className="import-progress__current">
               Uploading {state.uploadProgress.currentBranch}…
             </p>
           )}
@@ -953,11 +918,11 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
 
       {/* Error banner */}
       {state.status === 'error' && state.uploadError && (
-        <div style={{ padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'rgba(239, 68, 68, 0.03)', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-          <Icon name="alert" size={14} style={{ color: 'var(--danger)', marginTop: '2px', flexShrink: 0 }} />
-          <div style={{ fontSize: '12px' }}>
-            <p style={{ fontWeight: 600, color: 'var(--danger)' }}>Upload failed</p>
-            <p style={{ marginTop: '3px', color: 'var(--muted)', fontSize: '11px' }}>{state.uploadError}</p>
+        <div className="import-error-banner">
+          <Icon name="alert" size={14} className="import-error-banner__icon" />
+          <div className="import-error-banner__content">
+            <p className="import-error-banner__title">Upload failed</p>
+            <p className="import-error-banner__message">{state.uploadError}</p>
           </div>
         </div>
       )}
@@ -1968,49 +1933,37 @@ export default function ImportPage() {
         </p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      <div className="import-page">
         {revenueReportCards.length > 0 && (
-          <section className="card">
+          <section className="card import-group">
             <button
               type="button"
               onClick={() => toggleGroup('revenue_report')}
-              style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '12px 18px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', transition: 'background-color 0.2s' }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--muted-bg)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              className="import-group__toggle"
               aria-expanded={!!expandedGroups.revenue_report}
               aria-controls="revenue-report-group-content"
             >
-              <div>
+              <div className="import-group__meta">
                 <h3>Revenue Report</h3>
-                <p className="sub">
+                <p>
                   Upload PSF Revenue Report, Invoice Data, and VAS Data in one grouped section to reduce confusion.
                 </p>
               </div>
 
-              <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)', flexShrink: 0 }}>
-                <span style={{ padding: '3px 6px', borderRadius: '3px', backgroundColor: 'var(--muted-bg)', fontSize: '11px' }}>
+              <div className="import-group__summary">
+                <span className="import-group__count">
                   {revenueReportCards.length} cards
                 </span>
-                <svg
-                  style={{
-                    width: '14px',
-                    height: '14px',
-                    color: 'var(--muted)',
-                    transition: 'transform 0.2s',
-                    transform: expandedGroups.revenue_report ? 'rotate(180deg)' : 'rotate(0deg)',
-                  }}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
+                <Icon
+                  name="chevron"
+                  size={14}
+                  className={`import-group__chevron${expandedGroups.revenue_report ? ' is-open' : ''}`}
+                />
               </div>
             </button>
 
             {expandedGroups.revenue_report && (
-              <div id="revenue-report-group-content" style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'var(--muted-bg)' }}>
+              <div id="revenue-report-group-content" className="import-group__content">
                 {revenueReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
@@ -2029,47 +1982,35 @@ export default function ImportPage() {
         )}
 
         {partsReportCards.length > 0 && (
-          <section className="card">
+          <section className="card import-group">
             <button
               type="button"
               onClick={() => toggleGroup('parts_report')}
-              style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '12px 18px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', transition: 'background-color 0.2s' }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--muted-bg)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              className="import-group__toggle"
               aria-expanded={!!expandedGroups.parts_report}
               aria-controls="parts-report-group-content"
             >
-              <div>
+              <div className="import-group__meta">
                 <h3>Parts Report</h3>
-                <p className="sub">
+                <p>
                   Upload Parts Consumption, Parts Order, and Parts In Stock in one grouped section.
                 </p>
               </div>
 
-              <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)', flexShrink: 0 }}>
-                <span style={{ padding: '3px 6px', borderRadius: '3px', backgroundColor: 'var(--muted-bg)', fontSize: '11px' }}>
+              <div className="import-group__summary">
+                <span className="import-group__count">
                   {partsReportCards.length} cards
                 </span>
-                <svg
-                  style={{
-                    width: '14px',
-                    height: '14px',
-                    color: 'var(--muted)',
-                    transition: 'transform 0.2s',
-                    transform: expandedGroups.parts_report ? 'rotate(180deg)' : 'rotate(0deg)',
-                  }}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
+                <Icon
+                  name="chevron"
+                  size={14}
+                  className={`import-group__chevron${expandedGroups.parts_report ? ' is-open' : ''}`}
+                />
               </div>
             </button>
 
             {expandedGroups.parts_report && (
-              <div id="parts-report-group-content" style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'var(--muted-bg)' }}>
+              <div id="parts-report-group-content" className="import-group__content">
                 {partsReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
@@ -2088,47 +2029,35 @@ export default function ImportPage() {
         )}
 
         {warrantyReportCards.length > 0 && (
-          <section className="card">
+          <section className="card import-group">
             <button
               type="button"
               onClick={() => toggleGroup('warranty_report')}
-              style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '12px 18px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', transition: 'background-color 0.2s' }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--muted-bg)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              className="import-group__toggle"
               aria-expanded={!!expandedGroups.warranty_report}
               aria-controls="warranty-report-group-content"
             >
-              <div>
+              <div className="import-group__meta">
                 <h3>Warranty Report</h3>
-                <p className="sub">
+                <p>
                   Upload Claim-Settlement-Report, Part WC, Updation Claim, Goodwill, AMC, FSB, and WC across four branches.
                 </p>
               </div>
 
-              <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted)', flexShrink: 0 }}>
-                <span style={{ padding: '3px 6px', borderRadius: '3px', backgroundColor: 'var(--muted-bg)', fontSize: '11px' }}>
+              <div className="import-group__summary">
+                <span className="import-group__count">
                   {warrantyReportCards.length} cards
                 </span>
-                <svg
-                  style={{
-                    width: '14px',
-                    height: '14px',
-                    color: 'var(--muted)',
-                    transition: 'transform 0.2s',
-                    transform: expandedGroups.warranty_report ? 'rotate(180deg)' : 'rotate(0deg)',
-                  }}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
+                <Icon
+                  name="chevron"
+                  size={14}
+                  className={`import-group__chevron${expandedGroups.warranty_report ? ' is-open' : ''}`}
+                />
               </div>
             </button>
 
             {expandedGroups.warranty_report && (
-              <div id="warranty-report-group-content" style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '9px 18px', borderTop: '1px solid var(--muted-bg)', backgroundColor: 'var(--muted-bg)' }}>
+              <div id="warranty-report-group-content" className="import-group__content">
                 {warrantyReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
