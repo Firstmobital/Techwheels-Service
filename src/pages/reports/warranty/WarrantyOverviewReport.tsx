@@ -7,16 +7,19 @@ import Icon from '../../../components/Icon'
 type DashboardTab = 'overview' | 'alerts' | 'financial' | 'operations'
 
 // Real aggregates from warranty-reports-data.js (WARRANTY_REFERENCE.md, dealer 3000840 PV/ICE + 500A840 EV)
+// Mapped to reference design: 6 KPIs (Settlement, Claimed, Pending, Payment pending, Revenue 20%, Combined)
 const WARRANTY_AGGREGATES = {
   kpis: [
-    { icon: 'upload', label: 'Invoices pending upload', value: '12', sub: '₹25.72L value blocked', tone: 'var(--danger)' },
-    { icon: 'clock', label: 'Pending WC claims', value: '31', sub: 'Created / SOP / Submitted', tone: 'var(--danger)' },
-    { icon: 'doc', label: 'AMC pending settlement', value: '89', sub: '₹4.48L claimed', tone: 'var(--warn)' },
-    { icon: 'reports', label: '20% revenue — Normal WC', value: '₹6.10L', sub: 'on ₹30.5L parts', tone: 'var(--success)' },
-    { icon: 'reports', label: '20% revenue — Ext WC', value: '₹3.19L', sub: 'on ₹15.9L parts', tone: '#0F6E56' },
+    { icon: 'shield', label: 'Settlement portfolio', value: '₹196.13L', sub: '1,961 unique JCs', tone: 'var(--accent)' },
+    { icon: 'reports', label: 'Claimed (all cats)', value: '₹1.72Cr', sub: 'WC+UP+AMC+FSB+CS', tone: '#4F46E5' },
+    { icon: 'clock', label: 'Pending value', value: '₹46.22L', sub: '767 JCs unposted', tone: 'var(--warn)' },
+    { icon: 'alert', label: 'Payment pending', value: '234', sub: 'across categories', tone: 'var(--danger)' },
+    { icon: 'reports', label: '20% parts revenue', value: '₹26.96L', sub: `leakage ₹8.16L`, tone: 'var(--success)' },
+    { icon: 'doc', label: 'Settlement + revenue', value: '₹223.08L', sub: 'combined opportunity', tone: '#534AB7' },
   ],
   totals: {
     settlementL: '₹196.13L',
+    claimedL: '₹1.72Cr',
     uniqueJCs: 1961,
     pendingJCs: 767,
     pendingL: '₹46.22L',
@@ -589,8 +592,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   return (
     <div>
-      {/* Real KPIs from WARRANTY_AGGREGATES */}
-      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 'var(--gap)' }}>
+      {/* Real KPIs from WARRANTY_AGGREGATES — 6-column layout per reference design */}
+      <div className="kpis" style={{ gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 'var(--gap)' }}>
         {WARRANTY_AGGREGATES.kpis.map((kpi, i) => (
           <Kpi key={i} {...kpi} />
         ))}
