@@ -356,7 +356,25 @@ const MODEL_KEYS = ['model', 'product', 'vehicle_model', 'model_name', 'chassis_
 const JC_KEYS = ['job_card_number', 'job_card_no', 'jc_no', 'jc_number']
 const INVOICE_DATE_KEYS = ['invoice_date', 'invoice_dt', 'invoice date', 'inv_date']
 const CLOSED_DATE_KEYS = ['closed_date', 'job_closed_date', 'close_date', 'compl_report_date', 'repair_date']
-const JOB_CARD_DATE_KEYS = ['job_card_date', 'jc_date', 'job_date', 'created_date', 'date_created']
+const AGE_DATE_KEYS = [
+  'job_card_date',
+  'jc_date',
+  'job_date',
+  'original_claim_submitted_date',
+  'goodwill_request_date',
+  'created_date',
+  'date_created',
+  'cmpl_report_date',
+  'compl_report_date',
+  'service_date',
+  'invc_date_yyyy_mm_dd',
+  'posting_date_yyyy_mm_dd',
+  'pcr_created_date',
+  'pcr_creation_date',
+  'pcr_raising_date',
+  'veh_repair_date',
+  'repair_date',
+]
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -369,13 +387,19 @@ function toNumber(value: unknown): number {
 }
 
 function extractByPreferredKeys(row: Record<string, unknown>, keys: string[]): string {
-  for (const key of keys) {
-    const exact = row[key]
-    if (exact != null && String(exact).trim() !== '') return String(exact).trim()
+  const entries = Object.entries(row)
 
-    const found = Object.keys(row).find((candidate) => candidate.includes(key))
-    if (found && row[found] != null && String(row[found]).trim() !== '') {
-      return String(row[found]).trim()
+  for (const key of keys) {
+    const needle = key.toLowerCase()
+
+    const exactInsensitive = entries.find(([candidate]) => candidate.toLowerCase() === needle)
+    if (exactInsensitive && exactInsensitive[1] != null && String(exactInsensitive[1]).trim() !== '') {
+      return String(exactInsensitive[1]).trim()
+    }
+
+    const partialInsensitive = entries.find(([candidate]) => candidate.toLowerCase().includes(needle))
+    if (partialInsensitive && partialInsensitive[1] != null && String(partialInsensitive[1]).trim() !== '') {
+      return String(partialInsensitive[1]).trim()
     }
   }
   return ''
@@ -424,11 +448,43 @@ function parsePotentialDate(value: string): string | null {
   const text = value.trim()
   if (!text) return null
 
+  // Common placeholder in imported sheets.
+  if (text === '0000-00-00' || text.startsWith('0000-00-00')) return null
+
   const numericDate = Number(text)
   if (Number.isFinite(numericDate) && numericDate > 30000 && numericDate < 80000) {
     const epoch = new Date(Date.UTC(1899, 11, 30)).getTime()
     const date = new Date(epoch + numericDate * 24 * 60 * 60 * 1000)
     return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+
+  const yyyymmdd = text.match(/^(\d{4})(\d{2})(\d{2})$/)
+  if (yyyymmdd) {
+    const year = Number(yyyymmdd[1])
+    const month = Number(yyyymmdd[2]) - 1
+    const day = Number(yyyymmdd[3])
+    const parsed = new Date(Date.UTC(year, month, day))
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+  }
+
+  const ddmmyyyyWithTime = text.match(
+    /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i,
+  )
+  if (ddmmyyyyWithTime) {
+    const day = Number(ddmmyyyyWithTime[1])
+    const month = Number(ddmmyyyyWithTime[2]) - 1
+    const year = Number(ddmmyyyyWithTime[3].length === 2 ? `20${ddmmyyyyWithTime[3]}` : ddmmyyyyWithTime[3])
+
+    let hours = Number(ddmmyyyyWithTime[4] ?? '0')
+    const minutes = Number(ddmmyyyyWithTime[5] ?? '0')
+    const seconds = Number(ddmmyyyyWithTime[6] ?? '0')
+    const ampm = String(ddmmyyyyWithTime[7] ?? '').toUpperCase()
+
+    if (ampm === 'AM' && hours === 12) hours = 0
+    else if (ampm === 'PM' && hours < 12) hours += 12
+
+    const parsed = new Date(Date.UTC(year, month, day, hours, minutes, seconds))
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
   }
 
   const direct = new Date(text)
@@ -443,6 +499,28 @@ function parsePotentialDate(value: string): string | null {
     const year = Number(ddmmyyyy[3].length === 2 ? `20${ddmmyyyy[3]}` : ddmmyyyy[3])
     const parsed = new Date(Date.UTC(year, month, day))
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+  }
+
+  return null
+}
+
+function extractFirstParsableDateByPreferredKeys(row: Record<string, unknown>, keys: string[]): string | null {
+  const entries = Object.entries(row)
+
+  for (const key of keys) {
+    const needle = key.toLowerCase()
+
+    const exactInsensitive = entries.find(([candidate]) => candidate.toLowerCase() === needle)
+    if (exactInsensitive && exactInsensitive[1] != null) {
+      const parsed = parsePotentialDate(String(exactInsensitive[1]))
+      if (parsed) return parsed
+    }
+
+    const partialInsensitive = entries.find(([candidate]) => candidate.toLowerCase().includes(needle))
+    if (partialInsensitive && partialInsensitive[1] != null) {
+      const parsed = parsePotentialDate(String(partialInsensitive[1]))
+      if (parsed) return parsed
+    }
   }
 
   return null
@@ -606,13 +684,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             const claimAmount =
               claimAmountFromKnown > 0 ? claimAmountFromKnown : partsAmount + labourAmount + specialAmount + miscAmount
 
-            // Calculate age from job_card_date in source data (not database created_at which reflects import time)
-            const jobCardDateRaw = extractByPreferredKeys(source, JOB_CARD_DATE_KEYS)
-            const jobCardDateParsed = parsePotentialDate(jobCardDateRaw)
+            // Calculate age strictly from source-sheet business dates; do not use import timestamp fallback.
+            const parsedAgeSourceDate = extractFirstParsableDateByPreferredKeys(source, AGE_DATE_KEYS)
             let ageDays = 0
-            if (jobCardDateParsed) {
-              const jobCardDateMs = new Date(jobCardDateParsed).getTime()
-              ageDays = Math.max(0, Math.floor((now - jobCardDateMs) / (1000 * 60 * 60 * 24)))
+            if (parsedAgeSourceDate) {
+              const ageSourceMs = new Date(parsedAgeSourceDate).getTime()
+              ageDays = Math.max(0, Math.floor((now - ageSourceMs) / (1000 * 60 * 60 * 24)))
             }
 
             normalizedRecords.push({
@@ -1118,6 +1195,158 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     return alerts
   }, [filteredRecords])
 
+  const debugAlertCounts = useMemo(() => {
+    const countAlerts = (rows: WarrantyRecord[]) => {
+      const notSubmitted = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'created' && record.ageDays > 1
+      }).length
+
+      const stuckReview = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'awaiting_sop' && record.ageDays > 3
+      }).length
+
+      const sopPending = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return (bucket === 'awaiting_sop' || bucket === 'submitted') && record.ageDays > 2
+      }).length
+
+      const approvedUnsettled = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'approved' && record.ageDays > 5 && String(record.postingDocNo || '').trim() === ''
+      }).length
+
+      const rejectionBlank = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'rejected' && String(record.rejectionReason || '').trim() === ''
+      }).length
+
+      return {
+        notSubmitted,
+        stuckReview,
+        sopPending,
+        approvedUnsettled,
+        rejectionBlank,
+      }
+    }
+
+    const raw = countAlerts(records)
+    const filtered = countAlerts(filteredRecords)
+
+    return {
+      raw,
+      filtered,
+      rawTotal: raw.notSubmitted + raw.stuckReview + raw.sopPending + raw.approvedUnsettled + raw.rejectionBlank,
+      filteredTotal:
+        filtered.notSubmitted +
+        filtered.stuckReview +
+        filtered.sopPending +
+        filtered.approvedUnsettled +
+        filtered.rejectionBlank,
+    }
+  }, [filteredRecords, records])
+
+  const debugScopeSnapshot = useMemo(() => {
+    const adminBypassActive = viewerDealerCodes.length >= 2
+    return {
+      branchFilter: branch,
+      selectedLocation,
+      selectedFuelType,
+      dealerScopeLabel: viewerDealerCodes.length > 0 ? viewerDealerCodes.join(', ') : 'No dealer mapping assigned',
+      dealerCodeCount: viewerDealerCodes.length,
+      adminBypassActive,
+    }
+  }, [branch, selectedFuelType, selectedLocation, viewerDealerCodes])
+
+  const debugStatusBuckets = useMemo(() => {
+    const countBuckets = (rows: WarrantyRecord[]) => {
+      const counts = {
+        created: 0,
+        submitted: 0,
+        awaiting_sop: 0,
+        approved: 0,
+        settled: 0,
+        rejected: 0,
+      }
+
+      for (const row of rows) {
+        const bucket = normalizeStatusBucket(row.status)
+        counts[bucket] += 1
+      }
+
+      return counts
+    }
+
+    return {
+      raw: countBuckets(records),
+      filtered: countBuckets(filteredRecords),
+    }
+  }, [filteredRecords, records])
+
+  const debugAlertPredicateDiagnostics = useMemo(() => {
+    const compute = (rows: WarrantyRecord[]) => {
+      const createdBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'created').length
+      const createdAgePass = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'created' && record.ageDays > 1
+      }).length
+
+      const awaitingBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'awaiting_sop').length
+      const awaitingAgePass = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'awaiting_sop' && record.ageDays > 3
+      }).length
+
+      const sopBase = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'awaiting_sop' || bucket === 'submitted'
+      }).length
+      const sopAgePass = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return (bucket === 'awaiting_sop' || bucket === 'submitted') && record.ageDays > 2
+      }).length
+
+      const approvedBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'approved').length
+      const approvedAgePass = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'approved' && record.ageDays > 5
+      }).length
+      const approvedNoPosting = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'approved' && record.ageDays > 5 && String(record.postingDocNo || '').trim() === ''
+      }).length
+
+      const rejectedBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'rejected').length
+      const rejectedBlankReason = rows.filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'rejected' && String(record.rejectionReason || '').trim() === ''
+      }).length
+
+      const ageZeroOrMissing = rows.filter((record) => !Number.isFinite(record.ageDays) || record.ageDays <= 0).length
+
+      return {
+        createdBase,
+        createdAgePass,
+        awaitingBase,
+        awaitingAgePass,
+        sopBase,
+        sopAgePass,
+        approvedBase,
+        approvedAgePass,
+        approvedNoPosting,
+        rejectedBase,
+        rejectedBlankReason,
+        ageZeroOrMissing,
+      }
+    }
+
+    return {
+      raw: compute(records),
+      filtered: compute(filteredRecords),
+    }
+  }, [filteredRecords, records])
+
   const computedFinancialKpis = useMemo(() => {
     const normalWc = filteredRecords.filter((record) => {
       return record.category === 'Warranty Claim' && !record.model?.toLowerCase().includes('ev')
@@ -1295,6 +1524,196 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           </div>
         </div>
       )}
+
+      <div className="card" style={{ borderLeft: '3px solid #111827', marginBottom: 'var(--gap)', background: '#FAFAFA' }}>
+        <div className="card__head">
+          <div>
+            <h3>Debug Snapshot (Temporary)</h3>
+            <div className="sub">Raw vs filtered alert counts, plus active scope and filter context</div>
+          </div>
+        </div>
+        <div className="card__body" style={{ display: 'grid', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))', gap: 8 }}>
+            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>records (raw)</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{records.length.toLocaleString('en-IN')}</div>
+            </div>
+            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>filteredRecords</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{filteredRecords.length.toLocaleString('en-IN')}</div>
+            </div>
+            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>alerts (raw total)</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{debugAlertCounts.rawTotal.toLocaleString('en-IN')}</div>
+            </div>
+            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>alerts (filtered total)</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{debugAlertCounts.filteredTotal.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+
+          <div className="tbl-wrap scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Alert metric</th>
+                  <th className="ctr">Raw</th>
+                  <th className="ctr">Filtered</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Created &gt; 24h</td>
+                  <td className="ctr">{debugAlertCounts.raw.notSubmitted}</td>
+                  <td className="ctr">{debugAlertCounts.filtered.notSubmitted}</td>
+                </tr>
+                <tr>
+                  <td>Awaiting SOP &gt; 3d</td>
+                  <td className="ctr">{debugAlertCounts.raw.stuckReview}</td>
+                  <td className="ctr">{debugAlertCounts.filtered.stuckReview}</td>
+                </tr>
+                <tr>
+                  <td>SOP pending &gt; 2d</td>
+                  <td className="ctr">{debugAlertCounts.raw.sopPending}</td>
+                  <td className="ctr">{debugAlertCounts.filtered.sopPending}</td>
+                </tr>
+                <tr>
+                  <td>Approved + no posting &gt; 5d</td>
+                  <td className="ctr">{debugAlertCounts.raw.approvedUnsettled}</td>
+                  <td className="ctr">{debugAlertCounts.filtered.approvedUnsettled}</td>
+                </tr>
+                <tr>
+                  <td>Rejected + blank reason</td>
+                  <td className="ctr">{debugAlertCounts.raw.rejectionBlank}</td>
+                  <td className="ctr">{debugAlertCounts.filtered.rejectionBlank}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="tbl-wrap scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Status bucket</th>
+                  <th className="ctr">Raw</th>
+                  <th className="ctr">Filtered</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>created</td>
+                  <td className="ctr">{debugStatusBuckets.raw.created}</td>
+                  <td className="ctr">{debugStatusBuckets.filtered.created}</td>
+                </tr>
+                <tr>
+                  <td>submitted</td>
+                  <td className="ctr">{debugStatusBuckets.raw.submitted}</td>
+                  <td className="ctr">{debugStatusBuckets.filtered.submitted}</td>
+                </tr>
+                <tr>
+                  <td>awaiting_sop</td>
+                  <td className="ctr">{debugStatusBuckets.raw.awaiting_sop}</td>
+                  <td className="ctr">{debugStatusBuckets.filtered.awaiting_sop}</td>
+                </tr>
+                <tr>
+                  <td>approved</td>
+                  <td className="ctr">{debugStatusBuckets.raw.approved}</td>
+                  <td className="ctr">{debugStatusBuckets.filtered.approved}</td>
+                </tr>
+                <tr>
+                  <td>settled</td>
+                  <td className="ctr">{debugStatusBuckets.raw.settled}</td>
+                  <td className="ctr">{debugStatusBuckets.filtered.settled}</td>
+                </tr>
+                <tr>
+                  <td>rejected</td>
+                  <td className="ctr">{debugStatusBuckets.raw.rejected}</td>
+                  <td className="ctr">{debugStatusBuckets.filtered.rejected}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="tbl-wrap scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Predicate stage</th>
+                  <th className="ctr">Raw</th>
+                  <th className="ctr">Filtered</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Created base (status=created)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.createdBase}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.createdBase}</td>
+                </tr>
+                <tr>
+                  <td>Created age pass (&gt;24h)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.createdAgePass}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.createdAgePass}</td>
+                </tr>
+                <tr>
+                  <td>Await SOP base (status=awaiting_sop)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.awaitingBase}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.awaitingBase}</td>
+                </tr>
+                <tr>
+                  <td>Await SOP age pass (&gt;3d)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.awaitingAgePass}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.awaitingAgePass}</td>
+                </tr>
+                <tr>
+                  <td>SOP pending base (awaiting_sop or submitted)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.sopBase}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.sopBase}</td>
+                </tr>
+                <tr>
+                  <td>SOP pending age pass (&gt;2d)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.sopAgePass}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.sopAgePass}</td>
+                </tr>
+                <tr>
+                  <td>Approved base (status=approved)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.approvedBase}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.approvedBase}</td>
+                </tr>
+                <tr>
+                  <td>Approved age pass (&gt;5d)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.approvedAgePass}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.approvedAgePass}</td>
+                </tr>
+                <tr>
+                  <td>Approved + no posting (final)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.approvedNoPosting}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.approvedNoPosting}</td>
+                </tr>
+                <tr>
+                  <td>Rejected base (status=rejected)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.rejectedBase}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.rejectedBase}</td>
+                </tr>
+                <tr>
+                  <td>Rejected + blank reason (final)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.rejectedBlankReason}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.rejectedBlankReason}</td>
+                </tr>
+                <tr>
+                  <td>Age zero or missing (diagnostic)</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.ageZeroOrMissing}</td>
+                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.ageZeroOrMissing}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+            Scope: {debugScopeSnapshot.dealerScopeLabel} ({debugScopeSnapshot.dealerCodeCount} codes) | Branch filter: {debugScopeSnapshot.branchFilter} | Location: {debugScopeSnapshot.selectedLocation} | Fuel: {debugScopeSnapshot.selectedFuelType} | Admin bypass active: {debugScopeSnapshot.adminBypassActive ? 'yes' : 'no'}
+          </div>
+        </div>
+      </div>
 
       {/* Tab Navigation */}
       <div className="tabs" style={{ marginBottom: 'var(--gap)' }}>

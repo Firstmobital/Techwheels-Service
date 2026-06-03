@@ -17,6 +17,8 @@ SET search_path = public, pg_catalog
 AS $$
 DECLARE
   fq_table text;
+  has_rls boolean;
+  owner_name text;
 BEGIN
   IF target_schema IS NULL OR target_table IS NULL THEN
     RETURN;
@@ -29,17 +31,40 @@ BEGIN
 
   fq_table := format('%I.%I', target_schema, target_table);
 
-  EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', fq_table);
+  SELECT c.relrowsecurity, pg_get_userbyid(c.relowner)
+  INTO has_rls, owner_name
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = target_schema
+    AND c.relname = target_table
+    AND c.relkind IN ('r', 'p');
 
-  EXECUTE format(
-    'DROP POLICY IF EXISTS admin_unrestricted_all_ops_v1 ON %s',
-    fq_table
-  );
+  -- Do not alter baseline behavior for tables that are not already RLS-protected.
+  IF COALESCE(has_rls, false) = false THEN
+    RETURN;
+  END IF;
 
-  EXECUTE format(
-    'CREATE POLICY admin_unrestricted_all_ops_v1 ON %s FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin())',
-    fq_table
-  );
+  -- CREATE POLICY requires table ownership; skip tables owned by managed platform roles.
+  IF owner_name IS DISTINCT FROM current_user THEN
+    RAISE NOTICE 'Skipping %.%: owner is %, executor is %', target_schema, target_table, owner_name, current_user;
+    RETURN;
+  END IF;
+
+  BEGIN
+    EXECUTE format(
+      'DROP POLICY IF EXISTS admin_unrestricted_all_ops_v1 ON %s',
+      fq_table
+    );
+
+    EXECUTE format(
+      'CREATE POLICY admin_unrestricted_all_ops_v1 ON %s FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin())',
+      fq_table
+    );
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'Skipping %.% due to insufficient privilege while creating policy', target_schema, target_table;
+      RETURN;
+  END;
 END;
 $$;
 
@@ -59,6 +84,7 @@ BEGIN
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relkind IN ('r', 'p')
       AND n.nspname IN ('public', 'storage')
+      AND c.relrowsecurity = true
   LOOP
     PERFORM public.ensure_admin_bypass_policy(t.schema_name, t.table_name);
   END LOOP;
@@ -110,12 +136,13 @@ BEGIN
 END;
 $$;
 
--- Verification: tables without the admin bypass policy should be zero rows.
+-- Verification: RLS-enabled tables without the admin bypass policy should be zero rows.
 -- SELECT n.nspname AS schema_name, c.relname AS table_name
 -- FROM pg_class c
 -- JOIN pg_namespace n ON n.oid = c.relnamespace
 -- WHERE c.relkind IN ('r', 'p')
 --   AND n.nspname IN ('public', 'storage')
+--   AND c.relrowsecurity = true
 --   AND NOT EXISTS (
 --     SELECT 1
 --     FROM pg_policies p
