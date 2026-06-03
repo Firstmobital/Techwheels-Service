@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
 
 type TechnicianAssignmentRow = {
@@ -39,7 +40,12 @@ function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function formatCurrency(value: number): string {
@@ -62,6 +68,13 @@ function statusLabel(status: string | null | undefined): string {
   if (normalized === 'completed') return 'Completed'
   if (normalized === 'hold') return 'Hold'
   return 'Work Inprocess'
+}
+
+function statusPill(status: string | null | undefined): string {
+  const normalized = normalizeStatus(status)
+  if (normalized === 'completed') return 'g'
+  if (normalized === 'hold') return 'w'
+  return 'b'
 }
 
 function extractFuelFromBay(bayNo: string | null | undefined): 'PV' | 'EV' | null {
@@ -358,158 +371,204 @@ export default function TechnicianPage() {
   )
 
   return (
-    <div className="mx-auto w-full max-w-7xl p-4 md:p-6 space-y-5">
-      <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Technician</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              {isAdmin
-                ? 'Select any TECHNICIAN from Employee Master to view rows and day-wise income.'
-                : 'View your assigned rows and day-wise income tracker.'}
-            </p>
-          </div>
+    <div>
+      <div className="pagehead">
+        <div>
+          <p className="greet">
+            <Icon name="tech" size={13} className="icon-align-text" />
+            Technician
+          </p>
+          <h1>Assigned rows & income</h1>
+          <p>
+            {isAdmin
+              ? 'Select any technician to view their assigned rows and day-wise income tracker.'
+              : 'View your assigned rows and day-wise income tracker.'}
+          </p>
+        </div>
+        {isAdmin && (
+          <label className="field" style={{ marginBottom: 0, minWidth: 280 }}>
+            <span className="label">Technician</span>
+            <select
+              className="sel sel-lg"
+              value={selectedTechnicianCode}
+              onChange={(e) => {
+                const nextCode = e.target.value
+                setSelectedTechnicianCode(nextCode)
+                void loadData(nextCode)
+              }}
+            >
+              {technicianOptions.length === 0 ? (
+                <option value="">No technician found</option>
+              ) : (
+                technicianOptions.map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.code} — {opt.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
+        )}
+      </div>
 
-          {isAdmin && (
-            <div className="flex items-end gap-2">
-              <div>
-                <label htmlFor="technician-select" className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Technician
-                </label>
-                <select
-                  id="technician-select"
-                  value={selectedTechnicianCode}
-                  onChange={(e) => {
-                    const nextCode = e.target.value
-                    setSelectedTechnicianCode(nextCode)
-                    void loadData(nextCode)
-                  }}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
-                >
-                  {technicianOptions.length === 0 ? (
-                    <option value="">No technician found</option>
-                  ) : (
-                    technicianOptions.map((opt) => (
-                      <option key={opt.code} value={opt.code}>{opt.code} - {opt.name}</option>
-                    ))
-                  )}
-                </select>
-              </div>
+      {error && (
+        <div className="toast error">
+          <Icon name="alert" size={14} />
+          {error}
+        </div>
+      )}
+
+      {/* Income tracker */}
+      <div className="card" style={{ marginBottom: 'var(--gap)' }}>
+        <div className="card__head">
+          <div>
+            <h3>Income tracker</h3>
+            <div className="sub">
+              Computed per completed case: (Total Workshop Revenue ÷ 1.18) × 20% (PV) or 25% (EV).
+            </div>
+          </div>
+          <div
+            style={{
+              textAlign: 'right',
+              background: 'var(--success-bg)',
+              borderRadius: 'var(--r-sm)',
+              padding: '8px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              flex: 'none',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '10.5px',
+                fontWeight: 700,
+                letterSpacing: '.08em',
+                textTransform: 'uppercase',
+                color: 'var(--success)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Total earnings
+            </div>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: 'var(--success)',
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1.1,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {formatCurrency(totalIncome)}
+            </div>
+          </div>
+        </div>
+        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+          {loading ? (
+            <div className="empty-state">Loading income tracker...</div>
+          ) : incomeByDay.length === 0 ? (
+            <div className="empty-state">
+              No completed-and-billed cases for income yet. Income appears once assigned cases are
+              completed and the PSF invoice is closed.
+            </div>
+          ) : (
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th className="ctr">Cases</th>
+                    <th style={{ textAlign: 'right' }}>Gross Revenue</th>
+                    <th style={{ textAlign: 'right' }}>Net (ex GST)</th>
+                    <th style={{ textAlign: 'right' }}>Technician Income</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incomeByDay.map((row) => (
+                    <tr key={row.date}>
+                      <td className="strong">{row.date}</td>
+                      <td className="ctr">{row.jobsCount}</td>
+                      <td className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(row.grossRevenue)}
+                      </td>
+                      <td className="cell-muted text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(row.netBeforeShare)}
+                      </td>
+                      <td className="text-right strong" style={{ color: 'var(--success)', fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(row.technicianIncome)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-
-          <div>
-            <button
-              onClick={() => void loadData()}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Refresh
-            </button>
-          </div>
         </div>
-
-        {error && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        )}
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Assigned rows */}
+      <div className="card">
+        <div className="card__head">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Income Tracker</h2>
-            <p className="mt-1 text-sm text-gray-500">Computed from closed PSF revenue per completed case: (Total Workshop Revenue / 1.18) × 20% (PV) or 25% (EV).</p>
-          </div>
-          <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right">
-            <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">Total Earnings</div>
-            <div className="text-xl font-semibold text-emerald-800">{formatCurrency(totalIncome)}</div>
+            <h3>
+              Technician rows{' '}
+              <span style={{ color: 'var(--muted)', fontWeight: 600 }}>({assignments.length})</span>
+            </h3>
+            <div className="sub">{selectedTechnicianCode || '—'}</div>
           </div>
         </div>
-
-        {loading ? (
-          <div className="mt-4 text-sm text-gray-500">Loading income tracker...</div>
-        ) : incomeByDay.length === 0 ? (
-          <div className="mt-4 text-sm text-gray-500">No completed rows found for income computation yet.</div>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">Date</th>
-                  <th className="px-3 py-2 text-right">Cases</th>
-                  <th className="px-3 py-2 text-right">Gross Revenue</th>
-                  <th className="px-3 py-2 text-right">Net (ex GST)</th>
-                  <th className="px-3 py-2 text-right">Technician Income</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-gray-700">
-                {incomeByDay.map((row) => (
-                  <tr key={row.date}>
-                    <td className="whitespace-nowrap px-3 py-2">{row.date}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right">{row.jobsCount}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right">{formatCurrency(row.grossRevenue)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right">{formatCurrency(row.netBeforeShare)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-emerald-700">{formatCurrency(row.technicianIncome)}</td>
+        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+          {loading ? (
+            <div className="empty-state">Loading technician rows...</div>
+          ) : assignments.length === 0 ? (
+            <div className="empty-state">
+              {isAdmin
+                ? technicianCodes.length === 0
+                  ? 'No TECHNICIAN found in Employee Master.'
+                  : 'No assigned rows found for the selected technician.'
+                : technicianCodes.length === 0
+                  ? 'No active TECHNICIAN mapping found for your account.'
+                  : 'No assigned rows found for your technician code(s).'}
+            </div>
+          ) : (
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>JC Number</th>
+                    <th>Technician</th>
+                    <th>Bay No</th>
+                    <th>Status</th>
+                    <th>IN TS</th>
+                    <th>OUT TS</th>
+                    <th>Time Diff</th>
+                    <th>Remark</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
-          {isAdmin ? `Selected Technician Rows (${assignments.length})` : `My Rows (${assignments.length})`}
+                </thead>
+                <tbody>
+                  {assignments.map((row) => (
+                    <tr key={row.id}>
+                      <td className="mono ts-cell">{row.job_card_number}</td>
+                      <td className="strong">{row.technician_name}</td>
+                      <td className="type-cell">{row.bay_no ?? '—'}</td>
+                      <td>
+                        <span className={`pill ${statusPill(row.work_status)}`}>
+                          {statusLabel(row.work_status)}
+                        </span>
+                      </td>
+                      <td className="ts-cell">{formatDateTime(row.assigned_at)}</td>
+                      <td className="ts-cell">{formatDateTime(row.out_ts)}</td>
+                      <td className="unassigned-indicator">—</td>
+                      <td className="unassigned-indicator">{row.remark ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-
-        {loading ? (
-          <div className="p-4 text-sm text-gray-500">Loading technician rows...</div>
-        ) : assignments.length === 0 ? (
-          <div className="p-4 text-sm text-gray-500">
-            {isAdmin
-              ? (technicianCodes.length === 0
-                ? 'No TECHNICIAN found in Employee Master.'
-                : 'No assigned rows found for the selected technician.')
-              : (technicianCodes.length === 0
-                ? 'No active TECHNICIAN mapping found for your account.'
-                : 'No assigned rows found for your technician code(s).')}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">JC Number</th>
-                  <th className="px-3 py-2 text-left">Technician Code</th>
-                  <th className="px-3 py-2 text-left">Technician Name</th>
-                  <th className="px-3 py-2 text-left">Bay No</th>
-                  <th className="px-3 py-2 text-left">Status</th>
-                  <th className="px-3 py-2 text-left">IN TS</th>
-                  <th className="px-3 py-2 text-left">OUT TS</th>
-                  <th className="px-3 py-2 text-left">Time Diff</th>
-                  <th className="px-3 py-2 text-left">Remark</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-gray-700">
-                {assignments.map((row) => (
-                  <tr key={row.id}>
-                    <td className="whitespace-nowrap px-3 py-2 font-medium">{row.job_card_number}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{row.technician_code}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{row.technician_name}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{row.bay_no ?? '—'}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{statusLabel(row.work_status)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{formatDateTime(row.assigned_at)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{formatDateTime(row.out_ts)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{row.time_diff ?? '—'}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{row.remark ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   )
