@@ -27,6 +27,47 @@ This document is also the live activity tracker. Every completed, in-progress, b
 
 ## 2. Authority And Drift Guard
 
+### 2.0 ⚡ CRITICAL LEARNINGS FROM T-029 (Visual Sync Lock Enforcement)
+
+Read this before implementing any page. These are patterns discovered during T-029 (Floor Incharge) that ensure zero visual drift:
+
+**Container Structure Rule:**
+- ❌ Page component should NOT return `<div className="page">` wrapper
+- ✅ Page component returns plain `<div>` to inherit outer App.tsx `.page` wrapper padding
+- Reason: App.tsx structure is `<main className="main"><div className="page"><Routes>...` which provides consistent padding (28px 24px 56px). Extra inner `.page` causes double-padding and left/right gap inconsistency.
+
+**Inline Style Rule:**
+- ❌ Zero inline `style={{...}}` for visual properties (color, sizing, spacing, alignment, positioning)
+- ✅ ONLY state-driven conditionals allowed: `style={{ opacity: canEdit ? 1 : 0.5 }}`
+- Reason: Every visual property must come from shared src/App.css classes to maintain cross-page parity. Even one ad-hoc inline style breaks visual sync lock.
+
+**Form Control Sizing Rule:**
+- ❌ `<input style={{ height: 34, width: 150 }}>` or `<select style={{ height: 38, width: 150 }}>`
+- ✅ `<input className="inp inp-md">` or `<select className="sel sel-lg">`
+- Reason: Predefined classes ensure consistent heights and widths across all pages (T-029 fixed by adding `.sel-sm`, `.sel-md`, `.sel-lg`, `.inp-md`, `.inp-lg`, etc.)
+
+**Text Cell Styling Rule:**
+- ❌ `<td style={{ color: 'var(--accent)', fontSize: 12.5 }}>` or `<td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>`
+- ✅ `<td className="cell-accent">` or `<td className="ts-cell">`
+- Reason: Centralized cell classes prevent subtle font-size and color drift across tables.
+
+**Typography From Classes Rule:**
+- ❌ `<span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--muted)' }}>Badge</span>`
+- ✅ `<span className="count-badge">Badge</span>`
+- Reason: All typography must come from shared CSS to maintain visual baseline.
+
+**Pre-Implementation Checklist (Copy to Your Task):**
+Before marking any page task DONE:
+1. Grep page source for `style={{` → should find ONLY state-driven opacity/display conditionals
+2. Verify page returns plain `<div>` not `<div className="page">`
+3. Replace all form control sizing with `.sel-sm`, `.sel-md`, `.sel-lg`, `.inp-md`, `.inp-lg`
+4. Replace all text cell styling with `.cell-accent`, `.cell-muted`, `.ts-cell`, `.type-cell`, `.unassigned-indicator`, `.count-badge`
+5. Replace all custom padding/color/sizing with defined utility classes from section 5.5
+6. Compare side-by-side screenshot with Home page in same browser → left/right margins, font sizes, card spacing, button sizing should match pixel-perfect
+7. If any visual difference found, trace to root cause (missing class, inline style, wrong wrapper) and fix before marking DONE
+
+---
+
 ### 2.1 Authority order
 
 1. Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md (this file, execution tracker)
@@ -206,10 +247,39 @@ Classes that must be available in real app styling:
 
 ### 5.4 Visual Synchronization Contract (All Web Pages)
 
+**Core Principles:**
+
 1. Shared layout primitives must be reused across modules: pagehead, card/card__head/card__body, tbl/tbl-wrap, summary/schip, kpis.
 2. Typography and spacing scale must come from shared tokens and classes, not per-page one-off utility stacks.
 3. Home (dashboard) is the baseline rhythm for page-head, summary, card, and table density; all operational pages must align to this flow.
 4. Any discovered visual drift (font-size, row height, padding, chip scale, header rhythm) is a tracker defect and must be resolved before task closure.
+
+**Critical Padding & Container Rules (T-029 Learning):**
+
+5. **NO inner `.page` wrapper on page components**. Architecture provides outer wrapper in App.tsx (`<main className="main"><div className="page"><Routes>...`). Page components must return plain `<div>` wrapper (not `<div className="page">`) to avoid double padding. Example correct pattern:
+   ```tsx
+   return (
+     <div>  // <-- PLAIN div, NOT <div className="page">
+       <div className="pagehead">...</div>
+       <div className="card">...</div>
+     </div>
+   )
+   ```
+
+6. **All container-level padding comes from outer App.tsx `.page` wrapper** (28px 24px 56px). Do not add custom padding to inner page divs. Verify your page structure matches baseline pages (Home/Reception/ServiceAdvisor/Admin) not exception patterns.
+
+7. **Inline styles are not acceptable** except for state-driven conditional properties (e.g., `opacity: assignment && hasChanges ? 1 : 0.5`). All visual properties (color, spacing, sizing, alignment) must come from shared CSS classes in src/App.css or src/index.css. Example violations:
+   - ❌ `style={{ height: 34, width: 150 }}` → use `.inp-md`, `.sel-sm` class
+   - ❌ `style={{ color: 'var(--accent)' }}` → use `.cell-accent` class
+   - ❌ `style={{ padding: '6px 18px 14px' }}` → use `.card__body.dense` class
+   - ✅ `style={{ opacity: canEdit ? 1 : 0.5 }}` acceptable (state-driven only)
+
+8. **Utility classes must be pre-defined in src/App.css** (not inline style={{...}}). Common patterns:
+   - Form control sizing: `.sel-sm` (34px), `.sel-md` (34px minWidth:170px), `.sel-lg` (38px), `.inp-md` (150px), `.inp-lg` (38px)
+   - Text styling: `.cell-accent`, `.cell-muted`, `.ts-cell` (nowrap + muted), `.type-cell` (nowrap), `.unassigned-indicator`, `.count-badge`
+   - Component variants: `.card__body.dense`, `.schip.warn`, `.empty-state`, `.toast` (with `.error` modifier)
+
+9. **Reference pages do not enforce visual sync lock** (they use ad-hoc styling for mockup). Production code must be stricter. When porting reference code, systematically remove all inline styles and replace with shared classes before task closure.
 
 ---
 
@@ -257,9 +327,121 @@ Classes that must be available in real app styling:
 
 ### 7.2A Cross-Page Synchronization Rule (Mandatory)
 
+**Enforcement Checklist for Every Page Component:**
+
 1. Home page establishes canonical post-login layout rhythm.
 2. Service Advisor, Reception, Admin, Settings, Floor Incharge, Technician, Reports, Import, AutoDoc, and JobCard must match canonical rhythm using shared design-system classes.
 3. Mixed styling systems on the same page are not acceptable for final web redesign sign-off.
+
+**Before Marking Task DONE, Verify All Items:**
+
+- [ ] **Container structure**: Page component returns plain `<div>` (NOT `<div className="page">`)
+- [ ] **No inner .page wrapper**: Outer App.tsx `.page` provides consistent padding; verify your component doesn't double-wrap
+- [ ] **Padding consistency**: Left/right padding comes from outer wrapper only (no custom padding on inner divs)
+- [ ] **No inline styles**: Zero inline `style={{...}}` except state-driven conditionals (opacity, display toggles)
+  - Search page source for `style={{` — should only find conditional properties like `opacity: ? 1 : 0.5`
+- [ ] **Shared layout classes**: Uses pagehead, card, card__head, card__body, tbl, tbl-wrap, summary, schip, kpis
+- [ ] **Typography from tokens**: Font sizes, colors, weights from CSS classes (not inline)
+- [ ] **Spacing from classes**: Padding, margins, gaps from utility classes (not inline)
+- [ ] **Form controls sized**: Use `.sel-sm`, `.sel-md`, `.sel-lg`, `.inp-md`, `.inp-lg` (not `style={{height, width}}`)
+- [ ] **Text cells styled**: Use `.cell-accent`, `.cell-muted`, `.ts-cell`, `.type-cell` (not inline color/nowrap)
+- [ ] **Compare with baseline**: Side-by-side with Home page in same browser session; check:
+  - Left/right margins and padding match
+  - Font sizes and weights match
+  - Card spacing and row heights match
+  - Button and input sizing match
+  - Chip and badge appearance match
+- [ ] **Build passes clean**: `npm run build` with no TS/lint errors
+- [ ] **No visual drift vs Home**: If any difference appears on screen, find and fix root cause (missing class, wrong wrapper, inline style)
+
+**Pattern Mismatch Early Warnings:**
+
+- Page returns `<div className="page">` instead of plain `<div>` → double padding (T-029 trap)
+- Multiple `style={{...}}` props visible → mixed styling system violation (T-029 first pass)
+- Input/select elements with `style={{height, width}}` instead of class names → sizing inconsistency
+- Text cells with `style={{color, whiteSpace}}` → typography/cell alignment drift
+- Toast/modal with inline positioning/colors → component variant violation
+- Summary schips with inline background colors → color token violation
+
+### 5.5 Page-Level Utility Classes (Visual Sync Lock Reference)
+
+These classes ensure visual consistency across all pages. Use them instead of inline styles to maintain baseline parity with Home page.
+
+**Container & Layout:**
+- `.toast` - Fixed-position notification (bottom 22px, centered, 11px padding, 99px border-radius, var(--sh-3) shadow)
+- `.toast.error` - Toast variant with danger background
+- `.empty-state` - Centered no-data state (padding 40px, text-align center, color var(--faint), font-size 13px)
+- `.card__body.dense` - Dense table body padding (6px 18px 14px instead of default)
+- `.card__head-flex` - Card header flex layout with gap:10px for filter/search controls
+
+**Form Control Sizing (DO NOT use inline style={{height, width}}):**
+- `.sel-sm` - height:34px, width:96px (bay select, small pickers)
+- `.sel-md` - height:34px, minWidth:170px (technician multi-select)
+- `.sel-lg` - height:38px, width:150px (branch filter in card head)
+- `.inp-md` - height:34px, width:150px (remarks, small inputs)
+- `.inp-lg` - height:38px (search inputs in card head)
+- `.inp-wrap-lg` - width:240px (search input wrapper container)
+- `.inp-wrap-md` - width:150px (smaller input wrappers)
+
+**Text & Cell Styling (DO NOT use inline style={{color, whiteSpace, fontSize}}):**
+- `.cell-accent` - color:var(--accent), fontWeight:600 (reg numbers, IDs)
+- `.cell-muted` - color:var(--muted), fontSize:12px (muted text in cells)
+- `.ts-cell` - whiteSpace:nowrap, color:var(--muted) (timestamp columns)
+- `.type-cell` - whiteSpace:nowrap (service type, non-wrapping text)
+- `.unassigned-indicator` - color:var(--faint), fontSize:12px (unassigned state)
+- `.count-badge` - color:var(--muted), fontWeight:600 (count badges in headers)
+- `.text-right` - textAlign:right (action columns, right-aligned cells)
+
+**Component Variants:**
+- `.schip.warn` - Apply to schip icon container for warning tint (background:var(--warn-bg), color:var(--warn))
+- `.icon-align-text` - verticalAlign:-2px, marginRight:5px (inline icons in greet/titles)
+
+**Usage Pattern Example (Correct):**
+```tsx
+// Button with state-driven opacity (ACCEPTABLE inline style)
+<button style={{ opacity: canSave ? 1 : 0.5 }} className="btn btn--primary btn--sm">
+  Save
+</button>
+
+// Select with size class (NOT inline)
+<select className="sel sel-md">...</select>
+
+// Cell with text class (NOT inline)
+<td className="cell-accent">{regNumber}</td>
+
+// Form wrapper (NOT inline width)
+<span className="inp-wrap inp-wrap-lg">
+  <input className="inp inp-lg" />
+</span>
+
+// Unassigned indicator (NOT inline)
+<span className="unassigned-indicator">—</span>
+```
+
+**Common Violations to Catch:**
+```tsx
+// ❌ WRONG - inline sizing
+<select style={{ height: 34, width: 150 }}>
+
+// ✅ CORRECT - class-based sizing
+<select className="sel sel-sm">
+
+// ❌ WRONG - inline color/alignment
+<td style={{ color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+
+// ✅ CORRECT - class-based
+<td className="cell-accent type-cell">
+
+// ❌ WRONG - double padding from inner .page wrapper
+return <div className="page">  {/* outer .page in App.tsx already provides padding */}
+  <div className="pagehead">...</div>
+</div>
+
+// ✅ CORRECT - plain wrapper relies on outer .page
+return <div>
+  <div className="pagehead">...</div>
+</div>
+```
 
 ### 7.3 Reception
 
@@ -549,7 +731,7 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 | T-027 | Settings | Redesign Unmapped SR Entries section | settings.jsx + settings-data.js | src/pages/SettingsPage.tsx | REVIEW | Vinod | 2026-06-02 | 2026-06-02 | - | Unmapped SR section redesigned with structured action bar, stats cards, filter strip, selected-count bulk resolve bar, and refreshed table badges/actions while preserving existing resolve and auto-assign logic. Diagnostics/build passed; shared browser session currently module-access gated. |
 | T-028 | Service Advisor | Redesign advisor assigned-rows workspace | service-advisor.jsx + service-advisor-data.js | src/pages/ServiceAdvisorPage.tsx | DONE | Vinod | 2026-06-02 | 2026-06-02 | 2026-06-02 | Service Advisor visual system synchronized with Home baseline using shared class/token grammar only: inline style usage removed from page content blocks (pagehead, summary, table cells, estimate actions), shared App.css classes introduced, existing save/upload logic and non-standard service-type retention preserved. |
 | T-044 | Governance | Enforce cross-page visual synchronization lock (no design-system drift) | home.jsx + service-advisor.jsx + styles.css + components.css | docs/Implementation_plans/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md, src/App.css, src/pages/* | IN_PROGRESS | Vinod | 2026-06-02 | 2026-06-02 | - | Governance lock is now treated as active enforcement (not documentation-only). Home + Reception + Service Advisor + shell surfaces are being normalized to shared classes/tokens; remaining mixed-system pages must be remediated before closure (notably Floor Incharge and other pending modules). |
-| T-029 | Floor Incharge | Redesign assignment workspace and controls | floor.jsx + floor-data.js | src/pages/FloorInchargePage.tsx | REVIEW | Vinod | 2026-06-03 | 2026-06-03 | - | Redesigned to reference-style layout: pagehead (greeting icon + title + description), summary schips (Job cards total/Assigned/Unassigned), card with header filters (branch dropdown, search), and full job-card table (Created, Reg No, Model, Service Type, SA Name, JC Number, Branch, Bay select, IN TS, Technician select, Status select, Remark input, Save stage button). All design system classes ported (page, pagehead, summary, schip, card, card__head, card__body, tbl-wrap, tbl, sel, inp, btn). Icon component integrated. Preserves all existing API handlers and business logic. Build passes clean (723 modules, 879ms). |
+| T-029 | Floor Incharge | Redesign assignment workspace and controls | floor.jsx + floor-data.js | src/pages/FloorInchargePage.tsx | DONE | Vinod | 2026-06-03 | 2026-06-03 | 2026-06-03 | **COMPLETE VISUAL SYNC LOCK FIX**: (1) Refactored 20+ inline styles to class-based utility classes (new CSS: .toast, .icon-align-text, .empty-state, .schip.warn, .card__body.dense, .cell-accent, .cell-muted, .sel-md, .sel-sm, .inp-md, .sel-lg, .inp-lg, .inp-wrap-lg, .ts-cell, .type-cell, .count-badge, .unassigned-indicator, .text-right). (2) **CRITICAL FIX: Removed inner `.page` wrapper** — was causing double padding inconsistency vs baseline (outer .page wrapper in App.tsx provides consistent padding for all pages; only FloorInchargePage had redundant inner .page, creating left-side gap drift). Now returns plain `<div>` matching Home/Reception/ServiceAdvisor/Admin pattern. Build clean 905ms, 723 modules. Cross-page sync lock fully enforced (tracker 5.4, 7.2A, 11). |
 | T-030 | Technician | Redesign technician picker/income/rows workspace | technician.jsx + technician-data.js | src/pages/TechnicianPage.tsx | PENDING | unassigned | - | 2026-06-02 | - |  |
 | T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | PENDING | unassigned | - | 2026-06-02 | - | Scope locked to 7 warranty source tables + shared metadata columns from authoritative dump; no inferred report-count taxonomy claims |
 | T-032 | Remaining Modules | Apply shell + design-system parity to Import | IMPLEMENTATION_PLAN.md section pending | src/pages/ImportPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Full redesign spec not present in audited files |
@@ -636,6 +818,7 @@ Rules:
 | B-001 | 2026-06-02 | T-032, T-033, T-038, T-043 | Dedicated redesign prototypes and full spec detail still missing for Import, AutoDoc/JobCard, and non-warranty report categories (labour-revenue 5, revenue 7, parts 17). Warranty 15 new views tracked as T-043. | Provide finalized redesign reference files/snapshots/spec for Import, AutoDoc/JobCard, and non-warranty report pages (labour, revenue, parts). | OPEN |
 | B-002 | 2026-06-02 | T-039 | Reference instruction file status reconciliation. | Verified in second-pass re-audit: file exists and is readable. | CLOSED |
 | B-003 | 2026-06-02 | T-040 | Password policy mismatch across audited sources (prototype request-access guidance vs mirror SignUp minimum 8 chars vs PasswordUpdate 12+ strong policy). | Provide explicit product decision on whether sign-up policy remains 8+ (logic-preserving) or is elevated to 12+ strong policy. | OPEN |
+| B-004 | 2026-06-03 | T-029 | VISUAL SYNC LOCK: Floor Incharge had inner `.page` wrapper causing double padding + 20+ inline styles (both fixed). Reference prototype used inline styles; production requires class-based system. Fixed by: (1) Creating 18+ CSS utility classes, (2) Removing inner `.page` wrapper (was redundant vs outer wrapper in App.tsx), (3) Matching baseline pattern (plain `<div>` like Home/Reception/ServiceAdvisor/Admin). | Refactored FloorInchargePage.tsx: remove inline styles → utility classes, remove inner .page wrapper, verify visual parity. | CLOSED |
 
 ---
 

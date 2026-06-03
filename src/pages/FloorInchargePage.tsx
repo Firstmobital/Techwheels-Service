@@ -367,28 +367,10 @@ export default function FloorInchargePage() {
   const unassignedCount = filtered.length - assignedCount
 
   return (
-    <div className="page">
+    <div>
       {/* Toast */}
       {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 22,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 90,
-            background: toast.type === 'error' ? 'var(--danger)' : 'var(--ink)',
-            color: '#fff',
-            padding: '11px 18px',
-            borderRadius: 99,
-            fontSize: 13.5,
-            fontWeight: 600,
-            boxShadow: 'var(--sh-3)',
-            display: 'flex',
-            gap: 9,
-            alignItems: 'center',
-          }}
-        >
+        <div className={`toast${toast.type === 'error' ? ' error' : ''}`}>
           <Icon name={toast.type === 'error' ? 'alert' : 'checksm'} size={16} strokeWidth={2.4} />
           {toast.msg}
         </div>
@@ -398,7 +380,7 @@ export default function FloorInchargePage() {
       <div className="pagehead">
         <div>
           <p className="greet">
-            <Icon name="floor" size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />
+            <Icon name="floor" size={13} className="icon-align-text" />
             Floor Incharge
           </p>
           <h1>Assign technicians</h1>
@@ -426,8 +408,8 @@ export default function FloorInchargePage() {
             <div className="l">Assigned</div>
           </div>
         </div>
-        <div className="schip">
-          <span className="ic" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+        <div className="schip warn">
+          <span className="ic">
             <Icon name="clock" size={16} />
           </span>
           <div>
@@ -442,13 +424,12 @@ export default function FloorInchargePage() {
         <div className="card__head">
           <div>
             <h3>
-              Job cards <span style={{ color: 'var(--muted)', fontWeight: 600 }}>({filtered.length})</span>
+              Job cards <span className="count-badge">({filtered.length})</span>
             </h3>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="card__head-flex">
             <select
-              className="sel"
-              style={{ height: 38, width: 150 }}
+              className="sel sel-lg"
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
             >
@@ -458,27 +439,24 @@ export default function FloorInchargePage() {
                 </option>
               ))}
             </select>
-            <span className="inp-wrap" style={{ width: 240 }}>
+            <span className="inp-wrap inp-wrap-lg">
               <span className="icon-l">
                 <Icon name="search" size={16} />
               </span>
               <input
-                className="inp"
+                className="inp inp-lg"
                 placeholder="Search JC / reg / SA / owner"
-                style={{ height: 38 }}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </span>
           </div>
         </div>
-        <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+        <div className="card__body dense">
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--faint)', fontSize: 13 }}>
-              Loading job cards…
-            </div>
+            <div className="empty-state">Loading job cards…</div>
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--faint)', fontSize: 13 }}>
+            <div className="empty-state">
               {dataError
                 ? 'Rows are hidden due to access/scope rules. Please verify Floor Incharge module permission.'
                 : search.trim() || branchFilter !== 'All'
@@ -502,7 +480,7 @@ export default function FloorInchargePage() {
                     <th>Bay</th>
                     <th>Status</th>
                     <th>Remark</th>
-                    <th style={{ textAlign: 'right' }}>Action</th>
+                    <th className="text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -524,25 +502,24 @@ export default function FloorInchargePage() {
 
                     return (
                       <tr key={jc.id}>
-                        <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>
+                        <td className="ts-cell">
                           {formatDate(jc.created_at)}
                         </td>
-                        <td className="mono strong" style={{ color: 'var(--accent)' }}>
+                        <td className="mono strong cell-accent">
                           {jc.reg_number || '—'}
                         </td>
                         <td>{jc.model || '—'}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{jc.service_type || '—'}</td>
-                        <td className="strong" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="type-cell">{jc.service_type || '—'}</td>
+                        <td className="strong type-cell">
                           {jc.sa_name || '—'}
                         </td>
-                        <td className="mono" style={{ fontSize: 12.5 }}>
+                        <td className="mono">
                           {jc.jc_number || '—'}
                         </td>
                         <td>{jc.branch || '—'}</td>
                         <td>
                           <select
-                            className="sel"
-                            style={{ height: 34, minWidth: 170 }}
+                            className="sel sel-md"
                             value={assignment?.technician_code ?? ''}
                             onChange={(e) => assignTechnician(jc.assignment_key, e.target.value)}
                             disabled={isSaving}
@@ -555,13 +532,12 @@ export default function FloorInchargePage() {
                             ))}
                           </select>
                         </td>
-                        <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>
+                        <td className="ts-cell">
                           {formatTimestamp(assignment?.assigned_at) || '—'}
                         </td>
                         <td>
                           <select
-                            className="sel"
-                            style={{ height: 34, width: 96 }}
+                            className="sel sel-sm"
                             value={draft.bay_no}
                             disabled={!canEditStage}
                             onChange={(e) => patchStageDraft(jc.assignment_key, { bay_no: e.target.value })}
@@ -577,8 +553,7 @@ export default function FloorInchargePage() {
                         <td>
                           {assignment ? (
                             <select
-                              className="sel"
-                              style={{ height: 34, width: 150 }}
+                              className="sel sel-sm"
                               value={draft.work_status}
                               onChange={(e) =>
                                 patchStageDraft(jc.assignment_key, { work_status: e.target.value })
@@ -592,20 +567,19 @@ export default function FloorInchargePage() {
                               ))}
                             </select>
                           ) : (
-                            <span style={{ color: 'var(--faint)', fontSize: 12.5 }}>—</span>
+                            <span className="unassigned-indicator">—</span>
                           )}
                         </td>
                         <td>
                           <input
-                            className="inp"
-                            style={{ height: 34, width: 150 }}
+                            className="inp inp-md"
                             value={draft.remark}
                             disabled={!canEditStage}
                             placeholder="Add remark"
                             onChange={(e) => patchStageDraft(jc.assignment_key, { remark: e.target.value })}
                           />
                         </td>
-                        <td style={{ textAlign: 'right' }}>
+                        <td className="text-right">
                           <button
                             className="btn btn--primary btn--sm"
                             disabled={!assignment || !hasStageChanges}
