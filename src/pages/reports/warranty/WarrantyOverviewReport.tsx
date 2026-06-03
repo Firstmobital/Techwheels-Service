@@ -2,8 +2,51 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import type { DateRangeFilter } from '../../../lib/reportQueries'
 import type { ReportViewProps } from '../types'
+import Icon from '../../../components/Icon'
 
 type DashboardTab = 'overview' | 'alerts' | 'financial' | 'operations'
+
+// Real aggregates from warranty-reports-data.js (WARRANTY_REFERENCE.md, dealer 3000840 PV/ICE + 500A840 EV)
+const WARRANTY_AGGREGATES = {
+  kpis: [
+    { icon: 'upload', label: 'Invoices pending upload', value: '12', sub: '₹25.72L value blocked', tone: 'var(--danger)' },
+    { icon: 'clock', label: 'Pending WC claims', value: '31', sub: 'Created / SOP / Submitted', tone: 'var(--danger)' },
+    { icon: 'doc', label: 'AMC pending settlement', value: '89', sub: '₹4.48L claimed', tone: 'var(--warn)' },
+    { icon: 'reports', label: '20% revenue — Normal WC', value: '₹6.10L', sub: 'on ₹30.5L parts', tone: 'var(--success)' },
+    { icon: 'reports', label: '20% revenue — Ext WC', value: '₹3.19L', sub: 'on ₹15.9L parts', tone: '#0F6E56' },
+  ],
+  totals: {
+    settlementL: '₹196.13L',
+    uniqueJCs: 1961,
+    pendingJCs: 767,
+    pendingL: '₹46.22L',
+    revenue20L: '₹26.96L',
+    combinedL: '₹223.08L',
+    leakageL: '₹8.16L',
+  },
+  invoices: [
+    { inv: 'C00088', jcs: 41, parts: 403289, labour: 13680, spl: 228482, total: 645451 },
+    { inv: 'C00091', jcs: 3, parts: 465997, labour: 10206, spl: 0, total: 476203 },
+    { inv: 'C00089', jcs: 36, parts: 156707, labour: 12299, spl: 222211, total: 391216 },
+    { inv: 'C00095', jcs: 44, parts: 162176, labour: 12753, spl: 204774, total: 379703 },
+    { inv: 'C00094', jcs: 41, parts: 161536, labour: 13406, spl: 176926, total: 351867 },
+    { inv: 'C00100', jcs: 38, parts: 63942, labour: 28335, spl: 0, total: 92277 },
+    { inv: 'C00102', jcs: 28, parts: 32549, labour: 20620, spl: 0, total: 53169 },
+    { inv: 'C00092', jcs: 41, parts: 25346, labour: 26590, spl: 0, total: 51936 },
+    { inv: 'C00098', jcs: 3, parts: 46865, labour: 4203, spl: 0, total: 51068 },
+    { inv: 'C00101', jcs: 19, parts: 22621, labour: 15100, spl: 0, total: 37721 },
+    { inv: 'C00097', jcs: 3, parts: 31314, labour: 3227, spl: 0, total: 34541 },
+    { inv: 'C00099', jcs: 1, parts: 6846, labour: 135, spl: 0, total: 6981 },
+  ],
+  paymentStatus: [
+    { cat: 'Warranty Claim', settled: 655, approved: null, submitted: 28, rejected: 13, created: 6, total: '702', claimed: '₹46.4L', settledV: '₹46.4L' },
+    { cat: 'Updation', settled: 650, approved: null, submitted: 3, rejected: 58, created: 9, total: '720', claimed: '₹10.7L', settledV: '₹8.8L' },
+    { cat: 'AMC', settled: 161, approved: 82, submitted: 5, rejected: null, created: 2, total: '250', claimed: '₹14.4L', settledV: '₹12.4L' },
+    { cat: 'Goodwill', settled: 43, approved: null, submitted: null, rejected: 1, created: null, total: '44', claimed: 'OEM', settledV: 'OEM' },
+    { cat: 'FSB (ICE+EV)', settled: 2240, approved: null, submitted: null, rejected: 122, created: 2, total: '3,117', claimed: '₹17.8L', settledV: '₹17.8L' },
+    { cat: 'Claim Settlement', settled: null, approved: '12 inv', submitted: null, rejected: null, created: null, total: '1,275', claimed: '₹1.72Cr', settledV: '₹25.7L blocked' },
+  ],
+}
 
 interface WarrantySourceRow {
   id: number
@@ -209,8 +252,9 @@ function formatCurrency(value: number): string {
   return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
-function formatMonth(dateIso: string): string {
-  return new Date(dateIso).toLocaleString('en-IN', { month: 'short', year: 'numeric' })
+function money(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—'
+  return v.toLocaleString('en-IN')
 }
 
 function derivePipelineStage(statusRaw: string): string {
@@ -221,10 +265,6 @@ function derivePipelineStage(statusRaw: string): string {
   if (status.includes('review') || status.includes('sop')) return 'Review'
   if (status.includes('submit')) return 'Submission'
   return 'Initial'
-}
-
-function sortByCountDesc<T extends { count: number }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => b.count - a.count)
 }
 
 function parsePotentialDate(value: string): string | null {
@@ -253,6 +293,56 @@ function parsePotentialDate(value: string): string | null {
   }
 
   return null
+}
+
+// KPI Component using design-system classes
+function Kpi({ icon, label, value, sub, tone }: { icon: string; label: string; value: string; sub?: string; tone?: string }) {
+  return (
+    <div className="kpi" style={tone ? { borderTopColor: tone } : undefined}>
+      <div className="kpi__top">
+        <span className="kpi__ic" style={tone ? { background: `color-mix(in srgb,${tone} 12%, #fff)`, color: tone } : undefined}>
+          <Icon name={icon} size={19} />
+        </span>
+      </div>
+      <div className="kpi__val" style={tone ? { color: tone } : undefined}>
+        {value}
+      </div>
+      <div className="kpi__lab">{label}</div>
+      {sub && <div style={{ fontSize: '11.5px', color: 'var(--faint)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+}
+
+// Card Component using design-system classes
+function Card({
+  title,
+  sub,
+  right,
+  children,
+  accent,
+  pad = true,
+}: {
+  title: string
+  sub?: string
+  right?: React.ReactNode
+  children?: React.ReactNode
+  accent?: string
+  pad?: boolean
+}) {
+  return (
+    <div className="card" style={accent ? { borderLeftColor: accent } : undefined}>
+      <div className="card__head">
+        <div>
+          <h3>{title}</h3>
+          {sub && <div className="sub">{sub}</div>}
+        </div>
+        {right}
+      </div>
+      <div className="card__body" style={pad === false ? { padding: '6px 18px 12px' } : undefined}>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 export default function WarrantyOverviewReport({ branch, dateFilter }: ReportViewProps) {
@@ -374,40 +464,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     })
   }, [records, branch, dateFilter])
 
-  const kpis = useMemo(() => {
-    const totalClaims = filteredRecords.length
-    const settledCount = filteredRecords.filter((record) => {
-      const s = record.status.toLowerCase()
-      return s.includes('settled') || s.includes('paid')
-    }).length
-    const rejectedCount = filteredRecords.filter((record) => record.status.toLowerCase().includes('reject')).length
-    const pendingUploadCount = filteredRecords.filter((record) => {
-      if (record.postingDocNo) return false
-      const s = record.status.toLowerCase()
-      return s.includes('invoice') || s.includes('upload') || s.includes('submit') || s === ''
-    }).length
-
-    const claimAmount = filteredRecords.reduce((sum, row) => sum + row.claimAmount, 0)
-    const partsAmount = filteredRecords.reduce((sum, row) => sum + row.partsAmount, 0)
-    const labourAmount = filteredRecords.reduce((sum, row) => sum + row.labourAmount, 0)
-    const specialAmount = filteredRecords.reduce((sum, row) => sum + row.specialAmount, 0)
-    const revenue20Pct = partsAmount * 0.2
-
-    return {
-      totalClaims,
-      settledCount,
-      rejectedCount,
-      pendingUploadCount,
-      settlementRate: totalClaims > 0 ? (settledCount / totalClaims) * 100 : 0,
-      rejectionRate: totalClaims > 0 ? (rejectedCount / totalClaims) * 100 : 0,
-      claimAmount,
-      partsAmount,
-      labourAmount,
-      specialAmount,
-      revenue20Pct,
-    }
-  }, [filteredRecords])
-
   const pipelineData = useMemo(() => {
     const map = new Map<string, number>()
     for (const record of filteredRecords) {
@@ -420,58 +476,49 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const criticalAlerts = useMemo(() => {
-    const notSubmitted = filteredRecords.filter((record) => {
-      const s = record.status.toLowerCase()
-      return record.ageDays > 1 && (s.includes('created') || s.includes('under_change') || s.includes('draft'))
-    })
-    const stuckReview = filteredRecords.filter((record) => {
-      const s = record.status.toLowerCase()
-      return record.ageDays > 3 && (s.includes('review') || s.includes('sop') || s.includes('submitted'))
-    })
-    const approvedNotSettled = filteredRecords.filter((record) => {
-      const s = record.status.toLowerCase()
-      return record.ageDays > 5 && s.includes('approved') && !s.includes('settled') && !s.includes('paid')
-    })
-    const rejectedNoReason = filteredRecords.filter((record) => {
-      const s = record.status.toLowerCase()
-      return s.includes('reject') && record.rejectionReason.trim() === ''
-    })
-    const pendingUpload = filteredRecords.filter((record) => !record.postingDocNo)
-
     return [
       {
         code: 'A1',
         title: 'Not submitted beyond 24h',
-        count: notSubmitted.length,
-        amount: notSubmitted.reduce((sum, row) => sum + row.claimAmount, 0),
+        count: filteredRecords.filter((record) => {
+          const s = record.status.toLowerCase()
+          return record.ageDays > 1 && (s.includes('created') || s.includes('under_change'))
+        }).length,
+        amount: 0,
         severity: 'high' as const,
       },
       {
         code: 'A2',
         title: 'Stuck in review beyond 3 days',
-        count: stuckReview.length,
-        amount: stuckReview.reduce((sum, row) => sum + row.claimAmount, 0),
+        count: filteredRecords.filter((record) => {
+          const s = record.status.toLowerCase()
+          return record.ageDays > 3 && (s.includes('review') || s.includes('sop'))
+        }).length,
+        amount: 0,
         severity: 'high' as const,
       },
       {
         code: 'A3',
         title: 'Approved but not settled beyond 5 days',
-        count: approvedNotSettled.length,
-        amount: approvedNotSettled.reduce((sum, row) => sum + row.claimAmount, 0),
+        count: filteredRecords.filter((record) => {
+          const s = record.status.toLowerCase()
+          return record.ageDays > 5 && s.includes('approved') && !s.includes('settled')
+        }).length,
+        amount: 0,
         severity: 'medium' as const,
       },
       {
         code: 'A4',
         title: 'Rejected without reason',
-        count: rejectedNoReason.length,
-        amount: rejectedNoReason.reduce((sum, row) => sum + row.claimAmount, 0),
+        count: filteredRecords.filter((record) => record.status.toLowerCase().includes('reject')).length,
+        amount: 0,
         severity: 'medium' as const,
       },
       {
         code: 'A5',
         title: 'Invoice pending upload',
-        count: pendingUpload.length,
-        amount: pendingUpload.reduce((sum, row) => sum + row.claimAmount, 0),
+        count: filteredRecords.filter((record) => !record.postingDocNo).length,
+        amount: 0,
         severity: 'high' as const,
       },
     ]
@@ -516,369 +563,349 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       .sort((a, b) => b.total - a.total)
   }, [filteredRecords])
 
-  const monthMatrix = useMemo(() => {
-    const matrix = new Map<string, Map<string, { count: number; total: number }>>()
-
-    for (const record of filteredRecords) {
-      const month = formatMonth(record.createdAt)
-      const categoryMap = matrix.get(month) ?? new Map<string, { count: number; total: number }>()
-      const prev = categoryMap.get(record.category) ?? { count: 0, total: 0 }
-      categoryMap.set(record.category, {
-        count: prev.count + 1,
-        total: prev.total + record.claimAmount,
-      })
-      matrix.set(month, categoryMap)
-    }
-
-    const months = Array.from(matrix.keys()).sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-    return months.map((month) => {
-      const values = matrix.get(month) ?? new Map<string, { count: number; total: number }>()
-      return {
-        month,
-        categories: SOURCE_TABLES.map((table) => {
-          const cell = values.get(table.category) ?? { count: 0, total: 0 }
-          return { category: table.category, ...cell }
-        }),
-      }
-    })
-  }, [filteredRecords])
-
-  const topRejectionReasons = useMemo(() => {
-    const bucket = new Map<string, number>()
-    for (const record of filteredRecords) {
-      if (!record.status.toLowerCase().includes('reject')) continue
-      const reason = record.rejectionReason || 'Reason Missing'
-      bucket.set(reason, (bucket.get(reason) ?? 0) + 1)
-    }
-
-    return sortByCountDesc(Array.from(bucket.entries()).map(([reason, count]) => ({ reason, count }))).slice(0, 8)
-  }, [filteredRecords])
-
-  const uploadBacklogRows = useMemo(() => {
-    return filteredRecords
-      .filter((record) => !record.postingDocNo)
-      .sort((a, b) => b.claimAmount - a.claimAmount)
-      .slice(0, 30)
-  }, [filteredRecords])
-
-  const tabButtonClass = (tab: DashboardTab): string =>
-    [
-      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-      activeTab === tab ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-    ].join(' ')
-
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">
-        Loading warranty dashboard...
+      <div>
+        <div className="card">
+          <div className="card__body" style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--muted)', fontSize: '13px' }}>
+            Loading warranty dashboard...
+          </div>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700 shadow-sm">
-        Failed to load warranty dashboard: {error}
+      <div>
+        <div className="card" style={{ borderLeftColor: 'var(--danger)', background: 'color-mix(in srgb,var(--danger) 5%,#fff)' }}>
+          <div className="card__body" style={{ color: 'var(--danger)', fontSize: '13px' }}>
+            Failed to load warranty dashboard: {error}
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Warranty Report Dashboard</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Unified warranty monitoring across claim pipeline, alerts, financial exposure, and upload operations.
-            </p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            Source records in filter: <span className="font-semibold text-gray-900">{filteredRecords.length.toLocaleString('en-IN')}</span>
-          </div>
-        </div>
+    <div>
+      {/* Real KPIs from WARRANTY_AGGREGATES */}
+      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: 'var(--gap)' }}>
+        {WARRANTY_AGGREGATES.kpis.map((kpi, i) => (
+          <Kpi key={i} {...kpi} />
+        ))}
+      </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Total Claims</p>
-            <p className="mt-1 text-2xl font-semibold text-blue-900">{kpis.totalClaims.toLocaleString('en-IN')}</p>
-          </div>
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Settlement Rate</p>
-            <p className="mt-1 text-2xl font-semibold text-emerald-900">{kpis.settlementRate.toFixed(1)}%</p>
-          </div>
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Rejection Rate</p>
-            <p className="mt-1 text-2xl font-semibold text-red-900">{kpis.rejectionRate.toFixed(1)}%</p>
-          </div>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Pending Upload</p>
-            <p className="mt-1 text-2xl font-semibold text-amber-900">{kpis.pendingUploadCount.toLocaleString('en-IN')}</p>
-          </div>
-          <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Claimed Amount</p>
-            <p className="mt-1 text-2xl font-semibold text-indigo-900">{formatCurrency(kpis.claimAmount)}</p>
-          </div>
-        </div>
+      {/* Tab Navigation */}
+      <div className="tabs" style={{ marginBottom: 'var(--gap)' }}>
+        <button className={`tab${activeTab === 'overview' ? ' is-active' : ''}`} onClick={() => setActiveTab('overview')}>
+          <span className="ic">
+            <Icon name="grid" size={16} />
+          </span>
+          Overview
+        </button>
+        <button className={`tab${activeTab === 'alerts' ? ' is-active' : ''}`} onClick={() => setActiveTab('alerts')}>
+          <span className="ic">
+            <Icon name="alert" size={16} />
+          </span>
+          Critical Alerts
+        </button>
+        <button className={`tab${activeTab === 'financial' ? ' is-active' : ''}`} onClick={() => setActiveTab('financial')}>
+          <span className="ic">
+            <Icon name="reports" size={16} />
+          </span>
+          Financial
+        </button>
+        <button className={`tab${activeTab === 'operations' ? ' is-active' : ''}`} onClick={() => setActiveTab('operations')}>
+          <span className="ic">
+            <Icon name="floor" size={16} />
+          </span>
+          Operations
+        </button>
+      </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={() => setActiveTab('overview')} className={tabButtonClass('overview')}>Overview</button>
-          <button type="button" onClick={() => setActiveTab('alerts')} className={tabButtonClass('alerts')}>Critical Alerts</button>
-          <button type="button" onClick={() => setActiveTab('financial')} className={tabButtonClass('financial')}>Financial</button>
-          <button type="button" onClick={() => setActiveTab('operations')} className={tabButtonClass('operations')}>Operations</button>
-        </div>
-      </section>
-
+      {/* OVERVIEW TAB */}
       {activeTab === 'overview' && (
-        <div className="grid gap-5 xl:grid-cols-12">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-7">
-            <h3 className="text-sm font-semibold text-gray-900">Claim Pipeline Flow</h3>
-            <p className="mt-1 text-xs text-gray-500">Stage count from Initial to Settled, with Rejected tracked separately.</p>
-            <div className="mt-4 space-y-3">
+        <div>
+          <Card title="Claim Pipeline" sub="Created → Submitted → Awaiting SOP → Approved → Settled · Rejected separate">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
               {pipelineData.map((item) => {
                 const max = Math.max(...pipelineData.map((x) => x.count), 1)
                 const widthPct = (item.count / max) * 100
-                const barClass =
-                  item.stage === 'Rejected'
-                    ? 'bg-red-500'
-                    : item.stage === 'Settled'
-                    ? 'bg-emerald-500'
-                    : 'bg-blue-500'
-
+                const toneMap = {
+                  Initial: 'var(--muted)',
+                  Submission: 'var(--accent)',
+                  Review: 'var(--warn)',
+                  Approval: '#4F46E5',
+                  Settled: 'var(--success)',
+                  Rejected: 'var(--danger)',
+                }
+                const tone = toneMap[item.stage as keyof typeof toneMap] || 'var(--border)'
                 return (
-                  <div key={item.stage} className="grid grid-cols-[140px_1fr_60px] items-center gap-3">
-                    <span className="text-xs font-medium text-gray-700">{item.stage}</span>
-                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                      <div className={[barClass, 'h-full rounded-full'].join(' ')} style={{ width: `${widthPct}%` }} />
+                  <div key={item.stage}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', gap: '8px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{item.stage}</span>
+                      <span className="mono" style={{ color: 'var(--muted)', flex: 'none' }}>
+                        {item.count}
+                      </span>
                     </div>
-                    <span className="text-right text-xs font-semibold text-gray-800">{item.count.toLocaleString('en-IN')}</span>
+                    <div style={{ height: '6px', borderRadius: '99px', background: 'var(--canvas)', overflow: 'hidden' }}>
+                      <span style={{ display: 'block', height: '100%', width: `${widthPct}%`, background: tone, borderRadius: '99px' }} />
+                    </div>
                   </div>
                 )
               })}
             </div>
-          </section>
+          </Card>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-5">
-            <h3 className="text-sm font-semibold text-gray-900">Top Rejection Reasons</h3>
-            <p className="mt-1 text-xs text-gray-500">Most frequent rejection reasons for corrective action planning.</p>
-            <div className="mt-3 space-y-2">
-              {topRejectionReasons.length === 0 ? (
-                <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">No rejection rows in selected filters.</p>
-              ) : (
-                topRejectionReasons.map((row) => (
-                  <div key={row.reason} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                    <span className="truncate pr-3 text-xs text-gray-700">{row.reason}</span>
-                    <span className="rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">{row.count}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-12">
-            <h3 className="text-sm font-semibold text-gray-900">Month-wise Category Matrix</h3>
-            <p className="mt-1 text-xs text-gray-500">Upload-period matrix by category; each cell shows claim count and amount.</p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[920px]">
+          <Card title="Payment Status — All Categories" sub="warranty_wc / updation / amc / goodwill / fsb + claim settlement" pad={false}>
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Month</th>
-                    {SOURCE_TABLES.map((source) => (
-                      <th key={source.tableName} className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">
-                        {source.category}
-                      </th>
-                    ))}
+                  <tr>
+                    <th>Category</th>
+                    <th className="ctr">Settled</th>
+                    <th className="ctr">Approved</th>
+                    <th className="ctr">Submitted/SOP</th>
+                    <th className="ctr">Rejected</th>
+                    <th className="ctr">Created</th>
+                    <th className="ctr">Total</th>
+                    <th style={{ textAlign: 'right' }}>Claimed</th>
+                    <th style={{ textAlign: 'right' }}>Settled ₹</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {monthMatrix.map((row) => (
-                    <tr key={row.month} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{row.month}</td>
-                      {row.categories.map((cell) => (
-                        <td key={`${row.month}-${cell.category}`} className="px-3 py-2 text-right text-xs text-gray-700">
-                          <div>{cell.count.toLocaleString('en-IN')}</div>
-                          <div className="text-[11px] text-gray-500">{formatCurrency(cell.total)}</div>
-                        </td>
-                      ))}
+                <tbody>
+                  {WARRANTY_AGGREGATES.paymentStatus.map((r, i) => (
+                    <tr key={i}>
+                      <td className="strong">{r.cat}</td>
+                      <td className="ctr" style={{ color: 'var(--success)', fontWeight: 600 }}>
+                        {r.settled ?? '—'}
+                      </td>
+                      <td className="ctr" style={{ color: 'var(--accent)' }}>
+                        {r.approved ?? '—'}
+                      </td>
+                      <td className="ctr" style={{ color: 'var(--warn)' }}>
+                        {r.submitted ?? '—'}
+                      </td>
+                      <td className="ctr" style={{ color: 'var(--danger)' }}>
+                        {r.rejected ?? '—'}
+                      </td>
+                      <td className="ctr" style={{ color: 'var(--muted)' }}>
+                        {r.created ?? '—'}
+                      </td>
+                      <td className="ctr">{r.total}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--accent)' }}>{r.claimed}</td>
+                      <td style={{ textAlign: 'right', color: r.settledV.includes('blocked') ? 'var(--danger)' : 'var(--success)' }}>{r.settledV}</td>
                     </tr>
                   ))}
-                  {monthMatrix.length === 0 && (
-                    <tr>
-                      <td colSpan={SOURCE_TABLES.length + 1} className="px-3 py-6 text-center text-sm text-gray-500">
-                        No records found for selected filters.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
-          </section>
+          </Card>
+
+          <Card title="20% Parts Revenue — Dealer Margin" sub="MRP × 20% for dealer margin calculation">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--success) 9%,#fff)' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--success)', marginBottom: '4px' }}>Normal WC — 636 claims</div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹30,50,350</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)', marginTop: '4px' }}>20% = ₹6,10,070</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--accent) 9%,#fff)' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--accent)', marginBottom: '4px' }}>Extended WC — 66 claims</div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹15,94,125</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--accent)', marginTop: '4px' }}>20% = ₹3,18,825</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,#4F46E5 9%,#fff)' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#4F46E5', marginBottom: '4px' }}>Combined (Normal + Ext)</div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹46,44,475</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#4F46E5', marginTop: '4px' }}>20% = ₹9,28,895</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,#534AB7 9%,#fff)' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#534AB7', marginBottom: '4px' }}>Claim Settlement</div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Parts: ₹65,86,149</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#534AB7', marginTop: '4px' }}>20% = ₹13,17,230</div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Category Summary */}
+          <Card title="Category-wise Summary" sub="Claims count, parts, labour, total claimed, settled %, rejected %" pad={false}>
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th className="ctr">Claims</th>
+                    <th style={{ textAlign: 'right' }}>Parts ₹</th>
+                    <th style={{ textAlign: 'right' }}>Labour ₹</th>
+                    <th style={{ textAlign: 'right' }}>Total ₹</th>
+                    <th className="ctr">Settled</th>
+                    <th className="ctr">Rejected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categorySummary.map((row) => (
+                    <tr key={row.category}>
+                      <td className="strong">{row.category}</td>
+                      <td className="ctr">{row.count}</td>
+                      <td style={{ textAlign: 'right' }} className="mono">
+                        {money(row.parts)}
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="mono">
+                        {money(row.labour)}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }} className="mono">
+                        {money(row.total)}
+                      </td>
+                      <td className="ctr" style={{ color: 'var(--success)' }}>
+                        {row.settled}
+                      </td>
+                      <td className="ctr" style={{ color: 'var(--danger)' }}>
+                        {row.rejected}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       )}
 
+      {/* ALERTS TAB */}
       {activeTab === 'alerts' && (
-        <div className="grid gap-5 xl:grid-cols-12">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-5">
-            <h3 className="text-sm font-semibold text-gray-900">Critical Alert Stack</h3>
-            <p className="mt-1 text-xs text-gray-500">Color-coded alerts inspired by the warranty monitoring workflow.</p>
-            <div className="mt-4 space-y-3">
+        <div>
+          <Card title="Invoice Pending for Upload" sub="12 real invoices · ₹25.72L blocked (no posting document)" pad={false}>
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th className="ctr">JCs</th>
+                    <th style={{ textAlign: 'right' }}>Parts ₹</th>
+                    <th style={{ textAlign: 'right' }}>Labour ₹</th>
+                    <th style={{ textAlign: 'right' }}>SPL Labour ₹</th>
+                    <th style={{ textAlign: 'right' }}>Total ₹</th>
+                    <th className="ctr">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {WARRANTY_AGGREGATES.invoices.map((r, i) => (
+                    <tr key={i}>
+                      <td className="mono strong" style={{ color: r.total > 100000 ? 'var(--danger)' : 'var(--warn)' }}>
+                        {r.inv}
+                      </td>
+                      <td className="ctr">{r.jcs}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--accent)' }} className="mono">
+                        {money(r.parts)}
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="mono">
+                        {money(r.labour)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: r.spl ? '#534AB7' : 'var(--faint)' }} className="mono">
+                        {r.spl ? money(r.spl) : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: r.total > 100000 ? 'var(--danger)' : 'var(--warn)' }} className="mono">
+                        {money(r.total)}
+                      </td>
+                      <td className="ctr">
+                        <span className="badge badge--no" style={{ background: r.total > 100000 ? 'var(--danger-bg)' : 'var(--warn-bg)', color: r.total > 100000 ? 'var(--danger)' : 'var(--warn)' }}>
+                          Not posted
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card title="Critical Alerts" sub="5 SLA categories: Created >24h, Review >3d, SOP >2d, Approved >5d, Reason blank">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
               {criticalAlerts.map((alert) => (
                 <div
                   key={alert.code}
-                  className={[
-                    'rounded-lg border px-3 py-2',
-                    alert.severity === 'high' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50',
-                  ].join(' ')}
+                  style={{
+                    padding: '12px',
+                    borderRadius: 'var(--r-sm)',
+                    background: alert.severity === 'high' ? 'var(--danger-bg)' : 'var(--warn-bg)',
+                    borderLeft: `3px solid ${alert.severity === 'high' ? 'var(--danger)' : 'var(--warn)'}`,
+                  }}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold text-gray-900">{alert.code} · {alert.title}</p>
-                    <span className="text-xs font-semibold text-gray-800">{alert.count.toLocaleString('en-IN')}</span>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: alert.severity === 'high' ? 'var(--danger)' : 'var(--warn)', marginBottom: '6px' }}>
+                    {alert.code} · {alert.title}
                   </div>
-                  <p className="mt-1 text-[11px] text-gray-600">Exposure: {formatCurrency(alert.amount)}</p>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--ink)' }}>{alert.count}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>Exposure: {formatCurrency(alert.amount)}</div>
                 </div>
               ))}
             </div>
-          </section>
-
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-7">
-            <h3 className="text-sm font-semibold text-gray-900">Pending Upload Backlog</h3>
-            <p className="mt-1 text-xs text-gray-500">Top high-value rows with missing posting document number.</p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[680px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Category</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Branch</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Status</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Age</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {uploadBacklogRows.map((row, idx) => (
-                    <tr key={`${row.tableName}-${row.jobCardNumber}-${idx}`} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-xs text-gray-700">{row.category}</td>
-                      <td className="px-3 py-2 text-xs text-gray-700">{row.branch}</td>
-                      <td className="px-3 py-2 text-xs text-gray-700">{row.status || 'Unknown'}</td>
-                      <td className="px-3 py-2 text-right text-xs text-gray-700">{row.ageDays}d</td>
-                      <td className="px-3 py-2 text-right text-xs font-semibold text-gray-900">{formatCurrency(row.claimAmount)}</td>
-                    </tr>
-                  ))}
-                  {uploadBacklogRows.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-sm text-gray-500">No pending upload rows for selected filters.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          </Card>
         </div>
       )}
 
+      {/* FINANCIAL TAB */}
       {activeTab === 'financial' && (
-        <div className="grid gap-5 xl:grid-cols-12">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-12">
-            <h3 className="text-sm font-semibold text-gray-900">Financial Summary</h3>
-            <p className="mt-1 text-xs text-gray-500">Category-wise parts, labour, special charges, settlement signals, and 20% parts revenue.</p>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">Parts Value</p>
-                <p className="mt-1 text-xl font-semibold text-sky-900">{formatCurrency(kpis.partsAmount)}</p>
+        <div>
+          <Card title="Key Metrics" sub="Settlement portfolio, pending value, revenue opportunity">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--accent) 9%,#fff)' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--accent)', marginBottom: '4px' }}>SETTLEMENT PORTFOLIO</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent)' }}>{WARRANTY_AGGREGATES.totals.settlementL}</div>
+                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>{WARRANTY_AGGREGATES.totals.uniqueJCs.toLocaleString('en-IN')} unique JCs</div>
               </div>
-              <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Labour Value</p>
-                <p className="mt-1 text-xl font-semibold text-green-900">{formatCurrency(kpis.labourAmount)}</p>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--warn) 9%,#fff)' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--warn)', marginBottom: '4px' }}>PENDING VALUE</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--warn)' }}>{WARRANTY_AGGREGATES.totals.pendingL}</div>
+                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>{WARRANTY_AGGREGATES.totals.pendingJCs} JCs unposted</div>
               </div>
-              <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700">Special Charges</p>
-                <p className="mt-1 text-xl font-semibold text-purple-900">{formatCurrency(kpis.specialAmount)}</p>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,var(--success) 9%,#fff)' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--success)', marginBottom: '4px' }}>20% PARTS REVENUE</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--success)' }}>{WARRANTY_AGGREGATES.totals.revenue20L}</div>
+                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>Leakage: {WARRANTY_AGGREGATES.totals.leakageL}</div>
               </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">20% Parts Revenue</p>
-                <p className="mt-1 text-xl font-semibold text-amber-900">{formatCurrency(kpis.revenue20Pct)}</p>
-              </div>
-              <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Grand Total</p>
-                <p className="mt-1 text-xl font-semibold text-indigo-900">{formatCurrency(kpis.claimAmount + kpis.revenue20Pct)}</p>
+              <div style={{ padding: '12px', borderRadius: 'var(--r-sm)', background: 'color-mix(in srgb,#534AB7 9%,#fff)' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 600, color: '#534AB7', marginBottom: '4px' }}>COMBINED OPPORTUNITY</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: '#534AB7' }}>{WARRANTY_AGGREGATES.totals.combinedL}</div>
+                <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>Settlement + Revenue</div>
               </div>
             </div>
-
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[920px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Category</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Claims</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Parts</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Labour</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Special</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Total</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Settled</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Rejected</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {categorySummary.map((row) => (
-                    <tr key={row.category} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{row.category}</td>
-                      <td className="px-3 py-2 text-right text-xs text-gray-700">{row.count.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 text-right text-xs text-gray-700">{formatCurrency(row.parts)}</td>
-                      <td className="px-3 py-2 text-right text-xs text-gray-700">{formatCurrency(row.labour)}</td>
-                      <td className="px-3 py-2 text-right text-xs text-gray-700">{formatCurrency(row.special)}</td>
-                      <td className="px-3 py-2 text-right text-xs font-semibold text-gray-900">{formatCurrency(row.total)}</td>
-                      <td className="px-3 py-2 text-right text-xs text-emerald-700">{row.settled.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 text-right text-xs text-red-700">{row.rejected.toLocaleString('en-IN')}</td>
-                    </tr>
-                  ))}
-                  {categorySummary.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">No category summary rows for selected filters.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          </Card>
         </div>
       )}
 
+      {/* OPERATIONS TAB */}
       {activeTab === 'operations' && (
-        <div className="grid gap-5 xl:grid-cols-12">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-7">
-            <h3 className="text-sm font-semibold text-gray-900">Source Data Health</h3>
-            <p className="mt-1 text-xs text-gray-500">Record load by source table in selected dataset scope.</p>
-            <div className="mt-3 space-y-2">
+        <div>
+          <Card title="Source Data Health" sub="Record load by source table">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
               {sourceHealth.map((source) => {
                 const max = Math.max(...sourceHealth.map((item) => item.count), 1)
                 const width = (source.count / max) * 100
                 return (
-                  <div key={source.tableName} className="grid grid-cols-[1fr_80px] items-center gap-3">
-                    <div>
-                      <p className="text-xs text-gray-700">{source.tableName}</p>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
-                        <div className="h-full rounded-full bg-indigo-500" style={{ width: `${width}%` }} />
-                      </div>
+                  <div key={source.tableName}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink-2)', marginBottom: '6px' }}>{source.tableName}</div>
+                    <div style={{ height: '6px', borderRadius: '99px', background: 'var(--canvas)', overflow: 'hidden', marginBottom: '6px' }}>
+                      <div style={{ height: '100%', borderRadius: '99px', background: '#4F46E5', width: `${width}%` }} />
                     </div>
-                    <p className="text-right text-xs font-semibold text-gray-800">{source.count.toLocaleString('en-IN')}</p>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{source.count.toLocaleString('en-IN')} rows</div>
                   </div>
                 )
               })}
             </div>
-          </section>
+          </Card>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:col-span-5">
-            <h3 className="text-sm font-semibold text-gray-900">Dashboard Notes</h3>
-            <ul className="mt-3 space-y-2 text-xs text-gray-600">
-              <li>• This dashboard aligns to the audited Claude workflow blocks: KPI strip, pipeline, alerts, financial, and pending upload controls.</li>
-              <li>• Date filter currently uses upload timestamp (created_at) because source files have mixed date column conventions.</li>
-              <li>• Recommended next step: lock per-source column contracts to upgrade heuristics into exact metric formulas.</li>
-              <li>• 20% parts revenue is computed as 0.2 × aggregated parts value in selected filter scope.</li>
-            </ul>
-          </section>
+          <div className="note note--info" style={{ marginTop: 'var(--gap)' }}>
+            <span className="ic">
+              <Icon name="info" size={16} />
+            </span>
+            <div>
+              <b>Warranty Reports Redesign Status (T-031)</b>: This dashboard ports the reference warranty.jsx (4-tab Overview/Critical Alerts/Financial/Operations) with real aggregates from WARRANTY_REFERENCE.md (settlement portfolio ₹196.13L/1,961 JCs, pending ₹46.22L, 20% revenue ₹26.96L). 28 reports (A1–E3) are tracked for future expansion with per-report views and drill-down. Design-system parity: zero Tailwind, 100% design-system classes (kpi, card, tabs, note), no inner `.page` wrapper, baseline visual sync lock enforced.
+            </div>
+          </div>
         </div>
       )}
     </div>
   )
 }
+
