@@ -741,13 +741,13 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
   )
 
   return (
-    <div className="import-slot">
-      <div className="import-slot__head">
-        <span className="import-slot__branch">{branch}</span>
+    <div className="imp-slot">
+      <div className="imp-slot__hd">
+        <span className="imp-slot__br">{branch}</span>
         {slot.file && (
           <button
             onClick={() => onClear(branch)}
-            className="import-slot__clear"
+            className="imp-slot__rm"
           >
             Remove
           </button>
@@ -756,7 +756,7 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
 
       {slot.file ? (
         <div
-          className={`import-slot__file ${slot.parseError ? 'is-error' : slot.rowCount === null ? 'is-pending' : 'is-success'}`}
+          className={`imp-slot__file ${slot.parseError ? 'is-err' : slot.rowCount === null ? 'is-parsing' : 'is-ok'}`}
         >
           {slot.parseError ? (
             <span>{slot.parseError}</span>
@@ -764,8 +764,9 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
             <span>Parsing…</span>
           ) : (
             <>
-              <span className="import-slot__filename">{slot.file.name}</span>
-              <span className="import-slot__rows">· {slot.rowCount.toLocaleString()} rows</span>
+              <Icon name="checksm" size={13} strokeWidth={2.4} />
+              <span className="nm">{slot.file.name}</span>
+              <span className="ct">· {slot.rowCount.toLocaleString('en-IN')} rows</span>
             </>
           )}
         </div>
@@ -783,9 +784,9 @@ function SlotDropzone({ branch, slot, onFile, onClear }: SlotDropzoneProps) {
             const file = e.dataTransfer.files[0]
             if (file) handleFile(file)
           }}
-          className={`import-slot__dropzone${isDragging ? ' is-dragging' : ''}`}
+          className={`imp-drop${isDragging ? ' is-drag' : ''}`}
         >
-          <Icon name="upload" size={14} />
+          <Icon name="upload" size={15} />
           Drop or click to browse
           <input
             id={inputId}
@@ -835,22 +836,30 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       })
     : null
 
+  const rowsInDb = state.insertedCount > 0 ? state.insertedCount : null
+
   return (
-    <div className="card">
-      {/* Header */}
-      <div className="card__head">
-        <div>
-          <h3>{config.title}</h3>
-          <div className="sub">{config.description}</div>
-          {lastUpdatedLabel && <div className="sub import-card__updated">Last updated: {lastUpdatedLabel}</div>}
+    <div className="imp-card">
+      <div className="imp-card__hd">
+        <div style={{ minWidth: 0 }}>
+          <div className="imp-card__title">{config.title}</div>
+          <div className="imp-card__desc">{config.description}</div>
+          <div className="imp-card__meta">
+            {rowsInDb != null ? (
+              <span className="imp-card__rows">
+                <Icon name="grid" size={12} />
+                {rowsInDb.toLocaleString('en-IN')} rows in DB
+              </span>
+            ) : (
+              <span className="imp-card__rows imp-card__rows--none">No imports yet</span>
+            )}
+            {lastUpdatedLabel && <span className="imp-card__upd">Last: {lastUpdatedLabel}</span>}
+          </div>
         </div>
-        <span className="mono import-card__table-tag">
-          {config.tableName}
-        </span>
+        <code className="imp-card__tbl">{config.tableName}</code>
       </div>
 
-      {/* Slot grid */}
-      <div className={`card__body import-card__slots${branches.length === 4 ? ' import-card__slots--quad' : ''}`}>
+      <div className="imp-card__slots">
         {branches.map((branch) => (
           <SlotDropzone
             key={branch}
@@ -862,17 +871,35 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="import-card__footer">
-        <span className="import-card__ready">
-          {hasValidFile && totalRows > 0 ? `${totalRows.toLocaleString()} rows ready` : ''}
+      {state.status === 'uploading' && state.uploadProgress.totalBranches > 0 && (
+        <div className="imp-card__prog">
+          <div className="imp-card__progrow">
+            <span>Upload progress</span>
+            <span>
+              {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
+            </span>
+          </div>
+          <div className="imp-bar">
+            <span style={{ width: `${progressPercent}%` }} />
+          </div>
+          {state.uploadProgress.currentBranch && (
+            <div className="imp-card__progcur">
+              Uploading {state.uploadProgress.currentBranch}…
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="imp-card__ft">
+        <span className="imp-card__ready">
+          {hasValidFile && totalRows > 0 ? `${totalRows.toLocaleString('en-IN')} rows ready` : ''}
         </span>
 
-        <div className="import-card__actions">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {state.status === 'success' && (
             <button
               onClick={onReset}
-              className="import-card__reset"
+              className="linkbtn"
             >
               Import more
             </button>
@@ -881,49 +908,32 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
           <button
             onClick={onUpload}
             disabled={!hasValidFile || state.status === 'uploading' || state.status === 'success'}
-            className={`btn btn--primary import-upload-btn${state.status === 'success' ? ' is-success' : ''}`}
+            className={`btn btn--sm ${state.status === 'success' ? 'btn--ok-solid' : 'btn--primary'}`}
           >
-            {state.status === 'uploading' && (
-              <Icon name="upload" size={13} />
+            {state.status === 'uploading' ? (
+              <>
+                <span className="imp-spin" /> Uploading…
+              </>
+            ) : state.status === 'success' ? (
+              <>
+                <Icon name="checksm" size={15} strokeWidth={2.4} /> Uploaded {state.insertedCount.toLocaleString('en-IN')} rows
+              </>
+            ) : (
+              <>
+                <Icon name="upload" size={15} /> Upload all
+              </>
             )}
-            {state.status === 'success'
-              ? `Uploaded ${state.insertedCount.toLocaleString()} rows`
-              : state.status === 'uploading'
-              ? 'Uploading…'
-              : 'Upload All'}
           </button>
         </div>
       </div>
 
-      {state.status === 'uploading' && state.uploadProgress.totalBranches > 0 && (
-        <div className="import-progress">
-          <div className="import-progress__head">
-            <span>Upload progress</span>
-            <span>
-              {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
-            </span>
-          </div>
-          <div className="import-progress__track">
-            <div
-              className="import-progress__bar"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          {state.uploadProgress.currentBranch && (
-            <p className="import-progress__current">
-              Uploading {state.uploadProgress.currentBranch}…
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Error banner */}
       {state.status === 'error' && state.uploadError && (
-        <div className="import-error-banner">
-          <Icon name="alert" size={14} className="import-error-banner__icon" />
-          <div className="import-error-banner__content">
-            <p className="import-error-banner__title">Upload failed</p>
-            <p className="import-error-banner__message">{state.uploadError}</p>
+        <div className="alert alert--error" style={{ margin: 12, marginTop: 0 }}>
+          <Icon name="alert" size={14} />
+          <div>
+            <b>Upload failed</b>
+            <div>{state.uploadError}</div>
           </div>
         </div>
       )}
@@ -1962,42 +1972,31 @@ export default function ImportPage() {
         </div>
       </div>
 
-      <div className="note note--info">
+      <div className="note note--info mb-gap">
         <span className="ic"><Icon name="shield" size={17} /></span>
         <div>Branch mapping is automatic from dealer code (<b>3000840 → Sitapura PV</b> · <b>500A840 → Sitapura EV</b> · <b>3001440 → Ajmer Road PV</b>). UTF-16 TM exports and SpreadsheetML <code>.xls</code> are parsed automatically.</div>
       </div>
 
-      <div className="import-page">
+      <div>
         {revenueReportCards.length > 0 && (
-          <section className="card import-group">
+          <section className="imp-group">
             <button
               type="button"
               onClick={() => toggleGroup('revenue_report')}
-              className="import-group__toggle"
+              className="imp-group__hd"
               aria-expanded={!!expandedGroups.revenue_report}
               aria-controls="revenue-report-group-content"
             >
-              <div className="import-group__meta">
-                <h3>Revenue Report</h3>
-                <p>
-                  Upload PSF Revenue Report, Invoice Data, and VAS Data in one grouped section to reduce confusion.
-                </p>
-              </div>
-
-              <div className="import-group__summary">
-                <span className="import-group__count">
-                  {revenueReportCards.length} cards
-                </span>
-                <Icon
-                  name="chevron"
-                  size={14}
-                  className={`import-group__chevron${expandedGroups.revenue_report ? ' is-open' : ''}`}
-                />
-              </div>
+              <span className="imp-group__ic"><Icon name="reports" size={18} /></span>
+              <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                <span className="imp-group__title">Revenue Reports <span className="imp-group__count">{revenueReportCards.length}</span></span>
+                <span className="imp-group__desc">Closed job cards, invoice orders and value-added service data.</span>
+              </span>
+              <Icon name="chevron" size={18} className="imp-group__chev" style={{ transform: expandedGroups.revenue_report ? 'rotate(180deg)' : 'none' }} />
             </button>
 
             {expandedGroups.revenue_report && (
-              <div id="revenue-report-group-content" className="import-group__content">
+              <div id="revenue-report-group-content" className="imp-group__body">
                 {revenueReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
@@ -2016,35 +2015,24 @@ export default function ImportPage() {
         )}
 
         {partsReportCards.length > 0 && (
-          <section className="card import-group">
+          <section className="imp-group">
             <button
               type="button"
               onClick={() => toggleGroup('parts_report')}
-              className="import-group__toggle"
+              className="imp-group__hd"
               aria-expanded={!!expandedGroups.parts_report}
               aria-controls="parts-report-group-content"
             >
-              <div className="import-group__meta">
-                <h3>Parts Report</h3>
-                <p>
-                  Upload Parts Consumption, Parts Order, and Parts In Stock in one grouped section.
-                </p>
-              </div>
-
-              <div className="import-group__summary">
-                <span className="import-group__count">
-                  {partsReportCards.length} cards
-                </span>
-                <Icon
-                  name="chevron"
-                  size={14}
-                  className={`import-group__chevron${expandedGroups.parts_report ? ' is-open' : ''}`}
-                />
-              </div>
+              <span className="imp-group__ic"><Icon name="grid" size={18} /></span>
+              <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                <span className="imp-group__title">Parts Reports <span className="imp-group__count">{partsReportCards.length}</span></span>
+                <span className="imp-group__desc">Consumption, ordering and on-hand stock snapshots.</span>
+              </span>
+              <Icon name="chevron" size={18} className="imp-group__chev" style={{ transform: expandedGroups.parts_report ? 'rotate(180deg)' : 'none' }} />
             </button>
 
             {expandedGroups.parts_report && (
-              <div id="parts-report-group-content" className="import-group__content">
+              <div id="parts-report-group-content" className="imp-group__body">
                 {partsReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}
@@ -2063,35 +2051,24 @@ export default function ImportPage() {
         )}
 
         {warrantyReportCards.length > 0 && (
-          <section className="card import-group">
+          <section className="imp-group">
             <button
               type="button"
               onClick={() => toggleGroup('warranty_report')}
-              className="import-group__toggle"
+              className="imp-group__hd"
               aria-expanded={!!expandedGroups.warranty_report}
               aria-controls="warranty-report-group-content"
             >
-              <div className="import-group__meta">
-                <h3>Warranty Report</h3>
-                <p>
-                  Upload Claim-Settlement-Report, Part WC, Updation Claim, Goodwill, AMC, FSB, and WC across four branches.
-                </p>
-              </div>
-
-              <div className="import-group__summary">
-                <span className="import-group__count">
-                  {warrantyReportCards.length} cards
-                </span>
-                <Icon
-                  name="chevron"
-                  size={14}
-                  className={`import-group__chevron${expandedGroups.warranty_report ? ' is-open' : ''}`}
-                />
-              </div>
+              <span className="imp-group__ic"><Icon name="shield" size={18} /></span>
+              <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                <span className="imp-group__title">Warranty Reports <span className="imp-group__count">{warrantyReportCards.length}</span></span>
+                <span className="imp-group__desc">7 Tata Motors warranty source reports across 4 branches.</span>
+              </span>
+              <Icon name="chevron" size={18} className="imp-group__chev" style={{ transform: expandedGroups.warranty_report ? 'rotate(180deg)' : 'none' }} />
             </button>
 
             {expandedGroups.warranty_report && (
-              <div id="warranty-report-group-content" className="import-group__content">
+              <div id="warranty-report-group-content" className="imp-group__body">
                 {warrantyReportCards.map((config) => (
                   <ImportCard
                     key={config.tableName}

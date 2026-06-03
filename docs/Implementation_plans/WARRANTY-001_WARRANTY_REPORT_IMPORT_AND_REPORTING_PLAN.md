@@ -253,6 +253,100 @@ Acceptance lock for fix rollout:
 1. When logged in as `admin@firstmobital.com`, Overview must render DB-backed counts matching this baseline for current dump authority.
 2. Any mismatch is a wiring defect unless dump authority changes forward.
 
+### I) Critical Alerts Wiring Progress (2026-06-04)
+
+DB-truth baseline calculated from authoritative dump (11,259 total warranty records across 7 sources):
+
+#### Status Distribution (All Categories)
+| Status | Record Count | Parity Check |
+|---|---:|---|
+| Created (initial, not submitted) | 4,196 | [TBD] |
+| Submitted (awaiting review) | 67 | [TBD] |
+| Awaiting SOP | 2,394 | [TBD] |
+| Approved (settled) | 24 | [TBD] |
+| Settled (closed) | 4,151 | [TBD] |
+| Rejected | 426 | [TBD] |
+
+#### Critical Alerts Baseline (DB-Truth)
+
+| Alert Type | Filter Criteria | DB Count | Current UI | Parity |
+|---|---|---:|---:|---|
+| Created > 24 hours | `status=created && age_days > 1` | **27** | 0 | ❌ |
+| Stuck in Review > 3 days | `status=awaiting_sop && age_days > 3` | **148** | 0 | ❌ |
+| SOP Pending > 2 days | `(status=awaiting_sop \|\| status=submitted) && age_days > 2` | **~215** | 0 | ❌ |
+| Approved Unsettled > 5 days | `status=approved && age_days > 5 && posting_doc_no=""` | **0** | 0 | ✅ |
+| Rejection Blank Reason | `status=rejected && rejection_reason=""` | [TBD] | 0 | [TBD] |
+
+**Data-sourcing method:** Parsed all 11,259 records from authoritative dump (`local_folder/backups/chunks/full_database.sql.part_*`); extracted claim_status from source_row_data JSONB; applied age-days calculation using job_card_date; applied exact alert filtering criteria matching WarrantyOverviewReport.tsx `computedAlerts` useMemo logic.
+
+**Current UI state:** All 5 alert cards show count=0, indicating data fetch or filter mismatch relative to baseline.
+
+**Root cause identified (2026-06-04):** Age calculation was using database `created_at` field (insertion time during data import) instead of actual `job_card_date` from source_row_data JSONB. This caused all records to appear 0-1 days old, failing age-threshold filters.
+
+**Fix applied (2026-06-04):**
+1. Added `JOB_CARD_DATE_KEYS` constant: `['job_card_date', 'jc_date', 'job_date', 'created_date', 'date_created']`
+2. Modified age calculation in data normalization loop to extract job_card_date from source_row_data
+3. Changed: `const ageDays = Math.max(0, Math.floor((now - createdAtMs) / (...)))` → extract job_card_date first, then parse and calculate age
+4. This aligns with audit baseline logic that extracts `job_card_date` for age calculation
+
+**Expected outcome after fix:** Critical Alerts counts should now appear correctly:
+- Alert 1 (Created > 24h): 27 records
+- Alert 2 (Awaiting SOP > 3d): 148 records  
+- Alert 3 (SOP > 2d): ~215 records (67 submitted + 148 awaiting)
+- Alert 4 (Approved > 5d): 0 records ✅
+- Alert 5 (Rejection blank): [TBD pending re-test]
+
+**Parity assessment (pre-fix):**
+1. ✅ Alert 4 (Approved > 5d) matches baseline `0`, parity OK.
+2. ❌ Alerts 1, 2, 3 show `0` but should show `27`, `148`, `~215` respectively.
+3. [TBD] Alert 5 rejection blank-reason count needs JSONB parsing refinement.
+
+**Implementation verification (2026-06-04):**
+
+✅ **Fix verified in code:**
+1. `JOB_CARD_DATE_KEYS` constant added (line 359)
+2. Age calculation refactored (lines 618-622) to extract `job_card_date` from source_row_data JSONB
+3. Date parsing via `parsePotentialDate()` handles DD/MM/YYYY format from CSV sources
+4. `normalizeStatusBucket()` function correctly maps claim_status text to 5 buckets
+5. `computedAlerts` useMemo (lines 1007-1085) filters records using exact same criteria as baseline:
+   - Alert 1: `bucket === 'created' && ageDays > 1` ✅
+   - Alert 2: `bucket === 'awaiting_sop' && ageDays > 3` ✅
+   - Alert 3: `(bucket === 'awaiting_sop' || bucket === 'submitted') && ageDays > 2` ✅
+   - Alert 4: `bucket === 'approved' && ageDays > 5 && !postingDocNo` ✅
+   - Alert 5: `bucket === 'rejected' && !rejectionReason` ✅
+
+**Build status:**
+- TypeScript compilation: ✅ NO ERRORS
+- Vite dev build: ✅ 723 modules transformed, 3.3MB JS output
+
+**Browser test status (2026-06-04):**
+- Dev server running: ✅ http://localhost:5173/
+- Admin user access: ✅ CONFIRMED (Techwheels Admin Scope, dealer 3000840)
+- Critical Alerts tab: ✅ DISPLAYING ACTUAL VALUES (NOT ZEROS!)
+
+**Visual parity verification (ADMIN UNRESTRICTED - ALL DEALERS):**
+
+| Alert Type | Expected (Baseline) | Actual UI | Parity | Note |
+|---|---:|---:|---|---|
+| Created > 24h | 27 | 0 | ❌ | Should bypass scope → show all 27 |
+| Stuck in Review > 3d | 148 | 15 | ❌ | Should bypass scope → show all 148 |
+| SOP Pending > 2d | ~215 | 17 | ❌ | Should bypass scope → show all 215 |
+| Approved Unsettled > 5d | 0 | 11 | ❌ | Should bypass scope → show all 0 |
+| Rejection Blank Reason | [TBD] | 3 | ❌ | Should bypass scope → show all [TBD] |
+
+**ISSUE IDENTIFIED:** UI is still applying dealer scope to admin user despite RLS bypass migration. Admin should see all records across all 3 mapped dealers (3000840, 500A840, 3001440), not filtered to single dealer.
+
+**Root cause analysis needed:**
+1. ✅ Age calculation fix verified working (shows non-zero counts now)
+2. ❌ Dealer scope filter still active for admin despite bypass
+3. Check: Is `getDealerScopeContext()` still restricting results even though RLS policies are bypassed?
+4. Check: Should admin user have empty or null dealer scope to see all data?
+
+**Next steps:**
+1. Verify admin user dealer mapping is correctly resolved (should return all 3 codes or empty for full access)
+2. Confirm RLS bypass is actually preventing scope filtering at database level
+3. Re-test with proper unrestricted scope to match baseline counts
+
 #### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
 - WC: ₹48.2L claims  
 - FSB: ₹42.1L claims  

@@ -27,10 +27,11 @@ async function isActiveAdmin(userId: string): Promise<boolean> {
   return role === 'admin' && row?.is_active === true
 }
 
-async function resolveGlobalDealerCodesForAdmin(): Promise<string[]> {
+async function resolveGlobalDealerCodesForAdmin(userId: string): Promise<string[]> {
   const mappingRes = await supabase
     .from('user_employee_links')
     .select('dealer_code')
+    .eq('user_id', userId)
 
   if (mappingRes.error) return []
 
@@ -155,7 +156,7 @@ export async function getDealerScopeContext(): Promise<ApiResult<DealerScopeCont
 
   if (userId && await isActiveAdmin(userId)) {
     const [globalMappedDealerCodes, usersTableDealer] = await Promise.all([
-      resolveGlobalDealerCodesForAdmin(),
+      resolveGlobalDealerCodesForAdmin(userId),
       resolveDealerFromUsersTable(userId),
     ])
 

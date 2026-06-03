@@ -356,6 +356,7 @@ const MODEL_KEYS = ['model', 'product', 'vehicle_model', 'model_name', 'chassis_
 const JC_KEYS = ['job_card_number', 'job_card_no', 'jc_no', 'jc_number']
 const INVOICE_DATE_KEYS = ['invoice_date', 'invoice_dt', 'invoice date', 'inv_date']
 const CLOSED_DATE_KEYS = ['closed_date', 'job_closed_date', 'close_date', 'compl_report_date', 'repair_date']
+const JOB_CARD_DATE_KEYS = ['job_card_date', 'jc_date', 'job_date', 'created_date', 'date_created']
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -605,8 +606,14 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             const claimAmount =
               claimAmountFromKnown > 0 ? claimAmountFromKnown : partsAmount + labourAmount + specialAmount + miscAmount
 
-            const createdAtMs = new Date(row.created_at).getTime()
-            const ageDays = Math.max(0, Math.floor((now - createdAtMs) / (1000 * 60 * 60 * 24)))
+            // Calculate age from job_card_date in source data (not database created_at which reflects import time)
+            const jobCardDateRaw = extractByPreferredKeys(source, JOB_CARD_DATE_KEYS)
+            const jobCardDateParsed = parsePotentialDate(jobCardDateRaw)
+            let ageDays = 0
+            if (jobCardDateParsed) {
+              const jobCardDateMs = new Date(jobCardDateParsed).getTime()
+              ageDays = Math.max(0, Math.floor((now - jobCardDateMs) / (1000 * 60 * 60 * 24)))
+            }
 
             normalizedRecords.push({
               tableName,
@@ -691,19 +698,25 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     return records.filter((record) => {
       if (!matchesBranchFilter(record, branch)) return false
 
-      const portal = inferPortal(record)
-      const location = inferLocation(record)
-      if (allowedLocationFuelPairs.size > 0 && !allowedLocationFuelPairs.has(`${location}|${portal}`)) return false
+      // For admin with multiple dealer codes (unrestricted scope), skip location/fuel filtering
+      // since admin bypass means they see all records regardless of location/fuel combination
+      const isAdminWithFullScope = viewerDealerCodes.length >= 2
+      
+      if (!isAdminWithFullScope) {
+        const portal = inferPortal(record)
+        const location = inferLocation(record)
+        if (allowedLocationFuelPairs.size > 0 && !allowedLocationFuelPairs.has(`${location}|${portal}`)) return false
 
-      if (selectedLocation !== 'ALL' && location !== selectedLocation) return false
+        if (selectedLocation !== 'ALL' && location !== selectedLocation) return false
 
-      const parentFuelType = (branch === 'ALL_PV' || branch.endsWith(' PV')) ? 'PV' : (branch === 'ALL_EV' || branch.endsWith(' EV')) ? 'EV' : 'ALL'
-      if (parentFuelType !== 'ALL' && portal !== parentFuelType) return false
-      if (selectedFuelType !== 'ALL' && portal !== selectedFuelType) return false
+        const parentFuelType = (branch === 'ALL_PV' || branch.endsWith(' PV')) ? 'PV' : (branch === 'ALL_EV' || branch.endsWith(' EV')) ? 'EV' : 'ALL'
+        if (parentFuelType !== 'ALL' && portal !== parentFuelType) return false
+        if (selectedFuelType !== 'ALL' && portal !== selectedFuelType) return false
+      }
 
       return true
     })
-  }, [allowedLocationFuelPairs, branch, records, selectedFuelType, selectedLocation])
+  }, [allowedLocationFuelPairs, branch, records, selectedFuelType, selectedLocation, viewerDealerCodes.length])
 
   const overviewKpis = useMemo(() => {
     const claimed = filteredRecords.reduce((sum, record) => sum + record.claimAmount, 0)
