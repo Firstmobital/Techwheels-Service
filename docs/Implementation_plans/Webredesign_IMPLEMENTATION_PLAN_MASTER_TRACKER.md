@@ -858,7 +858,7 @@ Rules:
 
 ---
 
-## 16. Re-Audit Delta Notes (2026-06-02)
+## 15. Re-Audit Delta Notes (2026-06-02)
 
 1. Newly discovered explicit prototype screen set for Reports -> Warranty exists and is implementation-ready in reference folder.
 2. Reception prototype is now an explicit front-desk console (form + live feed) and should be ported accordingly.
@@ -876,7 +876,159 @@ Rules:
 
 ---
 
-## 16. Execution Notes
+## 16. Visual Sync Lock Enforcement (2026-06-03)
+
+**Context:** T-029 (Floor Incharge) exposed critical visual inconsistency patterns that were nearly missed during initial implementation. This section documents the discovery, fix, and enforcement rules to prevent future drift.
+
+### 16.1 Discovery: Double-Padding Side Gap
+
+**Symptom:** Floor Incharge page on Vercel showed left-side gap inconsistency vs Home baseline despite claiming visual sync lock enforced (tracker sections 5.4, 7.2A).
+
+**Root Cause Analysis:**
+- Floor Incharge component returned `<div className="page">` wrapper
+- App.tsx already provides outer `<div className="page">` with padding: 28px 24px 56px
+- Result: **Double padding** → inner wrapper added redundant left/right padding
+- Other pages (Home, Reception, ServiceAdvisor, Admin) returned plain `<div>` (no inner wrapper)
+- Side effect: Left-side content gap visually inconsistent with Home baseline
+
+**Fix Applied:**
+1. Removed inner `.page` wrapper from FloorInchargePage.tsx
+2. Changed from `return <div className="page">` to `return <div>`
+3. Brought padding structure in line with all other redesigned pages
+
+### 16.2 Discovery: 20+ Inline Styles Violating Sync Lock
+
+**Symptom:** Floor Incharge had inline styles mixed with class-based styling on 20+ properties (form controls, table cells, toast, icons, etc.).
+
+**Root Cause:** Reference prototype (floor.jsx) used ad-hoc inline styles for mockup. Production port retained inline styles instead of converting to shared CSS classes.
+
+**Fix Applied:**
+1. Created 18+ new CSS utility classes in src/App.css (section 5.5)
+2. Replaced all inline `style={{...}}` with class-based equivalents
+3. Only state-driven conditionals remain (e.g., `opacity: canSave ? 1 : 0.5`)
+
+### 16.3 Prevention: Three-Layer Visual Sync Lock Enforcement
+
+Going forward, every page implementation must enforce sync lock at THREE levels:
+
+**Layer 1: Component Structure**
+```
+❌ WRONG:
+return <div className="page">           // WRONG - inner wrapper creates double padding
+  <div className="pagehead">...</div>
+</div>
+
+✅ CORRECT:
+return <div>                             // Plain wrapper - inherits outer App.tsx padding
+  <div className="pagehead">...</div>
+</div>
+```
+
+**Layer 2: Styling System**
+```
+❌ WRONG:
+<select style={{ height: 34, width: 150 }}>
+<td style={{ color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+<button style={{ opacity: canSave ? 1 : 0.5 }}>
+
+✅ CORRECT:
+<select className="sel sel-md">
+<td className="cell-accent type-cell">
+<button style={{ opacity: canSave ? 1 : 0.5 }}>  // ONLY state-driven conditional
+```
+
+**Layer 3: Cross-Page Baseline Comparison**
+```
+Before marking task DONE:
+1. Open Home page in browser
+2. Open target page in same browser (same session)
+3. Screenshot side-by-side
+4. Compare visually:
+   - Left margin (should match)
+   - Right margin (should match)
+   - Font sizes (should match)
+   - Button heights (should match)
+   - Card padding (should match)
+   - Row spacing (should match)
+   - Table density (should match)
+5. If ANY difference found: trace to root cause (missing class, inline style, wrapper issue) and fix
+```
+
+### 16.4 Pre-Task Sync Lock Checklist (Copy to Every New Page Task)
+
+Before starting implementation of ANY page (T-030, T-031, etc.):
+
+```
+VISUAL SYNC LOCK ENFORCEMENT CHECKLIST (Copy to Task)
+
+☐ 1. CONTAINER STRUCTURE
+      - [ ] Page component returns plain `<div>` (NOT `<div className="page">`)
+      - [ ] No inner `.page` wrapper
+      - [ ] Matches Home/Reception/ServiceAdvisor/Admin pattern
+
+☐ 2. INLINE STYLE AUDIT
+      - [ ] Grep page source: grep -n 'style={{' src/pages/PageName.tsx
+      - [ ] Result: Should find ONLY state-driven conditionals (opacity, display)
+      - [ ] Zero visual properties (color, padding, width, height, fontSize) in inline styles
+
+☐ 3. FORM CONTROL SIZING
+      - [ ] All <select> elements use: .sel-sm, .sel-md, or .sel-lg
+      - [ ] All <input> elements use: .inp-md or .inp-lg
+      - [ ] All <input> wrappers use: .inp-wrap-lg or .inp-wrap-md
+      - [ ] No inline style={{height, width}} on form controls
+
+☐ 4. TABLE CELL STYLING
+      - [ ] All accent cells use: .cell-accent
+      - [ ] All muted cells use: .cell-muted
+      - [ ] All timestamp cells use: .ts-cell
+      - [ ] All nowrap cells use: .type-cell
+      - [ ] All unassigned indicators use: .unassigned-indicator
+      - [ ] All count badges use: .count-badge
+      - [ ] No inline style={{color, whiteSpace, fontSize}} on table cells
+
+☐ 5. COMPONENT LAYOUT
+      - [ ] Toast uses: .toast and .toast.error (not inline styles)
+      - [ ] Empty states use: .empty-state (not inline styles)
+      - [ ] Card bodies with dense tables use: .card__body.dense (not inline padding)
+      - [ ] Card header filters use: .card__head-flex (not inline display/gap)
+      - [ ] Warning schips use: .schip.warn (not inline background/color)
+
+☐ 6. BUILD VALIDATION
+      - [ ] npm run build passes with 0 TS errors
+      - [ ] 723 modules transformed (or more, never fewer)
+      - [ ] No lint warnings related to styling
+
+☐ 7. VISUAL PARITY VALIDATION (CRITICAL)
+      - [ ] Open Home page (http://localhost:5173/home)
+      - [ ] Open target page (http://localhost:5173/path-to-page)
+      - [ ] Take side-by-side screenshots
+      - [ ] Verify pixel-perfect parity:
+          - Left margin from edge (should be 28px)
+          - Right margin from edge (should be 24px)
+          - Pagehead font size (should be 25px h1)
+          - Card spacing (should be consistent)
+          - Button sizing (should match baseline)
+          - Table row height (should match baseline)
+      - [ ] If ANY difference found: DO NOT MARK DONE until root cause fixed
+
+☐ 8. FINAL SIGN-OFF
+      - [ ] All checklist items checked ✓
+      - [ ] Visual parity confirmed side-by-side
+      - [ ] Build clean and artifact reference updated
+      - [ ] Ready to mark task DONE
+```
+
+### 16.5 Lessons Learned (Apply to All Future Tasks)
+
+1. **Reference prototypes are looser than production:** floor.jsx used inline styles fine for mockup; production TS requires class-based system.
+2. **Architecture matters:** Outer App.tsx padding applies to all routes; inner page wrappers create unexpected drift.
+3. **Mixed styling breaks sync lock:** Even one inline style on one cell can create subtle parity drift across pages.
+4. **Visual comparison is mandatory:** Code inspection alone is insufficient; pixel-perfect browser comparison catches what grep misses.
+5. **Checklist prevents drift:** Pre-task checklist catches issues before implementation (not post-hoc).
+
+---
+
+## 17. Execution Notes
 
 1. This plan supersedes ad-hoc implementation sequencing.
 2. Any new task must be appended to section 9 before work starts.
