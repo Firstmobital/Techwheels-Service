@@ -307,6 +307,24 @@ function normalizeText(value: string | null | undefined): string {
   return String(value ?? '').trim().toLowerCase()
 }
 
+function normalizeRole(value: string | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function isBusinessOwnerRole(roleValue: string | null | undefined): boolean {
+  const normalized = normalizeRole(roleValue)
+  if (!normalized) return false
+  return (
+    normalized === 'admin' ||
+    normalized === 'owner' ||
+    normalized === 'businessowner' ||
+    normalized === 'superadmin'
+  )
+}
+
 function inferPortal(record: WarrantyRecord): 'PV' | 'EV' {
   if (record.portal === 'PV' || record.portal === 'EV') return record.portal
   const branchText = normalizeText(record.branch)
@@ -614,20 +632,43 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
         if (!active || !user) return
 
-        const [{ data: profile }, { data: links }] = await Promise.all([
+        const [{ data: profile }, { data: links }, { data: modules }] = await Promise.all([
           supabase.from('users').select('role, dealer_code').eq('id', user.id).maybeSingle(),
           supabase
             .from('user_employee_links')
             .select('dealer_code')
             .eq('user_id', user.id)
             .eq('is_active', true),
+          supabase.from('modules').select('id, name, route').eq('is_active', true),
         ])
 
         if (!active) return
 
+        const reportsModule = ((modules as Array<{ id: number; name?: string | null; route?: string | null }> | null) ?? []).find((module) => {
+          const moduleName = normalizeText(module.name)
+          const moduleRoute = normalizeText(module.route)
+          return moduleName === 'reports' || moduleRoute === '/reports'
+        })
+
+        let hasAdminLikeReportsPermission = false
+        if (reportsModule?.id) {
+          const { data: reportPerm } = await supabase
+            .from('user_module_permissions')
+            .select('can_modify, can_delete')
+            .eq('user_id', user.id)
+            .eq('module_id', reportsModule.id)
+            .maybeSingle()
+
+          const perms = reportPerm as { can_modify?: boolean; can_delete?: boolean } | null
+          hasAdminLikeReportsPermission = perms?.can_modify === true && perms?.can_delete === true
+        }
+
         const roleFromProfile = String((profile as { role?: string } | null)?.role ?? '').trim()
-        const roleFromMeta = String((user.user_metadata?.role as string | undefined) ?? '').trim()
-        setViewerRole((roleFromProfile || roleFromMeta).toLowerCase())
+        const roleFromUserMeta = String((user.user_metadata?.role as string | undefined) ?? '').trim()
+        const roleFromAppMeta = String((user.app_metadata?.role as string | undefined) ?? '').trim()
+        const resolvedRole = roleFromProfile || roleFromUserMeta || roleFromAppMeta
+        const normalizedRole = normalizeRole(resolvedRole)
+        setViewerRole(hasAdminLikeReportsPermission ? 'admin' : normalizedRole)
 
         const metadataDealer = String((user.user_metadata?.dealer_code as string | undefined) ?? '').trim().toUpperCase()
         const profileDealer = String((profile as { dealer_code?: string | null } | null)?.dealer_code ?? '').trim().toUpperCase()
@@ -742,8 +783,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [])
 
   const scopedDealerRules = useMemo(() => {
-    const isBusinessOwnerRole = viewerRole === 'admin' || viewerRole === 'super_admin' || viewerRole === 'super admin' || viewerRole === 'owner'
-    if (isBusinessOwnerRole) return DEALER_CODE_RULES
+    if (isBusinessOwnerRole(viewerRole)) return DEALER_CODE_RULES
     if (viewerDealerCodes.length === 0) return DEALER_CODE_RULES
 
     return DEALER_CODE_RULES.filter((rule) =>
@@ -949,8 +989,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const dealerScopeLabel = useMemo(() => {
-    const isBusinessOwnerRole = viewerRole === 'admin' || viewerRole === 'super_admin' || viewerRole === 'super admin' || viewerRole === 'owner'
-    if (isBusinessOwnerRole) return 'All dealer codes'
+    if (isBusinessOwnerRole(viewerRole)) return 'All dealer codes'
     if (viewerDealerCodes.length > 0) return viewerDealerCodes.join(', ')
     return 'Dealer scope from mapping rules'
   }, [viewerDealerCodes, viewerRole])
