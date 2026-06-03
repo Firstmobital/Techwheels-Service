@@ -7,10 +7,13 @@
 --      Ajmer Road | Sitapura PV | Sitapura EV
 -- 4) Deduplication rule for reception insert: JC number is unique across table.
 --    If same JC already exists in service_reception_entries, it is NOT inserted again.
+--    Additionally, existing rows with same JC and blank sa_employee_code are updated
+--    from Employee Master lookup during backfill.
 -- 5) Model normalization uses active Settings Models (public.settings_model_options).
 -- 6) Reception branch is physical branch only:
 --      Ajmer Road | Sitapura
 --    Source labels Sitapura PV / Sitapura EV are normalized to Sitapura.
+-- 7) Reception backfill includes all Open status rows regardless of service type.
 
 BEGIN;
 
@@ -233,7 +236,7 @@ source_rows AS (
   FROM public.service_invoice_order_data o
   WHERE nullif(btrim(o.job_card_number), '') IS NOT NULL
     AND upper(btrim(o.job_card_number)) LIKE 'JC-%'
-    AND lower(btrim(coalesce(o.status, ''))) NOT IN ('closed', 'cancelled')
+    AND lower(btrim(coalesce(o.status, ''))) = 'open'
 ),
 normalized AS (
   SELECT
@@ -267,11 +270,25 @@ normalized AS (
 with_sa_code AS (
   SELECT
     n.*,
-    em.employee_code AS sa_employee_code,
-    em.employee_name AS sa_display_name
+    em_match.employee_code AS sa_employee_code,
+    em_match.employee_name AS sa_display_name
   FROM normalized n
-  LEFT JOIN public.employee_master em
-    ON lower(btrim(em.employee_name)) = lower(btrim(n.sa_name))
+  LEFT JOIN LATERAL (
+    SELECT
+      em.employee_code,
+      em.employee_name
+    FROM public.employee_master em
+    WHERE
+      upper(btrim(em.employee_code)) = upper(btrim(n.sa_name))
+      OR lower(btrim(em.employee_name)) = lower(btrim(n.sa_name))
+    ORDER BY
+      CASE
+        WHEN upper(btrim(em.employee_code)) = upper(btrim(n.sa_name)) THEN 0
+        ELSE 1
+      END,
+      em.id
+    LIMIT 1
+  ) em_match ON true
 ),
 ranked AS (
   SELECT
@@ -346,8 +363,29 @@ inserted AS (
     WHERE upper(btrim(coalesce(r.jc_number, ''))) = upper(btrim(coalesce(i.jc_number, '')))
   )
   RETURNING id
+),
+updated_existing AS (
+  UPDATE public.service_reception_entries r
+  SET
+    sa_employee_code = i.sa_employee_code,
+    sa_display_name = coalesce(i.sa_display_name, r.sa_display_name),
+    updated_at = now()
+  FROM to_insert i
+  WHERE
+    upper(btrim(coalesce(r.jc_number, ''))) = upper(btrim(coalesce(i.jc_number, '')))
+    AND i.sa_employee_code IS NOT NULL
+    AND coalesce(nullif(btrim(r.sa_employee_code), ''), '') = ''
+  RETURNING r.id
+),
+counts AS (
+  SELECT
+    (SELECT count(*)::bigint FROM inserted) AS inserted_count,
+    (SELECT count(*)::bigint FROM updated_existing) AS updated_count
 )
-SELECT count(*) AS reception_rows_inserted FROM inserted;
+SELECT
+  inserted_count AS reception_rows_inserted,
+  updated_count AS reception_rows_sa_backfilled
+FROM counts;
 
 COMMIT;
 

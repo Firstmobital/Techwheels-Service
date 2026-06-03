@@ -15,13 +15,16 @@ type RowDraft = {
   remark: string
 }
 
-const SERVICE_TYPE_OPTIONS = [
-  'Running Repair',
+const DEFAULT_SERVICE_TYPE_OPTIONS = [
+  'Running Repairs',
   'First Free Service',
   'Second Free Service',
   'Third Free Service',
   'Paid Service',
-  'Accidental',
+  'Accident',
+  'PDI',
+  'Campaign',
+  'E Breakdown',
   'Updation',
 ]
 
@@ -49,6 +52,30 @@ function getSourceToneColor(source: string): string {
   return SOURCE_TONE_MAP[source] || ''
 }
 
+function normalizeServiceType(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function mergeServiceTypes(...groups: Array<string[]>): string[] {
+  const defaults = DEFAULT_SERVICE_TYPE_OPTIONS.map(normalizeServiceType)
+  const seen = new Set(defaults.map((value) => value.toLowerCase()))
+  const extras: string[] = []
+
+  groups.forEach((group) => {
+    group.forEach((raw) => {
+      const value = normalizeServiceType(String(raw ?? ''))
+      if (!value) return
+      const key = value.toLowerCase()
+      if (seen.has(key)) return
+      seen.add(key)
+      extras.push(value)
+    })
+  })
+
+  extras.sort((a, b) => a.localeCompare(b))
+  return [...defaults, ...extras]
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
@@ -64,6 +91,7 @@ export default function ServiceAdvisorPage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
+  const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
 
   const displayedRows = useMemo(() => {
     if (selectedBranch === 'all') return rows
@@ -163,6 +191,9 @@ export default function ServiceAdvisorPage() {
         remark: row.remark ?? '',
       }
     })
+
+    setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
+
     setDrafts(mappedDrafts)
     setDirtyRowIds(new Set())
     setLoading(false)
@@ -394,10 +425,10 @@ export default function ServiceAdvisorPage() {
                             className="sel sel--service-type"
                           >
                             <option value="">Select service type</option>
-                            {SERVICE_TYPE_OPTIONS.map((option) => (
+                            {serviceTypeOptions.map((option) => (
                               <option key={option} value={option}>{option}</option>
                             ))}
-                            {!SERVICE_TYPE_OPTIONS.includes(draft.service_type) && draft.service_type.trim() && (
+                            {!serviceTypeOptions.some((option) => option.toLowerCase() === draft.service_type.trim().toLowerCase()) && draft.service_type.trim() && (
                               <option value={draft.service_type}>{draft.service_type}</option>
                             )}
                           </select>
