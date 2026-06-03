@@ -951,6 +951,9 @@ export default function ImportPage() {
       !WARRANTY_REPORT_TABLES.has(config.tableName),
   )
 
+  const totalCards = revenueReportCards.length + partsReportCards.length + warrantyReportCards.length + standaloneCards.length
+  const totalRowsInDb = Object.values(cards).reduce((sum, card) => sum + card.insertedCount, 0)
+
   const toggleGroup = useCallback((groupKey: string) => {
     setExpandedGroups((prev) => ({
       ...prev,
@@ -1926,11 +1929,43 @@ export default function ImportPage() {
   return (
     <div>
       <div className="pagehead">
-        <h1>Import Data</h1>
-        <p>
-          Upload .xlsx, .xls, or .csv files for each portal ID. Column names are matched
-          case-insensitively to the target table.
-        </p>
+        <div>
+          <p className="greet">
+            <Icon name="import" size={13} className="icon-align-text" />
+            Import
+          </p>
+          <h1>Import data</h1>
+          <p>Upload branch-wise source files (.xlsx / .xls / .csv). Re-uploads update existing rows and insert new ones — no duplicates.</p>
+        </div>
+      </div>
+
+      <div className="summary">
+        <div className="schip">
+          <span className="ic"><Icon name="grid" size={16} /></span>
+          <div>
+            <div className="n">{totalCards}</div>
+            <div className="l">Source reports</div>
+          </div>
+        </div>
+        <div className="schip">
+          <span className="ic"><Icon name="building" size={16} /></span>
+          <div>
+            <div className="n">4</div>
+            <div className="l">Branch slots each</div>
+          </div>
+        </div>
+        <div className="schip">
+          <span className="ic"><Icon name="shield" size={16} /></span>
+          <div>
+            <div className="n">{totalRowsInDb.toLocaleString('en-IN')}</div>
+            <div className="l">Rows in database</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="note note--info">
+        <span className="ic"><Icon name="shield" size={17} /></span>
+        <div>Branch mapping is automatic from dealer code (<b>3000840 → Sitapura PV</b> · <b>500A840 → Sitapura EV</b> · <b>3001440 → Ajmer Road PV</b>). UTF-16 TM exports and SpreadsheetML <code>.xls</code> are parsed automatically.</div>
       </div>
 
       <div className="import-page">
