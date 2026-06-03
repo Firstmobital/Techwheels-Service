@@ -339,7 +339,7 @@ export default function ServiceAdvisorPage() {
 
         {/* Branch Filter (Admin Only) */}
         {isAdmin && availableBranches.length > 0 && (
-          <div>
+          <>
             <div className="toolbar toolbar--tight">
               <span className="toolbar__label">Filter by branch:</span>
               <button
@@ -419,7 +419,7 @@ export default function ServiceAdvisorPage() {
                 Null ({categoryCounts.null})
               </button>
             </div>
-          </div>
+          </>
         )}
       </div>
 
