@@ -172,10 +172,32 @@ export default function AdminPage() {
   const [mapIsPrimary, setMapIsPrimary]     = useState(false)
   const [savingMapping, setSavingMapping]   = useState(false)
 
+  // Current session user's JWT dealer info (fallback when public.users is null)
+  const [currentUserJWTDealers, setCurrentUserJWTDealers] = useState<{
+    id?: string
+    dealer_code?: string | null
+    dealer_name?: string | null
+    dealer_codes?: string[] | null
+  }>({})
+
   // ── Load ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([loadUsers(), loadModules(), loadMappings(), loadEmployeeCatalog()]).finally(() => setLoading(false))
+    // Also fetch current session user's JWT dealer info for fallback display
+    loadCurrentUserJWTDealers()
   }, [])
+
+  async function loadCurrentUserJWTDealers() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) {
+      setCurrentUserJWTDealers({
+        id: session.user.id,
+        dealer_code: session.user.user_metadata?.dealer_code ?? null,
+        dealer_name: session.user.user_metadata?.dealer_name ?? null,
+        dealer_codes: session.user.user_metadata?.dealer_codes ?? null,
+      })
+    }
+  }
 
   async function loadUsers() {
     const withDealer = await supabase
@@ -440,6 +462,7 @@ export default function AdminPage() {
     const name = editDealerName.trim() || null
 
     setSavingDealer(true)
+    let usersUpdateSkippedReason: string | null = null
 
     // 1. Update public.users (primary display source)
     const { error } = await supabase
@@ -447,14 +470,13 @@ export default function AdminPage() {
       .update({ dealer_code: code, dealer_name: name })
       .eq('id', dealerEditUser.id)
 
-    if (error && !isMissingDealerColumnError(error)) {
-      showToastMsg(error.message, 'error')
-      setSavingDealer(false)
-      return
-    }
-
-    if (error && isMissingDealerColumnError(error)) {
-      setSupportsDealerColumns(false)
+    if (error) {
+      const missingDealerColumns = isMissingDealerColumnError(error)
+      if (missingDealerColumns) {
+        setSupportsDealerColumns(false)
+      } else {
+        usersUpdateSkippedReason = error.message || 'public.users update failed'
+      }
     }
 
     // 2. Sync into auth.users.raw_user_meta_data so JWT contains dealer scope on next login
@@ -463,6 +485,11 @@ export default function AdminPage() {
     setSavingDealer(false)
     setDealerEditUser(null)
     await loadUsers()
+    if (usersUpdateSkippedReason) {
+      showToastMsg(`Dealer fallback metadata set in auth. public.users update skipped (${usersUpdateSkippedReason}). User must re-login for JWT fallback updates.`, 'success')
+      return
+    }
+
     showToastMsg(
       error && isMissingDealerColumnError(error)
         ? 'Dealer fallback metadata updated in auth. public.users dealer columns are not present in this schema. Manage primary dealer scope in Admin → Mappings.'
@@ -728,14 +755,22 @@ export default function AdminPage() {
                       <td className="strong">{u.full_name || u.email}</td>
                       <td style={{ color: 'var(--muted)' }}>{u.email}</td>
                       <td>
-                        {u.dealer_code ? (
-                          <>
-                            <span className="code-badge">{u.dealer_code}</span>
-                            {u.dealer_name && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{u.dealer_name}</div>}
-                          </>
-                        ) : (
-                          <span className="notset">Not set</span>
-                        )}
+                        {(() => {
+                          // Use JWT data as fallback for current session user
+                          const displayCode = u.dealer_code ?? 
+                            (u.id === currentUserJWTDealers.id ? currentUserJWTDealers.dealer_code : null)
+                          const displayName = u.dealer_name ?? 
+                            (u.id === currentUserJWTDealers.id ? currentUserJWTDealers.dealer_name : null)
+                          
+                          return displayCode ? (
+                            <>
+                              <span className="code-badge">{displayCode}</span>
+                              {displayName && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{displayName}</div>}
+                            </>
+                          ) : (
+                            <span className="notset">Not set</span>
+                          )
+                        })()}
                       </td>
                       <td><span className={`badge badge--${u.role}`}>{u.role}</span></td>
                       <td><span className={`badge badge--${u.is_active ? 'active' : 'inactive'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>

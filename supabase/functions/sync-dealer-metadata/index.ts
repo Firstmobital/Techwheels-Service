@@ -70,6 +70,7 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Metadata synced to JWT. Public.users table display will use JWT fallback via React component.
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers,

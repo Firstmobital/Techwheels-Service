@@ -276,11 +276,11 @@ function inferLocation(record: WarrantyRecord): 'Ajmer Road' | 'Sitapura' | '' {
 
 function normalizeStatusBucket(status: string): 'created' | 'submitted' | 'awaiting_sop' | 'approved' | 'settled' | 'rejected' {
   const text = normalizeText(status)
-  if (text.includes('reject')) return 'rejected'
+  if (text.includes('reject') || text.includes('cancelled') || text.includes('not validated')) return 'rejected'
   if (text.includes('settled') || text.includes('paid') || text.includes('closed')) return 'settled'
   if (text.includes('approved')) return 'approved'
-  if (text.includes('sop') || text.includes('review') || text.includes('await')) return 'awaiting_sop'
-  if (text.includes('submit')) return 'submitted'
+  if (text.includes('sop') || text.includes('review') || text.includes('await') || text.includes('accepted') || text.includes('sent to tm')) return 'awaiting_sop'
+  if (text.includes('submit') || text.includes('under change')) return 'submitted'
   return 'created'
 }
 
