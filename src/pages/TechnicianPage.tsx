@@ -370,6 +370,20 @@ export default function TechnicianPage() {
     [incomeByDay],
   )
 
+  const selectedTechnicianName = useMemo(() => {
+    const selectedCode = String(selectedTechnicianCode ?? '').trim().toUpperCase()
+    if (!selectedCode) return ''
+
+    const option = technicianOptions.find((opt) => opt.code === selectedCode)
+    if (option?.name) return option.name
+
+    const assignmentName = assignments
+      .find((row) => String(row.technician_code ?? '').trim().toUpperCase() === selectedCode)
+      ?.technician_name
+
+    return assignmentName ? String(assignmentName).trim() : selectedCode
+  }, [assignments, selectedTechnicianCode, technicianOptions])
+
   return (
     <div>
       <div className="pagehead">
@@ -379,17 +393,13 @@ export default function TechnicianPage() {
             Technician
           </p>
           <h1>Assigned rows & income</h1>
-          <p>
-            {isAdmin
-              ? 'Select any technician to view their assigned rows and day-wise income tracker.'
-              : 'View your assigned rows and day-wise income tracker.'}
-          </p>
+          <p>Select any technician to view their assigned rows and day-wise income tracker.</p>
         </div>
         {isAdmin && (
           <label className="field field--no-gap tech-picker-field">
             <span className="label">Technician</span>
             <select
-              className="sel sel-lg"
+              className="sel"
               value={selectedTechnicianCode}
               onChange={(e) => {
                 const nextCode = e.target.value
@@ -484,7 +494,7 @@ export default function TechnicianPage() {
         <div className="card__head">
           <div>
             <h3>
-              Technician rows{' '}
+              {selectedTechnicianName ? `${selectedTechnicianName} rows` : 'Technician rows'}{' '}
               <span className="count-badge">({assignments.length})</span>
             </h3>
             <div className="sub">{selectedTechnicianCode || '—'}</div>
