@@ -79,6 +79,10 @@ type NavItem = {
 
 const HOME_ROUTE = '/home'
 
+function isPublicAuthPath(pathname: string): boolean {
+  return pathname === '/' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/auth/callback'
+}
+
 function isNavItemActive(pathname: string, route: AppRoute) {
   if (route === '/reports') return pathname.startsWith('/reports')
   return pathname === route || pathname.startsWith(`${route}/`)
@@ -462,12 +466,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null
       setUser((prev) => (prev?.id === nextUser?.id ? prev : nextUser))
-      if (event === 'SIGNED_IN' && nextUser) {
+      // Keep current module route on tab focus/session refresh.
+      if (event === 'SIGNED_IN' && nextUser && isPublicAuthPath(location.pathname)) {
         navigate(HOME_ROUTE, { replace: true })
       }
     })
     return () => subscription.unsubscribe()
-  }, [])
+  }, [location.pathname, navigate])
 
   useEffect(() => {
     if (user) return
