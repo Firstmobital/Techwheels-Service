@@ -244,18 +244,6 @@ const WR_BACKORDER = [
   { branch: 'EV (500A840)', rows: 135, zsor: 83, zpgo: 43, zsso: 8, note: '188 intransit units · CED panels, Headlamp, Bumper' },
 ]
 
-const WR_PAYMENT_TOTAL = { claimed: '₹2.03Cr', pending: '₹30.2L', approved: '82 JC', submitted: '36 JC', rejected: 194, created: 19 }
-
-const WR_CATEGORIES = [
-  { label: 'Warranty Claim', count: 2223, claim: true },
-  { label: 'Claim Settlement', count: 4201, claim: true },
-  { label: 'Updation', count: 147, claim: false },
-  { label: 'Goodwill', count: 139, claim: false },
-  { label: 'FSB', count: 139, claim: false },
-  { label: 'Part WC', count: 114, claim: false },
-  { label: 'AMC', count: 84, claim: false },
-]
-
 const WR_CLAIM_TYPES = [
   { type: 'Normal WC', claims: 636, settle: 93, reject: 1.8, rev20: '₹6.10L' },
   { type: 'Extended WC', claims: 66, settle: 94.5, reject: 0, rev20: '₹3.19L' },
@@ -297,6 +285,77 @@ const PEND_TONE = {
   sop: { l: 'Await SOP', c: 'var(--warn)', bg: 'var(--warn-bg)' },
   submitted: { l: 'Submitted', c: 'var(--accent)', bg: 'var(--accent-soft)' },
   change: { l: 'Under Change', c: 'var(--muted)', bg: 'var(--canvas)' },
+}
+
+const DEALER_CODE_RULES = [
+  { key: '3000840', location: 'Sitapura', fuel_type: 'PV' },
+  { key: '500A840', location: 'Sitapura', fuel_type: 'EV' },
+  { key: '3001440', location: 'Ajmer Road', fuel_type: 'PV' },
+] as const
+
+type FuelTypeFilter = 'ALL' | 'PV' | 'EV'
+type LocationFilter = 'ALL' | 'Ajmer Road' | 'Sitapura'
+
+function formatAmountShort(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '₹0'
+  if (value >= 10000000) return `₹${(value / 10000000).toFixed(2).replace(/\.00$/, '')}Cr`
+  if (value >= 100000) return `₹${(value / 100000).toFixed(2).replace(/\.00$/, '')}L`
+  return `₹${Math.round(value).toLocaleString('en-IN')}`
+}
+
+function normalizeText(value: string | null | undefined): string {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function inferPortal(record: WarrantyRecord): 'PV' | 'EV' {
+  if (record.portal === 'PV' || record.portal === 'EV') return record.portal
+  const branchText = normalizeText(record.branch)
+  return branchText.includes('ev') ? 'EV' : 'PV'
+}
+
+function inferLocation(record: WarrantyRecord): 'Ajmer Road' | 'Sitapura' | '' {
+  const locationText = normalizeText(record.location)
+  if (locationText.includes('ajmer')) return 'Ajmer Road'
+  if (locationText.includes('sitapura')) return 'Sitapura'
+  const branchText = normalizeText(record.branch)
+  if (branchText.includes('ajmer')) return 'Ajmer Road'
+  if (branchText.includes('sitapura')) return 'Sitapura'
+  return ''
+}
+
+function normalizeStatusBucket(status: string): 'created' | 'submitted' | 'awaiting_sop' | 'approved' | 'settled' | 'rejected' {
+  const text = normalizeText(status)
+  if (text.includes('reject')) return 'rejected'
+  if (text.includes('settled') || text.includes('paid') || text.includes('closed')) return 'settled'
+  if (text.includes('approved')) return 'approved'
+  if (text.includes('sop') || text.includes('review') || text.includes('await')) return 'awaiting_sop'
+  if (text.includes('submit')) return 'submitted'
+  return 'created'
+}
+
+function matchesBranchFilter(record: WarrantyRecord, branchFilter: string): boolean {
+  if (!branchFilter || branchFilter === 'ALL') return true
+
+  const recordLocation = inferLocation(record)
+  const recordPortal = inferPortal(record)
+
+  if (branchFilter === 'ALL_PV') return recordPortal === 'PV'
+  if (branchFilter === 'ALL_EV') return recordPortal === 'EV'
+
+  if (branchFilter === 'Sitapura') return recordLocation === 'Sitapura'
+  if (branchFilter === 'Ajmer Road') return recordLocation === 'Ajmer Road'
+
+  if (branchFilter.endsWith(' PV')) {
+    const location = branchFilter.replace(/\s+PV$/, '').trim()
+    return recordPortal === 'PV' && (!location || recordLocation === location)
+  }
+
+  if (branchFilter.endsWith(' EV')) {
+    const location = branchFilter.replace(/\s+EV$/, '').trim()
+    return recordPortal === 'EV' && (!location || recordLocation === location)
+  }
+
+  return true
 }
 
 interface WarrantySourceRow {
@@ -533,13 +592,64 @@ function PendTag({ s }: { s: keyof typeof PEND_TONE }) {
 }
 
 export default function WarrantyOverviewReport({ branch, dateFilter }: ReportViewProps) {
-  void branch
   void dateFilter
 
-  const [, setRecords] = useState<WarrantyRecord[]>([])
+  const [records, setRecords] = useState<WarrantyRecord[]>([])
+  const [viewerRole, setViewerRole] = useState<string>('')
+  const [viewerDealerCodes, setViewerDealerCodes] = useState<string[]>([])
+  const [selectedLocation, setSelectedLocation] = useState<LocationFilter>('ALL')
+  const [selectedFuelType, setSelectedFuelType] = useState<FuelTypeFilter>('ALL')
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+
+    const loadViewerContext = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+
+        if (!active || !user) return
+
+        const [{ data: profile }, { data: links }] = await Promise.all([
+          supabase.from('users').select('role, dealer_code').eq('id', user.id).maybeSingle(),
+          supabase
+            .from('user_employee_links')
+            .select('dealer_code')
+            .eq('user_id', user.id)
+            .eq('is_active', true),
+        ])
+
+        if (!active) return
+
+        const roleFromProfile = String((profile as { role?: string } | null)?.role ?? '').trim()
+        const roleFromMeta = String((user.user_metadata?.role as string | undefined) ?? '').trim()
+        setViewerRole((roleFromProfile || roleFromMeta).toLowerCase())
+
+        const metadataDealer = String((user.user_metadata?.dealer_code as string | undefined) ?? '').trim().toUpperCase()
+        const profileDealer = String((profile as { dealer_code?: string | null } | null)?.dealer_code ?? '').trim().toUpperCase()
+        const linkedDealers = ((links as Array<{ dealer_code?: string | null }> | null) ?? [])
+          .map((row) => String(row.dealer_code ?? '').trim().toUpperCase())
+          .filter(Boolean)
+
+        const uniqueDealerCodes = Array.from(new Set([metadataDealer, profileDealer, ...linkedDealers].filter(Boolean)))
+        setViewerDealerCodes(uniqueDealerCodes)
+      } catch {
+        if (!active) return
+        setViewerRole('')
+        setViewerDealerCodes([])
+      }
+    }
+
+    void loadViewerContext()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -631,17 +741,219 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     }
   }, [])
 
-  const pipelineData = useMemo(
-    () => [
-      { stage: 'Created', count: 3, tone: 'var(--muted)' },
-      { stage: 'Submitted', count: 5, tone: 'var(--accent)' },
-      { stage: 'Awaiting SOP', count: 3, tone: 'var(--warn)' },
-      { stage: 'Approved', count: 0, tone: '#4F46E5' },
-      { stage: 'Settled', count: 0, tone: 'var(--success)' },
-      { stage: 'Rejected', count: 0, tone: 'var(--danger)' },
-    ],
-    [],
+  const scopedDealerRules = useMemo(() => {
+    const isBusinessOwnerRole = viewerRole === 'admin' || viewerRole === 'super_admin' || viewerRole === 'super admin' || viewerRole === 'owner'
+    if (isBusinessOwnerRole) return DEALER_CODE_RULES
+    if (viewerDealerCodes.length === 0) return DEALER_CODE_RULES
+
+    return DEALER_CODE_RULES.filter((rule) =>
+      viewerDealerCodes.some((dealerCode) => dealerCode.includes(rule.key)),
+    )
+  }, [viewerDealerCodes, viewerRole])
+
+  const locationOptions = useMemo(() => {
+    return Array.from(new Set(scopedDealerRules.map((rule) => rule.location))) as Array<'Ajmer Road' | 'Sitapura'>
+  }, [scopedDealerRules])
+
+  const fuelTypeOptions = useMemo(() => {
+    const scopedByLocation =
+      selectedLocation === 'ALL'
+        ? scopedDealerRules
+        : scopedDealerRules.filter((rule) => rule.location === selectedLocation)
+    return Array.from(new Set(scopedByLocation.map((rule) => rule.fuel_type))) as Array<'PV' | 'EV'>
+  }, [scopedDealerRules, selectedLocation])
+
+  useEffect(() => {
+    if (selectedLocation === 'ALL') return
+    if (locationOptions.includes(selectedLocation)) return
+    setSelectedLocation('ALL')
+  }, [locationOptions, selectedLocation])
+
+  useEffect(() => {
+    if (selectedFuelType === 'ALL') return
+    if (fuelTypeOptions.includes(selectedFuelType)) return
+    setSelectedFuelType('ALL')
+  }, [fuelTypeOptions, selectedFuelType])
+
+  const allowedLocationFuelPairs = useMemo(
+    () => new Set(scopedDealerRules.map((rule) => `${rule.location}|${rule.fuel_type}`)),
+    [scopedDealerRules],
   )
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((record) => {
+      if (!matchesBranchFilter(record, branch)) return false
+
+      const portal = inferPortal(record)
+      const location = inferLocation(record)
+      if (allowedLocationFuelPairs.size > 0 && !allowedLocationFuelPairs.has(`${location}|${portal}`)) return false
+
+      if (selectedLocation !== 'ALL' && location !== selectedLocation) return false
+
+      const parentFuelType = (branch === 'ALL_PV' || branch.endsWith(' PV')) ? 'PV' : (branch === 'ALL_EV' || branch.endsWith(' EV')) ? 'EV' : 'ALL'
+      if (parentFuelType !== 'ALL' && portal !== parentFuelType) return false
+      if (selectedFuelType !== 'ALL' && portal !== selectedFuelType) return false
+
+      return true
+    })
+  }, [allowedLocationFuelPairs, branch, records, selectedFuelType, selectedLocation])
+
+  const overviewKpis = useMemo(() => {
+    const claimed = filteredRecords.reduce((sum, record) => sum + record.claimAmount, 0)
+    const pendingRows = filteredRecords.filter((record) => String(record.postingDocNo || '').trim() === '')
+    const pendingValue = pendingRows.reduce((sum, record) => sum + record.claimAmount, 0)
+    const paymentPending = filteredRecords
+      .filter((record) => {
+        const bucket = normalizeStatusBucket(record.status)
+        return bucket === 'approved' || bucket === 'submitted' || bucket === 'awaiting_sop'
+      })
+      .reduce((sum, record) => sum + record.claimAmount, 0)
+    const settlement = Math.max(claimed - pendingValue, 0)
+    const revenue20 = filteredRecords.reduce((sum, record) => sum + Math.max(record.partsAmount, 0) * 0.2, 0)
+    const combined = settlement + revenue20
+
+    const uniqueJcs = new Set(filteredRecords.map((record) => record.jobCardNumber).filter(Boolean)).size
+    const pendingJcs = new Set(pendingRows.map((record) => record.jobCardNumber).filter(Boolean)).size
+
+    return {
+      kpis: [
+        { icon: 'shield', label: 'Settlement portfolio', value: formatAmountShort(settlement), sub: `${uniqueJcs.toLocaleString('en-IN')} unique JCs`, tone: 'var(--accent)' },
+        { icon: 'reports', label: 'Claimed (all cats)', value: formatAmountShort(claimed), sub: 'from warranty source tables', tone: '#4F46E5' },
+        { icon: 'clock', label: 'Pending value', value: formatAmountShort(pendingValue), sub: `${pendingJcs.toLocaleString('en-IN')} JCs unposted`, tone: 'var(--warn)' },
+        { icon: 'alert', label: 'Payment pending', value: formatAmountShort(paymentPending), sub: 'submitted/approved pipeline', tone: 'var(--danger)' },
+        { icon: 'reports', label: '20% parts revenue', value: formatAmountShort(revenue20), sub: 'computed from parts value', tone: 'var(--success)' },
+        { icon: 'doc', label: 'Settlement + revenue', value: formatAmountShort(combined), sub: 'combined opportunity', tone: '#534AB7' },
+      ],
+      totals: {
+        claimed,
+        pendingValue,
+        paymentPending,
+      },
+    }
+  }, [filteredRecords])
+
+  const pipelineData = useMemo(() => {
+    const warrantyRows = filteredRecords.filter((record) => record.category === 'Warranty Claim')
+    const buckets = {
+      created: 0,
+      submitted: 0,
+      awaiting_sop: 0,
+      approved: 0,
+      settled: 0,
+      rejected: 0,
+    }
+
+    for (const row of warrantyRows) {
+      const bucket = normalizeStatusBucket(row.status)
+      buckets[bucket] += 1
+    }
+
+    return [
+      { stage: 'Created', count: buckets.created, tone: 'var(--muted)' },
+      { stage: 'Submitted', count: buckets.submitted, tone: 'var(--accent)' },
+      { stage: 'Awaiting SOP', count: buckets.awaiting_sop, tone: 'var(--warn)' },
+      { stage: 'Approved', count: buckets.approved, tone: '#4F46E5' },
+      { stage: 'Settled', count: buckets.settled, tone: 'var(--success)' },
+      { stage: 'Rejected', count: buckets.rejected, tone: 'var(--danger)' },
+    ]
+  }, [filteredRecords])
+
+  const paymentStatusRows = useMemo(() => {
+    const grouped = new Map<string, { settled: number; approved: number; submitted: number; rejected: number; created: number; total: number; claimed: number; settledValue: number }>()
+
+    for (const row of filteredRecords) {
+      const current = grouped.get(row.category) ?? {
+        settled: 0,
+        approved: 0,
+        submitted: 0,
+        rejected: 0,
+        created: 0,
+        total: 0,
+        claimed: 0,
+        settledValue: 0,
+      }
+
+      const bucket = normalizeStatusBucket(row.status)
+      if (bucket === 'settled') current.settled += 1
+      else if (bucket === 'approved') current.approved += 1
+      else if (bucket === 'submitted' || bucket === 'awaiting_sop') current.submitted += 1
+      else if (bucket === 'rejected') current.rejected += 1
+      else current.created += 1
+      current.total += 1
+      current.claimed += row.claimAmount
+      if (String(row.postingDocNo || '').trim() !== '' || bucket === 'settled') {
+        current.settledValue += row.claimAmount
+      }
+
+      grouped.set(row.category, current)
+    }
+
+    return SOURCE_TABLES.map((source) => {
+      const row = grouped.get(source.category) ?? {
+        settled: 0,
+        approved: 0,
+        submitted: 0,
+        rejected: 0,
+        created: 0,
+        total: 0,
+        claimed: 0,
+        settledValue: 0,
+      }
+      return {
+        cat: source.category,
+        settled: row.settled,
+        approved: row.approved,
+        submitted: row.submitted,
+        rejected: row.rejected,
+        created: row.created,
+        total: row.total,
+        claimed: formatAmountShort(row.claimed),
+        settledV: formatAmountShort(row.settledValue),
+      }
+    })
+  }, [filteredRecords])
+
+  const paymentTotals = useMemo(() => {
+    const totals = paymentStatusRows.reduce(
+      (acc, row) => {
+        acc.approved += row.approved
+        acc.submitted += row.submitted
+        acc.rejected += row.rejected
+        acc.created += row.created
+        return acc
+      },
+      { approved: 0, submitted: 0, rejected: 0, created: 0 },
+    )
+
+    return {
+      ...totals,
+      claimed: formatAmountShort(overviewKpis.totals.claimed),
+      pending: formatAmountShort(overviewKpis.totals.paymentPending),
+    }
+  }, [overviewKpis.totals, paymentStatusRows])
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of filteredRecords) {
+      counts.set(row.category, (counts.get(row.category) ?? 0) + 1)
+    }
+
+    return SOURCE_TABLES.map((source) => {
+      const count = counts.get(source.category) ?? 0
+      return {
+        label: source.category,
+        count,
+        claim: source.category === 'Warranty Claim' || source.category === 'Claim Settlement',
+      }
+    })
+  }, [filteredRecords])
+
+  const dealerScopeLabel = useMemo(() => {
+    const isBusinessOwnerRole = viewerRole === 'admin' || viewerRole === 'super_admin' || viewerRole === 'super admin' || viewerRole === 'owner'
+    if (isBusinessOwnerRole) return 'All dealer codes'
+    if (viewerDealerCodes.length > 0) return viewerDealerCodes.join(', ')
+    return 'Dealer scope from mapping rules'
+  }, [viewerDealerCodes, viewerRole])
 
   if (isLoading) {
     return (
@@ -685,7 +997,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             Warranty report dashboard
           </h1>
           <p style={{ fontSize: '14px', color: 'var(--muted)', lineHeight: 1.5, maxWidth: '800px' }}>
-            Dealer 3000840 · Jan–May 2026 · claims, settlement, SLA risk, revenue & operations. Aggregates computed from the warranty source tables; pipeline sample from loaded WC.
+            {dealerScopeLabel} · claims, settlement, SLA risk, revenue & operations. Values are computed from warranty source tables with dealer-code branch/fuel scoping.
           </p>
         </div>
 
@@ -694,6 +1006,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           {/* Location Filter */}
           <div style={{ minWidth: '200px' }}>
             <select
+              value={selectedLocation}
+              onChange={(event) => setSelectedLocation(event.target.value as LocationFilter)}
               style={{
                 padding: '8px 12px',
                 borderRadius: 'var(--r-sm)',
@@ -709,52 +1023,62 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 paddingRight: '28px',
               }}
             >
-              <option>All locations</option>
-              <option>Ajmer Road</option>
-              <option>Sitapura</option>
+              <option value="ALL">All locations</option>
+              {locationOptions.map((location) => (
+                <option key={location} value={location}>
+                  {location}
+                </option>
+              ))}
             </select>
           </div>
 
           {/* Fuel Type Filter */}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
+              onClick={() => setSelectedFuelType('ALL')}
               style={{
                 padding: '8px 16px',
                 borderRadius: 'var(--r-sm)',
                 border: '1px solid var(--border)',
                 fontSize: '14px',
                 fontWeight: 500,
-                color: 'var(--ink-2)',
-                backgroundColor: '#fff',
+                color: selectedFuelType === 'ALL' ? 'var(--accent)' : 'var(--ink-2)',
+                backgroundColor: selectedFuelType === 'ALL' ? 'var(--accent-soft)' : '#fff',
                 cursor: 'pointer',
               }}
             >
               All
             </button>
             <button
+              onClick={() => setSelectedFuelType('PV')}
+              disabled={!fuelTypeOptions.includes('PV')}
               style={{
                 padding: '8px 16px',
                 borderRadius: 'var(--r-sm)',
                 border: '1px solid var(--border)',
                 fontSize: '14px',
                 fontWeight: 500,
-                color: 'var(--ink-2)',
-                backgroundColor: '#fff',
-                cursor: 'pointer',
+                color: selectedFuelType === 'PV' ? 'var(--accent)' : 'var(--ink-2)',
+                backgroundColor: selectedFuelType === 'PV' ? 'var(--accent-soft)' : '#fff',
+                cursor: fuelTypeOptions.includes('PV') ? 'pointer' : 'not-allowed',
+                opacity: fuelTypeOptions.includes('PV') ? 1 : 0.5,
               }}
             >
               PV
             </button>
             <button
+              onClick={() => setSelectedFuelType('EV')}
+              disabled={!fuelTypeOptions.includes('EV')}
               style={{
                 padding: '8px 16px',
                 borderRadius: 'var(--r-sm)',
                 border: '1px solid var(--border)',
                 fontSize: '14px',
                 fontWeight: 500,
-                color: 'var(--ink-2)',
-                backgroundColor: '#fff',
-                cursor: 'pointer',
+                color: selectedFuelType === 'EV' ? 'var(--accent)' : 'var(--ink-2)',
+                backgroundColor: selectedFuelType === 'EV' ? 'var(--accent-soft)' : '#fff',
+                cursor: fuelTypeOptions.includes('EV') ? 'pointer' : 'not-allowed',
+                opacity: fuelTypeOptions.includes('EV') ? 1 : 0.5,
               }}
             >
               EV
@@ -794,9 +1118,9 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       {/* OVERVIEW TAB */}
       {activeTab === 'overview' && (
         <div>
-          {/* Real KPIs from WARRANTY_AGGREGATES — 6-column layout per reference design */}
+          {/* DB-backed KPIs with dealer-code scoped filtering */}
           <div className="kpis" style={{ gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: 'var(--gap)' }}>
-            {WARRANTY_AGGREGATES.kpis.map((kpi, i) => (
+            {overviewKpis.kpis.map((kpi, i) => (
               <Kpi key={i} {...kpi} />
             ))}
           </div>
@@ -845,7 +1169,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                   </tr>
                 </thead>
                 <tbody>
-                  {WARRANTY_AGGREGATES.paymentStatus.map((r, i) => (
+                  {paymentStatusRows.map((r, i) => (
                     <tr key={i}>
                       <td className="strong">{r.cat}</td>
                       <td className="ctr" style={{ color: 'var(--success)', fontWeight: 600 }}>
@@ -871,15 +1195,15 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                   <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
                     <td>GRAND TOTAL</td>
                     <td className="ctr">—</td>
-                    <td className="ctr">{WR_PAYMENT_TOTAL.approved}</td>
-                    <td className="ctr">{WR_PAYMENT_TOTAL.submitted}</td>
+                    <td className="ctr">{paymentTotals.approved}</td>
+                    <td className="ctr">{paymentTotals.submitted}</td>
                     <td className="ctr" style={{ color: 'var(--danger)' }}>
-                      {WR_PAYMENT_TOTAL.rejected}
+                      {paymentTotals.rejected}
                     </td>
-                    <td className="ctr">{WR_PAYMENT_TOTAL.created}</td>
+                    <td className="ctr">{paymentTotals.created}</td>
                     <td className="ctr">—</td>
-                    <td style={{ textAlign: 'right', color: 'var(--accent)' }}>{WR_PAYMENT_TOTAL.claimed}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--danger)' }}>{WR_PAYMENT_TOTAL.pending}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--accent)' }}>{paymentTotals.claimed}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--danger)' }}>{paymentTotals.pending}</td>
                   </tr>
                 </tbody>
               </table>
@@ -888,7 +1212,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
           <div className="grid-2" style={{ marginTop: 'var(--gap)' }}>
             <Card title="Claims by source" sub="rows per warranty source table">
-              {WR_CATEGORIES.map((c, idx) => (
+              {categoryCounts.map((c, idx) => (
                 <div key={idx} style={{ marginBottom: 11 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5, gap: 8 }}>
                     <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{c.label}</span>
@@ -897,7 +1221,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                     </span>
                   </div>
                   <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
-                    <span style={{ display: 'block', height: '100%', width: `${(c.count / 4201) * 100}%`, background: c.claim ? 'var(--accent)' : '#4F46E5', borderRadius: 99 }} />
+                    <span style={{ display: 'block', height: '100%', width: `${(c.count / Math.max(1, ...categoryCounts.map((row) => row.count))) * 100}%`, background: c.claim ? 'var(--accent)' : '#4F46E5', borderRadius: 99 }} />
                   </div>
                 </div>
               ))}
