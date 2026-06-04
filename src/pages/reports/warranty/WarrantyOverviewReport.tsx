@@ -221,14 +221,86 @@ function inferLocation(record: WarrantyRecord): 'Ajmer Road' | 'Sitapura' | '' {
   return ''
 }
 
-function normalizeStatusBucket(status: string): 'created' | 'submitted' | 'awaiting_sop' | 'approved' | 'settled' | 'rejected' {
-  const text = normalizeText(status)
+function normalizeStatusBucket(recordOrStatus: WarrantyRecord | string): 'created' | 'submitted' | 'awaiting_sop' | 'approved' | 'settled' | 'rejected' {
+  const statusText = typeof recordOrStatus === 'string' ? recordOrStatus : recordOrStatus.status
+  const categoryText = typeof recordOrStatus === 'string' ? '' : normalizeText(recordOrStatus.category)
+  const text = normalizeText(statusText)
   if (text.includes('reject') || text.includes('cancelled') || text.includes('not validated')) return 'rejected'
   if (text.includes('settled') || text.includes('paid') || text.includes('closed')) return 'settled'
   if (text.includes('approved')) return 'approved'
-  if (text.includes('sop') || text.includes('review') || text.includes('await') || text.includes('accepted') || text.includes('sent to tm')) return 'awaiting_sop'
+  if (text.includes('accepted')) {
+    // Table-aware lock: FSB and Goodwill Accepted claims count as submitted backlog.
+    if (categoryText === 'fsb' || categoryText === 'goodwill') return 'submitted'
+    return 'awaiting_sop'
+  }
+  if (text.includes('sop') || text.includes('review') || text.includes('await') || text.includes('sent to tm')) return 'awaiting_sop'
   if (text.includes('submit') || text.includes('under change')) return 'submitted'
   return 'created'
+}
+
+function isWorkflowAlertEligible(record: WarrantyRecord): boolean {
+  // Claim Settlement rows are invoice/settlement snapshots and do not carry workflow status fields.
+  if (record.category === 'Claim Settlement') return false
+  return normalizeText(record.status) !== ''
+}
+
+function getWorkflowClaimKey(record: WarrantyRecord): string {
+  const jcKey = normalizeText(record.jobCardNumber)
+  if (jcKey) return `jc:${jcKey}`
+
+  const postingKey = normalizeText(record.postingDocNo)
+  if (postingKey) return `posting:${postingKey}`
+
+  return [
+    'fallback',
+    normalizeText(record.category),
+    normalizeText(record.model),
+    normalizeText(record.status),
+    String(record.ageDays),
+    String(record.claimAmount),
+    normalizeText(record.createdAt),
+  ].join('|')
+}
+
+function getSettlementEvidenceKey(record: WarrantyRecord): string {
+  const jcKey = normalizeText(record.jobCardNumber)
+  if (jcKey) return `jc:${jcKey}`
+
+  const postingKey = normalizeText(record.postingDocNo)
+  if (postingKey) return `posting:${postingKey}`
+
+  return ''
+}
+
+function dedupeWorkflowClaims(rows: WarrantyRecord[]): WarrantyRecord[] {
+  const unique = new Map<string, WarrantyRecord>()
+
+  for (const row of rows) {
+    const key = getWorkflowClaimKey(row)
+    const existing = unique.get(key)
+    if (!existing) {
+      unique.set(key, row)
+      continue
+    }
+
+    // Prefer richer row payload for display when duplicate claims appear across source tables.
+    const existingScore =
+      (existing.rejectionReason ? 1 : 0) +
+      (existing.postingDocNo ? 1 : 0) +
+      (existing.model ? 1 : 0) +
+      (existing.jobCardNumber ? 1 : 0)
+    const nextScore =
+      (row.rejectionReason ? 1 : 0) +
+      (row.postingDocNo ? 1 : 0) +
+      (row.model ? 1 : 0) +
+      (row.jobCardNumber ? 1 : 0)
+
+    if (nextScore > existingScore || (nextScore === existingScore && row.ageDays > existing.ageDays)) {
+      unique.set(key, row)
+    }
+  }
+
+  return Array.from(unique.values())
 }
 
 function matchesBranchFilter(record: WarrantyRecord, branchFilter: string): boolean {
@@ -795,13 +867,17 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     })
   }, [allowedLocationFuelPairs, branch, records, selectedFuelType, selectedLocation, viewerDealerCodes.length])
 
+  const workflowStatusRecords = useMemo(() => {
+    return filteredRecords.filter(isWorkflowAlertEligible)
+  }, [filteredRecords])
+
   const overviewKpis = useMemo(() => {
     const claimed = filteredRecords.reduce((sum, record) => sum + record.claimAmount, 0)
     const pendingRows = filteredRecords.filter((record) => String(record.postingDocNo || '').trim() === '')
     const pendingValue = pendingRows.reduce((sum, record) => sum + record.claimAmount, 0)
-    const paymentPending = filteredRecords
+    const paymentPending = workflowStatusRecords
       .filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
+        const bucket = normalizeStatusBucket(record)
         return bucket === 'approved' || bucket === 'submitted' || bucket === 'awaiting_sop'
       })
       .reduce((sum, record) => sum + record.claimAmount, 0)
@@ -827,10 +903,10 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         paymentPending,
       },
     }
-  }, [filteredRecords])
+  }, [filteredRecords, workflowStatusRecords])
 
   const pipelineData = useMemo(() => {
-    const warrantyRows = filteredRecords.filter((record) => record.category === 'Warranty Claim')
+    const warrantyRows = workflowStatusRecords.filter((record) => record.category === 'Warranty Claim')
     const buckets = {
       created: 0,
       submitted: 0,
@@ -841,7 +917,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     }
 
     for (const row of warrantyRows) {
-      const bucket = normalizeStatusBucket(row.status)
+      const bucket = normalizeStatusBucket(row)
       buckets[bucket] += 1
     }
 
@@ -853,7 +929,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       { stage: 'Settled', count: buckets.settled, tone: 'var(--success)' },
       { stage: 'Rejected', count: buckets.rejected, tone: 'var(--danger)' },
     ]
-  }, [filteredRecords])
+  }, [workflowStatusRecords])
 
   const paymentStatusRows = useMemo(() => {
     const grouped = new Map<string, { settled: number; approved: number; submitted: number; rejected: number; created: number; total: number; claimed: number; settledValue: number }>()
@@ -870,14 +946,17 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         settledValue: 0,
       }
 
-      const bucket = normalizeStatusBucket(row.status)
-      if (bucket === 'settled') current.settled += 1
-      else if (bucket === 'approved') current.approved += 1
-      else if (bucket === 'submitted' || bucket === 'awaiting_sop') current.submitted += 1
-      else if (bucket === 'rejected') current.rejected += 1
-      else current.created += 1
+      if (isWorkflowAlertEligible(row)) {
+        const bucket = normalizeStatusBucket(row)
+        if (bucket === 'settled') current.settled += 1
+        else if (bucket === 'approved') current.approved += 1
+        else if (bucket === 'submitted' || bucket === 'awaiting_sop') current.submitted += 1
+        else if (bucket === 'rejected') current.rejected += 1
+        else current.created += 1
+      }
       current.total += 1
       current.claimed += row.claimAmount
+      const bucket = normalizeStatusBucket(row)
       if (String(row.postingDocNo || '').trim() !== '' || bucket === 'settled') {
         current.settledValue += row.claimAmount
       }
@@ -952,8 +1031,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
     const buildRow = (label: string, rows: WarrantyRecord[], revenueMode: 'parts20' | 'none' | 'oem' | 'na' = 'none') => {
       const total = rows.length
-      const settled = rows.filter((record) => normalizeStatusBucket(record.status) === 'settled').length
-      const rejected = rows.filter((record) => normalizeStatusBucket(record.status) === 'rejected').length
+      const settled = rows.filter((record) => normalizeStatusBucket(record) === 'settled').length
+      const rejected = rows.filter((record) => normalizeStatusBucket(record) === 'rejected').length
       const settlePct = total > 0 ? Number(((settled / total) * 100).toFixed(1)) : 0
       const rejectPct = total > 0 ? Number(((rejected / total) * 100).toFixed(1)) : 0
 
@@ -989,7 +1068,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const computedRejectionRows = useMemo(() => {
-    const rejectedRows = filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'rejected')
+    const rejectedRows = workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'rejected')
     const grouped = new Map<string, number>()
     for (const row of rejectedRows) {
       const reason = String(row.rejectionReason || '').trim() || '(blank reason)'
@@ -1007,18 +1086,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       pct: totalRejected > 0 ? Math.max(1, Math.round((count / totalRejected) * 100)) : 0,
       tone: index < 2 ? 'var(--danger)' : index < 4 ? 'var(--warn)' : 'var(--muted)',
     }))
-  }, [filteredRecords])
+  }, [workflowStatusRecords])
 
   const computedTatRows = useMemo(() => {
     const stageBuckets = {
-      created: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'created'),
-      submitted: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'submitted'),
-      awaiting_sop: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'awaiting_sop'),
-      approved: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'approved'),
-      settled: filteredRecords.filter((record) => normalizeStatusBucket(record.status) === 'settled'),
+      created: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'created'),
+      submitted: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'submitted'),
+      awaiting_sop: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'awaiting_sop'),
+      approved: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'approved'),
+      settled: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'settled'),
     }
 
-    const totalRows = Math.max(1, filteredRecords.length)
+    const totalRows = Math.max(1, workflowStatusRecords.length)
     const avgAge = (rows: WarrantyRecord[]) => {
       if (rows.length === 0) return 0
       return Number((rows.reduce((sum, row) => sum + row.ageDays, 0) / rows.length).toFixed(1))
@@ -1041,7 +1120,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       { stage: 'Submit → Review', rows: submitToReview },
       { stage: 'Review → Approve', rows: reviewToApprove },
       { stage: 'Approve → Settle', rows: approveToSettle },
-      { stage: 'End-to-end', rows: settledRows.length > 0 ? settledRows : filteredRecords },
+      { stage: 'End-to-end', rows: settledRows.length > 0 ? settledRows : workflowStatusRecords },
     ]
 
     return rows.map((entry) => {
@@ -1055,7 +1134,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         tone,
       }
     })
-  }, [filteredRecords])
+  }, [workflowStatusRecords])
 
   const computedTypeMix = useMemo(() => {
     const groups = [
@@ -1090,35 +1169,45 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const computedAlerts = useMemo(() => {
+    const settlementEvidenceClaimKeys = new Set(
+      filteredRecords
+        .filter((record) => record.category === 'Claim Settlement')
+        .map(getSettlementEvidenceKey)
+        .filter((key) => key.length > 0),
+    )
+
     // Alert 1: Created but not submitted — beyond 24 hrs
-    const notSubmitted = filteredRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record.status)
+    const notSubmitted = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record)
       return bucket === 'created' && record.ageDays > 1
-    })
+    }))
 
     // Alert 2: Stuck in review stage — beyond 3 days
-    const stuckReview = filteredRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record.status)
+    const stuckReview = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record)
       return bucket === 'awaiting_sop' && record.ageDays > 3
-    })
+    }))
 
     // Alert 3: SOP document pending — beyond 2 days
-    const sopPending = filteredRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record.status)
+    const sopPending = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record)
       return (bucket === 'awaiting_sop' || bucket === 'submitted') && record.ageDays > 2
-    })
+    }))
 
     // Alert 4: Approved but payment not settled — beyond 5 days
-    const approvedUnsettled = filteredRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record.status)
-      return bucket === 'approved' && record.ageDays > 5 && String(record.postingDocNo || '').trim() === ''
-    })
+    const approvedUnsettled = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record)
+      const hasPostingEvidence = String(record.postingDocNo || '').trim() !== ''
+      const claimKey = getSettlementEvidenceKey(record)
+      const hasSettlementEvidence = claimKey.length > 0 && settlementEvidenceClaimKeys.has(claimKey)
+      return bucket === 'approved' && record.ageDays > 5 && !hasPostingEvidence && !hasSettlementEvidence
+    }))
 
     // Alert 5: Rejected claims — reason of rejection not filled
-    const rejectionBlank = filteredRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record.status)
+    const rejectionBlank = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
+      const bucket = normalizeStatusBucket(record)
       return bucket === 'rejected' && String(record.rejectionReason || '').trim() === ''
-    })
+    }))
 
     // Always return all 5 alerts (matching static design), even if empty
     const alerts: WarrantyAlert[] = [
@@ -1193,161 +1282,10 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     ]
 
     return alerts
-  }, [filteredRecords])
-
-  const debugAlertCounts = useMemo(() => {
-    const countAlerts = (rows: WarrantyRecord[]) => {
-      const notSubmitted = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'created' && record.ageDays > 1
-      }).length
-
-      const stuckReview = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'awaiting_sop' && record.ageDays > 3
-      }).length
-
-      const sopPending = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return (bucket === 'awaiting_sop' || bucket === 'submitted') && record.ageDays > 2
-      }).length
-
-      const approvedUnsettled = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'approved' && record.ageDays > 5 && String(record.postingDocNo || '').trim() === ''
-      }).length
-
-      const rejectionBlank = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'rejected' && String(record.rejectionReason || '').trim() === ''
-      }).length
-
-      return {
-        notSubmitted,
-        stuckReview,
-        sopPending,
-        approvedUnsettled,
-        rejectionBlank,
-      }
-    }
-
-    const raw = countAlerts(records)
-    const filtered = countAlerts(filteredRecords)
-
-    return {
-      raw,
-      filtered,
-      rawTotal: raw.notSubmitted + raw.stuckReview + raw.sopPending + raw.approvedUnsettled + raw.rejectionBlank,
-      filteredTotal:
-        filtered.notSubmitted +
-        filtered.stuckReview +
-        filtered.sopPending +
-        filtered.approvedUnsettled +
-        filtered.rejectionBlank,
-    }
-  }, [filteredRecords, records])
-
-  const debugScopeSnapshot = useMemo(() => {
-    const adminBypassActive = viewerDealerCodes.length >= 2
-    return {
-      branchFilter: branch,
-      selectedLocation,
-      selectedFuelType,
-      dealerScopeLabel: viewerDealerCodes.length > 0 ? viewerDealerCodes.join(', ') : 'No dealer mapping assigned',
-      dealerCodeCount: viewerDealerCodes.length,
-      adminBypassActive,
-    }
-  }, [branch, selectedFuelType, selectedLocation, viewerDealerCodes])
-
-  const debugStatusBuckets = useMemo(() => {
-    const countBuckets = (rows: WarrantyRecord[]) => {
-      const counts = {
-        created: 0,
-        submitted: 0,
-        awaiting_sop: 0,
-        approved: 0,
-        settled: 0,
-        rejected: 0,
-      }
-
-      for (const row of rows) {
-        const bucket = normalizeStatusBucket(row.status)
-        counts[bucket] += 1
-      }
-
-      return counts
-    }
-
-    return {
-      raw: countBuckets(records),
-      filtered: countBuckets(filteredRecords),
-    }
-  }, [filteredRecords, records])
-
-  const debugAlertPredicateDiagnostics = useMemo(() => {
-    const compute = (rows: WarrantyRecord[]) => {
-      const createdBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'created').length
-      const createdAgePass = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'created' && record.ageDays > 1
-      }).length
-
-      const awaitingBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'awaiting_sop').length
-      const awaitingAgePass = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'awaiting_sop' && record.ageDays > 3
-      }).length
-
-      const sopBase = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'awaiting_sop' || bucket === 'submitted'
-      }).length
-      const sopAgePass = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return (bucket === 'awaiting_sop' || bucket === 'submitted') && record.ageDays > 2
-      }).length
-
-      const approvedBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'approved').length
-      const approvedAgePass = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'approved' && record.ageDays > 5
-      }).length
-      const approvedNoPosting = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'approved' && record.ageDays > 5 && String(record.postingDocNo || '').trim() === ''
-      }).length
-
-      const rejectedBase = rows.filter((record) => normalizeStatusBucket(record.status) === 'rejected').length
-      const rejectedBlankReason = rows.filter((record) => {
-        const bucket = normalizeStatusBucket(record.status)
-        return bucket === 'rejected' && String(record.rejectionReason || '').trim() === ''
-      }).length
-
-      const ageZeroOrMissing = rows.filter((record) => !Number.isFinite(record.ageDays) || record.ageDays <= 0).length
-
-      return {
-        createdBase,
-        createdAgePass,
-        awaitingBase,
-        awaitingAgePass,
-        sopBase,
-        sopAgePass,
-        approvedBase,
-        approvedAgePass,
-        approvedNoPosting,
-        rejectedBase,
-        rejectedBlankReason,
-        ageZeroOrMissing,
-      }
-    }
-
-    return {
-      raw: compute(records),
-      filtered: compute(filteredRecords),
-    }
-  }, [filteredRecords, records])
+  }, [filteredRecords, workflowStatusRecords])
 
   const computedFinancialKpis = useMemo(() => {
+    const workflowFinancialRows = filteredRecords.filter(isWorkflowAlertEligible)
     const normalWc = filteredRecords.filter((record) => {
       return record.category === 'Warranty Claim' && !record.model?.toLowerCase().includes('ev')
     })
@@ -1360,15 +1298,15 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
     return [
       { icon: 'upload', label: 'Invoices pending upload', value: String(filteredRecords.filter((r) => !r.postingDocNo).length), sub: formatAmountShort(filteredRecords.filter((r) => !r.postingDocNo).reduce((sum, r) => sum + r.claimAmount, 0)) + ' value blocked', tone: 'var(--danger)' },
-      { icon: 'clock', label: 'Pending WC claims', value: String(filteredRecords.filter((r) => {
-        const bucket = normalizeStatusBucket(r.status)
+      { icon: 'clock', label: 'Pending WC claims', value: String(workflowFinancialRows.filter((r) => {
+        const bucket = normalizeStatusBucket(r)
         return (bucket === 'created' || bucket === 'awaiting_sop' || bucket === 'submitted') && r.category === 'Warranty Claim'
       }).length), sub: 'Created / SOP / Submitted', tone: 'var(--danger)' },
-      { icon: 'doc', label: 'AMC pending settlement', value: String(filteredRecords.filter((r) => {
-        const bucket = normalizeStatusBucket(r.status)
+      { icon: 'doc', label: 'AMC pending settlement', value: String(workflowFinancialRows.filter((r) => {
+        const bucket = normalizeStatusBucket(r)
         return bucket !== 'settled' && r.category === 'AMC'
-      }).length), sub: formatAmountShort(filteredRecords.filter((r) => {
-        const bucket = normalizeStatusBucket(r.status)
+      }).length), sub: formatAmountShort(workflowFinancialRows.filter((r) => {
+        const bucket = normalizeStatusBucket(r)
         return bucket !== 'settled' && r.category === 'AMC'
       }).reduce((sum, r) => sum + r.claimAmount, 0)) + ' claimed', tone: 'var(--warn)' },
       { icon: 'reports', label: '20% revenue — Normal WC', value: formatAmountShort(normalRev), sub: `on ${formatAmountShort(normalWc.reduce((sum, r) => sum + r.partsAmount, 0))} parts`, tone: 'var(--success)' },
@@ -1524,196 +1462,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           </div>
         </div>
       )}
-
-      <div className="card" style={{ borderLeft: '3px solid #111827', marginBottom: 'var(--gap)', background: '#FAFAFA' }}>
-        <div className="card__head">
-          <div>
-            <h3>Debug Snapshot (Temporary)</h3>
-            <div className="sub">Raw vs filtered alert counts, plus active scope and filter context</div>
-          </div>
-        </div>
-        <div className="card__body" style={{ display: 'grid', gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))', gap: 8 }}>
-            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>records (raw)</div>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{records.length.toLocaleString('en-IN')}</div>
-            </div>
-            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>filteredRecords</div>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{filteredRecords.length.toLocaleString('en-IN')}</div>
-            </div>
-            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>alerts (raw total)</div>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{debugAlertCounts.rawTotal.toLocaleString('en-IN')}</div>
-            </div>
-            <div style={{ padding: '8px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: '#fff' }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>alerts (filtered total)</div>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{debugAlertCounts.filteredTotal.toLocaleString('en-IN')}</div>
-            </div>
-          </div>
-
-          <div className="tbl-wrap scroll">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Alert metric</th>
-                  <th className="ctr">Raw</th>
-                  <th className="ctr">Filtered</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Created &gt; 24h</td>
-                  <td className="ctr">{debugAlertCounts.raw.notSubmitted}</td>
-                  <td className="ctr">{debugAlertCounts.filtered.notSubmitted}</td>
-                </tr>
-                <tr>
-                  <td>Awaiting SOP &gt; 3d</td>
-                  <td className="ctr">{debugAlertCounts.raw.stuckReview}</td>
-                  <td className="ctr">{debugAlertCounts.filtered.stuckReview}</td>
-                </tr>
-                <tr>
-                  <td>SOP pending &gt; 2d</td>
-                  <td className="ctr">{debugAlertCounts.raw.sopPending}</td>
-                  <td className="ctr">{debugAlertCounts.filtered.sopPending}</td>
-                </tr>
-                <tr>
-                  <td>Approved + no posting &gt; 5d</td>
-                  <td className="ctr">{debugAlertCounts.raw.approvedUnsettled}</td>
-                  <td className="ctr">{debugAlertCounts.filtered.approvedUnsettled}</td>
-                </tr>
-                <tr>
-                  <td>Rejected + blank reason</td>
-                  <td className="ctr">{debugAlertCounts.raw.rejectionBlank}</td>
-                  <td className="ctr">{debugAlertCounts.filtered.rejectionBlank}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="tbl-wrap scroll">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Status bucket</th>
-                  <th className="ctr">Raw</th>
-                  <th className="ctr">Filtered</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>created</td>
-                  <td className="ctr">{debugStatusBuckets.raw.created}</td>
-                  <td className="ctr">{debugStatusBuckets.filtered.created}</td>
-                </tr>
-                <tr>
-                  <td>submitted</td>
-                  <td className="ctr">{debugStatusBuckets.raw.submitted}</td>
-                  <td className="ctr">{debugStatusBuckets.filtered.submitted}</td>
-                </tr>
-                <tr>
-                  <td>awaiting_sop</td>
-                  <td className="ctr">{debugStatusBuckets.raw.awaiting_sop}</td>
-                  <td className="ctr">{debugStatusBuckets.filtered.awaiting_sop}</td>
-                </tr>
-                <tr>
-                  <td>approved</td>
-                  <td className="ctr">{debugStatusBuckets.raw.approved}</td>
-                  <td className="ctr">{debugStatusBuckets.filtered.approved}</td>
-                </tr>
-                <tr>
-                  <td>settled</td>
-                  <td className="ctr">{debugStatusBuckets.raw.settled}</td>
-                  <td className="ctr">{debugStatusBuckets.filtered.settled}</td>
-                </tr>
-                <tr>
-                  <td>rejected</td>
-                  <td className="ctr">{debugStatusBuckets.raw.rejected}</td>
-                  <td className="ctr">{debugStatusBuckets.filtered.rejected}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="tbl-wrap scroll">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Predicate stage</th>
-                  <th className="ctr">Raw</th>
-                  <th className="ctr">Filtered</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Created base (status=created)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.createdBase}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.createdBase}</td>
-                </tr>
-                <tr>
-                  <td>Created age pass (&gt;24h)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.createdAgePass}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.createdAgePass}</td>
-                </tr>
-                <tr>
-                  <td>Await SOP base (status=awaiting_sop)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.awaitingBase}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.awaitingBase}</td>
-                </tr>
-                <tr>
-                  <td>Await SOP age pass (&gt;3d)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.awaitingAgePass}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.awaitingAgePass}</td>
-                </tr>
-                <tr>
-                  <td>SOP pending base (awaiting_sop or submitted)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.sopBase}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.sopBase}</td>
-                </tr>
-                <tr>
-                  <td>SOP pending age pass (&gt;2d)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.sopAgePass}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.sopAgePass}</td>
-                </tr>
-                <tr>
-                  <td>Approved base (status=approved)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.approvedBase}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.approvedBase}</td>
-                </tr>
-                <tr>
-                  <td>Approved age pass (&gt;5d)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.approvedAgePass}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.approvedAgePass}</td>
-                </tr>
-                <tr>
-                  <td>Approved + no posting (final)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.approvedNoPosting}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.approvedNoPosting}</td>
-                </tr>
-                <tr>
-                  <td>Rejected base (status=rejected)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.rejectedBase}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.rejectedBase}</td>
-                </tr>
-                <tr>
-                  <td>Rejected + blank reason (final)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.rejectedBlankReason}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.rejectedBlankReason}</td>
-                </tr>
-                <tr>
-                  <td>Age zero or missing (diagnostic)</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.raw.ageZeroOrMissing}</td>
-                  <td className="ctr">{debugAlertPredicateDiagnostics.filtered.ageZeroOrMissing}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-            Scope: {debugScopeSnapshot.dealerScopeLabel} ({debugScopeSnapshot.dealerCodeCount} codes) | Branch filter: {debugScopeSnapshot.branchFilter} | Location: {debugScopeSnapshot.selectedLocation} | Fuel: {debugScopeSnapshot.selectedFuelType} | Admin bypass active: {debugScopeSnapshot.adminBypassActive ? 'yes' : 'no'}
-          </div>
-        </div>
-      </div>
 
       {/* Tab Navigation */}
       <div className="tabs" style={{ marginBottom: 'var(--gap)' }}>

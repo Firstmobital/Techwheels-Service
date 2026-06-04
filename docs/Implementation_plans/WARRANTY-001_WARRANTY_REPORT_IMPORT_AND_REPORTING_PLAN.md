@@ -253,108 +253,101 @@ Acceptance lock for fix rollout:
 1. When logged in as `admin@firstmobital.com`, Overview must render DB-backed counts matching this baseline for current dump authority.
 2. Any mismatch is a wiring defect unless dump authority changes forward.
 
-### I) Critical Alerts Wiring Progress (2026-06-04)
+### I) Critical Alerts Workflow Contract (Re-Audit, 2026-06-04)
 
-DB-truth baseline calculated from authoritative dump (11,259 total warranty records across 7 sources):
+This section replaces earlier mixed baselines and locks one business-logic contract for Critical Alerts using Tata CRM upload behavior.
 
-#### Status Distribution (All Categories)
-| Status | Record Count | Parity Check |
-|---|---:|---|
-| Created (initial, not submitted) | 4,196 | [TBD] |
-| Submitted (awaiting review) | 67 | [TBD] |
-| Awaiting SOP | 2,394 | [TBD] |
-| Approved (settled) | 24 | [TBD] |
-| Settled (closed) | 4,151 | [TBD] |
-| Rejected | 426 | [TBD] |
+#### I.1 Data Sources and Workflow Eligibility
 
-#### Critical Alerts Baseline (DB-Truth)
+All 7 warranty tables are loaded by the page, but **Critical Alerts must be workflow-stage alerts, not settlement-snapshot alerts**.
 
-| Alert Type | Filter Criteria | DB Count | Current UI | Parity |
-|---|---|---:|---:|---|
-| Created > 24 hours | `status=created && age_days > 1` | **27** | 0 | ❌ |
-| Stuck in Review > 3 days | `status=awaiting_sop && age_days > 3` | **148** | 0 | ❌ |
-| SOP Pending > 2 days | `(status=awaiting_sop \|\| status=submitted) && age_days > 2` | **~215** | 0 | ❌ |
-| Approved Unsettled > 5 days | `status=approved && age_days > 5 && posting_doc_no=""` | **0** | 0 | ✅ |
-| Rejection Blank Reason | `status=rejected && rejection_reason=""` | [TBD] | 0 | [TBD] |
+| Table | Rows (authoritative snapshot) | Workflow status present | Posting doc present | Alert participation |
+|---|---:|---:|---:|---|
+| `warranty_claim_settlement_report_data` | 4,110 | 0 | 2,973 | Excluded from stage alerts; used for settlement evidence/reconciliation only |
+| `warranty_part_wc_data` | 115 | 115 | 0 | Included |
+| `warranty_updation_claim_data` | 1,939 | 1,939 | 0 | Included |
+| `warranty_goodwill_data` | 97 | 97 | 0 | Included |
+| `warranty_amc_data` | 403 | 403 | 0 | Included |
+| `warranty_fsb_data` | 2,554 | 2,554 | 0 | Included |
+| `warranty_wc_data` | 2,365 | 2,365 | 0 | Included |
 
-**Data-sourcing method:** Parsed all 11,259 records from authoritative dump (`local_folder/backups/chunks/full_database.sql.part_*`); extracted claim_status from source_row_data JSONB; applied age-days calculation using job_card_date; applied exact alert filtering criteria matching WarrantyOverviewReport.tsx `computedAlerts` useMemo logic.
+Eligibility lock:
+1. Include rows only when workflow status is non-blank and table is not `warranty_claim_settlement_report_data`.
+2. Derive age from business date keys in `source_row_data`, never from import `created_at`.
 
-**Current UI state:** All 5 alert cards show count=0, indicating data fetch or filter mismatch relative to baseline.
+#### I.2 Tata CRM Status Normalization (Bucket Contract)
 
-**Root cause identified (2026-06-04):** Age calculation was using database `created_at` field (insertion time during data import) instead of actual `job_card_date` from source_row_data JSONB. This caused all records to appear 0-1 days old, failing age-threshold filters.
+Normalize CRM status text into stage buckets:
+1. `rejected`: contains `reject`, `cancelled`, `not validated`
+2. `settled`: contains `settled`, `paid`, `closed`
+3. `approved`: contains `approved`
+4. `awaiting_sop`: contains `sop`, `review`, `await`, `sent to tm`
+5. `submitted`: contains `submit`, `under change`
+6. fallback `created` for explicit created-like workflow records only after eligibility filter
 
-**Fix applied (2026-06-04):**
-1. Added `JOB_CARD_DATE_KEYS` constant: `['job_card_date', 'jc_date', 'job_date', 'created_date', 'date_created']`
-2. Modified age calculation in data normalization loop to extract job_card_date from source_row_data
-3. Changed: `const ageDays = Math.max(0, Math.floor((now - createdAtMs) / (...)))` → extract job_card_date first, then parse and calculate age
-4. This aligns with audit baseline logic that extracts `job_card_date` for age calculation
+Final `Accepted` policy lock (authoritative re-audit):
+1. `Accepted` remains table-aware, not global.
+2. If source is `warranty_fsb_data` or `warranty_goodwill_data`, map `Accepted` to `submitted`.
+3. For other workflow tables, `Accepted` maps to `awaiting_sop`.
+4. Rationale: this prevents `Review >3d` inflation while preserving combined pre-approval backlog visibility in `SOP pending >2d`.
 
-**Expected outcome after fix:** Critical Alerts counts should now appear correctly:
-- Alert 1 (Created > 24h): 27 records
-- Alert 2 (Awaiting SOP > 3d): 148 records  
-- Alert 3 (SOP > 2d): ~215 records (67 submitted + 148 awaiting)
-- Alert 4 (Approved > 5d): 0 records ✅
-- Alert 5 (Rejection blank): [TBD pending re-test]
+#### I.3 Claim Identity and De-duplication
 
-**Parity assessment (pre-fix):**
-1. ✅ Alert 4 (Approved > 5d) matches baseline `0`, parity OK.
-2. ❌ Alerts 1, 2, 3 show `0` but should show `27`, `148`, `~215` respectively.
-3. [TBD] Alert 5 rejection blank-reason count needs JSONB parsing refinement.
+Because Tata CRM uploads are interrelated across multiple report extracts, the same claim can appear multiple times.
 
-**Implementation verification (2026-06-04):**
+Claim key order:
+1. `jobCardNumber` (primary)
+2. posting document number (secondary)
+3. deterministic fallback fingerprint (category/model/status/age/amount/createdAt) when primary keys are absent
 
-✅ **Fix verified in code:**
-1. `JOB_CARD_DATE_KEYS` constant added (line 359)
-2. Age calculation refactored (lines 618-622) to extract `job_card_date` from source_row_data JSONB
-3. Date parsing via `parsePotentialDate()` handles DD/MM/YYYY format from CSV sources
-4. `normalizeStatusBucket()` function correctly maps claim_status text to 5 buckets
-5. `computedAlerts` useMemo (lines 1007-1085) filters records using exact same criteria as baseline:
-   - Alert 1: `bucket === 'created' && ageDays > 1` ✅
-   - Alert 2: `bucket === 'awaiting_sop' && ageDays > 3` ✅
-   - Alert 3: `(bucket === 'awaiting_sop' || bucket === 'submitted') && ageDays > 2` ✅
-   - Alert 4: `bucket === 'approved' && ageDays > 5 && !postingDocNo` ✅
-   - Alert 5: `bucket === 'rejected' && !rejectionReason` ✅
+All Critical Alerts counts must be computed on **deduped claim sets**, not raw rows.
 
-**Build status:**
-- TypeScript compilation: ✅ NO ERRORS
-- Vite dev build: ✅ 723 modules transformed, 3.3MB JS output
+#### I.4 Business Logic by Critical Alert Label
 
-**Browser + DB audit status (2026-06-03, corrected):**
-- Dev server running: ✅
-- Admin scope context: ✅ all 3 mapped dealer codes resolved (`3000840`, `500A840`, `3001440`)
-- Raw vs filtered diagnostic: ✅ identical counts, so dealer/fuel scope filtering is NOT reducing Critical Alerts
+| Report label | Business meaning | Rule (after eligibility + dedupe) | Tata CRM workflow interpretation |
+|---|---|---|---|
+| Created >24h | Claim created but not moved to submission | `bucket = created AND ageDays > 1` | Intake/claim creation stalled |
+| Review >3d | Claim stuck in SOP/review queue | `bucket = awaiting_sop AND ageDays > 3` | SOP/technical review SLA breach |
+| SOP pending >2d | Claim pending in submitted or awaiting SOP stage | `(bucket = awaiting_sop OR bucket = submitted) AND ageDays > 2` | Combined pre-approval SLA breach |
+| Approved-not-settled >5d | Approved claim not financially settled | `bucket = approved AND ageDays > 5 AND postingDocNo is blank AND no settlement-evidence claim key match` | Approval done but settlement evidence missing |
+| Rejection reason blank | Rejected claim missing reason | `bucket = rejected AND rejectionReason is blank` | Audit/compliance risk |
 
-### Critical Alerts Correction Delta (Authoritative)
+Rule interaction note:
+1. `Review >3d` is intentionally a subset of `SOP pending >2d` by design.
 
-Corrected findings after authoritative audit and in-app diagnostics:
-1. Earlier low/zero alert counts were not caused by RLS/admin scope filtering.
-2. Root cause was age derivation quality + status fallback semantics:
-   - Many rows had blank/unmapped status and were bucketed as `created` by fallback logic.
-   - Age was previously undercounted when source date parsing/key coverage was incomplete.
-3. Age derivation is now aligned to source-sheet business dates in `source_row_data`.
-4. `created_at` import timestamp must NOT be used for age KPI semantics.
+#### I.5 Runtime Observation (Non-Authoritative)
 
-### Implemented Rule Lock (Do Not Regress)
+Observed from authoritative dump mirror using the locked policy above (claim-deduped):
+1. Created >24h: **82**
+2. Review >3d: **47**
+3. SOP pending >2d: **2427**
+4. Approved-not-settled >5d: **91**
+5. Rejection reason blank: **2**
 
-1. Age for alerts is derived only from source payload date keys inside `source_row_data`.
-2. `created_at` is retained for lineage/debug only, not operational age calculations.
-3. Fallback bucket behavior (`else => created`) remains explicit and should be treated as a semantic choice, not a data truth.
+Authority rule:
+1. These runtime values are not authoritative when they conflict with `full_database.sql` / chunk mirror.
+2. For planning, reconciliation, and dispute resolution, prefer the local authoritative dump snapshot without reconciliation.
+3. For this section, the dump-derived values above are the current locked reference until authority advances with a newer dump.
 
-### Authoritative Recompute Snapshot (No `created_at` Fallback)
+#### I.6 Known Gap and Final Rule for Accuracy
 
-Read-only SQL recompute against authoritative warranty tables produced:
+Gap:
+1. Workflow tables carry robust status but sparse posting-document fields.
+2. Settlement table carries posting evidence but no workflow status.
 
-| Alert Type | Authoritative Recompute |
-|---|---:|
-| Created > 24h | 3,261 |
-| Stuck in Review > 3d | 2,379 |
-| SOP Pending > 2d | 2,439 |
-| Approved Unsettled > 5d | 90 |
-| Rejection Blank Reason | 3 |
+Therefore, final business interpretation for Alert 4 should be:
+1. Candidate set from workflow feeds: `approved AND ageDays > 5`
+2. Reconcile against settlement evidence feed (`warranty_claim_settlement_report_data`) by claim key
+3. Alert only if no settlement/posting evidence exists after reconciliation
 
-Interpretation note:
-1. `Created >24h` is high because fallback-bucketed blank statuses contribute to `created` unless status mapping is tightened.
-2. If business wants strict "created stage only", add a dedicated rule to exclude blank/unmapped status from Created alert and track it separately as data-quality backlog.
+This reconciliation is the v2 hardening path for `Approved-not-settled`.
+
+#### I.7 Regression Locks
+
+1. Do not use `created_at` import timestamp for alert aging.
+2. Do not count raw rows for Critical Alerts; count deduped claims.
+3. Do not include `warranty_claim_settlement_report_data` directly in stage bucket alerts.
+4. Keep status normalization mapping synchronized with observed Tata CRM values in uploaded files.
 
 #### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
 - WC: ₹48.2L claims  
@@ -366,11 +359,13 @@ Interpretation note:
 - Settlement Reports (Rpt 32-41): ₹40.8L PV + ₹33.7L EV  
 
 #### 2. **Operational Alerts** (28+ Critical)
-- Not submitted > 24 hours: 8 claims  
-- Review stuck > 3 days: 10 claims  
-- SOP pending > 2 days: 4 claims  
-- Approved not settled > 5 days: 3 claims  
-- Rejection reason blank: 3 claims  
+- Not submitted > 24 hours: dynamic, compute from authoritative dump/active snapshot  
+- Review stuck > 3 days: dynamic, compute from authoritative dump/active snapshot  
+- SOP pending > 2 days: dynamic, compute from authoritative dump/active snapshot  
+- Approved not settled > 5 days: dynamic, compute from authoritative dump/active snapshot  
+- Rejection reason blank: dynamic, compute from authoritative dump/active snapshot  
+
+Count-governance note: if runtime UI and dump differ, treat dump as source of truth.
 
 #### 3. **Special Charges** (₹23.52L Total from Job Codes)
 - 980016 (Rusting/Special Labour): ₹2,85,240 · 28 JCs  
@@ -874,11 +869,11 @@ Based on warranty report audit, the following additional reporting surfaces are 
 
 12. **Critical Alerts Enhanced**
     - 28+ active alerts categorized:
-      - Not submitted > 24 hours (8 claims)
-      - Review stuck > 3 days (10 claims)
-      - SOP pending > 2 days (4 claims)
-      - Approved not settled > 5 days (3 claims)
-      - Rejection reason blank (3 claims)
+         - Not submitted > 24 hours (current dump-backed snapshot: 82)
+         - Review stuck > 3 days (current dump-backed snapshot: 47)
+         - SOP pending > 2 days (current dump-backed snapshot: 2427)
+         - Approved not settled > 5 days (current dump-backed snapshot: 91)
+      - Rejection reason blank (2 claims)
     - Each alert must show: claim ID, advance amount, days pending, assigned owner, action required
 
 13. **Month-wise Category Matrix**
@@ -1113,7 +1108,7 @@ The database schema is already correct. Focus on **data transformation, not sche
 
 6. **Build reporting dashboards (in priority order)**
    - Invoice Pending Upload (₹25.72L, 12 invoices, TM portal status)
-   - Settlement Aging (3 claims pending > 5 days, payment visibility)
+   - Settlement Aging (dynamic, dump-backed pending > 5 days with claim-level reconciliation)
    - TAT Monitoring (4-stage flow with SLA thresholds)
    - Special Charges (980016 rusting, 980019 loaner, 980025 misc)
    - Critical Alerts v2 (28+ with ownership)
