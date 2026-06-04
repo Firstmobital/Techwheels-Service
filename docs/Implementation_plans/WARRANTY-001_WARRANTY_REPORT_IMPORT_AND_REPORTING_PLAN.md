@@ -2,7 +2,7 @@
 
 **Plan ID:** WARRANTY-001  
 **Created:** 2026-05-28  
-**Last Audit:** 2026-06-02  
+**Last Audit:** 2026-06-03  
 **Owner:** Techwheels Product + Dev Team + GitHub Copilot  
 **Priority:** High  
 **Status:** In Progress (Audit Complete – 15 New Tasks Added)
@@ -319,33 +319,42 @@ DB-truth baseline calculated from authoritative dump (11,259 total warranty reco
 - TypeScript compilation: ✅ NO ERRORS
 - Vite dev build: ✅ 723 modules transformed, 3.3MB JS output
 
-**Browser test status (2026-06-04):**
-- Dev server running: ✅ http://localhost:5173/
-- Admin user access: ✅ CONFIRMED (Techwheels Admin Scope, dealer 3000840)
-- Critical Alerts tab: ✅ DISPLAYING ACTUAL VALUES (NOT ZEROS!)
+**Browser + DB audit status (2026-06-03, corrected):**
+- Dev server running: ✅
+- Admin scope context: ✅ all 3 mapped dealer codes resolved (`3000840`, `500A840`, `3001440`)
+- Raw vs filtered diagnostic: ✅ identical counts, so dealer/fuel scope filtering is NOT reducing Critical Alerts
 
-**Visual parity verification (ADMIN UNRESTRICTED - ALL DEALERS):**
+### Critical Alerts Correction Delta (Authoritative)
 
-| Alert Type | Expected (Baseline) | Actual UI | Parity | Note |
-|---|---:|---:|---|---|
-| Created > 24h | 27 | 0 | ❌ | Should bypass scope → show all 27 |
-| Stuck in Review > 3d | 148 | 15 | ❌ | Should bypass scope → show all 148 |
-| SOP Pending > 2d | ~215 | 17 | ❌ | Should bypass scope → show all 215 |
-| Approved Unsettled > 5d | 0 | 11 | ❌ | Should bypass scope → show all 0 |
-| Rejection Blank Reason | [TBD] | 3 | ❌ | Should bypass scope → show all [TBD] |
+Corrected findings after authoritative audit and in-app diagnostics:
+1. Earlier low/zero alert counts were not caused by RLS/admin scope filtering.
+2. Root cause was age derivation quality + status fallback semantics:
+   - Many rows had blank/unmapped status and were bucketed as `created` by fallback logic.
+   - Age was previously undercounted when source date parsing/key coverage was incomplete.
+3. Age derivation is now aligned to source-sheet business dates in `source_row_data`.
+4. `created_at` import timestamp must NOT be used for age KPI semantics.
 
-**ISSUE IDENTIFIED:** UI is still applying dealer scope to admin user despite RLS bypass migration. Admin should see all records across all 3 mapped dealers (3000840, 500A840, 3001440), not filtered to single dealer.
+### Implemented Rule Lock (Do Not Regress)
 
-**Root cause analysis needed:**
-1. ✅ Age calculation fix verified working (shows non-zero counts now)
-2. ❌ Dealer scope filter still active for admin despite bypass
-3. Check: Is `getDealerScopeContext()` still restricting results even though RLS policies are bypassed?
-4. Check: Should admin user have empty or null dealer scope to see all data?
+1. Age for alerts is derived only from source payload date keys inside `source_row_data`.
+2. `created_at` is retained for lineage/debug only, not operational age calculations.
+3. Fallback bucket behavior (`else => created`) remains explicit and should be treated as a semantic choice, not a data truth.
 
-**Next steps:**
-1. Verify admin user dealer mapping is correctly resolved (should return all 3 codes or empty for full access)
-2. Confirm RLS bypass is actually preventing scope filtering at database level
-3. Re-test with proper unrestricted scope to match baseline counts
+### Authoritative Recompute Snapshot (No `created_at` Fallback)
+
+Read-only SQL recompute against authoritative warranty tables produced:
+
+| Alert Type | Authoritative Recompute |
+|---|---:|
+| Created > 24h | 3,261 |
+| Stuck in Review > 3d | 2,379 |
+| SOP Pending > 2d | 2,439 |
+| Approved Unsettled > 5d | 90 |
+| Rejection Blank Reason | 3 |
+
+Interpretation note:
+1. `Created >24h` is high because fallback-bucketed blank statuses contribute to `created` unless status mapping is tightened.
+2. If business wants strict "created stage only", add a dedicated rule to exclude blank/unmapped status from Created alert and track it separately as data-quality backlog.
 
 #### 1. **Financial Data** (₹2.03 Crore Total Across 7 Categories)
 - WC: ₹48.2L claims  
