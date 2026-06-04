@@ -227,6 +227,11 @@ function formatAmountShort(value: number): string {
   return `₹${Math.round(value).toLocaleString('en-IN')}`
 }
 
+function formatAmountLakh(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '₹0'
+  return `₹${(value / 100000).toFixed(2).replace(/\.00$/, '')}L`
+}
+
 function normalizeText(value: string | null | undefined): string {
   return String(value ?? '').trim().toLowerCase()
 }
@@ -313,6 +318,8 @@ interface WarrantyRecord {
   portal: 'PV' | 'EV'
   fileName: string
   status: string
+  claimCategory: string
+  serviceType: string
   rejectionReason: string
   claimAmount: number
   partsAmount: number
@@ -347,6 +354,7 @@ const SOURCE_TABLES: SourceTableConfig[] = [
 const STATUS_KEYS = ['claim_status', 'current_status', 'settlement_status', 'approval_status', 'stage', 'status']
 
 const REJECTION_REASON_KEYS = [
+  'vcm_comments',
   'rejection_reason',
   'reason_for_rejection',
   'vcm_remarks',
@@ -365,8 +373,8 @@ const POSTING_DOC_KEYS = [
 const DEALER_INVOICE_KEYS = ['dealer_invoice_no', 'dealer_invoice_number', 'invoice_no', 'dealer_inv_no']
 
 const CLAIM_AMOUNT_KEYS = [
-  'total',
   'total_amount',
+  'claimed_total_amount',
   'claimed_amount',
   'claim_amount',
   'total_claim_amount',
@@ -374,6 +382,8 @@ const CLAIM_AMOUNT_KEYS = [
 ]
 
 const PARTS_AMOUNT_KEYS = [
+  'material',
+  'material_amount',
   'parts',
   'parts_amount',
   'part_amount',
@@ -388,14 +398,17 @@ const LABOUR_AMOUNT_KEYS = [
   'labor',
   'labour_amount',
   'labor_amount',
+  'labour_chgs',
   'special_labour',
   'spl_labour',
 ]
 
 const SPECIAL_AMOUNT_KEYS = ['980016', '980019', '980025', 'special', 'loaner', 'rusting', 'spl']
-const MISC_AMOUNT_KEYS = ['misc', '980001', '980002', '980003', '980004']
-const MODEL_KEYS = ['model', 'product', 'vehicle_model', 'model_name', 'chassis_type']
+const MISC_AMOUNT_KEYS = ['misc', 'misc_chgs', '980001', '980002', '980003', '980004']
+const MODEL_KEYS = ['parent_product_line_name', 'model', 'product', 'product_line', 'vehicle_model', 'model_name', 'chassis_type']
 const JC_KEYS = ['job_card_number', 'job_card_no', 'jc_no', 'jc_number']
+const CLAIM_CATEGORY_KEYS = ['claim_category']
+const SERVICE_TYPE_KEYS = ['service_type', 'stype']
 const INVOICE_DATE_KEYS = ['invoice_date', 'invoice_dt', 'invoice date', 'inv_date']
 const CLOSED_DATE_KEYS = ['closed_date', 'job_closed_date', 'close_date', 'compl_report_date', 'repair_date']
 const AGE_DATE_KEYS = [
@@ -421,6 +434,9 @@ const AGE_DATE_KEYS = [
 function toNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   const str = String(value ?? '')
+    .replace(/rs\.?/gi, '')
+    .replace(/inr/gi, '')
+    .replace(/₹/g, '')
     .replace(/,/g, '')
     .replace(/[^0-9.-]/g, '')
     .trim()
@@ -450,11 +466,16 @@ function extractByPreferredKeys(row: Record<string, unknown>, keys: string[]): s
 function sumByKeys(row: Record<string, unknown>, keys: string[]): number {
   let total = 0
   for (const [key, value] of Object.entries(row)) {
-    if (keys.some((needle) => key.includes(needle))) {
+    const normalizedKey = key.toLowerCase()
+    if (keys.some((needle) => normalizedKey.includes(needle.toLowerCase()))) {
       total += toNumber(value)
     }
   }
   return total
+}
+
+function extractNumericByPreferredKeys(row: Record<string, unknown>, keys: string[]): number {
+  return toNumber(extractByPreferredKeys(row, keys))
 }
 
 function extractStatusValue(row: Record<string, unknown>): string {
@@ -715,7 +736,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           for (const { row, category, tableName } of tableResult.rows) {
             const source = row.source_row_data ?? {}
             const status = extractStatusValue(source)
-            const rejectionReason = extractByPreferredKeys(source, REJECTION_REASON_KEYS)
+            const claimCategory = extractByPreferredKeys(source, CLAIM_CATEGORY_KEYS)
+            const serviceType = extractByPreferredKeys(source, SERVICE_TYPE_KEYS)
+            const rejectionReason =
+              extractByPreferredKeys(source, ['vcm_comments']) ||
+              extractByPreferredKeys(source, ['rejection_reason']) ||
+              extractByPreferredKeys(source, ['reason_for_rejection'])
             const postingDocNo = extractByPreferredKeys(source, POSTING_DOC_KEYS)
             const dealerInvoiceNo = extractByPreferredKeys(source, DEALER_INVOICE_KEYS)
             const invoiceDateRaw = extractByPreferredKeys(source, INVOICE_DATE_KEYS)
@@ -725,8 +751,21 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             const specialAmount = sumByKeys(source, SPECIAL_AMOUNT_KEYS)
             const miscAmount = sumByKeys(source, MISC_AMOUNT_KEYS)
             const claimAmountFromKnown = sumByKeys(source, CLAIM_AMOUNT_KEYS)
-            const claimAmount =
-              claimAmountFromKnown > 0 ? claimAmountFromKnown : partsAmount + labourAmount + specialAmount + miscAmount
+            const totalAmount = extractNumericByPreferredKeys(source, ['total_amount'])
+            const claimedTotalAmount = extractNumericByPreferredKeys(source, ['claimed_total_amount'])
+            const settlementAmount =
+              extractNumericByPreferredKeys(source, ['list_price']) +
+              extractNumericByPreferredKeys(source, ['labour_chgs']) +
+              extractNumericByPreferredKeys(source, ['misc_chgs'])
+
+            let claimAmount = claimAmountFromKnown > 0 ? claimAmountFromKnown : partsAmount + labourAmount + specialAmount + miscAmount
+            if (category === 'Claim Settlement') {
+              claimAmount = settlementAmount
+            } else if (category === 'AMC') {
+              claimAmount = claimedTotalAmount > 0 ? claimedTotalAmount : claimAmount
+            } else if (category === 'Warranty Claim' || category === 'Updation') {
+              claimAmount = totalAmount > 0 ? totalAmount : claimAmount
+            }
 
             // Calculate age strictly from source-sheet business dates; do not use import timestamp fallback.
             const parsedAgeSourceDate = extractFirstParsableDateByPreferredKeys(source, AGE_DATE_KEYS)
@@ -744,6 +783,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               portal: row.portal ?? (row.branch.endsWith('EV') ? 'EV' : 'PV'),
               fileName: row.source_file_name ?? '',
               status,
+              claimCategory,
+              serviceType,
               rejectionReason,
               claimAmount,
               partsAmount,
@@ -845,38 +886,64 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const overviewKpis = useMemo(() => {
-    const claimed = filteredRecords.reduce((sum, record) => sum + record.claimAmount, 0)
-    const pendingRows = filteredRecords.filter((record) => String(record.postingDocNo || '').trim() === '')
-    const pendingValue = pendingRows.reduce((sum, record) => sum + record.claimAmount, 0)
-    const paymentPending = workflowStatusRecords
-      .filter((record) => {
-        const bucket = normalizeStatusBucket(record)
-        return bucket === 'approved' || bucket === 'submitted' || bucket === 'awaiting_sop'
-      })
-      .reduce((sum, record) => sum + record.claimAmount, 0)
-    const settlement = Math.max(claimed - pendingValue, 0)
-    const revenue20 = filteredRecords.reduce((sum, record) => sum + Math.max(record.partsAmount, 0) * 0.2, 0)
-    const combined = settlement + revenue20
+    // Reference HTML — Report 1: Portfolio KPIs (exact business logic from warranty-overview-report.html)
 
-    const uniqueJcs = new Set(filteredRecords.map((record) => record.jobCardNumber).filter(Boolean)).size
-    const pendingJcs = new Set(pendingRows.map((record) => record.jobCardNumber).filter(Boolean)).size
+    // KPI 1: WC Settled — warranty_wc_data where claim_status = 'Settled'
+    const wcSettledRows = filteredRecords.filter(
+      (r) => r.category === 'Warranty Claim' && normalizeStatusBucket(r) === 'settled'
+    )
+    const wcSettled = wcSettledRows.reduce((sum, r) => sum + r.claimAmount, 0)
+    const wcSettledCount = wcSettledRows.length
+
+    // KPI 2: WC Claimed — all warranty_wc_data rows (blank amounts treated as 0)
+    const wcClaimedRows = filteredRecords.filter((r) => r.category === 'Warranty Claim')
+    const wcClaimed = wcClaimedRows.reduce((sum, r) => sum + r.claimAmount, 0)
+    const wcClaimedCount = wcClaimedRows.length
+
+    // KPI 3: SAP Pending — warranty_claim_settlement_report_data where posting_document_number = ''
+    const sapPendingRows = filteredRecords.filter(
+      (r) => r.category === 'Claim Settlement' && String(r.postingDocNo || '').trim() === ''
+    )
+    const sapPending = sapPendingRows.reduce((sum, r) => sum + r.claimAmount, 0)
+    const sapPendingCount = sapPendingRows.length
+
+    // KPI 4: AMC Blocked — warranty_amc_data where dealer_invoice_no = '' (dealer has not raised invoice)
+    const amcBlockedRows = filteredRecords.filter(
+      (r) => r.category === 'AMC' && String(r.dealerInvoiceNo || '').trim() === ''
+    )
+    const amcBlocked = amcBlockedRows.reduce((sum, r) => sum + r.claimAmount, 0)
+    const amcBlockedCount = amcBlockedRows.length
+
+    // KPI 5: Updation Settled — warranty_updation_claim_data where claim_status = 'Settled'
+    const updationSettledRows = filteredRecords.filter(
+      (r) => r.category === 'Updation' && normalizeStatusBucket(r) === 'settled'
+    )
+    const updationSettled = updationSettledRows.reduce((sum, r) => sum + r.claimAmount, 0)
+    const updationSettledCount = updationSettledRows.length
+
+    // KPI 6: Combined Claimed — WC + Updation + AMC claimed (FSB/Goodwill amounts not in source_row_data)
+    const amcClaimedAll = filteredRecords.filter((r) => r.category === 'AMC').reduce((sum, r) => sum + r.claimAmount, 0)
+    const combined = wcClaimed + updationSettled + amcClaimedAll
 
     return {
       kpis: [
-        { icon: 'shield', label: 'Settlement portfolio', value: formatAmountShort(settlement), sub: `${uniqueJcs.toLocaleString('en-IN')} unique JCs`, tone: 'var(--accent)' },
-        { icon: 'reports', label: 'Claimed (all cats)', value: formatAmountShort(claimed), sub: 'from warranty source tables', tone: '#4F46E5' },
-        { icon: 'clock', label: 'Pending value', value: formatAmountShort(pendingValue), sub: `${pendingJcs.toLocaleString('en-IN')} JCs unposted`, tone: 'var(--warn)' },
-        { icon: 'alert', label: 'Payment pending', value: formatAmountShort(paymentPending), sub: 'submitted/approved pipeline', tone: 'var(--danger)' },
-        { icon: 'reports', label: '20% parts revenue', value: formatAmountShort(revenue20), sub: 'computed from parts value', tone: 'var(--success)' },
-        { icon: 'doc', label: 'Settlement + revenue', value: formatAmountShort(combined), sub: 'combined opportunity', tone: '#534AB7' },
+        { icon: 'shield', label: 'WC amount settled by TM', value: formatAmountLakh(wcSettled), sub: `${wcSettledCount.toLocaleString('en-IN')} settled WC rows`, tone: 'var(--success)' },
+        { icon: 'reports', label: 'Total WC claimed', value: formatAmountLakh(wcClaimed), sub: `${wcClaimedCount.toLocaleString('en-IN')} WC rows`, tone: '#4F46E5' },
+        { icon: 'clock', label: 'Settlement register pending', value: formatAmountLakh(sapPending), sub: `${sapPendingCount.toLocaleString('en-IN')} lines without posting doc`, tone: 'var(--warn)' },
+        { icon: 'alert', label: 'AMC pre-invoice blocked', value: formatAmountLakh(amcBlocked), sub: `${amcBlockedCount.toLocaleString('en-IN')} AMC claims (no dealer invoice)`, tone: 'var(--danger)' },
+        { icon: 'reports', label: 'Updation claims settled', value: formatAmountLakh(updationSettled), sub: `${updationSettledCount.toLocaleString('en-IN')} settled Updation rows`, tone: '#a855f7' },
+        { icon: 'doc', label: 'Grand total claimed', value: formatAmountLakh(combined), sub: 'WC + Updation + AMC combined', tone: '#6366f1' },
       ],
       totals: {
-        claimed,
-        pendingValue,
-        paymentPending,
+        wcSettled,
+        wcClaimed,
+        sapPending,
+        amcBlocked,
+        updationSettled,
+        combined,
       },
     }
-  }, [filteredRecords, workflowStatusRecords])
+  }, [filteredRecords])
 
   const pipelineData = useMemo(() => {
     const warrantyRows = workflowStatusRecords.filter((record) => record.category === 'Warranty Claim')
@@ -884,80 +951,194 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       created: 0,
       submitted: 0,
       awaiting_sop: 0,
-      approved: 0,
+      under_change: 0,
       settled: 0,
       rejected: 0,
     }
 
     for (const row of warrantyRows) {
-      const bucket = normalizeStatusBucket(row)
-      buckets[bucket] += 1
+      const status = normalizeText(row.status)
+      if (status === 'created') buckets.created += 1
+      else if (status === 'submitted') buckets.submitted += 1
+      else if (status === 'awaiting sop approval') buckets.awaiting_sop += 1
+      else if (status === 'under change') buckets.under_change += 1
+      else if (status === 'settled') buckets.settled += 1
+      else if (status === 'rejected') buckets.rejected += 1
     }
 
     return [
       { stage: 'Created', count: buckets.created, tone: 'var(--muted)' },
       { stage: 'Submitted', count: buckets.submitted, tone: 'var(--accent)' },
       { stage: 'Awaiting SOP', count: buckets.awaiting_sop, tone: 'var(--warn)' },
-      { stage: 'Approved', count: buckets.approved, tone: '#4F46E5' },
+      { stage: 'Under Change', count: buckets.under_change, tone: '#4F46E5' },
       { stage: 'Settled', count: buckets.settled, tone: 'var(--success)' },
       { stage: 'Rejected', count: buckets.rejected, tone: 'var(--danger)' },
     ]
   }, [workflowStatusRecords])
 
-  const paymentStatusRows = useMemo(() => {
-    const grouped = new Map<string, { settled: number; approved: number; submitted: number; rejected: number; created: number; total: number; claimed: number; settledValue: number }>()
+  const pipelineBreakdownRows = useMemo(() => {
+    const warrantyRows = workflowStatusRecords.filter((record) => record.category === 'Warranty Claim')
+    const total = warrantyRows.length
 
-    for (const row of filteredRecords) {
-      const current = grouped.get(row.category) ?? {
-        settled: 0,
-        approved: 0,
-        submitted: 0,
-        rejected: 0,
-        created: 0,
-        total: 0,
-        claimed: 0,
-        settledValue: 0,
-      }
-
-      if (isWorkflowAlertEligible(row)) {
-        const bucket = normalizeStatusBucket(row)
-        if (bucket === 'settled') current.settled += 1
-        else if (bucket === 'approved') current.approved += 1
-        else if (bucket === 'submitted' || bucket === 'awaiting_sop') current.submitted += 1
-        else if (bucket === 'rejected') current.rejected += 1
-        else current.created += 1
-      }
-      current.total += 1
-      current.claimed += row.claimAmount
-      const bucket = normalizeStatusBucket(row)
-      if (String(row.postingDocNo || '').trim() !== '' || bucket === 'settled') {
-        current.settledValue += row.claimAmount
-      }
-
-      grouped.set(row.category, current)
+    const statusCounts = new Map<string, number>()
+    for (const row of warrantyRows) {
+      const status = normalizeText(row.status)
+      statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1)
     }
 
+    const countOf = (statuses: string[]) => statuses.reduce((sum, status) => sum + (statusCounts.get(status) ?? 0), 0)
+    const pct = (count: number) => (total > 0 ? Number(((count / total) * 100).toFixed(1)) : 0)
+
+    const approvedByL1L2 = filteredRecords.filter((record) => {
+      const status = normalizeText(record.status)
+      return status === 'approved by l1' || status === 'approved by l2'
+    }).length
+
+    const rows = [
+      { status: 'Settled', count: countOf(['settled']), meaning: 'TM has paid / confirmed settlement' },
+      { status: 'Awaiting SOP Approval', count: countOf(['awaiting sop approval']), meaning: 'SOP not yet approved by TM — blocks settlement' },
+      { status: 'Submitted', count: countOf(['submitted']), meaning: 'Dealer submitted to TM, under review' },
+      { status: 'Rejected', count: countOf(['rejected']), meaning: 'TM rejected — see rejection analysis below' },
+      { status: 'Under Change', count: countOf(['under change']), meaning: 'Claim under modification by dealer' },
+      { status: 'Created', count: countOf(['created']), meaning: 'Draft — not yet submitted to TM' },
+      { status: 'Cancelled', count: countOf(['cancelled']), meaning: 'Voluntarily cancelled by dealer' },
+      { status: 'Accepted (WC)', count: countOf(['accepted']), meaning: 'TM accepted; awaiting SAP posting' },
+      { status: 'Sent to TM', count: countOf(['sent to tm']), meaning: 'In transit to TM queue' },
+      { status: 'Approved By L1/L2', count: approvedByL1L2, meaning: 'Internal approvals done (WC + AMC combined)' },
+    ].map((row) => ({ ...row, pct: pct(row.count) }))
+
+    return {
+      rows,
+      total,
+    }
+  }, [filteredRecords, workflowStatusRecords])
+
+  const paymentStatusRows = useMemo(() => {
+    const rowsByCategory = new Map<string, WarrantyRecord[]>()
+    for (const row of filteredRecords) {
+      const current = rowsByCategory.get(row.category) ?? []
+      current.push(row)
+      rowsByCategory.set(row.category, current)
+    }
+
+    const countStatuses = (statusMap: Map<string, number>, keys: string[]) =>
+      keys.reduce((sum, key) => sum + (statusMap.get(key) ?? 0), 0)
+
     return SOURCE_TABLES.map((source) => {
-      const row = grouped.get(source.category) ?? {
-        settled: 0,
-        approved: 0,
-        submitted: 0,
-        rejected: 0,
-        created: 0,
-        total: 0,
-        claimed: 0,
-        settledValue: 0,
+      const rows = rowsByCategory.get(source.category) ?? []
+      const total = rows.length
+
+      const statusMap = new Map<string, number>()
+      for (const row of rows) {
+        const status = normalizeText(row.status)
+        statusMap.set(status, (statusMap.get(status) ?? 0) + 1)
       }
+
+      const created = countStatuses(statusMap, ['created'])
+      const rejected = countStatuses(statusMap, ['rejected', 'cancelled'])
+      const settled = countStatuses(statusMap, ['settled'])
+      const accepted = countStatuses(statusMap, ['accepted'])
+
+      const inProgressParts: Array<{ label: string; count: number; tone: string }> = []
+
+      if (source.category === 'Warranty Claim') {
+        const sop = countStatuses(statusMap, ['awaiting sop approval'])
+        const submitted = countStatuses(statusMap, ['submitted'])
+        const underChange = countStatuses(statusMap, ['under change'])
+        if (sop > 0) inProgressParts.push({ label: 'SOP', count: sop, tone: 'var(--warn)' })
+        if (submitted > 0) inProgressParts.push({ label: 'subm', count: submitted, tone: 'var(--accent)' })
+        if (underChange > 0) inProgressParts.push({ label: 'UC', count: underChange, tone: '#8B5CF6' })
+        if (created > 0) inProgressParts.push({ label: 'created', count: created, tone: 'var(--muted)' })
+      } else if (source.category === 'FSB') {
+        if (created > 0) inProgressParts.push({ label: 'created', count: created, tone: 'var(--muted)' })
+      } else if (source.category === 'Updation') {
+        const underChange = countStatuses(statusMap, ['under change'])
+        const submitted = countStatuses(statusMap, ['submitted'])
+        if (created > 0) inProgressParts.push({ label: 'created', count: created, tone: 'var(--muted)' })
+        if (underChange > 0) inProgressParts.push({ label: 'UC', count: underChange, tone: '#8B5CF6' })
+        if (submitted > 0) inProgressParts.push({ label: 'subm', count: submitted, tone: 'var(--accent)' })
+      } else if (source.category === 'AMC') {
+        const l2 = countStatuses(statusMap, ['approved by l2'])
+        const sentToTm = countStatuses(statusMap, ['sent to tm'])
+        const l1 = countStatuses(statusMap, ['approved by l1'])
+        const notValidated = countStatuses(statusMap, ['not validated'])
+        if (l2 > 0) inProgressParts.push({ label: 'L2', count: l2, tone: 'var(--accent)' })
+        if (sentToTm > 0) inProgressParts.push({ label: 'TM', count: sentToTm, tone: 'var(--warn)' })
+        if (l1 > 0) inProgressParts.push({ label: 'L1', count: l1, tone: 'var(--muted)' })
+        if (created > 0) inProgressParts.push({ label: 'created', count: created, tone: 'var(--muted)' })
+        if (notValidated > 0) inProgressParts.push({ label: 'NV', count: notValidated, tone: 'var(--danger)' })
+      } else if (source.category === 'Goodwill') {
+        if (created > 0) inProgressParts.push({ label: 'created', count: created, tone: 'var(--muted)' })
+      } else if (source.category === 'Part WC') {
+        const sop = countStatuses(statusMap, ['awaiting sop approval'])
+        const underChange = countStatuses(statusMap, ['under change'])
+        const submitted = countStatuses(statusMap, ['submitted'])
+        if (sop > 0) inProgressParts.push({ label: 'SOP', count: sop, tone: 'var(--warn)' })
+        if (underChange > 0) inProgressParts.push({ label: 'UC', count: underChange, tone: '#8B5CF6' })
+        if (submitted > 0) inProgressParts.push({ label: 'subm', count: submitted, tone: 'var(--accent)' })
+      }
+
+      let settledAccepted = 0
+      let settledText = 'settled'
+      let settledSecondary: string | null = null
+      let inProgress = inProgressParts.reduce((sum, part) => sum + part.count, 0)
+      let rejectedDisplay = rejected
+      let createdDisplay = created
+      let showRejectedDash = false
+      let showCreatedDash = false
+      let pendingForTotals = inProgress
+
+      if (source.category === 'Claim Settlement') {
+        const sapPosted = rows.filter((row) => String(row.postingDocNo || '').trim() !== '').length
+        settledAccepted = sapPosted
+        settledText = 'SAP posted'
+        inProgress = 0
+        pendingForTotals = 0
+        rejectedDisplay = 0
+        createdDisplay = 0
+        showRejectedDash = true
+        showCreatedDash = true
+      } else if (source.category === 'FSB') {
+        settledAccepted = accepted + settled
+        settledText = 'accepted'
+      } else if (source.category === 'Goodwill') {
+        settledAccepted = accepted + settled
+        settledText = accepted > 0 ? 'accepted' : 'settled'
+        settledSecondary = accepted > 0 && settled > 0 ? `${settled.toLocaleString('en-IN')} settled` : null
+      } else {
+        settledAccepted = settled
+      }
+
+      if (source.category === 'AMC' && rejectedDisplay === 0) {
+        showRejectedDash = true
+      }
+      if (source.category === 'Part WC' && createdDisplay === 0) {
+        showCreatedDash = true
+      }
+
+      const terminalPct = total > 0 ? Number(((settledAccepted / total) * 100).toFixed(1)) : 0
+      const displayCategory =
+        source.category === 'Warranty Claim'
+          ? 'WC'
+          : source.category === 'Claim Settlement'
+            ? 'Settlement Register'
+            : source.category
+
       return {
         cat: source.category,
-        settled: row.settled,
-        approved: row.approved,
-        submitted: row.submitted,
-        rejected: row.rejected,
-        created: row.created,
-        total: row.total,
-        claimed: formatAmountShort(row.claimed),
-        settledV: formatAmountShort(row.settledValue),
+        displayCategory,
+        settledAccepted,
+        settledText,
+        settledSecondary,
+        inProgress,
+        inProgressParts,
+        rejected: rejectedDisplay,
+        created: createdDisplay,
+        showRejectedDash,
+        showCreatedDash,
+        total,
+        terminalPct,
+        pendingForTotals,
       }
     })
   }, [filteredRecords])
@@ -965,42 +1146,76 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   const paymentTotals = useMemo(() => {
     const totals = paymentStatusRows.reduce(
       (acc, row) => {
-        acc.approved += row.approved
-        acc.submitted += row.submitted
+        acc.settledAccepted += row.settledAccepted
+        acc.inProgress += row.pendingForTotals
         acc.rejected += row.rejected
         acc.created += row.created
+        acc.total += row.total
         return acc
       },
-      { approved: 0, submitted: 0, rejected: 0, created: 0 },
+      { settledAccepted: 0, inProgress: 0, rejected: 0, created: 0, total: 0 },
     )
 
     return {
       ...totals,
-      claimed: formatAmountShort(overviewKpis.totals.claimed),
-      pending: formatAmountShort(overviewKpis.totals.paymentPending),
+      terminalPct: totals.total > 0 ? Number(((totals.settledAccepted / totals.total) * 100).toFixed(1)) : 0,
     }
-  }, [overviewKpis.totals, paymentStatusRows])
+  }, [paymentStatusRows])
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>()
+    const fsbCounts = new Map<string, number>() // stype -> count
+    
     for (const row of filteredRecords) {
-      counts.set(row.category, (counts.get(row.category) ?? 0) + 1)
+      if (row.category === 'FSB') {
+        // Decompose FSB by service type
+        const stype = row.serviceType || 'unknown'
+        fsbCounts.set(stype, (fsbCounts.get(stype) ?? 0) + 1)
+      } else {
+        counts.set(row.category, (counts.get(row.category) ?? 0) + 1)
+      }
     }
 
-    return SOURCE_TABLES.map((source) => {
-      const count = counts.get(source.category) ?? 0
-      return {
-        label: source.category,
-        count,
-        claim: source.category === 'Warranty Claim' || source.category === 'Claim Settlement',
+    const result: Array<{ label: string; count: number; claim: boolean }> = []
+    
+    // Add non-FSB categories
+    for (const source of SOURCE_TABLES) {
+      if (source.category !== 'FSB') {
+        const count = counts.get(source.category) ?? 0
+        result.push({
+          label: source.category,
+          count,
+          claim: source.category === 'Warranty Claim' || source.category === 'Claim Settlement',
+        })
       }
-    })
+    }
+
+    // Add FSB with service type decomposition in order: 4, 1, 2, 3
+    const stypeOrder = ['4', '1', '2', '3']
+    for (const stype of stypeOrder) {
+      const count = fsbCounts.get(stype) ?? 0
+      if (count > 0) {
+        const labels: Record<string, string> = {
+          '1': 'FSB — 1st Free Service',
+          '2': 'FSB — 2nd Free Service',
+          '3': 'FSB — 3rd Free Service',
+          '4': 'FSB — 4th Free Service',
+        }
+        result.push({
+          label: labels[stype] || `FSB (stype=${stype})`,
+          count,
+          claim: true,
+        })
+      }
+    }
+
+    return result
   }, [filteredRecords])
 
   const computedClaimTypeRows = useMemo(() => {
     const warrantyRows = filteredRecords.filter((record) => record.category === 'Warranty Claim')
-    const normalWcRows = warrantyRows.filter((record) => !normalizeText(record.model).includes('ev'))
-    const extWcRows = warrantyRows.filter((record) => normalizeText(record.model).includes('ev'))
+    const normalWcRows = warrantyRows.filter((record) => normalizeText(record.claimCategory) === 'normal warranty')
+    const extWcRows = warrantyRows.filter((record) => normalizeText(record.claimCategory) === 'extended warranty')
 
     const buildRow = (label: string, rows: WarrantyRecord[], revenueMode: 'parts20' | 'none' | 'oem' | 'na' = 'none') => {
       const total = rows.length
@@ -1034,17 +1249,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       buildRow('AMC', filteredRecords.filter((record) => record.category === 'AMC')),
       buildRow('Goodwill', filteredRecords.filter((record) => record.category === 'Goodwill'), 'oem'),
       buildRow('PDI', [], 'na'),
-      buildRow('1st FSB', [], 'na'),
-      buildRow('2nd FSB', [], 'na'),
-      buildRow('3rd FSB', [], 'na'),
+      buildRow('FSB — 4th Free Service', filteredRecords.filter((record) => record.category === 'FSB' && record.serviceType === '4'), 'na'),
+      buildRow('FSB — 1st Free Service', filteredRecords.filter((record) => record.category === 'FSB' && record.serviceType === '1'), 'na'),
+      buildRow('FSB — 2nd Free Service', filteredRecords.filter((record) => record.category === 'FSB' && record.serviceType === '2'), 'na'),
+      buildRow('FSB — 3rd Free Service', filteredRecords.filter((record) => record.category === 'FSB' && record.serviceType === '3'), 'na'),
     ]
   }, [filteredRecords])
 
   const computedRejectionRows = useMemo(() => {
-    const rejectedRows = workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'rejected')
+    const rejectedRows = workflowStatusRecords.filter((record) => normalizeText(record.status) === 'rejected')
     const grouped = new Map<string, number>()
     for (const row of rejectedRows) {
-      const reason = String(row.rejectionReason || '').trim() || '(blank reason)'
+      const reason = String(row.rejectionReason || '').trim() || '(blank)'
       grouped.set(reason, (grouped.get(reason) ?? 0) + 1)
     }
 
@@ -1061,84 +1277,33 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     }))
   }, [workflowStatusRecords])
 
-  const computedTatRows = useMemo(() => {
-    const stageBuckets = {
-      created: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'created'),
-      submitted: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'submitted'),
-      awaiting_sop: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'awaiting_sop'),
-      approved: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'approved'),
-      settled: workflowStatusRecords.filter((record) => normalizeStatusBucket(record) === 'settled'),
-    }
-
-    const totalRows = Math.max(1, workflowStatusRecords.length)
-    const avgAge = (rows: WarrantyRecord[]) => {
-      if (rows.length === 0) return 0
-      return Number((rows.reduce((sum, row) => sum + row.ageDays, 0) / rows.length).toFixed(1))
-    }
-    const stageLoad = (rows: WarrantyRecord[]) => Math.round((rows.length / totalRows) * 100)
-    const health = (days: number) => {
-      if (days <= 2) return { flag: 'Good', tone: 'var(--success)' }
-      if (days <= 5) return { flag: 'Watch', tone: 'var(--warn)' }
-      return { flag: 'High', tone: 'var(--danger)' }
-    }
-
-    const initialToSubmit = stageBuckets.created.concat(stageBuckets.submitted)
-    const submitToReview = stageBuckets.submitted
-    const reviewToApprove = stageBuckets.awaiting_sop
-    const approveToSettle = stageBuckets.approved
-    const settledRows = stageBuckets.settled
-
-    const rows = [
-      { stage: 'Initial → Submit', rows: initialToSubmit },
-      { stage: 'Submit → Review', rows: submitToReview },
-      { stage: 'Review → Approve', rows: reviewToApprove },
-      { stage: 'Approve → Settle', rows: approveToSettle },
-      { stage: 'End-to-end', rows: settledRows.length > 0 ? settledRows : workflowStatusRecords },
-    ]
-
-    return rows.map((entry) => {
-      const days = avgAge(entry.rows)
-      const { flag, tone } = health(days)
-      return {
-        stage: entry.stage,
-        days,
-        pct: entry.stage === 'End-to-end' ? 100 : stageLoad(entry.rows),
-        flag,
-        tone,
-      }
-    })
+  const totalRejectedRows = useMemo(() => {
+    return workflowStatusRecords.filter((record) => normalizeText(record.status) === 'rejected').length
   }, [workflowStatusRecords])
 
-  const computedTypeMix = useMemo(() => {
-    const groups = [
-      {
-        type: 'Warranty',
-        n: filteredRecords.filter((record) => record.category === 'Warranty Claim' || record.category === 'Claim Settlement' || record.category === 'Part WC').length,
-        tone: 'var(--success)',
-      },
-      {
-        type: 'FSB',
-        n: filteredRecords.filter((record) => record.category === 'FSB').length,
-        tone: 'var(--accent)',
-      },
-      {
-        type: 'Updation',
-        n: filteredRecords.filter((record) => record.category === 'Updation').length,
-        tone: '#534AB7',
-      },
-      {
-        type: 'AMC',
-        n: filteredRecords.filter((record) => record.category === 'AMC').length,
-        tone: 'var(--warn)',
-      },
-      {
-        type: 'Goodwill',
-        n: filteredRecords.filter((record) => record.category === 'Goodwill').length,
-        tone: 'var(--muted)',
-      },
-    ]
+  const computedModelRows = useMemo(() => {
+    const settledWcRows = filteredRecords.filter(
+      (record) => record.category === 'Warranty Claim' && normalizeText(record.status) === 'settled',
+    )
 
-    return groups
+    const grouped = new Map<string, { count: number; amount: number }>()
+    for (const row of settledWcRows) {
+      const model = row.model || '(blank)'
+      const current = grouped.get(model) ?? { count: 0, amount: 0 }
+      current.count += 1
+      current.amount += row.claimAmount
+      grouped.set(model, current)
+    }
+
+    return Array.from(grouped.entries())
+      .map(([model, values]) => ({
+        model,
+        count: values.count,
+        amount: values.amount,
+        avg: values.count > 0 ? values.amount / values.count : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 10)
   }, [filteredRecords])
 
   const computedAlerts = useMemo(() => {
@@ -1426,10 +1591,10 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   const computedFinancialKpis = useMemo(() => {
     const workflowFinancialRows = filteredRecords.filter(isWorkflowAlertEligible)
     const normalWc = filteredRecords.filter((record) => {
-      return record.category === 'Warranty Claim' && !record.model?.toLowerCase().includes('ev')
+      return record.category === 'Warranty Claim' && !(record.model ?? '').toLowerCase().includes('ev')
     })
     const extendedWc = filteredRecords.filter((record) => {
-      return record.category === 'Warranty Claim' && record.model?.toLowerCase().includes('ev')
+      return record.category === 'Warranty Claim' && (record.model ?? '').toLowerCase().includes('ev')
     })
 
     const normalRev = normalWc.reduce((sum, r) => sum + r.partsAmount * 0.2, 0)
@@ -1640,30 +1805,150 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             ))}
           </div>
 
-          <Card title="Claim pipeline" sub="Created → Submitted → Awaiting SOP → Approved → Settled · Rejected separate · loaded WC sample">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              {pipelineData.map((item, i) => (
-                <div key={item.stage} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      minWidth: 140,
-                      border: '1px solid var(--border)',
-                      borderBottom: `3px solid ${item.tone}`,
-                      borderRadius: 'var(--r-sm)',
-                      padding: '10px 12px',
-                      background: item.stage === 'Rejected' ? 'var(--danger-bg)' : 'var(--panel)',
-                    }}
-                  >
-                    <div style={{ fontSize: 36, lineHeight: 1, fontWeight: 700, color: item.tone }}>{item.count}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>{item.stage}</div>
-                  </div>
-                  {i < pipelineData.length - 1 && (
-                    <span style={{ color: 'var(--faint)', fontWeight: 700 }}>
-                      →
-                    </span>
-                  )}
-                </div>
-              ))}
+          <Card title="Claim pipeline" sub="Created → Submitted → Awaiting SOP → Under Change → Settled · Rejected separate · warranty_wc_data">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 'var(--gap)' }}>
+              {(() => {
+                const baseOrder = ['Created', 'Submitted', 'Awaiting SOP Approval', 'Approved By L1/L2', 'Accepted (WC)', 'Sent to TM', 'Under Change', 'Settled', 'Rejected', 'Cancelled']
+                const sortedRows = pipelineBreakdownRows.rows.sort((a, b) => baseOrder.indexOf(a.status) - baseOrder.indexOf(b.status))
+                return sortedRows.map((row, idx) => {
+                  const statusTones: Record<string, string> = {
+                    'Created': 'var(--muted)',
+                    'Submitted': '#4F46E5',
+                    'Awaiting SOP Approval': '#D97706',
+                    'Approved By L1/L2': 'var(--accent)',
+                    'Accepted (WC)': 'var(--success)',
+                    'Sent to TM': '#6366F1',
+                    'Under Change': '#8B5CF6',
+                    'Settled': '#10B981',
+                    'Rejected': 'var(--danger)',
+                    'Cancelled': 'var(--faint)',
+                  }
+                  return (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          minWidth: 140,
+                          border: '1px solid var(--border)',
+                          borderBottom: `3px solid ${statusTones[row.status] || 'var(--faint)'}`,
+                          borderRadius: 'var(--r-sm)',
+                          padding: '10px 12px',
+                          background: 'var(--panel)',
+                          position: 'relative',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                          <div style={{ fontSize: 36, lineHeight: 1, fontWeight: 700, color: statusTones[row.status] || 'var(--faint)' }}>{row.count.toLocaleString('en-IN')}</div>
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <div style={{ position: 'relative', display: 'inline-block', group: 'tooltip' }}>
+                              <button
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: 4,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: 'var(--muted)',
+                                }}
+                                title="Show description"
+                              >
+                                <Icon name="sparkles" size={14} />
+                              </button>
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  right: 0,
+                                  background: 'var(--panel)',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: 'var(--r-sm)',
+                                  padding: '8px 10px',
+                                  fontSize: 10,
+                                  color: 'var(--ink-2)',
+                                  whiteSpace: 'nowrap',
+                                  zIndex: 100,
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                  marginTop: 4,
+                                  pointerEvents: 'none',
+                                  opacity: 0,
+                                  transition: 'opacity 0.2s ease',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.opacity = '1'
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.opacity = '0'
+                                }}
+                              >
+                                {row.meaning}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{row.status}</div>
+                        <button
+                          onClick={() => {
+                            const recordsToExport = workflowStatusRecords.filter(
+                              (r) =>
+                                r.category === 'Warranty Claim' &&
+                                normalizeText(r.status).replace(/\s+/g, ' ') === row.status.toLowerCase().replace(/\s+/g, ' '),
+                            )
+                            if (recordsToExport.length > 0) {
+                              const csv = [
+                                ['Job Card', 'Model', 'Status', 'Amount', 'Age Days', 'Portal', 'Location'].join(','),
+                                ...recordsToExport.map((r) =>
+                                  [
+                                    r.jobCardNumber || '',
+                                    r.model || '',
+                                    r.status || '',
+                                    String(r.claimAmount),
+                                    String(r.ageDays),
+                                    r.portal || '',
+                                    r.location || '',
+                                  ].join(','),
+                                ),
+                              ].join('\n')
+                              const blob = new Blob([csv], { type: 'text/csv' })
+                              const url = URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url
+                              a.download = `warranty-${row.status.replace(/\s+/g, '-').toLowerCase()}.csv`
+                              document.body.appendChild(a)
+                              a.click()
+                              document.body.removeChild(a)
+                              URL.revokeObjectURL(url)
+                            }
+                          }}
+                          style={{
+                            position: 'absolute',
+                            bottom: 8,
+                            right: 8,
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: 4,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--muted)',
+                          }}
+                          title="Export records"
+                        >
+                          <Icon name="download" size={16} />
+                        </button>
+                      </div>
+                      {idx < sortedRows.length - 1 && (
+                        <span style={{ color: 'var(--faint)', fontWeight: 700, fontSize: 18 }}>
+                          →
+                        </span>
+                      )}
+                    </div>
+                  )
+                })
+              })()}
             </div>
           </Card>
 
@@ -1673,52 +1958,58 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 <thead>
                   <tr>
                     <th>Category</th>
-                    <th className="ctr">Settled</th>
-                    <th className="ctr">Approved</th>
-                    <th className="ctr">Submitted/SOP</th>
+                    <th className="ctr">Settled/Accepted</th>
+                    <th className="ctr">In Progress</th>
                     <th className="ctr">Rejected</th>
                     <th className="ctr">Created</th>
-                    <th className="ctr">Total</th>
-                    <th style={{ textAlign: 'right' }}>Claimed</th>
-                    <th style={{ textAlign: 'right' }}>Settled ₹</th>
+                    <th className="ctr">Total Rows</th>
+                    <th className="ctr">Terminal %</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paymentStatusRows.map((r, i) => (
                     <tr key={i}>
-                      <td className="strong">{r.cat}</td>
+                      <td className="strong">{r.displayCategory}</td>
                       <td className="ctr" style={{ color: 'var(--success)', fontWeight: 600 }}>
-                        {r.settled ?? '—'}
-                      </td>
-                      <td className="ctr" style={{ color: 'var(--accent)' }}>
-                        {r.approved ?? '—'}
+                        {r.settledAccepted.toLocaleString('en-IN')} {r.settledText}
+                        {r.settledSecondary && (
+                          <span style={{ color: 'var(--success)', marginLeft: 4 }}>· {r.settledSecondary}</span>
+                        )}
                       </td>
                       <td className="ctr" style={{ color: 'var(--warn)' }}>
-                        {r.submitted ?? '—'}
+                        {r.inProgressParts.length === 0 ? (
+                          '—'
+                        ) : (
+                          <span>
+                            {r.inProgressParts.map((part, idx) => (
+                              <span key={`${part.label}-${idx}`}>
+                                {idx > 0 ? ' · ' : ''}
+                                <span style={{ color: part.tone }}>{part.count.toLocaleString('en-IN')}</span> {part.label}
+                              </span>
+                            ))}
+                          </span>
+                        )}
                       </td>
                       <td className="ctr" style={{ color: 'var(--danger)' }}>
-                        {r.rejected ?? '—'}
+                        {r.showRejectedDash ? '—' : r.rejected.toLocaleString('en-IN')}
                       </td>
                       <td className="ctr" style={{ color: 'var(--muted)' }}>
-                        {r.created ?? '—'}
+                        {r.showCreatedDash ? '—' : r.created.toLocaleString('en-IN')}
                       </td>
-                      <td className="ctr">{r.total}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--accent)' }}>{r.claimed}</td>
-                      <td style={{ textAlign: 'right', color: r.settledV.includes('blocked') ? 'var(--danger)' : 'var(--success)' }}>{r.settledV}</td>
+                      <td className="ctr">{r.total.toLocaleString('en-IN')}</td>
+                      <td className="ctr" style={{ color: r.terminalPct < 80 ? 'var(--warn)' : 'var(--success)' }}>{r.terminalPct}%</td>
                     </tr>
                   ))}
                   <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
-                    <td>GRAND TOTAL</td>
-                    <td className="ctr">—</td>
-                    <td className="ctr">{paymentTotals.approved}</td>
-                    <td className="ctr">{paymentTotals.submitted}</td>
+                    <td>GRAND TOTAL (all tables)</td>
+                    <td className="ctr" style={{ color: 'var(--success)' }}>{paymentTotals.settledAccepted.toLocaleString('en-IN')}</td>
+                    <td className="ctr" style={{ color: 'var(--warn)' }}>{paymentTotals.inProgress.toLocaleString('en-IN')} pending</td>
                     <td className="ctr" style={{ color: 'var(--danger)' }}>
-                      {paymentTotals.rejected}
+                      {paymentTotals.rejected.toLocaleString('en-IN')}
                     </td>
-                    <td className="ctr">{paymentTotals.created}</td>
-                    <td className="ctr">—</td>
-                    <td style={{ textAlign: 'right', color: 'var(--accent)' }}>{paymentTotals.claimed}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--danger)' }}>{paymentTotals.pending}</td>
+                    <td className="ctr">{paymentTotals.created.toLocaleString('en-IN')}</td>
+                    <td className="ctr">{paymentTotals.total.toLocaleString('en-IN')}</td>
+                    <td className="ctr" style={{ color: 'var(--success)' }}>{paymentTotals.terminalPct}%</td>
                   </tr>
                 </tbody>
               </table>
@@ -1742,7 +2033,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               ))}
             </Card>
 
-            <Card title="Claim-type performance" sub="settlement % · rejection % · 20% revenue (9 types)" pad={false}>
+            <Card title="Claim-type performance" sub="settlement % · rejection % · claim_category split (9 types)" pad={false}>
               <div className="tbl-wrap scroll">
                 <table className="tbl">
                   <thead>
@@ -1775,7 +2066,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           </div>
 
           <div className="grid-2" style={{ marginTop: 'var(--gap)' }}>
-            <Card title="Top rejection reasons" sub="real drivers · 194 rejections across categories">
+            <Card title="Top rejection reasons" sub={`real drivers · ${totalRejectedRows} rejections across categories`}>
                     {computedRejectionRows.length === 0 ? (
                       <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>No rejected rows in current scope.</div>
                     ) : (
@@ -1795,34 +2086,24 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                     )}
             </Card>
 
-            <Card title="Claim funnel TAT" sub="avg days per stage · Good / Watch / High" pad={false}>
+            <Card title="WC settled by vehicle model" sub="warranty_wc_data · claim_status=Settled · grouped by parent product line" pad={false}>
               <div className="tbl-wrap scroll">
                 <table className="tbl">
                   <thead>
                     <tr>
-                      <th>Stage</th>
-                      <th className="ctr">Days</th>
-                      <th>Load</th>
-                      <th className="ctr">Health</th>
+                      <th>Model</th>
+                      <th className="ctr">Settled JCs</th>
+                      <th style={{ textAlign: 'right' }}>Settled Amount</th>
+                      <th style={{ textAlign: 'right' }}>Avg per Claim</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {computedTatRows.map((t, i) => (
+                    {computedModelRows.map((t, i) => (
                       <tr key={i}>
-                        <td className="strong">{t.stage}</td>
-                        <td className="ctr" style={{ color: t.tone, fontWeight: 700 }}>
-                          {t.days}
-                        </td>
-                        <td style={{ minWidth: 110 }}>
-                          <div style={{ height: 6, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
-                            <span style={{ display: 'block', height: '100%', width: `${t.pct}%`, background: t.tone, borderRadius: 99 }} />
-                          </div>
-                        </td>
-                        <td className="ctr">
-                          <span className="badge badge--no" style={{ background: `color-mix(in srgb,${t.tone} 13%,#fff)`, color: t.tone }}>
-                            {t.flag}
-                          </span>
-                        </td>
+                        <td className="strong">{t.model}</td>
+                        <td className="ctr" style={{ color: 'var(--success)', fontWeight: 700 }}>{t.count.toLocaleString('en-IN')}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--success)', fontWeight: 700 }}>{formatAmountShort(t.amount)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{formatAmountShort(t.avg)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1830,17 +2111,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               </div>
             </Card>
           </div>
-
-          <Card title="Claim type mix" sub="claims by type — current monitoring window">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
-              {computedTypeMix.map((t, i) => (
-                <div key={i} style={{ textAlign: 'center', padding: '12px 6px', borderRadius: 'var(--r-sm)', background: `color-mix(in srgb,${t.tone} 10%, #fff)` }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: t.tone }}>{t.n}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{t.type}</div>
-                </div>
-              ))}
-            </div>
-          </Card>
         </div>
       )}
 

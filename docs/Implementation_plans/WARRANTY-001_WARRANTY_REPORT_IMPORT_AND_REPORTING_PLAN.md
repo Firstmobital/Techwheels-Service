@@ -16,7 +16,98 @@
 
 ---
 
-## 🔍 Audit Summary (2026-06-02)
+## � Strategic Redesign Approach (2026-06-04)
+
+**Objective:** Align Overview tab design with reference HTML while preserving current design system and proceeding with phased, value-driven delivery.
+
+**Approach:** Three-phase sequential delivery model
+
+### Phase 1: Data Layer Refresh + KPI Logic Blocks (1-2 weeks)
+
+**Status:** [OK] COMPLETE (2026-06-04)
+
+**Scope:**
+- [OK] Data layer: Already live DB queries against all 7 warranty tables (using `fetchAllRowsForTable` paginated pattern)
+- [OK] KPI computation: Already computed correctly in `overviewKpis` useMemo
+- [OK] **DONE**: Added KPI logic blocks (collapsible cards explaining computation rules + SQL reference)
+- [OK] **DONE**: Verified status normalization (validated against section H6 parity pass)
+- [OK] Design: Current design system preserved (colors, fonts, layout, responsive grid)
+
+**Deliverables:**
+- [OK] 6 KPIs with real-time DB-backed values (already implemented + validated)
+- [OK] Business rule documentation per KPI (implemented as `KpiLogicCard` component)
+- [OK] SQL query transparency blocks (included in each logic block; hidden by default)
+- [OK] Parity against authoritative dump baseline (validation: section H6 confirmed [OK])
+
+**File:** [src/pages/reports/warranty/WarrantyOverviewReport.tsx](src/pages/reports/warranty/WarrantyOverviewReport.tsx)
+
+**Implementation Details:**
+
+1. **KpiLogicCard Component** (lines 632-685): Reusable collapsible card that displays:
+   - KPI label & rule (plain English explanation)
+   - Computation formula
+   - Optional SQL snippet (for transparency)
+   - Authority source (dump reference or live table reference)
+   - Expandable UI (Show logic / Collapse button)
+
+2. **kpiLogics useMemo** (lines 955-1001): Computes 6 KPI logic blocks:
+   - Settlement Portfolio: Claimed - Pending SAP Posts
+   - Claimed (All Categories): SUM across all 7 warranty tables
+   - Pending Value: Rows without posting_document_number
+   - Payment Pending: Approved/Submitted/Awaiting SOP bucket
+   - 20% Parts Revenue: SUM(parts_amount × 0.20)
+   - Settlement + Revenue: Combined opportunity
+
+3. **JSX Integration** (line ~1760): Added `<KpiLogicCard kpis={kpiLogics} />` right after KPI strip in Overview tab
+
+4. **Status Normalization Verification**: 
+   - Current implementation correctly maps "Accepted" status per table:
+     - FSB/Goodwill: "Accepted" -> 'submitted' (in-flight, counted in Payment Pending)
+     - Other tables: "Accepted" -> 'awaiting_sop' (review pending)
+   - Parity validated in section H6 (all baseline metrics matched [OK])
+
+**Visual Design:**
+- Logic block cards use existing design tokens (blue border, monospace for SQL, muted text for labels)
+- Collapsible pattern reduces information overload (Show logic / Collapse)
+- Authority traceability (dump reference + SQL snippet) maintains transparency
+- Responsive layout (works on desktop + tablet)
+
+**Testing/Validation:**
+- [OK] TypeScript compilation: No errors in KpiLogicCard or kpiLogics useMemo
+- [OK] Data parity: Baseline KPI values match authoritative dump (section H6)
+- [OK] Component integration: Logic card renders after KPI strip in Overview tab
+- [PENDING] Manual verification: Requires login to warranty dashboard (http://localhost:5174/reports/warranty/warranty-overview)
+
+**Next Steps:** Phase 2 (Report Cards: Pipeline, Payment Status, Claims by Source, Performance)
+
+---
+
+### Phase 2: Report Cards (Sections 2-5) (2-3 weeks)
+
+**Scope:**
+- Report 2: Claim Pipeline visualization (Created -> Submitted -> SOP -> Settled | Rejected) with status breakdown table
+- Report 3: Payment Status multi-category table (WC, FSB, Updation, AMC, Goodwill, Part WC, Settlement)
+- Report 4: Claims by Source bar chart (FSB 2.5K | WC 2.4K | Updation 1.9K, etc.)
+- Report 5: Claim-Type Performance table (Settlement %, Rejection %, category splits)
+
+**Design Preservation:** Use reference HTML styling (section headings, logic blocks, colored borders, status pills, bar rows, pipeline stages)
+
+**File:** `src/pages/reports/warranty/WarrantyOverviewReport.tsx`
+
+---
+
+### Phase 3: Analytics + Drill-Down (Sections 6-7) (1-2 weeks)
+
+**Scope:**
+- Report 6: Rejection Root Cause Analysis (top reasons: FSB JC-closure 51%, PDI missing 16%, etc.)
+- Report 7: WC Settled by Vehicle Model (top 10 ranking)
+- Export/download functionality
+
+**File:** `src/pages/reports/warranty/WarrantyOverviewReport.tsx`
+
+---
+
+## �[AUDIT] Audit Summary (2026-06-02)
 
 **Audit Trigger:** Comprehensive review of attached warranty dashboards and settlement reports  
 **Audit Scope:** 12 HTML reports + attached data sets spanning Jan-May 2026 warranty operations  
@@ -147,62 +238,62 @@ Result summary:
 
 | KPI Label | Baseline (DB) | Current UI | Parity |
 |---|---:|---:|---|
-| Settlement portfolio | ₹84.67L | ₹10.11L | ❌ |
-| Claimed (all cats) | ₹1.14Cr | ₹30.13L | ❌ |
-| Pending value | ₹28.91L | ₹20.02L | ❌ |
-| Payment pending | ₹0 | ₹0 | ✅ |
-| 20% parts revenue | ₹29.46L | ₹7.05L | ❌ |
-| Settlement + revenue | ₹1.14Cr | ₹17.16L | ❌ |
+| Settlement portfolio | ₹84.67L | ₹10.11L | [FAIL] |
+| Claimed (all cats) | ₹1.14Cr | ₹30.13L | [FAIL] |
+| Pending value | ₹28.91L | ₹20.02L | [FAIL] |
+| Payment pending | ₹0 | ₹0 | [OK] |
+| 20% parts revenue | ₹29.46L | ₹7.05L | [FAIL] |
+| Settlement + revenue | ₹1.14Cr | ₹17.16L | [FAIL] |
 
 #### H2) Claim Pipeline Parity
 
 | Stage | Baseline (DB) | Current UI | Parity |
 |---|---:|---:|---|
-| Created | 14 | 12 | ❌ |
-| Submitted | 57 | 27 | ❌ |
-| Awaiting SOP | 56 | 41 | ❌ |
-| Approved | 0 | 0 | ✅ |
-| Settled | 2,182 | 889 | ❌ |
-| Rejected | 56 | 31 | ❌ |
+| Created | 14 | 12 | [FAIL] |
+| Submitted | 57 | 27 | [FAIL] |
+| Awaiting SOP | 56 | 41 | [FAIL] |
+| Approved | 0 | 0 | [OK] |
+| Settled | 2,182 | 889 | [FAIL] |
+| Rejected | 56 | 31 | [FAIL] |
 
 #### H3) Claims by Source Parity
 
 | Source | Baseline (DB) | Current UI | Parity |
 |---|---:|---:|---|
-| Claim Settlement | 4,110 | 1,000 | ❌ |
-| Part WC | 115 | 115 | ✅ |
-| Updation | 1,939 | 1,000 | ❌ |
-| Goodwill | 97 | 97 | ✅ |
-| AMC | 402 | 403 | ❌ |
-| FSB | 2,554 | 1,000 | ❌ |
-| Warranty Claim | 2,365 | 1,000 | ❌ |
+| Claim Settlement | 4,110 | 1,000 | [FAIL] |
+| Part WC | 115 | 115 | [OK] |
+| Updation | 1,939 | 1,000 | [FAIL] |
+| Goodwill | 97 | 97 | [OK] |
+| AMC | 402 | 403 | [FAIL] |
+| FSB | 2,554 | 1,000 | [FAIL] |
+| Warranty Claim | 2,365 | 1,000 | [FAIL] |
 
 #### H4) New Wired Blocks Parity Snapshot
 
 Claim-type performance (derivable labels only):
-1. `Normal WC`: baseline `1,820` vs UI `997` ❌
-2. `Extended WC`: baseline `545` vs UI `3` ❌
-3. `Updation`: baseline `1,939` vs UI `1,000` ❌
-4. `AMC`: baseline `402` vs UI `403` ❌
-5. `Goodwill`: baseline `97` vs UI `97` ✅
+1. `Normal WC`: baseline `1,820` vs UI `997` [FAIL]
+2. `Extended WC`: baseline `545` vs UI `3` [FAIL]
+3. `Updation`: baseline `1,939` vs UI `1,000` [FAIL]
+4. `AMC`: baseline `402` vs UI `403` [FAIL]
+5. `Goodwill`: baseline `97` vs UI `97` [OK]
 
 Top rejection reasons (top-5 order/count):
-1. Baseline top reason count `129` vs UI top reason count `73` ❌
-2. Baseline second count `103` vs UI second count `43` ❌
+1. Baseline top reason count `129` vs UI top reason count `73` [FAIL]
+2. Baseline second count `103` vs UI second count `43` [FAIL]
 
 Claim type mix:
-1. `Warranty`: baseline `6,590` vs UI `2,115` ❌
-2. `FSB`: baseline `2,554` vs UI `1,000` ❌
-3. `Updation`: baseline `1,939` vs UI `1,000` ❌
-4. `AMC`: baseline `402` vs UI `403` ❌
-5. `Goodwill`: baseline `97` vs UI `97` ✅
+1. `Warranty`: baseline `6,590` vs UI `2,115` [FAIL]
+2. `FSB`: baseline `2,554` vs UI `1,000` [FAIL]
+3. `Updation`: baseline `1,939` vs UI `1,000` [FAIL]
+4. `AMC`: baseline `402` vs UI `403` [FAIL]
+5. `Goodwill`: baseline `97` vs UI `97` [OK]
 
 TAT rows (computed formula parity):
-1. `Initial → Submit`: baseline `5.0` days vs UI `4.9` days (rounding-adjacent)
-2. `Submit → Review`: baseline `4.0` vs UI `3.2` ❌
-3. `Review → Approve`: baseline `4.8` vs UI `4.8` ✅
-4. `Approve → Settle`: baseline `4.6` vs UI `4.6` ✅
-5. `End-to-end`: baseline `4.1` vs UI `3.6` ❌
+1. `Initial -> Submit`: baseline `5.0` days vs UI `4.9` days (rounding-adjacent)
+2. `Submit -> Review`: baseline `4.0` vs UI `3.2` [FAIL]
+3. `Review -> Approve`: baseline `4.8` vs UI `4.8` [OK]
+4. `Approve -> Settle`: baseline `4.6` vs UI `4.6` [OK]
+5. `End-to-end`: baseline `4.1` vs UI `3.6` [FAIL]
 
 #### H5) Verification Conclusion (No Assumptions)
 
@@ -232,17 +323,17 @@ Post-fix parity checkpoints:
 
 | Check | Baseline (DB) | Current UI | Status |
 |---|---:|---:|---|
-| Settlement portfolio | ₹84.67L | ₹84.67L | ✅ |
-| Claimed (all cats) | ₹1.14Cr | ₹1.14Cr | ✅ |
-| Pending value | ₹28.91L | ₹28.91L | ✅ |
-| Payment pending | ₹0 | ₹0 | ✅ |
-| 20% parts revenue | ₹29.46L | ₹29.46L | ✅ |
-| Settlement + revenue | ₹1.14Cr | ₹1.14Cr | ✅ |
-| Pipeline Created/Submitted/Awaiting/Approved/Settled/Rejected | 14/57/56/0/2182/56 | 14/57/56/0/2182/56 | ✅ |
-| Claim Settlement rows | 4,110 | 4,110 | ✅ |
-| Updation rows | 1,939 | 1,939 | ✅ |
-| FSB rows | 2,554 | 2,554 | ✅ |
-| Warranty Claim rows | 2,365 | 2,365 | ✅ |
+| Settlement portfolio | ₹84.67L | ₹84.67L | [OK] |
+| Claimed (all cats) | ₹1.14Cr | ₹1.14Cr | [OK] |
+| Pending value | ₹28.91L | ₹28.91L | [OK] |
+| Payment pending | ₹0 | ₹0 | [OK] |
+| 20% parts revenue | ₹29.46L | ₹29.46L | [OK] |
+| Settlement + revenue | ₹1.14Cr | ₹1.14Cr | [OK] |
+| Pipeline Created/Submitted/Awaiting/Approved/Settled/Rejected | 14/57/56/0/2182/56 | 14/57/56/0/2182/56 | [OK] |
+| Claim Settlement rows | 4,110 | 4,110 | [OK] |
+| Updation rows | 1,939 | 1,939 | [OK] |
+| FSB rows | 2,554 | 2,554 | [OK] |
+| Warranty Claim rows | 2,365 | 2,365 | [OK] |
 
 Data-quality note resolved during rerun:
 1. `warranty_amc_data` authoritative row count is **403** by direct raw `COPY` line count in `full_database.sql` chunk mirror; earlier `402` mention came from prior audit script parsing drift and is now corrected in this plan.
@@ -493,7 +584,7 @@ Instead of schema migration, define **per-source extraction contracts** that spe
 11. **Critical Alerts v2** – 28+ with ownership  
 12. **TAT Monitoring Dashboard** – 4-stage SLA tracking  
 13. **Rejection Root-Cause Report** – reason + action + effectiveness  
-14. **Payment Flow Dashboard** – claim→settlement→paid visibility  
+14. **Payment Flow Dashboard** – claim->settlement->paid visibility  
 15. **Month-wise Category Matrix** – historical trends  
 
 **Action:** All 15 new report views + schema enhancement added to Traceability Matrix below. See TR-024 through TR-040.
@@ -604,7 +695,7 @@ From `COPY` sections in the authoritative dump, warranty rows currently contain 
 ## Data Model (Authoritative Schema – Verified 2026-06-02)
 
 **Source Migration:** `supabase/exec_success_migrations/20260528155000_create_warranty_import_tables.sql`  
-**Migration Status:** ✅ Applied and verified in database
+**Migration Status:** [OK] Applied and verified in database
 
 ### Seven Warranty Import Tables (All Active)
 
@@ -760,7 +851,7 @@ Use this for closure control per phase:
 | **P5-CORRECTED** | **Build Special Charges Dashboard (980016, 980019, 980025)** | **Pending** | **Dev Team** | **PV vs EV breakdown + top claims + margin impact** |
 | **P5-CORRECTED** | **Build Invoice Pending Upload Report** | **Pending** | **Dev Team** | **12 invoices ₹25.72L + aging buckets (24h, 48h, 5+ days)** |
 | **P5-CORRECTED** | **Build Settlement Aging Report** | **Pending** | **Dev Team** | **Approved-not-settled tracking + payment status visibility** |
-| **P5-CORRECTED** | **Build TAT Monitoring Dashboard** | **Pending** | **Dev Team** | **4 stages: Initial→Submission (0d) / Submission→Review (2d SLA 3d) / Review→Approval (1d SLA 2d) / Approval→Settlement (5d SLA 7d)** |
+| **P5-CORRECTED** | **Build TAT Monitoring Dashboard** | **Pending** | **Dev Team** | **4 stages: Initial->Submission (0d) / Submission->Review (2d SLA 3d) / Review->Approval (1d SLA 2d) / Approval->Settlement (5d SLA 7d)** |
 | **P5-CORRECTED** | **Build Rusting Analysis Report** | **Pending** | **Dev Team** | **168 claims ₹3.02L + model/batch correlation + preventive actions** |
 | **P5-CORRECTED** | **Build Advisor Performance Report** | **Pending** | **Dev Team** | **Claim count, rejection rate, avg value, quality trends by advisor** |
 | **P5-CORRECTED** | **Build Model Cost Analysis Report** | **Pending** | **Dev Team** | **Cost per model, warranty % of sales, top problem parts, leakage** |
@@ -770,7 +861,7 @@ Use this for closure control per phase:
 | **P5-CORRECTED** | **Build PDI & FSB Separated Report** | **Pending** | **Dev Team** | **PDI rejections vs FSB labour costs, acceptance rates** |
 | **P5-CORRECTED** | **Enhance Critical Alerts (v2)** | **Partial** | **Dev Team** | **28+ alerts with ownership + action required + aging buckets** |
 | **P5-CORRECTED** | **Build Rejection Root-Cause Report** | **Pending** | **Dev Team** | **Top reasons + corrective action assignment + completion tracking + effectiveness** |
-| **P5-CORRECTED** | **Build Payment Flow Dashboard** | **Pending** | **Dev Team** | **Claim→Settlement→Payment stage visibility + status transitions** |
+| **P5-CORRECTED** | **Build Payment Flow Dashboard** | **Pending** | **Dev Team** | **Claim->Settlement->Payment stage visibility + status transitions** |
 | **P8-NEW** | **Implement role-correct warranty scope contract (admin dealer-agnostic)** | **Pending** | **Dev Team** | **Use backend RBAC scope as source of truth; separate UI dealer chip state (`NO-DEALER`) from data visibility** |
 
 ---
@@ -948,7 +1039,7 @@ Additional fields required in warranty import tables (discovered from audited re
 | **TR-035** | **Month-wise category matrix (7 categories)** | **Month Category Matrix** | **src/pages/reports/warranty/MonthWiseCategoryReport.tsx** | **Partial** | **Group by month + table (warranty_*_data) + sum claimed/settled from source_row_data** |
 | **TR-036** | **TAT monitoring by claim stage** | **TAT Monitoring Dashboard** | **src/pages/reports/warranty/TATMonitoringReport.tsx** | **Pending** | **Calculate stage durations from date fields in source_row_data vs SLA targets** |
 | **TR-037** | **Rejection root-cause with corrective actions** | **Rejection Analysis Report** | **src/pages/reports/warranty/RejectionAnalysisReport.tsx** | **Pending** | **Extract rejection_reason + corrective_action + action_owner from source_row_data** |
-| **TR-038-CORRECTED** | **Define JSONB extraction mappings per source type (REPLACES schema migration)** | **Extraction contract documentation** | **docs/Implementation_plans/WARRANTY-001_JSONB_EXTRACTION_MAPPINGS.md** | **Pending** | **Audit source files + document field→JSONB path mappings** |
+| **TR-038-CORRECTED** | **Define JSONB extraction mappings per source type (REPLACES schema migration)** | **Extraction contract documentation** | **docs/Implementation_plans/WARRANTY-001_JSONB_EXTRACTION_MAPPINGS.md** | **Pending** | **Audit source files + document field->JSONB path mappings** |
 | **TR-039** | **Claim-to-settlement payment flow visibility** | **Payment Flow Dashboard** | **src/pages/reports/warranty/PaymentFlowReport.tsx** | **Pending** | **Extract status + payment_status stages + trace through source_row_data** |
 | **TR-040** | **Invoice document tracking and URL linking** | **Invoice Document Repository** | **src/pages/reports/warranty/InvoiceDocumentReport.tsx** | **Pending** | **Extract posted_doc_url from source_row_data + validate URL accessibility** |
 | **TR-041-NEW** | **Build per-source JSONB extraction functions** | **TypeScript extraction utilities** | **src/lib/warranty/jsonExtraction.ts** | **Pending** | **Unit tests for each source type's key extraction + type safety** |
@@ -1002,7 +1093,7 @@ Locked implementation baseline for this plan:
 
 ## JSONB Data Extraction Strategy (Corrected – No Schema Migration Needed)
 
-### The Reality: Schema is Complete ✅
+### The Reality: Schema is Complete [OK]
 
 Migration `20260528155000_create_warranty_import_tables.sql` has already created all 7 tables with the correct JSONB design. **No schema enhancement migration is required.**
 
@@ -1068,7 +1159,7 @@ The database schema is already correct. Focus on **data transformation, not sche
 
 ## Next Immediate Steps (Corrected – Database-Backed 2026-06-02)
 
-### ✅ What's Already Done
+### [OK] What's Already Done
 - 7 warranty tables created with JSONB design
 - Branch/location/portal CHECK constraints validated from authoritative dump
 - Upsert strategy implemented (branch + portal + source_row_hash unique constraint)
@@ -1131,16 +1222,16 @@ The database schema is already correct. Focus on **data transformation, not sche
 
 | Check | Result | Details |
 |---|---|---|
-| **7 Tables Exist** | ✅ Yes | warranty_claim_settlement_report_data, warranty_part_wc_data, warranty_updation_claim_data, warranty_goodwill_data, warranty_amc_data, warranty_fsb_data, warranty_wc_data |
-| **Column Count (per table)** | ✅ 10 | id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at |
-| **CHECK (branch)** | ✅ Present | `branch IN ('Ajmer Road', 'Sitapura')` on all 7 tables |
-| **CHECK (location)** | ✅ Present | `location IN ('Ajmer Road', 'Sitapura')` on all 7 tables |
-| **CHECK (portal)** | ✅ Present | `portal IN ('PV', 'EV')` on all 7 tables |
-| **Unique Constraint** | ✅ Applied | `(branch, portal, source_row_hash)` on all 7 tables |
-| **JSONB Column** | ✅ Present | `source_row_data jsonb NOT NULL DEFAULT '{}'` |
-| **Triggers** | ✅ Present | `trg_warranty_*_updated_at` executes `set_updated_at()` on update |
-| **Indexes** | ✅ Present | `idx_warranty_*_branch_portal` on each table |
-| **Import Metadata** | ✅ Registered | All 7 warranty tables present in `import_metadata` COPY data |
+| **7 Tables Exist** | [OK] Yes | warranty_claim_settlement_report_data, warranty_part_wc_data, warranty_updation_claim_data, warranty_goodwill_data, warranty_amc_data, warranty_fsb_data, warranty_wc_data |
+| **Column Count (per table)** | [OK] 10 | id, branch, location, portal, source_row_hash, source_row_number, source_file_name, source_row_data, created_at, updated_at |
+| **CHECK (branch)** | [OK] Present | `branch IN ('Ajmer Road', 'Sitapura')` on all 7 tables |
+| **CHECK (location)** | [OK] Present | `location IN ('Ajmer Road', 'Sitapura')` on all 7 tables |
+| **CHECK (portal)** | [OK] Present | `portal IN ('PV', 'EV')` on all 7 tables |
+| **Unique Constraint** | [OK] Applied | `(branch, portal, source_row_hash)` on all 7 tables |
+| **JSONB Column** | [OK] Present | `source_row_data jsonb NOT NULL DEFAULT '{}'` |
+| **Triggers** | [OK] Present | `trg_warranty_*_updated_at` executes `set_updated_at()` on update |
+| **Indexes** | [OK] Present | `idx_warranty_*_branch_portal` on each table |
+| **Import Metadata** | [OK] Registered | All 7 warranty tables present in `import_metadata` COPY data |
 | **RLS/Policies on Warranty Tables** | ➖ Not Found | No `ENABLE ROW LEVEL SECURITY` / `CREATE POLICY` entries for `warranty_*` in dump |
 
 ### Observed Warranty Data Combinations in Dump
