@@ -20,7 +20,7 @@ type RevenueRow = {
   job_card_number: string | null
   closed_date_time: string | null
   invoice_date: string | null
-  total_invoice_amount: number | null
+  final_labour_amount: number | null
 }
 
 type IncomeDayRow = {
@@ -280,7 +280,7 @@ export default function TechnicianPage() {
 
       const revenueRes = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, closed_date_time, invoice_date, total_invoice_amount')
+        .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
         .in('job_card_number', jcNumbers)
 
       if (revenueRes.error) {
@@ -317,7 +317,7 @@ export default function TechnicianPage() {
         const revenue = revenueMap.get(jc)
         if (!revenue) return
 
-        const gross = Number(revenue.total_invoice_amount ?? 0)
+        const gross = Number(revenue.final_labour_amount ?? 0)
         if (!Number.isFinite(gross) || gross <= 0) return
 
         const dateKeySource = revenue.closed_date_time ?? revenue.invoice_date
@@ -434,7 +434,7 @@ export default function TechnicianPage() {
           <div>
             <h3>Income tracker</h3>
             <div className="sub">
-              Computed per completed case: (Total Workshop Revenue ÷ 1.18) × 20% (PV) or 25% (EV).
+              Computed per completed case: (Labour Revenue ÷ 1.18) × 20% (PV) or 25% (EV).
             </div>
           </div>
           <div className="tech-income-total">

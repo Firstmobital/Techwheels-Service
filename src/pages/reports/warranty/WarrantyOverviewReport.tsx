@@ -1332,6 +1332,17 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       .slice(0, 10)
   }, [filteredRecords])
 
+  const computedModelTotals = useMemo(() => {
+    return computedModelRows.reduce(
+      (acc, row) => {
+        acc.count += row.count
+        acc.amount += row.amount
+        return acc
+      },
+      { count: 0, amount: 0 },
+    )
+  }, [computedModelRows])
+
   const computedAlerts = useMemo(() => {
     // Critical Alerts contract: exact text matching and table scopes from reference HTML.
     // No age thresholding or normalized status buckets.
@@ -2244,18 +2255,28 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                   <table className="tbl">
                     <thead>
                       <tr>
+                        <th className="ctr">Rank</th>
                         <th>Model</th>
                         <th className="ctr">Settled JCs</th>
+                        <th className="ctr">Claim Share %</th>
                         <th style={{ textAlign: 'right' }}>Settled Amount</th>
+                        <th className="ctr">Value Share %</th>
                         <th style={{ textAlign: 'right' }}>Avg per Claim</th>
                       </tr>
                     </thead>
                     <tbody>
                       {computedModelRows.map((t, i) => (
                         <tr key={i}>
+                          <td className="ctr" style={{ color: 'var(--muted)', fontWeight: 700 }}>#{i + 1}</td>
                           <td className="strong">{t.model}</td>
                           <td className="ctr" style={{ color: 'var(--success)', fontWeight: 700 }}>{t.count.toLocaleString('en-IN')}</td>
+                          <td className="ctr" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                            {computedModelTotals.count > 0 ? Number(((t.count / computedModelTotals.count) * 100).toFixed(1)) : 0}%
+                          </td>
                           <td style={{ textAlign: 'right', color: 'var(--success)', fontWeight: 700 }}>{formatAmountShort(t.amount)}</td>
+                          <td className="ctr" style={{ color: '#0F6E56', fontWeight: 600 }}>
+                            {computedModelTotals.amount > 0 ? Number(((t.amount / computedModelTotals.amount) * 100).toFixed(1)) : 0}%
+                          </td>
                           <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{formatAmountShort(t.avg)}</td>
                         </tr>
                       ))}

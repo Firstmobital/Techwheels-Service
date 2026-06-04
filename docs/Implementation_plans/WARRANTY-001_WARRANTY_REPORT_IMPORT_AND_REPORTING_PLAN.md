@@ -2,10 +2,10 @@
 
 **Plan ID:** WARRANTY-001  
 **Created:** 2026-05-28  
-**Last Audit:** 2026-06-03  
+**Last Audit:** 2026-06-04  
 **Owner:** Techwheels Product + Dev Team + GitHub Copilot  
 **Priority:** High  
-**Status:** In Progress (Audit Complete – 15 New Tasks Added)
+**Status:** In Progress (Overview Complete; broader 28-report roadmap in progress)
 
 **Audited Reference:** https://claude.ai/share/3ec32255-d0d4-46a6-8090-66d7ed2a6d7b
 
@@ -18,92 +18,34 @@
 
 ## � Strategic Redesign Approach (2026-06-04)
 
-**Objective:** Align Overview tab design with reference HTML while preserving current design system and proceeding with phased, value-driven delivery.
+**Objective:** Align the Overview tab to authoritative DB-truth + reference business logic while preserving current Techwheels visual design language.
 
-**Approach:** Three-phase sequential delivery model
+### Overview Closure Audit Delta (Supersedes Earlier Phase Notes)
 
-### Phase 1: Data Layer Refresh + KPI Logic Blocks (1-2 weeks)
+**Status:** [OK] COMPLETE (Overview only)
 
-**Status:** [OK] COMPLETE (2026-06-04)
+Final audited Overview completion (2026-06-04):
+1. Overview data wiring finalized against all 7 warranty tables with paginated full-row retrieval.
+2. KPI, Claim Pipeline, Payment Status, Claims by Source, and Claim-Type Performance sections are completed and parity-verified for current scope.
+3. Top rejection reasons finalized as multi-category cards with explicit reconciliation line and export action on each category card.
+4. WC settled by vehicle model finalized with additional density columns: Rank, Claim Share %, Value Share %, alongside settled amount and average per claim.
+5. Overview spacing polish completed: missing vertical gaps between section pairs corrected.
+6. TypeScript diagnostics for final Overview edits are clean.
 
-**Scope:**
-- [OK] Data layer: Already live DB queries against all 7 warranty tables (using `fetchAllRowsForTable` paginated pattern)
-- [OK] KPI computation: Already computed correctly in `overviewKpis` useMemo
-- [OK] **DONE**: Added KPI logic blocks (collapsible cards explaining computation rules + SQL reference)
-- [OK] **DONE**: Verified status normalization (validated against section H6 parity pass)
-- [OK] Design: Current design system preserved (colors, fonts, layout, responsive grid)
+UX decision lock (final):
+1. Business-logic explainer blocks are not shown in Overview frontend (kept decluttered per user direction).
+2. Payment Status semantics and labels remain aligned to the finalized contract currently implemented in Overview UI.
 
-**Deliverables:**
-- [OK] 6 KPIs with real-time DB-backed values (already implemented + validated)
-- [OK] Business rule documentation per KPI (implemented as `KpiLogicCard` component)
-- [OK] SQL query transparency blocks (included in each logic block; hidden by default)
-- [OK] Parity against authoritative dump baseline (validation: section H6 confirmed [OK])
+Implementation file:
+1. [src/pages/reports/warranty/WarrantyOverviewReport.tsx](src/pages/reports/warranty/WarrantyOverviewReport.tsx)
 
-**File:** [src/pages/reports/warranty/WarrantyOverviewReport.tsx](src/pages/reports/warranty/WarrantyOverviewReport.tsx)
+Temporary tracker closure sync:
+1. The temporary Overview tracker (`WARRANTY-001_OVERVIEW_CRASH_SAFE_IMPLEMENTATION_TRACKER.md`) has been fully merged into this master plan summary and can be removed.
 
-**Implementation Details:**
+### Remaining Program Scope (Outside Overview)
 
-1. **KpiLogicCard Component** (lines 632-685): Reusable collapsible card that displays:
-   - KPI label & rule (plain English explanation)
-   - Computation formula
-   - Optional SQL snippet (for transparency)
-   - Authority source (dump reference or live table reference)
-   - Expandable UI (Show logic / Collapse button)
-
-2. **kpiLogics useMemo** (lines 955-1001): Computes 6 KPI logic blocks:
-   - Settlement Portfolio: Claimed - Pending SAP Posts
-   - Claimed (All Categories): SUM across all 7 warranty tables
-   - Pending Value: Rows without posting_document_number
-   - Payment Pending: Approved/Submitted/Awaiting SOP bucket
-   - 20% Parts Revenue: SUM(parts_amount × 0.20)
-   - Settlement + Revenue: Combined opportunity
-
-3. **JSX Integration** (line ~1760): Added `<KpiLogicCard kpis={kpiLogics} />` right after KPI strip in Overview tab
-
-4. **Status Normalization Verification**: 
-   - Current implementation correctly maps "Accepted" status per table:
-     - FSB/Goodwill: "Accepted" -> 'submitted' (in-flight, counted in Payment Pending)
-     - Other tables: "Accepted" -> 'awaiting_sop' (review pending)
-   - Parity validated in section H6 (all baseline metrics matched [OK])
-
-**Visual Design:**
-- Logic block cards use existing design tokens (blue border, monospace for SQL, muted text for labels)
-- Collapsible pattern reduces information overload (Show logic / Collapse)
-- Authority traceability (dump reference + SQL snippet) maintains transparency
-- Responsive layout (works on desktop + tablet)
-
-**Testing/Validation:**
-- [OK] TypeScript compilation: No errors in KpiLogicCard or kpiLogics useMemo
-- [OK] Data parity: Baseline KPI values match authoritative dump (section H6)
-- [OK] Component integration: Logic card renders after KPI strip in Overview tab
-- [PENDING] Manual verification: Requires login to warranty dashboard (http://localhost:5174/reports/warranty/warranty-overview)
-
-**Next Steps:** Phase 2 (Report Cards: Pipeline, Payment Status, Claims by Source, Performance)
-
----
-
-### Phase 2: Report Cards (Sections 2-5) (2-3 weeks)
-
-**Scope:**
-- Report 2: Claim Pipeline visualization (Created -> Submitted -> SOP -> Settled | Rejected) with status breakdown table
-- Report 3: Payment Status multi-category table (WC, FSB, Updation, AMC, Goodwill, Part WC, Settlement)
-- Report 4: Claims by Source bar chart (FSB 2.5K | WC 2.4K | Updation 1.9K, etc.)
-- Report 5: Claim-Type Performance table (Settlement %, Rejection %, category splits)
-
-**Design Preservation:** Use reference HTML styling (section headings, logic blocks, colored borders, status pills, bar rows, pipeline stages)
-
-**File:** `src/pages/reports/warranty/WarrantyOverviewReport.tsx`
-
----
-
-### Phase 3: Analytics + Drill-Down (Sections 6-7) (1-2 weeks)
-
-**Scope:**
-- Report 6: Rejection Root Cause Analysis (top reasons: FSB JC-closure 51%, PDI missing 16%, etc.)
-- Report 7: WC Settled by Vehicle Model (top 10 ranking)
-- Export/download functionality
-
-**File:** `src/pages/reports/warranty/WarrantyOverviewReport.tsx`
+1. The broader WARRANTY-001 roadmap (including additional report families and traceability tasks TR-024..TR-040) remains in progress.
+2. This plan remains the single source of truth for forward work after Overview closure.
 
 ---
 
