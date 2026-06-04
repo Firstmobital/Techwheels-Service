@@ -316,22 +316,20 @@ Always visible (without click):
 1. 5 alert KPI cards with count + short alert label + severity tone.
 2. One-line contract banner: exact table-scope + exact status matching (no age-bucket approximation).
 3. Compact summary matrix for all 5 alerts: `Alert`, `Count`, `Table scope`, `Filter contract`, `Owner`.
+4. Full single-page dashboard with all 5 report sections rendered sequentially (no card-click drilldown dependency).
 
-Visible on clicking an alert card:
-1. Selected alert detail card only (single-focus mode).
-2. Status split pills (e.g., Rejected/Cancelled/Not Validated; SAP Pending/Posted).
-3. Row-level preview table with sample records (`job card`, `model`, `status`, `amount/age`, `note`).
-4. Action-owner line and explicit action text.
-5. Optional footer impact statement (amount-at-risk / estimated recovery).
+Per-section controls:
+1. Each alert section must include an `Export` button.
+2. Export outputs all records for that alert under current page filters (location/fuel/role scope), not only preview rows.
+3. Export format: CSV with claim keys + status + amounts + scope metadata.
 
 Interaction rule:
-1. Default selection should be Alert 1 (`Created — Not Submitted`) on first open.
-2. Clicking another KPI card replaces the detail pane content (do not stack all 5 detail tables at once).
-3. If scoped filters (location/fuel) yield zero rows for selected alert, show explicit zero-state text.
+1. Users should not need a card click to reveal any alert section.
+2. If scoped filters (location/fuel) yield zero rows for a section, show explicit zero-state text in that section.
 
 Benefits:
 1. Faster executive scan in first viewport.
-2. Lower scroll fatigue compared to rendering 5 full tables simultaneously.
+2. One-pass operational workflow: review + export from same screen.
 3. Keeps UI tone/design stable while enforcing report logic parity to reference contract.
 
 #### I.6 Known Gap and Final Rule for Accuracy

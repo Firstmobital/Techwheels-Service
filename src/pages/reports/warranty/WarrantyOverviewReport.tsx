@@ -16,6 +16,19 @@ interface WarrantyAlertRow {
   red: boolean
 }
 
+interface WarrantyAlertExportRow {
+  job_card: string
+  model: string
+  status: string
+  amount: string
+  age_days: string
+  note: string
+  category: string
+  portal: string
+  location: string
+  table_name: string
+}
+
 interface WarrantyAlertStatusSplit {
   label: string
   count: number
@@ -29,6 +42,7 @@ interface WarrantyAlert {
   thresh: string
   count: number
   rows: WarrantyAlertRow[]
+  exportRows: WarrantyAlertExportRow[]
   tableScope: string
   sqlFilter: string
   owner: string
@@ -621,7 +635,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   const [selectedLocation, setSelectedLocation] = useState<LocationFilter>('ALL')
   const [selectedFuelType, setSelectedFuelType] = useState<FuelTypeFilter>('ALL')
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
-  const [activeAlertKey, setActiveAlertKey] = useState<string>('created_not_forwarded')
+  const [activeAlertStatus, setActiveAlertStatus] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -806,21 +820,21 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     return records.filter((record) => {
       if (!matchesBranchFilter(record, branch)) return false
 
-      // For admin with multiple dealer codes (unrestricted scope), skip location/fuel filtering
-      // since admin bypass means they see all records regardless of location/fuel combination
+      const portal = inferPortal(record)
+      const location = inferLocation(record)
+
+      // RBAC scope enforcement remains for non-admin users.
       const isAdminWithFullScope = viewerDealerCodes.length >= 2
-      
-      if (!isAdminWithFullScope) {
-        const portal = inferPortal(record)
-        const location = inferLocation(record)
-        if (allowedLocationFuelPairs.size > 0 && !allowedLocationFuelPairs.has(`${location}|${portal}`)) return false
-
-        if (selectedLocation !== 'ALL' && location !== selectedLocation) return false
-
-        const parentFuelType = (branch === 'ALL_PV' || branch.endsWith(' PV')) ? 'PV' : (branch === 'ALL_EV' || branch.endsWith(' EV')) ? 'EV' : 'ALL'
-        if (parentFuelType !== 'ALL' && portal !== parentFuelType) return false
-        if (selectedFuelType !== 'ALL' && portal !== selectedFuelType) return false
+      if (!isAdminWithFullScope && allowedLocationFuelPairs.size > 0 && !allowedLocationFuelPairs.has(`${location}|${portal}`)) {
+        return false
       }
+
+      // Presentation filters must apply for all users, including admin.
+      if (selectedLocation !== 'ALL' && location !== selectedLocation) return false
+
+      const parentFuelType = branch === 'ALL_PV' || branch.endsWith(' PV') ? 'PV' : branch === 'ALL_EV' || branch.endsWith(' EV') ? 'EV' : 'ALL'
+      if (parentFuelType !== 'ALL' && portal !== parentFuelType) return false
+      if (selectedFuelType !== 'ALL' && portal !== selectedFuelType) return false
 
       return true
     })
@@ -1195,13 +1209,25 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         owner: 'Service Manager',
         action: 'Submit to TM immediately',
         statusSplit: [{ label: 'Created', count: createdNotSubmitted.length, tone: 'var(--danger)' }],
-        rows: createdNotSubmitted.slice(0, 8).map((r) => ({
+        rows: createdNotSubmitted.map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
           stage: r.status || 'Created',
           age: `${r.ageDays} days open`,
           note: 'Not submitted to TM',
           red: true,
+        })),
+        exportRows: createdNotSubmitted.map((r) => ({
+          job_card: r.jobCardNumber || '',
+          model: r.model || '',
+          status: r.status || 'Created',
+          amount: formatAmountShort(r.claimAmount),
+          age_days: String(r.ageDays),
+          note: 'Not submitted to TM',
+          category: r.category,
+          portal: inferPortal(r),
+          location: inferLocation(r),
+          table_name: r.tableName,
         })),
       },
       {
@@ -1219,12 +1245,24 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           { label: 'Cancelled', count: cancelledCount, tone: 'var(--warn)' },
           { label: 'Not Validated', count: notValidatedCount, tone: '#534AB7' },
         ],
-        rows: rejectedCancelledNotValidated.slice(0, 8).map((r) => ({
+        rows: rejectedCancelledNotValidated.map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
           stage: r.status,
           note: r.rejectionReason ? `Reason: ${r.rejectionReason.substring(0, 52)}` : '(no rejection reason)',
           red: true,
+        })),
+        exportRows: rejectedCancelledNotValidated.map((r) => ({
+          job_card: r.jobCardNumber || '',
+          model: r.model || '',
+          status: r.status || '',
+          amount: formatAmountShort(r.claimAmount),
+          age_days: String(r.ageDays),
+          note: r.rejectionReason || '',
+          category: r.category,
+          portal: inferPortal(r),
+          location: inferLocation(r),
+          table_name: r.tableName,
         })),
       },
       {
@@ -1241,13 +1279,25 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           { label: 'Awaiting SOP Approval', count: awaitingSopCount, tone: 'var(--warn)' },
           { label: 'Under Change', count: underChangeCount, tone: 'var(--accent)' },
         ],
-        rows: stuckReviewSopUnderChange.slice(0, 8).map((r) => ({
+        rows: stuckReviewSopUnderChange.map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
           stage: r.status,
           age: `${r.ageDays} days in review`,
           note: 'Actionable before escalation',
           red: r.ageDays > 5,
+        })),
+        exportRows: stuckReviewSopUnderChange.map((r) => ({
+          job_card: r.jobCardNumber || '',
+          model: r.model || '',
+          status: r.status || '',
+          amount: formatAmountShort(r.claimAmount),
+          age_days: String(r.ageDays),
+          note: 'Actionable before escalation',
+          category: r.category,
+          portal: inferPortal(r),
+          location: inferLocation(r),
+          table_name: r.tableName,
         })),
       },
       {
@@ -1262,9 +1312,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         action: 'Drive SAP posting completion',
         statusSplit: [
           { label: 'SAP Pending', count: settlementSapPendingPosting.length, tone: 'var(--warn)' },
-          { label: 'SAP Posted', count: settlementSapPosted.length, tone: 'var(--success)' },
         ],
-        rows: settlementSapPendingPosting.slice(0, 8).map((r) => ({
+        rows: settlementSapPendingPosting.map((r) => ({
           jc: r.jobCardNumber,
           model: r.model || 'Settlement',
           stage: 'Posting pending',
@@ -1272,6 +1321,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           age: `${r.ageDays} days`,
           note: 'No posting document number',
           red: r.ageDays > 7,
+        })),
+        exportRows: settlementSapPendingPosting.map((r) => ({
+          job_card: r.jobCardNumber || '',
+          model: r.model || 'Settlement',
+          status: 'Posting pending',
+          amount: formatAmountShort(r.claimAmount),
+          age_days: String(r.ageDays),
+          note: 'No posting document number',
+          category: r.category,
+          portal: inferPortal(r),
+          location: inferLocation(r),
+          table_name: r.tableName,
         })),
         footer: settlementSapPendingPosting.length > 0 ? `${formatAmountShort(settlementSapPendingPosting.reduce((sum, r) => sum + r.claimAmount, 0))} pending posting` : undefined,
       },
@@ -1289,13 +1350,25 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
           { label: 'Approved By L1', count: amcApprovedL1NoInvoice, tone: 'var(--danger)' },
           { label: 'Approved by L2', count: amcApprovedL2NoInvoice, tone: '#B91C1C' },
         ],
-        rows: amcApprovedNoInvoice.slice(0, 8).map((r) => ({
+        rows: amcApprovedNoInvoice.map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
           stage: r.status,
           amt: formatAmountShort(r.claimAmount),
           note: 'Dealer invoice missing',
           red: true,
+        })),
+        exportRows: amcApprovedNoInvoice.map((r) => ({
+          job_card: r.jobCardNumber || '',
+          model: r.model || '',
+          status: r.status || '',
+          amount: formatAmountShort(r.claimAmount),
+          age_days: String(r.ageDays),
+          note: 'Dealer invoice missing',
+          category: r.category,
+          portal: inferPortal(r),
+          location: inferLocation(r),
+          table_name: r.tableName,
         })),
         footer: amcApprovedNoInvoice.length > 0 ? `~Rs. ${((amcApprovedNoInvoice.length * 5800) / 100000).toFixed(2)}L uncollected` : undefined,
       },
@@ -1305,11 +1378,50 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   useEffect(() => {
-    if (computedAlerts.length === 0) return
-    if (!computedAlerts.some((alert) => alert.key === activeAlertKey)) {
-      setActiveAlertKey(computedAlerts[0].key)
+    setActiveAlertStatus((prev) => {
+      const next: Record<string, string> = { ...prev }
+      for (const alert of computedAlerts) {
+        if (!next[alert.key]) {
+          next[alert.key] = alert.statusSplit[0]?.label ?? 'All'
+        }
+      }
+      return next
+    })
+  }, [computedAlerts])
+
+  const matchesAlertStatus = (alert: WarrantyAlert, row: WarrantyAlertRow, selectedStatus: string) => {
+    if (!selectedStatus || selectedStatus === 'All') return true
+    const rowStatus = normalizeText(row.stage)
+    const target = normalizeText(selectedStatus)
+
+    if (alert.key === 'settlement_sap_pending') {
+      return target === 'sap pending'
     }
-  }, [activeAlertKey, computedAlerts])
+
+    return rowStatus === target
+  }
+
+  const exportAlertRows = (alert: WarrantyAlert) => {
+    const headers = ['job_card', 'model', 'status', 'amount', 'age_days', 'note', 'category', 'portal', 'location', 'table_name']
+    const escapeCsv = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`
+    const lines = [headers.join(',')]
+
+    for (const row of alert.exportRows) {
+      lines.push(headers.map((key) => escapeCsv(String((row as Record<string, string>)[key] ?? ''))).join(','))
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const scopeLocation = selectedLocation === 'ALL' ? 'all-locations' : selectedLocation.toLowerCase().replace(/\s+/g, '-')
+    const scopeFuel = selectedFuelType === 'ALL' ? 'all-fuel' : selectedFuelType.toLowerCase()
+    link.href = url
+    link.download = `warranty-critical-alert-${alert.key}-${scopeLocation}-${scopeFuel}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
 
   const computedFinancialKpis = useMemo(() => {
     const workflowFinancialRows = filteredRecords.filter(isWorkflowAlertEligible)
@@ -1737,19 +1849,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         <div>
           <div className="kpis" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
             {computedAlerts.map((a, i) => (
-              <button
-                type="button"
-                className="kpi"
-                key={i}
-                onClick={() => setActiveAlertKey(a.key)}
-                style={{
-                  borderLeft: `3px solid ${a.tone}`,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  borderColor: activeAlertKey === a.key ? a.tone : 'var(--border)',
-                  boxShadow: activeAlertKey === a.key ? `0 0 0 1px color-mix(in srgb,${a.tone} 35%, #fff)` : 'none',
-                }}
-              >
+              <div className="kpi" key={i} style={{ borderLeft: `3px solid ${a.tone}` }}>
                 <div className="kpi__top">
                   <span className="kpi__ic" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>
                     <Icon name="alert" size={17} />
@@ -1761,7 +1861,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 <div className="kpi__lab" style={{ fontSize: 12 }}>
                   {a.thresh}
                 </div>
-              </button>
+              </div>
             ))}
           </div>
 
@@ -1770,81 +1870,124 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               <Icon name="alert" size={17} />
             </span>
             <div>
-              <b>{computedAlerts.reduce((s, a) => s + a.count, 0)} actionable rows across 5 critical alerts.</b> Contract uses exact table scope + exact status text from warranty reference logic. Click any alert card for row-level details and action owner.
+              <b>{computedAlerts.reduce((s, a) => s + a.count, 0)} actionable rows across 5 critical alerts.</b> Single dashboard view with all sections visible below. Each section has an export action for full-scope records in current filters.
             </div>
           </div>
 
-          {(() => {
-            const selectedAlert = computedAlerts.find((alert) => alert.key === activeAlertKey) ?? computedAlerts[0]
-            if (!selectedAlert) return null
-
-            return (
-              <Card
-                accent={selectedAlert.tone}
-                title={selectedAlert.label}
-                sub={`Scope: ${selectedAlert.tableScope} · Filter: ${selectedAlert.sqlFilter}`}
-                right={<span className="badge badge--no" style={{ background: `color-mix(in srgb,${selectedAlert.tone} 13%, #fff)`, color: selectedAlert.tone }}>{selectedAlert.count} rows</span>}
-                pad={false}
-              >
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 12px' }}>
-                  {selectedAlert.statusSplit.map((split) => (
-                    <span key={split.label} className="badge badge--no" style={{ background: `color-mix(in srgb,${split.tone} 14%, #fff)`, color: split.tone }}>
-                      {split.label}: {split.count}
-                    </span>
-                  ))}
-                  <span className="badge badge--inactive badge--no">Owner: {selectedAlert.owner}</span>
+          {computedAlerts.map((alert) => (
+            <Card
+              key={alert.key}
+              accent={alert.tone}
+              title={alert.label}
+              sub={`Scope: ${alert.tableScope} · Filter: ${alert.sqlFilter}`}
+              right={
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className="badge badge--no" style={{ background: `color-mix(in srgb,${alert.tone} 13%, #fff)`, color: alert.tone }}>
+                    {alert.count} rows
+                  </span>
+                  <button className="tbtn tbtn--accent" onClick={() => exportAlertRows(alert)}>
+                    Export <Icon name="download" size={12} />
+                  </button>
                 </div>
+              }
+              pad={false}
+            >
+              {(() => {
+                const selectedStatus = activeAlertStatus[alert.key] ?? alert.statusSplit[0]?.label ?? 'All'
+                const statusRows = alert.rows.filter((row) => matchesAlertStatus(alert, row, selectedStatus))
+                const previewRows = statusRows.slice(0, 8)
 
-                <div className="tbl-wrap scroll">
-                  <table className="tbl">
-                    <thead>
+                return (
+                  <>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 12px' }}>
+                <button
+                  type="button"
+                  className="badge badge--no"
+                  onClick={() => setActiveAlertStatus((prev) => ({ ...prev, [alert.key]: 'All' }))}
+                  style={{
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: activeAlertStatus[alert.key] === 'All' ? 'var(--panel)' : 'var(--canvas)',
+                    color: 'var(--ink-2)',
+                  }}
+                >
+                  All: {alert.rows.length}
+                </button>
+                {alert.statusSplit.map((split) => {
+                  const isActive = (activeAlertStatus[alert.key] ?? alert.statusSplit[0]?.label) === split.label
+                  return (
+                    <button
+                      key={split.label}
+                      type="button"
+                      className="badge badge--no"
+                      onClick={() => setActiveAlertStatus((prev) => ({ ...prev, [alert.key]: split.label }))}
+                      style={{
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: isActive ? `color-mix(in srgb,${split.tone} 20%, #fff)` : `color-mix(in srgb,${split.tone} 12%, #fff)`,
+                        color: split.tone,
+                        boxShadow: isActive ? `0 0 0 1px color-mix(in srgb,${split.tone} 40%, #fff)` : 'none',
+                      }}
+                    >
+                      {split.label}: {split.count}
+                    </button>
+                  )
+                })}
+                <span className="badge badge--inactive badge--no">Owner: {alert.owner}</span>
+              </div>
+
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Job card</th>
+                      <th>Model</th>
+                      <th>Status</th>
+                      <th>{statusRows.some((row) => row.amt) ? 'Amount' : 'Age'}</th>
+                      <th>Note</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.length === 0 ? (
                       <tr>
-                        <th>Job card</th>
-                        <th>Model</th>
-                        <th>Status</th>
-                        <th>{selectedAlert.rows.some((row) => row.amt) ? 'Amount' : 'Age'}</th>
-                        <th>Note</th>
-                        <th style={{ textAlign: 'right' }}>Action</th>
+                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: '18px 10px' }}>
+                          No rows for selected status in current location/fuel scope.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {selectedAlert.rows.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: '18px 10px' }}>
-                            No rows in current location/fuel scope.
+                    ) : (
+                      previewRows.map((r, j) => (
+                        <tr key={j}>
+                          <td className="mono strong">{r.jc || '—'}</td>
+                          <td>{r.model || '—'}</td>
+                          <td>
+                            <span className="badge badge--no" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                              {r.stage || '—'}
+                            </span>
+                          </td>
+                          <td style={{ color: r.red ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>{r.amt ?? r.age ?? '—'}</td>
+                          <td style={{ color: 'var(--muted)', fontSize: 12.5 }}>{r.note ?? '—'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="tbtn tbtn--accent">
+                              {alert.action} <Icon name="arrowr" size={12} />
+                            </button>
                           </td>
                         </tr>
-                      ) : (
-                        selectedAlert.rows.map((r, j) => (
-                          <tr key={j}>
-                            <td className="mono strong">{r.jc || '—'}</td>
-                            <td>{r.model || '—'}</td>
-                            <td>
-                              <span className="badge badge--no" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-                                {r.stage || '—'}
-                              </span>
-                            </td>
-                            <td style={{ color: r.red ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>{r.amt ?? r.age ?? '—'}</td>
-                            <td style={{ color: 'var(--muted)', fontSize: 12.5 }}>{r.note ?? '—'}</td>
-                            <td style={{ textAlign: 'right' }}>
-                              <button className="tbtn tbtn--accent">
-                                {selectedAlert.action} <Icon name="arrowr" size={12} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+                  </>
+                )
+              })()}
+              {alert.footer && (
+                <div style={{ marginTop: 8, padding: '8px 12px', background: `color-mix(in srgb,${alert.tone} 9%, #fff)`, borderRadius: 'var(--r-sm)', fontSize: 12.5, fontWeight: 600, color: alert.tone }}>
+                  {alert.footer}
                 </div>
-                {selectedAlert.footer && (
-                  <div style={{ marginTop: 8, padding: '8px 12px', background: `color-mix(in srgb,${selectedAlert.tone} 9%, #fff)`, borderRadius: 'var(--r-sm)', fontSize: 12.5, fontWeight: 600, color: selectedAlert.tone }}>
-                    {selectedAlert.footer}
-                  </div>
-                )}
-              </Card>
-            )
-          })()}
+              )}
+            </Card>
+          ))}
 
           <Card title="Critical alerts summary" sub="Reference-contract view of all five alerts" pad={false}>
             <div className="tbl-wrap scroll">
