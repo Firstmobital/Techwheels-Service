@@ -12,7 +12,14 @@ interface WarrantyAlertRow {
   age?: string
   amt?: string
   stage?: string
+  note?: string
   red: boolean
+}
+
+interface WarrantyAlertStatusSplit {
+  label: string
+  count: number
+  tone: string
 }
 
 interface WarrantyAlert {
@@ -22,6 +29,11 @@ interface WarrantyAlert {
   thresh: string
   count: number
   rows: WarrantyAlertRow[]
+  tableScope: string
+  sqlFilter: string
+  owner: string
+  action: string
+  statusSplit: WarrantyAlertStatusSplit[]
   footer?: string
 }
 
@@ -294,6 +306,7 @@ interface WarrantyRecord {
   specialAmount: number
   miscAmount: number
   postingDocNo: string
+  dealerInvoiceNo: string
   model: string
   jobCardNumber: string
   createdAt: string
@@ -334,6 +347,8 @@ const POSTING_DOC_KEYS = [
   'posting_no',
   'posting_document',
 ]
+
+const DEALER_INVOICE_KEYS = ['dealer_invoice_no', 'dealer_invoice_number', 'invoice_no', 'dealer_inv_no']
 
 const CLAIM_AMOUNT_KEYS = [
   'total',
@@ -606,6 +621,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   const [selectedLocation, setSelectedLocation] = useState<LocationFilter>('ALL')
   const [selectedFuelType, setSelectedFuelType] = useState<FuelTypeFilter>('ALL')
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
+  const [activeAlertKey, setActiveAlertKey] = useState<string>('created_not_forwarded')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -687,6 +703,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             const status = extractStatusValue(source)
             const rejectionReason = extractByPreferredKeys(source, REJECTION_REASON_KEYS)
             const postingDocNo = extractByPreferredKeys(source, POSTING_DOC_KEYS)
+            const dealerInvoiceNo = extractByPreferredKeys(source, DEALER_INVOICE_KEYS)
             const invoiceDateRaw = extractByPreferredKeys(source, INVOICE_DATE_KEYS)
             const closedDateRaw = extractByPreferredKeys(source, CLOSED_DATE_KEYS)
             const partsAmount = sumByKeys(source, PARTS_AMOUNT_KEYS)
@@ -720,6 +737,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               specialAmount,
               miscAmount,
               postingDocNo,
+              dealerInvoiceNo,
               model: extractByPreferredKeys(source, MODEL_KEYS),
               jobCardNumber: extractByPreferredKeys(source, JC_KEYS),
               createdAt: row.created_at,
@@ -1110,44 +1128,61 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const computedAlerts = useMemo(() => {
-    // Implementation of 5 Critical Alerts per reference business logic (warrantycriticalalerts.html)
-    // Authority: table-specific status filters from authoritative dump, not age-based bucketing
+    // Critical Alerts contract: exact text matching and table scopes from reference HTML.
+    // No age thresholding or normalized status buckets.
 
-    // Alert 1: Created status from 6 workflow tables (EXCLUDE Claim Settlement)
+    // Alert 1: Created status from 6 workflow tables (exclude settlement).
     const createdNotSubmitted = filteredRecords.filter(
-      (r) => 
-        (r.category === 'Warranty Claim' || r.category === 'Updation' || r.category === 'Part WC' || 
-         r.category === 'Goodwill' || r.category === 'FSB' || r.category === 'AMC') &&
-        normalizeText(r.status) === 'created'
+      (r) =>
+        (r.category === 'Warranty Claim' ||
+          r.category === 'Updation' ||
+          r.category === 'Part WC' ||
+          r.category === 'Goodwill' ||
+          r.category === 'FSB' ||
+          r.category === 'AMC') &&
+        normalizeText(r.status) === 'created',
     )
 
-    // Alert 2: Rejected / Cancelled / Not Validated from all 7 tables
+    // Alert 2: Rejected / Cancelled / Not Validated from all 7 tables.
     const rejectedCancelledNotValidated = filteredRecords.filter((r) => {
       const stat = normalizeText(r.status)
       return ['rejected', 'cancelled', 'not validated'].includes(stat)
     })
 
-    // Alert 3: Awaiting SOP Approval / Under Change from 4 tables (EXCLUDE FSB, AMC, Settlement)
+    // Alert 3: Awaiting SOP Approval / Under Change from 4 tables.
     const stuckReviewSopUnderChange = filteredRecords.filter(
       (r) =>
-        (r.category === 'Warranty Claim' || r.category === 'Updation' || r.category === 'Part WC' ||
-         r.category === 'Goodwill') &&
-        (normalizeText(r.status) === 'awaiting sop approval' || normalizeText(r.status) === 'under change')
+        (r.category === 'Warranty Claim' ||
+          r.category === 'Updation' ||
+          r.category === 'Part WC' ||
+          r.category === 'Goodwill') &&
+        (normalizeText(r.status) === 'awaiting sop approval' || normalizeText(r.status) === 'under change'),
     )
 
-    // Alert 4: Settlement SAP posting not done (warranty_claim_settlement_report_data only)
+    // Alert 4: Settlement SAP posting not done.
     const settlementSapPendingPosting = filteredRecords.filter(
-      (r) => r.category === 'Claim Settlement' && String(r.postingDocNo || '').trim() === ''
+      (r) => r.category === 'Claim Settlement' && String(r.postingDocNo || '').trim() === '',
+    )
+    const settlementSapPosted = filteredRecords.filter(
+      (r) => r.category === 'Claim Settlement' && String(r.postingDocNo || '').trim() !== '',
     )
 
-    // Alert 5: AMC approved but no dealer invoice (warranty_amc_data only)
+    // Alert 5: AMC approved but no dealer invoice.
     const amcApprovedNoInvoice = filteredRecords.filter((r) => {
       if (r.category !== 'AMC') return false
       const stat = normalizeText(r.status)
-      return (['approved by l1', 'approved by l2'].includes(stat))
+      return ['approved by l1', 'approved by l2'].includes(stat) && String(r.dealerInvoiceNo || '').trim() === ''
     })
+    const amcApprovedL1NoInvoice = amcApprovedNoInvoice.filter((r) => normalizeText(r.status) === 'approved by l1').length
+    const amcApprovedL2NoInvoice = amcApprovedNoInvoice.filter((r) => normalizeText(r.status) === 'approved by l2').length
 
-    // Always return all 5 alerts (matching static design), even if empty
+    const rejectedCount = rejectedCancelledNotValidated.filter((r) => normalizeText(r.status) === 'rejected').length
+    const cancelledCount = rejectedCancelledNotValidated.filter((r) => normalizeText(r.status) === 'cancelled').length
+    const notValidatedCount = rejectedCancelledNotValidated.filter((r) => normalizeText(r.status) === 'not validated').length
+    const awaitingSopCount = stuckReviewSopUnderChange.filter((r) => normalizeText(r.status) === 'awaiting sop approval').length
+    const underChangeCount = stuckReviewSopUnderChange.filter((r) => normalizeText(r.status) === 'under change').length
+
+    // Always return all 5 alerts so layout remains stable.
     const alerts: WarrantyAlert[] = [
       {
         key: 'created_not_forwarded',
@@ -1155,11 +1190,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         tone: 'var(--danger)',
         thresh: 'Created — Not Submitted',
         count: createdNotSubmitted.length,
-        rows: createdNotSubmitted.slice(0, 5).map((r) => ({
+        tableScope: 'WC + Updation + Part WC + Goodwill + FSB + AMC',
+        sqlFilter: "claim_status = 'Created'",
+        owner: 'Service Manager',
+        action: 'Submit to TM immediately',
+        statusSplit: [{ label: 'Created', count: createdNotSubmitted.length, tone: 'var(--danger)' }],
+        rows: createdNotSubmitted.slice(0, 8).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
-          age: `${r.ageDays} days`,
-          red: r.ageDays > 1,
+          stage: r.status || 'Created',
+          age: `${r.ageDays} days open`,
+          note: 'Not submitted to TM',
+          red: true,
         })),
       },
       {
@@ -1168,11 +1210,20 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         tone: 'var(--danger)',
         thresh: 'Rejected / Cancelled',
         count: rejectedCancelledNotValidated.length,
-        rows: rejectedCancelledNotValidated.slice(0, 5).map((r) => ({
+        tableScope: 'All 7 warranty tables',
+        sqlFilter: "claim_status IN ('Rejected', 'Cancelled', 'Not Validated')",
+        owner: 'Warranty Manager',
+        action: 'Root-cause review and recovery decision',
+        statusSplit: [
+          { label: 'Rejected', count: rejectedCount, tone: 'var(--danger)' },
+          { label: 'Cancelled', count: cancelledCount, tone: 'var(--warn)' },
+          { label: 'Not Validated', count: notValidatedCount, tone: '#534AB7' },
+        ],
+        rows: rejectedCancelledNotValidated.slice(0, 8).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
-          stage: `${r.status}`,
-          age: r.rejectionReason ? `Reason: ${r.rejectionReason.substring(0, 30)}` : '(no reason)',
+          stage: r.status,
+          note: r.rejectionReason ? `Reason: ${r.rejectionReason.substring(0, 52)}` : '(no rejection reason)',
           red: true,
         })),
       },
@@ -1182,11 +1233,20 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         tone: 'var(--warn)',
         thresh: 'Awaiting SOP / Under Change',
         count: stuckReviewSopUnderChange.length,
-        rows: stuckReviewSopUnderChange.slice(0, 5).map((r) => ({
+        tableScope: 'WC + Updation + Part WC + Goodwill',
+        sqlFilter: "claim_status IN ('Awaiting SOP Approval', 'Under Change')",
+        owner: 'Warranty Team',
+        action: 'Upload SOP docs / complete correction and resubmit',
+        statusSplit: [
+          { label: 'Awaiting SOP Approval', count: awaitingSopCount, tone: 'var(--warn)' },
+          { label: 'Under Change', count: underChangeCount, tone: 'var(--accent)' },
+        ],
+        rows: stuckReviewSopUnderChange.slice(0, 8).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
           stage: r.status,
-          age: `${r.ageDays} days`,
+          age: `${r.ageDays} days in review`,
+          note: 'Actionable before escalation',
           red: r.ageDays > 5,
         })),
       },
@@ -1196,11 +1256,21 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         tone: 'var(--warn)',
         thresh: 'SAP Posting Pending',
         count: settlementSapPendingPosting.length,
-        rows: settlementSapPendingPosting.slice(0, 5).map((r) => ({
+        tableScope: 'Claim Settlement table only',
+        sqlFilter: "posting_document_number = ''",
+        owner: 'Accounts / TM Accounts',
+        action: 'Drive SAP posting completion',
+        statusSplit: [
+          { label: 'SAP Pending', count: settlementSapPendingPosting.length, tone: 'var(--warn)' },
+          { label: 'SAP Posted', count: settlementSapPosted.length, tone: 'var(--success)' },
+        ],
+        rows: settlementSapPendingPosting.slice(0, 8).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model || 'Settlement',
+          stage: 'Posting pending',
           amt: formatAmountShort(r.claimAmount),
           age: `${r.ageDays} days`,
+          note: 'No posting document number',
           red: r.ageDays > 7,
         })),
         footer: settlementSapPendingPosting.length > 0 ? `${formatAmountShort(settlementSapPendingPosting.reduce((sum, r) => sum + r.claimAmount, 0))} pending posting` : undefined,
@@ -1211,10 +1281,20 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         tone: 'var(--danger)',
         thresh: 'AMC Ready for Invoice',
         count: amcApprovedNoInvoice.length,
-        rows: amcApprovedNoInvoice.slice(0, 5).map((r) => ({
+        tableScope: 'AMC table only',
+        sqlFilter: "claim_status IN ('Approved By L1', 'Approved by L2') AND dealer_invoice_no = ''",
+        owner: 'Accounts + Warranty',
+        action: 'Raise dealer invoice and update TM portal',
+        statusSplit: [
+          { label: 'Approved By L1', count: amcApprovedL1NoInvoice, tone: 'var(--danger)' },
+          { label: 'Approved by L2', count: amcApprovedL2NoInvoice, tone: '#B91C1C' },
+        ],
+        rows: amcApprovedNoInvoice.slice(0, 8).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
+          stage: r.status,
           amt: formatAmountShort(r.claimAmount),
+          note: 'Dealer invoice missing',
           red: true,
         })),
         footer: amcApprovedNoInvoice.length > 0 ? `~Rs. ${((amcApprovedNoInvoice.length * 5800) / 100000).toFixed(2)}L uncollected` : undefined,
@@ -1223,6 +1303,13 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
     return alerts
   }, [filteredRecords])
+
+  useEffect(() => {
+    if (computedAlerts.length === 0) return
+    if (!computedAlerts.some((alert) => alert.key === activeAlertKey)) {
+      setActiveAlertKey(computedAlerts[0].key)
+    }
+  }, [activeAlertKey, computedAlerts])
 
   const computedFinancialKpis = useMemo(() => {
     const workflowFinancialRows = filteredRecords.filter(isWorkflowAlertEligible)
@@ -1650,7 +1737,19 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         <div>
           <div className="kpis" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
             {computedAlerts.map((a, i) => (
-              <div className="kpi" key={i} style={{ borderLeft: `3px solid ${a.tone}` }}>
+              <button
+                type="button"
+                className="kpi"
+                key={i}
+                onClick={() => setActiveAlertKey(a.key)}
+                style={{
+                  borderLeft: `3px solid ${a.tone}`,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  borderColor: activeAlertKey === a.key ? a.tone : 'var(--border)',
+                  boxShadow: activeAlertKey === a.key ? `0 0 0 1px color-mix(in srgb,${a.tone} 35%, #fff)` : 'none',
+                }}
+              >
                 <div className="kpi__top">
                   <span className="kpi__ic" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>
                     <Icon name="alert" size={17} />
@@ -1662,7 +1761,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 <div className="kpi__lab" style={{ fontSize: 12 }}>
                   {a.thresh}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -1671,59 +1770,108 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               <Icon name="alert" size={17} />
             </span>
             <div>
-              <b>{computedAlerts.reduce((s, a) => s + a.count, 0)} open alerts · action required today.</b> SLA thresholds: Created &gt;24h = red · Review &gt;3d = red · SOP pending &gt;2d = amber · Approved-not-settled &gt;5d = amber · rejection-reason-blank = audit risk.
+              <b>{computedAlerts.reduce((s, a) => s + a.count, 0)} actionable rows across 5 critical alerts.</b> Contract uses exact table scope + exact status text from warranty reference logic. Click any alert card for row-level details and action owner.
             </div>
           </div>
 
-          {computedAlerts.map((a, i) => (
-            <Card
-              key={i}
-              accent={a.tone}
-              title={a.label}
-              right={<span className="badge badge--no" style={{ background: `color-mix(in srgb,${a.tone} 13%, #fff)`, color: a.tone }}>{a.count} claims</span>}
-              pad={false}
-            >
-              <div className="tbl-wrap scroll">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>Job card</th>
-                      <th>Model</th>
-                      {a.rows[0]?.stage ? <th>Stage</th> : null}
-                      <th>{a.rows[0]?.amt ? 'Amount' : 'Pending'}</th>
-                      <th style={{ textAlign: 'right' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {a.rows.map((r, j) => (
-                      <tr key={j}>
-                        <td className="mono strong">{r.jc}</td>
-                        <td>{r.model}</td>
-                        {r.stage ? (
-                          <td>
-                            <span className="badge badge--no" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-                              {r.stage}
-                            </span>
-                          </td>
-                        ) : null}
-                        <td style={{ color: r.red ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>{r.amt ?? r.age}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="tbtn tbtn--accent">
-                            {a.key === 'rejection_blank' ? 'Fill reason' : a.key === 'approved_unsettled' ? 'Chase' : 'Escalate'} <Icon name="arrowr" size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {a.footer && (
-                <div style={{ marginTop: 8, padding: '8px 12px', background: `color-mix(in srgb,${a.tone} 9%, #fff)`, borderRadius: 'var(--r-sm)', fontSize: 12.5, fontWeight: 600, color: a.tone }}>
-                  {a.footer}
+          {(() => {
+            const selectedAlert = computedAlerts.find((alert) => alert.key === activeAlertKey) ?? computedAlerts[0]
+            if (!selectedAlert) return null
+
+            return (
+              <Card
+                accent={selectedAlert.tone}
+                title={selectedAlert.label}
+                sub={`Scope: ${selectedAlert.tableScope} · Filter: ${selectedAlert.sqlFilter}`}
+                right={<span className="badge badge--no" style={{ background: `color-mix(in srgb,${selectedAlert.tone} 13%, #fff)`, color: selectedAlert.tone }}>{selectedAlert.count} rows</span>}
+                pad={false}
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 12px' }}>
+                  {selectedAlert.statusSplit.map((split) => (
+                    <span key={split.label} className="badge badge--no" style={{ background: `color-mix(in srgb,${split.tone} 14%, #fff)`, color: split.tone }}>
+                      {split.label}: {split.count}
+                    </span>
+                  ))}
+                  <span className="badge badge--inactive badge--no">Owner: {selectedAlert.owner}</span>
                 </div>
-              )}
-            </Card>
-          ))}
+
+                <div className="tbl-wrap scroll">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Job card</th>
+                        <th>Model</th>
+                        <th>Status</th>
+                        <th>{selectedAlert.rows.some((row) => row.amt) ? 'Amount' : 'Age'}</th>
+                        <th>Note</th>
+                        <th style={{ textAlign: 'right' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedAlert.rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: '18px 10px' }}>
+                            No rows in current location/fuel scope.
+                          </td>
+                        </tr>
+                      ) : (
+                        selectedAlert.rows.map((r, j) => (
+                          <tr key={j}>
+                            <td className="mono strong">{r.jc || '—'}</td>
+                            <td>{r.model || '—'}</td>
+                            <td>
+                              <span className="badge badge--no" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                                {r.stage || '—'}
+                              </span>
+                            </td>
+                            <td style={{ color: r.red ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>{r.amt ?? r.age ?? '—'}</td>
+                            <td style={{ color: 'var(--muted)', fontSize: 12.5 }}>{r.note ?? '—'}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button className="tbtn tbtn--accent">
+                                {selectedAlert.action} <Icon name="arrowr" size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {selectedAlert.footer && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', background: `color-mix(in srgb,${selectedAlert.tone} 9%, #fff)`, borderRadius: 'var(--r-sm)', fontSize: 12.5, fontWeight: 600, color: selectedAlert.tone }}>
+                    {selectedAlert.footer}
+                  </div>
+                )}
+              </Card>
+            )
+          })()}
+
+          <Card title="Critical alerts summary" sub="Reference-contract view of all five alerts" pad={false}>
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Alert</th>
+                    <th className="ctr">Count</th>
+                    <th>Table scope</th>
+                    <th>Filter contract</th>
+                    <th>Owner</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {computedAlerts.map((alert) => (
+                    <tr key={alert.key}>
+                      <td className="strong" style={{ color: alert.tone }}>{alert.label}</td>
+                      <td className="ctr" style={{ color: alert.tone, fontWeight: 700 }}>{alert.count}</td>
+                      <td>{alert.tableScope}</td>
+                      <td className="mono" style={{ fontSize: 11.5, color: 'var(--muted)' }}>{alert.sqlFilter}</td>
+                      <td>{alert.owner}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       )}
 

@@ -305,6 +305,35 @@ All status mapping logic in code has been replaced with direct status matching p
 
 #### I.4 Runtime Authority
 
+#### I.5 Critical Alerts Visibility Contract (UI Recommendation Locked, 2026-06-04)
+
+Objective:
+1. Preserve current Techwheels report visual language (existing tokens, color semantics, typography, spacing).
+2. Align alert computation strictly to reference HTML business logic in I.2.
+3. Reduce information overload by separating always-visible decision signals from on-click deep detail.
+
+Always visible (without click):
+1. 5 alert KPI cards with count + short alert label + severity tone.
+2. One-line contract banner: exact table-scope + exact status matching (no age-bucket approximation).
+3. Compact summary matrix for all 5 alerts: `Alert`, `Count`, `Table scope`, `Filter contract`, `Owner`.
+
+Visible on clicking an alert card:
+1. Selected alert detail card only (single-focus mode).
+2. Status split pills (e.g., Rejected/Cancelled/Not Validated; SAP Pending/Posted).
+3. Row-level preview table with sample records (`job card`, `model`, `status`, `amount/age`, `note`).
+4. Action-owner line and explicit action text.
+5. Optional footer impact statement (amount-at-risk / estimated recovery).
+
+Interaction rule:
+1. Default selection should be Alert 1 (`Created — Not Submitted`) on first open.
+2. Clicking another KPI card replaces the detail pane content (do not stack all 5 detail tables at once).
+3. If scoped filters (location/fuel) yield zero rows for selected alert, show explicit zero-state text.
+
+Benefits:
+1. Faster executive scan in first viewport.
+2. Lower scroll fatigue compared to rendering 5 full tables simultaneously.
+3. Keeps UI tone/design stable while enforcing report logic parity to reference contract.
+
 #### I.6 Known Gap and Final Rule for Accuracy
 
 Gap:
