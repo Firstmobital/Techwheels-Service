@@ -1,630 +1,260 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Warranty Financial Report — Techwheels (First Mobital)</title>
-  <style>
-    :root {
-      --bg:        #0f1117;
-      --surface:   #1a1d27;
-      --surface2:  #22263a;
-      --border:    #2e3350;
-      --text:      #e4e8f5;
-      --muted:     #8b90aa;
-      --red:       #ef4444;
-      --red-bg:    rgba(239,68,68,0.10);
-      --red-bd:    rgba(239,68,68,0.30);
-      --amber:     #f59e0b;
-      --amber-bg:  rgba(245,158,11,0.10);
-      --amber-bd:  rgba(245,158,11,0.30);
-      --green:     #22c55e;
-      --green-bg:  rgba(34,197,94,0.10);
-      --green-bd:  rgba(34,197,94,0.30);
-      --blue:      #3b82f6;
-      --blue-bg:   rgba(59,130,246,0.10);
-      --blue-bd:   rgba(59,130,246,0.30);
-      --purple:    #a855f7;
-      --purple-bg: rgba(168,85,247,0.10);
-      --purple-bd: rgba(168,85,247,0.30);
-      --indigo:    #6366f1;
-      --indigo-bg: rgba(99,102,241,0.10);
-      --indigo-bd: rgba(99,102,241,0.30);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: var(--bg); color: var(--text); line-height: 1.5; padding: 0 0 60px;
-    }
-    .header {
-      background: var(--surface); border-bottom: 1px solid var(--border);
-      padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    }
-    .header-left { display: flex; align-items: center; gap: 12px; }
-    .logo-badge {
-      background: var(--green); border-radius: 8px; width: 38px; height: 38px;
-      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #fff;
-    }
-    .header-title { font-size: 17px; font-weight: 700; }
-    .header-sub   { font-size: 12px; color: var(--muted); margin-top: 1px; }
-    .header-meta  { font-size: 12px; color: var(--muted); text-align: right; }
-    .header-meta strong { color: var(--text); display: block; }
-    .page { max-width: 1180px; margin: 0 auto; padding: 32px 24px 0; }
-    .section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-    .section-head h2 { font-size: 20px; font-weight: 700; }
-    .tab-badge { color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
-    .section-sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
-
-    .kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px; }
-    @media(max-width:900px){ .kpi-strip { grid-template-columns: repeat(3,1fr); } }
-    .kpi { border-radius: 12px; padding: 16px 18px; border: 1px solid var(--border); background: var(--surface); }
-    .kpi-count { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
-    .kpi-label { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
-    .kpi-chip { display: inline-block; margin-top: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; }
-    .kpi.red    { border-color: var(--red-bd);    background: var(--red-bg);    }
-    .kpi.amber  { border-color: var(--amber-bd);  background: var(--amber-bg);  }
-    .kpi.green  { border-color: var(--green-bd);  background: var(--green-bg);  }
-    .kpi.blue   { border-color: var(--blue-bd);   background: var(--blue-bg);   }
-    .kpi.purple { border-color: var(--purple-bd); background: var(--purple-bg); }
-    .kpi.red    .kpi-count { color: var(--red); }
-    .kpi.amber  .kpi-count { color: var(--amber); }
-    .kpi.green  .kpi-count { color: var(--green); }
-    .kpi.blue   .kpi-count { color: var(--blue); }
-    .kpi.purple .kpi-count { color: var(--purple); }
-    .kpi.red    .kpi-chip { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bd); }
-    .kpi.amber  .kpi-chip { background: var(--amber-bg);  color: var(--amber);  border: 1px solid var(--amber-bd); }
-    .kpi.green  .kpi-chip { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-bd); }
-    .kpi.blue   .kpi-chip { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-bd); }
-    .kpi.purple .kpi-chip { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-bd); }
-
-    .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 20px; }
-    .card-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 12px; border-bottom: 1px solid var(--border); }
-    .card-head-left { display: flex; align-items: center; gap: 10px; }
-    .card-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-    .card-title { font-size: 14px; font-weight: 700; }
-    .card-subtitle { font-size: 11px; color: var(--muted); margin-top: 1px; }
-    .card-badge { font-size: 12px; font-weight: 700; padding: 3px 12px; border-radius: 8px; }
-    .card-body { padding: 16px 20px; }
-
-    .report-card.red    { border-color: var(--red-bd);    } .report-card.red    .card-head { border-bottom-color: var(--red-bd);    } .report-card.red    .card-icon { background: var(--red-bg);    color: var(--red);    } .report-card.red    .card-badge { background: var(--red-bg);    color: var(--red);    }
-    .report-card.amber  { border-color: var(--amber-bd);  } .report-card.amber  .card-head { border-bottom-color: var(--amber-bd);  } .report-card.amber  .card-icon { background: var(--amber-bg);  color: var(--amber);  } .report-card.amber  .card-badge { background: var(--amber-bg);  color: var(--amber);  }
-    .report-card.green  { border-color: var(--green-bd);  } .report-card.green  .card-head { border-bottom-color: var(--green-bd);  } .report-card.green  .card-icon { background: var(--green-bg);  color: var(--green);  } .report-card.green  .card-badge { background: var(--green-bg);  color: var(--green);  }
-    .report-card.blue   { border-color: var(--blue-bd);   } .report-card.blue   .card-head { border-bottom-color: var(--blue-bd);   } .report-card.blue   .card-icon { background: var(--blue-bg);   color: var(--blue);   } .report-card.blue   .card-badge { background: var(--blue-bg);   color: var(--blue);   }
-    .report-card.purple { border-color: var(--purple-bd); } .report-card.purple .card-head { border-bottom-color: var(--purple-bd); } .report-card.purple .card-icon { background: var(--purple-bg); color: var(--purple); } .report-card.purple .card-badge { background: var(--purple-bg); color: var(--purple); }
-
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-    @media(max-width:800px){ .grid-2 { grid-template-columns: 1fr; } }
-
-    .logic-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
-    .logic-block-title { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-    .logic-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 3px; line-height: 1.4; }
-    .logic-row:last-child { margin-bottom: 0; }
-    .logic-row .icon { flex-shrink: 0; margin-top: 1px; font-size: 13px; }
-    .logic-row em { color: var(--text); font-style: normal; }
-
-    .breakdown { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px; }
-    .breakdown th { text-align: left; color: var(--muted); font-weight: 600; padding: 5px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .breakdown td { padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
-    .breakdown tr:last-child td { border-bottom: none; }
-    .breakdown .num { font-weight: 700; font-size: 14px; }
-    .breakdown .num.red    { color: var(--red); }
-    .breakdown .num.amber  { color: var(--amber); }
-    .breakdown .num.green  { color: var(--green); }
-    .breakdown .num.blue   { color: var(--blue); }
-    .breakdown .num.purple { color: var(--purple); }
-    .breakdown .num.gray   { color: var(--muted); }
-    .breakdown .total-row td { background: var(--surface2); font-weight: 700; border-top: 1px solid var(--border); }
-
-    .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .bar-label { font-size: 11.5px; color: var(--muted); width: 170px; flex-shrink: 0; }
-    .bar-track { flex: 1; height: 7px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
-    .bar-fill  { height: 100%; border-radius: 3px; }
-    .bar-val   { font-size: 11.5px; font-weight: 700; width: 55px; text-align: right; }
-
-    .sql-block { background: #111827; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: 'Consolas','Courier New',monospace; font-size: 11px; color: #a5b4fc; overflow-x: auto; margin-bottom: 14px; }
-    .sql-kw  { color: #818cf8; font-weight: 700; }
-    .sql-fn  { color: #34d399; }
-    .sql-str { color: #f9a8d4; }
-    .sql-cmt { color: #6b7280; font-style: italic; }
-
-    .note-box { border-radius: 10px; padding: 12px 16px; font-size: 12px; display: flex; gap: 10px; margin-bottom: 14px; }
-    .note-box .icon { font-size: 18px; flex-shrink: 0; }
-    .note-box.blue   { background: var(--blue-bg);   border: 1px solid var(--blue-bd);   } .note-box.blue   strong { color: var(--blue); }
-    .note-box.amber  { background: var(--amber-bg);  border: 1px solid var(--amber-bd);  } .note-box.amber  strong { color: var(--amber); }
-    .note-box.red    { background: var(--red-bg);    border: 1px solid var(--red-bd);    } .note-box.red    strong { color: var(--red); }
-    .note-box.green  { background: var(--green-bg);  border: 1px solid var(--green-bd);  } .note-box.green  strong { color: var(--green); }
-    .note-box .body  { color: var(--muted); line-height: 1.5; }
-
-    /* Stage flow (AMC) */
-    .stage-flow { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-    .stage-box { padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border); text-align: center; min-width: 90px; }
-    .stage-box .snum { font-size: 28px; font-weight: 800; line-height: 1; }
-    .stage-box .slabel { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
-    .stage-arrow { align-self: center; font-size: 18px; color: var(--border); }
-
-    .footer-stat { background: var(--surface2); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
-    .footer-stat strong { color: var(--text); }
-    .divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warranty Financial Report — TechWheels</title>
+<style>
+  :root{--bg:#0f1117;--surface:#1a1d27;--border:#2a2d3a;--text:#e2e8f0;--muted:#64748b;--accent:#3b82f6;--success:#22c55e;--danger:#ef4444;--warn:#f59e0b;--info:#06b6d4}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px;line-height:1.5}
+  .shell{max-width:1100px;margin:0 auto;padding:32px 20px}
+  h1{font-size:22px;font-weight:700}
+  h2{font-size:16px;font-weight:600;margin-bottom:14px}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px;margin-bottom:28px}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .kpi .n{font-size:24px;font-weight:700}
+  .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+  .kpi .d{font-size:12px;color:var(--muted);margin-top:4px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  .tbl-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:rgba(255,255,255,.04);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+  td{padding:9px 12px;border-bottom:1px solid rgba(42,45,58,.6)}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(255,255,255,.025)}
+  .tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
+  .tag-g{background:rgba(34,197,94,.15);color:var(--success)}
+  .tag-r{background:rgba(239,68,68,.15);color:var(--danger)}
+  .tag-y{background:rgba(245,158,11,.15);color:var(--warn)}
+  .tag-b{background:rgba(59,130,246,.15);color:#60a5fa}
+  .tag-z{background:rgba(100,116,139,.15);color:var(--muted)}
+  .note{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:#93c5fd;margin-top:12px}
+  .mono{font-family:monospace}
+  .pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .pill{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer}
+  .pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .amc-stage{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:8px}
+  .amc-stage .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .amc-stage .info{flex:1}
+  .amc-stage .lbl{font-size:13px;font-weight:600}
+  .amc-stage .sub2{font-size:11px;color:var(--muted)}
+  .amc-stage .val{text-align:right}
+</style>
 </head>
 <body>
+<div class="shell">
+  <h1>💰 Warranty Financial Report</h1>
+  <p class="sub">All Locations · All Fuel Types · 04 Jun 2026 · Filters: Location (Sitapura / Ajmer Road) &amp; Fuel Type (PV / EV) apply to all tables</p>
 
-<header class="header">
-  <div class="header-left">
-    <div class="logo-badge">₹</div>
-    <div>
-      <div class="header-title">Warranty Dashboard — Financial Report</div>
-      <div class="header-sub">First Mobital Pvt. Ltd. · All Branches (Ajmer Road + Sitapura) · PV + EV</div>
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi" style="border-color:rgba(239,68,68,.3)">
+      <div class="n" style="color:var(--danger)">1,137</div>
+      <div class="l">SAP Unposted Lines</div>
+      <div class="d">₹42.39 L revenue blocked</div>
     </div>
-  </div>
-  <div class="header-meta">
-    <strong>As of database snapshot</strong>
-    Source: Supabase full dump (authoritative)<br>
-    Tables: warranty_claim_settlement_report_data · warranty_amc_data<br>
-    warranty_wc_data · warranty_part_wc_data · warranty_updation_claim_data
-  </div>
-</header>
-
-<div class="page">
-
-  <div class="section-head">
-    <h2>Financial Report</h2>
-    <span class="tab-badge" style="background:var(--green)">FINANCIAL TAB</span>
-  </div>
-  <p class="section-sub">
-    Cash-flow, SAP posting status, dealer margin recovery (20% parts revenue), AMC lifecycle,
-    and special charges. All figures from <code>source_row_data</code> JSONB — no frontend static constants used.
-  </p>
-
-  <!-- ══════════════════════════════════════════════════════════════════
-       FINANCIAL KPIs
-  ═══════════════════════════════════════════════════════════════════ -->
-  <div class="kpi-strip">
-    <div class="kpi red">
-      <div class="kpi-count">1,137</div>
-      <div class="kpi-label">Settlement lines pending SAP posting (posting_document_number = '')</div>
-      <span class="kpi-chip">SAP UNPOSTED</span>
+    <div class="kpi" style="border-color:rgba(245,158,11,.3)">
+      <div class="n" style="color:var(--warn)">121</div>
+      <div class="l">WC In-Flight</div>
+      <div class="d">Non-terminal WC claims</div>
     </div>
-    <div class="kpi amber">
-      <div class="kpi-count">₹42.39L</div>
-      <div class="kpi-label">Value blocked — unposted (parts ₹34.54L + labour ₹5.37L + misc ₹2.48L)</div>
-      <span class="kpi-chip">CASH BLOCKED</span>
+    <div class="kpi" style="border-color:rgba(245,158,11,.3)">
+      <div class="n" style="color:var(--warn)">91</div>
+      <div class="l">AMC No Invoice</div>
+      <div class="d">Approved, invoice not raised</div>
     </div>
-    <div class="kpi blue">
-      <div class="kpi-count">121</div>
-      <div class="kpi-label">WC claims in-flight (Created+Submitted+SOP+UnderChange+Accepted)</div>
-      <span class="kpi-chip">WC PENDING</span>
+    <div class="kpi" style="border-color:rgba(34,197,94,.3)">
+      <div class="n" style="color:var(--success)">₹22.55 L</div>
+      <div class="l">20% Margin on Posted Parts</div>
+      <div class="d">Parts value × 20% = parts margin</div>
     </div>
-    <div class="kpi purple">
-      <div class="kpi-count">105</div>
-      <div class="kpi-label">AMC claims — TM pre-approved but dealer has NOT raised invoice yet</div>
-      <span class="kpi-chip">AMC NO INVOICE</span>
-    </div>
-    <div class="kpi green">
-      <div class="kpi-count">₹6.91L</div>
-      <div class="kpi-label">Recoverable dealer margin (20% of ₹34.54L parts MRP in unposted lines)</div>
-      <span class="kpi-chip">20% RECOVERY</span>
+    <div class="kpi" style="border-color:rgba(239,68,68,.3)">
+      <div class="n" style="color:var(--danger)">₹6.91 L</div>
+      <div class="l">20% Margin Blocked</div>
+      <div class="d">On ₹34.54 L unposted parts</div>
     </div>
   </div>
 
-  <!-- Logic for Financial KPIs -->
-  <div class="report-card blue" style="margin-bottom:28px">
-    <div class="card-head">
-      <div class="card-head-left">
-        <div class="card-icon">🧮</div>
-        <div>
-          <div class="card-title">Business Logic — Financial KPI Computation</div>
-          <div class="card-subtitle">Exact derivation from warranty_claim_settlement_report_data + warranty_amc_data</div>
-        </div>
+  <!-- Filter pills -->
+  <div class="pill-row">
+    <div class="pill active">All Locations</div>
+    <div class="pill">Sitapura</div>
+    <div class="pill">Ajmer Road</div>
+    <div class="pill active" style="margin-left:16px">All Fuel Types</div>
+    <div class="pill">PV</div>
+    <div class="pill">EV</div>
+  </div>
+
+  <!-- Report 1: SAP Unposted -->
+  <div class="card">
+    <h2>SAP Unposted Settlement Lines — ₹42.39 L Blocked</h2>
+    <div class="grid2" style="margin-bottom:14px">
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Parts</span><span style="color:var(--danger)">₹34.54 L</span></div>
+        <div style="background:rgba(255,255,255,.06);border-radius:4px;height:10px"><div style="width:81.5%;background:var(--danger);height:10px;border-radius:4px"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:10px;margin-bottom:6px"><span>Labour</span><span style="color:var(--warn)">₹5.37 L</span></div>
+        <div style="background:rgba(255,255,255,.06);border-radius:4px;height:10px"><div style="width:12.7%;background:var(--warn);height:10px;border-radius:4px"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:10px;margin-bottom:6px"><span>Misc</span><span style="color:var(--muted)">₹2.48 L</span></div>
+        <div style="background:rgba(255,255,255,.06);border-radius:4px;height:10px"><div style="width:5.8%;background:var(--muted);height:10px;border-radius:4px"></div></div>
+      </div>
+      <div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Settlement Summary</div>
+        <table style="font-size:13px">
+          <tbody>
+            <tr><td style="padding:4px 0">Total Lines</td><td style="padding:4px 0;text-align:right;font-weight:600">4,110</td></tr>
+            <tr><td style="padding:4px 0;color:var(--success)">Posted (SAP)</td><td style="padding:4px 0;text-align:right;color:var(--success);font-weight:600">2,973</td></tr>
+            <tr><td style="padding:4px 0;color:var(--danger)">Unposted</td><td style="padding:4px 0;text-align:right;color:var(--danger);font-weight:600">1,137</td></tr>
+            <tr><td style="padding:4px 0;color:var(--danger)">Unposted %</td><td style="padding:4px 0;text-align:right;color:var(--danger);font-weight:600">27.7%</td></tr>
+            <tr><td style="padding:4px 0;color:var(--danger)">Blocked Value</td><td style="padding:4px 0;text-align:right;color:var(--danger);font-weight:600">₹42.39 L</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
-    <div class="card-body">
-      <div class="logic-block">
-        <div class="logic-block-title">KPI Rules</div>
-        <div class="logic-row"><span class="icon">🔴</span><span><em>1,137 Unposted Lines:</em> <code>warranty_claim_settlement_report_data</code> · WHERE <code>source_row_data->>'posting_document_number' = ''</code> · COUNT(*) = 1,137. Each line = one part/labour/misc row within a WC claim invoice. Not yet posted to SAP = TM cannot trigger payment.</span></div>
-        <div class="logic-row"><span class="icon">💰</span><span><em>₹42.39L Blocked:</em> SUM of <code>list_price</code> + <code>labour_chgs</code> + <code>misc_chgs</code> for those 1,137 unposted lines. Parts = ₹34.54L, Labour = ₹5.37L, Misc = ₹2.48L.</span></div>
-        <div class="logic-row"><span class="icon">🔵</span><span><em>121 WC Pending:</em> <code>warranty_wc_data</code> · WHERE <code>claim_status IN ('Created','Submitted','Awaiting SOP Approval','Under Change','Accepted','Sent to TM','Approved By L1','Approved by L2')</code> · COUNT = 121. (14+46+50+11+6+10+8+83... — only pure WC non-terminal states)</span></div>
-        <div class="logic-row"><span class="icon">🟣</span><span><em>105 AMC No Invoice:</em> <code>warranty_amc_data</code> · WHERE <code>source_row_data->>'dealer_invoice_no' = ''</code> · COUNT = 105. TM has already approved the amount (83 at L2, 8 at L1, 10 Sent to TM) but dealer has not yet raised the invoice. Claimed value = ₹5.54L.</span></div>
-        <div class="logic-row"><span class="icon">🟢</span><span><em>₹6.91L 20% Recovery:</em> list_price in settlement register is TM's NDP (dealer net price). The MRP for dealer's margin computation = list_price field. 20% × ₹34.54L unposted parts = ₹6.91L dealer margin not yet captured.</span></div>
-      </div>
-      <div class="sql-block">
-<span class="sql-cmt">-- Count unposted settlement lines</span>
-<span class="sql-kw">SELECT</span> <span class="sql-fn">COUNT</span>(*),
-  <span class="sql-fn">SUM</span>((source_row_data->><span class="sql-str">'list_price'</span>)::<span class="sql-kw">numeric</span>) <span class="sql-kw">AS</span> parts_sum,
-  <span class="sql-fn">SUM</span>((source_row_data->><span class="sql-str">'labour_chgs'</span>)::<span class="sql-kw">numeric</span>) <span class="sql-kw">AS</span> labour_sum
-<span class="sql-kw">FROM</span> warranty_claim_settlement_report_data
-<span class="sql-kw">WHERE</span> source_row_data->><span class="sql-str">'posting_document_number'</span> = <span class="sql-str">''</span>;
-<span class="sql-cmt">-- 1137 rows · parts 34,54,258 · labour 5,37,266</span>
-
-<span class="sql-cmt">-- AMC pending invoice</span>
-<span class="sql-kw">SELECT</span> <span class="sql-fn">COUNT</span>(*), source_row_data->><span class="sql-str">'claim_status'</span>,
-  <span class="sql-fn">SUM</span>(replace(source_row_data->><span class="sql-str">'claimed_total_amount'</span>,<span class="sql-str">'Rs.',''</span>...)::<span class="sql-kw">numeric</span>)
-<span class="sql-kw">FROM</span> warranty_amc_data
-<span class="sql-kw">WHERE</span> source_row_data->><span class="sql-str">'dealer_invoice_no'</span> = <span class="sql-str">''</span>
-<span class="sql-kw">GROUP BY</span> source_row_data->><span class="sql-str">'claim_status'</span>;
-<span class="sql-cmt">-- 83 Approved by L2 · 10 Sent to TM · 8 L1 · 3 Not Validated · 1 Created</span>
-      </div>
-    </div>
-  </div>
-
-  <hr class="divider">
-
-  <!-- ══════════════════════════════════════════════════════════════════
-       REPORT 1 — INVOICE PENDING FOR UPLOAD
-  ═══════════════════════════════════════════════════════════════════ -->
-  <div class="section-head">
-    <h2 style="font-size:15px">Report 1 — Invoice Pending for SAP Upload</h2>
-  </div>
-
-  <div class="report-card red">
-    <div class="card-head">
-      <div class="card-head-left">
-        <div class="card-icon">🧾</div>
-        <div>
-          <div class="card-title">Settlement invoices with zero SAP posting — payment cannot proceed</div>
-          <div class="card-subtitle">warranty_claim_settlement_report_data · posting_document_number = '' · grouped by dealer_invc_no</div>
-        </div>
-      </div>
-      <div class="card-badge">₹42.39L blocked</div>
-    </div>
-    <div class="card-body">
-      <div class="logic-block">
-        <div class="logic-block-title">Invoice grouping logic</div>
-        <div class="logic-row"><span class="icon">📋</span><span>Settlement register stores one row per <em>part/labour/misc line-item</em> within a claim. Multiple lines belong to one invoice (<code>dealer_invc_no</code>).</span></div>
-        <div class="logic-row"><span class="icon">📋</span><span>1,137 unposted lines belong to <em>5 distinct invoices</em> that are completely unposted + 1 partially unposted invoice. Total 6 invoices with unposted lines.</span></div>
-        <div class="logic-row"><span class="icon">⚠️</span><span>Until posting_document_number is filled (SAP posts the claim), TM cannot trigger payment. These invoices must be uploaded to the TM portal immediately.</span></div>
-      </div>
-      <table class="breakdown">
-        <thead>
-          <tr>
-            <th>Invoice No</th>
-            <th>Lines</th>
-            <th>Parts (list_price)</th>
-            <th>Labour</th>
-            <th>Misc</th>
-            <th>Total Blocked</th>
-            <th>Status</th>
-          </tr>
-        </thead>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Invoice No.</th><th>Lines</th><th>Amount</th><th>Category</th><th>Status</th></tr></thead>
         <tbody>
-          <tr>
-            <td style="font-family:monospace;color:var(--red)"><strong>I263000840C00110</strong></td>
-            <td><span class="num red">38</span></td>
-            <td style="color:var(--amber)">₹1,06,742</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--red);font-weight:700">₹1,26,742</td>
-            <td><span style="background:var(--red-bg);color:var(--red);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">Not posted</span></td>
-          </tr>
-          <tr>
-            <td style="font-family:monospace;color:var(--amber)"><strong>E26500A840000126</strong></td>
-            <td><span class="num amber">57</span></td>
-            <td style="color:var(--muted)">₹33,283</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--amber);font-weight:700">₹33,283</td>
-            <td><span style="background:var(--amber-bg);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">Not posted</span></td>
-          </tr>
-          <tr>
-            <td style="font-family:monospace;color:var(--amber)"><strong>E26500A840000127</strong></td>
-            <td><span class="num amber">38</span></td>
-            <td style="color:var(--muted)">₹22,321</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--amber);font-weight:700">₹22,321</td>
-            <td><span style="background:var(--amber-bg);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">Not posted</span></td>
-          </tr>
-          <tr>
-            <td style="font-family:monospace;color:var(--amber)"><strong>E26500A840000128</strong></td>
-            <td><span class="num amber">35</span></td>
-            <td style="color:var(--muted)">₹23,792</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--amber);font-weight:700">₹23,792</td>
-            <td><span style="background:var(--amber-bg);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">Not posted</span></td>
-          </tr>
-          <tr>
-            <td style="font-family:monospace;color:var(--amber)"><strong>E26500A840000129</strong></td>
-            <td><span class="num amber">36</span></td>
-            <td style="color:var(--muted)">₹24,085</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--muted)">—</td>
-            <td style="color:var(--amber);font-weight:700">₹24,085</td>
-            <td><span style="background:var(--amber-bg);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">Not posted</span></td>
-          </tr>
-          <tr>
-            <td style="color:var(--muted);font-size:11px">(1 more partially unposted)</td>
-            <td><span class="num gray">~933</span></td>
-            <td style="color:var(--muted)">remaining</td>
-            <td>—</td>
-            <td>—</td>
-            <td style="color:var(--muted)">see note</td>
-            <td><span style="background:var(--amber-bg);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">Partial</span></td>
-          </tr>
-          <tr class="total-row">
-            <td>TOTAL (1,137 lines)</td>
-            <td><span class="num">1,137</span></td>
-            <td style="color:var(--amber)">₹34.54L</td>
-            <td style="color:var(--muted)">₹5.37L</td>
-            <td style="color:var(--muted)">₹2.48L</td>
-            <td style="color:var(--red);font-weight:700">₹42.39L</td>
-            <td>—</td>
-          </tr>
+          <tr><td class="mono">I263000840C00110</td><td>38</td><td>₹1,26,742</td><td>Internal</td><td><span class="tag tag-r">Unposted</span></td></tr>
+          <tr><td class="mono">E26500A840000126</td><td>57</td><td>₹33,283</td><td>External</td><td><span class="tag tag-r">Unposted</span></td></tr>
+          <tr><td class="mono">E26500A840000127</td><td>38</td><td>₹22,321</td><td>External</td><td><span class="tag tag-r">Unposted</span></td></tr>
+          <tr><td class="mono">E26500A840000128</td><td>35</td><td>₹23,792</td><td>External</td><td><span class="tag tag-r">Unposted</span></td></tr>
+          <tr><td class="mono">E26500A840000129</td><td>36</td><td>₹24,085</td><td>External</td><td><span class="tag tag-r">Unposted</span></td></tr>
         </tbody>
       </table>
-      <div class="note-box amber">
-        <span class="icon">⚠️</span>
-        <div class="body">
-          <strong>Invoice I263000840C00110 is highest risk (₹1.27L, 38 lines)</strong> — largest single blocked amount.
-          The 4 EV invoices (E265...) are each smaller (~₹22–33K) but represent 166 lines total.
-          All 5 invoices must be re-uploaded to TM portal for SAP to process and generate posting_document_number.
+    </div>
+    <div class="note">⚡ Escalate all 5 invoices to accounts team. I263000840C00110 alone holds ₹1.27 L. SAP entry needed for each.</div>
+  </div>
+
+  <!-- Report 2: AMC Financial -->
+  <div class="card">
+    <h2>AMC Financial — Stage Breakdown</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">AMC uses a 2-step flow: TM approval → dealer raises invoice → payment. 91 claims approved but invoice not yet raised.</p>
+    <div style="margin-bottom:16px">
+      <div class="amc-stage">
+        <div class="dot" style="background:var(--success)"></div>
+        <div class="info">
+          <div class="lbl">Approved L2</div>
+          <div class="sub2">TM L2 approval complete</div>
+        </div>
+        <div class="val">
+          <div style="font-weight:700">83 JCs</div>
+          <div style="font-size:12px;color:var(--muted)">Claimed ₹4,22,014 · TM ₹3,58,180</div>
+        </div>
+      </div>
+      <div class="amc-stage">
+        <div class="dot" style="background:#60a5fa"></div>
+        <div class="info">
+          <div class="lbl">Approved L1</div>
+          <div class="sub2">TM L1 approval complete</div>
+        </div>
+        <div class="val">
+          <div style="font-weight:700">8 JCs</div>
+          <div style="font-size:12px;color:var(--muted)">Claimed ₹31,648 · TM ₹26,488</div>
+        </div>
+      </div>
+      <div class="amc-stage">
+        <div class="dot" style="background:var(--warn)"></div>
+        <div class="info">
+          <div class="lbl">Sent to TM</div>
+          <div class="sub2">Awaiting TM review</div>
+        </div>
+        <div class="val">
+          <div style="font-weight:700">10 JCs</div>
+          <div style="font-size:12px;color:var(--muted)">Claimed ₹57,239 · TM Pending</div>
+        </div>
+      </div>
+      <div class="amc-stage">
+        <div class="dot" style="background:var(--danger)"></div>
+        <div class="info">
+          <div class="lbl">Not Validated</div>
+          <div class="sub2">Failed TM validation</div>
+        </div>
+        <div class="val">
+          <div style="font-weight:700">3 JCs</div>
+          <div style="font-size:12px;color:var(--muted)">Claimed ₹43,110 · TM ₹0</div>
+        </div>
+      </div>
+      <div class="amc-stage">
+        <div class="dot" style="background:var(--muted)"></div>
+        <div class="info">
+          <div class="lbl">Created</div>
+          <div class="sub2">Draft only</div>
+        </div>
+        <div class="val">
+          <div style="font-weight:700">1 JC</div>
+          <div style="font-size:12px;color:var(--muted)">—</div>
         </div>
       </div>
     </div>
-  </div>
-
-  <hr class="divider">
-
-  <!-- ══════════════════════════════════════════════════════════════════
-       REPORT 2 — 20% PARTS REVENUE (DEALER MARGIN)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <div class="section-head">
-    <h2 style="font-size:15px">Report 2 — 20% Parts Revenue (Dealer Margin)</h2>
-  </div>
-
-  <div class="report-card green">
-    <div class="card-head">
-      <div class="card-head-left">
-        <div class="card-icon">💹</div>
-        <div>
-          <div class="card-title">20% dealer margin on warranty parts — MRP × 20%</div>
-          <div class="card-subtitle">warranty_claim_settlement_report_data · list_price field = MRP · NDP = what TM pays back · Margin = list_price − NDP</div>
-        </div>
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="logic-block">
-        <div class="logic-block-title">Margin calculation logic</div>
-        <div class="logic-row"><span class="icon">💡</span><span><em>list_price</em> in settlement register = MRP (manufacturer's retail price for the part).</span></div>
-        <div class="logic-row"><span class="icon">💡</span><span><em>ndp</em> (Net Dealer Price) = amount TM actually pays back to dealer.</span></div>
-        <div class="logic-row"><span class="icon">💡</span><span><em>Dealer margin = list_price − ndp</em>. TM policy: dealer earns 20% of MRP on warranty parts replacement.</span></div>
-        <div class="logic-row"><span class="icon">📊</span><span>Settlement register ALL lines: list_price sum = <em>₹1,47.31L</em>, NDP sum = <em>₹1,26.47L</em>, TM margin deduction = ₹20.84L. Dealer 20% margin = ₹29.46L from all posted lines.</span></div>
-        <div class="logic-row"><span class="icon">⚠️</span><span><em>Unposted 20%:</em> The 1,137 unposted lines have ₹34.54L parts (list_price). 20% = ₹6.91L dealer margin not yet crystallised (cannot be claimed until SAP posts).</span></div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-        <div style="padding:14px;border-radius:10px;background:var(--green-bg);border:1px solid var(--green-bd);text-align:center">
-          <div style="font-size:11px;color:var(--green);font-weight:700;margin-bottom:4px">ALL POSTED PARTS (MRP)</div>
-          <div style="font-size:22px;font-weight:800;color:var(--green)">₹1,12.77L</div>
-          <div style="font-size:11px;color:var(--muted)">2,973 posted lines</div>
-        </div>
-        <div style="padding:14px;border-radius:10px;background:var(--blue-bg);border:1px solid var(--blue-bd);text-align:center">
-          <div style="font-size:11px;color:var(--blue);font-weight:700;margin-bottom:4px">20% ON POSTED</div>
-          <div style="font-size:22px;font-weight:800;color:var(--blue)">₹22.55L</div>
-          <div style="font-size:11px;color:var(--muted)">dealer margin earned</div>
-        </div>
-        <div style="padding:14px;border-radius:10px;background:var(--amber-bg);border:1px solid var(--amber-bd);text-align:center">
-          <div style="font-size:11px;color:var(--amber);font-weight:700;margin-bottom:4px">UNPOSTED PARTS (MRP)</div>
-          <div style="font-size:22px;font-weight:800;color:var(--amber)">₹34.54L</div>
-          <div style="font-size:11px;color:var(--muted)">1,137 unposted lines</div>
-        </div>
-        <div style="padding:14px;border-radius:10px;background:var(--red-bg);border:1px solid var(--red-bd);text-align:center">
-          <div style="font-size:11px;color:var(--red);font-weight:700;margin-bottom:4px">20% BLOCKED</div>
-          <div style="font-size:22px;font-weight:800;color:var(--red)">₹6.91L</div>
-          <div style="font-size:11px;color:var(--muted)">pending SAP posting</div>
-        </div>
-      </div>
-
-      <table class="breakdown">
-        <thead>
-          <tr>
-            <th>Metric</th>
-            <th style="text-align:right">All Lines (4,110)</th>
-            <th style="text-align:right">Posted (2,973)</th>
-            <th style="text-align:right">Unposted (1,137)</th>
-          </tr>
-        </thead>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
         <tbody>
-          <tr>
-            <td>Sum of list_price (MRP)</td>
-            <td style="text-align:right;color:var(--blue)">₹1,47.31L</td>
-            <td style="text-align:right;color:var(--green)">₹1,12.77L</td>
-            <td style="text-align:right;color:var(--amber)">₹34.54L</td>
-          </tr>
-          <tr>
-            <td>Sum of NDP (TM pays)</td>
-            <td style="text-align:right;color:var(--blue)">₹1,26.47L</td>
-            <td style="text-align:right;color:var(--green)">₹97.00L</td>
-            <td style="text-align:right;color:var(--amber)">₹29.47L</td>
-          </tr>
-          <tr>
-            <td>20% dealer margin on MRP</td>
-            <td style="text-align:right;color:var(--green);font-weight:700">₹29.46L</td>
-            <td style="text-align:right;color:var(--green)">₹22.55L</td>
-            <td style="text-align:right;color:var(--red);font-weight:700">₹6.91L ⚠️</td>
-          </tr>
-          <tr>
-            <td>Sum labour_chgs</td>
-            <td style="text-align:right">₹18.91L</td>
-            <td style="text-align:right">₹13.54L</td>
-            <td style="text-align:right">₹5.37L</td>
-          </tr>
-          <tr class="total-row">
-            <td>Grand total claim value</td>
-            <td style="text-align:right;color:var(--blue)">₹1,73.85L</td>
-            <td style="text-align:right;color:var(--green)">₹1,31.46L</td>
-            <td style="text-align:right;color:var(--red)">₹42.39L</td>
-          </tr>
+          <tr><td>Total AMC Records</td><td>403</td></tr>
+          <tr><td>Settled</td><td style="color:var(--success)">298</td></tr>
+          <tr><td>L2 Approved (no invoice)</td><td style="color:var(--warn)">83</td></tr>
+          <tr><td>L1 Approved (no invoice)</td><td style="color:var(--warn)">8</td></tr>
+          <tr><td>Total no-invoice approved</td><td style="color:var(--danger)">91</td></tr>
+          <tr><td>Claimed value (L2)</td><td>₹4,22,014</td></tr>
+          <tr><td>TM Approved value (L2)</td><td>₹3,58,180</td></tr>
+          <tr><td>TM Gap (L2)</td><td style="color:var(--warn)">₹63,834</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">⚡ 91 AMC claims approved but dealer invoice not raised. Each day's delay defers ₹3.84 L+ in recoverable revenue.</div>
+  </div>
+
+  <!-- Report 3: WC Financial -->
+  <div class="card">
+    <h2>WC Financial Summary</h2>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Total WC Claims</td><td>2,365</td><td></td></tr>
+          <tr><td>Total Claimed Value</td><td>₹2,55,44,000</td><td></td></tr>
+          <tr><td>Total Settled Value</td><td style="color:var(--success)">₹2,54,62,000</td><td>2,182 claims settled</td></tr>
+          <tr><td>Settlement vs Claimed Gap</td><td style="color:var(--warn)">₹82,000</td><td>0.32% variance</td></tr>
+          <tr><td>In-Flight WC Claims</td><td style="color:var(--warn)">121</td><td>SOP=50, Submitted=46, UC=11, TM=10, Accepted=6</td></tr>
+          <tr><td>Rejected / Cancelled</td><td style="color:var(--danger)">53</td><td>Rejected=43, Cancelled=10</td></tr>
+          <tr><td>Avg Settled Value per Claim</td><td>₹11,669</td><td>₹2,54,62,000 / 2,182</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <hr class="divider">
-
-  <!-- ══════════════════════════════════════════════════════════════════
-       REPORT 3 — AMC SETTLEMENT STAGES
-  ═══════════════════════════════════════════════════════════════════ -->
-  <div class="section-head">
-    <h2 style="font-size:15px">Report 3 — AMC Settlement Stages</h2>
-  </div>
-
-  <div class="grid-2">
-    <div class="report-card purple">
-      <div class="card-head">
-        <div class="card-head-left">
-          <div class="card-icon">🔗</div>
-          <div>
-            <div class="card-title">AMC claim lifecycle — approval → invoice → payment</div>
-            <div class="card-subtitle">warranty_amc_data · 403 total AMC claims · distinct from WC — dealer raises invoice after TM approval</div>
-          </div>
-        </div>
-        <div class="card-badge">403 AMC claims</div>
-      </div>
-      <div class="card-body">
-        <div class="logic-block">
-          <div class="logic-block-title">AMC workflow — critical difference from WC</div>
-          <div class="logic-row"><span class="icon">🔑</span><span>AMC has a <em>unique 2-step</em> process: TM approves the amount first → THEN dealer raises invoice (<code>dealer_invoice_no</code>) → payment follows (<code>settlement_dt</code>).</span></div>
-          <div class="logic-row"><span class="icon">🔑</span><span>"<em>Settled</em>" = has dealer_invoice_no AND settlement_dt filled = TM paid.</span></div>
-          <div class="logic-row"><span class="icon">⚠️</span><span>105 claims are pre-invoice — TM has approved (L1/L2/TM) but <em>dealer has not raised the invoice</em>. Money is pre-approved but uncollected.</span></div>
-          <div class="logic-row"><span class="icon">💰</span><span>Uncollected value: <em>₹5.54L claimed</em> / <em>₹4.06L TM pre-approved</em> (settled_tm_amount for L2+L1 approved).</span></div>
-        </div>
-
-        <div class="stage-flow">
-          <div class="stage-box" style="border-color:var(--muted)">
-            <div class="snum" style="color:var(--muted)">1</div>
-            <div class="slabel">Created</div>
-          </div>
-          <div class="stage-arrow">→</div>
-          <div class="stage-box" style="border-color:var(--blue-bd);background:var(--blue-bg)">
-            <div class="snum" style="color:var(--blue)">8</div>
-            <div class="slabel">Approved L1</div>
-          </div>
-          <div class="stage-arrow">→</div>
-          <div class="stage-box" style="border-color:var(--blue-bd);background:var(--blue-bg)">
-            <div class="snum" style="color:var(--blue)">83</div>
-            <div class="slabel">Approved L2</div>
-          </div>
-          <div class="stage-arrow">→</div>
-          <div class="stage-box" style="border-color:var(--amber-bd);background:var(--amber-bg)">
-            <div class="snum" style="color:var(--amber)">10</div>
-            <div class="slabel">Sent to TM</div>
-          </div>
-          <div class="stage-arrow">→</div>
-          <div class="stage-box" style="border-color:var(--green-bd);background:var(--green-bg)">
-            <div class="snum" style="color:var(--green)">298</div>
-            <div class="slabel">Settled ✓</div>
-          </div>
-        </div>
-
-        <table class="breakdown">
-          <thead>
-            <tr><th>Stage</th><th>Count</th><th>Claimed ₹</th><th>TM Pre-approved ₹</th><th>Invoice?</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>Settled</td><td><span class="num green">298</span></td><td style="color:var(--muted)">—</td><td style="color:var(--green)">₹14.91L paid</td><td style="color:var(--green)">✓ Yes</td></tr>
-            <tr><td>Approved by L2</td><td><span class="num blue">83</span></td><td style="color:var(--blue)">₹4.53L</td><td style="color:var(--blue)">₹3.74L</td><td style="color:var(--red)">✗ No invoice</td></tr>
-            <tr><td>Sent to TM</td><td><span class="num amber">10</span></td><td style="color:var(--amber)">₹0.43L</td><td style="color:var(--muted)">Pending TM</td><td style="color:var(--red)">✗ No invoice</td></tr>
-            <tr><td>Approved By L1</td><td><span class="num blue">8</span></td><td style="color:var(--blue)">₹0.41L</td><td style="color:var(--blue)">₹0.33L</td><td style="color:var(--red)">✗ No invoice</td></tr>
-            <tr><td>Not Validated</td><td><span class="num gray">3</span></td><td style="color:var(--muted)">₹0.17L</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td></tr>
-            <tr><td>Created</td><td><span class="num gray">1</span></td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td></tr>
-            <tr class="total-row"><td>TOTAL</td><td><span class="num">403</span></td><td style="color:var(--blue)">₹22.80L</td><td style="color:var(--green)">₹14.91L paid</td><td>—</td></tr>
-          </tbody>
-        </table>
-
-        <div class="note-box amber">
-          <span class="icon">🚨</span>
-          <div class="body">
-            <strong>₹4.06L of pre-approved AMC money is uncollected.</strong>
-            83 claims at L2 approval are TM-approved but dealer has not raised the invoice.
-            Action: generate and submit dealer invoices for all 83 L2-approved AMC claims immediately.
-          </div>
-        </div>
-      </div>
+  <!-- Report 4: Margin Analysis -->
+  <div class="card">
+    <h2>Parts Margin Analysis (20% Benchmark)</h2>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Category</th><th>Parts Value</th><th>20% Margin</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Posted Parts (SAP confirmed)</td>
+            <td>₹1,12,75,000</td>
+            <td style="color:var(--success)">₹22.55 L</td>
+            <td><span class="tag tag-g">Realized</span></td>
+          </tr>
+          <tr>
+            <td>Unposted Parts (blocked)</td>
+            <td>₹34,54,000</td>
+            <td style="color:var(--danger)">₹6.91 L</td>
+            <td><span class="tag tag-r">Blocked</span></td>
+          </tr>
+          <tr style="font-weight:600">
+            <td>Total Parts</td>
+            <td>₹1,47,29,000</td>
+            <td>₹29.46 L</td>
+            <td><span class="tag tag-y">76.5% Realized</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-
-    <!-- REPORT 4 — SPECIAL CHARGES -->
-    <div class="report-card amber">
-      <div class="card-head">
-        <div class="card-head-left">
-          <div class="card-icon">🔧</div>
-          <div>
-            <div class="card-title">Special charges (SPL) — job-code breakdown</div>
-            <div class="card-subtitle">980016 Rusting · 980019 Loaner · 980025 Misc · from settlement register · job_code field</div>
-          </div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="logic-block">
-          <div class="logic-block-title">Logic — job_code field in settlement register</div>
-          <div class="logic-row"><span class="icon">📋</span><span>Settlement register has <code>source_row_data->>'job_code'</code>. Special charges use dedicated job codes: <em>980016</em> (Anti-Rust/Rusting), <em>980019</em> (Loaner car), <em>980025</em> (Misc).</span></div>
-          <div class="logic-row"><span class="icon">💡</span><span>Under-claiming SPL = revenue leakage. If a loaner car was provided but 980019 not in claim → dealer absorbs that cost.</span></div>
-          <div class="logic-row"><span class="icon">📊</span><span>Count by filtering <code>job_code IN ('980016','980019','980025')</code> in settlement register rows.</span></div>
-        </div>
-        <table class="breakdown">
-          <thead>
-            <tr><th>Code</th><th>Type</th><th>Count in settlement</th><th>Action if missing</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="font-family:monospace;color:var(--amber)">980016</td>
-              <td><strong>Anti-Rust/Rusting</strong><br><span style="font-size:10.5px;color:var(--muted)">Paint protection, under-body</span></td>
-              <td><span class="num amber">Present in posted lines</span></td>
-              <td style="font-size:11px;color:var(--muted)">Claim if vehicle had rust-related repair</td>
-            </tr>
-            <tr>
-              <td style="font-family:monospace;color:var(--purple)">980019</td>
-              <td><strong>Loaner Vehicle</strong><br><span style="font-size:10.5px;color:var(--muted)">Courtesy car during extended repair</span></td>
-              <td><span class="num purple">Present in posted lines</span></td>
-              <td style="font-size:11px;color:var(--muted)">Claim when loaner provided &gt;24h repair</td>
-            </tr>
-            <tr>
-              <td style="font-family:monospace;color:var(--blue)">980025</td>
-              <td><strong>Misc Special Charges</strong><br><span style="font-size:10.5px;color:var(--muted)">Other TM-approved SPL expenses</span></td>
-              <td><span class="num blue">Present in posted lines</span></td>
-              <td style="font-size:11px;color:var(--muted)">Ensure not under-claimed</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="note-box blue">
-          <span class="icon">💡</span>
-          <div class="body">
-            <strong>SPL misc_chgs total in unposted lines: ₹2.48L.</strong>
-            The misc_chgs column in settlement register covers all special charge codes.
-            ₹2.48L is blocked for 1,137 unposted lines — part of the ₹42.39L total blocked.
-          </div>
-        </div>
-
-        <!-- WC Pending count card -->
-        <div style="margin-top:20px">
-          <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:10px">WC Pending Claims — In-Flight Breakdown (121 total)</div>
-          <div class="logic-block">
-            <div class="logic-block-title">WC non-terminal statuses (not Settled/Rejected/Cancelled)</div>
-            <div class="logic-row"><span class="icon">📌</span><span>Correct count is <em>121</em>, not "31" shown in some production UI variants. Source: warranty_wc_data WHERE claim_status NOT IN ('Settled','Rejected','Cancelled','Not Validated').</span></div>
-          </div>
-          <table class="breakdown">
-            <thead><tr><th>Status</th><th>Count</th><th>Urgency</th></tr></thead>
-            <tbody>
-              <tr><td>Awaiting SOP Approval</td><td><span class="num amber">50</span></td><td style="color:var(--amber)">High — SOP blocks payment</td></tr>
-              <tr><td>Submitted</td><td><span class="num blue">46</span></td><td style="color:var(--blue)">Normal — under TM review</td></tr>
-              <tr><td>Created</td><td><span class="num gray">14</span></td><td style="color:var(--muted)">Action needed — submit to TM</td></tr>
-              <tr><td>Under Change</td><td><span class="num purple">11</span></td><td style="color:var(--purple)">Medium — revision in progress</td></tr>
-              <tr class="total-row"><td>TOTAL PENDING WC</td><td><span class="num">121</span></td><td>—</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- FOOTER -->
-  <hr class="divider">
-  <div class="footer-stat">
-    <span>📦</span>
-    <span>Source: <strong>Supabase full dump (authoritative)</strong> · warranty_claim_settlement_report_data (4,110 lines) · warranty_amc_data (403) · warranty_wc_data (2,365) · All financial figures from <code>source_row_data</code> JSONB — list_price, labour_chgs, misc_chgs, ndp, claimed_total_amount, settled_tm_amount · First Mobital Pvt. Ltd.</span>
+    <div class="note">💡 ₹6.91 L in parts margin is blocked by 1,137 unposted SAP lines. Post these entries to unlock the full ₹29.46 L parts margin.</div>
   </div>
 
 </div>
