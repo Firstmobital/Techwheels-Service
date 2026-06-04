@@ -1164,52 +1164,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    const fsbCounts = new Map<string, number>() // stype -> count
-    
     for (const row of filteredRecords) {
-      if (row.category === 'FSB') {
-        // Decompose FSB by service type
-        const stype = row.serviceType || 'unknown'
-        fsbCounts.set(stype, (fsbCounts.get(stype) ?? 0) + 1)
-      } else {
-        counts.set(row.category, (counts.get(row.category) ?? 0) + 1)
-      }
+      counts.set(row.category, (counts.get(row.category) ?? 0) + 1)
     }
 
-    const result: Array<{ label: string; count: number; claim: boolean }> = []
-    
-    // Add non-FSB categories
-    for (const source of SOURCE_TABLES) {
-      if (source.category !== 'FSB') {
-        const count = counts.get(source.category) ?? 0
-        result.push({
-          label: source.category,
-          count,
-          claim: source.category === 'Warranty Claim' || source.category === 'Claim Settlement',
-        })
+    return SOURCE_TABLES.map((source) => {
+      const count = counts.get(source.category) ?? 0
+      return {
+        label: source.category === 'FSB' ? 'FSB (Free Service)' : source.category,
+        count,
+        claim: source.category === 'Warranty Claim' || source.category === 'Claim Settlement',
       }
-    }
-
-    // Add FSB with service type decomposition in order: 4, 1, 2, 3
-    const stypeOrder = ['4', '1', '2', '3']
-    for (const stype of stypeOrder) {
-      const count = fsbCounts.get(stype) ?? 0
-      if (count > 0) {
-        const labels: Record<string, string> = {
-          '1': 'FSB — 1st Free Service',
-          '2': 'FSB — 2nd Free Service',
-          '3': 'FSB — 3rd Free Service',
-          '4': 'FSB — 4th Free Service',
-        }
-        result.push({
-          label: labels[stype] || `FSB (stype=${stype})`,
-          count,
-          claim: true,
-        })
-      }
-    }
-
-    return result
+    })
   }, [filteredRecords])
 
   const computedClaimTypeRows = useMemo(() => {
