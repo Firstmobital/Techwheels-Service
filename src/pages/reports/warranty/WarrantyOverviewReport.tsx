@@ -355,15 +355,6 @@ const SOURCE_TABLES: SourceTableConfig[] = [
 
 const STATUS_KEYS = ['claim_status', 'current_status', 'settlement_status', 'approval_status', 'stage', 'status']
 
-const REJECTION_REASON_KEYS = [
-  'vcm_comments',
-  'rejection_reason',
-  'reason_for_rejection',
-  'vcm_remarks',
-  'remarks',
-  'comments',
-]
-
 const POSTING_DOC_KEYS = [
   'posting_document_no',
   'posting_document_number',
@@ -950,37 +941,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     }
   }, [filteredRecords])
 
-  const pipelineData = useMemo(() => {
-    const warrantyRows = workflowStatusRecords.filter((record) => record.category === 'Warranty Claim')
-    const buckets = {
-      created: 0,
-      submitted: 0,
-      awaiting_sop: 0,
-      under_change: 0,
-      settled: 0,
-      rejected: 0,
-    }
-
-    for (const row of warrantyRows) {
-      const status = normalizeText(row.status)
-      if (status === 'created') buckets.created += 1
-      else if (status === 'submitted') buckets.submitted += 1
-      else if (status === 'awaiting sop approval') buckets.awaiting_sop += 1
-      else if (status === 'under change') buckets.under_change += 1
-      else if (status === 'settled') buckets.settled += 1
-      else if (status === 'rejected') buckets.rejected += 1
-    }
-
-    return [
-      { stage: 'Created', count: buckets.created, tone: 'var(--muted)' },
-      { stage: 'Submitted', count: buckets.submitted, tone: 'var(--accent)' },
-      { stage: 'Awaiting SOP', count: buckets.awaiting_sop, tone: 'var(--warn)' },
-      { stage: 'Under Change', count: buckets.under_change, tone: '#4F46E5' },
-      { stage: 'Settled', count: buckets.settled, tone: 'var(--success)' },
-      { stage: 'Rejected', count: buckets.rejected, tone: 'var(--danger)' },
-    ]
-  }, [workflowStatusRecords])
-
   const pipelineBreakdownRows = useMemo(() => {
     const warrantyRows = workflowStatusRecords.filter((record) => record.category === 'Warranty Claim')
     const total = warrantyRows.length
@@ -1379,10 +1339,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     const settlementSapPendingPosting = filteredRecords.filter(
       (r) => r.category === 'Claim Settlement' && String(r.postingDocNo || '').trim() === '',
     )
-    const settlementSapPosted = filteredRecords.filter(
-      (r) => r.category === 'Claim Settlement' && String(r.postingDocNo || '').trim() !== '',
-    )
-
     // Alert 5: AMC approved but no dealer invoice.
     const amcApprovedNoInvoice = filteredRecords.filter((r) => {
       if (r.category !== 'AMC') return false
@@ -1604,12 +1560,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }
 
   const exportAlertRows = (alert: WarrantyAlert) => {
-    const headers = ['job_card', 'model', 'status', 'amount', 'age_days', 'note', 'category', 'portal', 'location', 'table_name']
+    const headers: Array<keyof WarrantyAlertExportRow> = ['job_card', 'model', 'status', 'amount', 'age_days', 'note', 'category', 'portal', 'location', 'table_name']
     const escapeCsv = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`
     const lines = [headers.join(',')]
 
     for (const row of alert.exportRows) {
-      lines.push(headers.map((key) => escapeCsv(String((row as Record<string, string>)[key] ?? ''))).join(','))
+      lines.push(headers.map((key) => escapeCsv(String(row[key] ?? ''))).join(','))
     }
 
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -1905,7 +1861,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                           <div style={{ fontSize: 36, lineHeight: 1, fontWeight: 700, color: statusTones[row.status] || 'var(--faint)' }}>{row.count.toLocaleString('en-IN')}</div>
                           <div style={{ position: 'relative', display: 'inline-block' }}>
-                            <div style={{ position: 'relative', display: 'inline-block', group: 'tooltip' }}>
+                              <div style={{ position: 'relative', display: 'inline-block' }}>
                               <button
                                 style={{
                                   background: 'transparent',
