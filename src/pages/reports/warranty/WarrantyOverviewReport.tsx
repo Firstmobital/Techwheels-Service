@@ -328,7 +328,9 @@ interface WarrantyRecord {
   miscAmount: number
   postingDocNo: string
   dealerInvoiceNo: string
+  vcmComments: string
   model: string
+  parentProductLine: string
   jobCardNumber: string
   createdAt: string
   invoiceDate: string | null
@@ -738,6 +740,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             const status = extractStatusValue(source)
             const claimCategory = extractByPreferredKeys(source, CLAIM_CATEGORY_KEYS)
             const serviceType = extractByPreferredKeys(source, SERVICE_TYPE_KEYS)
+            const vcmComments = extractByPreferredKeys(source, ['vcm_comments'])
             const rejectionReason =
               extractByPreferredKeys(source, ['vcm_comments']) ||
               extractByPreferredKeys(source, ['rejection_reason']) ||
@@ -793,7 +796,9 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               miscAmount,
               postingDocNo,
               dealerInvoiceNo,
+              vcmComments,
               model: extractByPreferredKeys(source, MODEL_KEYS),
+              parentProductLine: extractByPreferredKeys(source, ['parent_product_line_name']),
               jobCardNumber: extractByPreferredKeys(source, JC_KEYS),
               createdAt: row.created_at,
               invoiceDate: parsePotentialDate(invoiceDateRaw),
@@ -1222,29 +1227,83 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     ]
   }, [filteredRecords])
 
-  const computedRejectionRows = useMemo(() => {
+  const computedRejectionBreakdown = useMemo(() => {
     const rejectedRows = workflowStatusRecords.filter((record) => normalizeText(record.status) === 'rejected')
-    const grouped = new Map<string, number>()
-    for (const row of rejectedRows) {
-      const reason = String(row.rejectionReason || '').trim() || '(blank)'
-      grouped.set(reason, (grouped.get(reason) ?? 0) + 1)
+
+    const toReasonKey = (reason: string) =>
+      reason
+        .slice(0, 80)
+        .replace(/\s+/g, ' ')
+        .trim()
+
+    const getReasonKey = (record: WarrantyRecord): string | null => {
+      // Reference logic: vcm_comments first; fallback to rejection_reason fields when unavailable.
+      const rawReason = String(record.vcmComments || record.rejectionReason || '').trim()
+      const reasonKey = toReasonKey(rawReason)
+      const normalized = reasonKey.toLowerCase()
+      if (!reasonKey || normalized === '-' || normalized === '--' || normalized === 'na' || normalized === 'n/a') return null
+      return reasonKey
     }
 
-    const totalRejected = rejectedRows.length
-    const ranked = Array.from(grouped.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
+    const rankCategory = (category: WarrantyRecord['category'], topN: number, tone: string) => {
+      const rows = rejectedRows.filter((row) => row.category === category)
+      const grouped = new Map<string, number>()
+      for (const row of rows) {
+        const reasonKey = getReasonKey(row)
+        if (!reasonKey) continue
+        grouped.set(reasonKey, (grouped.get(reasonKey) ?? 0) + 1)
+      }
 
-    return ranked.map(([reason, count], index) => ({
-      reason,
-      n: count,
-      pct: totalRejected > 0 ? Math.max(1, Math.round((count / totalRejected) * 100)) : 0,
-      tone: index < 2 ? 'var(--danger)' : index < 4 ? 'var(--warn)' : 'var(--muted)',
-    }))
-  }, [workflowStatusRecords])
+      const ranked = Array.from(grouped.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, topN)
+        .map(([reason, count], index) => ({
+          reason,
+          count,
+          pct: rows.length > 0 ? Number(((count / rows.length) * 100).toFixed(1)) : 0,
+          tone: index < 2 ? tone : index < 4 ? 'var(--warn)' : 'var(--muted)',
+        }))
 
-  const totalRejectedRows = useMemo(() => {
-    return workflowStatusRecords.filter((record) => normalizeText(record.status) === 'rejected').length
+      return {
+        total: rows.length,
+        reasons: ranked,
+        coverage: rows.length > 0 ? ranked.reduce((sum, row) => sum + row.count, 0) : 0,
+        exportRows: rows.map((row) => ({
+          job_card: row.jobCardNumber || '',
+          model: row.model || '',
+          status: row.status || '',
+          reason: String(row.vcmComments || row.rejectionReason || '').trim(),
+          amount: formatAmountShort(row.claimAmount),
+          age_days: String(row.ageDays),
+          category: row.category,
+          portal: inferPortal(row),
+          location: inferLocation(row),
+          table_name: row.tableName,
+        })),
+      }
+    }
+
+    const fsb = rankCategory('FSB', 6, 'var(--danger)')
+    const wc = rankCategory('Warranty Claim', 5, 'var(--warn)')
+    const updation = rankCategory('Updation', 5, '#ef4444')
+    const goodwill = rankCategory('Goodwill', 4, '#4F46E5')
+    const partWc = rankCategory('Part WC', 4, 'var(--accent)')
+
+    return {
+      totalRejected: rejectedRows.length,
+      fsb,
+      wc,
+      updation,
+      goodwill,
+      partWc,
+      cards: [
+        { key: 'fsb', label: 'FSB Rejections', tone: 'var(--danger)', data: fsb },
+        { key: 'wc', label: 'WC Rejections', tone: 'var(--warn)', data: wc },
+        { key: 'updation', label: 'Updation Rejections', tone: '#ef4444', data: updation },
+        { key: 'goodwill', label: 'Goodwill Rejections', tone: '#4F46E5', data: goodwill },
+        { key: 'partwc', label: 'Part WC Rejections', tone: 'var(--accent)', data: partWc },
+      ],
+    }
   }, [workflowStatusRecords])
 
   const computedModelRows = useMemo(() => {
@@ -1254,7 +1313,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
     const grouped = new Map<string, { count: number; amount: number }>()
     for (const row of settledWcRows) {
-      const model = row.model || '(blank)'
+      // Reference logic: group settled WC by parent_product_line_name (not variant-level model field).
+      const model = row.parentProductLine || '(blank)'
       const current = grouped.get(model) ?? { count: 0, amount: 0 }
       current.count += 1
       current.amount += row.claimAmount
@@ -1548,6 +1608,33 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     const scopeFuel = selectedFuelType === 'ALL' ? 'all-fuel' : selectedFuelType.toLowerCase()
     link.href = url
     link.download = `warranty-critical-alert-${alert.key}-${scopeLocation}-${scopeFuel}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportRejectionCategoryRows = (card: {
+    key: string
+    label: string
+    data: { exportRows: Array<Record<string, string>> }
+  }) => {
+    const headers = ['job_card', 'model', 'status', 'reason', 'amount', 'age_days', 'category', 'portal', 'location', 'table_name']
+    const escapeCsv = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`
+    const lines = [headers.join(',')]
+
+    for (const row of card.data.exportRows) {
+      lines.push(headers.map((key) => escapeCsv(String(row[key] ?? ''))).join(','))
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const scopeLocation = selectedLocation === 'ALL' ? 'all-locations' : selectedLocation.toLowerCase().replace(/\s+/g, '-')
+    const scopeFuel = selectedFuelType === 'ALL' ? 'all-fuel' : selectedFuelType.toLowerCase()
+    const categoryKey = card.key.toLowerCase().replace(/\s+/g, '-')
+    link.href = url
+    link.download = `warranty-rejections-${categoryKey}-${scopeLocation}-${scopeFuel}.csv`
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -1918,69 +2005,71 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </div>
           </Card>
 
-          <Card title="Payment status — all categories" sub="warranty_wc / updation / amc / goodwill / fsb + claim settlement" pad={false}>
-            <div className="tbl-wrap scroll">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th className="ctr">Settled/Accepted</th>
-                    <th className="ctr">In Progress</th>
-                    <th className="ctr">Rejected</th>
-                    <th className="ctr">Created</th>
-                    <th className="ctr">Total Rows</th>
-                    <th className="ctr">Terminal %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentStatusRows.map((r, i) => (
-                    <tr key={i}>
-                      <td className="strong">{r.displayCategory}</td>
-                      <td className="ctr" style={{ color: 'var(--success)', fontWeight: 600 }}>
-                        {r.settledAccepted.toLocaleString('en-IN')} {r.settledText}
-                        {r.settledSecondary && (
-                          <span style={{ color: 'var(--success)', marginLeft: 4 }}>· {r.settledSecondary}</span>
-                        )}
-                      </td>
-                      <td className="ctr" style={{ color: 'var(--warn)' }}>
-                        {r.inProgressParts.length === 0 ? (
-                          '—'
-                        ) : (
-                          <span>
-                            {r.inProgressParts.map((part, idx) => (
-                              <span key={`${part.label}-${idx}`}>
-                                {idx > 0 ? ' · ' : ''}
-                                <span style={{ color: part.tone }}>{part.count.toLocaleString('en-IN')}</span> {part.label}
-                              </span>
-                            ))}
-                          </span>
-                        )}
-                      </td>
-                      <td className="ctr" style={{ color: 'var(--danger)' }}>
-                        {r.showRejectedDash ? '—' : r.rejected.toLocaleString('en-IN')}
-                      </td>
-                      <td className="ctr" style={{ color: 'var(--muted)' }}>
-                        {r.showCreatedDash ? '—' : r.created.toLocaleString('en-IN')}
-                      </td>
-                      <td className="ctr">{r.total.toLocaleString('en-IN')}</td>
-                      <td className="ctr" style={{ color: r.terminalPct < 80 ? 'var(--warn)' : 'var(--success)' }}>{r.terminalPct}%</td>
+          <div style={{ marginTop: 'var(--gap)' }}>
+            <Card title="Payment status — all categories" sub="warranty_wc / updation / amc / goodwill / fsb + claim settlement" pad={false}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th className="ctr">Settled/Accepted</th>
+                      <th className="ctr">In Progress</th>
+                      <th className="ctr">Rejected</th>
+                      <th className="ctr">Created</th>
+                      <th className="ctr">Total Rows</th>
+                      <th className="ctr">Terminal %</th>
                     </tr>
-                  ))}
-                  <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
-                    <td>GRAND TOTAL (all tables)</td>
-                    <td className="ctr" style={{ color: 'var(--success)' }}>{paymentTotals.settledAccepted.toLocaleString('en-IN')}</td>
-                    <td className="ctr" style={{ color: 'var(--warn)' }}>{paymentTotals.inProgress.toLocaleString('en-IN')} pending</td>
-                    <td className="ctr" style={{ color: 'var(--danger)' }}>
-                      {paymentTotals.rejected.toLocaleString('en-IN')}
-                    </td>
-                    <td className="ctr">{paymentTotals.created.toLocaleString('en-IN')}</td>
-                    <td className="ctr">{paymentTotals.total.toLocaleString('en-IN')}</td>
-                    <td className="ctr" style={{ color: 'var(--success)' }}>{paymentTotals.terminalPct}%</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                  </thead>
+                  <tbody>
+                    {paymentStatusRows.map((r, i) => (
+                      <tr key={i}>
+                        <td className="strong">{r.displayCategory}</td>
+                        <td className="ctr" style={{ color: 'var(--success)', fontWeight: 600 }}>
+                          {r.settledAccepted.toLocaleString('en-IN')} {r.settledText}
+                          {r.settledSecondary && (
+                            <span style={{ color: 'var(--success)', marginLeft: 4 }}>· {r.settledSecondary}</span>
+                          )}
+                        </td>
+                        <td className="ctr" style={{ color: 'var(--warn)' }}>
+                          {r.inProgressParts.length === 0 ? (
+                            '—'
+                          ) : (
+                            <span>
+                              {r.inProgressParts.map((part, idx) => (
+                                <span key={`${part.label}-${idx}`}>
+                                  {idx > 0 ? ' · ' : ''}
+                                  <span style={{ color: part.tone }}>{part.count.toLocaleString('en-IN')}</span> {part.label}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </td>
+                        <td className="ctr" style={{ color: 'var(--danger)' }}>
+                          {r.showRejectedDash ? '—' : r.rejected.toLocaleString('en-IN')}
+                        </td>
+                        <td className="ctr" style={{ color: 'var(--muted)' }}>
+                          {r.showCreatedDash ? '—' : r.created.toLocaleString('en-IN')}
+                        </td>
+                        <td className="ctr">{r.total.toLocaleString('en-IN')}</td>
+                        <td className="ctr" style={{ color: r.terminalPct < 80 ? 'var(--warn)' : 'var(--success)' }}>{r.terminalPct}%</td>
+                      </tr>
+                    ))}
+                    <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
+                      <td>GRAND TOTAL (all tables)</td>
+                      <td className="ctr" style={{ color: 'var(--success)' }}>{paymentTotals.settledAccepted.toLocaleString('en-IN')}</td>
+                      <td className="ctr" style={{ color: 'var(--warn)' }}>{paymentTotals.inProgress.toLocaleString('en-IN')} pending</td>
+                      <td className="ctr" style={{ color: 'var(--danger)' }}>
+                        {paymentTotals.rejected.toLocaleString('en-IN')}
+                      </td>
+                      <td className="ctr">{paymentTotals.created.toLocaleString('en-IN')}</td>
+                      <td className="ctr">{paymentTotals.total.toLocaleString('en-IN')}</td>
+                      <td className="ctr" style={{ color: 'var(--success)' }}>{paymentTotals.terminalPct}%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
 
           <div className="grid-2" style={{ marginTop: 'var(--gap)' }}>
             <Card title="Claims by source" sub="rows per warranty source table">
@@ -2031,51 +2120,150 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </Card>
           </div>
 
-          <div className="grid-2" style={{ marginTop: 'var(--gap)' }}>
-            <Card title="Top rejection reasons" sub={`real drivers · ${totalRejectedRows} rejections across categories`}>
-                    {computedRejectionRows.length === 0 ? (
-                      <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>No rejected rows in current scope.</div>
-                    ) : (
-                      computedRejectionRows.map((r, i) => (
-                        <div key={i} style={{ marginBottom: 11 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5, gap: 8 }}>
-                            <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{r.reason}</span>
-                            <span className="mono" style={{ color: 'var(--muted)', flex: 'none' }}>
-                              {r.n} · {r.pct}%
-                            </span>
+          <div style={{ marginTop: 'var(--gap)' }}>
+            <Card title="Top rejection reasons" sub={`real drivers · ${computedRejectionBreakdown.totalRejected} rejections across categories`}>
+              {computedRejectionBreakdown.totalRejected === 0 ? (
+                <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>No rejected rows in current scope.</div>
+              ) : (
+                <>
+                  <div className="note" style={{ marginBottom: 12 }}>
+                    <span className="ic">
+                      <Icon name="reports" size={16} />
+                    </span>
+                    <div>
+                      <b>
+                        Total rejected = FSB {computedRejectionBreakdown.fsb.total.toLocaleString('en-IN')} + WC {computedRejectionBreakdown.wc.total.toLocaleString('en-IN')} + Updation {computedRejectionBreakdown.updation.total.toLocaleString('en-IN')} + Goodwill {computedRejectionBreakdown.goodwill.total.toLocaleString('en-IN')} + Part WC {computedRejectionBreakdown.partWc.total.toLocaleString('en-IN')} = {computedRejectionBreakdown.totalRejected.toLocaleString('en-IN')}
+                      </b>
+                    </div>
+                  </div>
+
+                  <div className="grid-2" style={{ gap: 16, marginBottom: 12 }}>
+                    {computedRejectionBreakdown.cards.slice(0, 2).map((card) => {
+                      const share =
+                        computedRejectionBreakdown.totalRejected > 0
+                          ? Number(((card.data.total / computedRejectionBreakdown.totalRejected) * 100).toFixed(1))
+                          : 0
+
+                      return (
+                        <div key={card.key} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 12, background: 'var(--panel)' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 700, color: card.tone }}>
+                                {card.label} ({card.data.total.toLocaleString('en-IN')})
+                              </div>
+                              <button
+                                className="tbtn"
+                                type="button"
+                                onClick={() => exportRejectionCategoryRows(card)}
+                                title={`Export all ${card.label.toLowerCase()} rows`}
+                                style={{ padding: '4px 8px', minHeight: 26 }}
+                              >
+                                <Icon name="download" size={12} />
+                              </button>
+                            </div>
+                            <span className="mono" style={{ color: 'var(--muted)', fontWeight: 700 }}>{share}%</span>
                           </div>
-                          <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
-                            <span style={{ display: 'block', height: '100%', width: `${r.pct}%`, background: r.tone, borderRadius: 99 }} />
-                          </div>
+
+                          {card.data.reasons.length === 0 ? (
+                            <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>No rejection reason text in current scope.</div>
+                          ) : (
+                            card.data.reasons.map((row, index) => (
+                              <div key={`${card.key}-${index}`} style={{ marginBottom: 9 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4, gap: 8 }}>
+                                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{row.reason}</span>
+                                  <span className="mono" style={{ color: row.tone, flex: 'none', fontWeight: 700 }}>
+                                    {row.count.toLocaleString('en-IN')} · {row.pct}%
+                                  </span>
+                                </div>
+                                <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
+                                  <span style={{ display: 'block', height: '100%', width: `${row.pct}%`, background: row.tone, borderRadius: 99 }} />
+                                </div>
+                              </div>
+                            ))
+                          )}
                         </div>
-                      ))
-                    )}
+                      )
+                    })}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+                    {computedRejectionBreakdown.cards.slice(2).map((card) => {
+                      const share =
+                        computedRejectionBreakdown.totalRejected > 0
+                          ? Number(((card.data.total / computedRejectionBreakdown.totalRejected) * 100).toFixed(1))
+                          : 0
+
+                      return (
+                        <div key={card.key} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 12, background: 'var(--panel)' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 700, color: card.tone }}>
+                                {card.label} ({card.data.total.toLocaleString('en-IN')})
+                              </div>
+                              <button
+                                className="tbtn"
+                                type="button"
+                                onClick={() => exportRejectionCategoryRows(card)}
+                                title={`Export all ${card.label.toLowerCase()} rows`}
+                                style={{ padding: '4px 8px', minHeight: 26 }}
+                              >
+                                <Icon name="download" size={12} />
+                              </button>
+                            </div>
+                            <span className="mono" style={{ color: 'var(--muted)', fontWeight: 700 }}>{share}%</span>
+                          </div>
+
+                          {card.data.reasons.length === 0 ? (
+                            <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>No rejection reason text in current scope.</div>
+                          ) : (
+                            card.data.reasons.map((row, index) => (
+                              <div key={`${card.key}-${index}`} style={{ marginBottom: 9 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4, gap: 8 }}>
+                                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{row.reason}</span>
+                                  <span className="mono" style={{ color: row.tone, flex: 'none', fontWeight: 700 }}>
+                                    {row.count.toLocaleString('en-IN')} · {row.pct}%
+                                  </span>
+                                </div>
+                                <div style={{ height: 7, borderRadius: 99, background: 'var(--canvas)', overflow: 'hidden' }}>
+                                  <span style={{ display: 'block', height: '100%', width: `${row.pct}%`, background: row.tone, borderRadius: 99 }} />
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </Card>
 
-            <Card title="WC settled by vehicle model" sub="warranty_wc_data · claim_status=Settled · grouped by parent product line" pad={false}>
-              <div className="tbl-wrap scroll">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>Model</th>
-                      <th className="ctr">Settled JCs</th>
-                      <th style={{ textAlign: 'right' }}>Settled Amount</th>
-                      <th style={{ textAlign: 'right' }}>Avg per Claim</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {computedModelRows.map((t, i) => (
-                      <tr key={i}>
-                        <td className="strong">{t.model}</td>
-                        <td className="ctr" style={{ color: 'var(--success)', fontWeight: 700 }}>{t.count.toLocaleString('en-IN')}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--success)', fontWeight: 700 }}>{formatAmountShort(t.amount)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{formatAmountShort(t.avg)}</td>
+            <div style={{ marginTop: 'var(--gap)' }}>
+              <Card title="WC settled by vehicle model" sub="warranty_wc_data · claim_status=Settled · grouped by parent product line" pad={false}>
+                <div className="tbl-wrap scroll">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Model</th>
+                        <th className="ctr">Settled JCs</th>
+                        <th style={{ textAlign: 'right' }}>Settled Amount</th>
+                        <th style={{ textAlign: 'right' }}>Avg per Claim</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                    </thead>
+                    <tbody>
+                      {computedModelRows.map((t, i) => (
+                        <tr key={i}>
+                          <td className="strong">{t.model}</td>
+                          <td className="ctr" style={{ color: 'var(--success)', fontWeight: 700 }}>{t.count.toLocaleString('en-IN')}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--success)', fontWeight: 700 }}>{formatAmountShort(t.amount)}</td>
+                          <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{formatAmountShort(t.avg)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
           </div>
         </div>
       )}
