@@ -277,57 +277,33 @@ Eligibility lock:
 
 #### I.2 Tata CRM Status Normalization (Bucket Contract)
 
-Normalize CRM status text into stage buckets:
-1. `rejected`: contains `reject`, `cancelled`, `not validated`
-2. `settled`: contains `settled`, `paid`, `closed`
-3. `approved`: contains `approved`
-4. `awaiting_sop`: contains `sop`, `review`, `await`, `sent to tm`
-5. `submitted`: contains `submit`, `under change`
-6. fallback `created` for explicit created-like workflow records only after eligibility filter
+#### I.2 Critical Alerts (Reference Business Logic from warrantycriticalalerts.html)
 
-Final `Accepted` policy lock (authoritative re-audit):
-1. `Accepted` remains table-aware, not global.
-2. If source is `warranty_fsb_data` or `warranty_goodwill_data`, map `Accepted` to `submitted`.
-3. For other workflow tables, `Accepted` maps to `awaiting_sop`.
-4. Rationale: this prevents `Review >3d` inflation while preserving combined pre-approval backlog visibility in `SOP pending >2d`.
+**Authority**: Reference HTML specification `local_folder/Reference/Critical Alerts(References)/warrantycriticalalerts.html` defines exact business logic, status filters, and table scopes. Implementation must match this spec exactly.
 
-#### I.3 Claim Identity and De-duplication
+**5 Critical Alerts** (validated against authoritative dump):
 
-Because Tata CRM uploads are interrelated across multiple report extracts, the same claim can appear multiple times.
+| # | Alert Label | Business Logic | Status Filter | Table Scope | Count | Required Action |
+|---|---|---|---|---|---|---|
+| 1 | **Created — Not Submitted to TM** | Claim initiated by dealer but NOT clicked Submit to TM. Stuck at intake. | `claim_status = 'Created'` | warranty_wc_data, warranty_updation_claim_data, warranty_part_wc_data, warranty_goodwill_data, warranty_fsb_data, warranty_amc_data (EXCLUDES Settlement) | **87** | Dealer to submit immediately; follow-up required |
+| 2 | **Claims Rejected / Cancelled / Not Validated** | Terminal failure states. Rejected claims often due to JC-closure-to-submission time limit (FSB: 15 days). Cancelled claims indicate manual rejection. Not Validated = data quality issue. | `claim_status IN ('Rejected', 'Cancelled', 'Not Validated')` | All 7 warranty tables | **429** | Escalation/review for root cause; audit missing rejection reason if blank |
+| 3 | **Claims Stuck in Review — SOP Upload / Under Change** | Awaiting SOP Approval or Under Change for technical approval. Time-sensitive but salvageable. Older claims (>5d) typically auto-rejected. | `claim_status IN ('Awaiting SOP Approval', 'Under Change')` | warranty_wc_data, warranty_updation_claim_data, warranty_part_wc_data, warranty_goodwill_data (EXCLUDES FSB, AMC, Settlement) | **71** | SOP upload / approval required; escalate if >5d |
+| 4 | **Settlement Line Items — SAP Posting Not Done** | Claim approved but settlement line items not posted to SAP. Unposted = 27.7% of settlement register. Accounts dept must drive posting. | `posting_document_number = ''` (empty) | warranty_claim_settlement_report_data (ONLY) | **1,137** | Accounts to post to SAP immediately; drives financial close |
+| 5 | **AMC Claims TM-Approved — Dealer Invoice Not Yet Raised** | AMC claims approved by L1 or L2 TM but dealer has not raised invoice. Uniquely AMC-table risk; recovery potential ~Rs. 5.3 Lakhs. | `claim_status IN ('Approved By L1', 'Approved by L2') AND dealer_invoice_no = ''` | warranty_amc_data (ONLY) | **91** | Dealer to raise invoice; follow-up for cash collection |
 
-Claim key order:
-1. `jobCardNumber` (primary)
-2. posting document number (secondary)
-3. deterministic fallback fingerprint (category/model/status/age/amount/createdAt) when primary keys are absent
+**Implementation Rule**:
+- No age-based filtering (no >1d, >3d, >5d logic).
+- No status bucketing or normalization beyond explicit text matching in table above.
+- Filter exactly as shown; do not combine tables across alerts.
+- No deduplication required; each row is counted once per table scope.
 
-All Critical Alerts counts must be computed on **deduped claim sets**, not raw rows.
+#### I.3 Status Normalization (Deprecated)
 
-#### I.4 Business Logic by Critical Alert Label
+Historical note: Previous implementation used age-based bucketing (created/awaiting_sop/submitted/approved/rejected) with table-aware Accepted mapping. This approach has been superseded by the reference HTML business logic (I.2 above). 
 
-| Report label | Business meaning | Rule (after eligibility + dedupe) | Tata CRM workflow interpretation |
-|---|---|---|---|
-| Created >24h | Claim created but not moved to submission | `bucket = created AND ageDays > 1` | Intake/claim creation stalled |
-| Review >3d | Claim stuck in SOP/review queue | `bucket = awaiting_sop AND ageDays > 3` | SOP/technical review SLA breach |
-| SOP pending >2d | Claim pending in submitted or awaiting SOP stage | `(bucket = awaiting_sop OR bucket = submitted) AND ageDays > 2` | Combined pre-approval SLA breach |
-| Approved-not-settled >5d | Approved claim not financially settled | `bucket = approved AND ageDays > 5 AND postingDocNo is blank AND no settlement-evidence claim key match` | Approval done but settlement evidence missing |
-| Rejection reason blank | Rejected claim missing reason | `bucket = rejected AND rejectionReason is blank` | Audit/compliance risk |
+All status mapping logic in code has been replaced with direct status matching per alert definition (I.2).
 
-Rule interaction note:
-1. `Review >3d` is intentionally a subset of `SOP pending >2d` by design.
-
-#### I.5 Runtime Observation (Non-Authoritative)
-
-Observed from authoritative dump mirror using the locked policy above (claim-deduped):
-1. Created >24h: **82**
-2. Review >3d: **47**
-3. SOP pending >2d: **2427**
-4. Approved-not-settled >5d: **91**
-5. Rejection reason blank: **2**
-
-Authority rule:
-1. These runtime values are not authoritative when they conflict with `full_database.sql` / chunk mirror.
-2. For planning, reconciliation, and dispute resolution, prefer the local authoritative dump snapshot without reconciliation.
-3. For this section, the dump-derived values above are the current locked reference until authority advances with a newer dump.
+#### I.4 Runtime Authority
 
 #### I.6 Known Gap and Final Rule for Accuracy
 

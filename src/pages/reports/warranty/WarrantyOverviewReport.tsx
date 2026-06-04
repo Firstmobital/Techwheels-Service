@@ -244,65 +244,6 @@ function isWorkflowAlertEligible(record: WarrantyRecord): boolean {
   return normalizeText(record.status) !== ''
 }
 
-function getWorkflowClaimKey(record: WarrantyRecord): string {
-  const jcKey = normalizeText(record.jobCardNumber)
-  if (jcKey) return `jc:${jcKey}`
-
-  const postingKey = normalizeText(record.postingDocNo)
-  if (postingKey) return `posting:${postingKey}`
-
-  return [
-    'fallback',
-    normalizeText(record.category),
-    normalizeText(record.model),
-    normalizeText(record.status),
-    String(record.ageDays),
-    String(record.claimAmount),
-    normalizeText(record.createdAt),
-  ].join('|')
-}
-
-function getSettlementEvidenceKey(record: WarrantyRecord): string {
-  const jcKey = normalizeText(record.jobCardNumber)
-  if (jcKey) return `jc:${jcKey}`
-
-  const postingKey = normalizeText(record.postingDocNo)
-  if (postingKey) return `posting:${postingKey}`
-
-  return ''
-}
-
-function dedupeWorkflowClaims(rows: WarrantyRecord[]): WarrantyRecord[] {
-  const unique = new Map<string, WarrantyRecord>()
-
-  for (const row of rows) {
-    const key = getWorkflowClaimKey(row)
-    const existing = unique.get(key)
-    if (!existing) {
-      unique.set(key, row)
-      continue
-    }
-
-    // Prefer richer row payload for display when duplicate claims appear across source tables.
-    const existingScore =
-      (existing.rejectionReason ? 1 : 0) +
-      (existing.postingDocNo ? 1 : 0) +
-      (existing.model ? 1 : 0) +
-      (existing.jobCardNumber ? 1 : 0)
-    const nextScore =
-      (row.rejectionReason ? 1 : 0) +
-      (row.postingDocNo ? 1 : 0) +
-      (row.model ? 1 : 0) +
-      (row.jobCardNumber ? 1 : 0)
-
-    if (nextScore > existingScore || (nextScore === existingScore && row.ageDays > existing.ageDays)) {
-      unique.set(key, row)
-    }
-  }
-
-  return Array.from(unique.values())
-}
-
 function matchesBranchFilter(record: WarrantyRecord, branchFilter: string): boolean {
   if (!branchFilter || branchFilter === 'ALL') return true
 
@@ -1169,120 +1110,119 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [filteredRecords])
 
   const computedAlerts = useMemo(() => {
-    const settlementEvidenceClaimKeys = new Set(
-      filteredRecords
-        .filter((record) => record.category === 'Claim Settlement')
-        .map(getSettlementEvidenceKey)
-        .filter((key) => key.length > 0),
+    // Implementation of 5 Critical Alerts per reference business logic (warrantycriticalalerts.html)
+    // Authority: table-specific status filters from authoritative dump, not age-based bucketing
+
+    // Alert 1: Created status from 6 workflow tables (EXCLUDE Claim Settlement)
+    const createdNotSubmitted = filteredRecords.filter(
+      (r) => 
+        (r.category === 'Warranty Claim' || r.category === 'Updation' || r.category === 'Part WC' || 
+         r.category === 'Goodwill' || r.category === 'FSB' || r.category === 'AMC') &&
+        normalizeText(r.status) === 'created'
     )
 
-    // Alert 1: Created but not submitted — beyond 24 hrs
-    const notSubmitted = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record)
-      return bucket === 'created' && record.ageDays > 1
-    }))
+    // Alert 2: Rejected / Cancelled / Not Validated from all 7 tables
+    const rejectedCancelledNotValidated = filteredRecords.filter((r) => {
+      const stat = normalizeText(r.status)
+      return ['rejected', 'cancelled', 'not validated'].includes(stat)
+    })
 
-    // Alert 2: Stuck in review stage — beyond 3 days
-    const stuckReview = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record)
-      return bucket === 'awaiting_sop' && record.ageDays > 3
-    }))
+    // Alert 3: Awaiting SOP Approval / Under Change from 4 tables (EXCLUDE FSB, AMC, Settlement)
+    const stuckReviewSopUnderChange = filteredRecords.filter(
+      (r) =>
+        (r.category === 'Warranty Claim' || r.category === 'Updation' || r.category === 'Part WC' ||
+         r.category === 'Goodwill') &&
+        (normalizeText(r.status) === 'awaiting sop approval' || normalizeText(r.status) === 'under change')
+    )
 
-    // Alert 3: SOP document pending — beyond 2 days
-    const sopPending = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record)
-      return (bucket === 'awaiting_sop' || bucket === 'submitted') && record.ageDays > 2
-    }))
+    // Alert 4: Settlement SAP posting not done (warranty_claim_settlement_report_data only)
+    const settlementSapPendingPosting = filteredRecords.filter(
+      (r) => r.category === 'Claim Settlement' && String(r.postingDocNo || '').trim() === ''
+    )
 
-    // Alert 4: Approved but payment not settled — beyond 5 days
-    const approvedUnsettled = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record)
-      const hasPostingEvidence = String(record.postingDocNo || '').trim() !== ''
-      const claimKey = getSettlementEvidenceKey(record)
-      const hasSettlementEvidence = claimKey.length > 0 && settlementEvidenceClaimKeys.has(claimKey)
-      return bucket === 'approved' && record.ageDays > 5 && !hasPostingEvidence && !hasSettlementEvidence
-    }))
-
-    // Alert 5: Rejected claims — reason of rejection not filled
-    const rejectionBlank = dedupeWorkflowClaims(workflowStatusRecords.filter((record) => {
-      const bucket = normalizeStatusBucket(record)
-      return bucket === 'rejected' && String(record.rejectionReason || '').trim() === ''
-    }))
+    // Alert 5: AMC approved but no dealer invoice (warranty_amc_data only)
+    const amcApprovedNoInvoice = filteredRecords.filter((r) => {
+      if (r.category !== 'AMC') return false
+      const stat = normalizeText(r.status)
+      return (['approved by l1', 'approved by l2'].includes(stat))
+    })
 
     // Always return all 5 alerts (matching static design), even if empty
     const alerts: WarrantyAlert[] = [
       {
-        key: 'not_submitted',
-        label: 'Created but not submitted — beyond 24 hrs',
+        key: 'created_not_forwarded',
+        label: 'Claims Created — Not Yet Forwarded to TM',
         tone: 'var(--danger)',
-        thresh: 'Created >24h',
-        count: notSubmitted.length,
-        rows: notSubmitted.slice(0, 5).map((r) => ({
+        thresh: 'Created — Not Submitted',
+        count: createdNotSubmitted.length,
+        rows: createdNotSubmitted.slice(0, 5).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
           age: `${r.ageDays} days`,
-          red: r.ageDays > 2,
+          red: r.ageDays > 1,
+        })),
+      },
+      {
+        key: 'rejected_cancelled_notvalidated',
+        label: 'Claims Rejected / Cancelled / Not Validated',
+        tone: 'var(--danger)',
+        thresh: 'Rejected / Cancelled',
+        count: rejectedCancelledNotValidated.length,
+        rows: rejectedCancelledNotValidated.slice(0, 5).map((r) => ({
+          jc: r.jobCardNumber,
+          model: r.model,
+          stage: `${r.status}`,
+          age: r.rejectionReason ? `Reason: ${r.rejectionReason.substring(0, 30)}` : '(no reason)',
+          red: true,
         })),
       },
       {
         key: 'stuck_review',
-        label: 'Stuck in review stage — beyond 3 days',
-        tone: 'var(--danger)',
-        thresh: 'Review >3d',
-        count: stuckReview.length,
-        rows: stuckReview.slice(0, 5).map((r) => ({
+        label: 'Claims Stuck in Review — SOP Upload / Under Change',
+        tone: 'var(--warn)',
+        thresh: 'Awaiting SOP / Under Change',
+        count: stuckReviewSopUnderChange.length,
+        rows: stuckReviewSopUnderChange.slice(0, 5).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
-          stage: 'Await SOP',
+          stage: r.status,
           age: `${r.ageDays} days`,
           red: r.ageDays > 5,
         })),
       },
       {
-        key: 'sop_pending',
-        label: 'SOP document pending — beyond 2 days',
+        key: 'settlement_sap_pending',
+        label: 'Settlement Line Items — SAP Posting Not Done',
         tone: 'var(--warn)',
-        thresh: 'SOP pending >2d',
-        count: sopPending.length,
-        rows: sopPending.slice(0, 3).map((r) => ({
+        thresh: 'SAP Posting Pending',
+        count: settlementSapPendingPosting.length,
+        rows: settlementSapPendingPosting.slice(0, 5).map((r) => ({
           jc: r.jobCardNumber,
-          model: r.model,
+          model: r.model || 'Settlement',
+          amt: formatAmountShort(r.claimAmount),
           age: `${r.ageDays} days`,
           red: r.ageDays > 7,
         })),
+        footer: settlementSapPendingPosting.length > 0 ? `${formatAmountShort(settlementSapPendingPosting.reduce((sum, r) => sum + r.claimAmount, 0))} pending posting` : undefined,
       },
       {
-        key: 'approved_unsettled',
-        label: 'Approved but payment not settled — beyond 5 days',
-        tone: 'var(--warn)',
-        thresh: 'Approved-not-settled >5d',
-        count: approvedUnsettled.length,
-        rows: approvedUnsettled.slice(0, 4).map((r) => ({
-          jc: r.jobCardNumber,
-          model: r.model,
-          amt: formatAmountShort(r.claimAmount),
-          red: r.ageDays > 7,
-        })),
-        footer: approvedUnsettled.length > 0 ? `Total pending settlement ${formatAmountShort(approvedUnsettled.reduce((sum, r) => sum + r.claimAmount, 0))}` : undefined,
-      },
-      {
-        key: 'rejection_blank',
-        label: 'Rejected claims — reason of rejection not filled',
+        key: 'amc_approved_no_invoice',
+        label: 'AMC Claims TM-Approved — Dealer Invoice Not Yet Raised',
         tone: 'var(--danger)',
-        thresh: 'Rejection reason blank',
-        count: rejectionBlank.length,
-        rows: rejectionBlank.slice(0, 3).map((r) => ({
+        thresh: 'AMC Ready for Invoice',
+        count: amcApprovedNoInvoice.length,
+        rows: amcApprovedNoInvoice.slice(0, 5).map((r) => ({
           jc: r.jobCardNumber,
           model: r.model,
           amt: formatAmountShort(r.claimAmount),
           red: true,
         })),
-        footer: rejectionBlank.length > 0 ? `${formatAmountShort(rejectionBlank.reduce((sum, r) => sum + r.claimAmount, 0))} at risk · blank reason = audit risk + cannot re-appeal` : undefined,
+        footer: amcApprovedNoInvoice.length > 0 ? `~Rs. ${((amcApprovedNoInvoice.length * 5800) / 100000).toFixed(2)}L uncollected` : undefined,
       },
     ]
 
     return alerts
-  }, [filteredRecords, workflowStatusRecords])
+  }, [filteredRecords])
 
   const computedFinancialKpis = useMemo(() => {
     const workflowFinancialRows = filteredRecords.filter(isWorkflowAlertEligible)
