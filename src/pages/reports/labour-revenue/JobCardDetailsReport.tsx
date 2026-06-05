@@ -24,6 +24,7 @@ interface ServiceInvoiceOrderRow {
 }
 
 type KPIType = 'cancelled' | 'closed-not-invoiced' | 'open' | null
+type ServiceTypeFilter = 'ALL' | 'ACCIDENT' | 'PDI' | 'MECHANICAL'
 
 const QUERY_PAGE_SIZE = 1000
 
@@ -47,6 +48,14 @@ function isClosedStatus(value: string | null): boolean {
   return status.includes('close')
 }
 
+function isOpenStatus(value: string | null): boolean {
+  const status = normalizeStatus(value)
+  if (!status) return false
+  if (status.includes('cancel')) return false
+  if (status.includes('close')) return false
+  return status.includes('open')
+}
+
 function getKpiBucket(row: ServiceInvoiceOrderRow): 'cancelled' | 'closed-not-invoiced' | 'open' {
   const invoiced = isTruthyInvoiceValue(row.invoiced)
   const isCancelled = isCancelledStatus(row.status)
@@ -55,6 +64,13 @@ function getKpiBucket(row: ServiceInvoiceOrderRow): 'cancelled' | 'closed-not-in
   if (isCancelled) return 'cancelled'
   if (isClosed && !invoiced) return 'closed-not-invoiced'
   return 'open'
+}
+
+function normalizeServiceTypeBucket(value: string | null): Exclude<ServiceTypeFilter, 'ALL'> {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (normalized.includes('accident')) return 'ACCIDENT'
+  if (normalized.includes('pdi')) return 'PDI'
+  return 'MECHANICAL'
 }
 
 function formatDateTime(dateString: string | null): string {
@@ -195,9 +211,11 @@ function dedupeRowsByJobCard(rows: ServiceInvoiceOrderRow[]): ServiceInvoiceOrde
 
 export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<ServiceInvoiceOrderRow[]>([])
+  const [openRows, setOpenRows] = useState<ServiceInvoiceOrderRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedKPI, setSelectedKPI] = useState<KPIType>(null)
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceTypeFilter>('ALL')
   const [employees, setEmployees] = useState<EmployeeMasterRecord[]>([])
 
   // Fetch employees once on mount
@@ -298,14 +316,21 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
         }
 
         const uniqueRows = dedupeRowsByJobCard(mappedRows)
+        const uniqueOpenRows = uniqueRows.filter((row) => {
+          const normalizedJobCard = normalizeJobCardNumber(row.job_card_number)
+          if (!normalizedJobCard) return false
+          return isOpenStatus(row.status)
+        })
 
         if (!cancelled) {
           setRows(uniqueRows)
+          setOpenRows(uniqueOpenRows)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load report.')
           setRows([])
+          setOpenRows([])
         }
       } finally {
         if (!cancelled) {
@@ -322,11 +347,18 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
   }, [branch, dateFilter, employeeIndex, employeeMasterByCode])
 
   const summary = useMemo(() => {
+    const serviceTypeFilteredRows = serviceTypeFilter === 'ALL'
+      ? rows
+      : rows.filter((row) => normalizeServiceTypeBucket(row.sr_type) === serviceTypeFilter)
+    const serviceTypeFilteredOpenRows = serviceTypeFilter === 'ALL'
+      ? openRows
+      : openRows.filter((row) => normalizeServiceTypeBucket(row.sr_type) === serviceTypeFilter)
+
     let cancelledCount = 0
     let closedNotInvoicedCount = 0
     let openCount = 0
 
-    for (const row of rows) {
+    for (const row of serviceTypeFilteredRows) {
       const invoiced = isTruthyInvoiceValue(row.invoiced)
       const isCancelled = isCancelledStatus(row.status)
       const isClosed = isClosedStatus(row.status)
@@ -345,14 +377,24 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
     return {
       cancelledCount,
       closedNotInvoicedCount,
-      openCount,
+      openCount: serviceTypeFilteredOpenRows.length,
     }
-  }, [rows])
+  }, [rows, openRows, serviceTypeFilter])
+
+  const serviceTypeFilteredRows = useMemo(() => {
+    if (serviceTypeFilter === 'ALL') return rows
+    return rows.filter((row) => normalizeServiceTypeBucket(row.sr_type) === serviceTypeFilter)
+  }, [rows, serviceTypeFilter])
+
+  const serviceTypeFilteredOpenRows = useMemo(() => {
+    if (serviceTypeFilter === 'ALL') return openRows
+    return openRows.filter((row) => normalizeServiceTypeBucket(row.sr_type) === serviceTypeFilter)
+  }, [openRows, serviceTypeFilter])
 
   const filteredRows = useMemo(() => {
     if (!selectedKPI) return []
 
-    return rows.filter((row) => {
+    return serviceTypeFilteredRows.filter((row) => {
       const invoiced = isTruthyInvoiceValue(row.invoiced)
       const isCancelled = isCancelledStatus(row.status)
       const isClosed = isClosedStatus(row.status)
@@ -366,9 +408,14 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
       }
       return false
     })
-  }, [rows, selectedKPI])
+  }, [serviceTypeFilteredRows, selectedKPI])
 
-  const previewRows = useMemo(() => filteredRows.slice(0, 100), [filteredRows])
+  const resolvedFilteredRows = useMemo(() => {
+    if (selectedKPI === 'open') return serviceTypeFilteredOpenRows
+    return filteredRows
+  }, [filteredRows, serviceTypeFilteredOpenRows, selectedKPI])
+
+  const previewRows = useMemo(() => resolvedFilteredRows.slice(0, 100), [resolvedFilteredRows])
 
   const selectedKpiLabel = useMemo(() => {
     if (selectedKPI === 'cancelled') return 'Cancelled Job Cards'
@@ -378,7 +425,9 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
   }, [selectedKPI])
 
   const handleExport = () => {
-    const exportSourceRows = selectedKPI ? filteredRows : rows
+    const exportSourceRows = selectedKPI
+      ? (selectedKPI === 'open' ? serviceTypeFilteredOpenRows : filteredRows)
+      : serviceTypeFilteredRows
     if (exportSourceRows.length === 0) return
 
     const exportData = exportSourceRows.map((row) => ({
@@ -410,7 +459,20 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
             <p className="mt-1 text-sm text-gray-600">Source: service_invoice_order_data</p>
           </div>
           <div className="flex items-center gap-2">
-            {(selectedKPI ? filteredRows.length > 0 : rows.length > 0) && (
+            <label className="text-sm text-gray-600">
+              <span className="mr-2">Service Type:</span>
+              <select
+                value={serviceTypeFilter}
+                onChange={(event) => setServiceTypeFilter(event.target.value as ServiceTypeFilter)}
+                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="ALL">All</option>
+                <option value="ACCIDENT">Accident</option>
+                <option value="PDI">PDI</option>
+                <option value="MECHANICAL">Mechanical (All Other)</option>
+              </select>
+            </label>
+            {(selectedKPI ? resolvedFilteredRows.length > 0 : serviceTypeFilteredRows.length > 0) && (
               <button
                 onClick={handleExport}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
@@ -470,10 +532,10 @@ export default function JobCardDetailsReport({ branch, dateFilter }: ReportViewP
               <div>
                 <h3 className="font-semibold text-gray-900">{selectedKpiLabel}</h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  Showing {previewRows.length} of {filteredRows.length} records
+                  Showing {previewRows.length} of {resolvedFilteredRows.length} records
                 </p>
               </div>
-              {filteredRows.length > 0 && (
+              {resolvedFilteredRows.length > 0 && (
                 <button
                   onClick={handleExport}
                   className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"

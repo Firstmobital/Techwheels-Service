@@ -635,7 +635,7 @@ function buildPartsSourceRowHash(
   branch: Branch,
   portal: Portal,
   row: Record<string, unknown>,
-  rowNumber: number,
+  _rowNumber: number,
 ): string {
   const partNumber = row.part_number == null ? '' : String(row.part_number).trim().toUpperCase()
   const dateKey =
@@ -651,7 +651,18 @@ function buildPartsSourceRowHash(
       ? row.ordered_quantity
       : row.on_hand_quantity
 
-  const raw = `${tableName}|${branch}|${portal}|${partNumber}|${String(dateKey ?? '')}|${String(qtyKey ?? '')}|${rowNumber}`
+  const normalizedDate = String(dateKey ?? '').trim()
+  const normalizedQty = String(qtyKey ?? '').trim()
+  const referenceKey =
+    tableName === 'service_parts_consumption_data'
+      ? String(row.source_reference ?? '').trim()
+      : tableName === 'service_parts_order_data'
+      ? String(row.source_document_id ?? '').trim()
+      : ''
+
+  // IMPORTANT: keep hash deterministic across re-uploads.
+  // Do not include row position/index in the hash.
+  const raw = `${tableName}|${branch}|${portal}|${partNumber}|${normalizedDate}|${normalizedQty}|${referenceKey}`
   return raw.replace(/\s+/g, ' ').trim()
 }
 
@@ -1239,6 +1250,17 @@ export default function ImportPage() {
           return inserted
         }
 
+        const dedupeRowsByKeys = (
+          rows: Record<string, unknown>[],
+          keyBuilder: (row: Record<string, unknown>) => string,
+        ): Record<string, unknown>[] => {
+          const map = new Map<string, Record<string, unknown>>()
+          for (const row of rows) {
+            map.set(keyBuilder(row), row)
+          }
+          return Array.from(map.values())
+        }
+
         const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
           let inserted = 0
 
@@ -1672,9 +1694,16 @@ export default function ImportPage() {
               )
             }
 
-            totalInserted += await upsertOrInsertRows(
+            const dedupedRows = dedupeRowsByKeys(
               insertRows,
+              (row) =>
+                `${String(row.branch ?? '')}|${String(row.portal ?? '')}|${String(row.source_row_hash ?? '')}`,
+            )
+
+            totalInserted += await upsertOrInsertRows(
+              dedupedRows,
               [
+                'branch,portal,source_row_hash',
                 'part_number,branch,transaction_date,source_row_hash',
                 'part_number,branch,portal,transaction_date,source_row_hash',
                 'part_number,branch,portal,fiscal_year,month_name,source_row_hash',

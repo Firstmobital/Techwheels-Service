@@ -1030,6 +1030,17 @@ export function getDateRangeBounds(dateFilter: DateRangeFilter): { from: string;
   }
 }
 
+function withInvoiceDateFilter(dateFilter: DateRangeFilter): DateRangeFilter {
+  if (dateFilter.dateFieldType === 'invoice_date') {
+    return dateFilter
+  }
+
+  return {
+    ...dateFilter,
+    dateFieldType: 'invoice_date',
+  }
+}
+
 export async function getBranchOptions(): Promise<string[]> {
   return [...REPORT_BRANCH_OPTIONS]
 }
@@ -1069,11 +1080,13 @@ export async function getServiceTypeLabourRevenue(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<ServiceTypeLabourRevenue[]> {
+  const invoiceDateFilter = withInvoiceDateFilter(dateFilter)
+
   const data = await fetchJobCardWithEmployeeData(
     'sr_type, final_labour_amount, final_spares_amount, job_card_number',
     {
       branch,
-      dateFilter,
+      dateFilter: invoiceDateFilter,
       serviceType: serviceTypeFilter,
     },
   )
@@ -1141,6 +1154,7 @@ export async function getFilteredJcChassisRows(
   dateFilter: DateRangeFilter,
   filters: { serviceType?: 'ALL' | string | string[]; parentProductLine?: 'ALL' | string } = {},
 ): Promise<FilteredJcChassisRow[]> {
+  const invoiceDateFilter = withInvoiceDateFilter(dateFilter)
   const serviceTypeFilter = filters.serviceType ?? 'ALL'
   const parentProductLineFilter = filters.parentProductLine ?? 'ALL'
 
@@ -1148,7 +1162,7 @@ export async function getFilteredJcChassisRows(
     'branch, invoice_date, sr_type, sr_assigned_to, parent_product_line, final_labour_amount, final_spares_amount, total_invoice_amount, job_card_number, chassis_number',
     {
       branch,
-      dateFilter,
+      dateFilter: invoiceDateFilter,
       serviceType: serviceTypeFilter,
       parentProductLine: parentProductLineFilter,
     },
@@ -1256,11 +1270,13 @@ export async function getLabourKpiSummary(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<LabourKpiSummary> {
+  const invoiceDateFilter = withInvoiceDateFilter(dateFilter)
+
   const data = await fetchJobCardWithEmployeeData(
     'job_card_number, total_invoice_amount, final_spares_amount, sr_type',
     {
       branch,
-      dateFilter,
+      dateFilter: invoiceDateFilter,
       serviceType: serviceTypeFilter,
     },
   )
@@ -1301,11 +1317,13 @@ export async function getManpowerWiseLabourRevenue(
   dateFilter: DateRangeFilter,
   filters: ManpowerWiseFilters = { serviceType: 'ALL', parentProductLine: 'ALL' },
 ): Promise<ManpowerLabourRevenue[]> {
+  const invoiceDateFilter = withInvoiceDateFilter(dateFilter)
+
   const data = await fetchJobCardWithEmployeeData(
     'branch, employee_code, sr_assigned_to, sr_type, parent_product_line, final_labour_amount, job_card_number',
     {
       branch,
-      dateFilter,
+      dateFilter: invoiceDateFilter,
       serviceType: filters.serviceType,
       parentProductLine: filters.parentProductLine,
     },
@@ -1661,7 +1679,8 @@ export async function getBranchLabourRevenueComparison(
   dateFilter: DateRangeFilter,
   serviceTypeFilter: 'ALL' | string | string[] = 'ALL',
 ): Promise<BranchLabourRevenueComparison[]> {
-  const selectedBounds = getDateRangeBounds(dateFilter)
+  const invoiceDateFilter = withInvoiceDateFilter(dateFilter)
+  const selectedBounds = getDateRangeBounds(invoiceDateFilter)
   if (!selectedBounds) {
     return []
   }
@@ -1672,7 +1691,7 @@ export async function getBranchLabourRevenueComparison(
   }
 
   const invoiceDateField =
-    dateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
+    invoiceDateFilter.dateFieldType === 'invoice_date' ? await getJobCardInvoiceDateColumn() : null
   const fuelSelection = parseFuelSelectionFromBranch(branch)
   const fuelColumn = fuelSelection ? await getJobCardFuelColumn() : null
   const queryBranch: BranchFilter = fuelSelection ? 'Sitapura' : branch

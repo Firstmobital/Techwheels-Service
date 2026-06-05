@@ -97,6 +97,12 @@ function parseNumber(value: unknown, fieldName: string): number | null {
   return num
 }
 
+function normalizePrecision(value: number, decimals = 6): number {
+  if (!Number.isFinite(value)) return value
+  const factor = 10 ** decimals
+  return Math.round((value + Number.EPSILON) * factor) / factor
+}
+
 function parseOptionalString(value: unknown): string | null {
   if (value == null || value === '') return null
   const raw = String(value).trim()
@@ -382,7 +388,8 @@ export function buildPartsConsumptionInsertRow(
 
   const normalizeNonNegative = (value: number | null): number | null => {
     if (value == null) return null
-    return value < 0 ? Math.abs(value) : value
+    const normalized = value < 0 ? Math.abs(value) : value
+    return normalizePrecision(normalized)
   }
 
   const safeOtcQuantity = normalizeNonNegative(otcQuantity)
@@ -416,7 +423,7 @@ export function buildPartsConsumptionInsertRow(
     }
   }
 
-  const computedQuantityConsumed = (normalizedOtcQuantity ?? 0) + (normalizedWsQuantity ?? 0)
+  const computedQuantityConsumed = normalizePrecision((normalizedOtcQuantity ?? 0) + (normalizedWsQuantity ?? 0))
   const totalConsumption = computedQuantityConsumed
 
   const row: Record<string, unknown> = {
