@@ -40,7 +40,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
-type SummaryCardFilter = 'all' | 'job_card_pending' | 'estimate_pending' | 'invoice_pending' | 'completed'
+type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -101,6 +101,10 @@ function isJobCardPending(jcNumber: string | null | undefined): boolean {
   return !String(jcNumber ?? '').trim()
 }
 
+function isServiceTypeMissing(serviceType: string | null | undefined): boolean {
+  return !String(serviceType ?? '').trim()
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const invoiceInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
@@ -154,6 +158,9 @@ export default function ServiceAdvisorPage() {
     if (selectedSummaryCard === 'all') return displayedRows
     if (selectedSummaryCard === 'job_card_pending') {
       return displayedRows.filter((row) => isJobCardPending(row.jc_number))
+    }
+    if (selectedSummaryCard === 'sr_type_pending') {
+      return displayedRows.filter((row) => isServiceTypeMissing(row.service_type))
     }
     if (selectedSummaryCard === 'estimate_pending') {
       return displayedRows.filter((row) => !row.estimate_storage_path)
@@ -212,6 +219,10 @@ export default function ServiceAdvisorPage() {
   )
   const pendingJobCardCount = useMemo(
     () => displayedRows.filter((r) => isJobCardPending(r.jc_number)).length,
+    [displayedRows],
+  )
+  const pendingServiceTypeCount = useMemo(
+    () => displayedRows.filter((r) => isServiceTypeMissing(r.service_type)).length,
     [displayedRows],
   )
   const pendingInvoiceCount = useMemo(
@@ -644,6 +655,19 @@ export default function ServiceAdvisorPage() {
             <div>
               <div className="n">{displayedRows.length}</div>
               <div className="l">{isAdmin ? 'Filtered entries' : 'Assigned'}</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('sr_type_pending')}
+            disabled={pendingServiceTypeCount === 0}
+            className={`schip schip--btn ${selectedSummaryCard === 'sr_type_pending' ? 'schip--active' : ''}`}
+          >
+            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+            <div>
+              <div className="n">{pendingServiceTypeCount}</div>
+              <div className="l">SR Type</div>
             </div>
           </button>
 
