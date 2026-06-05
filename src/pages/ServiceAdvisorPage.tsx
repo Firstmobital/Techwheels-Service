@@ -222,7 +222,7 @@ export default function ServiceAdvisorPage() {
     const mappedDrafts: Record<number, RowDraft> = {}
     data.forEach((row) => {
       mappedDrafts[row.id] = {
-        service_type: row.service_type,
+        service_type: typeof row.service_type === 'string' ? row.service_type : '',
         jc_number: row.jc_number ?? '',
         remark: row.remark ?? '',
       }
@@ -491,6 +491,8 @@ export default function ServiceAdvisorPage() {
                 <tbody>
                   {displayedRows.map((row) => {
                     const draft = drafts[row.id] ?? EMPTY_DRAFT
+                    const draftServiceType = String(draft.service_type ?? '')
+                    const normalizedDraftServiceType = draftServiceType.trim().toLowerCase()
                     const isDirty = dirtyRowIds.has(row.id)
                     const toneColor = getSourceToneColor(row.source)
 
@@ -506,7 +508,7 @@ export default function ServiceAdvisorPage() {
                         <td>{row.model || '-'}</td>
                         <td>
                           <select
-                            value={draft.service_type}
+                            value={draftServiceType}
                             onChange={(event) => patchDraft(row.id, { service_type: event.target.value })}
                             className="sel sel--service-type"
                           >
@@ -514,8 +516,8 @@ export default function ServiceAdvisorPage() {
                             {serviceTypeOptions.map((option) => (
                               <option key={option} value={option}>{option}</option>
                             ))}
-                            {!serviceTypeOptions.some((option) => option.toLowerCase() === draft.service_type.trim().toLowerCase()) && draft.service_type.trim() && (
-                              <option value={draft.service_type}>{draft.service_type}</option>
+                            {!serviceTypeOptions.some((option) => option.toLowerCase() === normalizedDraftServiceType) && normalizedDraftServiceType && (
+                              <option value={draftServiceType}>{draftServiceType}</option>
                             )}
                           </select>
                         </td>
