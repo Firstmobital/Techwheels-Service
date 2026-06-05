@@ -187,6 +187,15 @@ interface TechnicianAssignment {
 
 type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed'
 
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === 'object' && 'message' in err) {
+    const message = (err as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return fallback
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function FloorInchargePage() {
@@ -388,30 +397,10 @@ export default function FloorInchargePage() {
         remark: draft.remark.trim() || null,
       }
 
-      // If status is changing to 'completed', set out_ts and calculate time_diff
+      // out_ts is managed by DB trigger when work_status becomes completed.
+      // time_diff is a generated DB column and must never be written from client.
       if (draft.work_status === 'completed') {
-        const now = new Date().toISOString()
-        updatePayload.out_ts = now
-
-        // Calculate time_diff in seconds as ISO 8601 duration
-        if (assignment.assigned_at) {
-          const assignedTime = new Date(assignment.assigned_at).getTime()
-          const completedTime = new Date(now).getTime()
-          const diffSeconds = Math.round((completedTime - assignedTime) / 1000)
-
-          // Convert to ISO 8601 duration format (PT1H30M45S)
-          const hours = Math.floor(diffSeconds / 3600)
-          const minutes = Math.floor((diffSeconds % 3600) / 60)
-          const seconds = diffSeconds % 60
-
-          let durationStr = 'PT'
-          if (hours > 0) durationStr += `${hours}H`
-          if (minutes > 0) durationStr += `${minutes}M`
-          if (seconds > 0) durationStr += `${seconds}S`
-          if (durationStr === 'PT') durationStr = 'PT0S'
-
-          updatePayload.time_diff = durationStr
-        }
+        updatePayload.out_ts = new Date().toISOString()
       }
 
       const result = await supabase
@@ -438,7 +427,7 @@ export default function FloorInchargePage() {
       }))
       showToast(`Stage details saved for ${jobCardNumber}`, 'success')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save stage details'
+      const msg = getErrorMessage(err, 'Failed to save stage details')
       showToast(msg, 'error')
     } finally {
       setSaving(null)
