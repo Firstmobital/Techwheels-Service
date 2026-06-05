@@ -59,6 +59,76 @@ function formatTimestamp(value: string | null | undefined): string {
   return date.toLocaleString()
 }
 
+function formatTimeDiff(value: string | null | undefined): string {
+  if (!value) return '—'
+
+  const strValue = String(value).trim()
+
+  // Handle HH:MM:SS format (e.g., "01:45:30" or "00:00:47")
+  const hmsMatch = strValue.match(/^(\d{1,2}):(\d{1,2}):(\d{1,2})$/)
+  if (hmsMatch) {
+    const hours = parseInt(hmsMatch[1], 10)
+    const minutes = parseInt(hmsMatch[2], 10)
+    const seconds = parseInt(hmsMatch[3], 10)
+    
+    // Return "—" only if all are zero
+    if (hours === 0 && minutes === 0 && seconds === 0) {
+      return '—'
+    }
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
+  // Handle ISO 8601 duration format (e.g., "PT1H30M45S")
+  const isoDurationMatch = strValue.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/i)
+  if (isoDurationMatch) {
+    const hours = parseInt(isoDurationMatch[1] || '0', 10)
+    const minutes = parseInt(isoDurationMatch[2] || '0', 10)
+    const seconds = Math.floor(parseFloat(isoDurationMatch[3] || '0'))
+    
+    if (hours === 0 && minutes === 0 && seconds === 0) {
+      return '—'
+    }
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
+  // Handle seconds as number
+  const seconds = parseInt(strValue, 10)
+  if (!Number.isNaN(seconds) && seconds > 0) {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+
+  // If already formatted or unrecognized, return as-is
+  return strValue
+}
+
+function calculateTimeDiffFromTimestamps(assignedAt: string | null | undefined, outTs: string | null | undefined): string {
+  if (!assignedAt || !outTs) return '—'
+  
+  try {
+    const assignedTime = new Date(assignedAt).getTime()
+    const outTime = new Date(outTs).getTime()
+    
+    if (Number.isNaN(assignedTime) || Number.isNaN(outTime)) return '—'
+    
+    const diffSeconds = Math.round((outTime - assignedTime) / 1000)
+    
+    if (diffSeconds <= 0) return '—'
+    
+    const hours = Math.floor(diffSeconds / 3600)
+    const minutes = Math.floor((diffSeconds % 3600) / 60)
+    const secs = diffSeconds % 60
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  } catch {
+    return '—'
+  }
+}
+
 function normalizeStageValue(value: string | null | undefined): string {
   return String(value ?? '').trim()
 }
@@ -309,13 +379,41 @@ export default function FloorInchargePage() {
 
     setSaving(jobCardNumber)
     try {
+      const updatePayload: Record<string, unknown> = {
+        bay_no: draft.bay_no.trim() || null,
+        work_status: draft.work_status,
+        remark: draft.remark.trim() || null,
+      }
+
+      // If status is changing to 'completed', set out_ts and calculate time_diff
+      if (draft.work_status === 'completed') {
+        const now = new Date().toISOString()
+        updatePayload.out_ts = now
+
+        // Calculate time_diff in seconds as ISO 8601 duration
+        if (assignment.assigned_at) {
+          const assignedTime = new Date(assignment.assigned_at).getTime()
+          const completedTime = new Date(now).getTime()
+          const diffSeconds = Math.round((completedTime - assignedTime) / 1000)
+
+          // Convert to ISO 8601 duration format (PT1H30M45S)
+          const hours = Math.floor(diffSeconds / 3600)
+          const minutes = Math.floor((diffSeconds % 3600) / 60)
+          const seconds = diffSeconds % 60
+
+          let durationStr = 'PT'
+          if (hours > 0) durationStr += `${hours}H`
+          if (minutes > 0) durationStr += `${minutes}M`
+          if (seconds > 0) durationStr += `${seconds}S`
+          if (durationStr === 'PT') durationStr = 'PT0S'
+
+          updatePayload.time_diff = durationStr
+        }
+      }
+
       const result = await supabase
         .from('technician_assignments')
-        .update({
-          bay_no: draft.bay_no.trim() || null,
-          work_status: draft.work_status,
-          remark: draft.remark.trim() || null,
-        })
+        .update(updatePayload)
         .eq('id', assignment.id)
         .select('*')
         .single()
@@ -477,6 +575,8 @@ export default function FloorInchargePage() {
                     <th>Branch</th>
                     <th>Assign Technician</th>
                     <th>IN TS</th>
+                    <th>OUT TS</th>
+                    <th>Time Diff</th>
                     <th>Bay</th>
                     <th>Status</th>
                     <th>Remark</th>
@@ -534,6 +634,12 @@ export default function FloorInchargePage() {
                         </td>
                         <td className="ts-cell">
                           {formatTimestamp(assignment?.assigned_at) || '—'}
+                        </td>
+                        <td className="ts-cell">
+                          {formatTimestamp(assignment?.out_ts) || '—'}
+                        </td>
+                        <td className="ts-cell">
+                          {calculateTimeDiffFromTimestamps(assignment?.assigned_at, assignment?.out_ts) || formatTimeDiff(assignment?.time_diff) || '—'}
                         </td>
                         <td>
                           <select

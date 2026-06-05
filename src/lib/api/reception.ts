@@ -98,6 +98,48 @@ function sanitizeFileNamePart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
+async function enrichEntriesWithEmployeeBranch(entries: ReceptionEntryRow[]): Promise<ReceptionEntryRow[]> {
+  // Find entries with NULL branch
+  const entriesWithNullBranch = entries.filter(e => !e.branch && e.sa_employee_code)
+  
+  if (entriesWithNullBranch.length === 0) {
+    return entries
+  }
+
+  // Batch fetch employee locations for all employee codes
+  const employeeCodes = Array.from(
+    new Set(entriesWithNullBranch.map(e => e.sa_employee_code).filter(Boolean) as string[]),
+  )
+
+  const { data: employees, error } = await supabase
+    .from('employee_master')
+    .select('employee_code, location')
+    .in('employee_code', employeeCodes)
+
+  if (error || !employees) {
+    return entries
+  }
+
+  // Build location map
+  const locationMap = new Map(
+    employees.map((emp: { employee_code?: string; location?: string | null }) => [
+      String(emp.employee_code ?? '').trim().toUpperCase(),
+      String(emp.location ?? '').trim(),
+    ]),
+  )
+
+  // Enrich entries
+  return entries.map((entry) => {
+    if (!entry.branch && entry.sa_employee_code) {
+      const location = locationMap.get(entry.sa_employee_code.trim().toUpperCase())
+      if (location) {
+        return { ...entry, branch: location }
+      }
+    }
+    return entry
+  })
+}
+
 export async function listServiceBranches(): Promise<ApiResult<string[]>> {
   const { data, error } = await supabase
     .from('service_branches')
@@ -137,7 +179,10 @@ export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRo
     .order('created_at', { ascending: false })
 
   if (error) return fail(error)
-  return ok((data ?? []) as ReceptionEntryRow[])
+  
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
 }
 
 export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
@@ -147,7 +192,10 @@ export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEn
     .order('created_at', { ascending: false })
 
   if (error) return fail(error)
-  return ok((data ?? []) as ReceptionEntryRow[])
+  
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
 }
 
 export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
@@ -171,7 +219,9 @@ export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEnt
     return fail(error)
   }
 
-  return ok((data ?? []) as ReceptionEntryRow[])
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
 }
 
 export async function createReceptionEntry(input: ReceptionEntryInput): Promise<ApiResult<ReceptionEntryRow>> {
@@ -201,7 +251,9 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
     .single()
 
   if (error) return fail(error)
-  return ok(data as ReceptionEntryRow)
+  
+  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
+  return ok(enriched[0] ?? (data as ReceptionEntryRow))
 }
 
 export async function updateReceptionEntry(id: number, input: ReceptionEntryInput): Promise<ApiResult<ReceptionEntryRow>> {
@@ -232,7 +284,9 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
     .single()
 
   if (error) return fail(error)
-  return ok(data as ReceptionEntryRow)
+  
+  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
+  return ok(enriched[0] ?? (data as ReceptionEntryRow))
 }
 
 export async function deleteReceptionEntry(id: number): Promise<ApiResult<null>> {
@@ -336,7 +390,9 @@ export async function updateServiceAdvisorEntry(
     .single()
 
   if (error) return fail(error)
-  return ok(data as ReceptionEntryRow)
+  
+  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
+  return ok(enriched[0] ?? (data as ReceptionEntryRow))
 }
 
 export async function uploadServiceAdvisorEstimate(
@@ -389,5 +445,7 @@ export async function uploadServiceAdvisorEstimate(
     .single()
 
   if (error) return fail(error)
-  return ok(data as ReceptionEntryRow)
+  
+  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
+  return ok(enriched[0] ?? (data as ReceptionEntryRow))
 }
