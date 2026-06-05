@@ -360,19 +360,19 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .td-save { min-width: 80px; text-align: center; }
 .owner-name { white-space: normal; }
 .owner-phone { font-size: 12px; color: var(--muted); }
-.sel--service-type { height: 36px; min-width: 170px; }
-.inp--jc { height: 36px; min-width: 200px; font-size: 12.5px; text-transform: uppercase; }
+.sel--service-type { height: 36px; width: 200px; min-width: 200px; max-width: 200px; }
+.inp--jc { height: 36px; width: 220px; min-width: 220px; max-width: 220px; font-size: 12.5px; text-transform: uppercase; }
 .inp--remark { min-width: 200px; min-height: 36px; height: 36px; padding: 8px 11px; }
 .inp--uc { text-transform: uppercase; }
 .inp--compact { height: 38px; }
 .estimate-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.invoice-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.invoice-col { display: flex; align-items: center; }
 .estimate-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--success); font-weight: 600; }
-.invoice-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--success); font-weight: 600; }
 .estimate-actions { display: flex; gap: 6px; }
-.invoice-actions { display: flex; gap: 6px; }
+.invoice-actions { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .linkbtn--sm { font-size: 12.5px; }
 .tbtn--compact { height: 26px; }
+.tbtn--icon { width: 30px; min-width: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .tactions--mt { margin-top: 8px; }
 .recep-search { width: 240px; }
 .empty-state { padding: 20px 0; text-align: center; font-size: 13.5px; color: var(--muted); }
@@ -549,6 +549,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .schip .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .schip--btn { cursor: pointer; text-align: left; }
 .schip--active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-ring); }
+.schip--btn:disabled { cursor: not-allowed; opacity: 0.55; }
 
 /* Matrix center cells */
 .tbl td.ctr, .tbl th.ctr { text-align: center; }

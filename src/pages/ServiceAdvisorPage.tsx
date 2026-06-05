@@ -145,6 +145,11 @@ export default function ServiceAdvisorPage() {
     return fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
   }, [fuelTypeFilteredRows, selectedCategory])
 
+  const isWorkCompleted = (row: ReceptionEntryRow): boolean => {
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    return Boolean(jcNumber) && completedJobCardNumbers.has(jcNumber)
+  }
+
   const cardFilteredRows = useMemo(() => {
     if (selectedSummaryCard === 'all') return displayedRows
     if (selectedSummaryCard === 'job_card_pending') {
@@ -154,10 +159,10 @@ export default function ServiceAdvisorPage() {
       return displayedRows.filter((row) => !row.estimate_storage_path)
     }
     if (selectedSummaryCard === 'completed') {
-      return displayedRows.filter((row) => Boolean(row.invoice_storage_path))
+      return displayedRows.filter((row) => isWorkCompleted(row) && Boolean(row.invoice_storage_path))
     }
-    return displayedRows.filter((row) => !row.invoice_storage_path)
-  }, [displayedRows, selectedSummaryCard])
+    return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_storage_path)
+  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers])
 
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
@@ -210,12 +215,12 @@ export default function ServiceAdvisorPage() {
     [displayedRows],
   )
   const pendingInvoiceCount = useMemo(
-    () => displayedRows.filter((r) => !r.invoice_storage_path).length,
-    [displayedRows],
+    () => displayedRows.filter((r) => isWorkCompleted(r) && !r.invoice_storage_path).length,
+    [displayedRows, completedJobCardNumbers],
   )
   const completedCount = useMemo(
-    () => displayedRows.filter((r) => Boolean(r.invoice_storage_path)).length,
-    [displayedRows],
+    () => displayedRows.filter((r) => isWorkCompleted(r) && Boolean(r.invoice_storage_path)).length,
+    [displayedRows, completedJobCardNumbers],
   )
 
   // Detect admin/super_admin and get dealer scope
@@ -632,6 +637,7 @@ export default function ServiceAdvisorPage() {
           <button
             type="button"
             onClick={() => setSelectedSummaryCard('all')}
+            disabled={displayedRows.length === 0}
             className={`schip schip--btn ${selectedSummaryCard === 'all' ? 'schip--active' : ''}`}
           >
             <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
@@ -644,6 +650,7 @@ export default function ServiceAdvisorPage() {
           <button
             type="button"
             onClick={() => setSelectedSummaryCard('job_card_pending')}
+            disabled={pendingJobCardCount === 0}
             className={`schip schip--btn ${selectedSummaryCard === 'job_card_pending' ? 'schip--active' : ''}`}
           >
             <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
@@ -656,6 +663,7 @@ export default function ServiceAdvisorPage() {
           <button
             type="button"
             onClick={() => setSelectedSummaryCard('estimate_pending')}
+            disabled={pendingEstimateCount === 0}
             className={`schip schip--btn ${selectedSummaryCard === 'estimate_pending' ? 'schip--active' : ''}`}
           >
             <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
@@ -668,6 +676,7 @@ export default function ServiceAdvisorPage() {
           <button
             type="button"
             onClick={() => setSelectedSummaryCard('invoice_pending')}
+            disabled={pendingInvoiceCount === 0}
             className={`schip schip--btn ${selectedSummaryCard === 'invoice_pending' ? 'schip--active' : ''}`}
           >
             <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
@@ -680,6 +689,7 @@ export default function ServiceAdvisorPage() {
           <button
             type="button"
             onClick={() => setSelectedSummaryCard('completed')}
+            disabled={completedCount === 0}
             className={`schip schip--btn ${selectedSummaryCard === 'completed' ? 'schip--active' : ''}`}
           >
             <span className="ic"><Icon name="checksm" size={16} strokeWidth={2.4} /></span>
@@ -761,12 +771,6 @@ export default function ServiceAdvisorPage() {
                         <td className="mono strong">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             {row.reg_number}
-                            {isCompleted && (
-                              <span className="row--completed-badge">
-                                <Icon name="checksm" size={11} strokeWidth={2.4} />
-                                Ready for invoice
-                              </span>
-                            )}
                           </div>
                         </td>
                         <td>{row.model || '-'}</td>
@@ -791,6 +795,7 @@ export default function ServiceAdvisorPage() {
                             onChange={(event) =>
                               patchDraft(row.id, { jc_number: event.target.value.toUpperCase() })
                             }
+                            maxLength={25}
                             placeholder="JC number"
                             className="inp mono inp--jc"
                           />
@@ -867,28 +872,28 @@ export default function ServiceAdvisorPage() {
                           <div className="invoice-col">
                             {row.invoice_storage_path ? (
                               <>
-                                <span className="invoice-status">
-                                  <Icon name="checksm" size={13} strokeWidth={2.4} />
-                                  {row.invoice_file_name || 'Invoice uploaded'}
-                                </span>
                                 <div className="invoice-actions">
                                   {row.invoice_drive_url && (
                                     <a
                                       href={row.invoice_drive_url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="linkbtn linkbtn--sm"
+                                      className="tbtn tbtn--compact tbtn--icon"
+                                      title="View invoice"
+                                      aria-label="View invoice"
                                     >
-                                      View invoice
+                                      <Icon name="eye" size={14} strokeWidth={2.1} />
                                     </a>
                                   )}
                                   <button
                                     type="button"
                                     onClick={() => invoiceInputRefs.current[row.id]?.click()}
                                     disabled={uploadingInvoiceId === row.id}
-                                    className="tbtn tbtn--compact"
+                                    className="tbtn tbtn--compact tbtn--icon"
+                                    title="Replace invoice"
+                                    aria-label="Replace invoice"
                                   >
-                                    Replace
+                                    <Icon name="upload" size={14} strokeWidth={2.1} />
                                   </button>
                                 </div>
                               </>
