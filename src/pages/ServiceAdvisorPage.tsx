@@ -4,6 +4,7 @@ import {
   listReceptionEntries,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
+  getDealerScopeContext,
   type ReceptionEntryRow,
 } from '../lib/api'
 import { supabase } from '../lib/supabase'
@@ -102,8 +103,11 @@ export default function ServiceAdvisorPage() {
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set())
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState<string | 'all'>('all')
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all')
+  const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
+  const [hasMultipleDealers, setHasMultipleDealers] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -111,16 +115,25 @@ export default function ServiceAdvisorPage() {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
+  const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
 
   const branchFilteredRows = useMemo(() => {
     if (selectedBranch === 'all') return rows
     return rows.filter(r => r.branch === selectedBranch)
   }, [rows, selectedBranch])
 
+  const fuelTypeFilteredRows = useMemo(() => {
+    if (selectedFuelType === 'all') return branchFilteredRows
+    return branchFilteredRows.filter((row) => {
+      const fuelType = String(row.fuel_type ?? '').trim()
+      return fuelType === selectedFuelType
+    })
+  }, [branchFilteredRows, selectedFuelType])
+
   const displayedRows = useMemo(() => {
-    if (selectedCategory === 'all') return branchFilteredRows
-    return branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
-  }, [branchFilteredRows, selectedCategory])
+    if (selectedCategory === 'all') return fuelTypeFilteredRows
+    return fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+  }, [fuelTypeFilteredRows, selectedCategory])
 
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
@@ -128,16 +141,16 @@ export default function ServiceAdvisorPage() {
   }, [allRows])
 
   const categoryCounts = useMemo(() => {
-    const floor = branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
-    const other = branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'other').length
-    const nullCount = branchFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'null').length
+    const floor = fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
+    const other = fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'other').length
+    const nullCount = fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'null').length
     return {
-      all: branchFilteredRows.length,
+      all: fuelTypeFilteredRows.length,
       floor,
       other,
       null: nullCount,
     }
-  }, [branchFilteredRows])
+  }, [fuelTypeFilteredRows])
 
   const hasRows = useMemo(() => displayedRows.length > 0, [displayedRows.length])
   const advisorName = useMemo(() => {
@@ -151,19 +164,32 @@ export default function ServiceAdvisorPage() {
   const advisorBranch = useMemo(() => {
     if (isAdmin && selectedBranch !== 'all') return selectedBranch
     if (isAdmin) return 'All branches'
-    return rows[0]?.branch || 'Unknown'
+    
+    const uniqueBranches = Array.from(
+      new Set(
+        rows
+          .map((row) => String(row.branch ?? '').trim())
+          .filter(Boolean),
+      ),
+    )
+    
+    if (uniqueBranches.length === 0) return 'Unknown'
+    if (uniqueBranches.length === 1) return uniqueBranches[0]
+    return 'Multiple branches'
   }, [rows, isAdmin, selectedBranch])
   const pendingEstimateCount = useMemo(
     () => displayedRows.filter(r => !r.estimate_storage_path).length,
     [displayedRows],
   )
 
-  // Detect admin from canonical users.role so admin bypass is stable across module-id changes.
+  // Detect admin/super_admin and get dealer scope
   async function checkIfAdmin() {
     try {
       const { data: session } = await supabase.auth.getSession()
       if (!session.session?.user) {
         setIsAdmin(false)
+        setIsSuperAdmin(false)
+        setHasMultipleDealers(false)
         return false
       }
 
@@ -176,10 +202,22 @@ export default function ServiceAdvisorPage() {
       const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
       const isActive = (profile as { is_active?: boolean | null } | null)?.is_active === true
       const nextIsAdmin = role === 'admin' && isActive
+      const nextIsSuperAdmin = role === 'super_admin' && isActive
+      
       setIsAdmin(nextIsAdmin)
-      return nextIsAdmin
+      setIsSuperAdmin(nextIsSuperAdmin)
+
+      // Get dealer scope context
+      const scopeRes = await getDealerScopeContext()
+      if (scopeRes.data) {
+        setHasMultipleDealers((scopeRes.data.dealerCodes ?? []).length > 1)
+      }
+
+      return nextIsAdmin || nextIsSuperAdmin
     } catch {
       setIsAdmin(false)
+      setIsSuperAdmin(false)
+      setHasMultipleDealers(false)
       return false
     }
   }
@@ -229,6 +267,16 @@ export default function ServiceAdvisorPage() {
     })
 
     setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
+
+    // Extract and set fuel type options
+    const fuelTypes = Array.from(
+      new Set(
+        data
+          .map((row) => String(row.fuel_type ?? '').trim())
+          .filter(Boolean),
+      ),
+    ).sort()
+    setFuelTypeOptions(fuelTypes)
 
     setDrafts(mappedDrafts)
     setDirtyRowIds(new Set())
@@ -337,11 +385,11 @@ export default function ServiceAdvisorPage() {
           </div>
         )}
 
-        {/* Branch Filter (Admin Only) */}
-        {isAdmin && availableBranches.length > 0 && (
+        {/* Branch & Fuel Type Filters (Admin or Multi-Dealer Users) */}
+        {(isAdmin || hasMultipleDealers) && !isSuperAdmin && availableBranches.length > 0 && (
           <>
             <div className="toolbar toolbar--tight">
-              <span className="toolbar__label">Filter by branch:</span>
+              <span className="toolbar__label">Filter by location:</span>
               <button
                 type="button"
                 onClick={() => setSelectedBranch('all')}
@@ -371,6 +419,40 @@ export default function ServiceAdvisorPage() {
                 )
               })}
             </div>
+
+            {fuelTypeOptions.length > 0 && (
+              <div className="toolbar toolbar--tight">
+                <span className="toolbar__label">Filter by fuel type:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFuelType('all')}
+                  className={`btn btn--sm ${
+                    selectedFuelType === 'all'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
+                  }`}
+                >
+                  All ({allRows.length})
+                </button>
+                {fuelTypeOptions.map((fuelType) => {
+                  const count = allRows.filter(r => String(r.fuel_type ?? '').trim() === fuelType).length
+                  return (
+                    <button
+                      key={fuelType}
+                      type="button"
+                      onClick={() => setSelectedFuelType(fuelType)}
+                      className={`btn btn--sm ${
+                        selectedFuelType === fuelType
+                          ? 'btn--primary'
+                          : 'btn--ghost'
+                      }`}
+                    >
+                      {fuelType} ({count})
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             <div className="toolbar toolbar--tight">
               <span className="toolbar__label">Filter by category:</span>
@@ -430,7 +512,7 @@ export default function ServiceAdvisorPage() {
             <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
             <div>
               <div className="n">{displayedRows.length}</div>
-              <div className="l">Assigned to me</div>
+              <div className="l">{isAdmin ? 'Filtered entries' : 'Assigned to me'}</div>
             </div>
           </div>
 

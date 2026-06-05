@@ -16,6 +16,7 @@ export interface ReceptionEntryRow {
   owner_name: string | null
   owner_phone: string | null
   branch: string | null
+  fuel_type: string | null
   source: string
   remark: string | null
   estimate_storage_path: string | null
