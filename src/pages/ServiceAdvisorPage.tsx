@@ -56,6 +56,8 @@ const SOURCE_TONE_MAP: Record<string, string> = {
   'PSF Backfill': '',
 }
 
+const UNKNOWN_FUEL_TYPE = 'Unknown'
+
 function formatDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -68,6 +70,11 @@ function getSourceToneColor(source: string): string {
 
 function normalizeServiceType(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
+}
+
+function getFuelTypeLabel(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_FUEL_TYPE
 }
 
 function mergeServiceTypes(...groups: Array<string[]>): string[] {
@@ -140,8 +147,7 @@ export default function ServiceAdvisorPage() {
   const fuelTypeFilteredRows = useMemo(() => {
     if (selectedFuelType === 'all') return branchFilteredRows
     return branchFilteredRows.filter((row) => {
-      const fuelType = String(row.fuel_type ?? '').trim()
-      return fuelType === selectedFuelType
+      return getFuelTypeLabel(row.fuel_type) === selectedFuelType
     })
   }, [branchFilteredRows, selectedFuelType])
 
@@ -337,8 +343,7 @@ export default function ServiceAdvisorPage() {
     const fuelTypes = Array.from(
       new Set(
         data
-          .map((row) => String(row.fuel_type ?? '').trim())
-          .filter(Boolean),
+          .map((row) => getFuelTypeLabel(row.fuel_type)),
       ),
     ).sort()
     setFuelTypeOptions(fuelTypes)
@@ -610,7 +615,7 @@ export default function ServiceAdvisorPage() {
                   All ({allRows.length})
                 </button>
                 {fuelTypeOptions.map((fuelType) => {
-                  const count = allRows.filter(r => String(r.fuel_type ?? '').trim() === fuelType).length
+                  const count = allRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
                   return (
                     <button
                       key={fuelType}

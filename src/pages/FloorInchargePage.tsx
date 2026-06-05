@@ -185,6 +185,8 @@ interface TechnicianAssignment {
   updated_at?: string
 }
 
+type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed'
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function FloorInchargePage() {
@@ -196,6 +198,7 @@ export default function FloorInchargePage() {
   const [stageDrafts, setStageDrafts] = useState<Record<string, StageDraft>>({})
   const [search, setSearch] = useState('')
   const [branchFilter, setBranchFilter] = useState('All')
+  const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
   const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
@@ -447,7 +450,7 @@ export default function FloorInchargePage() {
     return ['All', ...Array.from(b).sort()]
   }, [jobCards])
 
-  const filtered = useMemo(() => {
+  const scopedJobCards = useMemo(() => {
     return jobCards.filter((jc) => {
       const matchBranch = branchFilter === 'All' || jc.branch === branchFilter
       const q = search.toLowerCase()
@@ -461,8 +464,53 @@ export default function FloorInchargePage() {
     })
   }, [jobCards, search, branchFilter])
 
-  const assignedCount = filtered.filter((jc) => !!assignments[jc.assignment_key]).length
-  const unassignedCount = filtered.length - assignedCount
+  const assignedCount = scopedJobCards.filter((jc) => !!assignments[jc.assignment_key]).length
+  const unassignedCount = scopedJobCards.length - assignedCount
+  const holdCount = scopedJobCards.filter((jc) => {
+    const assignment = assignments[jc.assignment_key]
+    return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'hold'
+  }).length
+  const inProcessCount = scopedJobCards.filter((jc) => {
+    const assignment = assignments[jc.assignment_key]
+    return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'work_inprocess'
+  }).length
+  const completedCount = scopedJobCards.filter((jc) => {
+    const assignment = assignments[jc.assignment_key]
+    return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
+  }).length
+
+  const filtered = useMemo(() => {
+    if (assignmentView === 'assigned') {
+      return scopedJobCards.filter((jc) => Boolean(assignments[jc.assignment_key]))
+    }
+
+    if (assignmentView === 'unassigned') {
+      return scopedJobCards.filter((jc) => !assignments[jc.assignment_key])
+    }
+
+    if (assignmentView === 'hold') {
+      return scopedJobCards.filter((jc) => {
+        const assignment = assignments[jc.assignment_key]
+        return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'hold'
+      })
+    }
+
+    if (assignmentView === 'work_inprocess') {
+      return scopedJobCards.filter((jc) => {
+        const assignment = assignments[jc.assignment_key]
+        return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'work_inprocess'
+      })
+    }
+
+    if (assignmentView === 'completed') {
+      return scopedJobCards.filter((jc) => {
+        const assignment = assignments[jc.assignment_key]
+        return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'completed'
+      })
+    }
+
+    return scopedJobCards
+  }, [assignmentView, assignments, scopedJobCards])
 
   return (
     <div>
@@ -488,25 +536,28 @@ export default function FloorInchargePage() {
 
       {/* Summary */}
       <div className="summary">
-        <div className="schip">
+        <button
+          type="button"
+          className={`schip schip--btn${assignmentView === 'all' ? ' schip--active' : ''}`}
+          onClick={() => setAssignmentView('all')}
+          aria-pressed={assignmentView === 'all'}
+          disabled={scopedJobCards.length === 0}
+        >
           <span className="ic">
             <Icon name="floor" size={16} />
           </span>
           <div>
-            <div className="n">{filtered.length}</div>
+            <div className="n">{scopedJobCards.length}</div>
             <div className="l">Job cards</div>
           </div>
-        </div>
-        <div className="schip">
-          <span className="ic">
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{assignedCount}</div>
-            <div className="l">Assigned</div>
-          </div>
-        </div>
-        <div className="schip warn">
+        </button>
+        <button
+          type="button"
+          className={`schip schip--btn warn${assignmentView === 'unassigned' ? ' schip--active' : ''}`}
+          onClick={() => setAssignmentView('unassigned')}
+          aria-pressed={assignmentView === 'unassigned'}
+          disabled={unassignedCount === 0}
+        >
           <span className="ic">
             <Icon name="clock" size={16} />
           </span>
@@ -514,7 +565,67 @@ export default function FloorInchargePage() {
             <div className="n">{unassignedCount}</div>
             <div className="l">Unassigned</div>
           </div>
-        </div>
+        </button>
+        <button
+          type="button"
+          className={`schip schip--btn${assignmentView === 'assigned' ? ' schip--active' : ''}`}
+          onClick={() => setAssignmentView('assigned')}
+          aria-pressed={assignmentView === 'assigned'}
+          disabled={assignedCount === 0}
+        >
+          <span className="ic">
+            <Icon name="checksm" size={16} />
+          </span>
+          <div>
+            <div className="n">{assignedCount}</div>
+            <div className="l">Assigned</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`schip schip--btn warn${assignmentView === 'hold' ? ' schip--active' : ''}`}
+          onClick={() => setAssignmentView('hold')}
+          aria-pressed={assignmentView === 'hold'}
+          disabled={holdCount === 0}
+        >
+          <span className="ic">
+            <Icon name="clock" size={16} />
+          </span>
+          <div>
+            <div className="n">{holdCount}</div>
+            <div className="l">Hold</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`schip schip--btn${assignmentView === 'work_inprocess' ? ' schip--active' : ''}`}
+          onClick={() => setAssignmentView('work_inprocess')}
+          aria-pressed={assignmentView === 'work_inprocess'}
+          disabled={inProcessCount === 0}
+        >
+          <span className="ic">
+            <Icon name="checksm" size={16} />
+          </span>
+          <div>
+            <div className="n">{inProcessCount}</div>
+            <div className="l">In-Process</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`schip schip--btn${assignmentView === 'completed' ? ' schip--active' : ''}`}
+          onClick={() => setAssignmentView('completed')}
+          aria-pressed={assignmentView === 'completed'}
+          disabled={completedCount === 0}
+        >
+          <span className="ic">
+            <Icon name="checksm" size={16} />
+          </span>
+          <div>
+            <div className="n">{completedCount}</div>
+            <div className="l">Completed</div>
+          </div>
+        </button>
       </div>
 
       {/* Card */}

@@ -106,43 +106,58 @@ function sanitizeFileNamePart(value: string): string {
 }
 
 async function enrichEntriesWithEmployeeBranch(entries: ReceptionEntryRow[]): Promise<ReceptionEntryRow[]> {
-  // Find entries with NULL branch
-  const entriesWithNullBranch = entries.filter(e => !e.branch && e.sa_employee_code)
+  // Find entries missing derived metadata from employee master.
+  const entriesNeedingEnrichment = entries.filter(
+    (entry) => (!entry.branch || !entry.fuel_type) && entry.sa_employee_code,
+  )
   
-  if (entriesWithNullBranch.length === 0) {
+  if (entriesNeedingEnrichment.length === 0) {
     return entries
   }
 
-  // Batch fetch employee locations for all employee codes
+  // Batch fetch employee metadata for all employee codes.
   const employeeCodes = Array.from(
-    new Set(entriesWithNullBranch.map(e => e.sa_employee_code).filter(Boolean) as string[]),
+    new Set(entriesNeedingEnrichment.map(e => e.sa_employee_code).filter(Boolean) as string[]),
   )
 
   const { data: employees, error } = await supabase
     .from('employee_master')
-    .select('employee_code, location')
+    .select('employee_code, location, fuel_type')
     .in('employee_code', employeeCodes)
 
   if (error || !employees) {
     return entries
   }
 
-  // Build location map
-  const locationMap = new Map(
-    employees.map((emp: { employee_code?: string; location?: string | null }) => [
+  // Build metadata map keyed by employee_code.
+  const employeeMetaMap = new Map(
+    employees.map((emp: { employee_code?: string; location?: string | null; fuel_type?: string | null }) => [
       String(emp.employee_code ?? '').trim().toUpperCase(),
-      String(emp.location ?? '').trim(),
+      {
+        location: String(emp.location ?? '').trim(),
+        fuelType: String(emp.fuel_type ?? '').trim(),
+      },
     ]),
   )
 
   // Enrich entries
   return entries.map((entry) => {
-    if (!entry.branch && entry.sa_employee_code) {
-      const location = locationMap.get(entry.sa_employee_code.trim().toUpperCase())
-      if (location) {
-        return { ...entry, branch: location }
+    if (!entry.sa_employee_code) return entry
+
+    const meta = employeeMetaMap.get(entry.sa_employee_code.trim().toUpperCase())
+    if (!meta) return entry
+
+    const nextBranch = entry.branch || meta.location || null
+    const nextFuelType = entry.fuel_type || meta.fuelType || null
+
+    if (nextBranch !== entry.branch || nextFuelType !== entry.fuel_type) {
+      return {
+        ...entry,
+        branch: nextBranch,
+        fuel_type: nextFuelType,
       }
     }
+
     return entry
   })
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
+import { listReceptionEntries, listServiceAdvisorEntries, type ReceptionEntryRow } from '../lib/api'
 
 type VisibleModule = {
   to: string
@@ -40,6 +41,8 @@ type ModuleMetaRow = {
   is_active: boolean | null
 }
 
+const UNKNOWN_FUEL_TYPE = 'Unknown'
+
 function normalizeRoute(value: string | null | undefined) {
   const trimmed = String(value ?? '').trim()
   if (!trimmed) return ''
@@ -48,6 +51,11 @@ function normalizeRoute(value: string | null | undefined) {
 
 function normalizeModuleName(value: string | null | undefined) {
   return String(value ?? '').trim().toLowerCase().replace(/[-\s]+/g, '_')
+}
+
+function getStatusFuelTypeLabel(value: string | null | undefined) {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_FUEL_TYPE
 }
 
 function formatDateTime(value: string) {
@@ -89,12 +97,18 @@ export default function DashboardPage({
   const [userFirstName, setUserFirstName] = useState('User')
   const [moduleMetaByRoute, setModuleMetaByRoute] = useState<Record<string, ModuleMetaRow>>({})
   const [totalModulesCount, setTotalModulesCount] = useState<number | null>(null)
+  const [statusRows, setStatusRows] = useState<ReceptionEntryRow[]>([])
+  const [statusLoading, setStatusLoading] = useState(true)
+  const [statusBranchFilter, setStatusBranchFilter] = useState<string | 'all'>('all')
+  const [statusFuelTypeFilter, setStatusFuelTypeFilter] = useState<string | 'all'>('all')
+  const [statusCompletedJobCards, setStatusCompletedJobCards] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let mounted = true
 
     async function loadDashboard() {
       setLoading(true)
+      setStatusLoading(true)
 
       const [
         receptionCount,
@@ -115,6 +129,35 @@ export default function DashboardPage({
           .limit(8),
         supabase.auth.getSession(),
       ])
+
+      const userId = authResult.data.session?.user?.id ?? null
+      let isAdminUser = false
+      if (userId) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('role, is_active')
+          .eq('id', userId)
+          .maybeSingle()
+
+        const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+        isAdminUser = role === 'admin' && (profile as { is_active?: boolean | null } | null)?.is_active === true
+      }
+
+      const statusRowsResult = isAdminUser
+        ? await listReceptionEntries()
+        : await listServiceAdvisorEntries()
+      const nextStatusRows = statusRowsResult.error ? [] : (statusRowsResult.data ?? [])
+
+      const { data: completedAssignments } = await supabase
+        .from('technician_assignments')
+        .select('job_card_number, work_status')
+        .eq('work_status', 'completed')
+
+      const nextCompleted = new Set<string>()
+      ;(completedAssignments ?? []).forEach((row: { job_card_number?: string | null }) => {
+        const jobCard = String(row.job_card_number ?? '').trim().toUpperCase()
+        if (jobCard) nextCompleted.add(jobCard)
+      })
 
       const moduleRows = (modulesResult.data ?? []) as ModuleMetaRow[]
       const activeModulesCount = moduleRows.filter((row) => row.is_active === true).length
@@ -158,7 +201,6 @@ export default function DashboardPage({
       setReceptionRows(receptionData)
 
       const fullName = String(authResult.data.session?.user?.user_metadata?.full_name ?? '').trim()
-      const userId = authResult.data.session?.user?.id
       if (userId) {
         const { data: userRow } = await supabase
           .from('users')
@@ -189,7 +231,11 @@ export default function DashboardPage({
         })),
       )
 
+      setStatusRows(nextStatusRows)
+      setStatusCompletedJobCards(nextCompleted)
+
       setLoading(false)
+      setStatusLoading(false)
     }
 
     void loadDashboard()
@@ -216,6 +262,89 @@ export default function DashboardPage({
     return 'Good evening'
   }, [])
 
+  const canSeeServiceAdvisorStatus = useMemo(
+    () => visibleModules.some((module) => module.to === '/service-advisor'),
+    [visibleModules],
+  )
+
+  const statusBranches = useMemo(
+    () => Array.from(new Set(statusRows.map((row) => String(row.branch ?? '').trim()).filter(Boolean))).sort(),
+    [statusRows],
+  )
+
+  const statusBranchFilteredRows = useMemo(() => {
+    if (statusBranchFilter === 'all') return statusRows
+    return statusRows.filter((row) => String(row.branch ?? '').trim() === statusBranchFilter)
+  }, [statusRows, statusBranchFilter])
+
+  const statusFuelTypes = useMemo(
+    () => Array.from(new Set(statusBranchFilteredRows.map((row) => getStatusFuelTypeLabel(row.fuel_type)))).sort(),
+    [statusBranchFilteredRows],
+  )
+
+  const statusFilteredRows = useMemo(() => {
+    if (statusFuelTypeFilter === 'all') return statusBranchFilteredRows
+    return statusBranchFilteredRows.filter(
+      (row) => getStatusFuelTypeLabel(row.fuel_type) === statusFuelTypeFilter,
+    )
+  }, [statusBranchFilteredRows, statusFuelTypeFilter])
+
+  const statusSummary = useMemo(() => {
+    const filteredEntries = statusFilteredRows.length
+    const srType = statusFilteredRows.filter((row) => !String(row.service_type ?? '').trim()).length
+    const jobCard = statusFilteredRows.filter((row) => !String(row.jc_number ?? '').trim()).length
+    const estimate = statusFilteredRows.filter((row) => !row.estimate_storage_path).length
+    const invoice = statusFilteredRows.filter((row) => {
+      const jc = String(row.jc_number ?? '').trim().toUpperCase()
+      return Boolean(jc) && statusCompletedJobCards.has(jc) && !row.invoice_storage_path
+    }).length
+    const completedCards = statusFilteredRows.filter((row) => {
+      const jc = String(row.jc_number ?? '').trim().toUpperCase()
+      return Boolean(jc) && statusCompletedJobCards.has(jc) && Boolean(row.invoice_storage_path)
+    }).length
+
+    return {
+      filteredEntries,
+      srType,
+      jobCard,
+      estimate,
+      invoice,
+      completedCards,
+    }
+  }, [statusFilteredRows, statusCompletedJobCards])
+
+  const statusBranchCounts = useMemo(() => {
+    const next: Record<string, number> = {}
+    statusBranches.forEach((branch) => {
+      next[branch] = statusRows.filter((row) => String(row.branch ?? '').trim() === branch).length
+    })
+    return next
+  }, [statusRows, statusBranches])
+
+  const statusFuelCounts = useMemo(() => {
+    const next: Record<string, number> = {}
+    statusFuelTypes.forEach((fuelType) => {
+      next[fuelType] = statusBranchFilteredRows.filter(
+        (row) => getStatusFuelTypeLabel(row.fuel_type) === fuelType,
+      ).length
+    })
+    return next
+  }, [statusBranchFilteredRows, statusFuelTypes])
+
+  useEffect(() => {
+    if (statusBranchFilter === 'all') return
+    if (!statusBranches.includes(statusBranchFilter)) {
+      setStatusBranchFilter('all')
+    }
+  }, [statusBranchFilter, statusBranches])
+
+  useEffect(() => {
+    if (statusFuelTypeFilter === 'all') return
+    if (!statusFuelTypes.includes(statusFuelTypeFilter)) {
+      setStatusFuelTypeFilter('all')
+    }
+  }, [statusFuelTypeFilter, statusFuelTypes])
+
   return (
     <div>
       <div className="pagehead">
@@ -241,7 +370,113 @@ export default function DashboardPage({
         ))}
       </div>
 
-      <div className="grid-2">
+      {canSeeServiceAdvisorStatus && (
+        <div className="card card--mt-gap">
+          <div className="card__head">
+            <div>
+              <h3>Status</h3>
+              <div className="sub">Service Advisor</div>
+            </div>
+          </div>
+          <div className="card__body">
+            <div className="toolbar toolbar--tight">
+              <span className="toolbar__label">Filter by location:</span>
+              <button
+                type="button"
+                onClick={() => setStatusBranchFilter('all')}
+                className={`btn btn--sm ${statusBranchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+              >
+                All ({toDisplayCount(statusRows.length)})
+              </button>
+              {statusBranches.map((branch) => (
+                <button
+                  key={branch}
+                  type="button"
+                  onClick={() => setStatusBranchFilter(branch)}
+                  className={`btn btn--sm ${statusBranchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
+                >
+                  {branch} ({toDisplayCount(statusBranchCounts[branch] ?? 0)})
+                </button>
+              ))}
+            </div>
+
+            {statusFuelTypes.length > 0 && (
+              <div className="toolbar toolbar--tight">
+                <span className="toolbar__label">Filter by fuel type:</span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFuelTypeFilter('all')}
+                  className={`btn btn--sm ${statusFuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+                >
+                  All ({toDisplayCount(statusBranchFilteredRows.length)})
+                </button>
+                {statusFuelTypes.map((fuelType) => (
+                  <button
+                    key={fuelType}
+                    type="button"
+                    onClick={() => setStatusFuelTypeFilter(fuelType)}
+                    className={`btn btn--sm ${statusFuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+                  >
+                    {fuelType} ({toDisplayCount(statusFuelCounts[fuelType] ?? 0)})
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="summary">
+              <div className="schip">
+                <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
+                <div>
+                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.filteredEntries)}</div>
+                  <div className="l">Filtered entries</div>
+                </div>
+              </div>
+
+              <div className="schip">
+                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                <div>
+                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.srType)}</div>
+                  <div className="l">SR Type</div>
+                </div>
+              </div>
+
+              <div className="schip">
+                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                <div>
+                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.jobCard)}</div>
+                  <div className="l">Job Card</div>
+                </div>
+              </div>
+
+              <div className="schip">
+                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                <div>
+                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.estimate)}</div>
+                  <div className="l">Estimate</div>
+                </div>
+              </div>
+
+              <div className="schip">
+                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                <div>
+                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.invoice)}</div>
+                  <div className="l">Invoice</div>
+                </div>
+              </div>
+
+              <div className="schip">
+                <span className="ic"><Icon name="checksm" size={16} strokeWidth={2.4} /></span>
+                <div>
+                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.completedCards)}</div>
+                  <div className="l">Completed cards</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={canSeeServiceAdvisorStatus ? 'grid-2 card--mt-gap' : 'grid-2'}>
         <div className="card">
           <div className="card__head">
             <div>
