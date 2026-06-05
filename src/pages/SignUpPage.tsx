@@ -36,6 +36,7 @@ const PW_RULES = [
 export default function SignUpPage({ onSwitchToLogin }: Props) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [selectedRole, setSelectedRole] = useState<string | null>(null)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -60,12 +61,21 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
       return
     }
 
+    if (phone.trim() && phone.replace(/\D/g, '').length !== 10) {
+      setError('Phone number must be exactly 10 digits.')
+      return
+    }
+
     setLoading(true)
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName, role: selectedRole },
+        data: { 
+          full_name: fullName, 
+          role: selectedRole,
+          phone: phone.trim() ? phone.replace(/\D/g, '') : null,
+        },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
@@ -139,6 +149,23 @@ export default function SignUpPage({ onSwitchToLogin }: Props) {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
+            />
+          </span>
+        </label>
+
+        <label className="field">
+          <span className="label">Phone (optional)</span>
+          <span className="inp-wrap">
+            <span className="icon-l"><Icon name="phone" size={17} /></span>
+            <input
+              className="inp"
+              type="tel"
+              placeholder="9876543210 (10 digits)"
+              value={phone}
+              onChange={e => {
+                const digitsOnly = e.target.value.replace(/\D/g, '')
+                setPhone(digitsOnly.slice(0, 10))
+              }}
             />
           </span>
         </label>
