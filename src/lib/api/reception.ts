@@ -33,7 +33,7 @@ export interface ReceptionEntryRow {
 export interface ReceptionEntryInput {
   reg_number: string
   model?: string | null
-  service_type: string
+  service_type?: string | null
   sa_employee_code: string
   jc_number?: string | null
   owner_name?: string | null
@@ -72,7 +72,7 @@ function normalizePayload(input: ReceptionEntryInput) {
   return {
     reg_number: input.reg_number.trim().toUpperCase(),
     model: input.model?.trim() || null,
-    service_type: input.service_type.trim(),
+    service_type: input.service_type?.trim() || null,
     sa_employee_code: input.sa_employee_code.trim().toUpperCase(),
     jc_number: input.jc_number?.trim() || null,
     owner_name: input.owner_name?.trim() || null,

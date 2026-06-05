@@ -129,7 +129,7 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
           const row = normalizedRows[i]
 
           const regNumber = row[indexMap.reg_number]?.trim() ?? ''
-          const serviceType = serviceTypeIndex >= 0 ? row[serviceTypeIndex]?.trim() ?? '' : ''
+          const serviceType = serviceTypeIndex >= 0 ? row[serviceTypeIndex]?.trim() ?? null : null
           const saEmployeeCode = row[indexMap.sa_employee_code]?.trim() ?? ''
 
           if (!regNumber && !serviceType && !saEmployeeCode) {
@@ -336,7 +336,7 @@ export default function ReceptionPage() {
     const payload: ReceptionEntryInput = {
       reg_number: form.reg_number,
       model: form.model,
-      service_type: '',
+      service_type: null,
       sa_employee_code: form.sa_employee_code,
       owner_name: form.owner_name,
       owner_phone: form.owner_phone,
