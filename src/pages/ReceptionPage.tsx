@@ -208,9 +208,12 @@ export default function ReceptionPage() {
     return values
   }, [employeeOptions])
 
-  const filteredEntries = useMemo(() => {
+  const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return entries
+
+    if (!query) {
+      return entries.filter((entry) => String(entry.sa_name ?? '').trim() === '')
+    }
 
     return entries.filter((entry) => {
       const joined = [
@@ -599,7 +602,7 @@ export default function ReceptionPage() {
           <div className="card__head">
             <div>
               <h3>Reception entries</h3>
-              <div className="sub">Newest first · {filteredEntries.length} shown</div>
+              <div className="sub">Newest first · {visibleEntries.length} shown</div>
             </div>
             <span className="inp-wrap recep-search">
               <span className="icon-l">⌕</span>
@@ -615,10 +618,12 @@ export default function ReceptionPage() {
           <div className="card__body recep-feed__body scroll">
             {loading ? (
               <div className="empty-state empty-state--lg">Loading reception entries...</div>
-            ) : filteredEntries.length === 0 ? (
-              <div className="empty-state empty-state--lg">No entries match your search.</div>
+            ) : visibleEntries.length === 0 ? (
+              <div className="empty-state empty-state--lg">
+                {search.trim() ? 'No entries match your search.' : 'No unassigned entries found.'}
+              </div>
             ) : (
-              filteredEntries.map((entry) => (
+              visibleEntries.map((entry) => (
                 <div className="recep-item" key={entry.id}>
                   <div className="recep-item__main">
                     <div className="recep-item__top">

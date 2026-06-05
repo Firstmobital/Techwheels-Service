@@ -33,6 +33,8 @@ export interface ReceptionEntryRow {
   invoice_uploaded_by: string | null
   invoice_drive_url: string | null
   invoice_drive_file_id: string | null
+  invoice_done_at: string | null
+  invoice_done_by: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -519,6 +521,30 @@ export async function uploadServiceAdvisorInvoice(
     .from('service_reception_entries')
     .select('*')
     .eq('id', id)
+    .single()
+
+  if (error) return fail(error)
+  
+  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
+  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+}
+
+export async function markServiceAdvisorInvoiceDone(
+  id: number,
+): Promise<ApiResult<ReceptionEntryRow>> {
+  const sessionRes = await supabase.auth.getSession()
+  const userEmail = sessionRes.data.session?.user?.email
+
+  if (!userEmail) return fail('No active session')
+
+  const { data, error } = await supabase
+    .from('service_reception_entries')
+    .update({
+      invoice_done_at: new Date().toISOString(),
+      invoice_done_by: userEmail,
+    })
+    .eq('id', id)
+    .select('*')
     .single()
 
   if (error) return fail(error)

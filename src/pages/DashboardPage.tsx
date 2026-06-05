@@ -330,11 +330,11 @@ export default function DashboardPage({
     const estimate = statusFilteredRows.filter((row) => !row.estimate_storage_path).length
     const invoice = statusFilteredRows.filter((row) => {
       const jc = String(row.jc_number ?? '').trim().toUpperCase()
-      return Boolean(jc) && statusCompletedJobCards.has(jc) && !row.invoice_storage_path
+      return Boolean(jc) && statusCompletedJobCards.has(jc) && !row.invoice_done_at
     }).length
     const completedCards = statusFilteredRows.filter((row) => {
       const jc = String(row.jc_number ?? '').trim().toUpperCase()
-      return Boolean(jc) && statusCompletedJobCards.has(jc) && Boolean(row.invoice_storage_path)
+      return Boolean(jc) && statusCompletedJobCards.has(jc) && Boolean(row.invoice_done_at)
     }).length
 
     return {

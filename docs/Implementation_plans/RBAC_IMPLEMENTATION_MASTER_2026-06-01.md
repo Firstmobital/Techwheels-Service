@@ -55,6 +55,55 @@
 - Verification conclusion: targeted dealer-bound policy families now include explicit `public.is_admin()` bypass and are considered hardened for Phase 1C scope.
 - Remaining governance step: include this verified state in the next authoritative dump refresh and policy text re-audit from `local_folder/backups/full_database.sql`.
 
+### Execution Update (2026-06-05)
+
+- Re-audited authoritative schema/policies from `local_folder/backups/full_database.sql` (mirror: `local_folder/backups/chunks/full_database.sql.part_*`).
+- Confirmed active Service Advisor SELECT policy is currently employee-code scoped:
+  - `service_reception_select_sa` uses `public.user_has_employee_code(sa_employee_code)`.
+- Confirmed CRM exists as an Employee Master role value (`employee_master.role = CRM`) and CRM-linked users can have `service_advisor` module view/modify permissions.
+- Identified access gap: CRM users are limited to self-mapped employee rows, not dealer-wide rows, which conflicts with operational requirement for dealer-scope visibility.
+- **Migration executed 2026-06-05 (SQL Editor)** — Version 1 (initial dealer_code approach):
+  - File: `supabase/migrations/20260605163000_add_crm_dealer_scope_for_service_advisor.sql`
+  - Initial attempt: helper function `public.user_has_crm_dealer_scope(text)` checking row's dealer_code column.
+  - Issue identified: rows don't have dealer_code reliably populated; policy failed to grant access.
+  - Root cause: Reliance on `dealer_code` column (which may be NULL or misaligned) instead of proven pattern.
+- **Migration executed 2026-06-05 (SQL Editor)** — Version 3 (Final - Both Format Support):
+  - File: `supabase/migrations/20260605163000_add_crm_dealer_scope_for_service_advisor.sql`
+  - Initial attempt (v1): Used `dealer_code` column approach (failed—column unreliable).
+  - Second attempt (v2): Used role-based check only (security issue—org-wide access instead of dealer-scoped).
+  - Final version (v3): Helper function `public.user_is_crm_for_dealer_sa()` checks both SA code formats:
+    - Format 1: `500A840_131` → Extract dealer from position 1 (before underscore)
+    - Format 2: `EPM_500A840` → Extract dealer from position 2 (after underscore)
+  - Logic: User has CRM role AND dealer code matches either split position
+  - Policy `service_reception_select_crm_dealer_scope`:
+    - Condition: `has_module_view('service_advisor') AND sa_employee_code IS NOT NULL AND user_is_crm_for_dealer_sa(sa_employee_code)`
+    - Semantic: CRM users see all SA-assigned rows in their dealer (dealer-scoped, not org-wide).
+  - Verification script: `supabase/migrations/20260605165500_verify_crm_policy_update.sql`
+- Safety boundary preserved:
+  - Existing SA update policy remains employee-code scoped (`service_reception_update_sa`) — no broadening of write scope without explicit approval.
+  - Existing admin bypass via `is_admin()` remains unchanged.
+  - Receipt module policy `service_reception_select_rbac` remains unchanged (dealer-scoped for reception module users).
+- Policy family count for service_reception_entries SELECT: now 4
+  1. `service_reception_select_rbac` (reception module users, dealer-scoped)
+  2. `service_reception_select_sa` (service_advisor module users, employee-code scoped — unchanged)
+  3. `service_reception_select_crm_dealer_scope` (service_advisor module + CRM role, dealer-scoped — NEW)
+  4. `service_reception_select_floor_incharge` (floor_incharge module users, fuel-type scoped)
+- **Verification executed 2026-06-05**:
+  - Both migrations executed in Supabase SQL Editor (20260605163000 Version 3, 20260605165500).
+  - Data assessment: 437 total service_reception_entries rows; 266 have non-NULL `sa_employee_code`.
+  - CRM policy pattern analysis: Identified two SA employee code formats:
+    - Numeric first: `500A840_131` (dealer code before underscore)
+    - Text first: `EPM_500A840` (dealer code after underscore)
+  - CRM helper function `user_is_crm_for_dealer_sa()` updated to handle both formats:
+    - Checks if dealer code matches `split_part(..., '_', 1)` OR `split_part(..., '_', 2)`
+    - Ensures dealer-scoped visibility (not organization-wide)
+  - CRM policy now grants visibility to all rows where SA employee code contains user's mapped dealer code
+  - Frontend updated: [src/pages/ServiceAdvisorPage.tsx](src/pages/ServiceAdvisorPage.tsx) detects CRM dealer-wide access:
+    - Shows "All dealer vehicles" when user sees multiple SA employee codes (CRM pattern).
+    - Shows "My assigned vehicles" when user sees only self-assigned sa_employee_code (SA pattern).
+    - Updated description reflects broader dealer-wide responsibility.
+  - Status: ✓ COMPLETE — CRM dealer-scoped visibility enabled; both SA code formats supported; frontend labels updated.
+
 ### Superadmin Default Access Policy (Locked)
 
 - Superadmin model in this project is users.role = admin with is_active = true.

@@ -4,7 +4,7 @@ import {
   listReceptionEntries,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
-  uploadServiceAdvisorInvoice,
+  markServiceAdvisorInvoiceDone,
   getDealerScopeContext,
   type ReceptionEntryRow,
 } from '../lib/api'
@@ -112,9 +112,48 @@ function isServiceTypeMissing(serviceType: string | null | undefined): boolean {
   return !String(serviceType ?? '').trim()
 }
 
+function normalizeWhatsAppPhone(raw: string | null | undefined): string | null {
+  const digits = String(raw ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  if (digits.length === 10) return `91${digits}`
+  if (digits.length === 12 && digits.startsWith('91')) return digits
+  return null
+}
+
+function parsePhoneMap(raw: string): Record<string, string> {
+  return raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((acc, part) => {
+      const [employeeCodeRaw, phoneRaw] = part.split(':')
+      const employeeCode = String(employeeCodeRaw ?? '').trim().toUpperCase()
+      const phone = normalizeWhatsAppPhone(phoneRaw)
+      if (employeeCode && phone) acc[employeeCode] = phone
+      return acc
+    }, {})
+}
+
+function getServiceTypeForMessage(rowServiceType: string | null | undefined, draftServiceType: string | null | undefined): string {
+  const draftValue = String(draftServiceType ?? '').trim()
+  if (draftValue) return draftValue
+  const rowValue = String(rowServiceType ?? '').trim()
+  return rowValue || 'Service'
+}
+
+function buildServiceCompleteMessage(regNumber: string, serviceType: string): string {
+  return `Your vehicle ${regNumber} with ${serviceType} is complete. Please come and collect.`
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
-  const invoiceInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const waDefaultSaPhone = normalizeWhatsAppPhone(import.meta.env.VITE_WA_GROUP_SA_PHONE as string | undefined)
+  const waSuperAdminPhone = normalizeWhatsAppPhone(import.meta.env.VITE_WA_GROUP_SUPERADMIN_PHONE as string | undefined)
+  const waGroupNamePrefix = String(import.meta.env.VITE_WA_GROUP_NAME_PREFIX ?? 'Service Delivery').trim() || 'Service Delivery'
+  const waSaPhoneMap = useMemo(
+    () => parsePhoneMap(String(import.meta.env.VITE_WA_GROUP_SA_PHONE_MAP ?? '')),
+    [],
+  )
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [allRows, setAllRows] = useState<ReceptionEntryRow[]>([])
@@ -181,9 +220,9 @@ export default function ServiceAdvisorPage() {
       return displayedRows.filter((row) => isWorkHold(row))
     }
     if (selectedSummaryCard === 'completed') {
-      return displayedRows.filter((row) => isWorkCompleted(row) && Boolean(row.invoice_storage_path))
+      return displayedRows.filter((row) => isWorkCompleted(row) && Boolean(row.invoice_done_at))
     }
-    return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_storage_path)
+    return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_done_at)
   }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
 
   const availableBranches = useMemo(() => {
@@ -241,7 +280,7 @@ export default function ServiceAdvisorPage() {
     [displayedRows],
   )
   const pendingInvoiceCount = useMemo(
-    () => displayedRows.filter((r) => isWorkCompleted(r) && !r.invoice_storage_path).length,
+    () => displayedRows.filter((r) => isWorkCompleted(r) && !r.invoice_done_at).length,
     [displayedRows, completedJobCardNumbers],
   )
   const floorHoldCount = useMemo(
@@ -249,7 +288,7 @@ export default function ServiceAdvisorPage() {
     [displayedRows, holdJobCardNumbers],
   )
   const completedCount = useMemo(
-    () => displayedRows.filter((r) => isWorkCompleted(r) && Boolean(r.invoice_storage_path)).length,
+    () => displayedRows.filter((r) => isWorkCompleted(r) && Boolean(r.invoice_done_at)).length,
     [displayedRows, completedJobCardNumbers],
   )
 
@@ -512,11 +551,11 @@ export default function ServiceAdvisorPage() {
     await loadRows()
   }
 
-  async function handleInvoiceUpload(id: number, file: File) {
+  async function handleInvoiceDone(id: number) {
     setUploadingInvoiceId(id)
     setError(null)
 
-    const res = await uploadServiceAdvisorInvoice(id, file)
+    const res = await markServiceAdvisorInvoiceDone(id)
     setUploadingInvoiceId(null)
 
     if (res.error) {
@@ -524,8 +563,49 @@ export default function ServiceAdvisorPage() {
       return
     }
 
-    showToast('Invoice uploaded successfully')
+    showToast('Invoice marked as done')
     await loadRows()
+  }
+
+  async function handleCreateGroup(row: ReceptionEntryRow) {
+    const draft = drafts[row.id] ?? EMPTY_DRAFT
+    const ownerPhone = normalizeWhatsAppPhone(row.owner_phone)
+    const saPhoneFromMap = row.sa_employee_code ? waSaPhoneMap[String(row.sa_employee_code).trim().toUpperCase()] ?? null : null
+    const saPhone = saPhoneFromMap ?? waDefaultSaPhone
+
+    const memberNumbers = Array.from(
+      new Set([ownerPhone, saPhone, waSuperAdminPhone].filter(Boolean) as string[]),
+    )
+
+    if (memberNumbers.length === 0) {
+      setError('Create Group needs at least one valid phone number (owner/SA/super admin).')
+      return
+    }
+
+    const regNo = String(row.reg_number ?? '').trim().toUpperCase() || 'REG-NO'
+    const serviceType = getServiceTypeForMessage(row.service_type, draft.service_type)
+    const message = buildServiceCompleteMessage(regNo, serviceType)
+    const groupName = `${waGroupNamePrefix} ${regNo}`.trim()
+
+    const checklist = [
+      `Group Name: ${groupName}`,
+      `Add Members: ${memberNumbers.map((phone) => `+${phone}`).join(', ')}`,
+      `Message: ${message}`,
+    ].join('\n')
+
+    try {
+      await navigator.clipboard.writeText(checklist)
+      showToast('Group details copied. Complete group creation in WhatsApp.')
+    } catch {
+      showToast('WhatsApp opened. Use manual copy for group details.')
+    }
+
+    const isMobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
+    const waUrl = isMobileDevice
+      ? `https://wa.me/?text=${encodeURIComponent(message)}`
+      : 'https://web.whatsapp.com/'
+
+    window.open(waUrl, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -543,13 +623,21 @@ export default function ServiceAdvisorPage() {
         <div>
           <p className="greet"><Icon name="admin" size={13} strokeWidth={2} className="icon-inline-shift" />Service Advisor</p>
         <h1>
-          {isAdmin ? 'All assigned vehicles' : 'My assigned vehicles'}
+          {isAdmin ? 'All assigned vehicles' : 
+            (rows.length > 0 && advisorCode && rows.some(row => row.sa_employee_code !== advisorCode)) ? 
+            'All dealer vehicles' : 
+            'My assigned vehicles'}
         </h1>
         <p>
           {isAdmin ? (
             <>
               Showing all service advisor entries across all advisors.
               {availableBranches.length > 0 && ` Use branch filter to manage your cases.`}
+            </>
+          ) : (rows.length > 0 && advisorCode && rows.some(row => row.sa_employee_code !== advisorCode)) ? (
+            <>
+              Showing all service advisor entries for your dealer. Manage and track all assigned cases.
+              {availableBranches.length > 0 && ` Use branch filter to refine your view.`}
             </>
           ) : (
             <>
@@ -950,71 +1038,44 @@ export default function ServiceAdvisorPage() {
                         </td>
                         <td className="td-invoice">
                           <div className="invoice-col">
-                            {row.invoice_storage_path ? (
-                              <>
-                                <div className="invoice-actions">
-                                  {row.invoice_drive_url && (
-                                    <a
-                                      href={row.invoice_drive_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="tbtn tbtn--compact tbtn--icon"
-                                      title="View invoice"
-                                      aria-label="View invoice"
-                                    >
-                                      <Icon name="eye" size={14} strokeWidth={2.1} />
-                                    </a>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => invoiceInputRefs.current[row.id]?.click()}
-                                    disabled={uploadingInvoiceId === row.id}
-                                    className="tbtn tbtn--compact tbtn--icon"
-                                    title="Replace invoice"
-                                    aria-label="Replace invoice"
-                                  >
-                                    <Icon name="upload" size={14} strokeWidth={2.1} />
-                                  </button>
-                                </div>
-                              </>
+                            {row.invoice_done_at ? (
+                              <span className="invoice-status">
+                                <Icon name="checksm" size={13} strokeWidth={2.4} />
+                                Done
+                              </span>
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => invoiceInputRefs.current[row.id]?.click()}
+                                onClick={() => void handleInvoiceDone(row.id)}
                                 disabled={uploadingInvoiceId === row.id}
                                 className="tbtn tbtn--accent"
                               >
-                                <Icon name="upload" size={13} strokeWidth={2} />
-                                {uploadingInvoiceId === row.id ? 'Uploading...' : 'Upload'}
+                                {uploadingInvoiceId === row.id ? 'Marking...' : 'Mark Done'}
                               </button>
                             )}
-                            <input
-                              ref={(el) => {
-                                invoiceInputRefs.current[row.id] = el
-                              }}
-                              type="file"
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0]
-                                if (!file) return
-                                void handleInvoiceUpload(row.id, file)
-                                event.target.value = ''
-                              }}
-                            />
                           </div>
                         </td>
                         <td className="td-save">
-                          <button
-                            type="button"
-                            onClick={() => void saveRow(row.id)}
-                            disabled={savingId === row.id || !isDirty}
-                            className={[
-                              'btn btn--primary btn--sm',
-                              !isDirty && savingId !== row.id ? 'btn--dim' : '',
-                            ].join(' ').trim()}
-                          >
-                            {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
-                          </button>
+                          <div className="tactions tactions--stack">
+                            <button
+                              type="button"
+                              onClick={() => void saveRow(row.id)}
+                              disabled={savingId === row.id || !isDirty}
+                              className={[
+                                'btn btn--primary btn--sm',
+                                !isDirty && savingId !== row.id ? 'btn--dim' : '',
+                              ].join(' ').trim()}
+                            >
+                              {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleCreateGroup(row)}
+                              className="tbtn tbtn--compact"
+                            >
+                              Create Group
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
