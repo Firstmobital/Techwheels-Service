@@ -2,8 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
 
 type UploadBody = {
-  resource_type?: 'document' | 'panel_photo' | 'reception_estimate'
-  resourceType?: 'document' | 'panel_photo' | 'reception_estimate'
+  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice'
+  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice'
   bucket_id?: string
   bucketId?: string
   object_name?: string
@@ -63,6 +63,8 @@ function normalizeBody(body: UploadBody) {
     ? 'panel_photo'
     : rawResourceType === 'reception_estimate'
       ? 'reception_estimate'
+      : rawResourceType === 'reception_invoice'
+        ? 'reception_invoice'
       : 'document'
   const bucketId = String(body.bucket_id ?? body.bucketId ?? 'autodoc').trim()
   const objectName = String(body.object_name ?? body.objectName ?? '').trim().replace(/^\/+/, '')
@@ -375,17 +377,18 @@ Deno.serve(async (req) => {
 
   try {
     const body = normalizeBody(await req.json() as UploadBody)
+    const isReceptionUpload = body.resourceType === 'reception_estimate' || body.resourceType === 'reception_invoice'
 
-    if (body.resourceType !== 'reception_estimate' && !body.jobCardId) {
+    if (!isReceptionUpload && !body.jobCardId) {
       return json(400, { ok: false, error: 'job_card_id is required', error_code: 'VALIDATION_ERROR' })
     }
-    if (body.resourceType === 'reception_estimate' && !body.receptionEntryId) {
+    if (isReceptionUpload && !body.receptionEntryId) {
       return json(400, { ok: false, error: 'reception_entry_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (!body.objectName) {
       return json(400, { ok: false, error: 'object_name is required', error_code: 'VALIDATION_ERROR' })
     }
-    if (body.resourceType !== 'reception_estimate' && !body.fileType) {
+    if (!isReceptionUpload && !body.fileType) {
       return json(400, {
         ok: false,
         error: 'file_type is required',
@@ -550,7 +553,7 @@ Deno.serve(async (req) => {
 
       const { data: receptionRows, error: receptionErr } = await supabase
         .from('service_reception_entries')
-        .select('id, created_at, reg_number, estimate_drive_file_id')
+        .select('id, created_at, reg_number, estimate_drive_file_id, invoice_drive_file_id')
         .eq('id', receptionId)
         .limit(1)
 
@@ -578,8 +581,10 @@ Deno.serve(async (req) => {
 
       rowId = String(receptionRow.id)
       rowCreatedAt = receptionRow.created_at
-      existingDriveFileId = String(receptionRow.estimate_drive_file_id ?? '').trim()
-      effectiveFileType = body.fileType || 'estimate'
+      existingDriveFileId = body.resourceType === 'reception_invoice'
+        ? String(receptionRow.invoice_drive_file_id ?? '').trim()
+        : String(receptionRow.estimate_drive_file_id ?? '').trim()
+      effectiveFileType = body.fileType || (body.resourceType === 'reception_invoice' ? 'invoice' : 'estimate')
     }
 
     const { data: blob, error: dlErr } = await supabase.storage
@@ -603,7 +608,9 @@ Deno.serve(async (req) => {
       ? `${normalizedReg}_${normalizedFileType}_${datePart}.${ext}`
       : body.resourceType === 'panel_photo'
         ? `${normalizedReg}_PANEL_${normalizedFileType}_${datePart}_${rowId.slice(0, 8)}.${ext}`
-        : `${normalizedReg}_SA_ESTIMATE_${datePart}_${rowId}.${ext}`
+        : body.resourceType === 'reception_invoice'
+          ? `${normalizedReg}_SA_INVOICE_${datePart}_${rowId}.${ext}`
+          : `${normalizedReg}_SA_ESTIMATE_${datePart}_${rowId}.${ext}`
 
     const privateKeyPem = serviceAccountPrivateKeyBase64
       ? decodeServiceAccountKey(serviceAccountPrivateKeyBase64)
@@ -669,10 +676,19 @@ Deno.serve(async (req) => {
           estimate_content_type: mimeType,
           estimate_uploaded_at: new Date().toISOString(),
         }
-      : {
-          drive_url: driveUrl,
-          drive_file_id: fileId,
-        }
+      : body.resourceType === 'reception_invoice'
+        ? {
+            invoice_drive_url: driveUrl,
+            invoice_drive_file_id: fileId,
+            invoice_storage_path: body.objectName,
+            invoice_file_name: body.objectName.split('/').at(-1) ?? null,
+            invoice_content_type: mimeType,
+            invoice_uploaded_at: new Date().toISOString(),
+          }
+        : {
+            drive_url: driveUrl,
+            drive_file_id: fileId,
+          }
     const targetTable = body.resourceType === 'document'
       ? 'documents'
       : body.resourceType === 'panel_photo'
