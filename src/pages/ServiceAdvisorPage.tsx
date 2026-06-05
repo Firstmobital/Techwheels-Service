@@ -4,6 +4,7 @@ import {
   listReceptionEntries,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
+  uploadServiceAdvisorInvoice,
   getDealerScopeContext,
   type ReceptionEntryRow,
 } from '../lib/api'
@@ -97,6 +98,7 @@ function getCategoryForServiceType(serviceType: string | null | undefined): Excl
 
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const invoiceInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [allRows, setAllRows] = useState<ReceptionEntryRow[]>([])
@@ -114,6 +116,7 @@ export default function ServiceAdvisorPage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
+  const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
@@ -417,6 +420,23 @@ export default function ServiceAdvisorPage() {
     showToast('Estimate uploaded')
     await loadRows()
   }
+
+  async function handleInvoiceUpload(id: number, file: File) {
+    setUploadingInvoiceId(id)
+    setError(null)
+
+    const res = await uploadServiceAdvisorInvoice(id, file)
+    setUploadingInvoiceId(null)
+
+    if (res.error) {
+      setError(res.error)
+      return
+    }
+
+    showToast('Invoice uploaded successfully')
+    await loadRows()
+  }
+
   return (
     <div>
       {/* Toast Notification */}
@@ -637,6 +657,8 @@ export default function ServiceAdvisorPage() {
                     <th>Owner</th>
                     <th>Remark</th>
                     <th>Estimate</th>
+                    <th>Invoice</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -743,7 +765,7 @@ export default function ServiceAdvisorPage() {
                                 className="tbtn tbtn--accent"
                               >
                                 <Icon name="upload" size={13} strokeWidth={2} />
-                                {uploadingId === row.id ? 'Uploading...' : 'Upload file'}
+                                {uploadingId === row.id ? 'Uploading...' : 'Upload'}
                               </button>
                             )}
                             <input
@@ -759,18 +781,75 @@ export default function ServiceAdvisorPage() {
                                 event.target.value = ''
                               }}
                             />
-                            <button
-                              type="button"
-                              onClick={() => void saveRow(row.id)}
-                              disabled={savingId === row.id || !isDirty}
-                              className={[
-                                'btn btn--primary btn--sm',
-                                !isDirty && savingId !== row.id ? 'btn--dim' : '',
-                              ].join(' ').trim()}
-                            >
-                              {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
-                            </button>
                           </div>
+                        </td>
+                        <td className="td-invoice">
+                          <div className="invoice-col">
+                            {row.invoice_storage_path ? (
+                              <>
+                                <span className="invoice-status">
+                                  <Icon name="checksm" size={13} strokeWidth={2.4} />
+                                  {row.invoice_file_name || 'Invoice uploaded'}
+                                </span>
+                                <div className="invoice-actions">
+                                  {row.invoice_drive_url && (
+                                    <a
+                                      href={row.invoice_drive_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="linkbtn linkbtn--sm"
+                                    >
+                                      View invoice
+                                    </a>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => invoiceInputRefs.current[row.id]?.click()}
+                                    disabled={uploadingInvoiceId === row.id}
+                                    className="tbtn tbtn--compact"
+                                  >
+                                    Replace
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => invoiceInputRefs.current[row.id]?.click()}
+                                disabled={uploadingInvoiceId === row.id}
+                                className="tbtn tbtn--accent"
+                              >
+                                <Icon name="upload" size={13} strokeWidth={2} />
+                                {uploadingInvoiceId === row.id ? 'Uploading...' : 'Upload'}
+                              </button>
+                            )}
+                            <input
+                              ref={(el) => {
+                                invoiceInputRefs.current[row.id] = el
+                              }}
+                              type="file"
+                              className="hidden"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0]
+                                if (!file) return
+                                void handleInvoiceUpload(row.id, file)
+                                event.target.value = ''
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="td-save">
+                          <button
+                            type="button"
+                            onClick={() => void saveRow(row.id)}
+                            disabled={savingId === row.id || !isDirty}
+                            className={[
+                              'btn btn--primary btn--sm',
+                              !isDirty && savingId !== row.id ? 'btn--dim' : '',
+                            ].join(' ').trim()}
+                          >
+                            {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
+                          </button>
                         </td>
                       </tr>
                     )

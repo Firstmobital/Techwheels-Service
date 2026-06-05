@@ -26,6 +26,13 @@ export interface ReceptionEntryRow {
   estimate_uploaded_by: string | null
   estimate_drive_url: string | null
   estimate_drive_file_id: string | null
+  invoice_storage_path: string | null
+  invoice_file_name: string | null
+  invoice_content_type: string | null
+  invoice_uploaded_at: string | null
+  invoice_uploaded_by: string | null
+  invoice_drive_url: string | null
+  invoice_drive_file_id: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -429,6 +436,61 @@ export async function uploadServiceAdvisorEstimate(
       object_name: storagePath,
       reception_entry_id: id,
       file_type: 'estimate',
+      file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
+    }),
+  })
+
+  const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+  if (!driveRes.ok || drivePayload?.error) {
+    return fail(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`)
+  }
+
+  const { data, error } = await supabase
+    .from('service_reception_entries')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error) return fail(error)
+  
+  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
+  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+}
+
+export async function uploadServiceAdvisorInvoice(
+  id: number,
+  file: File,
+): Promise<ApiResult<ReceptionEntryRow>> {
+  const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
+  const safeName = sanitizeFileNamePart(file.name || `invoice.${extension}`)
+  const dealerCtx = await getDealerContext()
+  const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
+  const storagePath = `${dealerCode}/service-advisor-invoices/${id}/${Date.now()}_${safeName}`
+
+  const uploadRes = await supabase.storage
+    .from(AUTODOC_BUCKET)
+    .upload(storagePath, file, { upsert: true, contentType: file.type || 'application/octet-stream' })
+
+  if (uploadRes.error) return fail(uploadRes.error)
+
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+  const sessionRes = await supabase.auth.getSession()
+  const token = sessionRes.data.session?.access_token
+
+  if (!supabaseUrl || !token) return fail('No active session for Drive offload request')
+
+  const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      resource_type: 'reception_invoice',
+      bucket_id: AUTODOC_BUCKET,
+      object_name: storagePath,
+      reception_entry_id: id,
+      file_type: 'invoice',
       file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
     }),
   })

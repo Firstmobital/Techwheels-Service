@@ -355,7 +355,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 
 .td-muted-nowrap { white-space: nowrap; color: var(--muted); }
 .td-owner { min-width: 150px; }
-.td-estimate { min-width: 190px; }
+.td-estimate { min-width: 120px; }
+.td-invoice { min-width: 120px; }
+.td-save { min-width: 80px; text-align: center; }
 .owner-name { white-space: normal; }
 .owner-phone { font-size: 12px; color: var(--muted); }
 .sel--service-type { height: 36px; min-width: 170px; }
@@ -364,8 +366,11 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .inp--uc { text-transform: uppercase; }
 .inp--compact { height: 38px; }
 .estimate-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.invoice-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .estimate-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--success); font-weight: 600; }
+.invoice-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--success); font-weight: 600; }
 .estimate-actions { display: flex; gap: 6px; }
+.invoice-actions { display: flex; gap: 6px; }
 .linkbtn--sm { font-size: 12.5px; }
 .tbtn--compact { height: 26px; }
 .tactions--mt { margin-top: 8px; }
