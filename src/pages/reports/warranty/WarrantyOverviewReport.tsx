@@ -1143,6 +1143,26 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     })
   }, [filteredRecords])
 
+  const claimTypeMixTiles = useMemo(() => {
+    const countByCategory = (category: string) => filteredRecords.filter((row) => row.category === category).length
+
+    const warrantyClaim = countByCategory('Warranty Claim')
+    const claimSettlement = countByCategory('Claim Settlement')
+    const partWc = countByCategory('Part WC')
+    const fsb = countByCategory('FSB')
+    const updation = countByCategory('Updation')
+    const amc = countByCategory('AMC')
+    const goodwill = countByCategory('Goodwill')
+
+    return [
+      { key: 'warranty', label: 'Warranty', count: warrantyClaim + claimSettlement + partWc, valueColor: '#0F6E56', bgColor: '#E7F1EE' },
+      { key: 'fsb', label: 'FSB', count: fsb, valueColor: '#2563EB', bgColor: '#E9EEF8' },
+      { key: 'updation', label: 'Updation', count: updation, valueColor: '#4F46A5', bgColor: '#ECEAF7' },
+      { key: 'amc', label: 'AMC', count: amc, valueColor: '#B26A00', bgColor: '#F4EFE5' },
+      { key: 'goodwill', label: 'Goodwill', count: goodwill, valueColor: '#64748B', bgColor: '#EEF0F3' },
+    ]
+  }, [filteredRecords])
+
   const computedClaimTypeRows = useMemo(() => {
     const warrantyRows = filteredRecords.filter((record) => record.category === 'Warranty Claim')
     const normalWcRows = warrantyRows.filter((record) => normalizeText(record.claimCategory) === 'normal warranty')
@@ -2238,6 +2258,35 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </Card>
+            </div>
+
+            <div style={{ marginTop: 'var(--gap)' }}>
+              <Card title="Claim type mix" sub="claims by type - current monitoring window" pad={false}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, padding: '12px 0 4px' }}>
+                  {claimTypeMixTiles.map((tile) => (
+                    <div
+                      key={tile.key}
+                      style={{
+                        borderRadius: 'var(--r-sm)',
+                        border: '1px solid var(--border)',
+                        background: tile.bgColor,
+                        minHeight: 96,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '10px 12px',
+                      }}
+                    >
+                      <div style={{ fontSize: 40, lineHeight: 1, fontWeight: 700, color: tile.valueColor }}>
+                        {tile.count.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ fontSize: 15, color: 'var(--muted)', fontWeight: 600 }}>{tile.label}</div>
+                    </div>
+                  ))}
                 </div>
               </Card>
             </div>
