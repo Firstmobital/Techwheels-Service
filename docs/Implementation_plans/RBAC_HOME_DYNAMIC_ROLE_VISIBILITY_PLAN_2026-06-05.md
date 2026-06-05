@@ -73,6 +73,9 @@ Legend:
 | HDS-006 | Data Enrichment | Enrich reception rows with branch + fuel_type via employee_master mapping | DONE | Web + Copilot | 2026-06-05 | src/lib/api/reception.ts |
 | HDS-007 | Fuel Fallback | Add Unknown fuel grouping on Home Status | DONE | Web + Copilot | 2026-06-05 | src/pages/DashboardPage.tsx |
 | HDS-008 | Fuel Fallback | Add Unknown fuel grouping on Service Advisor screen for parity | DONE | Web + Copilot | 2026-06-05 | src/pages/ServiceAdvisorPage.tsx |
+| HDS-013 | Home Status UI | Add Floor Incharge subsection under Home Status | DONE | Web + Copilot | 2026-06-05 | src/pages/DashboardPage.tsx |
+| HDS-014 | Home Status UI | Add Floor Incharge cards (Job cards, Unassigned, Assigned, Hold, In-Process, Completed) | DONE | Web + Copilot | 2026-06-05 | src/pages/DashboardPage.tsx |
+| HDS-015 | Home Status UI | Add Floor Incharge location filter and branch-scoped counts | DONE | Web + Copilot | 2026-06-05 | src/pages/DashboardPage.tsx |
 | HDS-009 | Phase A Platforming | Refactor home widgets into a registry (module -> widget map) | PENDING | Web | 2026-06-05 | Planned in Phase A |
 | HDS-010 | Phase B Data | Replace broad dashboard Promise.all with module-conditional loaders | PENDING | Web | 2026-06-05 | Planned in Phase B |
 | HDS-011 | Phase C UX | Personalize action rail and section subtitles by accessible modules | PENDING | Web | 2026-06-05 | Planned in Phase C |
@@ -80,7 +83,7 @@ Legend:
 
 ### Done vs Pending Snapshot
 
-- Done: 8
+- Done: 11
 - In Progress: 0
 - Pending: 4
 - Blocked: 0
@@ -89,6 +92,7 @@ Legend:
 
 | Date | Change | Reason | Updated By |
 |---|---|---|---|
+| 2026-06-05 | Added Floor Incharge subsection/cards in Home Status (HDS-013 to HDS-015) | Keep Home status aligned with Floor Incharge operational dashboard | Copilot |
 | 2026-06-05 | Created live tracker rows HDS-001 to HDS-012 | Prevent execution drift and keep done/pending transparent | Copilot |
 
 ## 1) Objective

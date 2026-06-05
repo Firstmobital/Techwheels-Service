@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
-import { listReceptionEntries, listServiceAdvisorEntries, type ReceptionEntryRow } from '../lib/api'
+import { listFloorInchargeEntries, listReceptionEntries, listServiceAdvisorEntries, type ReceptionEntryRow } from '../lib/api'
 
 type VisibleModule = {
   to: string
@@ -58,6 +58,16 @@ function getStatusFuelTypeLabel(value: string | null | undefined) {
   return trimmed || UNKNOWN_FUEL_TYPE
 }
 
+function normalizeWorkStatus(value: string | null | undefined) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized || 'work_inprocess'
+}
+
+function getFloorAssignmentKey(row: ReceptionEntryRow) {
+  const jc = String(row.jc_number ?? '').trim()
+  return jc || `RECEPTION-${row.id}`
+}
+
 function formatDateTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -101,6 +111,9 @@ export default function DashboardPage({
   const [statusLoading, setStatusLoading] = useState(true)
   const [statusBranchFilter, setStatusBranchFilter] = useState<string | 'all'>('all')
   const [statusFuelTypeFilter, setStatusFuelTypeFilter] = useState<string | 'all'>('all')
+  const [floorStatusRows, setFloorStatusRows] = useState<ReceptionEntryRow[]>([])
+  const [floorStatusBranchFilter, setFloorStatusBranchFilter] = useState<string | 'all'>('all')
+  const [assignmentStatusByJobCard, setAssignmentStatusByJobCard] = useState<Record<string, string>>({})
   const [statusCompletedJobCards, setStatusCompletedJobCards] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -143,20 +156,32 @@ export default function DashboardPage({
         isAdminUser = role === 'admin' && (profile as { is_active?: boolean | null } | null)?.is_active === true
       }
 
+      const hasServiceAdvisorModule = visibleModules.some((module) => module.to === '/service-advisor')
+      const hasFloorInchargeModule = visibleModules.some((module) => module.to === '/floor-incharge')
+
       const statusRowsResult = isAdminUser
         ? await listReceptionEntries()
         : await listServiceAdvisorEntries()
       const nextStatusRows = statusRowsResult.error ? [] : (statusRowsResult.data ?? [])
 
-      const { data: completedAssignments } = await supabase
+      const floorRowsResult = hasFloorInchargeModule
+        ? await listFloorInchargeEntries()
+        : { error: null, data: [] as ReceptionEntryRow[] }
+      const nextFloorStatusRows = floorRowsResult.error ? [] : (floorRowsResult.data ?? [])
+
+      const { data: assignmentRows } = await supabase
         .from('technician_assignments')
         .select('job_card_number, work_status')
-        .eq('work_status', 'completed')
 
       const nextCompleted = new Set<string>()
-      ;(completedAssignments ?? []).forEach((row: { job_card_number?: string | null }) => {
+      const nextAssignmentStatus: Record<string, string> = {}
+      ;(assignmentRows ?? []).forEach((row: { job_card_number?: string | null; work_status?: string | null }) => {
         const jobCard = String(row.job_card_number ?? '').trim().toUpperCase()
-        if (jobCard) nextCompleted.add(jobCard)
+        if (!jobCard) return
+
+        const normalizedStatus = normalizeWorkStatus(row.work_status)
+        nextAssignmentStatus[jobCard] = normalizedStatus
+        if (normalizedStatus === 'completed') nextCompleted.add(jobCard)
       })
 
       const moduleRows = (modulesResult.data ?? []) as ModuleMetaRow[]
@@ -232,6 +257,8 @@ export default function DashboardPage({
       )
 
       setStatusRows(nextStatusRows)
+      setFloorStatusRows(nextFloorStatusRows)
+      setAssignmentStatusByJobCard(nextAssignmentStatus)
       setStatusCompletedJobCards(nextCompleted)
 
       setLoading(false)
@@ -266,6 +293,13 @@ export default function DashboardPage({
     () => visibleModules.some((module) => module.to === '/service-advisor'),
     [visibleModules],
   )
+
+  const canSeeFloorInchargeStatus = useMemo(
+    () => visibleModules.some((module) => module.to === '/floor-incharge'),
+    [visibleModules],
+  )
+
+  const canSeeStatusSection = canSeeServiceAdvisorStatus || canSeeFloorInchargeStatus
 
   const statusBranches = useMemo(
     () => Array.from(new Set(statusRows.map((row) => String(row.branch ?? '').trim()).filter(Boolean))).sort(),
@@ -345,6 +379,61 @@ export default function DashboardPage({
     }
   }, [statusFuelTypeFilter, statusFuelTypes])
 
+  const floorStatusBranches = useMemo(
+    () => Array.from(new Set(floorStatusRows.map((row) => String(row.branch ?? '').trim()).filter(Boolean))).sort(),
+    [floorStatusRows],
+  )
+
+  const floorStatusScopedRows = useMemo(() => {
+    if (floorStatusBranchFilter === 'all') return floorStatusRows
+    return floorStatusRows.filter((row) => String(row.branch ?? '').trim() === floorStatusBranchFilter)
+  }, [floorStatusRows, floorStatusBranchFilter])
+
+  const floorStatusBranchCounts = useMemo(() => {
+    const next: Record<string, number> = {}
+    floorStatusBranches.forEach((branch) => {
+      next[branch] = floorStatusRows.filter((row) => String(row.branch ?? '').trim() === branch).length
+    })
+    return next
+  }, [floorStatusRows, floorStatusBranches])
+
+  const floorStatusSummary = useMemo(() => {
+    const jobCards = floorStatusScopedRows.length
+    const assigned = floorStatusScopedRows.filter((row) => {
+      const key = getFloorAssignmentKey(row).toUpperCase()
+      return Boolean(assignmentStatusByJobCard[key])
+    }).length
+    const unassigned = jobCards - assigned
+    const hold = floorStatusScopedRows.filter((row) => {
+      const key = getFloorAssignmentKey(row).toUpperCase()
+      return assignmentStatusByJobCard[key] === 'hold'
+    }).length
+    const inProcess = floorStatusScopedRows.filter((row) => {
+      const key = getFloorAssignmentKey(row).toUpperCase()
+      return assignmentStatusByJobCard[key] === 'work_inprocess'
+    }).length
+    const completed = floorStatusScopedRows.filter((row) => {
+      const key = getFloorAssignmentKey(row).toUpperCase()
+      return assignmentStatusByJobCard[key] === 'completed'
+    }).length
+
+    return {
+      jobCards,
+      unassigned,
+      assigned,
+      hold,
+      inProcess,
+      completed,
+    }
+  }, [floorStatusScopedRows, assignmentStatusByJobCard])
+
+  useEffect(() => {
+    if (floorStatusBranchFilter === 'all') return
+    if (!floorStatusBranches.includes(floorStatusBranchFilter)) {
+      setFloorStatusBranchFilter('all')
+    }
+  }, [floorStatusBranchFilter, floorStatusBranches])
+
   return (
     <div>
       <div className="pagehead">
@@ -370,113 +459,195 @@ export default function DashboardPage({
         ))}
       </div>
 
-      {canSeeServiceAdvisorStatus && (
+      {canSeeStatusSection && (
         <div className="card card--mt-gap">
           <div className="card__head">
             <div>
               <h3>Status</h3>
-              <div className="sub">Service Advisor</div>
             </div>
           </div>
           <div className="card__body">
-            <div className="toolbar toolbar--tight">
-              <span className="toolbar__label">Filter by location:</span>
-              <button
-                type="button"
-                onClick={() => setStatusBranchFilter('all')}
-                className={`btn btn--sm ${statusBranchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-              >
-                All ({toDisplayCount(statusRows.length)})
-              </button>
-              {statusBranches.map((branch) => (
-                <button
-                  key={branch}
-                  type="button"
-                  onClick={() => setStatusBranchFilter(branch)}
-                  className={`btn btn--sm ${statusBranchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
-                >
-                  {branch} ({toDisplayCount(statusBranchCounts[branch] ?? 0)})
-                </button>
-              ))}
-            </div>
-
-            {statusFuelTypes.length > 0 && (
-              <div className="toolbar toolbar--tight">
-                <span className="toolbar__label">Filter by fuel type:</span>
-                <button
-                  type="button"
-                  onClick={() => setStatusFuelTypeFilter('all')}
-                  className={`btn btn--sm ${statusFuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-                >
-                  All ({toDisplayCount(statusBranchFilteredRows.length)})
-                </button>
-                {statusFuelTypes.map((fuelType) => (
+            {canSeeServiceAdvisorStatus && (
+              <>
+                <div className="sub" style={{ marginBottom: 10 }}>Service Advisor</div>
+                <div className="toolbar toolbar--tight">
+                  <span className="toolbar__label">Filter by location:</span>
                   <button
-                    key={fuelType}
                     type="button"
-                    onClick={() => setStatusFuelTypeFilter(fuelType)}
-                    className={`btn btn--sm ${statusFuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+                    onClick={() => setStatusBranchFilter('all')}
+                    className={`btn btn--sm ${statusBranchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
                   >
-                    {fuelType} ({toDisplayCount(statusFuelCounts[fuelType] ?? 0)})
+                    All ({toDisplayCount(statusRows.length)})
                   </button>
-                ))}
-              </div>
+                  {statusBranches.map((branch) => (
+                    <button
+                      key={branch}
+                      type="button"
+                      onClick={() => setStatusBranchFilter(branch)}
+                      className={`btn btn--sm ${statusBranchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
+                    >
+                      {branch} ({toDisplayCount(statusBranchCounts[branch] ?? 0)})
+                    </button>
+                  ))}
+                </div>
+
+                {statusFuelTypes.length > 0 && (
+                  <div className="toolbar toolbar--tight">
+                    <span className="toolbar__label">Filter by fuel type:</span>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFuelTypeFilter('all')}
+                      className={`btn btn--sm ${statusFuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+                    >
+                      All ({toDisplayCount(statusBranchFilteredRows.length)})
+                    </button>
+                    {statusFuelTypes.map((fuelType) => (
+                      <button
+                        key={fuelType}
+                        type="button"
+                        onClick={() => setStatusFuelTypeFilter(fuelType)}
+                        className={`btn btn--sm ${statusFuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+                      >
+                        {fuelType} ({toDisplayCount(statusFuelCounts[fuelType] ?? 0)})
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="summary">
+                  <div className="schip">
+                    <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.filteredEntries)}</div>
+                      <div className="l">Filtered entries</div>
+                    </div>
+                  </div>
+
+                  <div className="schip">
+                    <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.srType)}</div>
+                      <div className="l">SR Type</div>
+                    </div>
+                  </div>
+
+                  <div className="schip">
+                    <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.jobCard)}</div>
+                      <div className="l">Job Card</div>
+                    </div>
+                  </div>
+
+                  <div className="schip">
+                    <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.estimate)}</div>
+                      <div className="l">Estimate</div>
+                    </div>
+                  </div>
+
+                  <div className="schip">
+                    <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.invoice)}</div>
+                      <div className="l">Invoice</div>
+                    </div>
+                  </div>
+
+                  <div className="schip">
+                    <span className="ic"><Icon name="checksm" size={16} strokeWidth={2.4} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.completedCards)}</div>
+                      <div className="l">Completed cards</div>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
 
-            <div className="summary">
-              <div className="schip">
-                <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
-                <div>
-                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.filteredEntries)}</div>
-                  <div className="l">Filtered entries</div>
-                </div>
-              </div>
+            {canSeeFloorInchargeStatus && (
+              <>
+                {canSeeServiceAdvisorStatus && <div style={{ borderTop: '1px solid var(--border)', margin: '10px 0 14px' }} />}
+                <div className="sub" style={{ marginBottom: 10 }}>Floor Incharge</div>
 
-              <div className="schip">
-                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-                <div>
-                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.srType)}</div>
-                  <div className="l">SR Type</div>
+                <div className="toolbar toolbar--tight">
+                  <span className="toolbar__label">Filter by location:</span>
+                  <button
+                    type="button"
+                    onClick={() => setFloorStatusBranchFilter('all')}
+                    className={`btn btn--sm ${floorStatusBranchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+                  >
+                    All ({toDisplayCount(floorStatusRows.length)})
+                  </button>
+                  {floorStatusBranches.map((branch) => (
+                    <button
+                      key={branch}
+                      type="button"
+                      onClick={() => setFloorStatusBranchFilter(branch)}
+                      className={`btn btn--sm ${floorStatusBranchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
+                    >
+                      {branch} ({toDisplayCount(floorStatusBranchCounts[branch] ?? 0)})
+                    </button>
+                  ))}
                 </div>
-              </div>
 
-              <div className="schip">
-                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-                <div>
-                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.jobCard)}</div>
-                  <div className="l">Job Card</div>
-                </div>
-              </div>
+                <div className="summary" style={{ marginBottom: 0 }}>
+                  <div className="schip">
+                    <span className="ic"><Icon name="floor" size={16} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(floorStatusSummary.jobCards)}</div>
+                      <div className="l">Job cards</div>
+                    </div>
+                  </div>
 
-              <div className="schip">
-                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-                <div>
-                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.estimate)}</div>
-                  <div className="l">Estimate</div>
-                </div>
-              </div>
+                  <div className="schip warn">
+                    <span className="ic"><Icon name="clock" size={16} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(floorStatusSummary.unassigned)}</div>
+                      <div className="l">Unassigned</div>
+                    </div>
+                  </div>
 
-              <div className="schip">
-                <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
-                <div>
-                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.invoice)}</div>
-                  <div className="l">Invoice</div>
-                </div>
-              </div>
+                  <div className="schip">
+                    <span className="ic"><Icon name="checksm" size={16} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(floorStatusSummary.assigned)}</div>
+                      <div className="l">Assigned</div>
+                    </div>
+                  </div>
 
-              <div className="schip">
-                <span className="ic"><Icon name="checksm" size={16} strokeWidth={2.4} /></span>
-                <div>
-                  <div className="n">{statusLoading ? '...' : toDisplayCount(statusSummary.completedCards)}</div>
-                  <div className="l">Completed cards</div>
+                  <div className="schip warn">
+                    <span className="ic"><Icon name="clock" size={16} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(floorStatusSummary.hold)}</div>
+                      <div className="l">Hold</div>
+                    </div>
+                  </div>
+
+                  <div className="schip">
+                    <span className="ic"><Icon name="checksm" size={16} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(floorStatusSummary.inProcess)}</div>
+                      <div className="l">In-Process</div>
+                    </div>
+                  </div>
+
+                  <div className="schip">
+                    <span className="ic"><Icon name="checksm" size={16} /></span>
+                    <div>
+                      <div className="n">{statusLoading ? '...' : toDisplayCount(floorStatusSummary.completed)}</div>
+                      <div className="l">Completed</div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      <div className={canSeeServiceAdvisorStatus ? 'grid-2 card--mt-gap' : 'grid-2'}>
+      <div className={canSeeStatusSection ? 'grid-2 card--mt-gap' : 'grid-2'}>
         <div className="card">
           <div className="card__head">
             <div>
