@@ -17,6 +17,7 @@ type UserRole = 'admin' | 'manager' | 'staff' | 'viewer'
 interface AppUser {
   id:          string
   email:       string
+  phone:       string | null
   full_name:   string | null
   role:        UserRole
   branch:      string | null
@@ -49,6 +50,22 @@ interface TempPasswordForm {
   email: string
   tempPassword: string
   emailConfirm: boolean
+}
+
+interface UsersWithPhoneResponse {
+  users: Array<{
+    id: string
+    email: string
+    phone?: string | null
+    full_name?: string | null
+    role: UserRole
+    branch?: string | null
+    dealer_code?: string | null
+    dealer_name?: string | null
+    is_active: boolean
+    created_at: string
+  }>
+  supportsDealerColumns?: boolean
 }
 
 interface FunctionInvokeError extends Error {
@@ -200,6 +217,29 @@ export default function AdminPage() {
   }
 
   async function loadUsers() {
+    const withPhone = await supabase.functions.invoke('list-users-with-phone', { body: {} })
+    if (!withPhone.error) {
+      const payload = withPhone.data as UsersWithPhoneResponse | null
+      if (payload?.users && Array.isArray(payload.users)) {
+        setSupportsDealerColumns(payload.supportsDealerColumns ?? true)
+        setUsers(
+          payload.users.map((u) => ({
+            id: u.id,
+            email: u.email,
+            phone: u.phone ?? null,
+            full_name: u.full_name ?? null,
+            role: u.role,
+            branch: u.branch ?? null,
+            dealer_code: u.dealer_code ?? null,
+            dealer_name: u.dealer_name ?? null,
+            is_active: u.is_active,
+            created_at: u.created_at,
+          }))
+        )
+        return
+      }
+    }
+
     const withDealer = await supabase
       .from('users')
       .select('id, email, full_name, role, branch, dealer_code, dealer_name, is_active, created_at')
@@ -207,7 +247,12 @@ export default function AdminPage() {
 
     if (!withDealer.error) {
       setSupportsDealerColumns(true)
-      setUsers((withDealer.data ?? []) as AppUser[])
+      setUsers(
+        ((withDealer.data ?? []) as Array<Omit<AppUser, 'phone'>>).map((u) => ({
+          ...u,
+          phone: null,
+        }))
+      )
       return
     }
 
@@ -230,8 +275,9 @@ export default function AdminPage() {
 
     setSupportsDealerColumns(false)
     setUsers(
-      ((fallback.data ?? []) as Array<Omit<AppUser, 'dealer_code' | 'dealer_name'>>).map((u) => ({
+      ((fallback.data ?? []) as Array<Omit<AppUser, 'phone' | 'dealer_code' | 'dealer_name'>>).map((u) => ({
         ...u,
+        phone: null,
         dealer_code: null,
         dealer_name: null,
       }))
@@ -609,6 +655,7 @@ export default function AdminPage() {
       (
         (u.full_name ?? '').toLowerCase().includes(term) ||
         u.email.toLowerCase().includes(term) ||
+        (u.phone ?? '').toLowerCase().includes(term) ||
         (u.dealer_code ?? '').toLowerCase().includes(term)
       )
   })
@@ -698,7 +745,7 @@ export default function AdminPage() {
               <span className="icon-l"><Icon name="search" size={16} strokeWidth={1.7} /></span>
               <input
                 className="inp"
-                placeholder="Search name, email, or dealer code…"
+                placeholder="Search name, email, phone, or dealer code…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -743,6 +790,7 @@ export default function AdminPage() {
                   <tr>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Phone</th>
                     <th>Dealer</th>
                     <th>Role</th>
                     <th>Status</th>
@@ -754,6 +802,7 @@ export default function AdminPage() {
                     <tr key={u.id}>
                       <td className="strong">{u.full_name || u.email}</td>
                       <td style={{ color: 'var(--muted)' }}>{u.email}</td>
+                      <td style={{ color: 'var(--muted)' }}>{u.phone || '-'}</td>
                       <td>
                         {(() => {
                           // Use JWT data as fallback for current session user
@@ -806,7 +855,7 @@ export default function AdminPage() {
                   ))}
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px 4px', color: 'var(--faint)' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '40px 4px', color: 'var(--faint)' }}>
                         No users found
                       </td>
                     </tr>

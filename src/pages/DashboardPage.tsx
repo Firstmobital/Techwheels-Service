@@ -156,7 +156,6 @@ export default function DashboardPage({
         isAdminUser = role === 'admin' && (profile as { is_active?: boolean | null } | null)?.is_active === true
       }
 
-      const hasServiceAdvisorModule = visibleModules.some((module) => module.to === '/service-advisor')
       const hasFloorInchargeModule = visibleModules.some((module) => module.to === '/floor-incharge')
 
       const statusRowsResult = isAdminUser

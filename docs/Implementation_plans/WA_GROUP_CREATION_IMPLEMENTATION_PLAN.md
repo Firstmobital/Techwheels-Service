@@ -28,18 +28,18 @@ Implementing a one-click guided WhatsApp group creation flow in the Service Advi
 - [x] Dynamic message template: `buildServiceCompleteMessage()` in ServiceAdvisorPage.tsx:144
   - Format: "Your vehicle {Reg No} with {Service Type} is complete. Please come and collect."
 - [x] Group creation handler: `handleCreateGroup()` in ServiceAdvisorPage.tsx:571
-  - Collects owner phone, SA phone (from map or default), super admin phone
+  - Collects owner phone from row + temporary login user phone + temporary role contact phone
   - Deduplicates members (Set)
   - Generates checklist with group name, member list, message
   - Copies checklist to clipboard
   - Opens WhatsApp automatically (mobile vs. desktop)
 
-### 2. **Environment Configuration** (READY FOR TEST)
-- [x] Four new env variables registered in code:
-  - `VITE_WA_GROUP_SA_PHONE` - Default SA phone (fallback)
-  - `VITE_WA_GROUP_SUPERADMIN_PHONE` - Super admin phone
-  - `VITE_WA_GROUP_SA_PHONE_MAP` - Employee code → phone mapping
-  - `VITE_WA_GROUP_NAME_PREFIX` - Group name template (default: "Service Delivery")
+### 2. **Current Contact Sourcing** (READY FOR TEST)
+- [x] Contact source behavior currently active in code:
+  - Owner phone is dynamic per row (`row.owner_phone`)
+  - Login user contact uses temporary fixed value: `1234567678`
+  - Role contact uses temporary fixed value: `1234345656`
+  - Group name prefix is fixed as "Service Delivery"
 
 ### 3. **UI/UX Implementation** (COMPLETE)
 - [x] New button: "Create Group" in Action column (td-save) of each row
@@ -56,7 +56,7 @@ Implementing a one-click guided WhatsApp group creation flow in the Service Advi
   - Reg No from row.reg_number
   - Service Type from draft (editable) or row (original)
   - Owner phone from row.owner_phone
-  - SA phone lookup by row.sa_employee_code with fallback
+  - Additional members currently from temporary fixed contacts
 - [x] Error handling:
   - Validates at least one valid phone number before proceeding
   - Toast notification for failure (no members found)
@@ -79,7 +79,6 @@ Implementing a one-click guided WhatsApp group creation flow in the Service Advi
 
 ### PHASE 1: Testing & Validation (READY)
 - [ ] **Local Development Test**
-  - [ ] Add env vars to `.env.local` (or Vite dev config)
   - [ ] Start dev server: `npm run dev`
   - [ ] Open Service Advisor page
   - [ ] Verify "Create Group" button appears in action column
@@ -90,20 +89,17 @@ Implementing a one-click guided WhatsApp group creation flow in the Service Advi
   - [ ] Test edge cases:
     - Row with missing owner_phone (expect error)
     - Row with custom (draft) service type
-    - SA employee code in map vs. not in map
+    - Deduplication when owner phone matches one of fixed contacts
 
-### PHASE 2: Backend/Config Integration (NEXT STEP)
-- [ ] **Define Production Phone Numbers**
-  - [ ] Get SA default phone number from team
-  - [ ] Get Super Admin phone number from team
-  - [ ] Build SA employee code → phone map (CSV/config)
-- [ ] **Environment Setup**
-  - [ ] Add VITE_WA_GROUP_* vars to:
-    - [ ] `.env.production`
-    - [ ] `.env.staging` (if exists)
-    - [ ] Vercel/deployment config
-  - [ ] Test env vars load correctly in deployed environment
-  - [ ] Verify no hardcoded fallback leaks sensitive data
+### PHASE 2: Dynamic Contact Upgrade (NEXT STEP)
+- [ ] **Schema + Data Preparation**
+  - [ ] Add contact number field for login users (users table)
+  - [ ] Add contact number field for employee role contact source
+  - [ ] Backfill valid phone numbers for active users/employees
+- [ ] **Code Upgrade**
+  - [ ] Replace temporary fixed login user phone with authenticated user phone
+  - [ ] Replace temporary fixed role phone with role-based lookup
+  - [ ] Keep hardcoded numbers only as explicit fallback for rollback safety
 
 ### PHASE 3: User Acceptance & Documentation (FUTURE)
 - [ ] **UAT Checklist**
@@ -153,19 +149,18 @@ Implementing a one-click guided WhatsApp group creation flow in the Service Advi
 
 ## Configuration Examples
 
-### Environment Variables Template
+### Temporary Contact Constants (Current)
 ```bash
-# .env.local (for local testing)
-VITE_WA_GROUP_SA_PHONE=919876543210
-VITE_WA_GROUP_SUPERADMIN_PHONE=919800000001
-VITE_WA_GROUP_SA_PHONE_MAP=SA001:919600000001,SA002:919600000002,SA003:919600000003
-VITE_WA_GROUP_NAME_PREFIX=Service Delivery
+TEMP_LOGIN_USER_PHONE=1234567678
+TEMP_ROLE_CONTACT_PHONE=1234345656
+DEFAULT_GROUP_NAME_PREFIX=Service Delivery
 ```
 
-### SA Phone Map Format
+### Future Dynamic Source (Recommended)
 ```
-Employee Code : Phone Number , Employee Code : Phone Number
-SA001 : 91 9876543210 , SA002 : 91 9876543211
+Owner Phone: reception_entries.owner_phone
+Login User Phone: users.contact_phone (to be added)
+Role Contact Phone: employee_master.contact_phone by role (to be added)
 ```
 
 ---
@@ -185,8 +180,6 @@ SA001 : 91 9876543210 , SA002 : 91 9876543211
 - [ ] `normalizeWhatsAppPhone()` with 10 digits
 - [ ] `normalizeWhatsAppPhone()` with 12 digits (91-prefixed)
 - [ ] `normalizeWhatsAppPhone()` with invalid input
-- [ ] `parsePhoneMap()` with valid CSV
-- [ ] `parsePhoneMap()` with malformed CSV
 - [ ] `getServiceTypeForMessage()` with draft value
 - [ ] `getServiceTypeForMessage()` without draft
 - [ ] `buildServiceCompleteMessage()` output format
@@ -241,18 +234,12 @@ SA001 : 91 9876543210 , SA002 : 91 9876543211
 ## Quick Start for Testing
 
 ```bash
-# 1. Add to .env.local
-VITE_WA_GROUP_SA_PHONE=919876543210
-VITE_WA_GROUP_SUPERADMIN_PHONE=919800000001
-VITE_WA_GROUP_SA_PHONE_MAP=SA001:919600000001
-VITE_WA_GROUP_NAME_PREFIX=Service Delivery
-
-# 2. Start dev server
+# 1. Start dev server
 npm run dev
 
-# 3. Navigate to Service Advisor page
-# 4. Click "Create Group" on any row
-# 5. Verify clipboard & WhatsApp behavior
+# 2. Navigate to Service Advisor page
+# 3. Click "Create Group" on any row
+# 4. Verify clipboard & WhatsApp behavior
 ```
 
 ---

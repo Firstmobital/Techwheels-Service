@@ -120,20 +120,6 @@ function normalizeWhatsAppPhone(raw: string | null | undefined): string | null {
   return null
 }
 
-function parsePhoneMap(raw: string): Record<string, string> {
-  return raw
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce<Record<string, string>>((acc, part) => {
-      const [employeeCodeRaw, phoneRaw] = part.split(':')
-      const employeeCode = String(employeeCodeRaw ?? '').trim().toUpperCase()
-      const phone = normalizeWhatsAppPhone(phoneRaw)
-      if (employeeCode && phone) acc[employeeCode] = phone
-      return acc
-    }, {})
-}
-
 function getServiceTypeForMessage(rowServiceType: string | null | undefined, draftServiceType: string | null | undefined): string {
   const draftValue = String(draftServiceType ?? '').trim()
   if (draftValue) return draftValue
@@ -145,15 +131,13 @@ function buildServiceCompleteMessage(regNumber: string, serviceType: string): st
   return `Your vehicle ${regNumber} with ${serviceType} is complete. Please come and collect.`
 }
 
+const TEMP_LOGIN_USER_PHONE = '911234567678'
+const TEMP_ROLE_CONTACT_PHONE = '911234345656'
+const DEFAULT_GROUP_NAME_PREFIX = 'Service Delivery'
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
-  const waDefaultSaPhone = normalizeWhatsAppPhone(import.meta.env.VITE_WA_GROUP_SA_PHONE as string | undefined)
-  const waSuperAdminPhone = normalizeWhatsAppPhone(import.meta.env.VITE_WA_GROUP_SUPERADMIN_PHONE as string | undefined)
-  const waGroupNamePrefix = String(import.meta.env.VITE_WA_GROUP_NAME_PREFIX ?? 'Service Delivery').trim() || 'Service Delivery'
-  const waSaPhoneMap = useMemo(
-    () => parsePhoneMap(String(import.meta.env.VITE_WA_GROUP_SA_PHONE_MAP ?? '')),
-    [],
-  )
+  const waGroupNamePrefix = DEFAULT_GROUP_NAME_PREFIX
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [allRows, setAllRows] = useState<ReceptionEntryRow[]>([])
@@ -570,11 +554,11 @@ export default function ServiceAdvisorPage() {
   async function handleCreateGroup(row: ReceptionEntryRow) {
     const draft = drafts[row.id] ?? EMPTY_DRAFT
     const ownerPhone = normalizeWhatsAppPhone(row.owner_phone)
-    const saPhoneFromMap = row.sa_employee_code ? waSaPhoneMap[String(row.sa_employee_code).trim().toUpperCase()] ?? null : null
-    const saPhone = saPhoneFromMap ?? waDefaultSaPhone
+    const loginUserPhone = normalizeWhatsAppPhone(TEMP_LOGIN_USER_PHONE)
+    const roleContactPhone = normalizeWhatsAppPhone(TEMP_ROLE_CONTACT_PHONE)
 
     const memberNumbers = Array.from(
-      new Set([ownerPhone, saPhone, waSuperAdminPhone].filter(Boolean) as string[]),
+      new Set([ownerPhone, loginUserPhone, roleContactPhone].filter(Boolean) as string[]),
     )
 
     if (memberNumbers.length === 0) {
