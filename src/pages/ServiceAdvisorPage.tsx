@@ -116,6 +116,7 @@ export default function ServiceAdvisorPage() {
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
+  const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
 
   const branchFilteredRows = useMemo(() => {
     if (selectedBranch === 'all') return rows
@@ -287,6 +288,64 @@ export default function ServiceAdvisorPage() {
     void loadRows()
   }, [])
 
+  // Subscribe to real-time updates for completed job cards
+  useEffect(() => {
+    // Fetch existing completed job cards
+    const fetchCompletedJobCards = async () => {
+      try {
+        const res = await supabase
+          .from('technician_assignments')
+          .select('job_card_number')
+          .eq('work_status', 'completed')
+
+        if (!res.error && res.data) {
+          const completed = new Set<string>()
+          res.data.forEach((row: Record<string, unknown>) => {
+            const jobCardNum = String(row.job_card_number ?? '').trim().toUpperCase()
+            if (jobCardNum) {
+              completed.add(jobCardNum)
+            }
+          })
+          setCompletedJobCardNumbers(completed)
+          console.log('Loaded completed job cards:', Array.from(completed))
+        }
+      } catch (err) {
+        console.error('Failed to fetch completed job cards:', err)
+      }
+    }
+
+    void fetchCompletedJobCards()
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('technician-assignments-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'technician_assignments',
+          filter: 'work_status=eq.completed',
+        },
+        (payload) => {
+          const updated = payload.new as { job_card_number?: string } | null
+          if (updated?.job_card_number) {
+            const normalized = String(updated.job_card_number).trim().toUpperCase()
+            setCompletedJobCardNumbers((prev) => {
+              const next = new Set([...prev, normalized])
+              console.log('Realtime update - completed job:', normalized)
+              return next
+            })
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [])
+
   function patchDraft(id: number, patch: Partial<RowDraft>) {
     setDrafts((prev) => ({
       ...prev,
@@ -343,6 +402,16 @@ export default function ServiceAdvisorPage() {
     if (res.error) {
       setError(res.error)
       return
+    }
+
+    // Clear the completed notification for this job card once estimate is uploaded
+    const uploadedRow = rows.find(r => r.id === id)
+    if (uploadedRow?.jc_number) {
+      setCompletedJobCardNumbers((prev) => {
+        const next = new Set(prev)
+        next.delete((uploadedRow.jc_number ?? '').toUpperCase())
+        return next
+      })
     }
 
     showToast('Estimate uploaded')
@@ -577,16 +646,27 @@ export default function ServiceAdvisorPage() {
                     const normalizedDraftServiceType = draftServiceType.trim().toLowerCase()
                     const isDirty = dirtyRowIds.has(row.id)
                     const toneColor = getSourceToneColor(row.source)
+                    const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
 
                     return (
-                      <tr key={row.id}>
+                      <tr key={row.id} className={isCompleted ? 'row--completed' : ''}>
                         <td className="td-muted-nowrap">{formatDate(row.created_at)}</td>
                         <td>
                           <span className={`pill ${toneColor}`.trim()}>
                             {row.source}
                           </span>
                         </td>
-                        <td className="mono strong">{row.reg_number}</td>
+                        <td className="mono strong">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {row.reg_number}
+                            {isCompleted && (
+                              <span className="row--completed-badge">
+                                <Icon name="checksm" size={11} strokeWidth={2.4} />
+                                Ready for invoice
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td>{row.model || '-'}</td>
                         <td>
                           <select
