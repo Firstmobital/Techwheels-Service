@@ -11,7 +11,7 @@ import type { ReportViewProps } from '../types'
 type SortKey = 'manpower' | 'totalLabourRevenue' | 'jobCardCount' | 'avgLabourRevenue'
 
 function formatCurrency(value: number): string {
-  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
 export default function ManpowerWiseLabourRevenueReport({
@@ -304,7 +304,7 @@ export default function ManpowerWiseLabourRevenueReport({
                           {row.jobCardCount.toLocaleString()}
                         </td>
                         <td className="px-3 py-2 text-right font-medium text-gray-900">
-                          {row.avgLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                          {row.avgLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </td>
                       </tr>
 
@@ -337,7 +337,7 @@ export default function ManpowerWiseLabourRevenueReport({
                                         </td>
                                         <td className="px-3 py-2 text-right text-gray-700">
                                           {serviceRow.avgLabourRevenue.toLocaleString('en-IN', {
-                                            maximumFractionDigits: 2,
+                                            maximumFractionDigits: 0,
                                           })}
                                         </td>
                                       </tr>

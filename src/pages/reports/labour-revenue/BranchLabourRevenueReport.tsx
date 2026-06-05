@@ -30,7 +30,7 @@ function getPeriodLabel(dateFilter: DateRangeFilter): string {
 }
 
 function formatCurrency(value: number): string {
-  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
 export default function BranchLabourRevenueReport({
@@ -154,7 +154,7 @@ export default function BranchLabourRevenueReport({
       'Selected Period Revenue': formatCurrency(row.selectedRevenue),
       'Previous Period Revenue': formatCurrency(row.previousRevenue),
       'Absolute Change': formatCurrency(row.absoluteChange),
-      '% Change': row.percentageChange == null ? 'N/A' : `${row.percentageChange.toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`,
+      '% Change': row.percentageChange == null ? 'N/A' : `${row.percentageChange.toLocaleString('en-IN', { maximumFractionDigits: 0 })}%`,
     }))
 
     const filename = generateExportFilename('branch-labour-revenue')
@@ -233,7 +233,7 @@ export default function BranchLabourRevenueReport({
             <p className="mt-1 text-2xl font-semibold text-amber-900">
               {totals.percentageChange == null
                 ? 'N/A'
-                : `${totals.percentageChange.toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`}
+                : `${totals.percentageChange.toLocaleString('en-IN', { maximumFractionDigits: 0 })}%`}
             </p>
           </div>
         </div>
@@ -273,7 +273,7 @@ export default function BranchLabourRevenueReport({
                         {isPositive ? '+' : ''}
                         {row.percentageChange == null
                           ? 'N/A'
-                          : `${row.percentageChange.toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`}
+                          : `${row.percentageChange.toLocaleString('en-IN', { maximumFractionDigits: 0 })}%`}
                       </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-gray-100">
@@ -354,7 +354,7 @@ export default function BranchLabourRevenueReport({
                           {row.percentageChange == null
                             ? 'N/A'
                             : `${row.percentageChange >= 0 ? '+' : ''}${row.percentageChange.toLocaleString('en-IN', {
-                                maximumFractionDigits: 2,
+                                maximumFractionDigits: 0,
                               })}%`}
                         </td>
                       </tr>

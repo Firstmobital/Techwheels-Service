@@ -14,6 +14,8 @@ type SortKey =
   | 'vasRevenue'
   | 'avgRevenuePerJobCard'
 
+const GST_DIVISOR = 1.18
+
 export default function ProductLinePerformanceReport({
   branch,
   dateFilter,
@@ -54,10 +56,24 @@ export default function ProductLinePerformanceReport({
     }
   }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
+  const transformedRows = useMemo(() => {
+    return rows.map((row) => {
+      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
+      const netTotalRevenue = netLabourRevenue + row.sparesRevenue
+
+      return {
+        ...row,
+        labourRevenue: netLabourRevenue,
+        totalRevenue: netTotalRevenue,
+        avgRevenuePerJobCard: row.jobCardCount > 0 ? netTotalRevenue / row.jobCardCount : 0,
+      }
+    })
+  }, [rows])
+
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
 
-    return [...rows].sort((a, b) => {
+    return [...transformedRows].sort((a, b) => {
       if (sortKey === 'parentProductLine') {
         return a.parentProductLine.localeCompare(b.parentProductLine) * direction
       }
@@ -110,18 +126,18 @@ export default function ProductLinePerformanceReport({
 
       return b.totalRevenue - a.totalRevenue
     })
-  }, [rows, sortDirection, sortKey])
+  }, [transformedRows, sortDirection, sortKey])
 
   const totals = useMemo(
     () => ({
-      jobCards: rows.reduce((sum, row) => sum + row.jobCardCount, 0),
-      labourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
-      sparesRevenue: rows.reduce((sum, row) => sum + row.sparesRevenue, 0),
-      totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
-      vasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
-      groupCount: rows.length,
+      jobCards: transformedRows.reduce((sum, row) => sum + row.jobCardCount, 0),
+      labourRevenue: transformedRows.reduce((sum, row) => sum + row.labourRevenue, 0),
+      sparesRevenue: transformedRows.reduce((sum, row) => sum + row.sparesRevenue, 0),
+      totalRevenue: transformedRows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      vasRevenue: transformedRows.reduce((sum, row) => sum + row.vasRevenue, 0),
+      groupCount: transformedRows.length,
     }),
-    [rows],
+    [transformedRows],
   )
 
   const toggleSort = (key: SortKey) => {
@@ -134,12 +150,12 @@ export default function ProductLinePerformanceReport({
   }
 
   const formatCurrency = (value: number) => {
-    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
   }
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       parentProductLine: row.parentProductLine,
       productLine: row.productLine,
       jobCardCount: row.jobCardCount,
@@ -160,7 +176,7 @@ export default function ProductLinePerformanceReport({
             <h2 className="text-lg font-semibold text-gray-900">Product Line Performance Report</h2>
             <p className="mt-1 text-sm text-gray-500">Revenue and volume performance across parent and child product lines.</p>
           </div>
-          {rows.length > 0 && (
+          {transformedRows.length > 0 && (
             <button
               onClick={handleExport}
               className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"

@@ -25,6 +25,8 @@ type SortKey =
   | 'avgRevenuePerJC'
   | 'topServiceType'
 
+const GST_DIVISOR = 1.18
+
 export default function ModelWiseRevenueReport({
   branch,
   dateFilter,
@@ -62,10 +64,24 @@ export default function ModelWiseRevenueReport({
     }
   }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
+  const transformedRows = useMemo(() => {
+    return rows.map((row) => {
+      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
+      const netTotalRevenue = netLabourRevenue + row.sparesRevenue
+
+      return {
+        ...row,
+        labourRevenue: netLabourRevenue,
+        totalRevenue: netTotalRevenue,
+        avgRevenuePerJC: row.jobCardCount > 0 ? netTotalRevenue / row.jobCardCount : 0,
+      }
+    })
+  }, [rows])
+
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
 
-    return [...rows].sort((a, b) => {
+    return [...transformedRows].sort((a, b) => {
       if (sortKey === 'model' || sortKey === 'topServiceType') {
         return a[sortKey].localeCompare(b[sortKey]) * direction
       }
@@ -78,22 +94,22 @@ export default function ModelWiseRevenueReport({
 
       return a.model.localeCompare(b.model)
     })
-  }, [rows, sortDirection, sortKey])
+  }, [transformedRows, sortDirection, sortKey])
 
   const totals = useMemo(() => {
-    const totalRevenue = rows.reduce((sum, row) => sum + row.totalRevenue, 0)
-    const totalVasRevenue = rows.reduce((sum, row) => sum + row.vasRevenue, 0)
-    const totalJCs = rows.reduce((sum, row) => sum + row.jobCardCount, 0)
-    const topModel = rows[0]?.model ?? '-'
+    const totalRevenue = transformedRows.reduce((sum, row) => sum + row.totalRevenue, 0)
+    const totalVasRevenue = transformedRows.reduce((sum, row) => sum + row.vasRevenue, 0)
+    const totalJCs = transformedRows.reduce((sum, row) => sum + row.jobCardCount, 0)
+    const topModel = transformedRows[0]?.model ?? '-'
 
     return {
-      modelsActive: rows.length,
+      modelsActive: transformedRows.length,
       topModel,
       totalJCs,
       totalRevenue,
       totalVasRevenue,
     }
-  }, [rows])
+  }, [transformedRows])
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -105,11 +121,11 @@ export default function ModelWiseRevenueReport({
     setSortDirection(key === 'model' || key === 'topServiceType' ? 'asc' : 'desc')
   }
 
-  const formatCurrency = (value: number) => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  const formatCurrency = (value: number) => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       model: row.model,
       jobCardCount: row.jobCardCount,
       labourRevenue: row.labourRevenue,
@@ -130,7 +146,7 @@ export default function ModelWiseRevenueReport({
             <h2 className="text-lg font-semibold text-gray-900">Model-wise Revenue Report</h2>
             <p className="mt-1 text-sm text-gray-500">Revenue split by EV model using parent product line.</p>
           </div>
-          {rows.length > 0 && (
+          {transformedRows.length > 0 && (
             <button
               onClick={handleExport}
               className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
@@ -172,7 +188,7 @@ export default function ModelWiseRevenueReport({
         <ReportLoadingState />
       ) : error ? (
         <ReportErrorState message={error} />
-      ) : rows.length === 0 ? (
+      ) : transformedRows.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">
           No records found for the selected filters.
         </div>
@@ -182,7 +198,7 @@ export default function ModelWiseRevenueReport({
             <p className="mb-3 text-sm font-medium text-gray-700">Labour vs Spares Revenue by Model</p>
             <div style={{ height: Math.max(320, rows.length * 44) }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 20, left: 20, bottom: 8 }}>
+                <BarChart data={transformedRows} layout="vertical" margin={{ top: 8, right: 20, left: 20, bottom: 8 }}>
                   <XAxis
                     type="number"
                     tickFormatter={(value: number) => `₹${Number(value).toLocaleString('en-IN')}`}

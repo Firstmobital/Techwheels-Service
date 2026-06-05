@@ -1279,6 +1279,20 @@ export default function ImportPage() {
           return inserted
         }
 
+        const getBranchRowCount = async (targetBranch: string): Promise<number | null> => {
+          const { count, error } = await supabase
+            .from(tableName)
+            .select('id', { count: 'exact', head: true })
+            .eq('branch', targetBranch)
+
+          if (error) {
+            console.warn(`Failed to read row count for ${tableName}/${targetBranch}: ${error.message}`)
+            return null
+          }
+
+          return count ?? 0
+        }
+
         // For VAS table, prepare header mapping upfront (extract from first available file)
         let vasHeaderMapping: Record<string, string> | null = null
         if (isVasTable) {
@@ -1443,6 +1457,8 @@ export default function ImportPage() {
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
 
+            const beforeBranchCount = await getBranchRowCount(standardBranch)
+
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildJcClosedInsertRow(
                 rawRows[rowIdx],
@@ -1547,7 +1563,23 @@ export default function ImportPage() {
               )
             }
 
-            totalInserted += await insertRowsInChunks(insertRows)
+            const attemptedInserted = await insertRowsInChunks(insertRows)
+            const afterBranchCount = await getBranchRowCount(standardBranch)
+
+            if (beforeBranchCount !== null && afterBranchCount !== null) {
+              const actualInserted = Math.max(0, afterBranchCount - beforeBranchCount)
+
+              if (insertRows.length > 0 && actualInserted === 0) {
+                throw new Error(
+                  'PSF upload reached database but 0 rows were persisted. Most likely cause: stale entries in public.job_card_closed_data_import_signatures (dedupe registry) while public.job_card_closed_data has been cleared. Fix in Supabase SQL editor: TRUNCATE TABLE public.job_card_closed_data_import_signatures; then re-upload.',
+                )
+              }
+
+              totalInserted += actualInserted
+            } else {
+              // Fallback when count query is blocked (for example, temporary permission issues).
+              totalInserted += attemptedInserted
+            }
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})

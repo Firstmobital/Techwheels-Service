@@ -125,7 +125,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
     setBranchSortDirection(key === 'branch' ? 'asc' : 'desc')
   }
 
-  const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
   const handleExport = () => {
     if (!report) return
@@ -242,7 +242,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
                     <tr key={row.bandKey} className="border-b border-gray-100">
                       <td className="px-3 py-2 font-medium text-gray-800">{row.bandLabel}</td>
                       <td className="px-3 py-2">{row.invoiceCount.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2">{row.percentage.toFixed(1)}%</td>
+                      <td className="px-3 py-2">{row.percentage.toFixed(0)}%</td>
                       <td className="px-3 py-2">{formatCurrency(row.totalAmount)}</td>
                       <td className="px-3 py-2">{formatCurrency(row.avgInvoiceValue)}</td>
                     </tr>
@@ -294,7 +294,7 @@ export default function InvoiceValueDistributionReport({ branch, dateFilter }: R
                     <tr key={row.branch} className="border-b border-gray-100">
                       <td className="px-3 py-2 font-medium text-gray-800">{row.branch}</td>
                       <td className="px-3 py-2">{row.invoiceCount.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2">{row.percentage.toFixed(1)}%</td>
+                      <td className="px-3 py-2">{row.percentage.toFixed(0)}%</td>
                       <td className="px-3 py-2">{formatCurrency(row.totalAmount)}</td>
                       <td className="px-3 py-2">{formatCurrency(row.vasRevenue)}</td>
                       <td className="px-3 py-2">{formatCurrency(row.avgInvoiceValue)}</td>

@@ -16,6 +16,8 @@ type SortKey =
   | 'firstVisitDate'
   | 'lastVisitDate'
 
+const GST_DIVISOR = 1.18
+
 export default function VehicleWiseRevenueReport({
   branch,
   dateFilter,
@@ -57,10 +59,24 @@ export default function VehicleWiseRevenueReport({
     }
   }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
+  const transformedRows = useMemo(() => {
+    return rows.map((row) => {
+      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
+      const netTotalRevenue = netLabourRevenue + row.sparesRevenue
+
+      return {
+        ...row,
+        labourRevenue: netLabourRevenue,
+        totalRevenue: netTotalRevenue,
+        avgRevenuePerVisit: row.visitCount > 0 ? netTotalRevenue / row.visitCount : 0,
+      }
+    })
+  }, [rows])
+
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
 
-    return [...rows].sort((a, b) => {
+    return [...transformedRows].sort((a, b) => {
       if (sortKey === 'vehicleRegistrationNumber') {
         return a.vehicleRegistrationNumber.localeCompare(b.vehicleRegistrationNumber) * direction
       }
@@ -83,19 +99,19 @@ export default function VehicleWiseRevenueReport({
 
       return (a.totalRevenue - b.totalRevenue) * direction
     })
-  }, [rows, sortDirection, sortKey])
+  }, [transformedRows, sortDirection, sortKey])
 
   const totals = useMemo(
     () => ({
-      vehicleCount: rows.length,
-      totalVisits: rows.reduce((sum, row) => sum + row.visitCount, 0),
-      repeatVisits: rows.reduce((sum, row) => sum + row.repeatVisitCount, 0),
-      labourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
-      sparesRevenue: rows.reduce((sum, row) => sum + row.sparesRevenue, 0),
-      totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
-      vasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
+      vehicleCount: transformedRows.length,
+      totalVisits: transformedRows.reduce((sum, row) => sum + row.visitCount, 0),
+      repeatVisits: transformedRows.reduce((sum, row) => sum + row.repeatVisitCount, 0),
+      labourRevenue: transformedRows.reduce((sum, row) => sum + row.labourRevenue, 0),
+      sparesRevenue: transformedRows.reduce((sum, row) => sum + row.sparesRevenue, 0),
+      totalRevenue: transformedRows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      vasRevenue: transformedRows.reduce((sum, row) => sum + row.vasRevenue, 0),
     }),
-    [rows],
+    [transformedRows],
   )
 
   const repeatRate = totals.totalVisits > 0 ? (totals.repeatVisits / totals.totalVisits) * 100 : 0
@@ -110,11 +126,11 @@ export default function VehicleWiseRevenueReport({
     setSortDirection(key === 'vehicleRegistrationNumber' || key === 'firstVisitDate' || key === 'lastVisitDate' ? 'asc' : 'desc')
   }
 
-  const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       vehicleRegistrationNumber: row.vehicleRegistrationNumber,
       visitCount: row.visitCount,
       repeatVisitCount: row.repeatVisitCount,
@@ -137,7 +153,7 @@ export default function VehicleWiseRevenueReport({
             <h2 className="text-lg font-semibold text-gray-900">Vehicle-wise Revenue Report</h2>
             <p className="mt-1 text-sm text-gray-500">Revenue and revisit behavior grouped by vehicle registration number.</p>
           </div>
-          {rows.length > 0 && (
+          {transformedRows.length > 0 && (
             <button
               onClick={handleExport}
               className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
@@ -178,7 +194,7 @@ export default function VehicleWiseRevenueReport({
           </div>
           <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-violet-600">Repeat Rate</p>
-            <p className="mt-1 text-2xl font-semibold text-violet-900">{repeatRate.toFixed(1)}%</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900">{repeatRate.toFixed(0)}%</p>
           </div>
         </div>
       </div>

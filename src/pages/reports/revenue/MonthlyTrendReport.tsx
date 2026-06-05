@@ -6,6 +6,8 @@ import { exportToCSV } from '../../../lib/exportUtils'
 
 type SortKey = 'month' | 'labourRevenue' | 'partsRevenue' | 'totalRevenue' | 'vasRevenue'
 
+const GST_DIVISOR = 1.18
+
 export default function MonthlyTrendReport({
   branch,
   dateFilter,
@@ -46,10 +48,23 @@ export default function MonthlyTrendReport({
     }
   }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
+  const transformedRows = useMemo(() => {
+    return rows.map((row) => {
+      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
+      const netTotalRevenue = netLabourRevenue + row.partsRevenue
+
+      return {
+        ...row,
+        labourRevenue: netLabourRevenue,
+        totalRevenue: netTotalRevenue,
+      }
+    })
+  }, [rows])
+
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
 
-    return [...rows].sort((a, b) => {
+    return [...transformedRows].sort((a, b) => {
       if (sortKey === 'month') {
         return a.month.localeCompare(b.month) * direction
       }
@@ -84,17 +99,17 @@ export default function MonthlyTrendReport({
 
       return b.totalRevenue - a.totalRevenue
     })
-  }, [rows, sortDirection, sortKey])
+  }, [transformedRows, sortDirection, sortKey])
 
   const totals = useMemo(
     () => ({
-      totalLabourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
-      totalPartsRevenue: rows.reduce((sum, row) => sum + row.partsRevenue, 0),
-      totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
-      totalVasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
-      months: rows.length,
+      totalLabourRevenue: transformedRows.reduce((sum, row) => sum + row.labourRevenue, 0),
+      totalPartsRevenue: transformedRows.reduce((sum, row) => sum + row.partsRevenue, 0),
+      totalRevenue: transformedRows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      totalVasRevenue: transformedRows.reduce((sum, row) => sum + row.vasRevenue, 0),
+      months: transformedRows.length,
     }),
-    [rows],
+    [transformedRows],
   )
 
   const avgMonthly = useMemo(
@@ -104,7 +119,7 @@ export default function MonthlyTrendReport({
       totalRevenue: rows.length > 0 ? totals.totalRevenue / rows.length : 0,
       vasRevenue: rows.length > 0 ? totals.totalVasRevenue / rows.length : 0,
     }),
-    [rows.length, totals],
+    [transformedRows.length, totals],
   )
 
   const toggleSort = (key: SortKey) => {
@@ -117,7 +132,7 @@ export default function MonthlyTrendReport({
   }
 
   const formatCurrency = (value: number) => {
-    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
   }
 
   const formatMonth = (month: string) => {
@@ -130,8 +145,8 @@ export default function MonthlyTrendReport({
   }
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       month: row.month,
       labourRevenue: row.labourRevenue,
       partsRevenue: row.partsRevenue,
@@ -149,7 +164,7 @@ export default function MonthlyTrendReport({
             <h2 className="text-lg font-semibold text-gray-900">Monthly Revenue Trend Report</h2>
             <p className="mt-1 text-sm text-gray-500">Monthly revenue trends for management review and analysis.</p>
           </div>
-          {rows.length > 0 && (
+          {transformedRows.length > 0 && (
             <button
               onClick={handleExport}
               className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"

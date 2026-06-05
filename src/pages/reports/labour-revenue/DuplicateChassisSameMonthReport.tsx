@@ -7,7 +7,7 @@ import { exportToCSV, generateExportFilename, formatCurrencyForExport } from '..
 import type { ReportViewProps } from '../types'
 
 function formatCurrency(value: number): string {
-  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
 export default function DuplicateChassisSameMonthReport({ branch, dateFilter }: ReportViewProps) {
@@ -161,9 +161,9 @@ export default function DuplicateChassisSameMonthReport({ branch, dateFilter }: 
                     <td className="px-3 py-2 text-gray-700">{row.serviceType}</td>
                     <td className="px-3 py-2 text-gray-700">{row.advisor}</td>
                     <td className="px-3 py-2 text-gray-700">{row.reportDate ?? '-'}</td>
-                    <td className="px-3 py-2 text-right text-gray-700">{row.labourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-right text-gray-700">{row.sparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-right font-medium text-gray-900">{row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-2 text-right text-gray-700">{row.labourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td className="px-3 py-2 text-right text-gray-700">{row.sparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td className="px-3 py-2 text-right font-medium text-gray-900">{row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                   </tr>
                 ))}
               </tbody>

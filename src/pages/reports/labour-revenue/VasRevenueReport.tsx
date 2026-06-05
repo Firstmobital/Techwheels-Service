@@ -16,7 +16,7 @@ interface VasRevenueReportProps {
 }
 
 function formatCurrency(value: number): string {
-  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
 export default function VasRevenueReport({
@@ -186,13 +186,13 @@ export default function VasRevenueReport({
                     <tr key={row.serviceType} className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-gray-700">{row.serviceType}</td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.jobCount.toLocaleString('en-IN')}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.avgVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.avgVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                     </tr>
                   ))}
@@ -221,13 +221,13 @@ export default function VasRevenueReport({
                       <td className="px-3 py-2 font-mono text-sm text-gray-700">{row.employeeCode}</td>
                       <td className="px-3 py-2 text-gray-700">{row.employeeName}</td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.totalVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.jobCount.toLocaleString('en-IN')}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.avgVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.avgVasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                     </tr>
                   ))}

@@ -13,6 +13,8 @@ type SortKey =
   | 'vasRevenue'
   | 'contributionPercentage'
 
+const GST_DIVISOR = 1.18
+
 export default function CategoryWiseRevenueReport({
   branch,
   dateFilter,
@@ -53,10 +55,30 @@ export default function CategoryWiseRevenueReport({
     }
   }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
+  const transformedRows = useMemo(() => {
+    const netRows = rows.map((row) => {
+      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
+      const netTotalRevenue = netLabourRevenue + row.partsRevenue
+
+      return {
+        ...row,
+        labourRevenue: netLabourRevenue,
+        totalRevenue: netTotalRevenue,
+      }
+    })
+
+    const grandTotal = netRows.reduce((sum, row) => sum + row.totalRevenue, 0)
+
+    return netRows.map((row) => ({
+      ...row,
+      contributionPercentage: grandTotal > 0 ? (row.totalRevenue / grandTotal) * 100 : 0,
+    }))
+  }, [rows])
+
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
 
-    return [...rows].sort((a, b) => {
+    return [...transformedRows].sort((a, b) => {
       if (sortKey === 'category') {
         return a.category.localeCompare(b.category) * direction
       }
@@ -105,18 +127,18 @@ export default function CategoryWiseRevenueReport({
 
       return a.totalRevenue - b.totalRevenue
     })
-  }, [rows, sortDirection, sortKey])
+  }, [transformedRows, sortDirection, sortKey])
 
   const totals = useMemo(
     () => ({
-      totalVehicles: rows.reduce((sum, row) => sum + row.vehicleCount, 0),
-      totalLabourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
-      totalPartsRevenue: rows.reduce((sum, row) => sum + row.partsRevenue, 0),
-      totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
-      totalVasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
-      categories: rows.length,
+      totalVehicles: transformedRows.reduce((sum, row) => sum + row.vehicleCount, 0),
+      totalLabourRevenue: transformedRows.reduce((sum, row) => sum + row.labourRevenue, 0),
+      totalPartsRevenue: transformedRows.reduce((sum, row) => sum + row.partsRevenue, 0),
+      totalRevenue: transformedRows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      totalVasRevenue: transformedRows.reduce((sum, row) => sum + row.vasRevenue, 0),
+      categories: transformedRows.length,
     }),
-    [rows],
+    [transformedRows],
   )
 
   const toggleSort = (key: SortKey) => {
@@ -129,12 +151,12 @@ export default function CategoryWiseRevenueReport({
   }
 
   const formatCurrency = (value: number) => {
-    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
   }
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       category: row.category,
       vehicleCount: row.vehicleCount,
       labourRevenue: row.labourRevenue,
@@ -154,7 +176,7 @@ export default function CategoryWiseRevenueReport({
             <h2 className="text-lg font-semibold text-gray-900">Category Wise Revenue Report</h2>
             <p className="mt-1 text-sm text-gray-500">Revenue breakdown by service category with contribution analysis.</p>
           </div>
-          {rows.length > 0 && (
+          {transformedRows.length > 0 && (
             <button
               onClick={handleExport}
               className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
@@ -246,7 +268,7 @@ export default function CategoryWiseRevenueReport({
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.partsRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right">{formatCurrency(row.totalRevenue)}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(row.vasRevenue)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{row.contributionPercentage.toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right">{row.contributionPercentage.toFixed(0)}%</td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">

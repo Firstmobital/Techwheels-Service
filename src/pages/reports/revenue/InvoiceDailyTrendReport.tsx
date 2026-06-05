@@ -12,6 +12,8 @@ type SortKey =
   | 'vasRevenue'
   | 'avgInvoiceValue'
 
+const GST_DIVISOR = 1.18
+
 export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportViewProps) {
   const [rows, setRows] = useState<InvoiceDailyTrendRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -45,10 +47,24 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
     }
   }, [branch, dateFilter])
 
+  const transformedRows = useMemo(() => {
+    return rows.map((row) => {
+      const netLabourTotal = row.labourTotal / GST_DIVISOR
+      const netConsolidatedTotal = netLabourTotal + row.sparesTotal
+
+      return {
+        ...row,
+        labourTotal: netLabourTotal,
+        consolidatedTotal: netConsolidatedTotal,
+        avgInvoiceValue: row.invoiceCount > 0 ? netConsolidatedTotal / row.invoiceCount : 0,
+      }
+    })
+  }, [rows])
+
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
 
-    return [...rows].sort((a, b) => {
+    return [...transformedRows].sort((a, b) => {
       if (sortKey === 'date') return a.date.localeCompare(b.date) * direction
       if (sortKey === 'invoiceCount') return (a.invoiceCount - b.invoiceCount) * direction
       if (sortKey === 'labourTotal') return (a.labourTotal - b.labourTotal) * direction
@@ -58,18 +74,18 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
       if (sortKey === 'avgInvoiceValue') return (a.avgInvoiceValue - b.avgInvoiceValue) * direction
       return a.date.localeCompare(b.date) * direction
     })
-  }, [rows, sortDirection, sortKey])
+  }, [transformedRows, sortDirection, sortKey])
 
   const totals = useMemo(
     () => ({
       days: rows.length,
-      invoiceCount: rows.reduce((sum, row) => sum + row.invoiceCount, 0),
-      labourTotal: rows.reduce((sum, row) => sum + row.labourTotal, 0),
-      sparesTotal: rows.reduce((sum, row) => sum + row.sparesTotal, 0),
-      consolidatedTotal: rows.reduce((sum, row) => sum + row.consolidatedTotal, 0),
-      vasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
+      invoiceCount: transformedRows.reduce((sum, row) => sum + row.invoiceCount, 0),
+      labourTotal: transformedRows.reduce((sum, row) => sum + row.labourTotal, 0),
+      sparesTotal: transformedRows.reduce((sum, row) => sum + row.sparesTotal, 0),
+      consolidatedTotal: transformedRows.reduce((sum, row) => sum + row.consolidatedTotal, 0),
+      vasRevenue: transformedRows.reduce((sum, row) => sum + row.vasRevenue, 0),
     }),
-    [rows],
+    [transformedRows],
   )
 
   const toggleSort = (key: SortKey) => {
@@ -82,11 +98,11 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
     setSortDirection(key === 'date' ? 'desc' : 'desc')
   }
 
-  const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  const formatCurrency = (value: number) => `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       date: row.date,
       invoiceCount: row.invoiceCount,
       labourTotal: row.labourTotal,
@@ -106,7 +122,7 @@ export default function InvoiceDailyTrendReport({ branch, dateFilter }: ReportVi
             <h2 className="text-lg font-semibold text-gray-900">Invoice Daily Trend Report</h2>
             <p className="mt-1 text-sm text-gray-500">Daily invoice metrics with labour, spares, consolidated, and VAS revenue totals.</p>
           </div>
-          {rows.length > 0 && (
+          {transformedRows.length > 0 && (
             <button
               onClick={handleExport}
               className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"

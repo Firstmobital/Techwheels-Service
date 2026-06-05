@@ -14,6 +14,8 @@ type SortKey =
   | 'vasRevenue'
   | 'avgBillingPerVehicle'
 
+const GST_DIVISOR = 1.18
+
 export default function DailyRevenueReportComponent({
   branch,
   dateFilter,
@@ -54,10 +56,24 @@ export default function DailyRevenueReportComponent({
     }
   }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
+  const transformedRows = useMemo(() => {
+    return rows.map((row) => {
+      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
+      const netTotalRevenue = netLabourRevenue + row.partsRevenue
+
+      return {
+        ...row,
+        labourRevenue: netLabourRevenue,
+        totalRevenue: netTotalRevenue,
+        avgBillingPerVehicle: row.vehicleCount > 0 ? netTotalRevenue / row.vehicleCount : 0,
+      }
+    })
+  }, [rows])
+
   const sortedRows = useMemo(() => {
     const direction = sortDirection === 'asc' ? 1 : -1
 
-    return [...rows].sort((a, b) => {
+    return [...transformedRows].sort((a, b) => {
       if (sortKey === 'date') {
         return a.date.localeCompare(b.date) * direction
       }
@@ -113,19 +129,19 @@ export default function DailyRevenueReportComponent({
 
       return a.date.localeCompare(b.date) * -1
     })
-  }, [rows, sortDirection, sortKey])
+  }, [transformedRows, sortDirection, sortKey])
 
   const totals = useMemo(
     () => ({
-      totalVehicles: rows.reduce((sum, row) => sum + row.vehicleCount, 0),
-      totalInvoices: rows.reduce((sum, row) => sum + row.invoiceCount, 0),
-      totalLabourRevenue: rows.reduce((sum, row) => sum + row.labourRevenue, 0),
-      totalPartsRevenue: rows.reduce((sum, row) => sum + row.partsRevenue, 0),
-      totalRevenue: rows.reduce((sum, row) => sum + row.totalRevenue, 0),
-      totalVasRevenue: rows.reduce((sum, row) => sum + row.vasRevenue, 0),
-      days: rows.length,
+      totalVehicles: transformedRows.reduce((sum, row) => sum + row.vehicleCount, 0),
+      totalInvoices: transformedRows.reduce((sum, row) => sum + row.invoiceCount, 0),
+      totalLabourRevenue: transformedRows.reduce((sum, row) => sum + row.labourRevenue, 0),
+      totalPartsRevenue: transformedRows.reduce((sum, row) => sum + row.partsRevenue, 0),
+      totalRevenue: transformedRows.reduce((sum, row) => sum + row.totalRevenue, 0),
+      totalVasRevenue: transformedRows.reduce((sum, row) => sum + row.vasRevenue, 0),
+      days: transformedRows.length,
     }),
-    [rows],
+    [transformedRows],
   )
 
   const toggleSort = (key: SortKey) => {
@@ -138,12 +154,12 @@ export default function DailyRevenueReportComponent({
   }
 
   const formatCurrency = (value: number) => {
-    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+    return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
   }
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       date: row.date,
       vehicleCount: row.vehicleCount,
       invoiceCount: row.invoiceCount,
@@ -164,7 +180,7 @@ export default function DailyRevenueReportComponent({
             <h2 className="text-lg font-semibold text-gray-900">Daily Revenue Report</h2>
             <p className="mt-1 text-sm text-gray-500">Daily revenue breakdown by date from PSF Revenue Report data.</p>
           </div>
-          {rows.length > 0 && (
+          {transformedRows.length > 0 && (
             <button
               onClick={handleExport}
               className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"

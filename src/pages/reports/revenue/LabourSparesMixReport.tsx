@@ -3,6 +3,8 @@ import { getLabourSparesMixByServiceType, type LabourSparesMixRow } from '../../
 import type { ReportViewProps } from '../types'
 import { exportToCSV } from '../../../lib/exportUtils'
 
+const GST_DIVISOR = 1.18
+
 export default function LabourSparesMixReport({
   branch,
   dateFilter,
@@ -42,8 +44,24 @@ export default function LabourSparesMixReport({
     }
   }, [branch, dateFilter, parentProductLineFilter, serviceTypeFilter])
 
+  const transformedRows = useMemo(() => {
+    return rows.map((row) => {
+      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
+      const netTotalRevenue = netLabourRevenue + row.sparesRevenue
+      const denominator = netTotalRevenue > 0 ? netTotalRevenue : 1
+
+      return {
+        ...row,
+        labourRevenue: netLabourRevenue,
+        totalRevenue: netTotalRevenue,
+        labourSharePercentage: netTotalRevenue > 0 ? (netLabourRevenue / denominator) * 100 : 0,
+        sparesSharePercentage: netTotalRevenue > 0 ? (row.sparesRevenue / denominator) * 100 : 0,
+      }
+    })
+  }, [rows])
+
   const totals = useMemo(() => {
-    return rows.reduce(
+    return transformedRows.reduce(
       (acc, row) => {
         acc.jobCardCount += row.jobCardCount
         acc.labourRevenue += row.labourRevenue
@@ -58,15 +76,15 @@ export default function LabourSparesMixReport({
         vasRevenue: 0,
       },
     )
-  }, [rows])
+  }, [transformedRows])
 
   const grandTotal = totals.labourRevenue + totals.sparesRevenue
   const labourShare = grandTotal > 0 ? (totals.labourRevenue / grandTotal) * 100 : 0
   const sparesShare = grandTotal > 0 ? (totals.sparesRevenue / grandTotal) * 100 : 0
 
   const handleExport = () => {
-    if (rows.length === 0) return
-    const exportData = rows.map((row) => ({
+    if (transformedRows.length === 0) return
+    const exportData = transformedRows.map((row) => ({
       serviceType: row.serviceType,
       jobCardCount: row.jobCardCount,
       labourRevenue: row.labourRevenue,
@@ -86,7 +104,7 @@ export default function LabourSparesMixReport({
           <h3 className="text-base font-semibold text-gray-900">Labour vs Spares Mix Report</h3>
           <p className="text-xs text-gray-500">Service-type level mix of labour and spares revenue for selected filters.</p>
         </div>
-        {rows.length > 0 && (
+        {transformedRows.length > 0 && (
           <button
             onClick={handleExport}
             className="ml-4 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
@@ -109,19 +127,19 @@ export default function LabourSparesMixReport({
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="text-xs text-gray-500">Labour Revenue Share</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">{labourShare.toFixed(1)}%</p>
+          <p className="mt-1 text-lg font-semibold text-gray-900">{labourShare.toFixed(0)}%</p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="text-xs text-gray-500">Spares Revenue Share</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">{sparesShare.toFixed(1)}%</p>
+          <p className="mt-1 text-lg font-semibold text-gray-900">{sparesShare.toFixed(0)}%</p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="text-xs text-gray-500">Total Revenue</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
+          <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="text-xs text-gray-500">VAS Revenue</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {totals.vasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
+          <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {totals.vasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
         </div>
       </div>
 
@@ -144,21 +162,21 @@ export default function LabourSparesMixReport({
               <tr>
                 <td className="px-3 py-4 text-gray-500" colSpan={8}>Loading report...</td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : transformedRows.length === 0 ? (
               <tr>
                 <td className="px-3 py-4 text-gray-500" colSpan={8}>No records found for selected filters.</td>
               </tr>
             ) : (
-              rows.map((row) => (
+              transformedRows.map((row) => (
                 <tr key={row.serviceType} className="border-b border-gray-100">
                   <td className="px-3 py-2 font-medium text-gray-800">{row.serviceType}</td>
                   <td className="px-3 py-2">{row.jobCardCount.toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-2">{row.labourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2">{row.sparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2">{row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2">{row.vasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                  <td className="px-3 py-2">{row.labourSharePercentage.toFixed(1)}%</td>
-                  <td className="px-3 py-2">{row.sparesSharePercentage.toFixed(1)}%</td>
+                  <td className="px-3 py-2">{row.labourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                  <td className="px-3 py-2">{row.sparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                  <td className="px-3 py-2">{row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                  <td className="px-3 py-2">{row.vasRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                  <td className="px-3 py-2">{row.labourSharePercentage.toFixed(0)}%</td>
+                  <td className="px-3 py-2">{row.sparesSharePercentage.toFixed(0)}%</td>
                 </tr>
               ))
             )}

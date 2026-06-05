@@ -17,6 +17,7 @@ interface ServiceTypeReportProps {
 }
 
 type SortKey = 'serviceType' | 'totalLabourRevenue' | 'jobCardCount' | 'avgLabourRevenue'
+const GST_DIVISOR = 1.18
 
 export default function ServiceTypeLabourRevenueReport({
   branch,
@@ -107,6 +108,15 @@ export default function ServiceTypeLabourRevenueReport({
     [rows],
   )
 
+  const totalLabourRevenueExcludingGst = useMemo(
+    () => totals.totalLabourRevenue / GST_DIVISOR,
+    [totals.totalLabourRevenue],
+  )
+  const totalRevenueFromLabourAndSpares = useMemo(
+    () => totalLabourRevenueExcludingGst + totals.totalSparesRevenue,
+    [totalLabourRevenueExcludingGst, totals.totalSparesRevenue],
+  )
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
@@ -188,19 +198,19 @@ export default function ServiceTypeLabourRevenueReport({
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Labour Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">
-              Rs. {totals.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              Rs. {Math.round(totalLabourRevenueExcludingGst).toLocaleString('en-IN')}
             </p>
           </div>
           <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-violet-600">Total Spares Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-violet-900">
-              Rs. {totals.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              Rs. {totals.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">Total Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-indigo-900">
-              Rs. {totals.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              Rs. {totalRevenueFromLabourAndSpares.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3">
@@ -214,7 +224,7 @@ export default function ServiceTypeLabourRevenueReport({
           <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
             <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Total Labour + VAS Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-900">
-              Rs. {(totals.totalLabourRevenue + totalVasRevenue).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              Rs. {(totalLabourRevenueExcludingGst + totalVasRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
         </div>
@@ -247,7 +257,7 @@ export default function ServiceTypeLabourRevenueReport({
                     <div className="mb-1 flex items-center justify-between gap-3 text-xs text-gray-600">
                       <span className="truncate font-medium text-gray-700">{row.serviceType}</span>
                       <span>
-                        Rs. {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        Rs. {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-gray-100">
@@ -313,19 +323,19 @@ export default function ServiceTypeLabourRevenueReport({
                     <tr key={row.serviceType} className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-gray-700">{row.serviceType}</td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.jobCardCount.toLocaleString()}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.avgLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        {row.avgLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                     </tr>
                   ))}
