@@ -547,6 +547,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .schip .n { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .schip .l { font-size: 12px; color: var(--muted); }
 .schip .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.schip--btn { cursor: pointer; text-align: left; }
+.schip--active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-ring); }
 
 /* Matrix center cells */
 .tbl td.ctr, .tbl th.ctr { text-align: center; }

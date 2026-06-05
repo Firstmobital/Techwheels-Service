@@ -40,6 +40,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
+type SummaryCardFilter = 'all' | 'job_card_pending' | 'estimate_pending' | 'invoice_pending' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -96,6 +97,10 @@ function getCategoryForServiceType(serviceType: string | null | undefined): Excl
   return 'other'
 }
 
+function isJobCardPending(jcNumber: string | null | undefined): boolean {
+  return !String(jcNumber ?? '').trim()
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const invoiceInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
@@ -108,6 +113,7 @@ export default function ServiceAdvisorPage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState<string | 'all'>('all')
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all')
+  const [selectedSummaryCard, setSelectedSummaryCard] = useState<SummaryCardFilter>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [hasMultipleDealers, setHasMultipleDealers] = useState(false)
 
@@ -139,6 +145,20 @@ export default function ServiceAdvisorPage() {
     return fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
   }, [fuelTypeFilteredRows, selectedCategory])
 
+  const cardFilteredRows = useMemo(() => {
+    if (selectedSummaryCard === 'all') return displayedRows
+    if (selectedSummaryCard === 'job_card_pending') {
+      return displayedRows.filter((row) => isJobCardPending(row.jc_number))
+    }
+    if (selectedSummaryCard === 'estimate_pending') {
+      return displayedRows.filter((row) => !row.estimate_storage_path)
+    }
+    if (selectedSummaryCard === 'completed') {
+      return displayedRows.filter((row) => Boolean(row.invoice_storage_path))
+    }
+    return displayedRows.filter((row) => !row.invoice_storage_path)
+  }, [displayedRows, selectedSummaryCard])
+
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
     return Array.from(branches).sort()
@@ -156,7 +176,7 @@ export default function ServiceAdvisorPage() {
     }
   }, [fuelTypeFilteredRows])
 
-  const hasRows = useMemo(() => displayedRows.length > 0, [displayedRows.length])
+  const hasRows = useMemo(() => cardFilteredRows.length > 0, [cardFilteredRows.length])
   const advisorName = useMemo(() => {
     if (isAdmin) return 'All Service Advisors'
     return rows[0]?.sa_display_name || rows[0]?.sa_name || 'Unknown'
@@ -183,6 +203,18 @@ export default function ServiceAdvisorPage() {
   }, [rows, isAdmin, selectedBranch])
   const pendingEstimateCount = useMemo(
     () => displayedRows.filter(r => !r.estimate_storage_path).length,
+    [displayedRows],
+  )
+  const pendingJobCardCount = useMemo(
+    () => displayedRows.filter((r) => isJobCardPending(r.jc_number)).length,
+    [displayedRows],
+  )
+  const pendingInvoiceCount = useMemo(
+    () => displayedRows.filter((r) => !r.invoice_storage_path).length,
+    [displayedRows],
+  )
+  const completedCount = useMemo(
+    () => displayedRows.filter((r) => Boolean(r.invoice_storage_path)).length,
     [displayedRows],
   )
 
@@ -597,21 +629,65 @@ export default function ServiceAdvisorPage() {
       {/* Summary Chips */}
       {hasRows && (
         <div className="summary">
-          <div className="schip">
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('all')}
+            className={`schip schip--btn ${selectedSummaryCard === 'all' ? 'schip--active' : ''}`}
+          >
             <span className="ic"><Icon name="admin" size={16} strokeWidth={2} /></span>
             <div>
               <div className="n">{displayedRows.length}</div>
-              <div className="l">{isAdmin ? 'Filtered entries' : 'Assigned to me'}</div>
+              <div className="l">{isAdmin ? 'Filtered entries' : 'Assigned'}</div>
             </div>
-          </div>
+          </button>
 
-          <div className="schip">
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('job_card_pending')}
+            className={`schip schip--btn ${selectedSummaryCard === 'job_card_pending' ? 'schip--active' : ''}`}
+          >
+            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+            <div>
+              <div className="n">{pendingJobCardCount}</div>
+              <div className="l">Job Card</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('estimate_pending')}
+            className={`schip schip--btn ${selectedSummaryCard === 'estimate_pending' ? 'schip--active' : ''}`}
+          >
             <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
             <div>
               <div className="n">{pendingEstimateCount}</div>
-              <div className="l">Estimates pending</div>
+              <div className="l">Estimate</div>
             </div>
-          </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('invoice_pending')}
+            className={`schip schip--btn ${selectedSummaryCard === 'invoice_pending' ? 'schip--active' : ''}`}
+          >
+            <span className="ic schip__ic--warn"><Icon name="doc" size={16} strokeWidth={2} /></span>
+            <div>
+              <div className="n">{pendingInvoiceCount}</div>
+              <div className="l">Invoice</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('completed')}
+            className={`schip schip--btn ${selectedSummaryCard === 'completed' ? 'schip--active' : ''}`}
+          >
+            <span className="ic"><Icon name="checksm" size={16} strokeWidth={2.4} /></span>
+            <div>
+              <div className="n">{completedCount}</div>
+              <div className="l">Completed</div>
+            </div>
+          </button>
 
           <div className="schip">
             <span className="ic"><Icon name="building" size={16} strokeWidth={2} /></span>
@@ -628,7 +704,7 @@ export default function ServiceAdvisorPage() {
         <div className="card__head">
           <div>
             <h3>
-              Assigned entries <span className="subcount">({displayedRows.length})</span>
+              Assigned entries <span className="subcount">({cardFilteredRows.length})</span>
             </h3>
             <div className="sub">
               {isAdmin ? 'Showing all intakes from filtered branch · edits save per row' : 'Each row is one intake assigned to you · edits save per row'}
@@ -641,7 +717,11 @@ export default function ServiceAdvisorPage() {
             <div className="empty-state">Loading assigned rows...</div>
           ) : !hasRows ? (
             <div className="empty-state">
-              {isAdmin ? 'No rows found for this branch filter.' : 'No rows are assigned to your advisor account.'}
+              {selectedSummaryCard !== 'all'
+                ? 'No rows found for the selected summary card.'
+                : isAdmin
+                  ? 'No rows found for this branch filter.'
+                  : 'No rows are assigned to your advisor account.'}
             </div>
           ) : (
             <div className="tbl-wrap scroll">
@@ -662,7 +742,7 @@ export default function ServiceAdvisorPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayedRows.map((row) => {
+                  {cardFilteredRows.map((row) => {
                     const draft = drafts[row.id] ?? EMPTY_DRAFT
                     const draftServiceType = String(draft.service_type ?? '')
                     const normalizedDraftServiceType = draftServiceType.trim().toLowerCase()
