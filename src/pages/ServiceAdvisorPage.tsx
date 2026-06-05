@@ -40,7 +40,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
-type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'completed'
+type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'floor_hold' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -130,6 +130,7 @@ export default function ServiceAdvisorPage() {
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
+  const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
 
   const branchFilteredRows = useMemo(() => {
     if (selectedBranch === 'all') return rows
@@ -154,6 +155,11 @@ export default function ServiceAdvisorPage() {
     return Boolean(jcNumber) && completedJobCardNumbers.has(jcNumber)
   }
 
+  const isWorkHold = (row: ReceptionEntryRow): boolean => {
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    return Boolean(jcNumber) && holdJobCardNumbers.has(jcNumber)
+  }
+
   const cardFilteredRows = useMemo(() => {
     if (selectedSummaryCard === 'all') return displayedRows
     if (selectedSummaryCard === 'job_card_pending') {
@@ -165,11 +171,14 @@ export default function ServiceAdvisorPage() {
     if (selectedSummaryCard === 'estimate_pending') {
       return displayedRows.filter((row) => !row.estimate_storage_path)
     }
+    if (selectedSummaryCard === 'floor_hold') {
+      return displayedRows.filter((row) => isWorkHold(row))
+    }
     if (selectedSummaryCard === 'completed') {
       return displayedRows.filter((row) => isWorkCompleted(row) && Boolean(row.invoice_storage_path))
     }
     return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_storage_path)
-  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers])
+  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
 
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
@@ -228,6 +237,10 @@ export default function ServiceAdvisorPage() {
   const pendingInvoiceCount = useMemo(
     () => displayedRows.filter((r) => isWorkCompleted(r) && !r.invoice_storage_path).length,
     [displayedRows, completedJobCardNumbers],
+  )
+  const floorHoldCount = useMemo(
+    () => displayedRows.filter((r) => isWorkHold(r)).length,
+    [displayedRows, holdJobCardNumbers],
   )
   const completedCount = useMemo(
     () => displayedRows.filter((r) => isWorkCompleted(r) && Boolean(r.invoice_storage_path)).length,
@@ -339,33 +352,38 @@ export default function ServiceAdvisorPage() {
     void loadRows()
   }, [])
 
-  // Subscribe to real-time updates for completed job cards
+  // Subscribe to real-time updates for completed/hold job cards
   useEffect(() => {
-    // Fetch existing completed job cards
-    const fetchCompletedJobCards = async () => {
+    // Fetch existing completed and hold job cards
+    const fetchAssignmentStatusJobCards = async () => {
       try {
         const res = await supabase
           .from('technician_assignments')
-          .select('job_card_number')
-          .eq('work_status', 'completed')
+          .select('job_card_number, work_status')
+          .in('work_status', ['completed', 'hold'])
 
         if (!res.error && res.data) {
           const completed = new Set<string>()
+          const hold = new Set<string>()
           res.data.forEach((row: Record<string, unknown>) => {
             const jobCardNum = String(row.job_card_number ?? '').trim().toUpperCase()
+            const status = String(row.work_status ?? '').trim().toLowerCase()
             if (jobCardNum) {
-              completed.add(jobCardNum)
+              if (status === 'completed') completed.add(jobCardNum)
+              if (status === 'hold') hold.add(jobCardNum)
             }
           })
           setCompletedJobCardNumbers(completed)
+          setHoldJobCardNumbers(hold)
           console.log('Loaded completed job cards:', Array.from(completed))
+          console.log('Loaded hold job cards:', Array.from(hold))
         }
       } catch (err) {
-        console.error('Failed to fetch completed job cards:', err)
+        console.error('Failed to fetch assignment status job cards:', err)
       }
     }
 
-    void fetchCompletedJobCards()
+    void fetchAssignmentStatusJobCards()
 
     // Subscribe to real-time updates
     const channel = supabase
@@ -385,6 +403,26 @@ export default function ServiceAdvisorPage() {
             setCompletedJobCardNumbers((prev) => {
               const next = new Set([...prev, normalized])
               console.log('Realtime update - completed job:', normalized)
+              return next
+            })
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'technician_assignments',
+          filter: 'work_status=eq.hold',
+        },
+        (payload) => {
+          const updated = payload.new as { job_card_number?: string } | null
+          if (updated?.job_card_number) {
+            const normalized = String(updated.job_card_number).trim().toUpperCase()
+            setHoldJobCardNumbers((prev) => {
+              const next = new Set([...prev, normalized])
+              console.log('Realtime update - hold job:', normalized)
               return next
             })
           }
@@ -707,6 +745,19 @@ export default function ServiceAdvisorPage() {
             <div>
               <div className="n">{pendingInvoiceCount}</div>
               <div className="l">Invoice</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('floor_hold')}
+            disabled={floorHoldCount === 0}
+            className={`schip schip--btn ${selectedSummaryCard === 'floor_hold' ? 'schip--active' : ''}`}
+          >
+            <span className="ic schip__ic--warn"><Icon name="clock" size={16} strokeWidth={2} /></span>
+            <div>
+              <div className="n">{floorHoldCount}</div>
+              <div className="l">Floor Hold</div>
             </div>
           </button>
 
