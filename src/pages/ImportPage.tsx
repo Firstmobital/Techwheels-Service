@@ -1924,6 +1924,13 @@ export default function ImportPage() {
 
                 row.branch = slotLocationPortal.location
                 row.portal = portal
+                row.source_row_hash = buildPartsSourceRowHash(
+                  tableName,
+                  slotLocationPortal.location,
+                  portal,
+                  row,
+                  rowIdx + 2,
+                )
                 insertRows.push(row)
               }
             }
@@ -2027,6 +2034,13 @@ export default function ImportPage() {
                 const resolved = dealerDerived ?? slotLocationPortal
                 row.branch = resolved.location
                 row.portal = resolved.portal
+                row.source_row_hash = buildPartsSourceRowHash(
+                  tableName,
+                  resolved.location,
+                  resolved.portal,
+                  row,
+                  rowIdx + 2,
+                )
 
                 insertRows.push(row)
               }
@@ -2084,6 +2098,13 @@ export default function ImportPage() {
               } else if (row) {
                 row.branch = slotLocationPortal.location
                 row.portal = portal
+                row.source_row_hash = buildPartsSourceRowHash(
+                  tableName,
+                  slotLocationPortal.location,
+                  portal,
+                  row,
+                  rowIdx + 2,
+                )
                 insertRows.push(row)
               }
 
