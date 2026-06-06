@@ -97,6 +97,41 @@ function getAdvisorFilterLabel(row: ReceptionEntryRow): string {
   return 'Unknown advisor'
 }
 
+function applySummaryCardFilter(
+  rows: ReceptionEntryRow[],
+  selectedSummaryCard: SummaryCardFilter,
+  completedJobCardNumbers: Set<string>,
+  holdJobCardNumbers: Set<string>,
+): ReceptionEntryRow[] {
+  const isCompleted = (row: ReceptionEntryRow): boolean => {
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    return Boolean(jcNumber) && completedJobCardNumbers.has(jcNumber)
+  }
+
+  const isHold = (row: ReceptionEntryRow): boolean => {
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    return Boolean(jcNumber) && holdJobCardNumbers.has(jcNumber)
+  }
+
+  if (selectedSummaryCard === 'all') return rows
+  if (selectedSummaryCard === 'job_card_pending') {
+    return rows.filter((row) => isJobCardPending(row.jc_number))
+  }
+  if (selectedSummaryCard === 'sr_type_pending') {
+    return rows.filter((row) => isServiceTypeMissing(row.service_type))
+  }
+  if (selectedSummaryCard === 'estimate_pending') {
+    return rows.filter((row) => !row.estimate_storage_path)
+  }
+  if (selectedSummaryCard === 'floor_hold') {
+    return rows.filter((row) => isHold(row))
+  }
+  if (selectedSummaryCard === 'completed') {
+    return rows.filter((row) => isCompleted(row) && Boolean(row.invoice_done_at))
+  }
+  return rows.filter((row) => isCompleted(row) && !row.invoice_done_at)
+}
+
 function mergeServiceTypes(...groups: Array<string[]>): string[] {
   const defaults = DEFAULT_SERVICE_TYPE_OPTIONS.map(normalizeServiceType)
   const seen = new Set(defaults.map((value) => value.toLowerCase()))
@@ -200,10 +235,74 @@ export default function ServiceAdvisorPage() {
     return fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
   }, [fuelTypeFilteredRows, selectedCategory])
 
+  const locationCountRows = useMemo(() => {
+    let scoped = rows
+
+    if (selectedFuelType !== 'all') {
+      scoped = scoped.filter((row) => getFuelTypeLabel(row.fuel_type) === selectedFuelType)
+    }
+    if (selectedCategory !== 'all') {
+      scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+    }
+    if (selectedAdvisor !== 'all') {
+      scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+    }
+
+    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+
+  const fuelTypeCountRows = useMemo(() => {
+    let scoped = rows
+
+    if (selectedBranch !== 'all') {
+      scoped = scoped.filter((row) => row.branch === selectedBranch)
+    }
+    if (selectedCategory !== 'all') {
+      scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+    }
+    if (selectedAdvisor !== 'all') {
+      scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+    }
+
+    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+
+  const categoryCountRows = useMemo(() => {
+    let scoped = rows
+
+    if (selectedBranch !== 'all') {
+      scoped = scoped.filter((row) => row.branch === selectedBranch)
+    }
+    if (selectedFuelType !== 'all') {
+      scoped = scoped.filter((row) => getFuelTypeLabel(row.fuel_type) === selectedFuelType)
+    }
+    if (selectedAdvisor !== 'all') {
+      scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+    }
+
+    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+
+  const advisorCountRows = useMemo(() => {
+    let scoped = rows
+
+    if (selectedBranch !== 'all') {
+      scoped = scoped.filter((row) => row.branch === selectedBranch)
+    }
+    if (selectedFuelType !== 'all') {
+      scoped = scoped.filter((row) => getFuelTypeLabel(row.fuel_type) === selectedFuelType)
+    }
+    if (selectedCategory !== 'all') {
+      scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+    }
+
+    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+
   const advisorOptions = useMemo(() => {
     const optionMap = new Map<string, { label: string; count: number }>()
 
-    categoryFilteredRows.forEach((row) => {
+    advisorCountRows.forEach((row) => {
       const key = getAdvisorFilterKey(row)
       const existing = optionMap.get(key)
 
@@ -220,7 +319,7 @@ export default function ServiceAdvisorPage() {
     return Array.from(optionMap.entries())
       .map(([value, meta]) => ({ value, label: meta.label, count: meta.count }))
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [categoryFilteredRows])
+  }, [advisorCountRows])
 
   const displayedRows = useMemo(() => {
     if (selectedAdvisor === 'all') return categoryFilteredRows
@@ -263,17 +362,18 @@ export default function ServiceAdvisorPage() {
   }, [allRows])
 
   const categoryCounts = useMemo(() => {
-    const floor = fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
-    const other = fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'other').length
-    const nullCount = fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === 'null').length
+    const floor = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
+    const other = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'other').length
+    const nullCount = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'null').length
     return {
-      all: fuelTypeFilteredRows.length,
+      all: categoryCountRows.length,
       floor,
       other,
       null: nullCount,
     }
-  }, [fuelTypeFilteredRows])
+  }, [categoryCountRows])
 
+  const hasBaseRows = useMemo(() => displayedRows.length > 0, [displayedRows.length])
   const hasRows = useMemo(() => cardFilteredRows.length > 0, [cardFilteredRows.length])
 
   useEffect(() => {
@@ -708,10 +808,10 @@ export default function ServiceAdvisorPage() {
                     : 'btn--ghost'
                 }`}
               >
-                All ({allRows.length})
+                All ({locationCountRows.length})
               </button>
               {availableBranches.map((branch) => {
-                const count = allRows.filter(r => r.branch === branch).length
+                const count = locationCountRows.filter((row) => row.branch === branch).length
                 return (
                   <button
                     key={branch}
@@ -738,7 +838,7 @@ export default function ServiceAdvisorPage() {
                   className="sel sel--advisor-filter"
                   aria-label="Filter by advisor"
                 >
-                  <option value="all">All ({categoryFilteredRows.length})</option>
+                  <option value="all">All ({advisorCountRows.length})</option>
                   {advisorOptions.map((advisor) => (
                     <option key={advisor.value} value={advisor.value}>
                       {advisor.label} ({advisor.count})
@@ -760,10 +860,10 @@ export default function ServiceAdvisorPage() {
                       : 'btn--ghost'
                   }`}
                 >
-                  All ({branchFilteredRows.length})
+                  All ({fuelTypeCountRows.length})
                 </button>
                 {fuelTypeOptions.map((fuelType) => {
-                  const count = branchFilteredRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
+                  const count = fuelTypeCountRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
                   return (
                     <button
                       key={fuelType}
@@ -834,7 +934,7 @@ export default function ServiceAdvisorPage() {
       </div>
 
       {/* Summary Chips */}
-      {hasRows && (
+      {hasBaseRows && (
         <div className="summary">
           <button
             type="button"
@@ -956,7 +1056,7 @@ export default function ServiceAdvisorPage() {
           ) : !hasRows ? (
             <div className="empty-state">
               {selectedSummaryCard !== 'all'
-                ? 'No rows found for the selected summary card.'
+                ? 'No rows found for the selected summary card. Select All in summary chips to view all filtered rows.'
                 : isAdmin
                   ? 'No rows found for the selected branch/advisor filters.'
                   : 'No rows are assigned to your advisor account.'}
