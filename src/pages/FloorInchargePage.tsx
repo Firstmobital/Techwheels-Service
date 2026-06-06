@@ -35,6 +35,8 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
 ]
 
+const UNKNOWN_FUEL_TYPE = 'Unknown'
+
 function formatDate(value: string | null): string {
   if (!value) return '—'
   const date = new Date(value)
@@ -138,6 +140,11 @@ function normalizeStatusValue(value: string | null | undefined): string {
   return normalized || 'work_inprocess'
 }
 
+function getFuelTypeLabel(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_FUEL_TYPE
+}
+
 function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
   const assignmentKey = row.jc_number?.trim() || `RECEPTION-${row.id}`
 
@@ -185,6 +192,22 @@ interface TechnicianAssignment {
   updated_at?: string
 }
 
+function getTechnicianFilterKey(assignment: TechnicianAssignment | undefined): string {
+  const code = String(assignment?.technician_code ?? '').trim().toUpperCase()
+  if (code) return `code:${code}`
+  return 'unassigned'
+}
+
+function getTechnicianFilterLabel(assignment: TechnicianAssignment | undefined): string {
+  const name = String(assignment?.technician_name ?? '').trim()
+  const code = String(assignment?.technician_code ?? '').trim().toUpperCase()
+
+  if (name && code) return `${name} (${code})`
+  if (name) return name
+  if (code) return code
+  return 'Unassigned'
+}
+
 type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed'
 
 function getErrorMessage(err: unknown, fallback: string): string {
@@ -206,7 +229,9 @@ export default function FloorInchargePage() {
   const [saving, setSaving] = useState<string | null>(null)
   const [stageDrafts, setStageDrafts] = useState<Record<string, StageDraft>>({})
   const [search, setSearch] = useState('')
-  const [branchFilter, setBranchFilter] = useState('All')
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [fuelTypeFilter, setFuelTypeFilter] = useState('all')
+  const [technicianFilter, setTechnicianFilter] = useState('all')
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
   const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -436,12 +461,63 @@ export default function FloorInchargePage() {
 
   const branches = useMemo(() => {
     const b = new Set(jobCards.map((j) => j.branch).filter(Boolean) as string[])
-    return ['All', ...Array.from(b).sort()]
+    return Array.from(b).sort()
   }, [jobCards])
 
+  const branchFilteredRows = useMemo(() => {
+    if (branchFilter === 'all') return jobCards
+    return jobCards.filter((jc) => jc.branch === branchFilter)
+  }, [jobCards, branchFilter])
+
+  const fuelTypeOptions = useMemo(() => {
+    const fuelTypes = new Set(branchFilteredRows.map((jc) => getFuelTypeLabel(jc.fuel_type)))
+    return Array.from(fuelTypes).sort((a, b) => {
+      if (a === UNKNOWN_FUEL_TYPE) return 1
+      if (b === UNKNOWN_FUEL_TYPE) return -1
+      return a.localeCompare(b)
+    })
+  }, [branchFilteredRows])
+
+  useEffect(() => {
+    if (fuelTypeFilter !== 'all' && !fuelTypeOptions.includes(fuelTypeFilter)) {
+      setFuelTypeFilter('all')
+    }
+  }, [fuelTypeFilter, fuelTypeOptions])
+
+  const technicianCountRows = useMemo(() => {
+    return branchFilteredRows.filter((jc) => {
+      return fuelTypeFilter === 'all' || getFuelTypeLabel(jc.fuel_type) === fuelTypeFilter
+    })
+  }, [branchFilteredRows, fuelTypeFilter])
+
+  const technicianOptions = useMemo(() => {
+    const optionMap = new Map<string, string>()
+
+    technicianCountRows.forEach((jc) => {
+      const assignment = assignments[jc.assignment_key]
+      optionMap.set(getTechnicianFilterKey(assignment), getTechnicianFilterLabel(assignment))
+    })
+
+    return Array.from(optionMap.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => {
+        if (a.value === 'unassigned') return 1
+        if (b.value === 'unassigned') return -1
+        return a.label.localeCompare(b.label)
+      })
+  }, [technicianCountRows, assignments])
+
+  useEffect(() => {
+    if (technicianFilter === 'all') return
+    const isValid = technicianOptions.some((option) => option.value === technicianFilter)
+    if (!isValid) setTechnicianFilter('all')
+  }, [technicianFilter, technicianOptions])
+
   const scopedJobCards = useMemo(() => {
-    return jobCards.filter((jc) => {
-      const matchBranch = branchFilter === 'All' || jc.branch === branchFilter
+    return technicianCountRows.filter((jc) => {
+      const assignment = assignments[jc.assignment_key]
+      const matchTechnician =
+        technicianFilter === 'all' || getTechnicianFilterKey(assignment) === technicianFilter
       const q = search.toLowerCase()
       const matchSearch =
         !q ||
@@ -449,9 +525,9 @@ export default function FloorInchargePage() {
         (jc.reg_number ?? '').toLowerCase().includes(q) ||
         (jc.sa_name ?? '').toLowerCase().includes(q) ||
         (jc.owner_name ?? '').toLowerCase().includes(q)
-      return matchBranch && matchSearch
+      return matchTechnician && matchSearch
     })
-  }, [jobCards, search, branchFilter])
+  }, [technicianCountRows, search, assignments, technicianFilter])
 
   const assignedCount = scopedJobCards.filter((jc) => !!assignments[jc.assignment_key]).length
   const unassignedCount = scopedJobCards.length - assignedCount
@@ -520,6 +596,78 @@ export default function FloorInchargePage() {
           </p>
           <h1>Assign technicians</h1>
           <p>Reception job cards with floor assignment controls — set bay, technician, work status, and remark.</p>
+        </div>
+
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by location:</span>
+          <button
+            type="button"
+            onClick={() => setBranchFilter('all')}
+            className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          >
+            All ({jobCards.length})
+          </button>
+          {branches.map((branch) => {
+            const count = jobCards.filter((jc) => jc.branch === branch).length
+            return (
+              <button
+                key={branch}
+                type="button"
+                onClick={() => setBranchFilter(branch)}
+                className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
+              >
+                {branch} ({count})
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by fuel type:</span>
+          <button
+            type="button"
+            onClick={() => setFuelTypeFilter('all')}
+            className={`btn btn--sm ${fuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          >
+            All ({branchFilteredRows.length})
+          </button>
+          {fuelTypeOptions.map((fuelType) => {
+            const count = branchFilteredRows.filter((jc) => getFuelTypeLabel(jc.fuel_type) === fuelType).length
+            return (
+              <button
+                key={fuelType}
+                type="button"
+                onClick={() => setFuelTypeFilter(fuelType)}
+                className={`btn btn--sm ${fuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+              >
+                {fuelType} ({count})
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by technician:</span>
+          <select
+            value={technicianFilter}
+            onChange={(event) => setTechnicianFilter(event.target.value)}
+            className="sel sel--advisor-filter"
+            aria-label="Filter by technician"
+          >
+            <option value="all">All ({technicianCountRows.length})</option>
+            {technicianOptions.map((option) => {
+              const count = technicianCountRows.filter((jc) => {
+                const assignment = assignments[jc.assignment_key]
+                return getTechnicianFilterKey(assignment) === option.value
+              }).length
+
+              return (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({count})
+                </option>
+              )
+            })}
+          </select>
         </div>
       </div>
 
@@ -626,17 +774,6 @@ export default function FloorInchargePage() {
             </h3>
           </div>
           <div className="card__head-flex">
-            <select
-              className="sel sel-lg"
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-            >
-              {branches.map((b) => (
-                <option key={b} value={b}>
-                  {b === 'All' ? 'All branches' : b}
-                </option>
-              ))}
-            </select>
             <span className="inp-wrap inp-wrap-lg">
               <span className="icon-l">
                 <Icon name="search" size={16} />
@@ -657,7 +794,7 @@ export default function FloorInchargePage() {
             <div className="empty-state">
               {dataError
                 ? 'Rows are hidden due to access/scope rules. Please verify Floor Incharge module permission.'
-                : search.trim() || branchFilter !== 'All'
+                : search.trim() || branchFilter !== 'all' || fuelTypeFilter !== 'all' || technicianFilter !== 'all'
                   ? 'No job cards match your filters'
                   : 'No job cards are visible in your Floor Incharge scope right now.'}
             </div>
