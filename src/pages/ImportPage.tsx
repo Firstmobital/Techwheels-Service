@@ -1253,34 +1253,62 @@ export default function ImportPage() {
         const upsertJcClosedRowsByBusinessKey = async (
           rows: Record<string, unknown>[],
         ): Promise<number> => {
-          let processed = 0
           const conflictCandidates = ['branch,job_card_number', 'job_card_number,branch']
+          type JcClosedUpsertRow = Record<string, unknown> & {
+            branch: string
+            job_card_number: string
+          }
+          const normalizedRows = rows
+            .map((row) => {
+              const branchKey = String(row.branch ?? '').trim()
+              const jobCardKey = String(row.job_card_number ?? '').trim().toUpperCase()
 
-          for (const row of rows) {
-            const branchKey = String(row.branch ?? '').trim()
-            const jobCardKey = String(row.job_card_number ?? '').trim().toUpperCase()
+              if (!branchKey || !jobCardKey) return null
 
-            if (!branchKey || !jobCardKey) {
-              continue
+              return {
+                ...row,
+                branch: branchKey,
+                job_card_number: jobCardKey,
+              }
+            })
+            .filter((row): row is JcClosedUpsertRow => row !== null)
+
+          let processed = 0
+
+          const upsertSingleRow = async (payload: JcClosedUpsertRow): Promise<void> => {
+            for (const onConflict of conflictCandidates) {
+              const { error } = await supabase.from(tableName).upsert([payload], { onConflict })
+              if (!error) return
+
+              const lower = (error.message ?? '').toLowerCase()
+              const missingConflictConstraint = lower.includes(
+                'no unique or exclusion constraint matching the on conflict specification',
+              )
+
+              if (missingConflictConstraint) continue
+
+              throw new Error(error.message ?? 'JC Closed single-row upsert failed')
             }
 
-            const payload = {
-              ...row,
-              branch: branchKey,
-              job_card_number: jobCardKey,
-            }
-            let handled = false
+            throw new Error('JC Closed upsert failed: no matching unique conflict constraint found')
+          }
+
+          for (let i = 0; i < normalizedRows.length; i += CHUNK) {
+            const chunkRows = normalizedRows.slice(i, i + CHUNK)
+            if (chunkRows.length === 0) continue
+
+            let chunkHandled = false
 
             for (const onConflict of conflictCandidates) {
-              const { error: upsertError } = await supabase.from(tableName).upsert([payload], { onConflict })
+              const { error } = await supabase.from(tableName).upsert(chunkRows, { onConflict })
 
-              if (!upsertError) {
-                processed += 1
-                handled = true
+              if (!error) {
+                processed += chunkRows.length
+                chunkHandled = true
                 break
               }
 
-              const lower = (upsertError.message ?? '').toLowerCase()
+              const lower = (error.message ?? '').toLowerCase()
               const missingConflictConstraint = lower.includes(
                 'no unique or exclusion constraint matching the on conflict specification',
               )
@@ -1289,41 +1317,25 @@ export default function ImportPage() {
                 continue
               }
 
-              const isDuplicate =
-                upsertError.code === '23505' ||
+              const requiresRowWiseRetry =
+                lower.includes('cannot affect row a second time') ||
                 lower.includes('duplicate key value violates unique constraint')
 
-              if (isDuplicate) {
-                const { error: retryUpdateError } = await supabase
-                  .from(tableName)
-                  .update(payload)
-                  .eq('branch', branchKey)
-                  .eq('job_card_number', jobCardKey)
-
-                if (retryUpdateError) {
-                  throw new Error(retryUpdateError.message ?? 'Retry update failed')
-                }
-
-                processed += 1
-                handled = true
-                break
+              if (!requiresRowWiseRetry) {
+                throw new Error(error.message ?? 'JC Closed chunk upsert failed')
               }
 
-              throw new Error(upsertError.message ?? 'JC Closed upsert failed')
+              for (const row of chunkRows) {
+                await upsertSingleRow(row)
+                processed += 1
+              }
+
+              chunkHandled = true
+              break
             }
 
-            if (!handled) {
-              const { error: finalUpdateError } = await supabase
-                .from(tableName)
-                .update(payload)
-                .eq('branch', branchKey)
-                .eq('job_card_number', jobCardKey)
-
-              if (finalUpdateError) {
-                throw new Error(finalUpdateError.message ?? 'Final JC Closed update failed')
-              }
-
-              processed += 1
+            if (!chunkHandled) {
+              throw new Error('JC Closed upsert failed: no matching unique conflict constraint found')
             }
           }
 
