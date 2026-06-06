@@ -1254,6 +1254,7 @@ export default function ImportPage() {
           rows: Record<string, unknown>[],
         ): Promise<number> => {
           let processed = 0
+          const conflictCandidates = ['branch,job_card_number', 'job_card_number,branch']
 
           for (const row of rows) {
             const branchKey = String(row.branch ?? '').trim()
@@ -1268,49 +1269,62 @@ export default function ImportPage() {
               branch: branchKey,
               job_card_number: jobCardKey,
             }
+            let handled = false
 
-            const { data: updatedRows, error: updateError } = await supabase
-              .from(tableName)
-              .update(payload)
-              .eq('branch', branchKey)
-              .eq('job_card_number', jobCardKey)
-              .select('id')
+            for (const onConflict of conflictCandidates) {
+              const { error: upsertError } = await supabase.from(tableName).upsert([payload], { onConflict })
 
-            if (updateError) {
-              throw new Error(updateError.message ?? 'Update failed')
+              if (!upsertError) {
+                processed += 1
+                handled = true
+                break
+              }
+
+              const lower = (upsertError.message ?? '').toLowerCase()
+              const missingConflictConstraint = lower.includes(
+                'no unique or exclusion constraint matching the on conflict specification',
+              )
+
+              if (missingConflictConstraint) {
+                continue
+              }
+
+              const isDuplicate =
+                upsertError.code === '23505' ||
+                lower.includes('duplicate key value violates unique constraint')
+
+              if (isDuplicate) {
+                const { error: retryUpdateError } = await supabase
+                  .from(tableName)
+                  .update(payload)
+                  .eq('branch', branchKey)
+                  .eq('job_card_number', jobCardKey)
+
+                if (retryUpdateError) {
+                  throw new Error(retryUpdateError.message ?? 'Retry update failed')
+                }
+
+                processed += 1
+                handled = true
+                break
+              }
+
+              throw new Error(upsertError.message ?? 'JC Closed upsert failed')
             }
 
-            if ((updatedRows?.length ?? 0) > 0) {
+            if (!handled) {
+              const { error: finalUpdateError } = await supabase
+                .from(tableName)
+                .update(payload)
+                .eq('branch', branchKey)
+                .eq('job_card_number', jobCardKey)
+
+              if (finalUpdateError) {
+                throw new Error(finalUpdateError.message ?? 'Final JC Closed update failed')
+              }
+
               processed += 1
-              continue
             }
-
-            const { error: insertError } = await supabase.from(tableName).insert(payload)
-
-            if (!insertError) {
-              processed += 1
-              continue
-            }
-
-            const isDuplicate =
-              insertError.code === '23505' ||
-              (insertError.message ?? '').toLowerCase().includes('duplicate key value violates unique constraint')
-
-            if (!isDuplicate) {
-              throw new Error(insertError.message ?? 'Insert failed')
-            }
-
-            const { error: retryUpdateError } = await supabase
-              .from(tableName)
-              .update(payload)
-              .eq('branch', branchKey)
-              .eq('job_card_number', jobCardKey)
-
-            if (retryUpdateError) {
-              throw new Error(retryUpdateError.message ?? 'Retry update failed')
-            }
-
-            processed += 1
           }
 
           return processed
