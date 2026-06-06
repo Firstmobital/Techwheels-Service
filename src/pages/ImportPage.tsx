@@ -836,10 +836,6 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
   const { lastUpdated } = useLastUpdated(config.tableName)
   const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
   const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
-  const progressPercent =
-    state.uploadProgress.totalBranches > 0
-      ? Math.round((state.uploadProgress.processedBranches / state.uploadProgress.totalBranches) * 100)
-      : 0
 
   const lastUpdatedLabel = lastUpdated
     ? lastUpdated.toLocaleString('en-IN', {
@@ -1365,24 +1361,6 @@ export default function ImportPage() {
           })
         }
 
-        const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
-          let inserted = 0
-
-          for (let i = 0; i < rows.length; i += CHUNK) {
-            const chunkRows = rows.slice(i, i + CHUNK)
-            if (chunkRows.length === 0) continue
-
-            const { error } = await supabase.from(tableName).insert(chunkRows)
-            if (error) {
-              throw new Error(error.message ?? 'Insert failed')
-            }
-
-            inserted += chunkRows.length
-          }
-
-          return inserted
-        }
-
         const getBranchRowCount = async (targetBranch: string): Promise<number | null> => {
           const { count, error } = await supabase
             .from(tableName)
@@ -1484,20 +1462,6 @@ export default function ImportPage() {
               `Invoice Order Data: ${err instanceof Error ? err.message : String(err)}`,
             )
           }
-        }
-
-        let processedBranches = 0
-
-        // Helper: Parse workbook in progressive chunks with callbacks
-        const parseWorkbookProgressively = async (
-          file: File,
-          tableName: string,
-          onProgressUpdate: (parsed: number, total: number) => void,
-        ): Promise<Record<string, unknown>[]> => {
-          // First pass: get total row count
-          const allRows = await parseWorkbook(file, tableName)
-          onProgressUpdate(allRows.length, allRows.length)
-          return allRows
         }
 
         // Helper: Process rows in progressive chunks with upload progress
