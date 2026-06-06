@@ -2128,10 +2128,8 @@ export default function ImportPage() {
               )
             }
 
-            const rowsWithoutAlreadyImportedStock = await filterAlreadyImportedPartsOrderRows(insertRows)
-
             totalInserted += await upsertOrInsertRows(
-              rowsWithoutAlreadyImportedStock,
+              insertRows,
               [
                 'part_number,branch,snapshot_date,source_row_hash',
                 'part_number,branch,portal,snapshot_date,source_row_hash',
