@@ -77,10 +77,6 @@ interface UploadProgressState {
   processedBranches: number
   totalBranches: number
   currentBranch: Branch | null
-  stage?: 'parsing' | 'uploading' // Current stage
-  parsedRows?: number // Rows parsed so far
-  totalRowsInCurrentBranch?: number // Total rows to parse in current branch
-  uploadedRows?: number // Rows uploaded so far in current branch
 }
 
 interface CardState {
@@ -836,6 +832,10 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
   const { lastUpdated } = useLastUpdated(config.tableName)
   const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
   const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
+  const progressPercent =
+    state.uploadProgress.totalBranches > 0
+      ? Math.round((state.uploadProgress.processedBranches / state.uploadProgress.totalBranches) * 100)
+      : 0
 
   const lastUpdatedLabel = lastUpdated
     ? lastUpdated.toLocaleString('en-IN', {
@@ -885,41 +885,17 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       {state.status === 'uploading' && state.uploadProgress.totalBranches > 0 && (
         <div className="imp-card__prog">
           <div className="imp-card__progrow">
+            <span>Upload progress</span>
             <span>
-              {state.uploadProgress.stage === 'parsing' ? 'Parsing progress' : 'Upload progress'}
-            </span>
-            <span>
-              {state.uploadProgress.stage === 'parsing'
-                ? `${state.uploadProgress.parsedRows ?? 0}/${state.uploadProgress.totalRowsInCurrentBranch ?? 0} rows`
-                : `${state.uploadProgress.processedBranches}/${state.uploadProgress.totalBranches} branches · ${Math.round(
-                    ((state.uploadProgress.processedBranches + (state.uploadProgress.uploadedRows ?? 0) / (state.uploadProgress.totalRowsInCurrentBranch ?? 1)) / state.uploadProgress.totalBranches) * 100,
-                  )}%`}
+              {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
             </span>
           </div>
           <div className="imp-bar">
-            <span
-              style={{
-                width: `${
-                  state.uploadProgress.stage === 'parsing'
-                    ? Math.round(
-                        ((state.uploadProgress.parsedRows ?? 0) /
-                          (state.uploadProgress.totalRowsInCurrentBranch ?? 1)) *
-                          100,
-                      )
-                    : Math.round(
-                        ((state.uploadProgress.processedBranches +
-                          (state.uploadProgress.uploadedRows ?? 0) /
-                            (state.uploadProgress.totalRowsInCurrentBranch ?? 1)) /
-                          state.uploadProgress.totalBranches) *
-                          100,
-                      )
-                }%`,
-              }}
-            />
+            <span style={{ width: `${progressPercent}%` }} />
           </div>
           {state.uploadProgress.currentBranch && (
             <div className="imp-card__progcur">
-              {state.uploadProgress.stage === 'parsing' ? 'Parsing' : 'Uploading'} {state.uploadProgress.currentBranch}…
+              Uploading {state.uploadProgress.currentBranch}…
             </div>
           )}
         </div>
@@ -1464,33 +1440,22 @@ export default function ImportPage() {
           }
         }
 
-        // Helper: Process rows in progressive chunks with upload progress
-        const processRowsInProgressiveChunks = async (
-          rows: Record<string, unknown>[],
-          processChunk: (chunk: Record<string, unknown>[]) => Promise<number>,
-          chunkSize: number,
-          totalRowsToProcess: number,
-        ): Promise<number> => {
-          let totalProcessed = 0
-          
-          for (let i = 0; i < rows.length; i += chunkSize) {
-            const chunk = rows.slice(i, i + chunkSize)
-            const processedInChunk = await processChunk(chunk)
-            totalProcessed += processedInChunk
-            
-            // Update progress for chunk upload
-            updateCard(tableName, (prev) => ({
-              ...prev,
-              uploadProgress: {
-                ...prev.uploadProgress,
-                stage: 'uploading',
-                uploadedRows: totalProcessed,
-                totalRowsInCurrentBranch: totalRowsToProcess,
-              },
-            }))
+        const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
+          let inserted = 0
+
+          for (let i = 0; i < rows.length; i += CHUNK) {
+            const chunkRows = rows.slice(i, i + CHUNK)
+            if (chunkRows.length === 0) continue
+
+            const { error } = await supabase.from(tableName).insert(chunkRows)
+            if (error) {
+              throw new Error(error.message ?? 'Insert failed')
+            }
+
+            inserted += chunkRows.length
           }
-          
-          return totalProcessed
+
+          return inserted
         }
 
         let processedBranches = 0
@@ -1515,17 +1480,6 @@ export default function ImportPage() {
           if (isVasTable && vasHeaderMapping) {
             // VAS table: use special parsing with numeric and date conversion
             const insertRows: Record<string, unknown>[] = []
-
-            // Update progress: parsing stage
-            updateCard(tableName, (prev) => ({
-              ...prev,
-              uploadProgress: {
-                ...prev.uploadProgress,
-                stage: 'parsing',
-                parsedRows: 0,
-                totalRowsInCurrentBranch: rawRows.length,
-              },
-            }))
 
             // Replace mode for VAS: clear current branch data, then insert full file rows.
             // This ensures Supabase reflects all uploaded rows instead of silently skipping duplicates.
@@ -1564,19 +1518,6 @@ export default function ImportPage() {
                 if (!row.branch) row.branch = standardBranch
                 insertRows.push(row)
               }
-
-              // Update parsing progress every 100 rows
-              if (rowIdx % 100 === 0) {
-                updateCard(tableName, (prev) => ({
-                  ...prev,
-                  uploadProgress: {
-                    ...prev.uploadProgress,
-                    stage: 'parsing',
-                    parsedRows: rowIdx,
-                    totalRowsInCurrentBranch: rawRows.length,
-                  },
-                }))
-              }
             }
 
             // If there were any parse errors, throw before inserting
@@ -1586,35 +1527,13 @@ export default function ImportPage() {
               )
             }
 
-            // Use progressive chunking for VAS table after branch clear (keeps all uploaded rows).
-            totalInserted += await processRowsInProgressiveChunks(
-              insertRows,
-              async (chunk) => {
-                const { error } = await supabase.from(tableName).insert(chunk)
-                if (error) {
-                  throw new Error(error.message ?? 'Insert failed')
-                }
-                return chunk.length
-              },
-              CHUNK,
-              insertRows.length,
-            )
+            // Use direct insert for VAS table after branch clear (keeps all uploaded rows).
+            totalInserted += await insertRowsInChunks(insertRows)
           } else if (isJcClosedTable && jcHeaderMapping) {
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
 
             const beforeBranchCount = await getBranchRowCount(standardBranch)
-
-            // Update progress: parsing stage
-            updateCard(tableName, (prev) => ({
-              ...prev,
-              uploadProgress: {
-                ...prev.uploadProgress,
-                stage: 'parsing',
-                parsedRows: 0,
-                totalRowsInCurrentBranch: rawRows.length,
-              },
-            }))
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildJcClosedInsertRow(
@@ -1712,19 +1631,6 @@ export default function ImportPage() {
                 if (!row.branch) row.branch = standardBranch
                 insertRows.push(row)
               }
-
-              // Update parsing progress every 100 rows
-              if (rowIdx % 100 === 0) {
-                updateCard(tableName, (prev) => ({
-                  ...prev,
-                  uploadProgress: {
-                    ...prev.uploadProgress,
-                    stage: 'parsing',
-                    parsedRows: rowIdx,
-                    totalRowsInCurrentBranch: rawRows.length,
-                  },
-                }))
-              }
             }
 
             if (jcParseErrors.length > 0) {
@@ -1733,18 +1639,7 @@ export default function ImportPage() {
               )
             }
 
-            const attemptedInserted = await processRowsInProgressiveChunks(
-              insertRows,
-              async (chunk) => {
-                const { error } = await supabase.from(tableName).insert(chunk)
-                if (error) {
-                  throw new Error(error.message ?? 'Insert failed')
-                }
-                return chunk.length
-              },
-              CHUNK,
-              insertRows.length,
-            )
+            const attemptedInserted = await insertRowsInChunks(insertRows)
             const afterBranchCount = await getBranchRowCount(standardBranch)
 
             if (beforeBranchCount !== null && afterBranchCount !== null) {
@@ -1786,17 +1681,6 @@ export default function ImportPage() {
             const invoiceParseErrors: InvoiceParseError[] = []
             const insertRows: Record<string, unknown>[] = []
 
-            // Update progress: parsing stage
-            updateCard(tableName, (prev) => ({
-              ...prev,
-              uploadProgress: {
-                ...prev.uploadProgress,
-                stage: 'parsing',
-                parsedRows: 0,
-                totalRowsInCurrentBranch: rawRows.length,
-              },
-            }))
-
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildInvoiceInsertRow(
                 rawRows[rowIdx],
@@ -1809,19 +1693,6 @@ export default function ImportPage() {
                 invoiceParseErrors.push(...errors)
               } else if (row) {
                 insertRows.push(row)
-              }
-
-              // Update parsing progress every 100 rows
-              if (rowIdx % 100 === 0) {
-                updateCard(tableName, (prev) => ({
-                  ...prev,
-                  uploadProgress: {
-                    ...prev.uploadProgress,
-                    stage: 'parsing',
-                    parsedRows: rowIdx,
-                    totalRowsInCurrentBranch: rawRows.length,
-                  },
-                }))
               }
             }
 
@@ -2065,17 +1936,6 @@ export default function ImportPage() {
             const insertRows: Record<string, unknown>[] = []
             const portal = slotLocationPortal.portal
 
-            // Update progress: parsing stage
-            updateCard(tableName, (prev) => ({
-              ...prev,
-              uploadProgress: {
-                ...prev.uploadProgress,
-                stage: 'parsing',
-                parsedRows: 0,
-                totalRowsInCurrentBranch: rawRows.length,
-              },
-            }))
-
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const sourceRowHash = buildPartsSourceRowHash(
                 tableName,
@@ -2106,19 +1966,6 @@ export default function ImportPage() {
                   rowIdx + 2,
                 )
                 insertRows.push(row)
-              }
-
-              // Update parsing progress every 100 rows
-              if (rowIdx % 100 === 0) {
-                updateCard(tableName, (prev) => ({
-                  ...prev,
-                  uploadProgress: {
-                    ...prev.uploadProgress,
-                    stage: 'parsing',
-                    parsedRows: rowIdx,
-                    totalRowsInCurrentBranch: rawRows.length,
-                  },
-                }))
               }
             }
 
