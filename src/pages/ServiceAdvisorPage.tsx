@@ -77,6 +77,26 @@ function getFuelTypeLabel(value: string | null | undefined): string {
   return trimmed || UNKNOWN_FUEL_TYPE
 }
 
+function getAdvisorFilterKey(row: ReceptionEntryRow): string {
+  const code = String(row.sa_employee_code ?? '').trim().toUpperCase()
+  if (code) return `code:${code}`
+
+  const displayName = String(row.sa_display_name ?? row.sa_name ?? '').trim()
+  if (displayName) return `name:${displayName.toLowerCase()}`
+
+  return 'unknown'
+}
+
+function getAdvisorFilterLabel(row: ReceptionEntryRow): string {
+  const displayName = String(row.sa_display_name ?? row.sa_name ?? '').trim()
+  const code = String(row.sa_employee_code ?? '').trim().toUpperCase()
+
+  if (displayName && code) return `${displayName} (${code})`
+  if (displayName) return displayName
+  if (code) return code
+  return 'Unknown advisor'
+}
+
 function mergeServiceTypes(...groups: Array<string[]>): string[] {
   const defaults = DEFAULT_SERVICE_TYPE_OPTIONS.map(normalizeServiceType)
   const seen = new Set(defaults.map((value) => value.toLowerCase()))
@@ -149,6 +169,7 @@ export default function ServiceAdvisorPage() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all')
   const [selectedSummaryCard, setSelectedSummaryCard] = useState<SummaryCardFilter>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
+  const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all')
   const [hasMultipleDealers, setHasMultipleDealers] = useState(false)
 
   const [loading, setLoading] = useState(true)
@@ -167,12 +188,39 @@ export default function ServiceAdvisorPage() {
     return rows.filter(r => r.branch === selectedBranch)
   }, [rows, selectedBranch])
 
+  const advisorOptions = useMemo(() => {
+    const optionMap = new Map<string, { label: string; count: number }>()
+
+    branchFilteredRows.forEach((row) => {
+      const key = getAdvisorFilterKey(row)
+      const existing = optionMap.get(key)
+
+      if (existing) {
+        existing.count += 1
+      } else {
+        optionMap.set(key, {
+          label: getAdvisorFilterLabel(row),
+          count: 1,
+        })
+      }
+    })
+
+    return Array.from(optionMap.entries())
+      .map(([value, meta]) => ({ value, label: meta.label, count: meta.count }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [branchFilteredRows])
+
+  const advisorFilteredRows = useMemo(() => {
+    if (selectedAdvisor === 'all') return branchFilteredRows
+    return branchFilteredRows.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+  }, [branchFilteredRows, selectedAdvisor])
+
   const fuelTypeFilteredRows = useMemo(() => {
-    if (selectedFuelType === 'all') return branchFilteredRows
-    return branchFilteredRows.filter((row) => {
+    if (selectedFuelType === 'all') return advisorFilteredRows
+    return advisorFilteredRows.filter((row) => {
       return getFuelTypeLabel(row.fuel_type) === selectedFuelType
     })
-  }, [branchFilteredRows, selectedFuelType])
+  }, [advisorFilteredRows, selectedFuelType])
 
   const displayedRows = useMemo(() => {
     if (selectedCategory === 'all') return fuelTypeFilteredRows
@@ -227,6 +275,13 @@ export default function ServiceAdvisorPage() {
   }, [fuelTypeFilteredRows])
 
   const hasRows = useMemo(() => cardFilteredRows.length > 0, [cardFilteredRows.length])
+
+  useEffect(() => {
+    if (selectedAdvisor === 'all') return
+    if (advisorOptions.some((option) => option.value === selectedAdvisor)) return
+    setSelectedAdvisor('all')
+  }, [advisorOptions, selectedAdvisor])
+
   const advisorName = useMemo(() => {
     if (isAdmin) return 'All Service Advisors'
     return rows[0]?.sa_display_name || rows[0]?.sa_name || 'Unknown'
@@ -346,9 +401,11 @@ export default function ServiceAdvisorPage() {
       setAllRows(data)
       setRows(data)
       setSelectedBranch('all')
+      setSelectedAdvisor('all')
     } else {
       setRows(data)
       setAllRows(data)
+      setSelectedAdvisor('all')
     }
 
     const mappedDrafts: Record<number, RowDraft> = {}
@@ -672,6 +729,25 @@ export default function ServiceAdvisorPage() {
               })}
             </div>
 
+            {advisorOptions.length > 0 && (
+              <div className="toolbar toolbar--tight">
+                <span className="toolbar__label">Filter by advisor:</span>
+                <select
+                  value={selectedAdvisor}
+                  onChange={(event) => setSelectedAdvisor(event.target.value)}
+                  className="sel sel--advisor-filter"
+                  aria-label="Filter by advisor"
+                >
+                  <option value="all">All ({branchFilteredRows.length})</option>
+                  {advisorOptions.map((advisor) => (
+                    <option key={advisor.value} value={advisor.value}>
+                      {advisor.label} ({advisor.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {fuelTypeOptions.length > 0 && (
               <div className="toolbar toolbar--tight">
                 <span className="toolbar__label">Filter by fuel type:</span>
@@ -684,10 +760,10 @@ export default function ServiceAdvisorPage() {
                       : 'btn--ghost'
                   }`}
                 >
-                  All ({allRows.length})
+                  All ({advisorFilteredRows.length})
                 </button>
                 {fuelTypeOptions.map((fuelType) => {
-                  const count = allRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
+                  const count = advisorFilteredRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
                   return (
                     <button
                       key={fuelType}
@@ -882,7 +958,7 @@ export default function ServiceAdvisorPage() {
               {selectedSummaryCard !== 'all'
                 ? 'No rows found for the selected summary card.'
                 : isAdmin
-                  ? 'No rows found for this branch filter.'
+                  ? 'No rows found for the selected branch/advisor filters.'
                   : 'No rows are assigned to your advisor account.'}
             </div>
           ) : (

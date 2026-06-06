@@ -13,7 +13,8 @@
 -- 6) Reception branch is physical branch only:
 --      Ajmer Road | Sitapura
 --    Source labels Sitapura PV / Sitapura EV are normalized to Sitapura.
--- 7) Reception backfill includes all Open status rows regardless of service type.
+-- 7) Date window is restricted to 2026-06-01 through 2026-06-05 (inclusive).
+-- 8) Reception backfill includes all Open status rows (within date window) regardless of service type.
 
 BEGIN;
 
@@ -51,7 +52,12 @@ CREATE TABLE IF NOT EXISTS public.open_job_cards_import_staging (
 -- -----------------------------------------------------------------------------
 -- B) Upsert staged rows into public.open_job_cards
 -- -----------------------------------------------------------------------------
-WITH normalized AS (
+WITH params AS (
+  SELECT
+    DATE '2026-06-01' AS start_date,
+    DATE '2026-06-05' AS end_date
+),
+normalized AS (
   SELECT
     branch,
     nullif(btrim(job_card_number), '') AS job_card_number,
@@ -114,6 +120,17 @@ WITH normalized AS (
   FROM public.open_job_cards_import_staging
   WHERE nullif(btrim(job_card_number), '') IS NOT NULL
 ),
+windowed AS (
+  SELECT n.*
+  FROM normalized n
+  CROSS JOIN params p
+  WHERE coalesce(
+    n.created_date_time_parsed::date,
+    n.closed_date_time_parsed::date,
+    n.completed_date_time_parsed::date,
+    n.imported_at::date
+  ) BETWEEN p.start_date AND p.end_date
+),
 ranked AS (
   SELECT
     n.*,
@@ -121,7 +138,7 @@ ranked AS (
       PARTITION BY upper(btrim(n.job_card_number)), n.branch
       ORDER BY n.created_date_time_parsed DESC NULLS LAST, n.imported_at DESC, n.id DESC
     ) AS rn
-  FROM normalized n
+  FROM windowed n
 ),
 upsert_rows AS (
   SELECT *
@@ -208,7 +225,9 @@ FROM upsert_count;
 WITH params AS (
   SELECT
     '3000840'::text AS target_dealer_code,
-    'Invoice Order Open Status Backfill (2026-06-02)'::text AS backfill_source
+    'Invoice Order Open Status Backfill (2026-06-01 to 2026-06-05)'::text AS backfill_source,
+    DATE '2026-06-01' AS start_date,
+    DATE '2026-06-05' AS end_date
 ),
 canonical_models AS (
   SELECT
@@ -234,9 +253,11 @@ source_rows AS (
     END AS reception_branch,
     coalesce(o.created_date_time, o.closed_date_time, now()) AS source_ts
   FROM public.service_invoice_order_data o
+  CROSS JOIN params p
   WHERE nullif(btrim(o.job_card_number), '') IS NOT NULL
     AND upper(btrim(o.job_card_number)) LIKE 'JC-%'
     AND lower(btrim(coalesce(o.status, ''))) = 'open'
+    AND coalesce(o.created_date_time::date, o.closed_date_time::date) BETWEEN p.start_date AND p.end_date
 ),
 normalized AS (
   SELECT
