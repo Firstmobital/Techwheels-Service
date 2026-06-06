@@ -34,6 +34,7 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Verify actor is authenticated
     const actorRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       method: 'GET',
       headers: {
@@ -59,6 +60,7 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Verify actor is admin via public.users
     const roleRes = await fetch(
       `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(actorId)}&select=role,is_active`,
       {
@@ -78,6 +80,7 @@ Deno.serve(async (req) => {
     const roleRows = (await roleRes.json()) as Array<{ role?: string; is_active?: boolean }>
     const role = roleRows[0]?.role
     const isActive = roleRows[0]?.is_active
+
     if (role !== 'admin' || isActive !== true) {
       return new Response(JSON.stringify({ error: 'Forbidden: admin access required' }), {
         status: 403,
@@ -85,6 +88,49 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Fetch all auth.users with phone via admin API (pagination required)
+    const phoneByUserId = new Map<string, string | null>()
+    const phoneByEmail = new Map<string, string | null>()
+    const perPage = 1000
+
+    for (let page = 1; page <= 20; page += 1) {
+      const authUsersRes = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?page=${page}&per_page=${perPage}`,
+        {
+          method: 'GET',
+          headers: {
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+          },
+        }
+      )
+
+      if (!authUsersRes.ok) {
+        const authErr = await authUsersRes.text()
+        throw new Error(`Failed to load auth users (page ${page}): status=${authUsersRes.status} error=${authErr}`)
+      }
+
+      const authPayload = (await authUsersRes.json()) as {
+        users?: Array<{ id?: string; email?: string; phone?: string | null }>
+        error?: string
+      }
+
+      if (authPayload.error) {
+        throw new Error(`Auth API error (page ${page}): ${authPayload.error}`)
+      }
+
+      const pageUsers = authPayload.users ?? []
+      pageUsers.forEach((u) => {
+        if (u.id) phoneByUserId.set(u.id, u.phone ?? null)
+        if (u.email) phoneByEmail.set((u.email ?? '').toLowerCase(), u.phone ?? null)
+      })
+
+      if (pageUsers.length < perPage) {
+        break
+      }
+    }
+
+    // Fetch public.users with dealer columns
     const usersWithDealerRes = await fetch(
       `${SUPABASE_URL}/rest/v1/users?select=id,email,full_name,role,branch,dealer_code,dealer_name,is_active,created_at&order=full_name.asc.nullslast`,
       {
@@ -112,14 +158,6 @@ Deno.serve(async (req) => {
     if (usersWithDealerRes.ok) {
       userRows = (await usersWithDealerRes.json()) as typeof userRows
     } else {
-      const err = await usersWithDealerRes.text()
-      if (!/dealer_code|dealer_name|column/i.test(err)) {
-        return new Response(JSON.stringify({ error: `Failed to load users: ${err}` }), {
-          status: usersWithDealerRes.status,
-          headers,
-        })
-      }
-
       supportsDealerColumns = false
       const usersFallbackRes = await fetch(
         `${SUPABASE_URL}/rest/v1/users?select=id,email,full_name,role,branch,is_active,created_at&order=full_name.asc.nullslast`,
@@ -134,57 +172,15 @@ Deno.serve(async (req) => {
 
       if (!usersFallbackRes.ok) {
         const fallbackErr = await usersFallbackRes.text()
-        return new Response(JSON.stringify({ error: `Failed to load users: ${fallbackErr}` }), {
-          status: usersFallbackRes.status,
-          headers,
-        })
+        throw new Error(`Failed to load users fallback: ${fallbackErr}`)
       }
 
       userRows = (await usersFallbackRes.json()) as typeof userRows
     }
 
-    const phoneByUserId = new Map<string, string | null>()
-    const perPage = 1000
-
-    for (let page = 1; page <= 20; page += 1) {
-      const authUsersRes = await fetch(
-        `${SUPABASE_URL}/auth/v1/admin/users?page=${page}&per_page=${perPage}`,
-        {
-          method: 'GET',
-          headers: {
-            apikey: SERVICE_KEY,
-            Authorization: `Bearer ${SERVICE_KEY}`,
-          },
-        }
-      )
-
-      if (!authUsersRes.ok) {
-        const authErr = await authUsersRes.text()
-        return new Response(JSON.stringify({ error: `Failed to load auth users: ${authErr}` }), {
-          status: authUsersRes.status,
-          headers,
-        })
-      }
-
-      const payload = (await authUsersRes.json()) as {
-        users?: Array<{ id?: string; phone?: string | null }>
-      }
-
-      const pageUsers = payload.users ?? []
-      pageUsers.forEach((u) => {
-        if (u.id) {
-          phoneByUserId.set(u.id, u.phone ?? null)
-        }
-      })
-
-      if (pageUsers.length < perPage) {
-        break
-      }
-    }
-
     const users = userRows.map((u) => ({
       ...u,
-      phone: phoneByUserId.get(u.id) ?? null,
+      phone: phoneByUserId.get(u.id) ?? phoneByEmail.get(u.email.toLowerCase()) ?? null,
       dealer_code: u.dealer_code ?? null,
       dealer_name: u.dealer_name ?? null,
     }))
