@@ -77,6 +77,10 @@ interface UploadProgressState {
   processedBranches: number
   totalBranches: number
   currentBranch: Branch | null
+  stage?: 'parsing' | 'uploading' // Current stage
+  parsedRows?: number // Rows parsed so far
+  totalRowsInCurrentBranch?: number // Total rows to parse in current branch
+  uploadedRows?: number // Rows uploaded so far in current branch
 }
 
 interface CardState {
@@ -885,17 +889,41 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
       {state.status === 'uploading' && state.uploadProgress.totalBranches > 0 && (
         <div className="imp-card__prog">
           <div className="imp-card__progrow">
-            <span>Upload progress</span>
             <span>
-              {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
+              {state.uploadProgress.stage === 'parsing' ? 'Parsing progress' : 'Upload progress'}
+            </span>
+            <span>
+              {state.uploadProgress.stage === 'parsing'
+                ? `${state.uploadProgress.parsedRows ?? 0}/${state.uploadProgress.totalRowsInCurrentBranch ?? 0} rows`
+                : `${state.uploadProgress.processedBranches}/${state.uploadProgress.totalBranches} branches · ${Math.round(
+                    ((state.uploadProgress.processedBranches + (state.uploadProgress.uploadedRows ?? 0) / (state.uploadProgress.totalRowsInCurrentBranch ?? 1)) / state.uploadProgress.totalBranches) * 100,
+                  )}%`}
             </span>
           </div>
           <div className="imp-bar">
-            <span style={{ width: `${progressPercent}%` }} />
+            <span
+              style={{
+                width: `${
+                  state.uploadProgress.stage === 'parsing'
+                    ? Math.round(
+                        ((state.uploadProgress.parsedRows ?? 0) /
+                          (state.uploadProgress.totalRowsInCurrentBranch ?? 1)) *
+                          100,
+                      )
+                    : Math.round(
+                        ((state.uploadProgress.processedBranches +
+                          (state.uploadProgress.uploadedRows ?? 0) /
+                            (state.uploadProgress.totalRowsInCurrentBranch ?? 1)) /
+                          state.uploadProgress.totalBranches) *
+                          100,
+                      )
+                }%`,
+              }}
+            />
           </div>
           {state.uploadProgress.currentBranch && (
             <div className="imp-card__progcur">
-              Uploading {state.uploadProgress.currentBranch}…
+              {state.uploadProgress.stage === 'parsing' ? 'Parsing' : 'Uploading'} {state.uploadProgress.currentBranch}…
             </div>
           )}
         </div>
@@ -1261,6 +1289,82 @@ export default function ImportPage() {
           return Array.from(map.values())
         }
 
+        const filterAlreadyImportedPartsOrderRows = async (
+          rows: Record<string, unknown>[],
+        ): Promise<Record<string, unknown>[]> => {
+          if (rows.length === 0) return rows
+
+          const dedupedRows = dedupeRowsByKeys(
+            rows,
+            (row) =>
+              `${String(row.branch ?? '').trim()}|${String(row.portal ?? '').trim()}|${String(
+                row.source_row_hash ?? '',
+              ).trim()}`,
+          )
+
+          const groupedHashes = new Map<string, { branch: string; portal: string; hashes: string[] }>()
+
+          for (const row of dedupedRows) {
+            const rowHash = String(row.source_row_hash ?? '').trim()
+            const rowBranch = String(row.branch ?? '').trim()
+            const rowPortal = String(row.portal ?? '').trim()
+            if (!rowHash || !rowBranch || !rowPortal) continue
+
+            const groupKey = `${rowBranch}|${rowPortal}`
+            const existingGroup = groupedHashes.get(groupKey)
+            if (existingGroup) {
+              existingGroup.hashes.push(rowHash)
+            } else {
+              groupedHashes.set(groupKey, {
+                branch: rowBranch,
+                portal: rowPortal,
+                hashes: [rowHash],
+              })
+            }
+          }
+
+          const existingKeys = new Set<string>()
+          const HASH_CHUNK = 500
+
+          for (const group of groupedHashes.values()) {
+            const uniqueHashes = Array.from(new Set(group.hashes))
+
+            for (let i = 0; i < uniqueHashes.length; i += HASH_CHUNK) {
+              const hashChunk = uniqueHashes.slice(i, i + HASH_CHUNK)
+
+              const { data, error } = await supabase
+                .from(tableName)
+                .select('branch, portal, source_row_hash')
+                .eq('branch', group.branch)
+                .eq('portal', group.portal)
+                .in('source_row_hash', hashChunk)
+
+              if (error) {
+                console.warn(`Failed to pre-check existing parts order rows: ${error.message}`)
+                return dedupedRows
+              }
+
+              for (const existingRow of (data as Record<string, unknown>[] | null) ?? []) {
+                existingKeys.add(
+                  `${String(existingRow.branch ?? '').trim()}|${String(existingRow.portal ?? '').trim()}|${String(
+                    existingRow.source_row_hash ?? '',
+                  ).trim()}`,
+                )
+              }
+            }
+          }
+
+          return dedupedRows.filter((row) => {
+            const rowHash = String(row.source_row_hash ?? '').trim()
+            const rowBranch = String(row.branch ?? '').trim()
+            const rowPortal = String(row.portal ?? '').trim()
+            if (!rowHash || !rowBranch || !rowPortal) return true
+
+            const rowKey = `${rowBranch}|${rowPortal}|${rowHash}`
+            return !existingKeys.has(rowKey)
+          })
+        }
+
         const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
           let inserted = 0
 
@@ -1384,6 +1488,49 @@ export default function ImportPage() {
 
         let processedBranches = 0
 
+        // Helper: Parse workbook in progressive chunks with callbacks
+        const parseWorkbookProgressively = async (
+          file: File,
+          tableName: string,
+          onProgressUpdate: (parsed: number, total: number) => void,
+        ): Promise<Record<string, unknown>[]> => {
+          // First pass: get total row count
+          const allRows = await parseWorkbook(file, tableName)
+          onProgressUpdate(allRows.length, allRows.length)
+          return allRows
+        }
+
+        // Helper: Process rows in progressive chunks with upload progress
+        const processRowsInProgressiveChunks = async (
+          rows: Record<string, unknown>[],
+          processChunk: (chunk: Record<string, unknown>[]) => Promise<number>,
+          chunkSize: number,
+          totalRowsToProcess: number,
+        ): Promise<number> => {
+          let totalProcessed = 0
+          
+          for (let i = 0; i < rows.length; i += chunkSize) {
+            const chunk = rows.slice(i, i + chunkSize)
+            const processedInChunk = await processChunk(chunk)
+            totalProcessed += processedInChunk
+            
+            // Update progress for chunk upload
+            updateCard(tableName, (prev) => ({
+              ...prev,
+              uploadProgress: {
+                ...prev.uploadProgress,
+                stage: 'uploading',
+                uploadedRows: totalProcessed,
+                totalRowsInCurrentBranch: totalRowsToProcess,
+              },
+            }))
+          }
+          
+          return totalProcessed
+        }
+
+        let processedBranches = 0
+
         for (const branch of readyBranches) {
           updateCard(tableName, (prev) => ({
             ...prev,
@@ -1404,6 +1551,17 @@ export default function ImportPage() {
           if (isVasTable && vasHeaderMapping) {
             // VAS table: use special parsing with numeric and date conversion
             const insertRows: Record<string, unknown>[] = []
+
+            // Update progress: parsing stage
+            updateCard(tableName, (prev) => ({
+              ...prev,
+              uploadProgress: {
+                ...prev.uploadProgress,
+                stage: 'parsing',
+                parsedRows: 0,
+                totalRowsInCurrentBranch: rawRows.length,
+              },
+            }))
 
             // Replace mode for VAS: clear current branch data, then insert full file rows.
             // This ensures Supabase reflects all uploaded rows instead of silently skipping duplicates.
@@ -1442,6 +1600,19 @@ export default function ImportPage() {
                 if (!row.branch) row.branch = standardBranch
                 insertRows.push(row)
               }
+
+              // Update parsing progress every 100 rows
+              if (rowIdx % 100 === 0) {
+                updateCard(tableName, (prev) => ({
+                  ...prev,
+                  uploadProgress: {
+                    ...prev.uploadProgress,
+                    stage: 'parsing',
+                    parsedRows: rowIdx,
+                    totalRowsInCurrentBranch: rawRows.length,
+                  },
+                }))
+              }
             }
 
             // If there were any parse errors, throw before inserting
@@ -1451,13 +1622,35 @@ export default function ImportPage() {
               )
             }
 
-            // Use direct insert for VAS table after branch clear (keeps all uploaded rows).
-            totalInserted += await insertRowsInChunks(insertRows)
+            // Use progressive chunking for VAS table after branch clear (keeps all uploaded rows).
+            totalInserted += await processRowsInProgressiveChunks(
+              insertRows,
+              async (chunk) => {
+                const { error } = await supabase.from(tableName).insert(chunk)
+                if (error) {
+                  throw new Error(error.message ?? 'Insert failed')
+                }
+                return chunk.length
+              },
+              CHUNK,
+              insertRows.length,
+            )
           } else if (isJcClosedTable && jcHeaderMapping) {
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
 
             const beforeBranchCount = await getBranchRowCount(standardBranch)
+
+            // Update progress: parsing stage
+            updateCard(tableName, (prev) => ({
+              ...prev,
+              uploadProgress: {
+                ...prev.uploadProgress,
+                stage: 'parsing',
+                parsedRows: 0,
+                totalRowsInCurrentBranch: rawRows.length,
+              },
+            }))
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildJcClosedInsertRow(
@@ -1555,6 +1748,19 @@ export default function ImportPage() {
                 if (!row.branch) row.branch = standardBranch
                 insertRows.push(row)
               }
+
+              // Update parsing progress every 100 rows
+              if (rowIdx % 100 === 0) {
+                updateCard(tableName, (prev) => ({
+                  ...prev,
+                  uploadProgress: {
+                    ...prev.uploadProgress,
+                    stage: 'parsing',
+                    parsedRows: rowIdx,
+                    totalRowsInCurrentBranch: rawRows.length,
+                  },
+                }))
+              }
             }
 
             if (jcParseErrors.length > 0) {
@@ -1563,7 +1769,18 @@ export default function ImportPage() {
               )
             }
 
-            const attemptedInserted = await insertRowsInChunks(insertRows)
+            const attemptedInserted = await processRowsInProgressiveChunks(
+              insertRows,
+              async (chunk) => {
+                const { error } = await supabase.from(tableName).insert(chunk)
+                if (error) {
+                  throw new Error(error.message ?? 'Insert failed')
+                }
+                return chunk.length
+              },
+              CHUNK,
+              insertRows.length,
+            )
             const afterBranchCount = await getBranchRowCount(standardBranch)
 
             if (beforeBranchCount !== null && afterBranchCount !== null) {
@@ -1604,6 +1821,18 @@ export default function ImportPage() {
 
             const invoiceParseErrors: InvoiceParseError[] = []
             const insertRows: Record<string, unknown>[] = []
+
+            // Update progress: parsing stage
+            updateCard(tableName, (prev) => ({
+              ...prev,
+              uploadProgress: {
+                ...prev.uploadProgress,
+                stage: 'parsing',
+                parsedRows: 0,
+                totalRowsInCurrentBranch: rawRows.length,
+              },
+            }))
+
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildInvoiceInsertRow(
                 rawRows[rowIdx],
@@ -1616,6 +1845,19 @@ export default function ImportPage() {
                 invoiceParseErrors.push(...errors)
               } else if (row) {
                 insertRows.push(row)
+              }
+
+              // Update parsing progress every 100 rows
+              if (rowIdx % 100 === 0) {
+                updateCard(tableName, (prev) => ({
+                  ...prev,
+                  uploadProgress: {
+                    ...prev.uploadProgress,
+                    stage: 'parsing',
+                    parsedRows: rowIdx,
+                    totalRowsInCurrentBranch: rawRows.length,
+                  },
+                }))
               }
             }
 
@@ -1832,8 +2074,10 @@ export default function ImportPage() {
               )
             }
 
+            const rowsWithoutAlreadyImported = await filterAlreadyImportedPartsOrderRows(insertRows)
+
             totalInserted += await upsertOrInsertRows(
-              insertRows,
+              rowsWithoutAlreadyImported,
               partsOrderOnConflictCandidates.length > 0
                 ? partsOrderOnConflictCandidates
                 : ['part_number,branch,order_date'],
@@ -1842,6 +2086,17 @@ export default function ImportPage() {
             const parseErrors: PartsStockParseError[] = []
             const insertRows: Record<string, unknown>[] = []
             const portal = slotLocationPortal.portal
+
+            // Update progress: parsing stage
+            updateCard(tableName, (prev) => ({
+              ...prev,
+              uploadProgress: {
+                ...prev.uploadProgress,
+                stage: 'parsing',
+                parsedRows: 0,
+                totalRowsInCurrentBranch: rawRows.length,
+              },
+            }))
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const sourceRowHash = buildPartsSourceRowHash(
@@ -1867,6 +2122,19 @@ export default function ImportPage() {
                 row.portal = portal
                 insertRows.push(row)
               }
+
+              // Update parsing progress every 100 rows
+              if (rowIdx % 100 === 0) {
+                updateCard(tableName, (prev) => ({
+                  ...prev,
+                  uploadProgress: {
+                    ...prev.uploadProgress,
+                    stage: 'parsing',
+                    parsedRows: rowIdx,
+                    totalRowsInCurrentBranch: rawRows.length,
+                  },
+                }))
+              }
             }
 
             if (parseErrors.length > 0) {
@@ -1875,8 +2143,10 @@ export default function ImportPage() {
               )
             }
 
+            const rowsWithoutAlreadyImportedStock = await filterAlreadyImportedPartsOrderRows(insertRows)
+
             totalInserted += await upsertOrInsertRows(
-              insertRows,
+              rowsWithoutAlreadyImportedStock,
               [
                 'part_number,branch,snapshot_date,source_row_hash',
                 'part_number,branch,portal,snapshot_date,source_row_hash',
