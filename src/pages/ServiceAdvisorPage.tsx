@@ -188,10 +188,22 @@ export default function ServiceAdvisorPage() {
     return rows.filter(r => r.branch === selectedBranch)
   }, [rows, selectedBranch])
 
+  const fuelTypeFilteredRows = useMemo(() => {
+    if (selectedFuelType === 'all') return branchFilteredRows
+    return branchFilteredRows.filter((row) => {
+      return getFuelTypeLabel(row.fuel_type) === selectedFuelType
+    })
+  }, [branchFilteredRows, selectedFuelType])
+
+  const categoryFilteredRows = useMemo(() => {
+    if (selectedCategory === 'all') return fuelTypeFilteredRows
+    return fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
+  }, [fuelTypeFilteredRows, selectedCategory])
+
   const advisorOptions = useMemo(() => {
     const optionMap = new Map<string, { label: string; count: number }>()
 
-    branchFilteredRows.forEach((row) => {
+    categoryFilteredRows.forEach((row) => {
       const key = getAdvisorFilterKey(row)
       const existing = optionMap.get(key)
 
@@ -208,24 +220,12 @@ export default function ServiceAdvisorPage() {
     return Array.from(optionMap.entries())
       .map(([value, meta]) => ({ value, label: meta.label, count: meta.count }))
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [branchFilteredRows])
-
-  const advisorFilteredRows = useMemo(() => {
-    if (selectedAdvisor === 'all') return branchFilteredRows
-    return branchFilteredRows.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
-  }, [branchFilteredRows, selectedAdvisor])
-
-  const fuelTypeFilteredRows = useMemo(() => {
-    if (selectedFuelType === 'all') return advisorFilteredRows
-    return advisorFilteredRows.filter((row) => {
-      return getFuelTypeLabel(row.fuel_type) === selectedFuelType
-    })
-  }, [advisorFilteredRows, selectedFuelType])
+  }, [categoryFilteredRows])
 
   const displayedRows = useMemo(() => {
-    if (selectedCategory === 'all') return fuelTypeFilteredRows
-    return fuelTypeFilteredRows.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
-  }, [fuelTypeFilteredRows, selectedCategory])
+    if (selectedAdvisor === 'all') return categoryFilteredRows
+    return categoryFilteredRows.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+  }, [categoryFilteredRows, selectedAdvisor])
 
   const isWorkCompleted = (row: ReceptionEntryRow): boolean => {
     const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
@@ -738,7 +738,7 @@ export default function ServiceAdvisorPage() {
                   className="sel sel--advisor-filter"
                   aria-label="Filter by advisor"
                 >
-                  <option value="all">All ({branchFilteredRows.length})</option>
+                  <option value="all">All ({categoryFilteredRows.length})</option>
                   {advisorOptions.map((advisor) => (
                     <option key={advisor.value} value={advisor.value}>
                       {advisor.label} ({advisor.count})
@@ -760,10 +760,10 @@ export default function ServiceAdvisorPage() {
                       : 'btn--ghost'
                   }`}
                 >
-                  All ({advisorFilteredRows.length})
+                  All ({branchFilteredRows.length})
                 </button>
                 {fuelTypeOptions.map((fuelType) => {
-                  const count = advisorFilteredRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
+                  const count = branchFilteredRows.filter((row) => getFuelTypeLabel(row.fuel_type) === fuelType).length
                   return (
                     <button
                       key={fuelType}
