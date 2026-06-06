@@ -1253,7 +1253,17 @@ export default function ImportPage() {
         const upsertJcClosedRowsByBusinessKey = async (
           rows: Record<string, unknown>[],
         ): Promise<number> => {
-          const conflictCandidates = ['branch,job_card_number', 'job_card_number,branch']
+          const jcClosedHasLocationPortalKey =
+            jcClosedColumnSet.has('location') && jcClosedColumnSet.has('portal')
+
+          const conflictCandidates = jcClosedHasLocationPortalKey
+            ? [
+                'location,portal,job_card_number',
+                'portal,location,job_card_number',
+                'branch,job_card_number',
+                'job_card_number,branch',
+              ]
+            : ['branch,job_card_number', 'job_card_number,branch']
           type JcClosedUpsertRow = Record<string, unknown> & {
             branch: string
             job_card_number: string
@@ -1262,6 +1272,8 @@ export default function ImportPage() {
             .map((row) => {
               const branchKey = String(row.branch ?? '').trim()
               const jobCardKey = String(row.job_card_number ?? '').trim().toUpperCase()
+              const locationKey = String(row.location ?? '').trim()
+              const portalKey = String(row.portal ?? '').trim()
 
               if (!branchKey || !jobCardKey) return null
 
@@ -1269,6 +1281,12 @@ export default function ImportPage() {
                 ...row,
                 branch: branchKey,
                 job_card_number: jobCardKey,
+                ...(jcClosedHasLocationPortalKey
+                  ? {
+                      location: locationKey,
+                      portal: portalKey,
+                    }
+                  : {}),
               }
             })
             .filter((row): row is JcClosedUpsertRow => row !== null)
@@ -1290,7 +1308,10 @@ export default function ImportPage() {
               throw new Error(error.message ?? 'JC Closed single-row upsert failed')
             }
 
-            throw new Error('JC Closed upsert failed: no matching unique conflict constraint found')
+            const { error: insertError } = await supabase.from(tableName).insert([payload])
+            if (!insertError || isDuplicateViolation(insertError)) return
+
+            throw new Error(insertError.message ?? 'JC Closed single-row fallback insert failed')
           }
 
           for (let i = 0; i < normalizedRows.length; i += CHUNK) {
@@ -1335,7 +1356,15 @@ export default function ImportPage() {
             }
 
             if (!chunkHandled) {
-              throw new Error('JC Closed upsert failed: no matching unique conflict constraint found')
+              try {
+                processed += await insertRowsWithDuplicateSkip(chunkRows)
+              } catch (insertFallbackError) {
+                const fallbackMessage =
+                  insertFallbackError instanceof Error
+                    ? insertFallbackError.message
+                    : String(insertFallbackError)
+                throw new Error(fallbackMessage)
+              }
             }
           }
 
