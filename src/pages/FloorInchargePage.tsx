@@ -500,25 +500,47 @@ export default function FloorInchargePage() {
     return applyAssignmentViewFilter(jobCards, assignmentView, assignments)
   }, [jobCards, assignmentView, assignments])
 
+  const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
+
+  const searchScopedRows = useMemo(() => {
+    if (!searchQuery) return statusScopedRows
+
+    return statusScopedRows.filter((jc) => {
+      const assignment = assignments[jc.assignment_key]
+      const searchText = [
+        jc.jc_number ?? '',
+        jc.reg_number ?? '',
+        jc.model ?? '',
+        jc.service_type ?? '',
+        jc.sa_name ?? '',
+        jc.owner_name ?? '',
+        jc.owner_phone ?? '',
+        jc.source ?? '',
+        jc.branch ?? '',
+        assignment?.technician_name ?? '',
+        assignment?.technician_code ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+
+      return searchText.includes(searchQuery)
+    })
+  }, [statusScopedRows, assignments, searchQuery])
+
   const branches = useMemo(() => {
-    const b = new Set(statusScopedRows.map((j) => j.branch).filter(Boolean) as string[])
+    const b = new Set(searchScopedRows.map((j) => j.branch).filter(Boolean) as string[])
     return Array.from(b).sort()
-  }, [statusScopedRows])
+  }, [searchScopedRows])
 
   const statusScopedBranchRows = useMemo(() => {
-    if (branchFilter === 'all') return statusScopedRows
-    return statusScopedRows.filter((jc) => jc.branch === branchFilter)
-  }, [statusScopedRows, branchFilter])
+    if (branchFilter === 'all') return searchScopedRows
+    return searchScopedRows.filter((jc) => jc.branch === branchFilter)
+  }, [searchScopedRows, branchFilter])
 
   const statusScopedFuelRows = useMemo(() => {
     if (fuelTypeFilter === 'all') return statusScopedBranchRows
     return statusScopedBranchRows.filter((jc) => getFuelTypeLabel(jc.fuel_type) === fuelTypeFilter)
   }, [statusScopedBranchRows, fuelTypeFilter])
-
-  const branchFilteredRows = useMemo(() => {
-    if (branchFilter === 'all') return jobCards
-    return jobCards.filter((jc) => jc.branch === branchFilter)
-  }, [jobCards, branchFilter])
 
   const fuelTypeOptions = useMemo(() => {
     const fuelTypes = new Set(statusScopedBranchRows.map((jc) => getFuelTypeLabel(jc.fuel_type)))
@@ -536,10 +558,10 @@ export default function FloorInchargePage() {
   }, [fuelTypeFilter, fuelTypeOptions])
 
   const technicianCountRows = useMemo(() => {
-    return branchFilteredRows.filter((jc) => {
+    return statusScopedBranchRows.filter((jc) => {
       return fuelTypeFilter === 'all' || getFuelTypeLabel(jc.fuel_type) === fuelTypeFilter
     })
-  }, [branchFilteredRows, fuelTypeFilter])
+  }, [statusScopedBranchRows, fuelTypeFilter])
 
   const technicianOptions = useMemo(() => {
     const optionMap = new Map<string, string>()
@@ -569,27 +591,9 @@ export default function FloorInchargePage() {
       const assignment = assignments[jc.assignment_key]
       const matchTechnician =
         technicianFilter === 'all' || getTechnicianFilterKey(assignment) === technicianFilter
-      const q = search.trim().toLowerCase()
-      const searchText = [
-        jc.jc_number ?? '',
-        jc.reg_number ?? '',
-        jc.model ?? '',
-        jc.service_type ?? '',
-        jc.sa_name ?? '',
-        jc.owner_name ?? '',
-        jc.owner_phone ?? '',
-        jc.source ?? '',
-        jc.branch ?? '',
-        assignment?.technician_name ?? '',
-        assignment?.technician_code ?? '',
-      ]
-        .join(' ')
-        .toLowerCase()
-      const matchSearch =
-        !q || searchText.includes(q)
-      return matchTechnician && matchSearch
+      return matchTechnician
     })
-  }, [technicianCountRows, search, assignments, technicianFilter])
+  }, [technicianCountRows, assignments, technicianFilter])
 
   const assignedCount = scopedJobCards.filter((jc) => !!assignments[jc.assignment_key]).length
   const unassignedCount = scopedJobCards.length - assignedCount
@@ -667,10 +671,10 @@ export default function FloorInchargePage() {
             onClick={() => setBranchFilter('all')}
             className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
           >
-            All ({statusScopedRows.length})
+            All ({searchScopedRows.length})
           </button>
           {branches.map((branch) => {
-            const count = statusScopedRows.filter((jc) => jc.branch === branch).length
+            const count = searchScopedRows.filter((jc) => jc.branch === branch).length
             return (
               <button
                 key={branch}
