@@ -569,13 +569,24 @@ export default function FloorInchargePage() {
       const assignment = assignments[jc.assignment_key]
       const matchTechnician =
         technicianFilter === 'all' || getTechnicianFilterKey(assignment) === technicianFilter
-      const q = search.toLowerCase()
+      const q = search.trim().toLowerCase()
+      const searchText = [
+        jc.jc_number ?? '',
+        jc.reg_number ?? '',
+        jc.model ?? '',
+        jc.service_type ?? '',
+        jc.sa_name ?? '',
+        jc.owner_name ?? '',
+        jc.owner_phone ?? '',
+        jc.source ?? '',
+        jc.branch ?? '',
+        assignment?.technician_name ?? '',
+        assignment?.technician_code ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
       const matchSearch =
-        !q ||
-        (jc.jc_number ?? '').toLowerCase().includes(q) ||
-        (jc.reg_number ?? '').toLowerCase().includes(q) ||
-        (jc.sa_name ?? '').toLowerCase().includes(q) ||
-        (jc.owner_name ?? '').toLowerCase().includes(q)
+        !q || searchText.includes(q)
       return matchTechnician && matchSearch
     })
   }, [technicianCountRows, search, assignments, technicianFilter])
@@ -831,7 +842,7 @@ export default function FloorInchargePage() {
               </span>
               <input
                 className="inp inp-lg"
-                placeholder="Search JC / reg / SA / owner"
+                placeholder="Search JC / reg / model / SA / owner"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />

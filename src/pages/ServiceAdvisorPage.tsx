@@ -205,6 +205,7 @@ export default function ServiceAdvisorPage() {
   const [selectedSummaryCard, setSelectedSummaryCard] = useState<SummaryCardFilter>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all')
+  const [search, setSearch] = useState('')
   const [hasMultipleDealers, setHasMultipleDealers] = useState(false)
 
   const [loading, setLoading] = useState(true)
@@ -356,6 +357,29 @@ export default function ServiceAdvisorPage() {
     return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_done_at)
   }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
 
+  const searchedRows = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return cardFilteredRows
+
+    return cardFilteredRows.filter((row) => {
+      const haystack = [
+        row.reg_number,
+        row.model ?? '',
+        row.sa_name ?? '',
+        row.jc_number ?? '',
+        row.owner_name ?? '',
+        row.owner_phone ?? '',
+        row.source,
+        row.branch ?? '',
+        row.created_by,
+      ]
+        .join(' ')
+        .toLowerCase()
+
+      return haystack.includes(query)
+    })
+  }, [cardFilteredRows, search])
+
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
     return Array.from(branches).sort()
@@ -374,7 +398,7 @@ export default function ServiceAdvisorPage() {
   }, [categoryCountRows])
 
   const hasBaseRows = useMemo(() => displayedRows.length > 0, [displayedRows.length])
-  const hasRows = useMemo(() => cardFilteredRows.length > 0, [cardFilteredRows.length])
+  const hasRows = useMemo(() => searchedRows.length > 0, [searchedRows.length])
 
   useEffect(() => {
     if (selectedAdvisor === 'all') return
@@ -1042,11 +1066,24 @@ export default function ServiceAdvisorPage() {
         <div className="card__head">
           <div>
             <h3>
-              Assigned entries <span className="subcount">({cardFilteredRows.length})</span>
+              Assigned entries <span className="subcount">({searchedRows.length})</span>
             </h3>
             <div className="sub">
               {isAdmin ? 'Showing all intakes from filtered branch · edits save per row' : 'Each row is one intake assigned to you · edits save per row'}
             </div>
+          </div>
+          <div className="card__head-flex">
+            <span className="inp-wrap inp-wrap-lg">
+              <span className="icon-l">
+                <Icon name="search" size={16} />
+              </span>
+              <input
+                className="inp inp-lg"
+                placeholder="Search reg / model / JC / owner"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </span>
           </div>
         </div>
 
@@ -1055,7 +1092,9 @@ export default function ServiceAdvisorPage() {
             <div className="empty-state">Loading assigned rows...</div>
           ) : !hasRows ? (
             <div className="empty-state">
-              {selectedSummaryCard !== 'all'
+              {search.trim()
+                ? 'No rows match your search.'
+                : selectedSummaryCard !== 'all'
                 ? 'No rows found for the selected summary card. Select All in summary chips to view all filtered rows.'
                 : isAdmin
                   ? 'No rows found for the selected branch/advisor filters.'
@@ -1080,7 +1119,7 @@ export default function ServiceAdvisorPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cardFilteredRows.map((row) => {
+                  {searchedRows.map((row) => {
                     const draft = drafts[row.id] ?? EMPTY_DRAFT
                     const draftServiceType = String(draft.service_type ?? '')
                     const normalizedDraftServiceType = draftServiceType.trim().toLowerCase()
