@@ -207,6 +207,8 @@ export default function ServiceAdvisorPage() {
   const [selectedAdvisor, setSelectedAdvisor] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [hasMultipleDealers, setHasMultipleDealers] = useState(false)
+  const [canModifyReception, setCanModifyReception] = useState(false)
+  const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -468,22 +470,45 @@ export default function ServiceAdvisorPage() {
         setIsAdmin(false)
         setIsSuperAdmin(false)
         setHasMultipleDealers(false)
+        setCanModifyReception(false)
+        setCanModifyServiceAdvisor(false)
         return false
       }
 
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role, is_active')
-        .eq('id', session.session.user.id)
-        .maybeSingle()
+      const userId = session.session.user.id
+
+      const [{ data: profile }, { data: permissionRows }] = await Promise.all([
+        supabase
+          .from('users')
+          .select('role, is_active')
+          .eq('id', userId)
+          .maybeSingle(),
+        supabase.rpc('get_all_my_permissions'),
+      ])
 
       const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
       const isActive = (profile as { is_active?: boolean | null } | null)?.is_active === true
       const nextIsAdmin = role === 'admin' && isActive
       const nextIsSuperAdmin = role === 'super_admin' && isActive
-      
+
+      type PermissionRow = {
+        module_name?: string | null
+        can_modify?: boolean | null
+      }
+
+      const permissions = (permissionRows ?? []) as PermissionRow[]
+      const nextCanModifyReception = permissions.some(
+        (row) => String(row.module_name ?? '').trim().toLowerCase() === 'reception' && row.can_modify === true,
+      )
+      const nextCanModifyServiceAdvisor = permissions.some(
+        (row) => String(row.module_name ?? '').trim().toLowerCase() === 'service_advisor' && row.can_modify === true,
+      )
+
+
       setIsAdmin(nextIsAdmin)
       setIsSuperAdmin(nextIsSuperAdmin)
+      setCanModifyReception(nextCanModifyReception)
+      setCanModifyServiceAdvisor(nextCanModifyServiceAdvisor)
 
       // Get dealer scope context
       const scopeRes = await getDealerScopeContext()
@@ -496,8 +521,17 @@ export default function ServiceAdvisorPage() {
       setIsAdmin(false)
       setIsSuperAdmin(false)
       setHasMultipleDealers(false)
+      setCanModifyReception(false)
+      setCanModifyServiceAdvisor(false)
       return false
     }
+  }
+
+  function canUpdateRow(row: ReceptionEntryRow): boolean {
+    void row
+    if (isAdmin || isSuperAdmin) return true
+    if (canModifyReception) return true
+    return canModifyServiceAdvisor
   }
 
   async function loadRows() {
@@ -722,19 +756,35 @@ export default function ServiceAdvisorPage() {
   }
 
   async function handleInvoiceDone(id: number) {
-    setUploadingInvoiceId(id)
-    setError(null)
-
-    const res = await markServiceAdvisorInvoiceDone(id)
-    setUploadingInvoiceId(null)
-
-    if (res.error) {
-      setError(res.error)
+    const row = rows.find((item) => item.id === id)
+    if (row && !canUpdateRow(row)) {
+      const deniedMessage = 'You do not have edit permission for Mark Done.'
+      setError(deniedMessage)
+      showToast(deniedMessage)
       return
     }
 
-    showToast('Invoice marked as done')
-    await loadRows()
+    setUploadingInvoiceId(id)
+    setError(null)
+
+    try {
+      const res = await markServiceAdvisorInvoiceDone(id)
+
+      if (res.error) {
+        setError(res.error)
+        showToast(`Failed to mark invoice: ${res.error}`)
+        return
+      }
+
+      showToast('Invoice marked as done')
+      await loadRows()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to mark invoice as done'
+      setError(message)
+      showToast(`Failed to mark invoice: ${message}`)
+    } finally {
+      setUploadingInvoiceId(null)
+    }
   }
 
   async function handleCreateGroup(row: ReceptionEntryRow) {
@@ -1131,6 +1181,7 @@ export default function ServiceAdvisorPage() {
                     const isDirty = dirtyRowIds.has(row.id)
                     const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
+                    const canMarkDone = canUpdateRow(row)
 
                     return (
                       <tr key={row.id} className={isCompleted ? 'row--completed' : ''}>
@@ -1251,8 +1302,9 @@ export default function ServiceAdvisorPage() {
                               <button
                                 type="button"
                                 onClick={() => void handleInvoiceDone(row.id)}
-                                disabled={uploadingInvoiceId === row.id}
+                                disabled={uploadingInvoiceId === row.id || !canMarkDone}
                                 className="tbtn tbtn--accent"
+                                title={!canMarkDone ? 'Edit permission required' : undefined}
                               >
                                 {uploadingInvoiceId === row.id ? 'Marking...' : 'Mark Done'}
                               </button>

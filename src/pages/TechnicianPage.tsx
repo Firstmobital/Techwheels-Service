@@ -14,6 +14,7 @@ type TechnicianAssignmentRow = {
   out_ts: string | null
   time_diff: string | null
   remark: string | null
+  reg_number?: string | null
 }
 
 type RevenueRow = {
@@ -21,6 +22,11 @@ type RevenueRow = {
   closed_date_time: string | null
   invoice_date: string | null
   final_labour_amount: number | null
+}
+
+type ReceptionEntryRow = {
+  jc_number: string | null
+  reg_number: string | null
 }
 
 type IncomeDayRow = {
@@ -243,8 +249,8 @@ export default function TechnicianPage() {
       }
 
       const assignmentRows = (assignRes.data ?? []) as TechnicianAssignmentRow[]
-      setAssignments(assignmentRows)
 
+      // Get completed assignments to query revenue data
       const completedMap = new Map<string, TechnicianAssignmentRow>()
       assignmentRows
         .filter((row) => normalizeStatus(row.work_status) === 'completed')
@@ -266,48 +272,86 @@ export default function TechnicianPage() {
         })
 
       const completed = Array.from(completedMap.values())
-      const jcNumbers = Array.from(new Set(
+      const completedJcNumbers = Array.from(new Set(
         completed
           .map((row) => String(row.job_card_number ?? '').trim())
           .filter(Boolean),
       ))
 
-      if (jcNumbers.length === 0) {
-        setIncomeByDay([])
-        setLoading(false)
-        return
-      }
+      // Fetch from service_reception_entries (same source as Floor Incharge page)
+      let regNumberMap = new Map<string, string>()
+      let revenueMap = new Map<string, RevenueRow>()
 
-      const revenueRes = await supabase
-        .from('job_card_closed_data')
-        .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
-        .in('job_card_number', jcNumbers)
+      if (completedJcNumbers.length > 0) {
+        // Fetch revenue data
+        const revenueRes = await supabase
+          .from('job_card_closed_data')
+          .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
+          .in('job_card_number', completedJcNumbers)
 
-      if (revenueRes.error) {
-        setError(revenueRes.error.message)
-        setIncomeByDay([])
-        setLoading(false)
-        return
-      }
-
-      const revenueMap = new Map<string, RevenueRow>()
-      ;(revenueRes.data ?? []).forEach((row) => {
-        const key = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim()
-        if (!key) return
-
-        const existing = revenueMap.get(key)
-        const candidate = row as RevenueRow
-        if (!existing) {
-          revenueMap.set(key, candidate)
+        if (revenueRes.error) {
+          setError(revenueRes.error.message)
+          setIncomeByDay([])
+          setLoading(false)
           return
         }
 
-        const existingTs = new Date(existing.closed_date_time ?? existing.invoice_date ?? 0).getTime()
-        const candidateTs = new Date(candidate.closed_date_time ?? candidate.invoice_date ?? 0).getTime()
-        if (candidateTs > existingTs) {
-          revenueMap.set(key, candidate)
+        ;(revenueRes.data ?? []).forEach((row) => {
+          const key = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim()
+          if (!key) return
+
+          const existing = revenueMap.get(key)
+          const candidate = row as RevenueRow
+          if (!existing) {
+            revenueMap.set(key, candidate)
+          } else {
+            const existingTs = new Date(existing.closed_date_time ?? existing.invoice_date ?? 0).getTime()
+            const candidateTs = new Date(candidate.closed_date_time ?? candidate.invoice_date ?? 0).getTime()
+            if (candidateTs > existingTs) {
+              revenueMap.set(key, candidate)
+            }
+          }
+        })
+
+        // Fetch registration numbers from service_reception_entries (same source as Floor Incharge)
+        const receptionRes = await supabase
+          .from('service_reception_entries')
+          .select('jc_number, reg_number')
+          .in('jc_number', completedJcNumbers)
+
+        if (!receptionRes.error && receptionRes.data) {
+          ;(receptionRes.data ?? []).forEach((row) => {
+            const key = String((row as { jc_number?: string | null }).jc_number ?? '').trim()
+            if (!key) return
+
+            const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
+            if (regNum && !regNumberMap.has(key)) {
+              regNumberMap.set(key, regNum)
+            }
+          })
         }
-      })
+      }
+
+      // Add reg_number to assignment rows
+      const enrichedAssignmentRows = assignmentRows.map((row) => ({
+        ...row,
+        reg_number: regNumberMap.get(String(row.job_card_number ?? '').trim()) ?? null,
+      }))
+      setAssignments(enrichedAssignmentRows)
+
+      // If no completed jobs, set empty income and return
+      if (completedJcNumbers.length === 0) {
+        setIncomeByDay([])
+        setLoading(false)
+        return
+      }
+
+      // Check if we have revenue data before processing income
+      if (revenueMap.size === 0) {
+        setIncomeByDay([])
+        setLoading(false)
+        return
+      }
 
       const dayAgg = new Map<string, IncomeDayRow>()
 
@@ -456,7 +500,7 @@ export default function TechnicianPage() {
             </div>
           ) : (
             <div className="tbl-wrap scroll">
-              <table className="tbl">
+              <table className="tbl tech-income-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -518,13 +562,13 @@ export default function TechnicianPage() {
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>JC Number</th>
-                    <th>Technician</th>
+                    <th className="mono">JC Number</th>
+                    <th className="mono">Reg No</th>
                     <th>Bay No</th>
-                    <th>Status</th>
-                    <th>IN TS</th>
-                    <th>OUT TS</th>
-                    <th>Time Diff</th>
+                    <th className="ctr">Status</th>
+                    <th className="ts-cell">IN TS</th>
+                    <th className="ts-cell">OUT TS</th>
+                    <th className="ctr">Time Diff</th>
                     <th>Remark</th>
                   </tr>
                 </thead>
@@ -532,17 +576,17 @@ export default function TechnicianPage() {
                   {assignments.map((row) => (
                     <tr key={row.id}>
                       <td className="mono ts-cell">{row.job_card_number}</td>
-                      <td className="strong">{row.technician_name}</td>
+                      <td className="mono ts-cell">{row.reg_number ?? '—'}</td>
                       <td className="type-cell">{row.bay_no ?? '—'}</td>
-                      <td>
+                      <td className="ctr">
                         <span className={`pill ${statusPill(row.work_status)}`}>
                           {statusLabel(row.work_status)}
                         </span>
                       </td>
                       <td className="ts-cell">{formatDateTime(row.assigned_at)}</td>
                       <td className="ts-cell">{formatDateTime(row.out_ts)}</td>
-                      <td className="unassigned-indicator">—</td>
-                      <td className="unassigned-indicator">{row.remark ?? '—'}</td>
+                      <td className="ctr ts-cell">—</td>
+                      <td className="remark-cell">{row.remark ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

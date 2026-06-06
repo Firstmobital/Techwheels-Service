@@ -635,7 +635,7 @@ function buildPartsSourceRowHash(
   branch: Branch,
   portal: Portal,
   row: Record<string, unknown>,
-  _rowNumber: number,
+  rowNumber: number,
 ): string {
   const partNumber = row.part_number == null ? '' : String(row.part_number).trim().toUpperCase()
   const dateKey =
@@ -651,18 +651,7 @@ function buildPartsSourceRowHash(
       ? row.ordered_quantity
       : row.on_hand_quantity
 
-  const normalizedDate = String(dateKey ?? '').trim()
-  const normalizedQty = String(qtyKey ?? '').trim()
-  const referenceKey =
-    tableName === 'service_parts_consumption_data'
-      ? String(row.source_reference ?? '').trim()
-      : tableName === 'service_parts_order_data'
-      ? String(row.source_document_id ?? '').trim()
-      : ''
-
-  // IMPORTANT: keep hash deterministic across re-uploads.
-  // Do not include row position/index in the hash.
-  const raw = `${tableName}|${branch}|${portal}|${partNumber}|${normalizedDate}|${normalizedQty}|${referenceKey}`
+  const raw = `${tableName}|${branch}|${portal}|${partNumber}|${String(dateKey ?? '')}|${String(qtyKey ?? '')}|${rowNumber}`
   return raw.replace(/\s+/g, ' ').trim()
 }
 
@@ -1250,212 +1239,22 @@ export default function ImportPage() {
           return inserted
         }
 
-        const upsertJcClosedRowsByBusinessKey = async (
-          rows: Record<string, unknown>[],
-        ): Promise<number> => {
-          const jcClosedHasLocationPortalKey =
-            jcClosedColumnSet.has('location') && jcClosedColumnSet.has('portal')
+        const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
+          let inserted = 0
 
-          const conflictCandidates = jcClosedHasLocationPortalKey
-            ? [
-                'location,portal,job_card_number',
-                'portal,location,job_card_number',
-                'branch,job_card_number',
-                'job_card_number,branch',
-              ]
-            : ['branch,job_card_number', 'job_card_number,branch']
-          type JcClosedUpsertRow = Record<string, unknown> & {
-            branch: string
-            job_card_number: string
-          }
-          const normalizedRows = rows
-            .map((row) => {
-              const branchKey = String(row.branch ?? '').trim()
-              const jobCardKey = String(row.job_card_number ?? '').trim().toUpperCase()
-              const locationKey = String(row.location ?? '').trim()
-              const portalKey = String(row.portal ?? '').trim()
-
-              if (!branchKey || !jobCardKey) return null
-
-              return {
-                ...row,
-                branch: branchKey,
-                job_card_number: jobCardKey,
-                ...(jcClosedHasLocationPortalKey
-                  ? {
-                      location: locationKey,
-                      portal: portalKey,
-                    }
-                  : {}),
-              }
-            })
-            .filter((row): row is JcClosedUpsertRow => row !== null)
-
-          let processed = 0
-
-          const upsertSingleRow = async (payload: JcClosedUpsertRow): Promise<void> => {
-            for (const onConflict of conflictCandidates) {
-              const { error } = await supabase.from(tableName).upsert([payload], { onConflict })
-              if (!error) return
-
-              const lower = (error.message ?? '').toLowerCase()
-              const missingConflictConstraint = lower.includes(
-                'no unique or exclusion constraint matching the on conflict specification',
-              )
-
-              if (missingConflictConstraint) continue
-
-              throw new Error(error.message ?? 'JC Closed single-row upsert failed')
-            }
-
-            const { error: insertError } = await supabase.from(tableName).insert([payload])
-            if (!insertError || isDuplicateViolation(insertError)) return
-
-            throw new Error(insertError.message ?? 'JC Closed single-row fallback insert failed')
-          }
-
-          for (let i = 0; i < normalizedRows.length; i += CHUNK) {
-            const chunkRows = normalizedRows.slice(i, i + CHUNK)
+          for (let i = 0; i < rows.length; i += CHUNK) {
+            const chunkRows = rows.slice(i, i + CHUNK)
             if (chunkRows.length === 0) continue
 
-            let chunkHandled = false
-
-            for (const onConflict of conflictCandidates) {
-              const { error } = await supabase.from(tableName).upsert(chunkRows, { onConflict })
-
-              if (!error) {
-                processed += chunkRows.length
-                chunkHandled = true
-                break
-              }
-
-              const lower = (error.message ?? '').toLowerCase()
-              const missingConflictConstraint = lower.includes(
-                'no unique or exclusion constraint matching the on conflict specification',
-              )
-
-              if (missingConflictConstraint) {
-                continue
-              }
-
-              const requiresRowWiseRetry =
-                lower.includes('cannot affect row a second time') ||
-                lower.includes('duplicate key value violates unique constraint')
-
-              if (!requiresRowWiseRetry) {
-                throw new Error(error.message ?? 'JC Closed chunk upsert failed')
-              }
-
-              for (const row of chunkRows) {
-                await upsertSingleRow(row)
-                processed += 1
-              }
-
-              chunkHandled = true
-              break
+            const { error } = await supabase.from(tableName).insert(chunkRows)
+            if (error) {
+              throw new Error(error.message ?? 'Insert failed')
             }
 
-            if (!chunkHandled) {
-              try {
-                processed += await insertRowsWithDuplicateSkip(chunkRows)
-              } catch (insertFallbackError) {
-                const fallbackMessage =
-                  insertFallbackError instanceof Error
-                    ? insertFallbackError.message
-                    : String(insertFallbackError)
-                throw new Error(fallbackMessage)
-              }
-            }
+            inserted += chunkRows.length
           }
 
-          return processed
-        }
-
-        const dedupeRowsByKeys = (
-          rows: Record<string, unknown>[],
-          keyBuilder: (row: Record<string, unknown>) => string,
-        ): Record<string, unknown>[] => {
-          const map = new Map<string, Record<string, unknown>>()
-          for (const row of rows) {
-            map.set(keyBuilder(row), row)
-          }
-          return Array.from(map.values())
-        }
-
-        const filterAlreadyImportedPartsOrderRows = async (
-          rows: Record<string, unknown>[],
-        ): Promise<Record<string, unknown>[]> => {
-          if (rows.length === 0) return rows
-
-          const dedupedRows = dedupeRowsByKeys(
-            rows,
-            (row) =>
-              `${String(row.branch ?? '').trim()}|${String(row.portal ?? '').trim()}|${String(
-                row.source_row_hash ?? '',
-              ).trim()}`,
-          )
-
-          const groupedHashes = new Map<string, { branch: string; portal: string; hashes: string[] }>()
-
-          for (const row of dedupedRows) {
-            const rowHash = String(row.source_row_hash ?? '').trim()
-            const rowBranch = String(row.branch ?? '').trim()
-            const rowPortal = String(row.portal ?? '').trim()
-            if (!rowHash || !rowBranch || !rowPortal) continue
-
-            const groupKey = `${rowBranch}|${rowPortal}`
-            const existingGroup = groupedHashes.get(groupKey)
-            if (existingGroup) {
-              existingGroup.hashes.push(rowHash)
-            } else {
-              groupedHashes.set(groupKey, {
-                branch: rowBranch,
-                portal: rowPortal,
-                hashes: [rowHash],
-              })
-            }
-          }
-
-          const existingKeys = new Set<string>()
-          const HASH_CHUNK = 500
-
-          for (const group of groupedHashes.values()) {
-            const uniqueHashes = Array.from(new Set(group.hashes))
-
-            for (let i = 0; i < uniqueHashes.length; i += HASH_CHUNK) {
-              const hashChunk = uniqueHashes.slice(i, i + HASH_CHUNK)
-
-              const { data, error } = await supabase
-                .from(tableName)
-                .select('branch, portal, source_row_hash')
-                .eq('branch', group.branch)
-                .eq('portal', group.portal)
-                .in('source_row_hash', hashChunk)
-
-              if (error) {
-                console.warn(`Failed to pre-check existing parts order rows: ${error.message}`)
-                return dedupedRows
-              }
-
-              for (const existingRow of (data as Record<string, unknown>[] | null) ?? []) {
-                existingKeys.add(
-                  `${String(existingRow.branch ?? '').trim()}|${String(existingRow.portal ?? '').trim()}|${String(
-                    existingRow.source_row_hash ?? '',
-                  ).trim()}`,
-                )
-              }
-            }
-          }
-
-          return dedupedRows.filter((row) => {
-            const rowHash = String(row.source_row_hash ?? '').trim()
-            const rowBranch = String(row.branch ?? '').trim()
-            const rowPortal = String(row.portal ?? '').trim()
-            if (!rowHash || !rowBranch || !rowPortal) return true
-
-            const rowKey = `${rowBranch}|${rowPortal}|${rowHash}`
-            return !existingKeys.has(rowKey)
-          })
+          return inserted
         }
 
         // For VAS table, prepare header mapping upfront (extract from first available file)
@@ -1545,24 +1344,6 @@ export default function ImportPage() {
               `Invoice Order Data: ${err instanceof Error ? err.message : String(err)}`,
             )
           }
-        }
-
-        const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
-          let inserted = 0
-
-          for (let i = 0; i < rows.length; i += CHUNK) {
-            const chunkRows = rows.slice(i, i + CHUNK)
-            if (chunkRows.length === 0) continue
-
-            const { error } = await supabase.from(tableName).insert(chunkRows)
-            if (error) {
-              throw new Error(error.message ?? 'Insert failed')
-            }
-
-            inserted += chunkRows.length
-          }
-
-          return inserted
         }
 
         let processedBranches = 0
@@ -1734,21 +1515,6 @@ export default function ImportPage() {
                 }
                 // Ensure branch is always set (fallback to selected branch if not set)
                 if (!row.branch) row.branch = standardBranch
-
-                const normalizedJobCardNumber =
-                  row.job_card_number == null ? '' : String(row.job_card_number).trim().toUpperCase()
-                if (!normalizedJobCardNumber) {
-                  jcParseErrors.push({
-                    rowNumber: rowIdx + 2,
-                    fieldName: 'job_card_number',
-                    columnName: 'job_card_number',
-                    value: row.job_card_number == null ? '' : String(row.job_card_number),
-                    error: 'Job card number is required for dedupe/update',
-                  })
-                  continue
-                }
-
-                row.job_card_number = normalizedJobCardNumber
                 insertRows.push(row)
               }
             }
@@ -1759,15 +1525,7 @@ export default function ImportPage() {
               )
             }
 
-            const dedupedJcRows = dedupeRowsByKeys(
-              insertRows,
-              (row) =>
-                `${String(row.branch ?? '').trim().toLowerCase()}|${String(row.job_card_number ?? '')
-                  .trim()
-                  .toUpperCase()}`,
-            )
-
-            totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
+            totalInserted += await insertRowsInChunks(insertRows)
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
@@ -1790,7 +1548,6 @@ export default function ImportPage() {
 
             const invoiceParseErrors: InvoiceParseError[] = []
             const insertRows: Record<string, unknown>[] = []
-
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildInvoiceInsertRow(
                 rawRows[rowIdx],
@@ -1905,13 +1662,6 @@ export default function ImportPage() {
 
                 row.branch = slotLocationPortal.location
                 row.portal = portal
-                row.source_row_hash = buildPartsSourceRowHash(
-                  tableName,
-                  slotLocationPortal.location,
-                  portal,
-                  row,
-                  rowIdx + 2,
-                )
                 insertRows.push(row)
               }
             }
@@ -1922,16 +1672,9 @@ export default function ImportPage() {
               )
             }
 
-            const dedupedRows = dedupeRowsByKeys(
-              insertRows,
-              (row) =>
-                `${String(row.branch ?? '')}|${String(row.portal ?? '')}|${String(row.source_row_hash ?? '')}`,
-            )
-
             totalInserted += await upsertOrInsertRows(
-              dedupedRows,
+              insertRows,
               [
-                'branch,portal,source_row_hash',
                 'part_number,branch,transaction_date,source_row_hash',
                 'part_number,branch,portal,transaction_date,source_row_hash',
                 'part_number,branch,portal,fiscal_year,month_name,source_row_hash',
@@ -2015,13 +1758,6 @@ export default function ImportPage() {
                 const resolved = dealerDerived ?? slotLocationPortal
                 row.branch = resolved.location
                 row.portal = resolved.portal
-                row.source_row_hash = buildPartsSourceRowHash(
-                  tableName,
-                  resolved.location,
-                  resolved.portal,
-                  row,
-                  rowIdx + 2,
-                )
 
                 insertRows.push(row)
               }
@@ -2033,10 +1769,8 @@ export default function ImportPage() {
               )
             }
 
-            const rowsWithoutAlreadyImported = await filterAlreadyImportedPartsOrderRows(insertRows)
-
             totalInserted += await upsertOrInsertRows(
-              rowsWithoutAlreadyImported,
+              insertRows,
               partsOrderOnConflictCandidates.length > 0
                 ? partsOrderOnConflictCandidates
                 : ['part_number,branch,order_date'],
@@ -2068,13 +1802,6 @@ export default function ImportPage() {
               } else if (row) {
                 row.branch = slotLocationPortal.location
                 row.portal = portal
-                row.source_row_hash = buildPartsSourceRowHash(
-                  tableName,
-                  slotLocationPortal.location,
-                  portal,
-                  row,
-                  rowIdx + 2,
-                )
                 insertRows.push(row)
               }
             }

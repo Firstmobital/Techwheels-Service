@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Icon } from '../components/Icon'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
 import { getCurrentLocation, assembleGpsMetadata } from '../lib/gpsUtils'
@@ -56,6 +57,7 @@ interface JobRow {
   colour:                string | null
   complaint_date:        string
   status:                string
+  claim_type:            string | null
   warranty_age_days:     number | null
   tml_share_percent:     number | null
   total_estimate_amount: number | null
@@ -146,6 +148,16 @@ const DEFAULT_FORM_LOOKUPS: AutoDocFormLookupState = {
 }
 
 const FALLBACK_CLAIM_TYPE_OPTIONS = ['Body & Paint', 'Warranty', 'Insurance', 'Goodwill', 'Policy', 'Campaign']
+
+const AD_STAGES = [
+  { key: 'active_intake' as const, label: 'Active Intake', short: 'Intake', tone: 'var(--muted)' },
+  { key: 'documentation_pre_repair' as const, label: 'Pre-Repair Docs', short: 'Docs', tone: 'var(--accent)' },
+  { key: 'estimate' as const, label: 'Estimate', short: 'Estimate', tone: 'var(--warn)' },
+  { key: 'pre_submit_pending' as const, label: 'Pre-Submit Pending', short: 'Pre-Pend', tone: '#B26A00' },
+  { key: 'pre_submit_done' as const, label: 'Pre-Submit Done', short: 'Pre-Done', tone: '#0F766E' },
+  { key: 'post_repair_ppt' as const, label: 'Post-Repair PPT', short: 'Post PPT', tone: '#4F46E5' },
+  { key: 'claim_submitted' as const, label: 'Claim Submitted', short: 'Submitted', tone: 'var(--success)' },
+]
 
 const SESSION_KEYS = {
   activeTab: 'autodoc_active_tab',
@@ -358,6 +370,7 @@ export default function AutoDocPage() {
   const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
   const [kpis, setKpis] = useState({
     totalToday: 0,
+    totalActive: 0,
     activeIntake: 0,
     documentationPreRepair: 0,
     estimate: 0,
@@ -395,6 +408,7 @@ export default function AutoDocPage() {
     stage: DamageStage
     replacePhotoId?: string
   } | null>(null)
+  const [damageStageView, setDamageStageView] = useState<DamageStage>('pre-repair')
   const damageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const damagePhotosRef = useRef<DamagePhotoItem[]>([])
   const [estimateRows, setEstimateRows] = useState<EstimateLineItem[]>(() => readSessionJSON<EstimateLineItem[]>(SESSION_KEYS.estimateRows, []))
@@ -419,7 +433,6 @@ export default function AutoDocPage() {
 
     const composeReady = readiness.prePpt && readiness.excel && readiness.walkaroundVideo
     const submitReady = readiness.postPpt
-    const postRepairPptReady = Boolean(activeJobCardId && postRepairReadyJobIds.has(activeJobCardId))
 
   const damagePanelOptions = useMemo(
     () => (
@@ -1856,6 +1869,7 @@ export default function AutoDocPage() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const totalToday = rows.filter(r => new Date(r.complaint_date) >= today).length
+    const totalActive = rows.filter(r => r.status !== 'completed').length
 
     function deriveWorkflowStage(row: JobRow): WorkflowStage {
       if (row.status === 'completed') return 'claim_submitted'
@@ -1877,6 +1891,7 @@ export default function AutoDocPage() {
 
     setKpis({
       totalToday,
+      totalActive,
       activeIntake,
       documentationPreRepair,
       estimate,
@@ -2961,11 +2976,6 @@ export default function AutoDocPage() {
     return workflowStageForRow(row) === dashboardCardFilter
   }
 
-  function kpiCardClass(filter: DashboardCardFilter): string {
-    const active = dashboardCardFilter === filter
-    if (active) return 'rounded-2xl border-2 border-blue-500 bg-blue-50 p-4 text-left shadow-sm transition'
-    return 'rounded-2xl border border-gray-200 bg-[#f5f5f2] p-4 text-left transition hover:border-blue-300 hover:bg-white'
-  }
 
   const displayed = rows.filter(r => {
     const matchCard = matchesCardFilter(r)
@@ -3030,27 +3040,6 @@ export default function AutoDocPage() {
     return 'border border-slate-200 bg-slate-100 text-slate-600'
   }
 
-  function queueVehicleIconClass(row: JobRow): string {
-    const stage = workflowStageForRow(row)
-    if (stage === 'claim_submitted') return 'bg-blue-50 text-blue-700'
-    if (stage === 'post_repair_ppt') return 'bg-indigo-50 text-indigo-700'
-    if (stage === 'pre_submit_done') return 'bg-emerald-50 text-emerald-700'
-    if (stage === 'pre_submit_pending') return 'bg-amber-50 text-amber-700'
-    if (stage === 'estimate') return 'bg-violet-50 text-violet-700'
-    if (stage === 'documentation_pre_repair') return 'bg-orange-50 text-orange-700'
-    return 'bg-slate-50 text-slate-700'
-  }
-
-  function primaryActionLabel(row: JobRow): string {
-    const stage = workflowStageForRow(row)
-    if (stage === 'claim_submitted') return 'View Claim'
-    if (stage === 'post_repair_ppt') return 'Open Submit'
-    if (stage === 'pre_submit_done' || stage === 'pre_submit_pending') return 'Open Submit'
-    if (stage === 'estimate') return 'Complete Estimate'
-    if (stage === 'documentation_pre_repair') return 'Under Repair'
-    return 'Continue Job Card'
-  }
-
   function runPrimaryAction(row: JobRow) {
     selectWorkflowRow(row)
     const stage = workflowStageForRow(row)
@@ -3075,143 +3064,61 @@ export default function AutoDocPage() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-full bg-gray-50 p-4 pb-24 md:p-6 md:pb-6">
+    <div>
+      <div className="pagehead">
+        <div>
+          <p className="greet">
+            <Icon name="doc" size={13} className="icon-align-text" />
+            AutoDoc
+          </p>
+          <h1>Body & Paint Documentation</h1>
+          <p>Capture damage photos, estimate repairs, and submit claim documentation.</p>
+        </div>
+      </div>
 
-      {/* Tab Navigation as Cards - v2 Design */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:gap-4">
-        <button 
-          onClick={() => setActiveTab('dashboard')}
-          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'dashboard' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
-          <svg className={`h-5 w-5 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
-          </svg>
-          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-700'}`}>Dashboard</span>
+      <div className="tabs">
+        <button className={`tab${activeTab === 'dashboard' ? ' is-active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+          <span className="ic"><Icon name="grid" size={16} /></span>Dashboard
         </button>
-
-        <button 
-          onClick={() => {
-            if (activeTab === 'dashboard') {
-              handleNewJobCard()
-            }
-            setActiveTab('jobcard')
-          }}
-          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'jobcard' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
-          <svg className={`h-5 w-5 ${activeTab === 'jobcard' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'jobcard' ? 'text-blue-600' : 'text-gray-700'}`}>Job Card</span>
+        <button className={`tab${activeTab === 'jobcard' ? ' is-active' : ''}`} onClick={() => { if (activeTab === 'dashboard') { handleNewJobCard() } setActiveTab('jobcard') }}>
+          <span className="ic"><Icon name="plus" size={16} /></span>Job Card
         </button>
-
-        <button 
-          onClick={() => setActiveTab('damage')}
-          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'damage' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
-          <svg className={`h-5 w-5 ${activeTab === 'damage' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-          </svg>
-          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'damage' ? 'text-blue-600' : 'text-gray-700'}`}>Damage</span>
+        <button className={`tab${activeTab === 'damage' ? ' is-active' : ''}`} onClick={() => setActiveTab('damage')}>
+          <span className="ic"><Icon name="reception" size={16} /></span>Damage
         </button>
-
-        <button 
-          onClick={() => setActiveTab('estimate')}
-          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'estimate' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
-          <svg className={`h-5 w-5 ${activeTab === 'estimate' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'estimate' ? 'text-blue-600' : 'text-gray-700'}`}>Estimate</span>
+        <button className={`tab${activeTab === 'estimate' ? ' is-active' : ''}`} onClick={() => setActiveTab('estimate')}>
+          <span className="ic"><Icon name="doc" size={16} /></span>Estimate
         </button>
-
-        <button 
-          onClick={() => setActiveTab('submit')}
-          className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-4 transition-colors ${activeTab === 'submit' ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}`}>
-          <svg className={`h-5 w-5 ${activeTab === 'submit' ? 'text-blue-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
-          <span className={`text-xs font-semibold text-center leading-tight ${activeTab === 'submit' ? 'text-blue-600' : 'text-gray-700'}`}>Submit</span>
+        <button className={`tab${activeTab === 'submit' ? ' is-active' : ''}`} onClick={() => setActiveTab('submit')}>
+          <span className="ic"><Icon name="arrowr" size={16} /></span>Submit
         </button>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Summary */}
       {activeTab === 'dashboard' && (
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('today')}
-          className={kpiCardClass('today')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Today's Cars</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-gray-900">{kpis.totalToday}</p>
-          <p className="mt-2 text-xs text-gray-500">Job cards opened today only</p>
+      <div className="summary" style={{ marginBottom: 18 }}>
+        <button className="schip ad-kpi" data-on={dashboardCardFilter === 'active_vehicles'} onClick={() => setDashboardCardFilter('active_vehicles')}>
+          <span className="ic"><Icon name="reception" size={16} /></span>
+          <div><div className="n">{kpis.totalActive || 0}</div><div className="l">Active vehicles</div></div>
         </button>
-
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('active_intake')}
-          className={kpiCardClass('active_intake')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Active Intake</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-slate-700">{kpis.activeIntake}</p>
-          <p className="mt-2 text-xs text-gray-500">Before Next: Document Damage</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('documentation_pre_repair')}
-          className={kpiCardClass('documentation_pre_repair')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Documentation Pre-Repair</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-orange-700">{kpis.documentationPreRepair}</p>
-          <p className="mt-2 text-xs text-gray-500">After Next: Document Damage</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('estimate')}
-          className={kpiCardClass('estimate')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Estimate</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-violet-700">{kpis.estimate}</p>
-          <p className="mt-2 text-xs text-gray-500">Pre-repair images done, estimate pending</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('pre_submit_pending')}
-          className={kpiCardClass('pre_submit_pending')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pre Submit Pending</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-amber-700">{kpis.preSubmitPending}</p>
-          <p className="mt-2 text-xs text-gray-500">After Next: Submit Reports</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('pre_submit_done')}
-          className={kpiCardClass('pre_submit_done')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Pre Submit Done</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-emerald-700">{kpis.preSubmitDone}</p>
-          <p className="mt-2 text-xs text-gray-500">After Compose and Send</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('post_repair_ppt')}
-          className={kpiCardClass('post_repair_ppt')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Post Repair PPT</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-indigo-700">{kpis.postRepairPpt}</p>
-          <p className="mt-2 text-xs text-gray-500">Post-repair photo complete by selected panels</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('claim_submitted')}
-          className={kpiCardClass('claim_submitted')}
-        >
-          <p className="text-sm font-medium leading-none text-gray-700 sm:text-base">Claim Submitted</p>
-          <p className="mt-2 text-4xl font-semibold leading-none text-blue-700">{kpis.claimSubmitted}</p>
-          <p className="mt-2 text-xs text-gray-500">After Submit Claim email sent</p>
-        </button>
+        {AD_STAGES.map(s => {
+          const stageKeyMap: Record<string, keyof typeof kpis> = {
+            'active_intake': 'activeIntake',
+            'documentation_pre_repair': 'documentationPreRepair',
+            'estimate': 'estimate',
+            'pre_submit_pending': 'preSubmitPending',
+            'pre_submit_done': 'preSubmitDone',
+            'post_repair_ppt': 'postRepairPpt',
+            'claim_submitted': 'claimSubmitted',
+          }
+          const count = kpis[stageKeyMap[s.key]] || 0
+          return (
+            <button key={s.key} className="schip ad-kpi" data-on={dashboardCardFilter === s.key} onClick={() => setDashboardCardFilter(s.key)}>
+              <span className="ic" style={{ background: `color-mix(in srgb,${s.tone} 13%,#fff)`, color: s.tone }}><Icon name="grid" size={15} /></span>
+              <div><div className="n">{count}</div><div className="l">{s.short}</div></div>
+            </button>
+          )
+        })}
       </div>
       )}
 
@@ -3299,115 +3206,67 @@ export default function AutoDocPage() {
 
       {/* Active Queue */}
       {!loading && !error && dashboardDisplayed.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm print-table">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <h3 className="flex items-center gap-2 text-2xl font-semibold text-gray-900">
-              <svg className="h-7 w-7 text-gray-800" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
-              </svg>
-              {cardFilterLabel(dashboardCardFilter)}
-            </h3>
+        <div className="card print-table">
+          <div className="card__head">
+            <div>
+              <h3>Job queue ({dashboardDisplayed.length})</h3>
+              <div className="sub">{dashboardCardFilter === 'active_vehicles' ? 'All active B&P claims' : cardFilterLabel(dashboardCardFilter)}</div>
+            </div>
             <button
               type="button"
               onClick={() => {
                 handleNewJobCard()
                 setActiveTab('jobcard')
               }}
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+              className="btn btn--primary btn--sm"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
-              </svg>
+              <Icon name="plus" size={15} />
               New Job Card
             </button>
           </div>
 
-          <div className="divide-y divide-gray-100">
-            {dashboardDisplayed.map((row) => (
-              <div key={row.job_card_id} className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${queueVehicleIconClass(row)}`}>
-                      <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l1-2h16l1 2v5a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-5zM6 9l1.2-3A2 2 0 019.07 5h5.86a2 2 0 011.87 1.3L18 9M7 14h.01M17 14h.01" />
-                      </svg>
-                    </div>
-                    <p className="truncate text-2xl font-semibold leading-tight text-gray-900">
-                      {row.reg_number} • {row.model ?? 'Model NA'} • Job# {row.jc_number}
-                    </p>
-                  </div>
-                  {(() => {
-                    const panelLabel = row.panel_names.length > 0 ? row.panel_names.join(', ') : '—'
-                    const ownerLabel = row.owner_name?.trim() || '—'
-                    const kmLabel = row.km_reading != null ? row.km_reading.toLocaleString('en-IN') : '—'
-                    return (
-                  <p className="mt-1 text-base leading-tight text-gray-600 sm:ml-[52px]">
-                    {fmtDate(row.complaint_date)} • {ownerLabel} • KM: {kmLabel} • Age: {row.warranty_age_days ?? '—'} days • Panels: {panelLabel} • Estimate: ₹ {(row.total_estimate_amount ?? 0).toLocaleString('en-IN')}
-                  </p>
-                    )
-                  })()}
-                </div>
-
-                <div className="flex flex-wrap items-center justify-end gap-2.5 md:pl-4">
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${queueStatusClass(row)}`}>
-                    {queueStatusLabel(row)}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => runPrimaryAction(row)}
-                    className="inline-flex items-center rounded-xl border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                  >
-                    {primaryActionLabel(row)}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectWorkflowRow(row)
-                      setActiveTab('damage')
-                    }}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                    aria-label="Open damage"
-                    title="Open Damage"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    </svg>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectWorkflowRow(row)
-                      setActiveTab('estimate')
-                    }}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                    aria-label="Open estimate"
-                    title="Open Estimate"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectWorkflowRow(row)
-                      setActiveTab('submit')
-                    }}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                    aria-label="Open submit"
-                    title="Open Submit"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>JC Number</th>
+                    <th>Vehicle</th>
+                    <th>Claim</th>
+                    <th>Stage</th>
+                    <th className="ctr">Panels</th>
+                    <th className="ctr">Photos</th>
+                    <th className="text-right">Estimate</th>
+                    <th className="text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboardDisplayed.map((row) => (
+                    <tr key={row.job_card_id}>
+                      <td className="mono text-xs">{row.jc_number}</td>
+                      <td>
+                        <span className="strong mono">{row.reg_number}</span>
+                        <div className="text-xs text-gray-500">{row.model ?? 'Model NA'} · {row.colour ?? '—'}</div>
+                      </td>
+                      <td>{row.claim_type || '—'}</td>
+                      <td>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${queueStatusClass(row)}`}>
+                          {queueStatusLabel(row)}
+                        </span>
+                      </td>
+                      <td className="ctr">{row.panel_names.length || '—'}</td>
+                      <td className="ctr">{row.photo_count || '—'}</td>
+                      <td className="text-right mono">{row.total_estimate_amount ? `Rs ${row.total_estimate_amount.toLocaleString('en-IN')}` : '—'}</td>
+                      <td className="text-right">
+                        <button type="button" className="tbtn tbtn--accent" onClick={() => runPrimaryAction(row)}>
+                          Open <Icon name="arrowr" size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -3416,14 +3275,17 @@ export default function AutoDocPage() {
 
       {/* JOB CARD FORM */}
       {activeTab === 'jobcard' && (
-        <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-          <div className="mb-6 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <h2 className="text-lg font-semibold text-gray-900">Job Card — New Vehicle Registration</h2>
-            </div>
+          <div className="grid-2">
+            <div className="card">
+              <div className="card__head">
+                <div>
+                  <h3>Job Card — New Vehicle Registration</h3>
+                  <div className="sub">Lookup by registration, then complete claim details.</div>
+                </div>
+              </div>
+              <div className="card__body">
+          <div className="mb-6 flex flex-col gap-3 border-b border-gray-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-medium text-gray-500">Start with vehicle lookup, then complete owner/dealer details and required uploads.</p>
             <button
               type="button"
               onClick={handleNewJobCard}
@@ -3867,226 +3729,191 @@ export default function AutoDocPage() {
             </>
           )}
         </div>
+
+        <div className="card">
+          <div className="card__head">
+            <div>
+              <h3>Intake media</h3>
+              <div className="sub">Required before fetch / documentation</div>
+            </div>
+          </div>
+          <div className="card__body space-y-3">
+            <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+              <span>Walkaround video</span>
+              <span className="text-xs text-gray-500">{walkaroundVideoName || 'Upload'}</span>
+              <input type="file" accept="video/*" onChange={(event) => { void handlePreFetchWalkaroundVideoUpload(event) }} className="hidden" />
+            </label>
+
+            <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+              <span>Car image (GPS-stamped)</span>
+              <span className="text-xs text-gray-500">{carImageName || 'Upload'}</span>
+              <input type="file" accept="image/*" onChange={(event) => { void handlePreFetchCarImageUpload(event) }} className="hidden" />
+            </label>
+
+            <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+              <span>Service history (PDF)</span>
+              <span className="text-xs text-gray-500">{serviceHistoryName || 'Upload'}</span>
+              <input type="file" accept=".pdf" onChange={handleServiceHistoryUpload} className="hidden" />
+            </label>
+
+            <div className="note note--info">
+              <span className="ic"><Icon name="shield" size={14} /></span>
+              <div>
+                Car age {activeSummary?.warranty_age_days ?? calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? 0} days · TML share band auto-derived from sale date & claim type.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
       )}
 
       {/* DAMAGE */}
       {activeTab === 'damage' && (
-        <div className="w-full space-y-4">
-          <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Select Affected Panels
-              </h3>
-              <div className="flex flex-col items-start gap-1 sm:items-end">
-                <span className="text-xs text-gray-500">Tap to select - each panel requires a photo</span>
-                <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-200">
-                  Vehicle: {currentVehicleReg} - {currentVehicleModel} - {currentVehicleJc}
-                </span>
+        <div className="card">
+          <div className="card__head">
+            <div>
+              <h3>Damage Documentation</h3>
+              <div className="sub">Tap panels with damage and capture stage-wise photos for the selected job card.</div>
+            </div>
+            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-200">
+              {currentVehicleReg} · {currentVehicleModel} · {currentVehicleJc}
+            </span>
+          </div>
+
+          <div className="card__body space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="text-xs font-medium text-gray-600">{currentVehicleReg} · {currentVehicleModel} · {currentVehicleJc}</p>
+              <div className="seg2">
+                {damageStages.map((stage) => (
+                  <button
+                    key={stage}
+                    className={damageStageView === stage ? 'on' : ''}
+                    onClick={() => setDamageStageView(stage)}
+                  >
+                    {stageLabel(stage)}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-              {panelSelectionOptions.map((panel) => {
-                const isSelected = selectedPanels.includes(panel)
-                return (
-                  <button
-                    key={panel}
-                    type="button"
-                    onClick={() => toggleDamagePanel(panel)}
-                    className={[
-                      'rounded-lg border px-3 py-3 text-center text-sm font-medium transition-colors',
-                      isSelected
-                        ? 'border-blue-300 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50',
-                    ].join(' ')}
-                  >
-                    {panel}
-                  </button>
-                )
-              })}
+            <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-5">
+              <h3 className="text-base font-semibold text-gray-900">Select panels</h3>
+              <p className="mb-3 text-xs text-gray-500">Tap panels with damage. Rate-card: {form.bpCityCategory || 'A'}</p>
+              <div className="flex flex-wrap gap-2">
+                {panelSelectionOptions.map((panel) => {
+                  const isSelected = selectedPanels.includes(panel)
+                  return (
+                    <button
+                      key={panel}
+                      type="button"
+                      onClick={() => toggleDamagePanel(panel)}
+                      className={[
+                        'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                        isSelected
+                          ? 'border-blue-300 bg-blue-600 text-white'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50',
+                      ].join(' ')}
+                    >
+                      {panel}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            {loadingModelRates && (
-              <p className="mt-2 text-xs text-gray-500">Loading model-wise panels...</p>
-            )}
-            <p className="mt-2 text-xs font-medium text-blue-700">Each selected panel appears under all three stage sections below for direct uploads.</p>
+            <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">{stageLabel(damageStageView)} photos</h3>
+                  <p className="text-xs text-gray-500">{selectedPanels.length} panel{selectedPanels.length === 1 ? '' : 's'} selected · GPS-stamped on capture</p>
+                </div>
+              </div>
 
-            <p className="mt-4 text-sm font-medium text-blue-700">
-              Selected: {selectedPanels.length > 0 ? selectedPanels.join(', ') : 'none'}
-            </p>
-          </div>
+              <input
+                ref={damageUploadInputRef}
+                type="file"
+                accept="image/*"
+                multiple={!damageUploadContext?.replacePhotoId}
+                onChange={handleDamagePhotoUpload}
+                className="hidden"
+              />
 
-          <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-            <div className="mb-4 flex flex-col gap-1">
-              <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-                <svg className="h-5 w-5 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                </svg>
-                Stage-wise Damage Photo Upload
-              </h3>
-              <p className="text-xs font-medium text-gray-600">Uploading for registration: <span className="text-blue-700">{currentVehicleReg}</span></p>
-            </div>
+              {selectedPanels.length === 0 && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  Select at least one panel to start photo capture.
+                </p>
+              )}
 
-            <input
-              ref={damageUploadInputRef}
-              type="file"
-              accept="image/*"
-              multiple={!damageUploadContext?.replacePhotoId}
-              onChange={handleDamagePhotoUpload}
-              className="hidden"
-            />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {selectedPanels.map((panel) => {
+                  const key = `${damageStageView}::${panel}`
+                  const photosForCard = damagePhotosByPanelStage[key] ?? []
+                  return (
+                    <div key={key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-gray-800">{panel}</p>
+                        <button
+                          type="button"
+                          onClick={() => openDamagePhotoPicker(panel, damageStageView)}
+                          className="tbtn"
+                        >
+                          {photosForCard.length === 0 ? 'Upload' : 'Add'}
+                        </button>
+                      </div>
 
-            {selectedPanels.length === 0 && (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                Select at least one panel in "Select Affected Panels" to start uploading stage photos.
-              </p>
-            )}
-
-            <div className="space-y-5">
-              {damageStages.map((stage) => (
-                <div key={stage} className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-                      Damage Photo Upload
-                      <span className="ml-2 text-red-600">* mandatory per panel - {stageLabel(stage)}</span>
-                    </p>
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 ring-1 ring-gray-200">
-                      {selectedPanels.length} panel{selectedPanels.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
-                    {selectedPanels.map((panel) => {
-                      const key = `${stage}::${panel}`
-                      const photosForCard = damagePhotosByPanelStage[key] ?? []
-
-                      return (
-                        <div key={key} className="self-start rounded-lg border border-gray-300 bg-white p-3">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-gray-900">{panel}</p>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => openDamagePhotoPicker(panel, stage)}
-                                className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                              >
-                                Upload
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openDamagePhotoPicker(panel, stage)}
-                                className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                              >
-                                Add
-                              </button>
-                            </div>
-                          </div>
-
-                          {photosForCard.length === 0 ? (
-                            <div className="rounded-md border border-dashed border-red-300 bg-red-50 px-3 py-4 text-center text-xs font-medium text-red-700">
-                              No photo uploaded yet for this panel in {stageLabel(stage)}.
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {photosForCard.map((photo) => (
-                                <div key={photo.id} className="rounded-md border border-gray-300 bg-white p-2">
-                                  <div className="flex items-start gap-3">
-                                    <a
-                                      href={photo.url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="shrink-0"
-                                    >
-                                      <img
-                                        src={photo.url}
-                                        alt={photo.name}
-                                        className="h-20 w-28 rounded-md border border-gray-200 bg-gray-100 object-cover"
-                                      />
-                                    </a>
-
-                                    <div className="min-w-0 flex-1">
-                                      <div className="mb-1 flex items-start justify-between gap-2">
-                                        <span className="truncate text-xs font-medium text-gray-800" title={photo.name}>{photo.name}</span>
-                                        <span className="shrink-0 text-[11px] text-gray-500">{photo.uploadedAtLabel}</span>
-                                      </div>
-
-                                      <div className="flex flex-wrap gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            void openDamagePhotoInBrowser(photo)
-                                          }}
-                                          className="inline-flex items-center rounded-md border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                                        >
-                                          View
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => openDamagePhotoPicker(panel, stage, photo.id)}
-                                          className="inline-flex items-center rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                                        >
-                                          Replace
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => removeDamagePhoto(photo.id)}
-                                          className="inline-flex items-center rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                                        >
-                                          Remove
-                                        </button>
-                                      </div>
-                                    </div>
+                      {photosForCard.length === 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => openDamagePhotoPicker(panel, damageStageView)}
+                          className="flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-5 text-xs text-gray-500 hover:bg-gray-50"
+                        >
+                          <Icon name="reception" size={16} />
+                          Tap to capture
+                        </button>
+                      ) : (
+                        <div className="space-y-2">
+                          {photosForCard.map((photo) => (
+                            <div key={photo.id} className="rounded-md border border-gray-200 bg-white p-2">
+                              <div className="flex items-start gap-2">
+                                <img src={photo.url} alt={photo.name} className="h-16 w-20 rounded border border-gray-200 object-cover" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs font-medium text-gray-700" title={photo.name}>{photo.name}</p>
+                                  <p className="text-[11px] text-gray-500">{photo.uploadedAtLabel}</p>
+                                  <div className="mt-1 flex gap-1">
+                                    <button type="button" className="tbtn" onClick={() => { void openDamagePhotoInBrowser(photo) }}>View</button>
+                                    <button type="button" className="tbtn" onClick={() => openDamagePhotoPicker(panel, damageStageView, photo.id)}>Replace</button>
+                                    <button type="button" className="tbtn tbtn--danger" onClick={() => removeDamagePhoto(photo.id)}>Remove</button>
                                   </div>
                                 </div>
-                              ))}
+                              </div>
                             </div>
-                          )}
+                          ))}
                         </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
 
-            <div className="my-4 h-px bg-gray-200" />
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Technician Remarks for selected panel <span className="text-red-600">*</span>
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Describe rust / damage observed, severity, recommended action..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={async () => {
-                  setSavingDraft(true)
-                  try {
-                    const ok = await persistDraftJobCard(false)
-                    if (ok) {
-                      setActiveTab('estimate')
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setSavingDraft(true)
+                    try {
+                      const ok = await persistDraftJobCard(false)
+                      if (ok) setActiveTab('estimate')
+                    } finally {
+                      setSavingDraft(false)
                     }
-                  } finally {
-                    setSavingDraft(false)
-                  }
-                }}
-                disabled={savingDraft}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
-              >
-                {savingDraft ? 'Saving...' : 'Next: Estimate'}
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </button>
+                  }}
+                  disabled={savingDraft}
+                  className="btn btn--ghost"
+                >
+                  {savingDraft ? 'Saving...' : 'Next: Estimate'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -4094,15 +3921,19 @@ export default function AutoDocPage() {
 
       {/* ESTIMATE */}
       {activeTab === 'estimate' && (
-        <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="flex items-center gap-2 text-xl font-semibold text-gray-900 sm:text-2xl">
-              <svg className="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Repair Estimate - {currentVehicleReg} - {currentVehicleModel} - {currentVehicleJc}
-            </h3>
-            <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Draft</span>
+        <div className="card">
+          <div className="card__head">
+            <div>
+              <h3>Repair Estimate</h3>
+              <div className="sub">Prepare panel-wise parts, paint, and labour estimate for vehicle {currentVehicleReg || 'N/A'}.</div>
+            </div>
+            <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Draft</span>
+          </div>
+          <div className="card__body">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
+            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Vehicle: {currentVehicleReg || 'N/A'}</span>
+            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Model: {currentVehicleModel || 'N/A'}</span>
+            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">JC: {currentVehicleJc || 'N/A'}</span>
           </div>
 
           <div className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
@@ -4380,142 +4211,86 @@ export default function AutoDocPage() {
             </button>
           </div>
         </div>
+        </div>
       )}
 
       {/* SUBMIT */}
       {activeTab === 'submit' && (
-        <div className="w-full rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="text-2xl font-semibold text-gray-900">
-              Reports and Submit - {currentVehicleReg}
-            </h3>
-            <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">Awaiting Approval</span>
+        <div className="card">
+          <div className="card__head">
+            <div>
+              <h3>Reports and Submit</h3>
+              <div className="sub">Generate pre/post-repair documents and submit final warranty claim package for {currentVehicleReg || 'N/A'}.</div>
+            </div>
+            <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Awaiting Approval</span>
+          </div>
+          <div className="card__body">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
+            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Vehicle: {currentVehicleReg || 'N/A'}</span>
+            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Model: {currentVehicleModel || 'N/A'}</span>
+            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">JC: {currentVehicleJc || 'N/A'}</span>
           </div>
 
-          <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">Pre-repair submission to Tata Motors</p>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="mb-2 text-xl font-semibold text-gray-900">Damage Report PPT</p>
-              <p className="mb-4 text-sm text-gray-600">Photos + geo-tags + video thumbnail + vehicle details + damage remarks</p>
-              <button
-                type="button"
-                onClick={() => void handleSubmitGeneratePpt('pre-repair')}
-                disabled={!activeJobCardId}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
-              >
-                Generate PPT
-              </button>
-              <p className={`mt-2 text-xs font-medium ${readiness.prePpt ? 'text-green-600' : 'text-gray-500'}`}>
-                {readiness.prePpt ? 'Uploaded' : 'Not uploaded'}
-              </p>
+          <input
+            ref={deliveryVideoInputRef}
+            type="file"
+            accept="video/*"
+            onChange={handleDeliveryVideoUpload}
+            className="hidden"
+          />
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.65fr_1fr]">
+            <div className="rounded-xl border border-gray-200 bg-white">
+              <div className="border-b border-gray-100 px-3 py-2">
+                <p className="text-sm font-semibold text-gray-900">Submission gates</p>
+                <p className="text-xs text-gray-500">{[
+                  readiness.serviceHistory,
+                  readiness.walkaroundVideo,
+                  readiness.carImage,
+                  readiness.prePpt,
+                  readiness.excel,
+                  readiness.postPpt,
+                  readiness.deliveryVideo,
+                ].filter(Boolean).length} of 7 artifacts ready</p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {[
+                  { key: 'service', label: 'Service history (PDF)', ready: readiness.serviceHistory, upload: () => setActiveTab('jobcard') },
+                  { key: 'walkaround', label: 'Walkaround video', ready: readiness.walkaroundVideo, upload: () => setActiveTab('jobcard') },
+                  { key: 'car', label: 'Car image (GPS-stamped)', ready: readiness.carImage, upload: () => setActiveTab('jobcard') },
+                  { key: 'pre', label: 'Pre-repair PPT', ready: readiness.prePpt, upload: () => { void handleSubmitGeneratePpt('pre-repair') } },
+                  { key: 'excel', label: 'Estimate Excel', ready: readiness.excel, upload: () => { void handleSubmitExportExcel() } },
+                  { key: 'post', label: 'Post-repair PPT', ready: readiness.postPpt, upload: () => { void handleSubmitGeneratePpt('post-repair') } },
+                  { key: 'delivery', label: 'Delivery video', ready: readiness.deliveryVideo, upload: () => openDeliveryVideoPicker() },
+                ].map((gate) => (
+                  <div key={gate.key} className="flex items-center gap-3 px-3 py-2">
+                    <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${gate.ready ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {gate.ready ? '✓' : '○'}
+                    </span>
+                    <span className="flex-1 text-sm text-gray-700">{gate.label}</span>
+                    {gate.ready ? (
+                      <span className="badge badge--active badge--no">Ready</span>
+                    ) : (
+                      <button type="button" className="tbtn" onClick={gate.upload}>Upload</button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="mb-2 text-xl font-semibold text-gray-900">Quotation Excel</p>
-              <p className="mb-4 text-sm text-gray-600">Parts + Paint + Labour breakdown with auto-calculated total expenses</p>
-              <button
-                type="button"
-                onClick={() => void handleSubmitExportExcel()}
-                disabled={!activeJobCardId}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
-              >
-                Export Excel
-              </button>
-              <p className={`mt-2 text-xs font-medium ${readiness.excel ? 'text-green-600' : 'text-gray-500'}`}>
-                {readiness.excel ? 'Uploaded' : 'Not uploaded'}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="mb-2 text-xl font-semibold text-gray-900">Send to Tata Motors</p>
-              <p className="mb-4 text-sm text-gray-600">PPT + Excel + compressed video attached, dealer code and VIN auto-filled in email</p>
-              <button
-                type="button"
-                onClick={() => void handleComposeAndSend()}
-                disabled={!composeReady}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Compose and Send
-              </button>
-              {!composeReady && (
-                <p className="mt-2 text-xs font-medium text-amber-700">Upload Pre-repair PPT, Excel, and Vehicle Walkaround Video first.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="my-5 h-px bg-gray-200" />
-
-          <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">Delivery Video (mandatory at delivery)</p>
-          <div className="mb-3 flex flex-wrap items-center gap-6 rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
-            <span>30-60 sec walkaround</span>
-            <span>Number plate visible</span>
-            <span>Auto-compressed less than 15MB</span>
-          </div>
-
-          <div className="max-w-xl rounded-xl border-2 border-dashed border-red-300 bg-red-50 p-6 text-center">
-            <input
-              ref={deliveryVideoInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleDeliveryVideoUpload}
-              className="hidden"
-            />
-            <p className="mb-1 text-xl font-semibold text-gray-900">Upload Delivery Walkaround Video</p>
-            <p className="mb-4 text-sm text-gray-600">Blocked until video uploaded</p>
-            <button
-              type="button"
-              onClick={openDeliveryVideoPicker}
-              className="inline-flex items-center rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-            >
-              {deliveryVideoName ? 'Replace Video' : 'Upload Video'}
-            </button>
-            <p className="mt-3 text-xs font-medium text-gray-600">
-              {deliveryVideoName ? `Selected: ${deliveryVideoName}` : 'Required for delivery'}
-            </p>
-            <p className={`mt-1 text-xs font-medium ${readiness.deliveryVideo ? 'text-green-600' : 'text-gray-500'}`}>
-              {readiness.deliveryVideo ? 'Delivery video uploaded' : 'Delivery video pending'}
-            </p>
-          </div>
-
-          <div className="my-5 h-px bg-gray-200" />
-
-          <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-600">Post-repair warranty claim</p>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="mb-2 text-xl font-semibold text-gray-900">Post-Repair PPT</p>
-              <p className="mb-4 text-sm text-gray-600">Before + during + after photos + delivery video in one warranty claim deck</p>
-              <button
-                type="button"
-                onClick={() => void handleSubmitGeneratePpt('post-repair')}
-                disabled={!activeJobCardId || !postRepairPptReady}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Generate PPT
-              </button>
-              {!postRepairPptReady && (
-                <p className="mt-2 text-xs font-medium text-amber-700">Upload at least one Post-repair image for every selected panel first.</p>
-              )}
-              <p className={`mt-2 text-xs font-medium ${readiness.postPpt ? 'text-green-600' : 'text-gray-500'}`}>
-                {readiness.postPpt ? 'Uploaded' : 'Not uploaded'}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 p-4">
-              <p className="mb-2 text-xl font-semibold text-gray-900">Submit Warranty Claim</p>
-              <p className="mb-4 text-sm text-gray-600">Full documentation sent to Tata warranty department</p>
-              <button
-                type="button"
-                onClick={() => void handleSubmitClaim()}
-                disabled={!submitReady}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Submit Claim
-              </button>
-              {!submitReady && (
-                <p className="mt-2 text-xs font-medium text-amber-700">Generate Post-repair PPT first.</p>
-              )}
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <p className="text-sm font-semibold text-gray-900">Claim actions</p>
+              <p className="mb-3 text-xs text-gray-500">Generate documents and submit to TM</p>
+              <div className="space-y-2">
+                <button type="button" className="btn btn--soft btn--block" onClick={() => void handleSubmitGeneratePpt('pre-repair')}>Generate pre-repair PPT</button>
+                <button type="button" className="btn btn--soft btn--block" onClick={() => void handleSubmitGeneratePpt('post-repair')}>Generate post-repair PPT</button>
+                <button type="button" className="btn btn--soft btn--block" onClick={() => void handleComposeAndSend()} disabled={!composeReady}>Draft claim email</button>
+                <button type="button" className="btn btn--primary btn--block" onClick={() => void handleSubmitClaim()} disabled={!submitReady}>Submit claim</button>
+              </div>
+              <p className="mt-2 text-center text-xs text-gray-500">Estimate value: Rs {estimateTotals.grand.toLocaleString('en-IN')}</p>
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -4650,6 +4425,7 @@ function mapJobRows(source: JobDashboardSummaryRow[]): JobRow[] {
       panel_names: row.panel_names ?? [],
       photo_count: row.photo_count ?? 0,
       owner_name: row.owner_name,
+      claim_type: 'Body & Paint',
       km_reading: row.km_reading,
       has_ppt_pre: row.has_ppt_pre ?? false,
       has_ppt_post: row.has_ppt_post ?? false,
@@ -4658,10 +4434,6 @@ function mapJobRows(source: JobDashboardSummaryRow[]): JobRow[] {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function fmtDate(d: string | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 function CheckIcon() {
   return (
     <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">

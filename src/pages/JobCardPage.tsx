@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Icon } from '../components/Icon'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import { useDirty } from '../context/DirtyContext'
 import {
@@ -70,14 +71,6 @@ const BLANK_ROW = {
   part_description: '', defect: '', action: '', qty: 1, ndp_value: 0,
   cut_weld_charges: 0, paint_charges: 0, total_special_charges: 0, job_code: '', job_code_desc: '',
   no_off: 1, labour_charges: 0,
-}
-
-const STATUS_COLOURS: Record<string, string> = {
-  draft:     'bg-gray-100 text-gray-600',
-  submitted: 'bg-blue-100 text-blue-700',
-  approved:  'bg-purple-100 text-purple-700',
-  in_work:   'bg-amber-100 text-amber-700',
-  completed: 'bg-green-100 text-green-700',
 }
 
 const PHOTO_TYPES: { type: 'defect' | 'primer' | 'paint'; label: string; hdr: string }[] = [
@@ -470,33 +463,27 @@ export default function JobCardPage() {
   const grandTotal  = estRows.reduce((s, r) => s + r.row_total, 0)
 
   return (
-    <div className="min-h-full bg-gray-50 p-4 pb-24 md:p-6 md:pb-6">
-
-      {/* Header */}
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <div className="pagehead">
         <div>
-          <Link to="/autodoc" className="mb-1 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
+          <Link to="/autodoc" className="greet-link" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--muted)', fontSize: 12, textDecoration: 'none' }}>
+            <Icon name="arrowl" size={14} />
             AutoDoc
           </Link>
-          <h2 className="text-lg font-semibold text-gray-900">{jc.jc_number}</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
-            {[jc.reg_number, jc.model, jc.colour].filter(Boolean).join('  ·  ')}
-          </p>
+          <h1>{jc.jc_number}</h1>
+          <p>{[jc.reg_number, jc.model, jc.colour].filter(Boolean).join(' · ')}</p>
         </div>
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {localDirty && (
-            <span className="text-[10px] font-medium text-amber-600">● Unsaved changes</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--warn)' }}>● Unsaved changes</span>
           )}
           {lastSaved && !localDirty && (
-            <span className="text-[10px] text-gray-400">
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>
               Saved {lastSaved.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_COLOURS[jc.status] ?? 'bg-gray-100 text-gray-600'}`}>
-            {jc.status.replace('_', ' ')}
+          <span className={`badge ${jc.status === 'draft' ? 'badge--gray' : jc.status === 'submitted' ? 'badge--blue' : jc.status === 'approved' ? 'badge--purple' : jc.status === 'in_work' ? 'badge--amber' : 'badge--green'}`}>
+            {jc.status.replace(/_/g, ' ')}
           </span>
         </div>
       </div>

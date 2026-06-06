@@ -355,25 +355,19 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 
 .td-muted-nowrap { white-space: nowrap; color: var(--muted); }
 .td-owner { min-width: 150px; }
-.td-estimate { min-width: 120px; }
-.td-invoice { min-width: 120px; }
-.td-save { min-width: 132px; text-align: center; }
+.td-estimate { min-width: 190px; }
 .owner-name { white-space: normal; }
 .owner-phone { font-size: 12px; color: var(--muted); }
-.sel--service-type { height: 36px; width: 200px; min-width: 200px; max-width: 200px; }
-.sel--advisor-filter { height: 36px; width: 280px; min-width: 220px; max-width: 340px; }
-.inp--jc { height: 36px; width: 220px; min-width: 220px; max-width: 220px; font-size: 12.5px; text-transform: uppercase; }
+.sel--service-type { height: 36px; min-width: 170px; }
+.inp--jc { height: 36px; min-width: 200px; font-size: 12.5px; text-transform: uppercase; }
 .inp--remark { min-width: 200px; min-height: 36px; height: 36px; padding: 8px 11px; }
 .inp--uc { text-transform: uppercase; }
 .inp--compact { height: 38px; }
 .estimate-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.invoice-col { display: flex; align-items: center; }
 .estimate-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--success); font-weight: 600; }
 .estimate-actions { display: flex; gap: 6px; }
-.invoice-actions { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .linkbtn--sm { font-size: 12.5px; }
 .tbtn--compact { height: 26px; }
-.tbtn--icon { width: 30px; min-width: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .tactions--mt { margin-top: 8px; }
 .recep-search { width: 240px; }
 .empty-state { padding: 20px 0; text-align: center; font-size: 13.5px; color: var(--muted); }
@@ -511,7 +505,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tbtn--ok { background: var(--success-bg); color: var(--success); border-color: transparent; }
 .tbtn--ok:hover { background: #d7f0e4; }
 .tactions { display: inline-flex; gap: 6px; align-items: center; }
-.tactions--stack { flex-direction: column; align-items: stretch; }
 
 /* Matrix quick-set mini buttons */
 .mini { height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
@@ -549,9 +542,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .schip .n { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .schip .l { font-size: 12px; color: var(--muted); }
 .schip .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
-.schip--btn { cursor: pointer; text-align: left; }
-.schip--active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-ring); }
-.schip--btn:disabled { cursor: not-allowed; opacity: 0.55; }
 
 /* Matrix center cells */
 .tbl td.ctr, .tbl th.ctr { text-align: center; }
@@ -1103,6 +1093,8 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .ts-cell {
   white-space: nowrap;
   color: var(--muted);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Nowrap for service type cells */
@@ -1120,6 +1112,12 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .unassigned-indicator {
   color: var(--faint);
   font-size: 12px;
+}
+
+/* Remark cells — allows text wrap */
+.remark-cell {
+  white-space: normal;
+  color: var(--ink-2);
 }
 
 /* Text right alignment utility */
@@ -1166,6 +1164,32 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 
 .tech-income-cell {
   color: var(--success);
+}
+
+.tech-income-table {
+  table-layout: fixed;
+}
+
+.tech-income-table th:nth-child(1),
+.tech-income-table td:nth-child(1) {
+  width: 20%;
+}
+
+.tech-income-table th:nth-child(2),
+.tech-income-table td:nth-child(2) {
+  width: 10%;
+}
+
+.tech-income-table th:nth-child(3),
+.tech-income-table td:nth-child(3),
+.tech-income-table th:nth-child(4),
+.tech-income-table td:nth-child(4),
+.tech-income-table th:nth-child(5),
+.tech-income-table td:nth-child(5) {
+  width: 23.33%;
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Import screen */
@@ -1223,31 +1247,4 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   .import-card__slots--quad {
     grid-template-columns: 1fr;
   }
-}
-
-/* ═══ COMPLETED JOB CARD HIGHLIGHTING ═══════════════════════════════════════ */
-@keyframes pulse-golden {
-  0%, 100% { background-color: rgba(251, 191, 36, 0.15); }
-  50% { background-color: rgba(251, 191, 36, 0.25); }
-}
-
-.tbl tr.row--completed {
-  animation: pulse-golden 2.5s ease-in-out infinite;
-  position: relative;
-}
-
-.row--completed-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: rgba(251, 191, 36, 0.2);
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  color: #b8860b;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: .01em;
-  white-space: nowrap;
-  flex: none;
 }

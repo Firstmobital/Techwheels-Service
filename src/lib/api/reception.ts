@@ -534,23 +534,30 @@ export async function uploadServiceAdvisorInvoice(
 export async function markServiceAdvisorInvoiceDone(
   id: number,
 ): Promise<ApiResult<ReceptionEntryRow>> {
-  const sessionRes = await supabase.auth.getSession()
-  const userEmail = sessionRes.data.session?.user?.email
+  try {
+    const sessionRes = await supabase.auth.getSession()
+    const userEmail = sessionRes.data.session?.user?.email
 
-  if (!userEmail) return fail('No active session')
+    if (!userEmail) return fail('No active session')
 
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .update({
-      invoice_done_at: new Date().toISOString(),
-      invoice_done_by: userEmail,
-    })
-    .eq('id', id)
-    .select('*')
-    .single()
+    const { data, error } = await supabase
+      .from('service_reception_entries')
+      .update({
+        invoice_done_at: new Date().toISOString(),
+        invoice_done_by: userEmail,
+      })
+      .eq('id', id)
+      .select('*')
 
-  if (error) return fail(error)
-  
-  const enriched = await enrichEntriesWithEmployeeBranch(data ? [data as ReceptionEntryRow] : [])
-  return ok(enriched[0] ?? (data as ReceptionEntryRow))
+    if (error) return fail(error)
+    if (!data || data.length === 0) {
+      return fail('Unable to mark invoice as done. Please refresh and retry.')
+    }
+
+    const updatedRow = data[0] as ReceptionEntryRow
+    const enriched = await enrichEntriesWithEmployeeBranch([updatedRow])
+    return ok(enriched[0] ?? updatedRow)
+  } catch (error) {
+    return fail(error)
+  }
 }

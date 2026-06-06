@@ -749,7 +749,7 @@ Status codes: PENDING | IN_PROGRESS | REVIEW | DONE | BLOCKED
 | T-030 | Technician | Redesign technician picker/income/rows workspace | technician.jsx + technician-data.js | src/pages/TechnicianPage.tsx | DONE | Vinod | 2026-06-03 | 2026-06-03 | 2026-06-03 | **REFERENCE PARITY + VISUAL SYNC LOCK VALIDATED (COMPLETE)**: (1) Reference parity implemented: pagehead/greet/copy/technician-selector/income-tracker/assigned-rows-table match technician.jsx structure; selectedTechnicianName derived from option→assignment fallback→code; selector uses `.sel` (not `.sel-lg`); heading uses `<TechnicianName> rows (n)` format. (2) **Visual Sync Lock Verified**: Zero inline `style={{` violations (rg search returned 0); plain `<div>` wrapper (no inner `.page`); 100% design-system class coverage (6/6 T-030 classes defined: `.tech-picker-field`, `.tech-income-total*`, `.tech-income-cell`, `.num-tabular`); zero Tailwind utilities (only design-system `.text-right`, `.cell-muted`, `.strong`, `.num-tabular` detected); cross-page parity confirmed vs Home/Dashboard/FloorIncharge baseline (same wrapper pattern, same class grammar); production build clean (723 modules, no errors). |
 | T-031 | Remaining Modules | Apply warranty report redesign parity in Reports | warranty.jsx + warranty-data.js + warranty-main.jsx + Warranty Reports.html | src/pages/ReportsPage.tsx and reports/warranty views | COMPLETE ✅ | Vinod | 2026-06-03 | 2026-06-04 | **REFERENCE PARITY COMPLETE**: Design-system refactor (100% class coverage); no Tailwind utilities; Icon import added; WARRANTY_AGGREGATES wired with 6 real KPIs (Settlement ₹196.13L, Claimed ₹1.72Cr, Pending ₹46.22L, Payment Pending ₹30.2L, Revenue 20% ₹26.96L, Combined ₹223.08L); 6-column fixed grid layout matching reference; 4 tabs (Overview/Critical Alerts/Financial/Operations); Kpi/Card components use design-system styling; 12 invoices table ₹25.72L; 6-category payment status matrix; Build: 723 modules, 0 TS errors | **Reference Parity Fixes Applied**: (1) Ported 4-tab dashboard from warranty.jsx reference; (2) Refactored all Tailwind→design-system classes (card, kpi, kpis, tabs, tab, tbl, tbl-wrap, badge, note); (3) Icon import added (src/components/Icon); (4) WARRANTY_AGGREGATES: 6 business-metric KPIs matching reference (Settlement/Claimed/Pending/Payment/20%-Revenue/Combined); (5) Grid layout: fixed `repeat(6, 1fr)` matching reference (not responsive auto-fit); (6) Color tones: Settlement=accent-blue, Claimed=indigo, Pending=warn-amber, Payment=danger-red, Revenue=success-green, Combined=purple; (7) 4 tab sections complete (Overview: pipeline+payment+revenue; Alerts: invoices+severity; Financial: metrics; Operations: health+note); (8) Visual sync lock: zero `.page`, zero inline styles (except color/layout vars), 100% design-system; (9) Built clean 895ms, 723 modules, 0 errors; (10) Reference HTML visual parity verified: 6-column KPI grid + colored top borders + 4-tab structure + real aggregates |
 | T-032 | Remaining Modules | Apply import page full reference parity redesign | import.jsx + Import.html | src/pages/ImportPage.tsx | DONE | Vinod | 2026-06-03 | 2026-06-03 | 2026-06-03 | **FULL REFERENCE PARITY + VISUAL SYNC LOCK COMPLETE**: (1) Added missing structure elements from reference (greet+icon, summary schips, info note, import-page wrapper). (2) Updated page copy to match reference exactly. (3) Refactored pagehead to include icon + label + lowercase "Import data" h1 + reference copy. (4) Added summary section with 3 schips (Source reports count, 4 Branch slots, Rows in DB). (5) Added info note with branch mapping guidance (dealer code → location/portal mapping). (6) All design-system classes used (pagehead, summary, schip, note, note--info, import-slot*, import-card*, import-group*, import-progress*). Zero Tailwind utilities. One state-driven inline style only (progress width). Build clean 723 modules. Cross-page baseline parity confirmed (wrapper, class grammar, KPI chips match Technician/FloorIncharge/Dashboard). |
-| T-033 | Remaining Modules | Apply shell + design-system parity to AutoDoc and JobCard | IMPLEMENTATION_PLAN.md section pending | src/pages/AutoDocPage.tsx, src/pages/JobCardPage.tsx | PENDING | unassigned | - | 2026-06-02 | - | Full redesign spec not present in audited files |
+| T-033 | Remaining Modules | Apply shell + design-system parity to AutoDoc and JobCard | IMPLEMENTATION_PLAN.md section 7.9 | src/pages/AutoDocPage.tsx, src/pages/JobCardPage.tsx | IN_PROGRESS | Vinod | 2026-06-06 | 2026-06-06 | - | **RESUMED AFTER SESSION CRASH**: AutoDoc parity work continued using local reference `local_folder/Reference/WebVersionRedesignReference/AutoDoc.html` + `autodoc.jsx`. This pass implemented reference-style Dashboard Job queue table, Job Card right-side Intake media card, existing-job Damage segmented stage workflow (Pre/Under/Post), and Submit tab two-column Submission gates + Claim actions while preserving handlers/workflow transitions. Build validation passing (`npm run -s build`). Remaining scope: JobCardPage shell/design-system parity and final T-044 sync-lock sweep. |
 | T-038 | Reports | Keep non-warranty report categories in blocked/pending state until dedicated redesign artifacts arrive | IMPLEMENTATION_PLAN.md + folder audit | src/pages/ReportsPage.tsx and reports/* (non-warranty) | BLOCKED | unassigned | - | 2026-06-02 | - | Needs dedicated redesign prototypes for labour-revenue, revenue, parts categories |
 | T-039 | Governance | Reconcile reference instruction artifact status (copilot-instructions.md) | folder audit recheck | local_folder/Reference/WebVersionRedesignReference | DONE | unassigned | - | 2026-06-02 | 2026-06-02 | File present in second-pass re-audit; blocker closed |
 | T-040 | Auth Governance | Resolve password-policy spec mismatch across redesign prototype and mirror TS flows | IMPLEMENTATION_PLAN.md + auth.jsx + src/pages/SignUpPage.tsx + src/pages/PasswordUpdatePage.tsx | src/pages/SignUpPage.tsx, src/pages/PasswordUpdatePage.tsx | BLOCKED | unassigned | - | 2026-06-02 | - | Needs explicit product decision before any logic normalization |
@@ -1077,33 +1077,33 @@ VISUAL SYNC LOCK ENFORCEMENT CHECKLIST (Copy to Task)
 
 **HIGH PRIORITY (Unblocked, Ready to Start):**
 
-1. **T-030 Technician** 
-   - Reference files: technician.jsx, technician-data.js
-   - Scope: Technician picker, income tracker cards/table, assigned rows table
-   - Pattern: Use shared pagehead, summary, card, tbl classes (no inner .page wrapper)
-   - Visual parity: Match Home/Dashboard baseline
+1. **T-033 AutoDoc & JobCard (Shell + Design Parity Only)** ⭐ **FIRST PRIORITY**
+   - Reference files: shell.jsx, components.css (shared system only; no full AutoDoc/JobCard redesign spec available)
+   - Scope: **LIMITED** — shell + design-system parity only (like T-032 Import model)
+   - Pattern: Port shared pagehead/card/tbl/summary grammar, apply shared CSS token system
+   - Visual parity: Match Home/Dashboard baseline (no pixel-perfect feature redesign needed)
+   - Implementation model: T-032 Import provides exact reference pattern
+   - Expected outcome: AutoDoc/JobCard pages use shared redesign classes, visual sync lock maintained
    - Checklist: See section 16.4 before starting
+   - Status: Ready to implement immediately
 
-2. **T-031 Warranty Reports**
-   - Reference files: warranty.jsx, warranty-data.js, warranty-main.jsx, WARRANTY_REFERENCE.md, all_reports_registry.html
-   - Scope: 4-tab dashboard (Overview/Critical Alerts/Financial/Operations) with 28 reports (A1–E3)
+2. **T-043 Warranty Report Views 15–40** (Phase 2)
+   - Reference files: WARRANTY_REFERENCE.md, all_reports_registry.html, local dump
+   - Scope: 15 new warranty report views (TR-024..TR-040) across 5 sections
+   - Extraction utilities: Already complete in src/lib/warranty/jsonExtraction.ts (TR-041)
    - Data source: 7 warranty tables (schema locked in section 7.10A)
-   - Business logic: 3 core rules (UTF-16 handling, 20%-revenue formula, classification)
-   - Real aggregates: ₹196.13L settlement/1,961 JCs + 14 more (see section 7.15)
-   - Visual tokens: Gradient #185FA5→#1D6F42, pills, KPI borders, 10–11px dense tables
-   - Pattern: Use shared card, tbl, summary classes (no inner .page wrapper)
-   - Critical: Do NOT add custom CSS per report; use shared class system
-   - Checklist: See section 16.4 before starting
+   - Status: Extraction unblocked; awaiting Phase 2 view implementations
+   - Priority: Start after T-033 completes
 
 **BLOCKED (Waiting for User Input):**
 
-3. **T-033 AutoDoc/JobCard Redesign** (B-001)
-   - Blocker: Missing dedicated redesign prototype for AutoDoc/JobCard
-   - Unblock: Provide finalized redesign reference file/snapshot for AutoDoc/JobCard
-
-4. **T-040 Password Policy Alignment** (B-003)
+3. **T-040 Password Policy Alignment** (B-003)
    - Blocker: Conflicting constraints across sources (8 chars vs 12+ strength)
    - Unblock: Product decision: keep SignUp at 8+ or elevate to 12+ strong?
+
+4. **T-038 Non-Warranty Report Categories** (B-001)
+   - Blocker: Missing dedicated redesign specs for labour-revenue, revenue, parts categories
+   - Unblock: Provide finalized redesign references for these report categories
 
 ---
 

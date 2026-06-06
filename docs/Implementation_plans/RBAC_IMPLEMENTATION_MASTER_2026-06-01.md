@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-03 22:30 UTC  
+**Last Updated**: 2026-06-06 17:35 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-01)
@@ -103,6 +103,18 @@
     - Shows "My assigned vehicles" when user sees only self-assigned sa_employee_code (SA pattern).
     - Updated description reflects broader dealer-wide responsibility.
   - Status: ✓ COMPLETE — CRM dealer-scoped visibility enabled; both SA code formats supported; frontend labels updated.
+
+### Execution Update (2026-06-06)
+
+- Authoritative policy re-audit performed from `local_folder/backups/full_database.sql` and mirror `local_folder/backups/chunks/full_database.sql.part_*`.
+- Confirmed production mismatch: `service_reception_select_crm_dealer_scope` granted dealer-scope visibility for CRM users, but `service_reception_update_sa` remained employee-code scoped only.
+- Symptom reproduced in Service Advisor UI: rows visible under CRM dealer-scope could not be marked done (`invoice_done_at` update failed).
+- Migration prepared to align UPDATE scope with visible-row semantics for users with `service_advisor` modify rights:
+  - `supabase/migrations/20260606173000_align_service_advisor_update_with_visible_rows.sql`
+  - Policy behavior after migration:
+    - `service_reception_update_sa` allows UPDATE when `has_module_modify('service_advisor')` AND `sa_employee_code IS NOT NULL` AND (`user_has_employee_code(sa_employee_code)` OR `user_is_crm_for_dealer_sa(sa_employee_code)`).
+- Frontend gating in `src/pages/ServiceAdvisorPage.tsx` was aligned with module modify permissions to avoid contradictory UI disablement for rows that are policy-eligible.
+- Governance note: this is an intentional write-scope broadening for CRM dealer-scope operations and supersedes the 2026-06-05 "no broadening of write scope" note for Service Advisor UPDATE only.
 
 ### Superadmin Default Access Policy (Locked)
 
