@@ -219,6 +219,28 @@ export default function ServiceAdvisorPage() {
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
 
+  const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
+
+  const matchesSearch = (row: ReceptionEntryRow): boolean => {
+    if (!searchQuery) return true
+
+    const haystack = [
+      row.reg_number,
+      row.model ?? '',
+      row.sa_name ?? '',
+      row.jc_number ?? '',
+      row.owner_name ?? '',
+      row.owner_phone ?? '',
+      row.source,
+      row.branch ?? '',
+      row.created_by,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(searchQuery)
+  }
+
   const branchFilteredRows = useMemo(() => {
     if (selectedBranch === 'all') return rows
     return rows.filter(r => r.branch === selectedBranch)
@@ -249,8 +271,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
-  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    return summaryScoped.filter((row) => matchesSearch(row))
+  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
 
   const fuelTypeCountRows = useMemo(() => {
     let scoped = rows
@@ -265,8 +288,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
-  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    return summaryScoped.filter((row) => matchesSearch(row))
+  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
 
   const categoryCountRows = useMemo(() => {
     let scoped = rows
@@ -281,8 +305,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
-  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    return summaryScoped.filter((row) => matchesSearch(row))
+  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
 
   const advisorCountRows = useMemo(() => {
     let scoped = rows
@@ -297,8 +322,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
     }
 
-    return applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
-  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    return summaryScoped.filter((row) => matchesSearch(row))
+  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
 
   const advisorOptions = useMemo(() => {
     const optionMap = new Map<string, { label: string; count: number }>()
@@ -323,9 +349,11 @@ export default function ServiceAdvisorPage() {
   }, [advisorCountRows])
 
   const displayedRows = useMemo(() => {
-    if (selectedAdvisor === 'all') return categoryFilteredRows
-    return categoryFilteredRows.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
-  }, [categoryFilteredRows, selectedAdvisor])
+    const advisorScoped = selectedAdvisor === 'all'
+      ? categoryFilteredRows
+      : categoryFilteredRows.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
+    return advisorScoped.filter((row) => matchesSearch(row))
+  }, [categoryFilteredRows, selectedAdvisor, searchQuery])
 
   const isWorkCompleted = (row: ReceptionEntryRow): boolean => {
     const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
@@ -357,29 +385,6 @@ export default function ServiceAdvisorPage() {
     return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_done_at)
   }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
 
-  const searchedRows = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return cardFilteredRows
-
-    return cardFilteredRows.filter((row) => {
-      const haystack = [
-        row.reg_number,
-        row.model ?? '',
-        row.sa_name ?? '',
-        row.jc_number ?? '',
-        row.owner_name ?? '',
-        row.owner_phone ?? '',
-        row.source,
-        row.branch ?? '',
-        row.created_by,
-      ]
-        .join(' ')
-        .toLowerCase()
-
-      return haystack.includes(query)
-    })
-  }, [cardFilteredRows, search])
-
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
     return Array.from(branches).sort()
@@ -398,7 +403,7 @@ export default function ServiceAdvisorPage() {
   }, [categoryCountRows])
 
   const hasBaseRows = useMemo(() => displayedRows.length > 0, [displayedRows.length])
-  const hasRows = useMemo(() => searchedRows.length > 0, [searchedRows.length])
+  const hasRows = useMemo(() => cardFilteredRows.length > 0, [cardFilteredRows.length])
 
   useEffect(() => {
     if (selectedAdvisor === 'all') return
@@ -1066,7 +1071,7 @@ export default function ServiceAdvisorPage() {
         <div className="card__head">
           <div>
             <h3>
-              Assigned entries <span className="subcount">({searchedRows.length})</span>
+              Assigned entries <span className="subcount">({cardFilteredRows.length})</span>
             </h3>
             <div className="sub">
               {isAdmin ? 'Showing all intakes from filtered branch · edits save per row' : 'Each row is one intake assigned to you · edits save per row'}
@@ -1119,7 +1124,7 @@ export default function ServiceAdvisorPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {searchedRows.map((row) => {
+                  {cardFilteredRows.map((row) => {
                     const draft = drafts[row.id] ?? EMPTY_DRAFT
                     const draftServiceType = String(draft.service_type ?? '')
                     const normalizedDraftServiceType = draftServiceType.trim().toLowerCase()
