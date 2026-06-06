@@ -1250,6 +1250,72 @@ export default function ImportPage() {
           return inserted
         }
 
+        const upsertJcClosedRowsByBusinessKey = async (
+          rows: Record<string, unknown>[],
+        ): Promise<number> => {
+          let processed = 0
+
+          for (const row of rows) {
+            const branchKey = String(row.branch ?? '').trim()
+            const jobCardKey = String(row.job_card_number ?? '').trim().toUpperCase()
+
+            if (!branchKey || !jobCardKey) {
+              continue
+            }
+
+            const payload = {
+              ...row,
+              branch: branchKey,
+              job_card_number: jobCardKey,
+            }
+
+            const { data: updatedRows, error: updateError } = await supabase
+              .from(tableName)
+              .update(payload)
+              .eq('branch', branchKey)
+              .eq('job_card_number', jobCardKey)
+              .select('id')
+
+            if (updateError) {
+              throw new Error(updateError.message ?? 'Update failed')
+            }
+
+            if ((updatedRows?.length ?? 0) > 0) {
+              processed += 1
+              continue
+            }
+
+            const { error: insertError } = await supabase.from(tableName).insert(payload)
+
+            if (!insertError) {
+              processed += 1
+              continue
+            }
+
+            const isDuplicate =
+              insertError.code === '23505' ||
+              (insertError.message ?? '').toLowerCase().includes('duplicate key value violates unique constraint')
+
+            if (!isDuplicate) {
+              throw new Error(insertError.message ?? 'Insert failed')
+            }
+
+            const { error: retryUpdateError } = await supabase
+              .from(tableName)
+              .update(payload)
+              .eq('branch', branchKey)
+              .eq('job_card_number', jobCardKey)
+
+            if (retryUpdateError) {
+              throw new Error(retryUpdateError.message ?? 'Retry update failed')
+            }
+
+            processed += 1
+          }
+
+          return processed
+        }
+
         const dedupeRowsByKeys = (
           rows: Record<string, unknown>[],
           keyBuilder: (row: Record<string, unknown>) => string,
@@ -1335,20 +1401,6 @@ export default function ImportPage() {
             const rowKey = `${rowBranch}|${rowPortal}|${rowHash}`
             return !existingKeys.has(rowKey)
           })
-        }
-
-        const getBranchRowCount = async (targetBranch: string): Promise<number | null> => {
-          const { count, error } = await supabase
-            .from(tableName)
-            .select('id', { count: 'exact', head: true })
-            .eq('branch', targetBranch)
-
-          if (error) {
-            console.warn(`Failed to read row count for ${tableName}/${targetBranch}: ${error.message}`)
-            return null
-          }
-
-          return count ?? 0
         }
 
         // For VAS table, prepare header mapping upfront (extract from first available file)
@@ -1533,8 +1585,6 @@ export default function ImportPage() {
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
 
-            const beforeBranchCount = await getBranchRowCount(standardBranch)
-
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildJcClosedInsertRow(
                 rawRows[rowIdx],
@@ -1629,6 +1679,21 @@ export default function ImportPage() {
                 }
                 // Ensure branch is always set (fallback to selected branch if not set)
                 if (!row.branch) row.branch = standardBranch
+
+                const normalizedJobCardNumber =
+                  row.job_card_number == null ? '' : String(row.job_card_number).trim().toUpperCase()
+                if (!normalizedJobCardNumber) {
+                  jcParseErrors.push({
+                    rowNumber: rowIdx + 2,
+                    fieldName: 'job_card_number',
+                    columnName: 'job_card_number',
+                    value: row.job_card_number == null ? '' : String(row.job_card_number),
+                    error: 'Job card number is required for dedupe/update',
+                  })
+                  continue
+                }
+
+                row.job_card_number = normalizedJobCardNumber
                 insertRows.push(row)
               }
             }
@@ -1639,25 +1704,15 @@ export default function ImportPage() {
               )
             }
 
-            const attemptedInserted = await insertRowsInChunks(insertRows)
-            const afterBranchCount = await getBranchRowCount(standardBranch)
+            const dedupedJcRows = dedupeRowsByKeys(
+              insertRows,
+              (row) =>
+                `${String(row.branch ?? '').trim().toLowerCase()}|${String(row.job_card_number ?? '')
+                  .trim()
+                  .toUpperCase()}`,
+            )
 
-            if (beforeBranchCount !== null && afterBranchCount !== null) {
-              const actualInserted = Math.max(0, afterBranchCount - beforeBranchCount)
-
-              // Dedupe/merge trigger can legitimately yield zero net new rows when
-              // incoming rows are merged into existing keepers or fully de-duplicated.
-              if (insertRows.length > 0 && actualInserted === 0) {
-                console.info(
-                  'PSF upload completed with 0 net new rows (rows were likely deduplicated or merged into existing records).',
-                )
-              }
-
-              totalInserted += actualInserted
-            } else {
-              // Fallback when count query is blocked (for example, temporary permission issues).
-              totalInserted += attemptedInserted
-            }
+            totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
