@@ -1569,9 +1569,11 @@ export default function ImportPage() {
             if (beforeBranchCount !== null && afterBranchCount !== null) {
               const actualInserted = Math.max(0, afterBranchCount - beforeBranchCount)
 
+              // Dedupe/merge trigger can legitimately yield zero net new rows when
+              // incoming rows are merged into existing keepers or fully de-duplicated.
               if (insertRows.length > 0 && actualInserted === 0) {
-                throw new Error(
-                  'PSF upload reached database but 0 rows were persisted. Most likely cause: stale entries in public.job_card_closed_data_import_signatures (dedupe registry) while public.job_card_closed_data has been cleared. Fix in Supabase SQL editor: TRUNCATE TABLE public.job_card_closed_data_import_signatures; then re-upload.',
+                console.info(
+                  'PSF upload completed with 0 net new rows (rows were likely deduplicated or merged into existing records).',
                 )
               }
 

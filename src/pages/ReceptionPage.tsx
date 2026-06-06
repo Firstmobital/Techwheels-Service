@@ -17,6 +17,36 @@ import {
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 
 const SETTINGS_MODELS_STORAGE_KEY = 'settings.models.v1'
+const UNKNOWN_FUEL_TYPE = 'Unknown'
+const UNKNOWN_SERVICE_TYPE = 'Null'
+
+const SERVICE_TYPE_ABBREVIATIONS: Record<string, string> = {
+  'running repairs': 'RR',
+  'first free service': 'FFS',
+  'second free service': 'SFS',
+  'third free service': 'TFS',
+  'paid service': 'PS',
+  'accident': 'ACC',
+  'pdi': 'PDI',
+  'campaign': 'CMP',
+  'e breakdown': 'EBD',
+  'updation': 'UPD',
+  null: 'NULL',
+}
+
+const SERVICE_TYPE_CARD_ORDER = [
+  'first free service',
+  'second free service',
+  'third free service',
+  'paid service',
+  'running repairs',
+  'accident',
+  'updation',
+  'e breakdown',
+  'campaign',
+  'pdi',
+  'null',
+]
 
 const DEFAULT_MODEL_OPTIONS = [
   'Nexon',
@@ -56,6 +86,8 @@ const EMPTY_FORM: FormState = {
   owner_phone: '',
   source: SOURCE_OPTIONS[0],
 }
+
+type ReceptionListFilter = 'default' | 'today'
 
 function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -183,6 +215,36 @@ function sourceTone(source: string): string {
   return ''
 }
 
+function getFuelTypeLabel(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_FUEL_TYPE
+}
+
+function normalizeName(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function normalizeServiceType(value: string | null | undefined): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ')
+}
+
+function getServiceTypeLabel(value: string | null | undefined): string {
+  const normalized = normalizeServiceType(value)
+  if (normalized.toLowerCase() === 'null') return UNKNOWN_SERVICE_TYPE
+  return normalized || UNKNOWN_SERVICE_TYPE
+}
+
+function getServiceTypeAbbreviation(label: string): string {
+  const key = normalizeServiceType(label).toLowerCase()
+  const mapped = SERVICE_TYPE_ABBREVIATIONS[key]
+  if (mapped) return mapped
+
+  const tokens = key.split(' ').filter(Boolean)
+  if (tokens.length === 0) return 'UNK'
+  if (tokens.length === 1) return tokens[0].slice(0, 3).toUpperCase()
+  return tokens.map((token) => token[0]).join('').slice(0, 4).toUpperCase()
+}
+
 export default function ReceptionPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [entries, setEntries] = useState<ReceptionEntryRow[]>([])
@@ -201,6 +263,114 @@ export default function ReceptionPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [selectedListFilter, setSelectedListFilter] = useState<ReceptionListFilter>('default')
+  const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
+  const [selectedServiceType, setSelectedServiceType] = useState<string | 'all'>('all')
+
+  const todayKey = useMemo(() => {
+    const now = new Date()
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now)
+  }, [])
+
+  const todayEntries = useMemo(() => {
+    return entries.filter((entry) => {
+      const created = new Date(entry.created_at)
+      if (Number.isNaN(created.getTime())) return false
+
+      const createdKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(created)
+
+      return createdKey === todayKey
+    })
+  }, [entries, todayKey])
+
+  const fuelFilterBaseEntries = useMemo(() => {
+    if (selectedListFilter === 'today') return todayEntries
+    return entries
+  }, [entries, selectedListFilter, todayEntries])
+
+  const employeeFuelTypeByCode = useMemo(() => {
+    return new Map(
+      employeeOptions.map((employee) => [
+        String(employee.employee_code ?? '').trim().toUpperCase(),
+        getFuelTypeLabel(employee.fuel_type),
+      ]),
+    )
+  }, [employeeOptions])
+
+  const employeeFuelTypeByName = useMemo(() => {
+    return new Map(
+      employeeOptions.map((employee) => [
+        String(employee.employee_name ?? '').trim().toLowerCase(),
+        getFuelTypeLabel(employee.fuel_type),
+      ]),
+    )
+  }, [employeeOptions])
+
+  const getEntryFuelTypeLabel = (entry: ReceptionEntryRow): string => {
+    const rowFuelType = String(entry.fuel_type ?? '').trim()
+    if (rowFuelType) return rowFuelType
+
+    const codeKey = String(entry.sa_employee_code ?? '').trim().toUpperCase()
+    if (codeKey) {
+      const byCode = employeeFuelTypeByCode.get(codeKey)
+      if (byCode) return byCode
+    }
+
+    const nameKey = String(entry.sa_name ?? '').trim().toLowerCase()
+    if (nameKey) {
+      const byName = employeeFuelTypeByName.get(nameKey)
+      if (byName) return byName
+    }
+
+    return UNKNOWN_FUEL_TYPE
+  }
+
+  const fuelTypeOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(fuelFilterBaseEntries.map((entry) => getEntryFuelTypeLabel(entry))),
+    )
+    return values.sort((a, b) => a.localeCompare(b))
+  }, [fuelFilterBaseEntries, employeeFuelTypeByCode, employeeFuelTypeByName])
+
+  const serviceTypeBaseEntries = useMemo(() => {
+    if (selectedFuelType === 'all') return fuelFilterBaseEntries
+    return fuelFilterBaseEntries.filter((entry) => getEntryFuelTypeLabel(entry) === selectedFuelType)
+  }, [fuelFilterBaseEntries, selectedFuelType, employeeFuelTypeByCode, employeeFuelTypeByName])
+
+  const serviceTypeCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    serviceTypeBaseEntries.forEach((entry) => {
+      const label = getServiceTypeLabel(entry.service_type)
+      counts.set(label, (counts.get(label) ?? 0) + 1)
+    })
+    return counts
+  }, [serviceTypeBaseEntries])
+
+  const serviceTypeOptions = useMemo(() => {
+    const orderMap = new Map(SERVICE_TYPE_CARD_ORDER.map((key, index) => [key, index]))
+
+    return Array.from(serviceTypeCounts.keys()).sort((a, b) => {
+      const aKey = normalizeServiceType(a).toLowerCase()
+      const bKey = normalizeServiceType(b).toLowerCase()
+      const aOrder = orderMap.get(aKey)
+      const bOrder = orderMap.get(bKey)
+
+      if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder
+      if (aOrder !== undefined) return -1
+      if (bOrder !== undefined) return 1
+      return a.localeCompare(b)
+    })
+  }, [serviceTypeCounts])
 
   const sortedEmployeeOptions = useMemo(() => {
     const values = [...employeeOptions]
@@ -208,14 +378,30 @@ export default function ReceptionPage() {
     return values
   }, [employeeOptions])
 
+  const entryLookupById = useMemo(() => {
+    return new Map(entries.map((entry) => [entry.id, entry]))
+  }, [entries])
+
+  const hasSelectedSaInOptions = useMemo(() => {
+    const selectedCode = String(form.sa_employee_code ?? '').trim().toUpperCase()
+    if (!selectedCode) return false
+    return sortedEmployeeOptions.some(
+      (employee) => String(employee.employee_code ?? '').trim().toUpperCase() === selectedCode,
+    )
+  }, [form.sa_employee_code, sortedEmployeeOptions])
+
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase()
+    const serviceTypeFilteredEntries =
+      selectedServiceType === 'all'
+        ? serviceTypeBaseEntries
+        : serviceTypeBaseEntries.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
 
     if (!query) {
-      return entries.filter((entry) => String(entry.sa_name ?? '').trim() === '')
+      return serviceTypeFilteredEntries
     }
 
-    return entries.filter((entry) => {
+    return serviceTypeFilteredEntries.filter((entry) => {
       const joined = [
         entry.reg_number,
         entry.model ?? '',
@@ -230,7 +416,13 @@ export default function ReceptionPage() {
 
       return joined.includes(query)
     })
-  }, [entries, search])
+  }, [serviceTypeBaseEntries, search, selectedServiceType])
+
+  useEffect(() => {
+    if (selectedServiceType === 'all') return
+    if (serviceTypeOptions.includes(selectedServiceType)) return
+    setSelectedServiceType('all')
+  }, [selectedServiceType, serviceTypeOptions])
 
   async function loadModelOptions() {
     const result = await getModelNames()
@@ -364,10 +556,19 @@ export default function ReceptionPage() {
   }
 
   function startEdit(entry: ReceptionEntryRow) {
-    const resolvedEmployeeCode =
-      entry.sa_employee_code
-      ?? employeeOptions.find((employee) => employee.employee_name === entry.sa_name)?.employee_code
-      ?? ''
+    const entryCode = String(entry.sa_employee_code ?? '').trim().toUpperCase()
+    const byCode = entryCode
+      ? employeeOptions.find((employee) => String(employee.employee_code ?? '').trim().toUpperCase() === entryCode)
+      : undefined
+
+    const entryNames = new Set([
+      normalizeName(entry.sa_name),
+      normalizeName(entry.sa_display_name),
+    ].filter(Boolean))
+
+    const byName = employeeOptions.find((employee) => entryNames.has(normalizeName(employee.employee_name)))
+
+    const resolvedEmployeeCode = byCode?.employee_code ?? byName?.employee_code ?? entryCode
 
     setEditingId(entry.id)
     setForm({
@@ -478,6 +679,73 @@ export default function ReceptionPage() {
       {error && <div className="alert alert--err mb-gap">{error}</div>}
       {notice && <div className="alert alert--ok mb-gap">{notice}</div>}
 
+      <div className="toolbar toolbar--tight">
+        <span className="toolbar__label">Filter by fuel type:</span>
+        <button
+          type="button"
+          onClick={() => setSelectedFuelType('all')}
+          className={`btn btn--sm ${selectedFuelType === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+        >
+          All ({fuelFilterBaseEntries.length})
+        </button>
+        {fuelTypeOptions.map((fuelType) => {
+          const count = fuelFilterBaseEntries.filter((entry) => getEntryFuelTypeLabel(entry) === fuelType).length
+          return (
+            <button
+              key={fuelType}
+              type="button"
+              onClick={() => setSelectedFuelType(fuelType)}
+              className={`btn btn--sm ${selectedFuelType === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+            >
+              {fuelType} ({count})
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="summary">
+        <button
+          type="button"
+          onClick={() => setSelectedListFilter((prev) => (prev === 'today' ? 'default' : 'today'))}
+          disabled={todayEntries.length === 0}
+          className={`schip schip--btn ${selectedListFilter === 'today' ? 'schip--active' : ''}`}
+        >
+          <span className="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 2v3m8-3v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+          <div>
+            <div className="n">{todayEntries.length}</div>
+            <div className="l">Today</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSelectedServiceType('all')}
+          className={`schip schip--btn ${selectedServiceType === 'all' ? 'schip--active' : ''}`}
+        >
+          <span className="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></span>
+          <div>
+            <div className="n">{serviceTypeBaseEntries.length}</div>
+            <div className="l">ALL SR</div>
+          </div>
+        </button>
+
+        {serviceTypeOptions.map((serviceType) => (
+          <button
+            key={serviceType}
+            type="button"
+            onClick={() => setSelectedServiceType(serviceType)}
+            className={`schip schip--btn ${selectedServiceType === serviceType ? 'schip--active' : ''}`}
+            title={serviceType}
+          >
+            <span className="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm3 4h8m-8 4h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+            <div>
+              <div className="n">{serviceTypeCounts.get(serviceType) ?? 0}</div>
+              <div className="l">{getServiceTypeAbbreviation(serviceType)}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
       <div className="recep-grid">
         <form onSubmit={handleSubmit} className="card recep-form">
           <div className="card__head">
@@ -542,6 +810,11 @@ export default function ReceptionPage() {
                 className="sel"
               >
                 <option value="">- Select SA -</option>
+                {editingId !== null && form.sa_employee_code && !hasSelectedSaInOptions && (
+                  <option value={form.sa_employee_code}>
+                    {entryLookupById.get(editingId)?.sa_name || 'Current SA'} ({form.sa_employee_code})
+                  </option>
+                )}
                 {sortedEmployeeOptions.map((employee) => (
                   <option key={employee.employee_code} value={employee.employee_code}>
                     {employee.employee_name} ({employee.employee_code})
@@ -602,7 +875,12 @@ export default function ReceptionPage() {
           <div className="card__head">
             <div>
               <h3>Reception entries</h3>
-              <div className="sub">Newest first · {visibleEntries.length} shown</div>
+              <div className="sub">
+                Newest first · {visibleEntries.length} shown
+                {selectedListFilter === 'today' ? ' · Today filter' : ''}
+                {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
+                {selectedServiceType !== 'all' ? ` · ${selectedServiceType}` : ''}
+              </div>
             </div>
             <span className="inp-wrap recep-search">
               <span className="icon-l">⌕</span>
@@ -620,7 +898,11 @@ export default function ReceptionPage() {
               <div className="empty-state empty-state--lg">Loading reception entries...</div>
             ) : visibleEntries.length === 0 ? (
               <div className="empty-state empty-state--lg">
-                {search.trim() ? 'No entries match your search.' : 'No unassigned entries found.'}
+                {search.trim()
+                  ? 'No entries match your search.'
+                  : selectedListFilter === 'today'
+                    ? 'No intake entries found for today.'
+                    : 'No intake entries found.'}
               </div>
             ) : (
               visibleEntries.map((entry) => (
