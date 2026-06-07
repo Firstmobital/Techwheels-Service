@@ -71,6 +71,8 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'Third Free Service',
   'Paid Service',
   'Updation',
+  'E Breakdown',
+  'Campaign',
 ]
 
 function normalizePhone(value?: string | null): string | null {

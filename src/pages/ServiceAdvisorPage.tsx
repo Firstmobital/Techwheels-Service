@@ -37,6 +37,8 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
   'third free service',
   'paid service',
   'updation',
+  'e breakdown',
+  'campaign',
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
