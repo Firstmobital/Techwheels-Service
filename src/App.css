@@ -309,7 +309,7 @@ textarea.inp { height: auto; padding: 11px 13px; resize: vertical; line-height: 
 
 /* Table */
 .tbl-wrap { overflow-x: auto; }
-table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tbl thead th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 14px 11px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .tbl thead th.ctr { text-align: center; }
 .tbl tbody td { padding: 0 14px; height: var(--row-h); border-bottom: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; vertical-align: middle; }
@@ -1121,6 +1121,66 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .remark-cell {
   white-space: normal;
   color: var(--ink-2);
+}
+
+/* Service Advisor: keep columns evenly spaced using page-specific table rules */
+.tbl.sa-tbl {
+  table-layout: fixed;
+  width: 1524px;
+  min-width: 1524px;
+}
+
+.sa-tbl th:nth-child(1),
+.sa-tbl td:nth-child(1) { width: 130px; }
+
+.sa-tbl th:nth-child(2),
+.sa-tbl td:nth-child(2) { width: 110px; }
+
+.sa-tbl th:nth-child(3),
+.sa-tbl td:nth-child(3) { width: 130px; }
+
+.sa-tbl th:nth-child(4),
+.sa-tbl td:nth-child(4) { width: 120px; }
+
+.sa-tbl th:nth-child(5),
+.sa-tbl td:nth-child(5) { width: 190px; }
+
+.sa-tbl th:nth-child(6),
+.sa-tbl td:nth-child(6) { width: 190px; }
+
+.sa-tbl th:nth-child(7),
+.sa-tbl td:nth-child(7) { width: 170px; }
+
+.sa-tbl th:nth-child(8),
+.sa-tbl td:nth-child(8) { width: 170px; }
+
+.sa-tbl th:nth-child(9),
+.sa-tbl td:nth-child(9),
+.sa-tbl th:nth-child(10),
+.sa-tbl td:nth-child(10),
+.sa-tbl th:nth-child(11),
+.sa-tbl td:nth-child(11) {
+  width: 108px;
+}
+
+.sa-tbl td:nth-child(9),
+.sa-tbl td:nth-child(10),
+.sa-tbl td:nth-child(11) {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.sa-tbl .td-estimate,
+.sa-tbl .td-invoice,
+.sa-tbl .td-save {
+  min-width: 0;
+}
+
+.sa-tbl .sel--service-type,
+.sa-tbl .inp--jc,
+.sa-tbl .inp--remark {
+  width: 100%;
+  min-width: 0;
 }
 
 /* Text right alignment utility */

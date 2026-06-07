@@ -1216,7 +1216,7 @@ export default function ServiceAdvisorPage() {
             </div>
           ) : (
             <div className="tbl-wrap scroll">
-              <table className="tbl">
+              <table className="tbl sa-tbl">
                 <thead>
                   <tr>
                     <th>Created</th>
