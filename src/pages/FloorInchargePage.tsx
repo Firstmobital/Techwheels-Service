@@ -596,7 +596,7 @@ export default function FloorInchargePage() {
   }, [technicianCountRows, assignments, technicianFilter])
 
   const assignedCount = scopedJobCards.filter((jc) => !!assignments[jc.assignment_key]).length
-  const unassignedCount = scopedJobCards.length - assignedCount
+  const unassignedCount = scopedJobCards.filter((jc) => !assignments[jc.assignment_key]).length
   const holdCount = scopedJobCards.filter((jc) => {
     const assignment = assignments[jc.assignment_key]
     return Boolean(assignment) && normalizeStatusValue(assignment?.work_status) === 'hold'

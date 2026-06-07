@@ -40,7 +40,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
-type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'floor_hold' | 'in_process' | 'completed'
+type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'no_technician' | 'floor_hold' | 'in_process' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -103,6 +103,7 @@ function applySummaryCardFilter(
   completedJobCardNumbers: Set<string>,
   holdJobCardNumbers: Set<string>,
   inProcessJobCardNumbers: Set<string>,
+  allAssignedJobCardNumbers: Set<string>,
 ): ReceptionEntryRow[] {
   const isCompleted = (row: ReceptionEntryRow): boolean => {
     const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
@@ -119,6 +120,10 @@ function applySummaryCardFilter(
     return Boolean(jcNumber) && inProcessJobCardNumbers.has(jcNumber)
   }
 
+  const isFloorApplicable = (row: ReceptionEntryRow): boolean => {
+    return getCategoryForServiceType(row.service_type) === 'floor'
+  }
+
   if (selectedSummaryCard === 'all') return rows
   if (selectedSummaryCard === 'job_card_pending') {
     return rows.filter((row) => isJobCardPending(row.jc_number))
@@ -128,6 +133,18 @@ function applySummaryCardFilter(
   }
   if (selectedSummaryCard === 'estimate_pending') {
     return rows.filter((row) => !row.estimate_storage_path)
+  }
+  if (selectedSummaryCard === 'no_technician') {
+    // Match Floor Incharge's "Unassigned" logic: entries with NO assignment row
+    const filtered = rows.filter((row) => {
+      if (!isFloorApplicable(row)) return false
+      const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+      // Entry has no JC number → no assignment row possible
+      if (!jcNumber) return true
+      // Entry has JC number → check if assignment row exists
+      return !allAssignedJobCardNumbers.has(jcNumber)
+    })
+    return filtered
   }
   if (selectedSummaryCard === 'floor_hold') {
     return rows.filter((row) => isHold(row))
@@ -230,6 +247,7 @@ export default function ServiceAdvisorPage() {
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
   const [inProcessJobCardNumbers, setInProcessJobCardNumbers] = useState<Set<string>>(new Set())
+  const [allAssignedJobCardNumbers, setAllAssignedJobCardNumbers] = useState<Set<string>>(new Set())
 
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
 
@@ -283,9 +301,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
+  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
   const fuelTypeCountRows = useMemo(() => {
     let scoped = rows
@@ -300,9 +318,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
+  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
   const categoryCountRows = useMemo(() => {
     let scoped = rows
@@ -317,9 +335,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
+  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
   const advisorCountRows = useMemo(() => {
     let scoped = rows
@@ -334,9 +352,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
+  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
   const advisorOptions = useMemo(() => {
     const optionMap = new Map<string, { label: string; count: number }>()
@@ -382,6 +400,17 @@ export default function ServiceAdvisorPage() {
     return Boolean(jcNumber) && inProcessJobCardNumbers.has(jcNumber)
   }
 
+  const isTechnicianAssigned = (row: ReceptionEntryRow): boolean => {
+    // "No Technician" = no assignment row (matches Floor Incharge "Unassigned")
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    if (!jcNumber) return false // No JC number → no assignment possible
+    return allAssignedJobCardNumbers.has(jcNumber) // Check if assignment row exists
+  }
+
+  const isFloorApplicable = (row: ReceptionEntryRow): boolean => {
+    return getCategoryForServiceType(row.service_type) === 'floor'
+  }
+
   const cardFilteredRows = useMemo(() => {
     if (selectedSummaryCard === 'all') return displayedRows
     if (selectedSummaryCard === 'job_card_pending') {
@@ -393,6 +422,9 @@ export default function ServiceAdvisorPage() {
     if (selectedSummaryCard === 'estimate_pending') {
       return displayedRows.filter((row) => !row.estimate_storage_path)
     }
+    if (selectedSummaryCard === 'no_technician') {
+      return displayedRows.filter((row) => isFloorApplicable(row) && !isTechnicianAssigned(row))
+    }
     if (selectedSummaryCard === 'floor_hold') {
       return displayedRows.filter((row) => isWorkHold(row))
     }
@@ -403,7 +435,7 @@ export default function ServiceAdvisorPage() {
       return displayedRows.filter((row) => isWorkCompleted(row) && Boolean(row.invoice_done_at))
     }
     return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_done_at)
-  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers])
+  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
 
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
@@ -471,6 +503,22 @@ export default function ServiceAdvisorPage() {
     () => displayedRows.filter((r) => isWorkCompleted(r) && !r.invoice_done_at).length,
     [displayedRows, completedJobCardNumbers],
   )
+  const noTechnicianCount = useMemo(
+    () => displayedRows.filter((r) => isFloorApplicable(r) && !isTechnicianAssigned(r)).length,
+    [displayedRows, allAssignedJobCardNumbers],
+  )
+
+  // Debug: Log count difference analysis
+  useEffect(() => {
+    const floorRows = displayedRows.filter((r) => isFloorApplicable(r))
+    const noTech = floorRows.filter((r) => !isTechnicianAssigned(r))
+    const withoutJc = floorRows.filter((r) => !r.jc_number?.trim())
+    const noAssignment = floorRows.filter((r) => {
+      const jcNum = String(r.jc_number ?? '').trim().toUpperCase()
+      return jcNum && !allAssignedJobCardNumbers.has(jcNum)
+    })
+    console.log(`[DEBUG] Floor rows: ${floorRows.length}, No Technician: ${noTech.length}, Without JC: ${withoutJc.length}, No Assignment (with JC): ${noAssignment.length}`)
+  }, [displayedRows, allAssignedJobCardNumbers])
   const floorHoldCount = useMemo(
     () => displayedRows.filter((r) => isWorkHold(r)).length,
     [displayedRows, holdJobCardNumbers],
@@ -629,28 +677,36 @@ export default function ServiceAdvisorPage() {
       try {
         const res = await supabase
           .from('technician_assignments')
-          .select('job_card_number, work_status')
-          .in('work_status', ['completed', 'hold', 'work_inprocess'])
+          .select('job_card_number, work_status, technician_code')
 
         if (!res.error && res.data) {
           const completed = new Set<string>()
           const hold = new Set<string>()
           const inProcess = new Set<string>()
+          const technicianAssigned = new Set<string>()
+          const allAssigned = new Set<string>()
           res.data.forEach((row: Record<string, unknown>) => {
             const jobCardNum = String(row.job_card_number ?? '').trim().toUpperCase()
             const status = String(row.work_status ?? '').trim().toLowerCase()
+            const technicianCode = String(row.technician_code ?? '').trim()
             if (jobCardNum) {
+              allAssigned.add(jobCardNum)
               if (status === 'completed') completed.add(jobCardNum)
               if (status === 'hold') hold.add(jobCardNum)
               if (status === 'work_inprocess') inProcess.add(jobCardNum)
+              if (technicianCode) technicianAssigned.add(jobCardNum)
             }
           })
           setCompletedJobCardNumbers(completed)
           setHoldJobCardNumbers(hold)
           setInProcessJobCardNumbers(inProcess)
+          setAllAssignedJobCardNumbers(technicianAssigned)
+          setAllAssignedJobCardNumbers(allAssigned)
+          console.log('Loaded all assigned job cards:', Array.from(allAssigned))
           console.log('Loaded completed job cards:', Array.from(completed))
           console.log('Loaded hold job cards:', Array.from(hold))
           console.log('Loaded in-process job cards:', Array.from(inProcess))
+          console.log('Loaded technician-assigned job cards:', Array.from(technicianAssigned))
         }
       } catch (err) {
         console.error('Failed to fetch assignment status job cards:', err)
@@ -665,62 +721,13 @@ export default function ServiceAdvisorPage() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'technician_assignments',
-          filter: 'work_status=eq.completed',
         },
-        (payload) => {
-          const updated = payload.new as { job_card_number?: string } | null
-          if (updated?.job_card_number) {
-            const normalized = String(updated.job_card_number).trim().toUpperCase()
-            setCompletedJobCardNumbers((prev) => {
-              const next = new Set([...prev, normalized])
-              console.log('Realtime update - completed job:', normalized)
-              return next
-            })
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'technician_assignments',
-          filter: 'work_status=eq.hold',
+        () => {
+          void fetchAssignmentStatusJobCards()
         },
-        (payload) => {
-          const updated = payload.new as { job_card_number?: string } | null
-          if (updated?.job_card_number) {
-            const normalized = String(updated.job_card_number).trim().toUpperCase()
-            setHoldJobCardNumbers((prev) => {
-              const next = new Set([...prev, normalized])
-              console.log('Realtime update - hold job:', normalized)
-              return next
-            })
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'technician_assignments',
-          filter: 'work_status=eq.work_inprocess',
-        },
-        (payload) => {
-          const updated = payload.new as { job_card_number?: string } | null
-          if (updated?.job_card_number) {
-            const normalized = String(updated.job_card_number).trim().toUpperCase()
-            setInProcessJobCardNumbers((prev) => {
-              const next = new Set([...prev, normalized])
-              console.log('Realtime update - in-process job:', normalized)
-              return next
-            })
-          }
-        }
       )
       .subscribe()
 
@@ -1128,6 +1135,19 @@ export default function ServiceAdvisorPage() {
 
           <button
             type="button"
+            onClick={() => setSelectedSummaryCard('no_technician')}
+            disabled={noTechnicianCount === 0}
+            className={`schip schip--btn ${selectedSummaryCard === 'no_technician' ? 'schip--active' : ''}`}
+          >
+            <span className="ic schip__ic--warn"><Icon name="clock" size={16} strokeWidth={2} /></span>
+            <div>
+              <div className="n">{noTechnicianCount}</div>
+              <div className="l">No Technician</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setSelectedSummaryCard('floor_hold')}
             disabled={floorHoldCount === 0}
             className={`schip schip--btn ${selectedSummaryCard === 'floor_hold' ? 'schip--active' : ''}`}
@@ -1272,6 +1292,10 @@ export default function ServiceAdvisorPage() {
                           </select>
                         </td>
                         <td>
+                          {(() => {
+                            const jcValue = String(draft.jc_number ?? '')
+                            const jcSize = Math.max(20, Math.min(34, jcValue.length || 20))
+                            return (
                           <input
                             value={draft.jc_number}
                             onChange={(event) =>
@@ -1279,8 +1303,11 @@ export default function ServiceAdvisorPage() {
                             }
                             maxLength={25}
                             placeholder="JC number"
+                            size={jcSize}
                             className="inp mono inp--jc"
                           />
+                            )
+                          })()}
                         </td>
                         <td className="td-owner">
                           <div className="strong owner-name">{row.owner_name || '-'}</div>
