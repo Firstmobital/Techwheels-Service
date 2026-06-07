@@ -40,7 +40,7 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
 ])
 
 type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
-type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'floor_hold' | 'completed'
+type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'floor_hold' | 'in_process' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
@@ -102,6 +102,7 @@ function applySummaryCardFilter(
   selectedSummaryCard: SummaryCardFilter,
   completedJobCardNumbers: Set<string>,
   holdJobCardNumbers: Set<string>,
+  inProcessJobCardNumbers: Set<string>,
 ): ReceptionEntryRow[] {
   const isCompleted = (row: ReceptionEntryRow): boolean => {
     const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
@@ -111,6 +112,11 @@ function applySummaryCardFilter(
   const isHold = (row: ReceptionEntryRow): boolean => {
     const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
     return Boolean(jcNumber) && holdJobCardNumbers.has(jcNumber)
+  }
+
+  const isInProcess = (row: ReceptionEntryRow): boolean => {
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    return Boolean(jcNumber) && inProcessJobCardNumbers.has(jcNumber)
   }
 
   if (selectedSummaryCard === 'all') return rows
@@ -125,6 +131,9 @@ function applySummaryCardFilter(
   }
   if (selectedSummaryCard === 'floor_hold') {
     return rows.filter((row) => isHold(row))
+  }
+  if (selectedSummaryCard === 'in_process') {
+    return rows.filter((row) => isInProcess(row))
   }
   if (selectedSummaryCard === 'completed') {
     return rows.filter((row) => isCompleted(row) && Boolean(row.invoice_done_at))
@@ -220,6 +229,7 @@ export default function ServiceAdvisorPage() {
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
+  const [inProcessJobCardNumbers, setInProcessJobCardNumbers] = useState<Set<string>>(new Set())
 
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
 
@@ -273,9 +283,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
+  }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
 
   const fuelTypeCountRows = useMemo(() => {
     let scoped = rows
@@ -290,9 +300,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
+  }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
 
   const categoryCountRows = useMemo(() => {
     let scoped = rows
@@ -307,9 +317,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
+  }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
 
   const advisorCountRows = useMemo(() => {
     let scoped = rows
@@ -324,9 +334,9 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers)
     return summaryScoped.filter((row) => matchesSearch(row))
-  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, searchQuery])
+  }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, searchQuery])
 
   const advisorOptions = useMemo(() => {
     const optionMap = new Map<string, { label: string; count: number }>()
@@ -367,6 +377,11 @@ export default function ServiceAdvisorPage() {
     return Boolean(jcNumber) && holdJobCardNumbers.has(jcNumber)
   }
 
+  const isWorkInProcess = (row: ReceptionEntryRow): boolean => {
+    const jcNumber = String(row.jc_number ?? '').trim().toUpperCase()
+    return Boolean(jcNumber) && inProcessJobCardNumbers.has(jcNumber)
+  }
+
   const cardFilteredRows = useMemo(() => {
     if (selectedSummaryCard === 'all') return displayedRows
     if (selectedSummaryCard === 'job_card_pending') {
@@ -381,11 +396,14 @@ export default function ServiceAdvisorPage() {
     if (selectedSummaryCard === 'floor_hold') {
       return displayedRows.filter((row) => isWorkHold(row))
     }
+    if (selectedSummaryCard === 'in_process') {
+      return displayedRows.filter((row) => isWorkInProcess(row))
+    }
     if (selectedSummaryCard === 'completed') {
       return displayedRows.filter((row) => isWorkCompleted(row) && Boolean(row.invoice_done_at))
     }
     return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_done_at)
-  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers])
+  }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers])
 
   const availableBranches = useMemo(() => {
     const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
@@ -456,6 +474,10 @@ export default function ServiceAdvisorPage() {
   const floorHoldCount = useMemo(
     () => displayedRows.filter((r) => isWorkHold(r)).length,
     [displayedRows, holdJobCardNumbers],
+  )
+  const inProcessCount = useMemo(
+    () => displayedRows.filter((r) => isWorkInProcess(r)).length,
+    [displayedRows, inProcessJobCardNumbers],
   )
   const completedCount = useMemo(
     () => displayedRows.filter((r) => isWorkCompleted(r) && Boolean(r.invoice_done_at)).length,
@@ -600,31 +622,35 @@ export default function ServiceAdvisorPage() {
     void loadRows()
   }, [])
 
-  // Subscribe to real-time updates for completed/hold job cards
+  // Subscribe to real-time updates for completed/hold/work-in-process job cards
   useEffect(() => {
-    // Fetch existing completed and hold job cards
+    // Fetch existing completed, hold and work-in-process job cards
     const fetchAssignmentStatusJobCards = async () => {
       try {
         const res = await supabase
           .from('technician_assignments')
           .select('job_card_number, work_status')
-          .in('work_status', ['completed', 'hold'])
+          .in('work_status', ['completed', 'hold', 'work_inprocess'])
 
         if (!res.error && res.data) {
           const completed = new Set<string>()
           const hold = new Set<string>()
+          const inProcess = new Set<string>()
           res.data.forEach((row: Record<string, unknown>) => {
             const jobCardNum = String(row.job_card_number ?? '').trim().toUpperCase()
             const status = String(row.work_status ?? '').trim().toLowerCase()
             if (jobCardNum) {
               if (status === 'completed') completed.add(jobCardNum)
               if (status === 'hold') hold.add(jobCardNum)
+              if (status === 'work_inprocess') inProcess.add(jobCardNum)
             }
           })
           setCompletedJobCardNumbers(completed)
           setHoldJobCardNumbers(hold)
+          setInProcessJobCardNumbers(inProcess)
           console.log('Loaded completed job cards:', Array.from(completed))
           console.log('Loaded hold job cards:', Array.from(hold))
+          console.log('Loaded in-process job cards:', Array.from(inProcess))
         }
       } catch (err) {
         console.error('Failed to fetch assignment status job cards:', err)
@@ -671,6 +697,26 @@ export default function ServiceAdvisorPage() {
             setHoldJobCardNumbers((prev) => {
               const next = new Set([...prev, normalized])
               console.log('Realtime update - hold job:', normalized)
+              return next
+            })
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'technician_assignments',
+          filter: 'work_status=eq.work_inprocess',
+        },
+        (payload) => {
+          const updated = payload.new as { job_card_number?: string } | null
+          if (updated?.job_card_number) {
+            const normalized = String(updated.job_card_number).trim().toUpperCase()
+            setInProcessJobCardNumbers((prev) => {
+              const next = new Set([...prev, normalized])
+              console.log('Realtime update - in-process job:', normalized)
               return next
             })
           }
@@ -1090,6 +1136,19 @@ export default function ServiceAdvisorPage() {
             <div>
               <div className="n">{floorHoldCount}</div>
               <div className="l">Floor Hold</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSummaryCard('in_process')}
+            disabled={inProcessCount === 0}
+            className={`schip schip--btn ${selectedSummaryCard === 'in_process' ? 'schip--active' : ''}`}
+          >
+            <span className="ic schip__ic--warn"><Icon name="clock" size={16} strokeWidth={2} /></span>
+            <div>
+              <div className="n">{inProcessCount}</div>
+              <div className="l">In-Process</div>
             </div>
           </button>
 
