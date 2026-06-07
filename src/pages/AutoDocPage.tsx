@@ -150,13 +150,13 @@ const DEFAULT_FORM_LOOKUPS: AutoDocFormLookupState = {
 const FALLBACK_CLAIM_TYPE_OPTIONS = ['Body & Paint', 'Warranty', 'Insurance', 'Goodwill', 'Policy', 'Campaign']
 
 const AD_STAGES = [
-  { key: 'active_intake' as const, label: 'Active Intake', short: 'Intake', tone: 'var(--muted)' },
-  { key: 'documentation_pre_repair' as const, label: 'Pre-Repair Docs', short: 'Docs', tone: 'var(--accent)' },
-  { key: 'estimate' as const, label: 'Estimate', short: 'Estimate', tone: 'var(--warn)' },
-  { key: 'pre_submit_pending' as const, label: 'Pre-Submit Pending', short: 'Pre-Pend', tone: '#B26A00' },
-  { key: 'pre_submit_done' as const, label: 'Pre-Submit Done', short: 'Pre-Done', tone: '#0F766E' },
-  { key: 'post_repair_ppt' as const, label: 'Post-Repair PPT', short: 'Post PPT', tone: '#4F46E5' },
-  { key: 'claim_submitted' as const, label: 'Claim Submitted', short: 'Submitted', tone: 'var(--success)' },
+  { key: 'active_intake' as const, label: 'Active Intake', short: 'Intake', toneClass: 'ad-kpi-tone-intake' },
+  { key: 'documentation_pre_repair' as const, label: 'Pre-Repair Docs', short: 'Docs', toneClass: 'ad-kpi-tone-docs' },
+  { key: 'estimate' as const, label: 'Estimate', short: 'Estimate', toneClass: 'ad-kpi-tone-estimate' },
+  { key: 'pre_submit_pending' as const, label: 'Pre-Submit Pending', short: 'Pre-Pend', toneClass: 'ad-kpi-tone-pre-pending' },
+  { key: 'pre_submit_done' as const, label: 'Pre-Submit Done', short: 'Pre-Done', toneClass: 'ad-kpi-tone-pre-done' },
+  { key: 'post_repair_ppt' as const, label: 'Post-Repair PPT', short: 'Post PPT', toneClass: 'ad-kpi-tone-post-ppt' },
+  { key: 'claim_submitted' as const, label: 'Claim Submitted', short: 'Submitted', toneClass: 'ad-kpi-tone-submitted' },
 ]
 
 const SESSION_KEYS = {
@@ -3081,7 +3081,7 @@ export default function AutoDocPage() {
 
       {/* KPI Summary */}
       {activeTab === 'dashboard' && (
-      <div className="summary" style={{ marginBottom: 18 }}>
+      <div className="summary mb-gap">
         <button className="schip ad-kpi" data-on={dashboardCardFilter === 'active_vehicles'} onClick={() => setDashboardCardFilter('active_vehicles')}>
           <span className="ic"><Icon name="reception" size={16} /></span>
           <div><div className="n">{kpis.totalActive || 0}</div><div className="l">Active vehicles</div></div>
@@ -3099,7 +3099,7 @@ export default function AutoDocPage() {
           const count = kpis[stageKeyMap[s.key]] || 0
           return (
             <button key={s.key} className="schip ad-kpi" data-on={dashboardCardFilter === s.key} onClick={() => setDashboardCardFilter(s.key)}>
-              <span className="ic" style={{ background: `color-mix(in srgb,${s.tone} 13%,#fff)`, color: s.tone }}><Icon name="grid" size={15} /></span>
+              <span className={`ic ${s.toneClass}`}><Icon name="grid" size={15} /></span>
               <div><div className="n">{count}</div><div className="l">{s.short}</div></div>
             </button>
           )
@@ -3165,7 +3165,7 @@ export default function AutoDocPage() {
             </button>
           </div>
 
-          <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+          <div className="card__body dense">
             <div className="tbl-wrap scroll">
               <table className="tbl">
                 <thead>
@@ -3586,7 +3586,7 @@ export default function AutoDocPage() {
             </div>
           </div>
 
-          <div className="grid-2" style={{ alignItems: 'start' }}>
+          <div className="grid-2">
             <div className="card">
               <div className="card__head">
                 <div>
@@ -3636,7 +3636,7 @@ export default function AutoDocPage() {
                 />
 
                 {selectedPanels.length === 0 ? (
-                  <div style={{ color: 'var(--faint)', fontSize: 13, padding: '20px 4px' }}>Select panels first.</div>
+                  <div className="ad-empty-hint">Select panels first.</div>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {selectedPanels.map((panel) => {
@@ -3730,7 +3730,7 @@ export default function AutoDocPage() {
                 <div className="sub">Labour auto-fills from the active rate card for repaint actions</div>
               </div>
             </div>
-            <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+            <div className="card__body dense">
               <div className="tbl-wrap scroll">
                 <table className="tbl">
                   <thead>
@@ -3739,10 +3739,10 @@ export default function AutoDocPage() {
                       <th>Action</th>
                       <th>Defect</th>
                       <th>Part No</th>
-                      <th style={{ textAlign: 'right' }}>Parts</th>
-                      <th style={{ textAlign: 'right' }}>Paint</th>
-                      <th style={{ textAlign: 'right' }}>Labour</th>
-                      <th style={{ textAlign: 'right' }}>Total</th>
+                      <th className="text-right">Parts</th>
+                      <th className="text-right">Paint</th>
+                      <th className="text-right">Labour</th>
+                      <th className="text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3753,7 +3753,7 @@ export default function AutoDocPage() {
                         <tr key={row.id}>
                           <td>{row.panel || '—'}</td>
                           <td>
-                            <select className="sel" style={{ height: 34, width: 140 }} value={row.action} onChange={(e) => updateEstimateRow(row.id, { action: e.target.value })}>
+                            <select className="sel ad-sel-action" value={row.action} onChange={(e) => updateEstimateRow(row.id, { action: e.target.value })}>
                               <option value="">—</option>
                               {estimateActionOptions.map((action) => (
                                 <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
@@ -3761,7 +3761,7 @@ export default function AutoDocPage() {
                             </select>
                           </td>
                           <td>
-                            <select className="sel" style={{ height: 34, minWidth: 130 }} value={row.defect ?? ''} onChange={(e) => updateEstimateRow(row.id, { defect: e.target.value })}>
+                            <select className="sel ad-sel-defect" value={row.defect ?? ''} onChange={(e) => updateEstimateRow(row.id, { defect: e.target.value })}>
                               <option value="">—</option>
                               {estimateDefectOptions.map((defect) => (
                                 <option key={defect} value={defect}>{defect}</option>
@@ -3769,35 +3769,35 @@ export default function AutoDocPage() {
                             </select>
                           </td>
                           <td>
-                            <input className="inp mono" style={{ height: 34, width: 96 }} value={row.partNo} disabled={isRepaint} onChange={(e) => updateEstimateRow(row.id, { partNo: e.target.value })} />
+                            <input className="inp mono ad-inp-part" value={row.partNo} disabled={isRepaint} onChange={(e) => updateEstimateRow(row.id, { partNo: e.target.value })} />
                           </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <input className="inp mono" style={{ height: 34, width: 90, textAlign: 'right' }} type="number" min={0} value={row.partsPrice} disabled={isRepaint} onChange={(e) => updateEstimateRow(row.id, { partsPrice: e.target.value })} />
+                          <td className="text-right">
+                            <input className="inp mono ad-inp-money" type="number" min={0} value={row.partsPrice} disabled={isRepaint} onChange={(e) => updateEstimateRow(row.id, { partsPrice: e.target.value })} />
                           </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <input className="inp mono" style={{ height: 34, width: 90, textAlign: 'right' }} type="number" min={0} value={row.paintPrice} onChange={(e) => updateEstimateRow(row.id, { paintPrice: e.target.value })} />
+                          <td className="text-right">
+                            <input className="inp mono ad-inp-money" type="number" min={0} value={row.paintPrice} onChange={(e) => updateEstimateRow(row.id, { paintPrice: e.target.value })} />
                           </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <input className="inp mono" style={{ height: 34, width: 90, textAlign: 'right' }} type="number" min={0} value={row.labourPrice} onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })} />
+                          <td className="text-right">
+                            <input className="inp mono ad-inp-money" type="number" min={0} value={row.labourPrice} onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })} />
                           </td>
-                          <td style={{ textAlign: 'right' }} className="mono">Rs {total.toLocaleString('en-IN')}</td>
+                          <td className="text-right mono">Rs {total.toLocaleString('en-IN')}</td>
                         </tr>
                       )
                     })}
                   </tbody>
                   <tfoot>
-                    <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
+                    <tr className="ad-estimate-total-row">
                       <td colSpan={4}>Grand total</td>
-                      <td style={{ textAlign: 'right' }} className="mono">Rs {estimateTotals.parts.toLocaleString('en-IN')}</td>
-                      <td style={{ textAlign: 'right' }} className="mono">Rs {estimateTotals.paint.toLocaleString('en-IN')}</td>
-                      <td style={{ textAlign: 'right' }} className="mono">Rs {estimateTotals.labour.toLocaleString('en-IN')}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--accent)' }} className="mono">Rs {estimateTotals.grand.toLocaleString('en-IN')}</td>
+                      <td className="text-right mono">Rs {estimateTotals.parts.toLocaleString('en-IN')}</td>
+                      <td className="text-right mono">Rs {estimateTotals.paint.toLocaleString('en-IN')}</td>
+                      <td className="text-right mono">Rs {estimateTotals.labour.toLocaleString('en-IN')}</td>
+                      <td className="text-right mono cell-accent">Rs {estimateTotals.grand.toLocaleString('en-IN')}</td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
 
-              <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+              <div className="ad-estimate-actions">
                 <button
                   className="btn btn--soft"
                   onClick={() => void handleEstimateExportExcel()}
@@ -3845,7 +3845,7 @@ export default function AutoDocPage() {
             className="hidden"
           />
 
-          <div className="grid-2" style={{ alignItems: 'start' }}>
+          <div className="grid-2">
             <div className="card">
               <div className="card__head">
                 <div>
@@ -3861,7 +3861,7 @@ export default function AutoDocPage() {
                   ].filter(Boolean).length} of 7 artifacts ready</div>
                 </div>
               </div>
-              <div className="card__body" style={{ padding: 4 }}>
+              <div className="card__body ad-submit-gates">
                 {[
                   { key: 'service', label: 'Service history (PDF)', ready: readiness.serviceHistory, upload: () => setActiveTab('jobcard') },
                   { key: 'walkaround', label: 'Walkaround video', ready: readiness.walkaroundVideo, upload: () => setActiveTab('jobcard') },
@@ -3871,11 +3871,11 @@ export default function AutoDocPage() {
                   { key: 'post', label: 'Post-repair PPT', ready: readiness.postPpt, upload: () => { void handleSubmitGeneratePpt('post-repair') } },
                   { key: 'delivery', label: 'Delivery video', ready: readiness.deliveryVideo, upload: () => openDeliveryVideoPicker() },
                 ].map((gate, idx, arr) => (
-                  <div key={gate.key} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 12px', borderBottom: idx < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div key={gate.key} className={`ad-gate-row ${idx < arr.length - 1 ? 'ad-gate-row--border' : ''}`}>
                     <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${gate.ready ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {gate.ready ? '✓' : '○'}
                     </span>
-                    <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>{gate.label}</span>
+                    <span className="ad-gate-label">{gate.label}</span>
                     {gate.ready ? <span className="badge badge--active badge--no">Ready</span> : <button type="button" className="tbtn" onClick={gate.upload}>Upload</button>}
                   </div>
                 ))}
@@ -3889,12 +3889,12 @@ export default function AutoDocPage() {
                   <div className="sub">Generate documents and submit to TM</div>
                 </div>
               </div>
-              <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <div className="card__body ad-claim-actions">
                 <button type="button" className="btn btn--soft btn--block" onClick={() => void handleSubmitGeneratePpt('pre-repair')}>Generate pre-repair PPT</button>
                 <button type="button" className="btn btn--soft btn--block" onClick={() => void handleSubmitGeneratePpt('post-repair')}>Generate post-repair PPT</button>
                 <button type="button" className="btn btn--soft btn--block" onClick={() => void handleComposeAndSend()} disabled={!composeReady}>Draft claim email</button>
                 <button type="button" className="btn btn--primary btn--block" onClick={() => void handleSubmitClaim()} disabled={!submitReady}>Submit claim</button>
-                <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Estimate value: <b>Rs {estimateTotals.grand.toLocaleString('en-IN')}</b></div>
+                <div className="ad-estimate-value">Estimate value: <b>Rs {estimateTotals.grand.toLocaleString('en-IN')}</b></div>
               </div>
             </div>
           </div>
