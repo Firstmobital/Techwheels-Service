@@ -353,8 +353,8 @@ export default function AutoDocPage() {
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
-  const [search,       setSearch]       = useState('')
-  const [statusFilter, setStatus]       = useState<string>('')
+  const [search] = useState('')
+  const [statusFilter] = useState<string>('')
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [savingDraft, setSavingDraft] = useState(false)
@@ -363,7 +363,7 @@ export default function AutoDocPage() {
   const [vehicleFound, setVehicleFound] = useState(false)
   const [vehicleLookupStatus, setVehicleLookupStatus] = useState<VehicleLookupStatus>('idle')
   const [formLookups, setFormLookups] = useState<AutoDocFormLookupState>(DEFAULT_FORM_LOOKUPS)
-  const [statusOptions, setStatusOptions] = useState<string[]>([])
+  const [, setStatusOptions] = useState<string[]>([])
   const [estimateActionOptions, setEstimateActionOptions] = useState<string[]>([])
   const [estimateDefectOptions, setEstimateDefectOptions] = useState<string[]>([])
   const [panelMasterOptions, setPanelMasterOptions] = useState<string[]>([])
@@ -420,7 +420,7 @@ export default function AutoDocPage() {
   const [uploadingCarImage, setUploadingCarImage] = useState(false)
   const suppressNextVehicleHydrationRef = useRef(false)
   const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
-  const [loadingModelRates, setLoadingModelRates] = useState(false)
+  const [, setLoadingModelRates] = useState(false)
     const readiness = {
       serviceHistory: jobDocuments.some((doc) => doc.doc_type === 'service_history'),
       walkaroundVideo: jobDocuments.some((doc) => doc.doc_type === 'video_job_card'),
@@ -996,13 +996,6 @@ export default function AutoDocPage() {
     if (selectedModel) values.add(selectedModel)
     return Array.from(values).sort((a, b) => a.localeCompare(b))
   }, [form.model, formLookups.modelOptions])
-  const lookupReady = Boolean(
-    form.regNumber.trim()
-    && form.jcNumber.trim()
-    && form.kmReading.trim()
-    && walkaroundVideoName.trim()
-    && carImageName.trim(),
-  ) && !uploadingWalkaround && !uploadingCarImage
   const showVehicleDetailsForm = vehicleLookupStatus !== 'idle'
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -1325,14 +1318,6 @@ export default function AutoDocPage() {
     setServiceHistoryName(file.name)
     await refreshDocuments(jobCardId)
     showToast('Service history uploaded.', true)
-    event.target.value = ''
-  }
-
-  async function handleWalkaroundVideoUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    await uploadWalkaroundVideoFile(file)
     event.target.value = ''
   }
 
@@ -3071,8 +3056,8 @@ export default function AutoDocPage() {
             <Icon name="doc" size={13} className="icon-align-text" />
             AutoDoc
           </p>
-          <h1>Body & Paint Documentation</h1>
-          <p>Capture damage photos, estimate repairs, and submit claim documentation.</p>
+          <h1>Body & Paint claim documentation</h1>
+          <p>Intake to pre-repair docs to estimate to submit. Select a job card to begin.</p>
         </div>
       </div>
 
@@ -3124,54 +3109,13 @@ export default function AutoDocPage() {
 
       {activeTab === 'dashboard' && (
       <>
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setDashboardCardFilter('active_vehicles')}
-          className={`h-9 rounded-lg border px-3 text-xs font-semibold transition ${dashboardCardFilter === 'active_vehicles' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50'}`}
-        >
-          Active Vehicles (Default)
-        </button>
-
-        <input
-          type="search"
-          placeholder="Search by Reg No, JC No, or Model…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="h-9 w-full sm:w-72 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-        />
-        <select
-          value={statusFilter}
-          onChange={e => setStatus(e.target.value)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-        >
-          <option value="">All statuses</option>
-          {statusOptions.map((status) => (
-            <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>
-          ))}
-        </select>
-        {!loading && (
-          <span className="ml-auto text-xs text-gray-400">
-            {dashboardDisplayed.length} job card{dashboardDisplayed.length !== 1 ? 's' : ''} • {cardFilterLabel(dashboardCardFilter)}
-          </span>
-        )}
-      </div>
-
-      {/* Error state with retry */}
       {!loading && error && (
         <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <span>{error}</span>
-          <button
-            onClick={() => void fetchRows()}
-            className="ml-4 shrink-0 text-xs font-semibold underline hover:no-underline"
-          >
-            Retry
-          </button>
+          <button onClick={() => void fetchRows()} className="ml-4 shrink-0 text-xs font-semibold underline hover:no-underline">Retry</button>
         </div>
       )}
 
-      {/* Skeleton loaders */}
       {loading && (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-100 text-sm">
@@ -3197,14 +3141,10 @@ export default function AutoDocPage() {
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !error && dashboardDisplayed.length === 0 && (
-        <div className="py-16 text-center text-sm text-gray-400">
-          No job cards found for this dashboard filter.{q || statusFilter ? ' Try clearing the filters.' : ''}
-        </div>
+        <div className="py-16 text-center text-sm text-gray-400">No job cards found for this dashboard filter.</div>
       )}
 
-      {/* Active Queue */}
       {!loading && !error && dashboardDisplayed.length > 0 && (
         <div className="card print-table">
           <div className="card__head">
@@ -3236,8 +3176,8 @@ export default function AutoDocPage() {
                     <th>Stage</th>
                     <th className="ctr">Panels</th>
                     <th className="ctr">Photos</th>
-                    <th className="text-right">Estimate</th>
-                    <th className="text-right">Action</th>
+                    <th>Estimate</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3256,8 +3196,8 @@ export default function AutoDocPage() {
                       </td>
                       <td className="ctr">{row.panel_names.length || '—'}</td>
                       <td className="ctr">{row.photo_count || '—'}</td>
-                      <td className="text-right mono">{row.total_estimate_amount ? `Rs ${row.total_estimate_amount.toLocaleString('en-IN')}` : '—'}</td>
-                      <td className="text-right">
+                      <td className="mono">{row.total_estimate_amount ? `Rs ${row.total_estimate_amount.toLocaleString('en-IN')}` : '—'}</td>
+                      <td>
                         <button type="button" className="tbtn tbtn--accent" onClick={() => runPrimaryAction(row)}>
                           Open <Icon name="arrowr" size={12} />
                         </button>
@@ -3275,11 +3215,11 @@ export default function AutoDocPage() {
 
       {/* JOB CARD FORM */}
       {activeTab === 'jobcard' && (
-          <div className="grid-2">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.6fr_1fr]">
             <div className="card">
               <div className="card__head">
                 <div>
-                  <h3>Job Card — New Vehicle Registration</h3>
+                  <h3>{showVehicleDetailsForm ? 'Vehicle & claim details' : 'New job card — intake'}</h3>
                   <div className="sub">Lookup by registration, then complete claim details.</div>
                 </div>
               </div>
@@ -3306,11 +3246,9 @@ export default function AutoDocPage() {
               </svg>
               Vehicle Lookup
             </h3>
-            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  Registration No <span className="text-red-600">*</span>
-                </label>
+            <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_140px_auto]">
+              <span className="inp-wrap">
+                <span className="icon-l"><Icon name="search" size={14} /></span>
                 <input
                   type="text"
                   value={form.regNumber}
@@ -3325,86 +3263,33 @@ export default function AutoDocPage() {
                   onBlur={() => {
                     setForm((prev) => ({ ...prev, regNumber: prev.regNumber.toUpperCase() }))
                   }}
-                  placeholder="RJ14YH7659"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium tracking-widest text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  placeholder="REGISTRATION NO"
+                  className="inp"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  Job Card Number <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. JC-2026-042"
-                  value={form.jcNumber}
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, jcNumber: e.target.value }))
-                    setActiveJobCardId(null)
-                    setActiveSummary(null)
-                  }}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  KM Reading <span className="text-red-600">*</span>
-                </label>
+              </span>
+
+              <span className="inp-wrap">
                 <input
                   type="number"
-                  min={0}
-                  placeholder="e.g. 18420"
                   value={form.kmReading}
-                  onChange={(e) => setForm((prev) => ({ ...prev, kmReading: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, kmReading: e.target.value }))
+                  }}
+                  placeholder="KM Reading"
+                  className="inp"
+                  min="0"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  Vehicle Walkaround Video <span className="text-red-600">*</span>
-                </label>
-                <label className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:bg-blue-50">
-                  <span className="truncate">{uploadingWalkaround ? 'Uploading video...' : (walkaroundVideoName || 'Choose video file')}</span>
-                  <span className="ml-3 shrink-0 rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">{uploadingWalkaround ? 'Uploading...' : 'Browse'}</span>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={(event) => { void handlePreFetchWalkaroundVideoUpload(event) }}
-                    disabled={uploadingWalkaround || uploadingCarImage}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  Car Image <span className="text-red-600">*</span>
-                </label>
-                <label className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:bg-blue-50">
-                  <span className="truncate">{uploadingCarImage ? 'Capturing GPS & uploading...' : (carImageName || 'Choose car image')}</span>
-                  <span className="ml-3 shrink-0 rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">{uploadingCarImage ? 'Uploading...' : 'Browse'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => { void handlePreFetchCarImageUpload(event) }}
-                    disabled={uploadingWalkaround || uploadingCarImage}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
+              </span>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
               <button
                 onClick={() => void handleVehicleLookup()}
-                disabled={lookupBusy || creating || uploadingWalkaround || uploadingCarImage || !lookupReady}
-                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 justify-center whitespace-nowrap"
+                disabled={lookupBusy || creating || uploadingWalkaround || uploadingCarImage || !form.regNumber.trim() || !form.kmReading.trim()}
+                className="btn btn--soft"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                {lookupBusy ? 'Fetching…' : 'Fetch from DB'}
+                {lookupBusy ? 'Checking…' : 'Fetch'}
               </button>
             </div>
-            <p className="mt-2 text-xs text-gray-500">Enter Registration No, Job Card Number, KM Reading, then upload Vehicle Walkaround Video and Car Image (GPS tagged) to enable fetch.</p>
+
             {vehicleLookupStatus === 'loading' && <p className="mt-2 text-sm text-blue-600">Searching vehicle in database...</p>}
             {vehicleLookupStatus === 'found' && <p className="mt-2 text-sm text-green-600">✓ Vehicle found and prefilled.</p>}
             {vehicleLookupStatus === 'not_found' && (
@@ -3611,89 +3496,6 @@ export default function AutoDocPage() {
                 </div>
               </div>
 
-              {/* DOCUMENTS */}
-              <div className="mb-6">
-                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-600">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  Documents
-                </h3>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div>
-                    <label className="mb-2 flex items-center gap-1 text-xs font-medium text-gray-600">
-                      Service History <span className="text-red-600">*</span>
-                    </label>
-                    <div className="relative border-2 border-dashed border-red-300 rounded-lg p-6 text-center cursor-pointer hover:border-red-400 transition-colors bg-red-50">
-                      <span className="absolute top-2 right-2 bg-red-100 text-red-700 text-[10px] font-semibold px-2 py-1 rounded">Required</span>
-                      <svg className="h-8 w-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <p className="text-sm font-medium text-gray-900">Upload Service History PDF</p>
-                      <p className="text-xs text-gray-600 mt-1">PDF format only</p>
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        onChange={handleServiceHistoryUpload}
-                        className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-                      />
-                      <p className={`mt-2 text-xs font-medium ${readiness.serviceHistory ? 'text-green-600' : 'text-gray-500'}`}>
-                        {serviceHistoryName ? `Selected: ${serviceHistoryName}` : 'No file selected'}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="mb-2 flex items-center gap-1 text-xs font-medium text-gray-600">
-                      Vehicle Walkaround Video <span className="text-red-600">*</span>
-                    </label>
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-800">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span>⏱️</span> 30–60 sec
-                      </div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span>🔄</span> Full walkaround
-                      </div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span>📋</span> Number plate visible
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span>📦</span> Auto-compressed &lt;15MB
-                      </div>
-                    </div>
-                    <div className="relative border-2 border-dashed border-red-300 rounded-lg p-6 text-center cursor-pointer hover:border-red-400 transition-colors bg-red-50">
-                      <span className="absolute top-2 right-2 bg-red-100 text-red-700 text-[10px] font-semibold px-2 py-1 rounded">Required</span>
-                      <svg className="h-8 w-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <p className="text-sm font-medium text-gray-900">Upload Vehicle Video</p>
-                      <p className="text-xs text-gray-600 mt-1">MP4 / MOV — auto-compressed to &lt;15MB</p>
-                      <input
-                        type="file"
-                        accept="video/*"
-                        onChange={handleWalkaroundVideoUpload}
-                        className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-                      />
-                      <p className={`mt-2 text-xs font-medium ${readiness.walkaroundVideo ? 'text-green-600' : 'text-gray-500'}`}>
-                        {walkaroundVideoName ? `Selected: ${walkaroundVideoName}` : 'No file selected'}
-                      </p>
-                    </div>
-                    <div className="mt-3 hidden bg-gray-100 border border-gray-300 rounded-lg p-2 text-xs text-gray-700">
-                      <div className="flex items-center gap-2 mb-1">
-                        <svg className="h-4 w-4 animate-spin text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Compressing video to low resolution…
-                      </div>
-                      <div className="w-full bg-gray-300 rounded h-1">
-                        <div className="bg-blue-600 h-1 rounded w-0" style={{ width: '45%' }}></div>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">45%</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
                 <p className="flex items-center gap-1 text-xs text-gray-500">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -3729,6 +3531,7 @@ export default function AutoDocPage() {
             </>
           )}
         </div>
+      </div>
 
         <div className="card">
           <div className="card__head">
@@ -3740,14 +3543,14 @@ export default function AutoDocPage() {
           <div className="card__body space-y-3">
             <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
               <span>Walkaround video</span>
-              <span className="text-xs text-gray-500">{walkaroundVideoName || 'Upload'}</span>
-              <input type="file" accept="video/*" onChange={(event) => { void handlePreFetchWalkaroundVideoUpload(event) }} className="hidden" />
+              <span className="text-xs text-gray-500">{uploadingWalkaround ? 'Uploading...' : (walkaroundVideoName || 'Upload')}</span>
+              <input type="file" accept="video/*" disabled={uploadingWalkaround || uploadingCarImage} onChange={(event) => { void handlePreFetchWalkaroundVideoUpload(event) }} className="hidden" />
             </label>
 
             <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
               <span>Car image (GPS-stamped)</span>
-              <span className="text-xs text-gray-500">{carImageName || 'Upload'}</span>
-              <input type="file" accept="image/*" onChange={(event) => { void handlePreFetchCarImageUpload(event) }} className="hidden" />
+              <span className="text-xs text-gray-500">{uploadingCarImage ? 'Uploading...' : (carImageName || 'Upload')}</span>
+              <input type="file" accept="image/*" disabled={uploadingWalkaround || uploadingCarImage} onChange={(event) => { void handlePreFetchCarImageUpload(event) }} className="hidden" />
             </label>
 
             <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -3756,162 +3559,269 @@ export default function AutoDocPage() {
               <input type="file" accept=".pdf" onChange={handleServiceHistoryUpload} className="hidden" />
             </label>
 
-            <div className="note note--info">
-              <span className="ic"><Icon name="shield" size={14} /></span>
-              <div>
-                Car age {activeSummary?.warranty_age_days ?? calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? 0} days · TML share band auto-derived from sale date & claim type.
+            {showVehicleDetailsForm && (
+              <div className="note note--info">
+                <span className="ic"><Icon name="shield" size={14} /></span>
+                <div>
+                  Car age {activeSummary?.warranty_age_days ?? calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? 0} days · TML share band auto-derived from sale date & claim type.
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
-    </div>
       )}
 
       {/* DAMAGE */}
       {activeTab === 'damage' && (
-        <div className="card">
-          <div className="card__head">
-            <div>
-              <h3>Damage Documentation</h3>
-              <div className="sub">Tap panels with damage and capture stage-wise photos for the selected job card.</div>
+        <div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+            <p className="text-xs font-medium text-gray-700">{currentVehicleReg} · {currentVehicleModel} · {currentVehicleJc}</p>
+            <div className="seg2">
+              {damageStages.map((stage) => (
+                <button key={stage} className={damageStageView === stage ? 'on' : ''} onClick={() => setDamageStageView(stage)}>
+                  {stageLabel(stage)}
+                </button>
+              ))}
             </div>
-            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-200">
-              {currentVehicleReg} · {currentVehicleModel} · {currentVehicleJc}
-            </span>
           </div>
 
-          <div className="card__body space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-              <p className="text-xs font-medium text-gray-600">{currentVehicleReg} · {currentVehicleModel} · {currentVehicleJc}</p>
-              <div className="seg2">
-                {damageStages.map((stage) => (
-                  <button
-                    key={stage}
-                    className={damageStageView === stage ? 'on' : ''}
-                    onClick={() => setDamageStageView(stage)}
-                  >
-                    {stageLabel(stage)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-5">
-              <h3 className="text-base font-semibold text-gray-900">Select panels</h3>
-              <p className="mb-3 text-xs text-gray-500">Tap panels with damage. Rate-card: {form.bpCityCategory || 'A'}</p>
-              <div className="flex flex-wrap gap-2">
-                {panelSelectionOptions.map((panel) => {
-                  const isSelected = selectedPanels.includes(panel)
-                  return (
-                    <button
-                      key={panel}
-                      type="button"
-                      onClick={() => toggleDamagePanel(panel)}
-                      className={[
-                        'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
-                        isSelected
-                          ? 'border-blue-300 bg-blue-600 text-white'
-                          : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50',
-                      ].join(' ')}
-                    >
-                      {panel}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-5">
-              <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="grid-2" style={{ alignItems: 'start' }}>
+            <div className="card">
+              <div className="card__head">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">{stageLabel(damageStageView)} photos</h3>
-                  <p className="text-xs text-gray-500">{selectedPanels.length} panel{selectedPanels.length === 1 ? '' : 's'} selected · GPS-stamped on capture</p>
+                  <h3>Select panels</h3>
+                  <div className="sub">Tap panels with damage · rate-card: {form.bpCityCategory || 'A'}</div>
                 </div>
               </div>
+              <div className="card__body">
+                <div className="flex flex-wrap gap-2">
+                  {panelSelectionOptions.map((panel) => {
+                    const isSelected = selectedPanels.includes(panel)
+                    return (
+                      <button
+                        key={panel}
+                        type="button"
+                        onClick={() => toggleDamagePanel(panel)}
+                        className={[
+                          'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                          isSelected
+                            ? 'border-blue-300 bg-blue-600 text-white'
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50',
+                        ].join(' ')}
+                      >
+                        {panel}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
 
-              <input
-                ref={damageUploadInputRef}
-                type="file"
-                accept="image/*"
-                multiple={!damageUploadContext?.replacePhotoId}
-                onChange={handleDamagePhotoUpload}
-                className="hidden"
-              />
+            <div className="card">
+              <div className="card__head">
+                <div>
+                  <h3>{stageLabel(damageStageView)} photos</h3>
+                  <div className="sub">{selectedPanels.length} panel{selectedPanels.length === 1 ? '' : 's'} selected · GPS-stamped on capture</div>
+                </div>
+              </div>
+              <div className="card__body">
+                <input
+                  ref={damageUploadInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple={!damageUploadContext?.replacePhotoId}
+                  onChange={handleDamagePhotoUpload}
+                  className="hidden"
+                />
 
-              {selectedPanels.length === 0 && (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-                  Select at least one panel to start photo capture.
-                </p>
-              )}
+                {selectedPanels.length === 0 ? (
+                  <div style={{ color: 'var(--faint)', fontSize: 13, padding: '20px 4px' }}>Select panels first.</div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {selectedPanels.map((panel) => {
+                      const key = `${damageStageView}::${panel}`
+                      const photosForCard = damagePhotosByPanelStage[key] ?? []
+                      return (
+                        <div key={key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-gray-800">{panel}</p>
+                            <button
+                              type="button"
+                              onClick={() => openDamagePhotoPicker(panel, damageStageView)}
+                              className="tbtn"
+                            >
+                              {photosForCard.length === 0 ? 'Upload' : 'Add'}
+                            </button>
+                          </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {selectedPanels.map((panel) => {
-                  const key = `${damageStageView}::${panel}`
-                  const photosForCard = damagePhotosByPanelStage[key] ?? []
-                  return (
-                    <div key={key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-gray-800">{panel}</p>
-                        <button
-                          type="button"
-                          onClick={() => openDamagePhotoPicker(panel, damageStageView)}
-                          className="tbtn"
-                        >
-                          {photosForCard.length === 0 ? 'Upload' : 'Add'}
-                        </button>
-                      </div>
-
-                      {photosForCard.length === 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => openDamagePhotoPicker(panel, damageStageView)}
-                          className="flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-5 text-xs text-gray-500 hover:bg-gray-50"
-                        >
-                          <Icon name="reception" size={16} />
-                          Tap to capture
-                        </button>
-                      ) : (
-                        <div className="space-y-2">
-                          {photosForCard.map((photo) => (
-                            <div key={photo.id} className="rounded-md border border-gray-200 bg-white p-2">
-                              <div className="flex items-start gap-2">
-                                <img src={photo.url} alt={photo.name} className="h-16 w-20 rounded border border-gray-200 object-cover" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-xs font-medium text-gray-700" title={photo.name}>{photo.name}</p>
-                                  <p className="text-[11px] text-gray-500">{photo.uploadedAtLabel}</p>
-                                  <div className="mt-1 flex gap-1">
-                                    <button type="button" className="tbtn" onClick={() => { void openDamagePhotoInBrowser(photo) }}>View</button>
-                                    <button type="button" className="tbtn" onClick={() => openDamagePhotoPicker(panel, damageStageView, photo.id)}>Replace</button>
-                                    <button type="button" className="tbtn tbtn--danger" onClick={() => removeDamagePhoto(photo.id)}>Remove</button>
+                          {photosForCard.length === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => openDamagePhotoPicker(panel, damageStageView)}
+                              className="flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-5 text-xs text-gray-500 hover:bg-gray-50"
+                            >
+                              <Icon name="reception" size={16} />
+                              Tap to capture
+                            </button>
+                          ) : (
+                            <div className="space-y-2">
+                              {photosForCard.map((photo) => (
+                                <div key={photo.id} className="rounded-md border border-gray-200 bg-white p-2">
+                                  <div className="flex items-start gap-2">
+                                    <img src={photo.url} alt={photo.name} className="h-16 w-20 rounded border border-gray-200 object-cover" />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-xs font-medium text-gray-700" title={photo.name}>{photo.name}</p>
+                                      <p className="text-[11px] text-gray-500">{photo.uploadedAtLabel}</p>
+                                      <div className="mt-1 flex gap-1">
+                                        <button type="button" className="tbtn" onClick={() => { void openDamagePhotoInBrowser(photo) }}>View</button>
+                                        <button type="button" className="tbtn" onClick={() => openDamagePhotoPicker(panel, damageStageView, photo.id)}>Replace</button>
+                                        <button type="button" className="tbtn tbtn--danger" onClick={() => removeDamagePhoto(photo.id)}>Remove</button>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={async () => {
+                setSavingDraft(true)
+                try {
+                  const ok = await persistDraftJobCard(false)
+                  if (ok) setActiveTab('estimate')
+                } finally {
+                  setSavingDraft(false)
+                }
+              }}
+              disabled={savingDraft}
+              className="btn btn--ghost"
+            >
+              {savingDraft ? 'Saving...' : 'Next: Estimate'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ESTIMATE */}
+      {activeTab === 'estimate' && (
+        <div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+            <p className="text-xs font-medium text-gray-700">{currentVehicleReg} · {currentVehicleModel} · {form.paintType || 'Paint NA'} · {currentVehicleJc}</p>
+            <span className="badge badge--active">Rate-card {form.bpCityCategory || 'A'} active</span>
+          </div>
+
+          <div className="card">
+            <div className="card__head">
+              <div>
+                <h3>Estimate line items</h3>
+                <div className="sub">Labour auto-fills from the active rate card for repaint actions</div>
+              </div>
+            </div>
+            <div className="card__body" style={{ padding: '6px 18px 14px' }}>
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Panel</th>
+                      <th>Action</th>
+                      <th>Defect</th>
+                      <th>Part No</th>
+                      <th style={{ textAlign: 'right' }}>Parts</th>
+                      <th style={{ textAlign: 'right' }}>Paint</th>
+                      <th style={{ textAlign: 'right' }}>Labour</th>
+                      <th style={{ textAlign: 'right' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estimateRows.map((row) => {
+                      const total = (Number(row.partsPrice) || 0) + (Number(row.paintPrice) || 0) + (Number(row.labourPrice) || 0)
+                      const isRepaint = isRepaintAction(row.action)
+                      return (
+                        <tr key={row.id}>
+                          <td>{row.panel || '—'}</td>
+                          <td>
+                            <select className="sel" style={{ height: 34, width: 140 }} value={row.action} onChange={(e) => updateEstimateRow(row.id, { action: e.target.value })}>
+                              <option value="">—</option>
+                              {estimateActionOptions.map((action) => (
+                                <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <select className="sel" style={{ height: 34, minWidth: 130 }} value={row.defect ?? ''} onChange={(e) => updateEstimateRow(row.id, { defect: e.target.value })}>
+                              <option value="">—</option>
+                              {estimateDefectOptions.map((defect) => (
+                                <option key={defect} value={defect}>{defect}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input className="inp mono" style={{ height: 34, width: 96 }} value={row.partNo} disabled={isRepaint} onChange={(e) => updateEstimateRow(row.id, { partNo: e.target.value })} />
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <input className="inp mono" style={{ height: 34, width: 90, textAlign: 'right' }} type="number" min={0} value={row.partsPrice} disabled={isRepaint} onChange={(e) => updateEstimateRow(row.id, { partsPrice: e.target.value })} />
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <input className="inp mono" style={{ height: 34, width: 90, textAlign: 'right' }} type="number" min={0} value={row.paintPrice} onChange={(e) => updateEstimateRow(row.id, { paintPrice: e.target.value })} />
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <input className="inp mono" style={{ height: 34, width: 90, textAlign: 'right' }} type="number" min={0} value={row.labourPrice} onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })} />
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="mono">Rs {total.toLocaleString('en-IN')}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: 'var(--raised)', fontWeight: 700 }}>
+                      <td colSpan={4}>Grand total</td>
+                      <td style={{ textAlign: 'right' }} className="mono">Rs {estimateTotals.parts.toLocaleString('en-IN')}</td>
+                      <td style={{ textAlign: 'right' }} className="mono">Rs {estimateTotals.paint.toLocaleString('en-IN')}</td>
+                      <td style={{ textAlign: 'right' }} className="mono">Rs {estimateTotals.labour.toLocaleString('en-IN')}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--accent)' }} className="mono">Rs {estimateTotals.grand.toLocaleString('en-IN')}</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
 
-              <div className="mt-4 flex justify-end">
+              <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
                 <button
-                  type="button"
+                  className="btn btn--soft"
+                  onClick={() => void handleEstimateExportExcel()}
+                >
+                  <Icon name="reports" size={16} /> Generate Excel
+                </button>
+                <button
+                  className="btn btn--primary"
                   onClick={async () => {
                     setSavingDraft(true)
                     try {
                       const ok = await persistDraftJobCard(false)
-                      if (ok) setActiveTab('estimate')
+                      if (ok) {
+                        await updateJobCardStatus(ok, 'approved')
+                        await fetchRows(true)
+                        setActiveTab('submit')
+                      }
                     } finally {
                       setSavingDraft(false)
                     }
                   }}
                   disabled={savingDraft}
-                  className="btn btn--ghost"
                 >
-                  {savingDraft ? 'Saving...' : 'Next: Estimate'}
+                  <Icon name="checksm" size={16} /> {savingDraft ? 'Saving...' : 'Save estimate'}
                 </button>
               </div>
             </div>
@@ -3919,316 +3829,12 @@ export default function AutoDocPage() {
         </div>
       )}
 
-      {/* ESTIMATE */}
-      {activeTab === 'estimate' && (
-        <div className="card">
-          <div className="card__head">
-            <div>
-              <h3>Repair Estimate</h3>
-              <div className="sub">Prepare panel-wise parts, paint, and labour estimate for vehicle {currentVehicleReg || 'N/A'}.</div>
-            </div>
-            <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Draft</span>
-          </div>
-          <div className="card__body">
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
-            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Vehicle: {currentVehicleReg || 'N/A'}</span>
-            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Model: {currentVehicleModel || 'N/A'}</span>
-            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">JC: {currentVehicleJc || 'N/A'}</span>
-          </div>
-
-          <div className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
-            <p className="text-xs text-blue-800">
-              <span className="font-semibold">Rate Card Status:</span>{' '}
-              {!form.model || !form.bpCityCategory ? (
-                <span className="text-gray-600">Awaiting model & city category selection</span>
-              ) : loadingModelRates ? (
-                <span className="text-blue-600">Searching {form.model} + {form.bpCityCategory}...</span>
-              ) : activeModelRates.length > 0 ? (
-                <span className="text-emerald-600">✓ {activeModelRates.length} rates active: {form.model} / {form.bpCityCategory}</span>
-              ) : (
-                <span className="text-amber-600">No rates found for {form.model} / {form.bpCityCategory} — check Settings upload & activation</span>
-              )}
-            </p>
-          </div>
-
-          <div className="hidden overflow-x-auto xl:block">
-            <table className="min-w-full border-separate border-spacing-y-2 text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  <th className="px-2 py-2">Panel</th>
-                  <th className="px-2 py-2">Action</th>
-                  <th className="px-2 py-2">Defect</th>
-                  <th className="px-2 py-2">Part No.</th>
-                  <th className="px-2 py-2">Parts Price (Rs) <span className="text-red-600">*</span></th>
-                  <th className="px-2 py-2">Paint Price (Rs) <span className="text-red-600">*</span></th>
-                  <th className="px-2 py-2">Labour (Rs)</th>
-                  <th className="px-2 py-2">Total (Rs)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {estimateRows.map((row) => {
-                  const total = (Number(row.partsPrice) || 0) + (Number(row.paintPrice) || 0) + (Number(row.labourPrice) || 0)
-                  const isRepaint = isRepaintAction(row.action)
-                  return (
-                    <tr key={row.id} className="rounded-lg bg-white shadow-[0_0_0_1px_rgba(229,231,235,1)]">
-                      <td className="px-2 py-2">
-                        <div className="flex h-10 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-900">
-                          {row.panel}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2">
-                        <select
-                          value={row.action}
-                          onChange={(e) => updateEstimateRow(row.id, { action: e.target.value })}
-                          className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        >
-                          <option value="">Select</option>
-                          {estimateActionOptions.map((action) => (
-                            <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-2 py-2">
-                        <select
-                          value={row.defect ?? ''}
-                          onChange={(e) => updateEstimateRow(row.id, { defect: e.target.value })}
-                          className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        >
-                          <option value="">Select</option>
-                          {estimateDefectOptions.map((defect) => (
-                            <option key={defect} value={defect}>{defect}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-2 py-2">
-                        <input
-                          type="text"
-                          value={row.partNo}
-                          disabled={isRepaint}
-                          onChange={(e) => updateEstimateRow(row.id, { partNo: e.target.value })}
-                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none disabled:bg-gray-100"
-                        />
-                      </td>
-                      <td className="px-2 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={row.partsPrice}
-                          disabled={isRepaint}
-                          onChange={(e) => updateEstimateRow(row.id, { partsPrice: e.target.value })}
-                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
-                          placeholder={isRepaint ? 'N/A' : 'Required'}
-                        />
-                      </td>
-                      <td className="px-2 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={row.paintPrice}
-                          onChange={(e) => updateEstimateRow(row.id, { paintPrice: e.target.value })}
-                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                          placeholder="Required"
-                        />
-                      </td>
-                      <td className="px-2 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={row.labourPrice}
-                          onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
-                          placeholder={isRepaintAction(row.action) && activeModelRates.length > 0 ? 'Auto-fill' : ''}
-                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        />
-                      </td>
-                      <td className="px-2 py-2 text-base font-semibold text-gray-900">Rs {total.toLocaleString('en-IN')}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3 xl:hidden">
-            <p className="text-xs text-blue-800">
-              <span className="font-semibold">Rate Card Status:</span>{' '}
-              {loadingModelRates ? (
-                <span className="text-blue-600">Loading rates...</span>
-              ) : activeModelRates.length > 0 ? (
-                <span className="text-emerald-600">✓ {activeModelRates.length} panel rates active for {form.model}</span>
-              ) : (
-                <span className="text-gray-600">No active rates found — labour must be entered manually</span>
-              )}
-            </p>
-          </div>
-
-          <div className="space-y-3 xl:hidden">
-            {estimateRows.map((row) => {
-              const total = (Number(row.partsPrice) || 0) + (Number(row.paintPrice) || 0) + (Number(row.labourPrice) || 0)
-              const isRepaint = isRepaintAction(row.action)
-              return (
-                <div key={row.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                  <div className="mb-3">
-                    <p className="text-base font-semibold text-gray-900">{row.panel}</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <label className="text-xs font-medium text-gray-600">
-                      Action
-                      <select
-                        value={row.action}
-                        onChange={(e) => updateEstimateRow(row.id, { action: e.target.value })}
-                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      >
-                        <option value="">Select</option>
-                        {estimateActionOptions.map((action) => (
-                          <option key={action} value={action}>{formatEstimateActionLabel(action)}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs font-medium text-gray-600">
-                      Defect
-                      <select
-                        value={row.defect ?? ''}
-                        onChange={(e) => updateEstimateRow(row.id, { defect: e.target.value })}
-                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      >
-                        <option value="">Select</option>
-                        {estimateDefectOptions.map((defect) => (
-                          <option key={defect} value={defect}>{defect}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs font-medium text-gray-600">
-                      Part No.
-                      <input
-                        type="text"
-                        value={row.partNo}
-                        disabled={isRepaint}
-                        onChange={(e) => updateEstimateRow(row.id, { partNo: e.target.value })}
-                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none disabled:bg-gray-100"
-                      />
-                    </label>
-                    <label className="text-xs font-medium text-gray-600">
-                      Parts Price (Rs)
-                      <input
-                        type="number"
-                        min={0}
-                        value={row.partsPrice}
-                        disabled={isRepaint}
-                        onChange={(e) => updateEstimateRow(row.id, { partsPrice: e.target.value })}
-                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
-                        placeholder={isRepaint ? 'N/A' : 'Required'}
-                      />
-                    </label>
-                    <label className="text-xs font-medium text-gray-600">
-                      Paint Price (Rs)
-                      <input
-                        type="number"
-                        min={0}
-                        value={row.paintPrice}
-                        onChange={(e) => updateEstimateRow(row.id, { paintPrice: e.target.value })}
-                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        placeholder="Required"
-                      />
-                    </label>
-                    <label className="text-xs font-medium text-gray-600 md:col-span-2">
-                      Labour (Rs)
-                      <input
-                        type="number"
-                        min={0}
-                        value={row.labourPrice}
-                        onChange={(e) => updateEstimateRow(row.id, { labourPrice: e.target.value })}
-                        className="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      />
-                      {isRepaintAction(row.action) && activeModelRates.length > 0 && (
-                        <p className="mt-1 text-[11px] text-emerald-600">Auto-filled from {form.paintType || 'paint type'}</p>
-                      )}
-                    </label>
-                  </div>
-
-                  <p className="mt-3 text-right text-base font-semibold text-gray-900">Total: Rs {total.toLocaleString('en-IN')}</p>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-            <div className="grid grid-cols-2 gap-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-right sm:grid-cols-4">
-              <div>
-                <p className="text-xs text-gray-500">Parts Total</p>
-                <p className="text-2xl font-semibold text-gray-900">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.parts.toLocaleString('en-IN')}`}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Paint Total</p>
-                <p className="text-2xl font-semibold text-gray-900">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.paint.toLocaleString('en-IN')}`}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Labour Total</p>
-                <p className="text-2xl font-semibold text-gray-900">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.labour.toLocaleString('en-IN')}`}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Grand Total (1+2+3)</p>
-                <p className="text-3xl font-bold text-blue-700">{estimateRows.length === 0 ? '--' : `Rs ${estimateTotals.grand.toLocaleString('en-IN')}`}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="my-4 h-px bg-gray-200" />
-
-          <div className="flex flex-wrap justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => void handleEstimateExportExcel()}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18M10 3v18M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z" />
-              </svg>
-              Export Excel
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                setSavingDraft(true)
-                try {
-                  const ok = await persistDraftJobCard(false)
-                  if (ok) {
-                    await updateJobCardStatus(ok, 'approved')
-                    await fetchRows(true)
-                    setActiveTab('submit')
-                  }
-                } finally {
-                  setSavingDraft(false)
-                }
-              }}
-              disabled={savingDraft}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50"
-            >
-              {savingDraft ? 'Saving...' : 'Next: Submit Reports'}
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        </div>
-      )}
-
       {/* SUBMIT */}
       {activeTab === 'submit' && (
-        <div className="card">
-          <div className="card__head">
-            <div>
-              <h3>Reports and Submit</h3>
-              <div className="sub">Generate pre/post-repair documents and submit final warranty claim package for {currentVehicleReg || 'N/A'}.</div>
-            </div>
+        <div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+            <p className="text-xs font-medium text-gray-700">{currentVehicleReg} · {currentVehicleModel} · {currentVehicleJc}</p>
             <span className="inline-flex w-fit items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Awaiting Approval</span>
-          </div>
-          <div className="card__body">
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
-            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Vehicle: {currentVehicleReg || 'N/A'}</span>
-            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">Model: {currentVehicleModel || 'N/A'}</span>
-            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-inset ring-gray-200">JC: {currentVehicleJc || 'N/A'}</span>
           </div>
 
           <input
@@ -4239,21 +3845,23 @@ export default function AutoDocPage() {
             className="hidden"
           />
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.65fr_1fr]">
-            <div className="rounded-xl border border-gray-200 bg-white">
-              <div className="border-b border-gray-100 px-3 py-2">
-                <p className="text-sm font-semibold text-gray-900">Submission gates</p>
-                <p className="text-xs text-gray-500">{[
-                  readiness.serviceHistory,
-                  readiness.walkaroundVideo,
-                  readiness.carImage,
-                  readiness.prePpt,
-                  readiness.excel,
-                  readiness.postPpt,
-                  readiness.deliveryVideo,
-                ].filter(Boolean).length} of 7 artifacts ready</p>
+          <div className="grid-2" style={{ alignItems: 'start' }}>
+            <div className="card">
+              <div className="card__head">
+                <div>
+                  <h3>Submission gates</h3>
+                  <div className="sub">{[
+                    readiness.serviceHistory,
+                    readiness.walkaroundVideo,
+                    readiness.carImage,
+                    readiness.prePpt,
+                    readiness.excel,
+                    readiness.postPpt,
+                    readiness.deliveryVideo,
+                  ].filter(Boolean).length} of 7 artifacts ready</div>
+                </div>
               </div>
-              <div className="divide-y divide-gray-100">
+              <div className="card__body" style={{ padding: 4 }}>
                 {[
                   { key: 'service', label: 'Service history (PDF)', ready: readiness.serviceHistory, upload: () => setActiveTab('jobcard') },
                   { key: 'walkaround', label: 'Walkaround video', ready: readiness.walkaroundVideo, upload: () => setActiveTab('jobcard') },
@@ -4262,35 +3870,34 @@ export default function AutoDocPage() {
                   { key: 'excel', label: 'Estimate Excel', ready: readiness.excel, upload: () => { void handleSubmitExportExcel() } },
                   { key: 'post', label: 'Post-repair PPT', ready: readiness.postPpt, upload: () => { void handleSubmitGeneratePpt('post-repair') } },
                   { key: 'delivery', label: 'Delivery video', ready: readiness.deliveryVideo, upload: () => openDeliveryVideoPicker() },
-                ].map((gate) => (
-                  <div key={gate.key} className="flex items-center gap-3 px-3 py-2">
+                ].map((gate, idx, arr) => (
+                  <div key={gate.key} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 12px', borderBottom: idx < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
                     <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${gate.ready ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {gate.ready ? '✓' : '○'}
                     </span>
-                    <span className="flex-1 text-sm text-gray-700">{gate.label}</span>
-                    {gate.ready ? (
-                      <span className="badge badge--active badge--no">Ready</span>
-                    ) : (
-                      <button type="button" className="tbtn" onClick={gate.upload}>Upload</button>
-                    )}
+                    <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>{gate.label}</span>
+                    {gate.ready ? <span className="badge badge--active badge--no">Ready</span> : <button type="button" className="tbtn" onClick={gate.upload}>Upload</button>}
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-3">
-              <p className="text-sm font-semibold text-gray-900">Claim actions</p>
-              <p className="mb-3 text-xs text-gray-500">Generate documents and submit to TM</p>
-              <div className="space-y-2">
+            <div className="card">
+              <div className="card__head">
+                <div>
+                  <h3>Claim actions</h3>
+                  <div className="sub">Generate documents and submit to TM</div>
+                </div>
+              </div>
+              <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 <button type="button" className="btn btn--soft btn--block" onClick={() => void handleSubmitGeneratePpt('pre-repair')}>Generate pre-repair PPT</button>
                 <button type="button" className="btn btn--soft btn--block" onClick={() => void handleSubmitGeneratePpt('post-repair')}>Generate post-repair PPT</button>
                 <button type="button" className="btn btn--soft btn--block" onClick={() => void handleComposeAndSend()} disabled={!composeReady}>Draft claim email</button>
                 <button type="button" className="btn btn--primary btn--block" onClick={() => void handleSubmitClaim()} disabled={!submitReady}>Submit claim</button>
+                <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Estimate value: <b>Rs {estimateTotals.grand.toLocaleString('en-IN')}</b></div>
               </div>
-              <p className="mt-2 text-center text-xs text-gray-500">Estimate value: Rs {estimateTotals.grand.toLocaleString('en-IN')}</p>
             </div>
           </div>
-        </div>
         </div>
       )}
 
