@@ -59,6 +59,7 @@ const SOURCE_TONE_MAP: Record<string, string> = {
 }
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
+const QUERY_PAGE_SIZE = 1000
 
 function formatDate(value: string): string {
   const date = new Date(value)
@@ -677,17 +678,33 @@ export default function ServiceAdvisorPage() {
     // Fetch existing completed, hold and work-in-process job cards
     const fetchAssignmentStatusJobCards = async () => {
       try {
-        const res = await supabase
-          .from('technician_assignments')
-          .select('job_card_number, work_status, technician_code')
+        const allRows: Record<string, unknown>[] = []
+        let from = 0
 
-        if (!res.error && res.data) {
+        while (true) {
+          const res = await supabase
+            .from('technician_assignments')
+            .select('job_card_number, work_status, technician_code')
+            .range(from, from + QUERY_PAGE_SIZE - 1)
+
+          if (res.error) {
+            throw res.error
+          }
+
+          const batch = (res.data ?? []) as Record<string, unknown>[]
+          allRows.push(...batch)
+
+          if (batch.length < QUERY_PAGE_SIZE) break
+          from += QUERY_PAGE_SIZE
+        }
+
+        if (allRows.length > 0) {
           const completed = new Set<string>()
           const hold = new Set<string>()
           const inProcess = new Set<string>()
           const technicianAssigned = new Set<string>()
           const allAssigned = new Set<string>()
-          res.data.forEach((row: Record<string, unknown>) => {
+          allRows.forEach((row: Record<string, unknown>) => {
             const jobCardNum = String(row.job_card_number ?? '').trim().toUpperCase()
             const status = String(row.work_status ?? '').trim().toLowerCase()
             const technicianCode = String(row.technician_code ?? '').trim()

@@ -31,6 +31,8 @@ interface Props {
   dateFilter: DateRangeFilter
 }
 
+const QUERY_PAGE_SIZE = 1000
+
 function formatDateTime(value: string | null): string {
   if (!value) return '-'
   const d = new Date(value)
@@ -80,22 +82,47 @@ export default function AdvisorPerformanceMobile({ branch, dateFilter }: Props) 
 
       try {
         const bounds = getDateRangeBounds(dateFilter)
+        const fetchAllRows = async (
+          table: SourceTable,
+          columns: string,
+          dateColumn: 'jc_closed_date_time' | 'closed_date_time',
+        ): Promise<Record<string, unknown>[]> => {
+          const rows: Record<string, unknown>[] = []
+          let from = 0
+
+          while (true) {
+            let query = supabase
+              .from(table)
+              .select(columns)
+              .order(dateColumn, { ascending: false })
+              .order('id', { ascending: false })
+              .range(from, from + QUERY_PAGE_SIZE - 1)
+
+            query = applyBranchFilterToQuery(query, branch)
+            if (employeeCode) query = query.eq('employee_code', employeeCode)
+            if (bounds) query = query.gte(dateColumn, bounds.from).lt(dateColumn, bounds.toExclusive)
+
+            const { data, error: fetchError } = await query
+            if (fetchError) throw new Error(fetchError.message)
+
+            const batch = (data as Record<string, unknown>[] | null) ?? []
+            rows.push(...batch)
+
+            if (batch.length < QUERY_PAGE_SIZE) break
+            from += QUERY_PAGE_SIZE
+          }
+
+          return rows
+        }
 
         if (sourceTable === 'service_vas_jc_data') {
-          let query = supabase
-            .from('service_vas_jc_data')
-            .select('branch, job_card_number, sr_assigned_to, employee_code, jc_closed_date_time, job_value')
-            .order('jc_closed_date_time', { ascending: false })
-            .limit(1000)
+          const data = await fetchAllRows(
+            'service_vas_jc_data',
+            'branch, job_card_number, sr_assigned_to, employee_code, jc_closed_date_time, job_value',
+            'jc_closed_date_time',
+          )
 
-          query = applyBranchFilterToQuery(query, branch)
-          if (employeeCode) query = query.eq('employee_code', employeeCode)
-          if (bounds) query = query.gte('jc_closed_date_time', bounds.from).lt('jc_closed_date_time', bounds.toExclusive)
-
-          const { data, error: fetchError } = await query
-          if (fetchError) throw new Error(fetchError.message)
-
-          const mappedRows: ReportRow[] = ((data as Record<string, unknown>[] | null) ?? []).map((row) => ({
+          const mappedRows: ReportRow[] = data.map((row) => ({
             branch: row.branch == null ? null : String(row.branch),
             jobCardNumber: row.job_card_number == null ? null : String(row.job_card_number),
             srAssignedTo: row.sr_assigned_to == null ? null : String(row.sr_assigned_to),
@@ -109,20 +136,13 @@ export default function AdvisorPerformanceMobile({ branch, dateFilter }: Props) 
           return
         }
 
-        let query = supabase
-          .from('job_card_closed_data')
-          .select('branch, job_card_number, sr_assigned_to, employee_code, closed_date_time, total_invoice_amount')
-          .order('closed_date_time', { ascending: false })
-          .limit(1000)
+        const data = await fetchAllRows(
+          'job_card_closed_data',
+          'branch, job_card_number, sr_assigned_to, employee_code, closed_date_time, total_invoice_amount',
+          'closed_date_time',
+        )
 
-        query = applyBranchFilterToQuery(query, branch)
-        if (employeeCode) query = query.eq('employee_code', employeeCode)
-        if (bounds) query = query.gte('closed_date_time', bounds.from).lt('closed_date_time', bounds.toExclusive)
-
-        const { data, error: fetchError } = await query
-        if (fetchError) throw new Error(fetchError.message)
-
-        const mappedRows: ReportRow[] = ((data as Record<string, unknown>[] | null) ?? []).map((row) => ({
+        const mappedRows: ReportRow[] = data.map((row) => ({
           branch: row.branch == null ? null : String(row.branch),
           jobCardNumber: row.job_card_number == null ? null : String(row.job_card_number),
           srAssignedTo: row.sr_assigned_to == null ? null : String(row.sr_assigned_to),

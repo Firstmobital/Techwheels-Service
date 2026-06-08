@@ -42,6 +42,8 @@ type TechnicianOption = {
   name: string
 }
 
+const QUERY_PAGE_SIZE = 1000
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
   const date = new Date(value)
@@ -270,21 +272,34 @@ export default function TechnicianPage() {
         return
       }
 
-      const assignRes = await supabase
-        .from('technician_assignments')
-        .select('*')
-        .in('technician_code', effectiveCodes)
-        .order('assigned_at', { ascending: false })
+      const assignmentRows: TechnicianAssignmentRow[] = []
+      let from = 0
 
-      if (assignRes.error) {
-        setError(assignRes.error.message)
-        setAssignments([])
-        setIncomeByDay([])
-        setLoading(false)
-        return
+      while (true) {
+        const assignRes = await supabase
+          .from('technician_assignments')
+          .select('*')
+          .in('technician_code', effectiveCodes)
+          .order('assigned_at', { ascending: false })
+          .range(from, from + QUERY_PAGE_SIZE - 1)
+
+        if (assignRes.error) {
+          setError(assignRes.error.message)
+          setAssignments([])
+          setIncomeByDay([])
+          setLoading(false)
+          return
+        }
+
+        const batch = (assignRes.data ?? []) as TechnicianAssignmentRow[]
+        assignmentRows.push(...batch)
+
+        if (batch.length < QUERY_PAGE_SIZE) {
+          break
+        }
+
+        from += QUERY_PAGE_SIZE
       }
-
-      const assignmentRows = (assignRes.data ?? []) as TechnicianAssignmentRow[]
 
       // Get completed assignments to query revenue data
       const completedMap = new Map<string, TechnicianAssignmentRow>()

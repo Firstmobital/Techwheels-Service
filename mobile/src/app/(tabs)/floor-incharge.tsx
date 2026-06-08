@@ -37,6 +37,8 @@ interface Assignment {
   assigned_by: string | null
 }
 
+const QUERY_PAGE_SIZE = 1000
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function FloorInchargeScreen() {
@@ -65,7 +67,7 @@ export default function FloorInchargeScreen() {
     else setLoading(true)
 
     try {
-      const [jcRes, empRes, assignRes] = await Promise.all([
+      const [jcRes, empRes] = await Promise.all([
         supabase
           .from('open_job_cards')
           .select('id, job_card_number, branch, status, vehicle_registration_number, sr_type, open_for_days, product_line, chassis_number')
@@ -76,8 +78,25 @@ export default function FloorInchargeScreen() {
           .select('id, employee_code, employee_name, location, role')
           .ilike('role', 'technician')
           .order('employee_name'),
-        supabase.from('technician_assignments').select('*'),
       ])
+
+      const assignmentRows: Assignment[] = []
+      let from = 0
+
+      while (true) {
+        const assignRes = await supabase
+          .from('technician_assignments')
+          .select('*')
+          .range(from, from + QUERY_PAGE_SIZE - 1)
+
+        if (assignRes.error) break
+
+        const batch = (assignRes.data ?? []) as Assignment[]
+        assignmentRows.push(...batch)
+
+        if (batch.length < QUERY_PAGE_SIZE) break
+        from += QUERY_PAGE_SIZE
+      }
 
       const technicianEmployees = (empRes.data ?? []).filter((employee) =>
         String(employee.role ?? '').trim().toLowerCase() === 'technician',
@@ -87,10 +106,8 @@ export default function FloorInchargeScreen() {
       setEmployees(technicianEmployees)
 
       const map: Record<string, Assignment> = {}
-      if (!assignRes.error && assignRes.data) {
-        for (const a of assignRes.data as Assignment[]) {
-          map[a.job_card_number] = a
-        }
+      for (const a of assignmentRows) {
+        map[a.job_card_number] = a
       }
       setAssignments(map)
     } catch (e) {

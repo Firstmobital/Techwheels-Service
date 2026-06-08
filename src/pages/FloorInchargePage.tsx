@@ -210,6 +210,8 @@ function getTechnicianFilterLabel(assignment: TechnicianAssignment | undefined):
 
 type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed'
 
+const QUERY_PAGE_SIZE = 1000
+
 function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message
   if (err && typeof err === 'object' && 'message' in err) {
@@ -334,11 +336,28 @@ export default function FloorInchargePage() {
       setEmployees(technicianEmployees)
 
       // Try to fetch assignments — graceful fallback if table doesn't exist yet
-      const assignRes = await supabase.from('technician_assignments').select('*')
-      if (!assignRes.error && assignRes.data) {
+      const assignmentRows: TechnicianAssignment[] = []
+      let from = 0
+
+      while (true) {
+        const assignRes = await supabase
+          .from('technician_assignments')
+          .select('*')
+          .range(from, from + QUERY_PAGE_SIZE - 1)
+
+        if (assignRes.error) break
+
+        const batch = (assignRes.data ?? []) as TechnicianAssignment[]
+        assignmentRows.push(...batch)
+
+        if (batch.length < QUERY_PAGE_SIZE) break
+        from += QUERY_PAGE_SIZE
+      }
+
+      if (assignmentRows.length > 0) {
         const assignMap: Record<string, TechnicianAssignment> = {}
         const nextDrafts: Record<string, StageDraft> = {}
-        for (const a of assignRes.data as TechnicianAssignment[]) {
+        for (const a of assignmentRows) {
           const normalizedJc = String(a.job_card_number ?? '').trim().toUpperCase()
           assignMap[normalizedJc] = a
           nextDrafts[normalizedJc] = {

@@ -42,6 +42,7 @@ type ModuleMetaRow = {
 }
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
+const QUERY_PAGE_SIZE = 1000
 
 function normalizeRoute(value: string | null | undefined) {
   const trimmed = String(value ?? '').trim()
@@ -168,13 +169,29 @@ export default function DashboardPage({
         : { error: null, data: [] as ReceptionEntryRow[] }
       const nextFloorStatusRows = floorRowsResult.error ? [] : (floorRowsResult.data ?? [])
 
-      const { data: assignmentRows } = await supabase
-        .from('technician_assignments')
-        .select('job_card_number, work_status')
+      const assignmentRows: { job_card_number?: string | null; work_status?: string | null }[] = []
+      let from = 0
+
+      while (true) {
+        const assignRes = await supabase
+          .from('technician_assignments')
+          .select('job_card_number, work_status')
+          .range(from, from + QUERY_PAGE_SIZE - 1)
+
+        if (assignRes.error) {
+          throw new Error(assignRes.error.message)
+        }
+
+        const batch = (assignRes.data ?? []) as { job_card_number?: string | null; work_status?: string | null }[]
+        assignmentRows.push(...batch)
+
+        if (batch.length < QUERY_PAGE_SIZE) break
+        from += QUERY_PAGE_SIZE
+      }
 
       const nextCompleted = new Set<string>()
       const nextAssignmentStatus: Record<string, string> = {}
-      ;(assignmentRows ?? []).forEach((row: { job_card_number?: string | null; work_status?: string | null }) => {
+      assignmentRows.forEach((row: { job_card_number?: string | null; work_status?: string | null }) => {
         const jobCard = String(row.job_card_number ?? '').trim().toUpperCase()
         if (!jobCard) return
 
