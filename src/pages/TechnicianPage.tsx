@@ -21,7 +21,7 @@ type RevenueRow = {
   job_card_number: string | null
   closed_date_time: string | null
   invoice_date: string | null
-  final_labour_amount: number | null
+  final_labour_amount: number | string | null
 }
 
 type ReceptionEntryRow = {
@@ -88,6 +88,42 @@ function extractFuelFromBay(bayNo: string | null | undefined): 'PV' | 'EV' | nul
   if (normalized.startsWith('PV-')) return 'PV'
   if (normalized.startsWith('EV-')) return 'EV'
   return null
+}
+
+function parseRevenueAmount(value: unknown): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0
+  }
+
+  if (value == null) return 0
+
+  const raw = String(value).trim()
+  if (!raw) return 0
+
+  const isParenthesizedNegative = raw.startsWith('(') && raw.endsWith(')')
+  const cleaned = raw
+    .replace(/[₹,]/g, '')
+    .replace(/\bRS\.?\b/gi, '')
+    .replace(/\s+/g, '')
+    .replace(/[()]/g, '')
+
+  const parsed = Number(cleaned)
+  if (!Number.isFinite(parsed)) return 0
+  return isParenthesizedNegative ? -parsed : parsed
+}
+
+function getIncomeDateKey(assignment: TechnicianAssignmentRow, revenue: RevenueRow): string | null {
+  const source =
+    revenue.closed_date_time ??
+    revenue.invoice_date ??
+    assignment.out_ts ??
+    assignment.assigned_at
+
+  if (!source) return null
+
+  const parsedDate = new Date(source)
+  if (Number.isNaN(parsedDate.getTime())) return null
+  return parsedDate.toISOString().slice(0, 10)
 }
 
 export default function TechnicianPage() {
@@ -255,7 +291,7 @@ export default function TechnicianPage() {
       assignmentRows
         .filter((row) => normalizeStatus(row.work_status) === 'completed')
         .forEach((row) => {
-          const jc = String(row.job_card_number ?? '').trim()
+          const jc = String(row.job_card_number ?? '').trim().toUpperCase()
           if (!jc) return
 
           const existing = completedMap.get(jc)
@@ -283,22 +319,10 @@ export default function TechnicianPage() {
       let revenueMap = new Map<string, RevenueRow>()
 
       if (completedJcNumbers.length > 0) {
-        // Fetch all revenue data and filter in-memory by normalized job card numbers
-        // This is more reliable than RPC functions which may not be available yet
-        const allRevenueRes = await supabase
+        const revenueRes = await supabase
           .from('job_card_closed_data')
           .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
-
-        let revenueRes = allRevenueRes
-
-        // Filter to only matching job cards (case-insensitive)
-        if (allRevenueRes.data && !allRevenueRes.error) {
-          const normalizedSet = new Set(completedJcNumbers)
-          revenueRes.data = allRevenueRes.data.filter((row: any) => {
-            const normalizedJc = String(row.job_card_number ?? '').trim().toUpperCase()
-            return normalizedSet.has(normalizedJc)
-          })
-        }
+          .in('job_card_number', completedJcNumbers)
 
         if (revenueRes.error) {
           setError(revenueRes.error.message)
@@ -324,21 +348,10 @@ export default function TechnicianPage() {
           }
         })
 
-        // Fetch registration numbers from service_reception_entries with case-insensitive matching
-        const allReceptionRes = await supabase
+        const receptionRes = await supabase
           .from('service_reception_entries')
           .select('jc_number, reg_number')
-
-        let receptionRes = allReceptionRes
-
-        // Filter to only matching job cards (case-insensitive)
-        if (allReceptionRes.data && !allReceptionRes.error) {
-          const normalizedSet = new Set(completedJcNumbers)
-          receptionRes.data = allReceptionRes.data.filter((row: any) => {
-            const normalizedJc = String(row.jc_number ?? '').trim().toUpperCase()
-            return normalizedSet.has(normalizedJc)
-          })
-        }
+          .in('jc_number', completedJcNumbers)
 
         if (!receptionRes.error && receptionRes.data) {
           ;(receptionRes.data ?? []).forEach((row: any) => {
@@ -382,14 +395,11 @@ export default function TechnicianPage() {
         const revenue = revenueMap.get(jc)
         if (!revenue) return
 
-        const gross = Number(revenue.final_labour_amount ?? 0)
+        const gross = parseRevenueAmount(revenue.final_labour_amount)
         if (!Number.isFinite(gross) || gross <= 0) return
 
-        const dateKeySource = revenue.closed_date_time ?? revenue.invoice_date
-        if (!dateKeySource) return
-        const parsedDate = new Date(dateKeySource)
-        if (Number.isNaN(parsedDate.getTime())) return
-        const dateKey = parsedDate.toISOString().slice(0, 10)
+        const dateKey = getIncomeDateKey(assignment, revenue)
+        if (!dateKey) return
 
         const fuel = extractFuelFromBay(assignment.bay_no)
         const shareRate = fuel === 'EV' ? 0.25 : 0.2
