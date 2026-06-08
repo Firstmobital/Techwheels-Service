@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-08 04:45 UTC  
+**Last Updated**: 2026-06-08 06:10 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-08)
@@ -42,6 +42,17 @@ Tightening execution contract (starting next phase):
 - For each table batch, create scoped replacement policy first, then remove broad policy.
 - Validate impacted screens (web + mobile) immediately after each batch before continuing.
 - If any conflict appears between docs and mirror policy text, mirror policy text is authoritative.
+
+Progress update (2026-06-08, staged tightening):
+- Step 1 (warranty domain) validated PASS.
+- Step 2 (service domain) validated PASS with `p0_auth_delete` now constrained to `is_admin()` OR `has_module_delete('reports')` on:
+  - `service_vas_jc_data`
+  - `service_jc_parts_data`
+  - `service_invoice_data`
+  - `service_invoice_order_data`
+- Step 3 draft prepared for import/reconciliation domain:
+  - Migration: `20260608123000_p0_step3_import_recon_tighten_delete_policy.sql`
+  - Checks: `20260608123000_import_recon_tighten_step3_checks.sql`
 
 ### Execution Update (2026-06-01)
 
