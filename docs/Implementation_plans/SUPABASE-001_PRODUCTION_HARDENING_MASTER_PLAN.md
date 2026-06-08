@@ -102,7 +102,7 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 |---|---|---|---|---|---|---|---|---|---|
 | P0-01 | Critical | Export and classify all 22 Advisor issues | Team | Done | 2026-06-08 | 2026-06-08 | Full advisor inventory captured and tracked across four fix batches; final rerun shows Security Advisor Errors = 0 | 2026-06-08 | - |
 | P0-02 | Critical | Enable RLS on exposed public tables | Team | Done | 2026-06-08 | 2026-06-08 | Fixes 1-4 executed (`20260608100000`, `20260608101500`, `20260608103000`, `20260608104500`); final rerun shows all `rls_disabled_in_public` errors cleared | 2026-06-08 | - |
-| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Step 1 draft prepared: `supabase/migrations/20260608113000_p0_step1_warranty_tighten_delete_policy.sql` (tightens existing `p0_auth_delete` on warranty tables only; keeps read/import continuity) | 2026-06-08 | Execute Step 1 draft, run warranty validation checklist, then proceed to Step 2 service-domain tightening |
+| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Step 1 validated: warranty `p0_auth_delete` tightened with all checks green. Step 2 draft prepared: `supabase/migrations/20260608120000_p0_step2_service_tighten_delete_policy.sql`. | 2026-06-08 | Execute Step 2 draft and run `supabase/sql_checks/20260608120000_service_tighten_step2_checks.sql` |
 | P0-04 | High | Restrict `anon` API key permissions in settings | Team | Not Started |  |  |  | 2026-06-04 | Validate no frontend breakage after restriction |
 | P0-05 | High | Enable leaked-password protection in Auth | Team | Not Started |  |  |  | 2026-06-04 | Toggle and test signup/login failure path |
 | P1-01 | Critical | Move app DB connection usage to pooler URL | Team | Not Started |  |  |  | 2026-06-04 | Identify all runtime connection string consumers |
@@ -149,6 +149,8 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Logged post-Fix-3 Advisor delta (20 -> 18 errors) and created Fix 4 migration to enable RLS + baseline authenticated policies for all remaining flagged tables |
 | 2026-06-08 | Copilot | Logged Fix 4 execution and Security Advisor milestone (Errors: 0); transitioned plan from error-clearance to least-privilege policy tightening |
 | 2026-06-08 | Copilot | Started tightening Step 1 draft for warranty domain: constrained `p0_auth_delete` only (existing policy name) and added pre/post execution validation checklist |
+| 2026-06-08 | Copilot | Logged Step 1 warranty tightening migration execution; next checkpoint is SQL + frontend/mobile validation before Step 2 |
+| 2026-06-08 | Copilot | Step 1 warranty tightening validated (policy + baseline + RLS checks passed); prepared Step 2 service-domain delete-policy tightening draft and SQL checks |
 
 ## 7) Update Protocol For Future Chats
 
@@ -465,3 +467,14 @@ Frontend/runtime validation:
 Rollback plan (if breakage appears):
 1. Recreate previous broad `p0_auth_delete ... using (true)` for only affected warranty tables.
 2. Re-run post-check SQL and confirm recovery.
+
+Step 1 validation outcome (2026-06-08):
+- PASS: `p0_auth_delete` on all 7 warranty tables now requires `is_admin()` or `has_module_delete('reports')`.
+- PASS: `p0_auth_select`, `p0_auth_insert`, `p0_auth_update` remained present on all 7 tables.
+- PASS: RLS stayed enabled on all 7 tables.
+
+Step 2 draft prepared:
+- Migration: `supabase/migrations/20260608120000_p0_step2_service_tighten_delete_policy.sql`
+- Checks: `supabase/sql_checks/20260608120000_service_tighten_step2_checks.sql`
+- Scope: `service_vas_jc_data`, `service_jc_parts_data`, `service_invoice_data`, `service_invoice_order_data`.
+- Action: tighten only `p0_auth_delete`; leave select/insert/update unchanged in this step.
