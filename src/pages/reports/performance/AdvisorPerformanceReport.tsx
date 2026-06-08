@@ -95,7 +95,9 @@ export default function AdvisorPerformanceReport({ branch, dateFilter }: ReportV
           const { data, error: fetchError } = await query
           if (fetchError) throw new Error(fetchError.message)
 
-          const batch = (data as Record<string, unknown>[] | null) ?? []
+          const batch = Array.isArray(data)
+            ? (data as unknown as Record<string, unknown>[])
+            : []
           rows.push(...batch)
 
           if (batch.length < QUERY_PAGE_SIZE) break
