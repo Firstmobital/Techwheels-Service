@@ -461,21 +461,77 @@ export default function TechnicianPage() {
     }
   }, [selectedDayKey, dayCards])
 
-  const finalRows = useMemo(() => {
+  const dayRowsForSelectedDay = useMemo(() => {
     if (!selectedDayKey) return []
-
-    return selectedTechnicianRows
-      .filter((row) => {
-        const dateSource = row.out_ts ?? row.assigned_at ?? ''
-        const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
-        return dateKey === selectedDayKey
-      })
-      .sort((a, b) => {
-        const aTs = new Date(a.assigned_at ?? 0).getTime()
-        const bTs = new Date(b.assigned_at ?? 0).getTime()
-        return bTs - aTs
-      })
+    return selectedTechnicianRows.filter((row) => {
+      const dateSource = row.out_ts ?? row.assigned_at ?? ''
+      const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
+      return dateKey === selectedDayKey
+    })
   }, [selectedTechnicianRows, selectedDayKey])
+
+  const vehicleOnDayCards = useMemo<VehicleOnDayCard[]>(() => {
+    const byVehicle = new Map<string, VehicleOnDayCard>()
+
+    dayRowsForSelectedDay.forEach((row) => {
+      const reg = String(row.reg_number ?? '').trim().toUpperCase()
+      const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+      const regKey = reg || `UNREG-${jc}`
+      const label = reg || `No Reg (${jc})`
+
+      const existing = byVehicle.get(regKey) ?? {
+        regKey,
+        label,
+        rowCount: 0,
+        completedCount: 0,
+        totalIncome: 0,
+      }
+
+      existing.rowCount += 1
+      existing.totalIncome += Number(row.technician_income ?? 0)
+      if (normalizeStatus(row.work_status) === 'completed') {
+        existing.completedCount += 1
+      }
+
+      byVehicle.set(regKey, existing)
+    })
+
+    return Array.from(byVehicle.values()).sort((a, b) => {
+      if (b.totalIncome !== a.totalIncome) return b.totalIncome - a.totalIncome
+      return b.rowCount - a.rowCount
+    })
+  }, [dayRowsForSelectedDay])
+
+  useEffect(() => {
+    if (vehicleOnDayCards.length === 0) {
+      if (selectedVehicleOnDayKey) setSelectedVehicleOnDayKey('')
+      return
+    }
+
+    const hasSelected = vehicleOnDayCards.some((card) => card.regKey === selectedVehicleOnDayKey)
+    if (!hasSelected && selectedVehicleOnDayKey) {
+      setSelectedVehicleOnDayKey('')
+    }
+  }, [selectedVehicleOnDayKey, vehicleOnDayCards])
+
+  const finalRows = useMemo(() => {
+    let rows = dayRowsForSelectedDay
+
+    if (selectedVehicleOnDayKey) {
+      rows = rows.filter((row) => {
+        const reg = String(row.reg_number ?? '').trim().toUpperCase()
+        const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+        const regKey = reg || `UNREG-${jc}`
+        return regKey === selectedVehicleOnDayKey
+      })
+    }
+
+    return rows.sort((a, b) => {
+      const aTs = new Date(a.assigned_at ?? 0).getTime()
+      const bTs = new Date(b.assigned_at ?? 0).getTime()
+      return bTs - aTs
+    })
+  }, [dayRowsForSelectedDay, selectedVehicleOnDayKey])
 
   const totalIncome = useMemo(
     () => technicianCards.reduce((sum, row) => sum + row.totalIncome, 0),
@@ -599,6 +655,42 @@ export default function TechnicianPage() {
         </div>
       )}
 
+      {/* Vehicle-on-day cards */}
+      {!loading && selectedDayKey && vehicleOnDayCards.length > 0 && (
+        <div className="card mb-gap">
+          <div className="card__head">
+            <div>
+              <h3>Vehicle-wise earnings for {dayCards.find((d) => d.dateKey === selectedDayKey)?.label}</h3>
+              <div className="sub">Select a vehicle to view its job cards on this day.</div>
+            </div>
+          </div>
+          <div className="card__body dense">
+            <div className="tech-drill-grid tech-drill-grid--sm">
+              {vehicleOnDayCards.map((card) => (
+                <button
+                  key={card.regKey}
+                  type="button"
+                  className={`tech-drill-btn ${selectedVehicleOnDayKey === card.regKey ? 'is-active' : ''}`}
+                  onClick={() => {
+                    if (selectedVehicleOnDayKey === card.regKey) {
+                      setSelectedVehicleOnDayKey('')
+                    } else {
+                      setSelectedVehicleOnDayKey(card.regKey)
+                    }
+                  }}
+                >
+                  <div className="tech-drill-btn__hd">
+                    <div className="tech-drill-btn__title">{card.label}</div>
+                  </div>
+                  <div className="tech-drill-btn__value">{formatCurrency(card.totalIncome)}</div>
+                  <div className="tech-drill-btn__meta">{card.rowCount} rows • {card.completedCount} done</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Final JC rows */}
       {!loading && selectedTechnicianCode && (
         <div className="card">
@@ -608,6 +700,7 @@ export default function TechnicianPage() {
               <div className="sub">
                 JC #, Reg #, Bay, Status, IN TS, OUT TS, Time Diff, Remark
                 {selectedDayKey && ` — ${dayCards.find((d) => d.dateKey === selectedDayKey)?.label || 'selected day'}`}
+                {selectedVehicleOnDayKey && ` — ${vehicleOnDayCards.find((v) => v.regKey === selectedVehicleOnDayKey)?.label || 'selected vehicle'}`}
               </div>
             </div>
           </div>
@@ -615,7 +708,7 @@ export default function TechnicianPage() {
             {!selectedDayKey ? (
               <div className="empty-state">Select a day card above to view rows.</div>
             ) : finalRows.length === 0 ? (
-              <div className="empty-state">No job card rows for this day.</div>
+              <div className="empty-state">{selectedVehicleOnDayKey ? 'No job card rows for this vehicle on this day.' : 'No job card rows for this day.'}</div>
             ) : (
               <div className="tbl-wrap scroll">
                 <table className="tbl">
