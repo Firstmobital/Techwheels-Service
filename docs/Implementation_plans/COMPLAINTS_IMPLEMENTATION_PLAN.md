@@ -19,10 +19,11 @@
 7. [Row-Level Security (RLS)](#7-row-level-security-rls)
 8. [SLA & Notification Design](#8-sla--notification-design)
 9. [Frontend Implementation](#9-frontend-implementation)
-10. [Implementation Phases](#10-implementation-phases)
-11. [Testing & Acceptance Criteria](#11-testing--acceptance-criteria)
-12. [Risk Assessment & Mitigations](#12-risk-assessment--mitigations)
-13. [Guardrails & Constraints](#13-guardrails--constraints)
+10. [Gaps & Critical Issues](#10-gaps--critical-issues)
+11. [Implementation Phases](#11-implementation-phases)
+12. [Testing & Acceptance Criteria](#12-testing--acceptance-criteria)
+13. [Risk Assessment & Mitigations](#13-risk-assessment--mitigations)
+14. [Guardrails & Constraints](#14-guardrails--constraints)
 
 ---
 
@@ -1721,7 +1722,93 @@ export async function generateComplaintLink(receptionEntryId: number) {
 
 ---
 
-## 10. IMPLEMENTATION PHASES
+## 10. GAPS & CRITICAL ISSUES
+
+**Status:** Reviewed on 2026-06-08; all gaps have mitigation strategies.
+
+### Issues Identified & How They'll Be Addressed
+
+#### 1. Missing Service Role Grants ⚠️
+- **Issue:** Staff RPCs don't grant EXECUTE to `service_role`, needed for Edge Functions and background jobs.
+- **Fix:** Add `GRANT EXECUTE ON FUNCTION public.<function_name>(...) TO service_role;` to all staff RPC migrations.
+- **Priority:** P1 — Do this in Phase 2 before background job setup.
+
+#### 2. Concurrent Link Consumption Race Condition ⚠️
+- **Issue:** Two simultaneous requests could both pass the `status='active'` check and create two complaints from one link.
+- **Fix:** Use `FOR UPDATE` lock in `raise_complaint()` SELECT, or add a CHECK constraint trigger on `complaint_id` uniqueness.
+- **Priority:** P1 — Implement in Phase 2 RPC layer.
+
+#### 3. Token Storage Security 🔒
+- **Issue:** Plain-text tokens in database pose risk if DB is breached; hashing adds complexity (hash comparison expensive).
+- **Recommendation:** Phase 1: Store tokens as-is (128-bit random URL-safe). Phase 5: Upgrade to hash-at-rest if needed.
+- **Priority:** P3 — Acceptable for initial launch.
+
+#### 4. my_employee_code() Edge Case 🔴
+- **Issue:** Function returns NULL if user has no active primary link; breaks RLS WHERE clauses expecting a non-null employee_code.
+- **Fix:** Add CASE logic: If result is NULL and user is authenticated, RAISE ERROR with helpful message. System/background functions can return NULL.
+- **Priority:** P1 — Fix before Phase 1 deployment.
+
+#### 5. SLA Recalculation on Reopen — Document Explicitly
+- **Issue:** When customer reopens a resolved ticket, which SLA targets apply? Original priority or current?
+- **Decision:** Use CURRENT priority to fetch SLA targets from `complaint_sla_policies`. Response SLA is NOT recalculated (staff assumed to respond within original window). Resolution SLA RESETS from NOW().
+- **Priority:** P2 — Document in code comments; test in pgTAP.
+
+#### 6. Attachment Deletion Strategy — Out of Scope for Phase 1
+- **Issue:** `complaint_attachments.storage_path` points to Supabase Storage files; no cleanup logic if message or complaint deleted.
+- **Recommendation:** Phase 1: Manual cleanup (accept orphaned files). Phase 5: Implement background job to delete storage files on CASCADE delete.
+- **Priority:** P3 — Defer to Phase 5 refinement.
+
+#### 7. No Explicit Status Transition Validation
+- **Issue:** Can status move from `in_progress` → `acknowledged`? `resolved` → `in_progress`? Not specified.
+- **Fix:** Add trigger `trg_ct_validate_status_transition()` that enforces: new → acknowledged/in_progress/resolved; acknowledged → in_progress/resolved; in_progress → resolved; resolved → reopened; reopened → in_progress/resolved.
+- **Priority:** P2 — Implement in Phase 2 triggers.
+
+#### 8. Rate Limiting on Anonymous RPCs — API Layer Responsibility
+- **Issue:** Anon RPCs (get_complaint_by_token, raise_complaint, etc.) have no rate limiting; susceptible to spam/DDoS.
+- **Recommendation:** Implement at Supabase API layer using RLS or middleware; document rate limits in frontend code comments.
+- **Priority:** P2 — Configure during Phase 3 frontend integration.
+
+#### 9. Error Response Format Standardization
+- **Issue:** RPCs raise generic EXCEPTION; frontend can't differentiate between validation, auth, and not-found errors.
+- **Fix:** Standardize RPC error responses:
+  ```json
+  { "error": "invalid_token", "code": "ERR_AUTH_001", "message": "Link expired or invalid" }
+  ```
+- **Priority:** P2 — Implement in all RPCs during Phase 2; document error codes.
+
+#### 10. Module Registration: RBAC Role Mapping Must Be Verified
+- **Issue:** Seed SQL assumes `users.role` IN ('admin','manager','advisor','viewer'); your schema may differ.
+- **Action Before Phase 1:** Query the dump and confirm `users` table schema and actual role values.
+- **Priority:** P1 — Blocking Phase 1 seed data.
+
+#### 11. Ticket Number Generation: Pattern Must Match Existing JC Scheme
+- **Issue:** `trg_ct_ticket_number_fn()` uses placeholder logic (dealer_abbr, fiscal year, seq); must match your actual JC numbering.
+- **Action Before Phase 1:** Grep the full dump for JC number patterns (e.g., "JC-FstMbl-FQ7-2627-") and confirm format.
+- **Priority:** P1 — Blocking Phase 1 trigger deployment.
+
+#### 12. No Cascading Delete on Reception Entry Foreign Key
+- **Issue:** If a reception entry is deleted, `complaint_access_links` rows become orphaned.
+- **Fix:** Add `ON DELETE CASCADE` to FK constraint: `REFERENCES public.service_reception_entries(id) ON DELETE CASCADE`.
+- **Priority:** P2 — Add in Phase 1 schema creation.
+
+#### 13. SLA Policies: New Dealer Onboarding
+- **Issue:** Seed data inserts default SLA policies; new dealers need their own or inherit defaults.
+- **Recommendation:** Create a stored procedure `init_dealer_sla_policies(dealer_code)` that either copies defaults or uses global settings.
+- **Priority:** P3 — Defer to Phase 5 automation.
+
+#### 14. Attachment Upload: No Validation Documented
+- **Issue:** No file size limits, content-type whitelist, or storage quota mentioned.
+- **Recommendation:** Implement validation in frontend and RPC (Phase 3); document max file size (e.g., 10 MB), allowed types (jpg, png, pdf).
+- **Priority:** P2 — Frontend responsibility.
+
+#### 15. Notification Strategy: Concrete Integration Plan Needed
+- **Issue:** Notifications are outlined as stubs; no integration with actual SMS/email provider specified.
+- **Action in Phase 4:** Decide: Gupshup (SMS) + Supabase email or SendGrid? Document in a separate "Notification Integration Plan" guide.
+- **Priority:** P2 — Phase 4 implementation.
+
+---
+
+## 11. IMPLEMENTATION PHASES
 
 ### Phase 1: Database Schema & Helpers (Week 1)
 
@@ -1768,7 +1855,7 @@ export async function generateComplaintLink(receptionEntryId: number) {
 
 ---
 
-## 11. TESTING & ACCEPTANCE CRITERIA
+## 12. TESTING & ACCEPTANCE CRITERIA
 
 ### Unit Tests (pgTAP)
 
@@ -1829,7 +1916,7 @@ SELECT * FROM pgTAP.test_suite__complaint_rbac();
 
 ---
 
-## 12. RISK ASSESSMENT & MITIGATIONS
+## 13. RISK ASSESSMENT & MITIGATIONS
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|-----------|
@@ -1843,7 +1930,7 @@ SELECT * FROM pgTAP.test_suite__complaint_rbac();
 
 ---
 
-## 13. GUARDRAILS & CONSTRAINTS
+## 14. GUARDRAILS & CONSTRAINTS
 
 ### Non-Negotiable Rules
 
@@ -1868,6 +1955,350 @@ SELECT * FROM pgTAP.test_suite__complaint_rbac();
 
 ---
 
+## EXECUTION ROADMAP & DAILY TIMELINE
+
+**Total Duration:** 19 days (critical path); can be compressed to 12–14 days with parallel work on UI designs.
+
+### Phase 1: Database Foundation (Days 1–4)
+
+**Gate:** All dump audits complete; no schema collisions found.
+
+#### Day 1: Schema Audit & Preparation
+- [ ] **Task 1a:** Grep full dump for `complaint_` prefix, `my_employee_code`, module registration logic
+  - Confirm: No collisions, no existing complaints tables or helper functions
+  - Time: 30 min
+- [ ] **Task 1b:** Verify `users` table schema and available role values (admin, manager, advisor, viewer?)
+  - Time: 20 min
+- [ ] **Task 1c:** Grep for existing JC number patterns; note the format (e.g., "JC-FstMbl-FQ7-2627-000118")
+  - Time: 20 min
+- [ ] **Task 1d:** Confirm `service_reception_entries` structure (sa_employee_code, branch, customer_name fields)
+  - Time: 15 min
+- [ ] **Task 1e:** Confirm `user_employee_links` columns (is_primary, is_active, deleted_at)
+  - Time: 10 min
+- [ ] **Summary:** Migration ready; no blockers found
+
+#### Day 2: Create Migration File & Deploy Schema
+- [ ] **Task 2a:** Create migration file `supabase/migrations/<YYYYMMDDHHMMSS>_create_complaints_tables.sql`
+  - Includes: 6 tables, indexes, module registration, `my_employee_code()` helper
+  - Time: 1.5 hours
+- [ ] **Task 2b:** Apply migration to dev/staging environment
+  - Time: 15 min
+- [ ] **Task 2c:** Verify in Supabase dashboard:
+  - All 6 tables appear
+  - Indexes created
+  - Module registered in `modules` table
+  - RLS policies enabled
+  - Time: 30 min
+- [ ] **Task 2d:** Test `my_employee_code()` function manually (quick SQL test)
+  - Time: 15 min
+- [ ] **Summary:** Schema deployed; ready for triggers
+
+#### Day 3: Triggers & Helper Functions
+- [ ] **Task 3a:** Create migration file `supabase/migrations/<YYYYMMDDHHMMSS>_create_complaints_triggers.sql`
+  - Includes: ticket_number, autoassign, SLA, touch, history triggers
+  - Time: 1.5 hours
+- [ ] **Task 3b:** Apply migration; test each trigger:
+  - Insert test complaint row, verify ticket_number generated
+  - Verify SLA fields (response_due_at, resolution_due_at) calculated
+  - Verify first_response_at NOT stamped until acknowledged
+  - Time: 1 hour
+- [ ] **Summary:** Triggers deployed; baseline complaint row creation working
+
+#### Day 4: Anonymous & Staff RPC Layer
+- [ ] **Task 4a:** Create migration file `supabase/migrations/<YYYYMMDDHHMMSS>_create_complaints_anon_rpcs.sql`
+  - Includes: get_complaint_by_token, raise_complaint, add_customer_message, submit_csat, reopen_complaint
+  - GRANT EXECUTE TO anon
+  - Time: 1.5 hours
+- [ ] **Task 4b:** Create migration file `supabase/migrations/<YYYYMMDDHHMMSS>_create_complaints_staff_rpcs.sql`
+  - Includes: acknowledge, start_progress, resolve, close, set_priority, reassign, escalate, add_staff_message, generate_complaint_link
+  - GRANT EXECUTE TO authenticated AND service_role ⚠️ (Don't forget service_role!)
+  - Time: 1.5 hours
+- [ ] **Task 4c:** Test manually via Supabase SQL editor:
+  - Call get_complaint_by_token() with valid token → should return entry_summary
+  - Call raise_complaint() → should create ticket, consume link
+  - Call raise_complaint() again with same token → should error (single-use guard)
+  - Call acknowledge() as authenticated user → should update status
+  - Time: 1.5 hours
+- [ ] **Summary:** RPC layer deployed; manual smoke tests pass
+
+### Phase 2: Testing & RLS Verification (Days 5–6)
+
+#### Day 5: pgTAP Test Suite
+- [ ] **Task 5a:** Create migration file `supabase/migrations/<YYYYMMDDHHMMSS>_create_complaints_tests.sql`
+  - Tests:
+    - Single-use raise (second raise with same token should error)
+    - Tenant isolation (advisor from dealer A can't see dealer B tickets)
+    - Internal notes hidden (anon RPC doesn't return is_internal=true messages)
+    - SLA breach detection (breach sweep marks flags + escalates)
+    - RBAC gates (user without modify perm can't update)
+  - Time: 2 hours
+- [ ] **Task 5b:** Run pgTAP test suite; debug failures
+  - Time: 1 hour
+- [ ] **Summary:** All tests pass; ready for frontend
+
+#### Day 6: RLS Spot-Check & Types Generation
+- [ ] **Task 6a:** Manually test as different roles:
+  - Login as advisor → query own tickets via RLS; verify can't see other advisors' tickets
+  - Login as manager → query all dealer tickets via RLS
+  - Login as admin → query all tickets
+  - Try as anon → confirm NO table access (errors), only RPC access works
+  - Time: 1 hour
+- [ ] **Task 6b:** Run `supabase gen types typescript` to generate `database.types.ts`
+  - Time: 15 min
+- [ ] **Task 6c:** Verify `database.types.ts` contains new types: `ComplaintTicket`, `ComplaintMessages`, etc.
+  - Time: 10 min
+- [ ] **Summary:** Database foundation complete; ready for frontend implementation
+
+### Phase 3: Customer Portal (Days 7–10)
+
+#### Day 7: Public Route & API Layer
+- [ ] **Task 7a:** Create `src/pages/ComplaintCustomerPage.tsx`
+  - Route: `/c/:token`
+  - No auth required
+  - Placeholder screens (just text for now)
+  - Time: 1 hour
+- [ ] **Task 7b:** Create `src/lib/api/complaints.ts`
+  - Export all 5 anon RPC wrappers
+  - Type responses against `database.types.ts`
+  - Error handling (try/catch, console.error for now)
+  - Time: 1 hour
+- [ ] **Task 7c:** Create placeholder components:
+  - `<ComplaintVerifyScreen />` — show loading, error states
+  - `<ComplaintRaiseForm />` — form fields only, no submit yet
+  - `<ComplaintTrackerScreen />` — empty state, ready for content
+  - Time: 1.5 hours
+- [ ] **Summary:** Scaffold done; wired to API
+
+#### Day 8: Raise Form & Submission
+- [ ] **Task 8a:** Build out `<ComplaintRaiseForm />`:
+  - Inputs: category select, title, description, severity, name, phone
+  - Validation: title required, phone regex (10 digits)
+  - Loading state during submit
+  - Time: 1.5 hours
+- [ ] **Task 8b:** Wire to `raiseComplaint()` API call
+  - On success: transition to tracker screen
+  - On error: show toast with error message
+  - Time: 1 hour
+- [ ] **Task 8c:** Test end-to-end:
+  - Mint link via `generate_complaint_link()` RPC
+  - Copy token, open `/c/:token` in browser
+  - Raise form appears
+  - Fill form, submit → success toast → tracker screen shows ticket
+  - Time: 1 hour
+- [ ] **Summary:** Raise workflow functional
+
+#### Day 9: Tracker Screen & Thread
+- [ ] **Task 9a:** Build out `<ComplaintTrackerScreen />`:
+  - Vehicle info card (reg, model, branch, service type)
+  - Status stepper (visual component showing new → acknowledged → in_progress → resolved → closed)
+  - SLA ring (circular progress visual, color-coded)
+  - Assigned advisor name
+  - Conversation thread (customer + staff messages, exclude internal notes)
+  - Message count, timestamp
+  - Time: 2 hours
+- [ ] **Task 9b:** Implement message thread auto-refresh
+  - Option A: Poll every 10 seconds
+  - Option B: Call `get_complaint_by_token()` on a timer
+  - Time: 30 min
+- [ ] **Task 9c:** Test:
+  - Open tracker as customer
+  - (Via SQL/API) Add a staff message
+  - Refresh or wait for auto-poll → new message appears
+  - Time: 30 min
+- [ ] **Summary:** Live tracking working
+
+#### Day 10: CSAT & Reopen, Mobile Optimization
+- [ ] **Task 10a:** Build `<CSATWidget />` (5-star rating + comment box)
+  - Show only when status === 'resolved' AND csat_rating IS NULL
+  - On submit: call `submitCsat()`
+  - Show success message
+  - Time: 1 hour
+- [ ] **Task 10b:** Build `<ReopenModal />` (reason textarea + confirm)
+  - Show button only if status IN ('resolved','closed')
+  - On submit: call `reopenComplaint()`
+  - Time: 1 hour
+- [ ] **Task 10c:** Mobile optimization
+  - Responsive layout (CSS media queries or Tailwind `md:`)
+  - Stack components vertically on mobile
+  - Touch-friendly button sizes
+  - Test on iPhone + Android emulator
+  - Time: 1.5 hours
+- [ ] **Task 10d:** End-to-end E2E test:
+  - Mint link → raise → track (add customer reply via API) → resolve → CSAT → reopen
+  - Time: 1 hour
+- [ ] **Summary:** Customer portal complete & mobile-optimized
+
+### Phase 4: Staff Module (Days 11–15)
+
+#### Day 11: Inbox Table & Filtering
+- [ ] **Task 11a:** Build `<ComplaintsInboxTable />` component
+  - Columns: ticket_number, customer_name, category, priority, status, SLA_status (icon + time), age, unread
+  - Sortable headers (click to sort)
+  - Pagination (20 rows/page)
+  - Row click → open detail view
+  - Time: 2 hours
+- [ ] **Task 11b:** Build filter UI:
+  - Status filter (multi-select: new, acknowledged, in_progress, resolved, closed)
+  - Priority filter (low, medium, high, urgent)
+  - Branch filter (dropdown, from ticket data)
+  - Advisor filter (dropdown, from assigned_to)
+  - Time: 1 hour
+- [ ] **Task 11c:** Wire to API:
+  - Fetch tickets via `listComplaintTickets(filters)` RPC (create this RPC)
+  - Apply filters server-side (WHERE clauses in RPC)
+  - Paginate: LIMIT 20 OFFSET
+  - Time: 1 hour
+- [ ] **Summary:** Inbox table done; filters working
+
+#### Day 12: Kanban Board & SLA Tab
+- [ ] **Task 12a:** Build `<ComplaintsBoard />` (kanban view)
+  - 5 columns: new, acknowledged, in_progress, resolved, closed
+  - Drag-and-drop between columns (use react-beautiful-dnd or Framer Motion)
+  - Cards: ticket_number, priority color, customer_name
+  - On drop → update status (call `start_progress()`, `resolve()`, `close()`)
+  - Time: 2 hours
+- [ ] **Task 12b:** Build `<ComplaintsSLATab />` (breaches view)
+  - Filter: show only response_breached=true OR resolution_breached=true
+  - Highlight in red
+  - Quick escalate button
+  - Time: 1 hour
+- [ ] **Summary:** Kanban & SLA tab done
+
+#### Day 13: Detail Panel (Part 1 – Structure & Vehicle Info)
+- [ ] **Task 13a:** Build `<ComplaintsDetailPanel />` (side panel, collapsible sections on mobile)
+  - Sections:
+    - Header (ticket_number, status stepper, priority badge, SLA ring, escalation flag)
+    - Vehicle card (reg, model, JC, branch, service type)
+    - Properties panel (assigned_to, priority, category, created_at, resolved_at, csat_rating)
+  - Time: 2 hours
+- [ ] **Task 13b:** Test rendering with mock data
+  - Time: 30 min
+- [ ] **Summary:** Detail structure done
+
+#### Day 14: Detail Panel (Part 2 – Thread & Actions)
+- [ ] **Task 14a:** Build thread section:
+  - Display messages (customer + staff, exclude is_internal=true)
+  - Timestamp, author_type (customer/staff/system), author_name
+  - Add reply box (text only, no attachments for now)
+  - On submit: call `add_staff_message(complaint_id, body, is_internal=false)`
+  - Internal note checkbox + hidden reply box (only if has_module_modify)
+  - Time: 1.5 hours
+- [ ] **Task 14b:** Build action buttons row:
+  - Acknowledge, Start Progress, Resolve, Close (status-dependent visibility)
+  - Set Priority dropdown
+  - Reassign user dropdown (calls `reassign()`)
+  - Escalate button + reason modal (calls `escalate()`)
+  - All hidden if `!has_module_modify('complaints')`
+  - Time: 1.5 hours
+- [ ] **Task 14c:** Wire each action to RPC:
+  - Test acknowledge() → status updates in real-time
+  - Test reassign() → assigned_to updates
+  - Time: 1 hour
+- [ ] **Summary:** Full detail panel done; actions wired
+
+#### Day 15: Activity Timeline & Nav Integration
+- [ ] **Task 15a:** Build activity timeline:
+  - Fetch `complaint_activity` for this ticket
+  - Display event_type, from_value, to_value, actor_name, timestamp
+  - Sort by created_at ASC (oldest first)
+  - Time: 1 hour
+- [ ] **Task 15b:** Create main `<ComplaintsPage />` with tab nav:
+  - Tabs: Inbox, Board, SLA
+  - KPI row: open count, avg CSAT, overdue count
+  - Switch between tabs → change displayed component
+  - Time: 1 hour
+- [ ] **Task 15c:** Integrate into TopNav:
+  - Add "Complaints" menu item (link to `/complaints`)
+  - Add badge with open ticket count
+  - Time: 30 min
+- [ ] **Task 15d:** Permission gate:
+  - Wrap ComplaintsPage in `useModulePermission('complaints', 'view')` check
+  - Show error if user lacks permission
+  - Time: 30 min
+- [ ] **Summary:** Staff module complete; ready for refinement
+
+### Phase 5: Notifications, Polish & QA (Days 16–19)
+
+#### Day 16: Notification Outbox & Background Jobs
+- [ ] **Task 16a:** Create `complaint_notifications` table (outbox pattern)
+  - Columns: id, complaint_id, event_type (raised, acknowledged, resolved, escalated), recipient_type (customer/staff), recipient_email/phone, channel (email/sms), status (pending/sent/failed), created_at, sent_at
+  - Time: 1 hour
+- [ ] **Task 16b:** Create trigger `trg_cn_write_notifications()`:
+  - On complaint raised: insert notification event (email to assigned advisor)
+  - On acknowledged/start_progress/resolve: insert event (SMS to customer if has phone)
+  - On escalated: insert event (email to branch manager)
+  - Time: 1.5 hours
+- [ ] **Task 16c:** Create `supabase/functions/send-complaint-notifications/index.ts` (Edge Function):
+  - Fetch pending notifications from outbox
+  - Call Gupshup API (SMS) or email service (SendGrid/AWS SES)
+  - Mark as sent/failed
+  - Schedule: every 5 minutes via pg_cron or Supabase scheduler
+  - Time: 2 hours
+- [ ] **Summary:** Notification pipeline ready
+
+#### Day 17: Error Handling Standardization & Reports
+- [ ] **Task 17a:** Standardize all RPC error responses
+  - Define shape: `{ error: string; code: string; message: string }`
+  - Update all RPCs to throw structured errors (wrap in TRY-CATCH in client if needed)
+  - Time: 1 hour
+- [ ] **Task 17b:** Update frontend API layer (`src/lib/api/complaints.ts`) error handling
+  - Parse error responses
+  - Map error codes to user-friendly messages
+  - Time: 1 hour
+- [ ] **Task 17c:** Build (optional) Reports page `src/pages/ComplaintsReportsPage.tsx`
+  - Charts: Complaints by category, by branch, by priority
+  - Table: Avg CSAT by advisor
+  - Gauge: SLA attainment %
+  - Time: 2 hours (optional, can defer)
+- [ ] **Summary:** Error handling consistent; optional reports added
+
+#### Day 18: CSS Polish, Accessibility, Design Match
+- [ ] **Task 18a:** Port CSS components from design HTML (only genuinely new ones)
+  - Stepper component (status progression visual)
+  - SLA ring component (circular progress)
+  - Thread/message card styling
+  - Board cards styling
+  - Time: 1.5 hours
+- [ ] **Task 18b:** Accessibility audit:
+  - Keyboard nav: Tab through all buttons/inputs
+  - Screen reader: Test with axe-core or Wave extension
+  - Color contrast: Verify WCAG AA compliance
+  - Time: 1 hour
+- [ ] **Task 18c:** Verify UI matches design HTML pixel-perfect:
+  - Compare screenshots of customer portal (raise form, tracker)
+  - Compare screenshots of staff module (inbox, board, detail)
+  - Adjust colors, spacing, typography as needed
+  - Time: 1.5 hours
+- [ ] **Summary:** Polished, accessible, design-compliant
+
+#### Day 19: Security Audit, QA, & Staged Rollout
+- [ ] **Task 19a:** Security audit:
+  - Verify: SECURITY DEFINER RPCs are properly scoped (no cross-tenant leaks)
+  - Verify: Anon role has EXECUTE-only on RPCs, NO table grants
+  - Verify: RLS policies enforce dealer_code filtering on all staff queries
+  - Verify: Internal notes never returned by anon RPC
+  - Time: 1.5 hours
+- [ ] **Task 19b:** Final E2E test:
+  - Raise complaint as customer (mint link → fill form → submit)
+  - Track complaint (add reply, refresh, see updates)
+  - Staff acknowledge (mark as acknowledged in detail panel)
+  - Staff add reply → customer sees in tracker
+  - Staff resolve → customer sees CSAT
+  - Customer submit CSAT → visible to staff
+  - Reopen → escalated to manager
+  - Advisor sees only own tickets (RLS enforced)
+  - Manager sees all dealer tickets
+  - Admin sees all
+  - Time: 2 hours
+- [ ] **Task 19c:** Staged rollout:
+  - Day 1: Internal testing (Techwheels staff only; use preview build if available)
+  - Day 2: Pilot with 1 dealer (monitor for errors, performance)
+  - Day 3: Full production rollout (all dealers enabled)
+  - Time: Async (over 3 days)
+- [ ] **Summary:** Ready for production
+
+---
+
 ## APPENDIX: REFERENCE FILES
 
 | File | Location | Purpose |
@@ -1886,6 +2317,9 @@ SELECT * FROM pgTAP.test_suite__complaint_rbac();
 
 **v1.0** – 2026-06-08  
 Initial comprehensive plan, integrating design references, database schema audit, and phase breakdown. All non-guessed, assumption-free data from authoritative sources.
+
+**v1.1** – 2026-06-08 (Reviewed & Consolidated)  
+Added Section 10 (Gaps & Critical Issues with 15 identified issues and mitigations), detailed execution roadmap with day-by-day timeline (19 days total, 41 named tasks), updated section numbering. Consolidated review findings into main plan document to avoid fragmentation.
 
 ---
 

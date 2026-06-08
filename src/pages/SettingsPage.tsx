@@ -284,6 +284,7 @@ export default function SettingsPage() {
   const [resolvingIssueId, setResolvingIssueId] = useState<number | null>(null)
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<number | null>(null)
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null)
+  const [editBaselineCodes, setEditBaselineCodes] = useState<Record<number, string>>({})
 
   const [rateCards, setRateCards] = useState<RateCardRow[]>([])
   const [loadingRateCards, setLoadingRateCards] = useState(true)
@@ -1109,17 +1110,24 @@ export default function SettingsPage() {
     setMessage(null)
     setError(null)
 
-    const derived = deriveLocationAndFuelType(employee.employee_code)
-    const payload = {
-      employee_code: employee.employee_code.trim(),
+    const baselineCode = String(editBaselineCodes[employee.id] ?? '').trim()
+    const nextCode = employee.employee_code.trim()
+    const codeChanged = baselineCode !== '' && baselineCode !== nextCode
+    const updatePayload: Partial<EmployeeRow> & { employee_name: string } = {
       employee_name: employee.employee_name.trim(),
-      location: employee.location?.trim() || derived?.location || null,
+      location: employee.location?.trim() || null,
       department: employee.department?.trim() || null,
-      fuel_type: employee.fuel_type?.trim() || derived?.fuel_type || null,
+      fuel_type: employee.fuel_type?.trim() || null,
       role: employee.role?.trim() || null,
     }
 
-    if (!payload.employee_code || !payload.employee_name) {
+    // Avoid updating employee_code unless it was actually changed.
+    // This preserves force-edited fuel/location values for existing codes.
+    if (codeChanged) {
+      updatePayload.employee_code = nextCode
+    }
+
+    if (!nextCode || !updatePayload.employee_name) {
       setError('Employee code and employee name are required.')
       setSavingCode(null)
       return false
@@ -1127,19 +1135,25 @@ export default function SettingsPage() {
 
     const { error: saveError } = await supabase
       .from('employee_master')
-      .upsert(payload, { onConflict: 'employee_code' })
+      .update(updatePayload)
+      .eq('id', employee.id)
 
     if (saveError) {
       setError(saveError.message)
     } else {
-      setMessage(`Saved ${payload.employee_code}.`)
+      setMessage(`Saved ${nextCode}.`)
+      setEditBaselineCodes((prev) => {
+        const next = { ...prev }
+        delete next[employee.id]
+        return next
+      })
       await fetchEmployees()
     }
 
     setSavingCode(null)
 
     return !saveError
-  }, [fetchEmployees])
+  }, [editBaselineCodes, fetchEmployees])
 
   const handleAddEmployee = useCallback(async () => {
     setMessage(null)
@@ -2050,7 +2064,13 @@ export default function SettingsPage() {
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => setEditingEmployeeId(employee.id)}
+                                onClick={() => {
+                                  setEditingEmployeeId(employee.id)
+                                  setEditBaselineCodes((prev) => ({
+                                    ...prev,
+                                    [employee.id]: employee.employee_code,
+                                  }))
+                                }}
                                 className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700"
                               >
                                 Edit
