@@ -283,28 +283,21 @@ export default function TechnicianPage() {
       let revenueMap = new Map<string, RevenueRow>()
 
       if (completedJcNumbers.length > 0) {
-        // Fetch revenue data with case-insensitive matching using RPC
-        const { data: revenueData, error: revenueError } = await supabase.rpc(
-          'get_revenue_by_jc_case_insensitive',
-          { p_jc_numbers: completedJcNumbers },
-        )
+        // Fetch all revenue data and filter in-memory by normalized job card numbers
+        // This is more reliable than RPC functions which may not be available yet
+        const allRevenueRes = await supabase
+          .from('job_card_closed_data')
+          .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
 
-        let revenueRes: any = { data: revenueData, error: revenueError }
+        let revenueRes = allRevenueRes
 
-        // Fallback: if RPC fails (function doesn't exist yet), fetch all and filter in-memory
-        if (revenueError) {
-          const allRes = await supabase
-            .from('job_card_closed_data')
-            .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
-
-          const normalizedJcSet = new Set(completedJcNumbers.map((jc) => String(jc ?? '').trim().toUpperCase()))
-          if (allRes.data) {
-            allRes.data = allRes.data.filter((row: any) => {
-              const normalizedJc = String(row.job_card_number ?? '').trim().toUpperCase()
-              return normalizedJcSet.has(normalizedJc)
-            })
-          }
-          revenueRes = allRes
+        // Filter to only matching job cards (case-insensitive)
+        if (allRevenueRes.data && !allRevenueRes.error) {
+          const normalizedSet = new Set(completedJcNumbers)
+          revenueRes.data = allRevenueRes.data.filter((row: any) => {
+            const normalizedJc = String(row.job_card_number ?? '').trim().toUpperCase()
+            return normalizedSet.has(normalizedJc)
+          })
         }
 
         if (revenueRes.error) {
@@ -332,27 +325,19 @@ export default function TechnicianPage() {
         })
 
         // Fetch registration numbers from service_reception_entries with case-insensitive matching
-        const { data: receptionData, error: receptionError } = await supabase.rpc(
-          'get_reception_by_jc_case_insensitive',
-          { p_jc_numbers: completedJcNumbers },
-        )
+        const allReceptionRes = await supabase
+          .from('service_reception_entries')
+          .select('jc_number, reg_number')
 
-        let receptionRes: any = { data: receptionData, error: receptionError }
+        let receptionRes = allReceptionRes
 
-        // Fallback: if RPC fails, fetch all and filter in-memory
-        if (receptionError) {
-          const allRes = await supabase
-            .from('service_reception_entries')
-            .select('jc_number, reg_number')
-
-          const normalizedJcSet = new Set(completedJcNumbers)
-          if (allRes.data) {
-            allRes.data = allRes.data.filter((row: any) => {
-              const normalizedJc = String(row.jc_number ?? '').trim().toUpperCase()
-              return normalizedJcSet.has(normalizedJc)
-            })
-          }
-          receptionRes = allRes
+        // Filter to only matching job cards (case-insensitive)
+        if (allReceptionRes.data && !allReceptionRes.error) {
+          const normalizedSet = new Set(completedJcNumbers)
+          receptionRes.data = allReceptionRes.data.filter((row: any) => {
+            const normalizedJc = String(row.jc_number ?? '').trim().toUpperCase()
+            return normalizedSet.has(normalizedJc)
+          })
         }
 
         if (!receptionRes.error && receptionRes.data) {
