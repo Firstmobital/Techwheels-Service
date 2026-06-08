@@ -8,6 +8,21 @@
 
 ### Execution Update (2026-06-08)
 
+- **Admin Bypass Governance Rule Established** ([ADMIN_BYPASS_RLS_GOVERNANCE.md](./../../runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md)):
+  - **Core Rule:** Every RLS policy using `has_module_*()` or role-specific scope checks MUST include `is_admin() OR (original_logic)` pattern.
+  - **Rationale:** Admin users must never be blocked by role-specific checks; they need full access for testing, debugging, and administration.
+  - **Scope:** Applied retroactively to 8 policies missing admin bypass:
+    - `service_reception_select_floor_incharge` (Floor Incharge scoped rows)
+    - `service_reception_select_crm_dealer_scope` (CRM dealer scoped rows)
+    - `technician_assignments_select_rbac` (Floor Incharge module)
+    - `technician_assignments_insert_rbac` (Floor Incharge module)
+    - `technician_assignments_update_rbac` (Floor Incharge module)
+    - `technician_assignments_delete_rbac` (Floor Incharge module)
+    - `technician_assignments_select_sa_own_jobs` (Service Advisor scope)
+    - `technician_assignments_select_technician` (Technician self-view)
+  - **Migration:** `supabase/migrations/20260608_add_admin_bypass_floor_incharge_policy.sql` (requires manual execution in Supabase SQL Editor)
+  - **Going Forward:** All new/modified RLS policies must follow this pattern automatically.
+
 - Security Advisor error-elimination track completed (Errors = 0) via four executed migrations:
   - `20260608100000_p0_fix1_enable_rls_job_card_closed_data.sql`
   - `20260608101500_p0_fix2_set_vw_parts_stock_health_security_invoker.sql`

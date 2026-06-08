@@ -90,7 +90,6 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'owner_name',
   'owner_phone',
   'branch',
-  'fuel_type',
   'source',
   'remark',
   'estimate_storage_path',
