@@ -102,7 +102,7 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 |---|---|---|---|---|---|---|---|---|---|
 | P0-01 | Critical | Export and classify all 22 Advisor issues | Team | Done | 2026-06-08 | 2026-06-08 | Full advisor inventory captured and tracked across four fix batches; final rerun shows Security Advisor Errors = 0 | 2026-06-08 | - |
 | P0-02 | Critical | Enable RLS on exposed public tables | Team | Done | 2026-06-08 | 2026-06-08 | Fixes 1-4 executed (`20260608100000`, `20260608101500`, `20260608103000`, `20260608104500`); final rerun shows all `rls_disabled_in_public` errors cleared | 2026-06-08 | - |
-| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Baseline authenticated CRUD policies were added to clear hard errors safely; tightening pass still required to replace broad rules with module/dealer scoped RBAC policies | 2026-06-08 | Start tightening pass by domain: warranty -> service imports -> staging/backup tables |
+| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Step 1 draft prepared: `supabase/migrations/20260608113000_p0_step1_warranty_tighten_delete_policy.sql` (tightens existing `p0_auth_delete` on warranty tables only; keeps read/import continuity) | 2026-06-08 | Execute Step 1 draft, run warranty validation checklist, then proceed to Step 2 service-domain tightening |
 | P0-04 | High | Restrict `anon` API key permissions in settings | Team | Not Started |  |  |  | 2026-06-04 | Validate no frontend breakage after restriction |
 | P0-05 | High | Enable leaked-password protection in Auth | Team | Not Started |  |  |  | 2026-06-04 | Toggle and test signup/login failure path |
 | P1-01 | Critical | Move app DB connection usage to pooler URL | Team | Not Started |  |  |  | 2026-06-04 | Identify all runtime connection string consumers |
@@ -148,6 +148,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Logged post-Fix-2 Advisor delta (21 -> 20 errors, all RLS-disabled), and created Fix 3 migration for `user_employee_links` + `audit_logs` with baseline RBAC-safe policies |
 | 2026-06-08 | Copilot | Logged post-Fix-3 Advisor delta (20 -> 18 errors) and created Fix 4 migration to enable RLS + baseline authenticated policies for all remaining flagged tables |
 | 2026-06-08 | Copilot | Logged Fix 4 execution and Security Advisor milestone (Errors: 0); transitioned plan from error-clearance to least-privilege policy tightening |
+| 2026-06-08 | Copilot | Started tightening Step 1 draft for warranty domain: constrained `p0_auth_delete` only (existing policy name) and added pre/post execution validation checklist |
 
 ## 7) Update Protocol For Future Chats
 
@@ -421,3 +422,46 @@ Tightening method contract:
 - Gate T1: This audit section reviewed and accepted.
 - Gate T2: Current authoritative mirror considered source of truth for policy text.
 - Gate T3: First tightening batch includes rollback SQL and post-check query list.
+
+## 12) Tightening Step 1 - Warranty Domain (Draft + Checklist)
+
+Migration draft (not yet executed in this plan log):
+- `supabase/migrations/20260608113000_p0_step1_warranty_tighten_delete_policy.sql`
+
+Step 1 scope:
+- Tables:
+	- `warranty_claim_settlement_report_data`
+	- `warranty_part_wc_data`
+	- `warranty_updation_claim_data`
+	- `warranty_goodwill_data`
+	- `warranty_amc_data`
+	- `warranty_fsb_data`
+	- `warranty_wc_data`
+- Policy action:
+	- Replace existing `p0_auth_delete` only.
+	- New delete condition uses existing RBAC helpers: `public.is_admin() OR public.has_module_delete('reports')`.
+- Non-goals in Step 1:
+	- No change to `p0_auth_select`, `p0_auth_insert`, `p0_auth_update` yet (to protect report reads and import/upsert continuity).
+
+Validation checklist (run immediately after execution):
+
+Pre-check SQL:
+1. Confirm policy text before run:
+	 - `select tablename, policyname, cmd, qual from pg_policies where schemaname='public' and policyname='p0_auth_delete' and tablename like 'warranty_%' order by tablename;`
+
+Post-check SQL:
+1. Confirm delete policy changed on all 7 tables:
+	 - same query as pre-check; verify `qual` contains `is_admin` or `has_module_delete('reports')`.
+2. Confirm select/insert/update policies remain present:
+	 - `select tablename, policyname, cmd from pg_policies where schemaname='public' and tablename like 'warranty_%' and policyname in ('p0_auth_select','p0_auth_insert','p0_auth_update') order by tablename, policyname;`
+3. Confirm Security Advisor remains zero errors.
+
+Frontend/runtime validation:
+1. Web: open `Reports -> Warranty Overview` and load KPIs/charts without permission errors.
+2. Web: run one warranty report import from `ImportPage` and verify insert/upsert success.
+3. Mobile: run warranty-related report queries used in `mobile/src/lib/reportQueries.ts` for one branch/date range.
+4. Verify no new `permission denied` errors in console/network logs for warranty tables.
+
+Rollback plan (if breakage appears):
+1. Recreate previous broad `p0_auth_delete ... using (true)` for only affected warranty tables.
+2. Re-run post-check SQL and confirm recovery.
