@@ -209,63 +209,10 @@ export default function TechnicianPage() {
       } else {
         setTechnicianOptions([])
         setSelectedTechnicianCode('')
-
-        const mappingsRes = await supabase
-          .from('user_employee_links')
-          .select('employee_code, is_active')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-
-        if (mappingsRes.error) {
-          setError(mappingsRes.error.message)
-          setAssignments([])
-          setIncomeByDay([])
-          setTechnicianCodes([])
-          setLoading(false)
-          return
-        }
-
-        const mappedCodes = Array.from(new Set(
-          (mappingsRes.data ?? [])
-            .map((row) => String((row as { employee_code?: string }).employee_code ?? '').trim().toUpperCase())
-            .filter(Boolean),
-        ))
-
-        if (mappedCodes.length === 0) {
-          setAssignments([])
-          setIncomeByDay([])
-          setTechnicianCodes([])
-          setLoading(false)
-          return
-        }
-
-        const employeeRes = await supabase
-          .from('employee_master')
-          .select('employee_code, role')
-          .in('employee_code', mappedCodes)
-
-        if (employeeRes.error) {
-          setError(employeeRes.error.message)
-          setAssignments([])
-          setIncomeByDay([])
-          setTechnicianCodes([])
-          setLoading(false)
-          return
-        }
-
-        const technicianCodeSet = new Set(
-          (employeeRes.data ?? [])
-            .filter((row) => String((row as { role?: string | null }).role ?? '').trim().toLowerCase() === 'technician')
-            .map((row) => String((row as { employee_code?: string }).employee_code ?? '').trim().toUpperCase())
-            .filter(Boolean),
-        )
-
-        effectiveCodes = mappedCodes.filter((code) => technicianCodeSet.has(code))
       }
 
-      setTechnicianCodes(effectiveCodes)
-
-      if (effectiveCodes.length === 0) {
+      if (userIsAdmin && effectiveCodes.length === 0) {
+        setTechnicianCodes([])
         setAssignments([])
         setIncomeByDay([])
         setLoading(false)
@@ -276,12 +223,17 @@ export default function TechnicianPage() {
       let from = 0
 
       while (true) {
-        const assignRes = await supabase
+        let assignQuery = supabase
           .from('technician_assignments')
           .select('*')
-          .in('technician_code', effectiveCodes)
           .order('assigned_at', { ascending: false })
           .range(from, from + QUERY_PAGE_SIZE - 1)
+
+        if (userIsAdmin) {
+          assignQuery = assignQuery.in('technician_code', effectiveCodes)
+        }
+
+        const assignRes = await assignQuery
 
         if (assignRes.error) {
           setError(assignRes.error.message)
@@ -300,6 +252,13 @@ export default function TechnicianPage() {
 
         from += QUERY_PAGE_SIZE
       }
+
+      const visibleTechnicianCodes = Array.from(new Set(
+        assignmentRows
+          .map((row) => String(row.technician_code ?? '').trim().toUpperCase())
+          .filter(Boolean),
+      ))
+      setTechnicianCodes(userIsAdmin ? effectiveCodes : visibleTechnicianCodes)
 
       const assignmentJcNumbers = Array.from(new Set(
         assignmentRows
@@ -609,7 +568,7 @@ export default function TechnicianPage() {
                   ? 'No TECHNICIAN found in Employee Master.'
                   : 'No assigned rows found for the selected technician.'
                 : technicianCodes.length === 0
-                  ? 'No active TECHNICIAN mapping found for your account.'
+                  ? 'No technician-visible rows found for your account scope.'
                   : 'No assigned rows found for your technician code(s).'}
             </div>
           ) : (
