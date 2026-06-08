@@ -164,14 +164,6 @@ export default function TechnicianPage() {
         return
       }
 
-      const profileRes = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle()
-
-      const userIsAdmin = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase() === 'admin'
-
       const assignmentRows: TechnicianAssignmentRow[] = []
       let from = 0
 
@@ -200,12 +192,6 @@ export default function TechnicianPage() {
 
         from += QUERY_PAGE_SIZE
       }
-
-      const visibleTechnicianCodes = Array.from(new Set(
-        assignmentRows
-          .map((row) => String(row.technician_code ?? '').trim().toUpperCase())
-          .filter(Boolean),
-      ))
 
       const assignmentJcNumbers = Array.from(new Set(
         assignmentRows
