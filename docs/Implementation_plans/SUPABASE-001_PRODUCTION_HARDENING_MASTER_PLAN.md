@@ -102,9 +102,9 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 |---|---|---|---|---|---|---|---|---|---|
 | P0-01 | Critical | Export and classify all 22 Advisor issues | Team | Done | 2026-06-08 | 2026-06-08 | Full advisor inventory captured and tracked across four fix batches; final rerun shows Security Advisor Errors = 0 | 2026-06-08 | - |
 | P0-02 | Critical | Enable RLS on exposed public tables | Team | Done | 2026-06-08 | 2026-06-08 | Fixes 1-4 executed (`20260608100000`, `20260608101500`, `20260608103000`, `20260608104500`); final rerun shows all `rls_disabled_in_public` errors cleared | 2026-06-08 | - |
-| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Step 1, Step 2, and Step 3 validated: warranty + service + import/reconciliation `p0_auth_delete` tightening passed all checks. Step 4 draft prepared: `supabase/migrations/20260608130000_p0_step4_operational_staging_tighten_delete_policy.sql`. | 2026-06-08 | Execute Step 4 draft and run `supabase/sql_checks/20260608130000_operational_staging_tighten_step4_checks.sql` |
-| P0-04 | High | Restrict `anon` API key permissions in settings | Team | Not Started |  |  |  | 2026-06-04 | Validate no frontend breakage after restriction |
-| P0-05 | High | Enable leaked-password protection in Auth | Team | Not Started |  |  |  | 2026-06-04 | Toggle and test signup/login failure path |
+| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | Done | 2026-06-08 | 2026-06-08 | Step 1-4 fully validated: `p0_auth_delete` tightened across warranty, service, import/reconciliation, and operational/staging domains; baseline policies and RLS confirmed on all scoped tables. | 2026-06-08 | - |
+| P0-04 | High | Restrict `anon` API key permissions in settings | Team | In Progress | 2026-06-08 |  | Pre-check captured from `20260608171000_p0_04_anon_surface_and_post_toggle_checks.sql`: `public_policy_rows=25`, `anon_table_grants=322`, `anon_function_grants=31`; multiple `{public}` role policies found on `documents`, `estimate_rows`, `job_cards`, `email_logs`, `panel_photos`, `panels`, `modules`, `users`, `user_module_permissions`, `vehicles`. | 2026-06-08 | Apply dashboard anon restriction, rerun same SQL as post-check, and verify reduced anon surface plus no auth-flow breakage |
+| P0-05 | High | Enable leaked-password protection in Auth | Team | In Progress | 2026-06-08 |  | Rollout checklist created: `docs/Implementation_plans/SUPABASE_P0_05_LEAKED_PASSWORD_ROLLOUT_CHECKLIST.md` | 2026-06-08 | Enable toggle in dashboard and execute full web/mobile validation matrix with evidence |
 | P1-01 | Critical | Move app DB connection usage to pooler URL | Team | Not Started |  |  |  | 2026-06-04 | Identify all runtime connection string consumers |
 | P1-02 | High | Accept and triage Index Advisor suggestions | Team | Not Started |  |  |  | 2026-06-04 | Mark suggestions as apply/defer/reject with reason |
 | P1-03 | High | Analyze top 3-5 slow queries in dashboard | Team | In Progress | 2026-06-08 |  | Query hotlist expanded from Supabase Query Performance logs (roles: authenticated/anon/supabase_admin/postgres) with prop-total-time ranking and query-family grouping | 2026-06-08 | Convert top offenders into index + query-shape migration tasks with EXPLAIN evidence |
@@ -153,6 +153,10 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Step 1 warranty tightening validated (policy + baseline + RLS checks passed); prepared Step 2 service-domain delete-policy tightening draft and SQL checks |
 | 2026-06-08 | Copilot | Step 2 service-domain tightening validated (policy + baseline + RLS checks passed); prepared Step 3 import/reconciliation delete-policy tightening draft and SQL checks |
 | 2026-06-08 | Copilot | Step 3 import/reconciliation tightening validated (policy + baseline + RLS checks passed); prepared Step 4 operational/staging delete-policy tightening draft and SQL checks |
+| 2026-06-08 | Copilot | Step 4 operational/staging tightening executed; delete-policy and baseline-policy checks passed for all 4 tables; awaiting explicit RLS output rows to close P0-03 |
+| 2026-06-08 | Copilot | Step 4 RLS confirmation received (`rls_enabled=true` for all 4 tables); closed P0-03 and marked staged `p0_auth_delete` tightening complete |
+| 2026-06-08 | Copilot | Started P0-04/P0-05 next steps: created anon-surface pre/post SQL check pack and leaked-password rollout checklist; moved both tracker rows to In Progress |
+| 2026-06-08 | Copilot | Logged P0-04 pre-check baseline output: 25 public/anon policy rows, 322 anon table grants, 31 anon function grants; queued dashboard restriction + post-check diff |
 
 ## 7) Update Protocol For Future Chats
 
@@ -505,3 +509,20 @@ Step 4 draft prepared:
 - Checks: `supabase/sql_checks/20260608130000_operational_staging_tighten_step4_checks.sql`
 - Scope: `cancel_job_card`, `closed_but_not_invoiced`, `open_job_cards`, `job_card_closed_data_duplicates_backup`.
 - Action: tighten only `p0_auth_delete`; keep `p0_auth_select/insert/update` unchanged in this step.
+
+Step 4 execution outcome (2026-06-08):
+- PASS: `p0_auth_delete` tightened on all 4 Step 4 tables:
+	- `cancel_job_card`: `is_admin()` OR `has_module_delete('reception')` OR `has_module_delete('job_cards')`
+	- `closed_but_not_invoiced`: `is_admin()` OR `has_module_delete('reports')` OR `has_module_delete('job_cards')`
+	- `open_job_cards`: `is_admin()` OR `has_module_delete('reception')` OR `has_module_delete('job_cards')`
+	- `job_card_closed_data_duplicates_backup`: `is_admin()` OR `has_module_delete('reports')` OR `has_module_delete('job_cards')`
+- PASS: `p0_auth_select`, `p0_auth_insert`, `p0_auth_update` remained present on all 4 tables.
+- PASS: Step 4 RLS rows confirmed all `true` for:
+	- `cancel_job_card`
+	- `closed_but_not_invoiced`
+	- `job_card_closed_data_duplicates_backup`
+	- `open_job_cards`
+
+Staged tightening closeout (P0-03):
+- Completed Step 1 through Step 4 with policy-text evidence, baseline continuity checks, and RLS confirmations.
+- Scope of this staged track was `p0_auth_delete` tightening only; select/insert/update hardening remains a future scoped phase.

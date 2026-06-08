@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-08 06:35 UTC  
+**Last Updated**: 2026-06-08 07:35 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-08)
@@ -54,9 +54,23 @@ Progress update (2026-06-08, staged tightening):
   - `import_employee_mapping_issues` delete constrained to `is_admin()` OR `has_module_delete('employees')`
   - `pending_drive_uploads` delete constrained to `is_admin()` OR `has_module_delete('job_cards')`
   - `open_job_cards_import_staging` delete constrained to `is_admin()` OR `has_module_delete('job_cards')`
-- Step 4 draft prepared for operational/staging domain:
-  - Migration: `20260608130000_p0_step4_operational_staging_tighten_delete_policy.sql`
-  - Checks: `20260608130000_operational_staging_tighten_step4_checks.sql`
+- Step 4 (operational/staging domain) executed:
+  - `cancel_job_card` delete constrained to `is_admin()` OR `has_module_delete('reception')` OR `has_module_delete('job_cards')`
+  - `closed_but_not_invoiced` delete constrained to `is_admin()` OR `has_module_delete('reports')` OR `has_module_delete('job_cards')`
+  - `open_job_cards` delete constrained to `is_admin()` OR `has_module_delete('reception')` OR `has_module_delete('job_cards')`
+  - `job_card_closed_data_duplicates_backup` delete constrained to `is_admin()` OR `has_module_delete('reports')` OR `has_module_delete('job_cards')`
+  - Baseline policy continuity check passed (`p0_auth_select/insert/update` present on all 4 tables)
+  - RLS confirmation passed (`rls_enabled = true`) on all 4 tables
+- Staged `p0_auth_delete` tightening track status: COMPLETE (Step 1 through Step 4 validated)
+- Next hardening track kicked off:
+  - P0-04 anon-surface restriction validation pack prepared: `supabase/sql_checks/20260608171000_p0_04_anon_surface_and_post_toggle_checks.sql`
+  - P0-05 leaked-password rollout checklist prepared: `docs/Implementation_plans/SUPABASE_P0_05_LEAKED_PASSWORD_ROLLOUT_CHECKLIST.md`
+- P0-04 pre-check baseline captured (before dashboard restriction):
+  - `public_policy_rows = 25`
+  - `anon_table_grants = 322`
+  - `anon_function_grants = 31`
+  - Observed `{public}`-role policy families on: `documents`, `estimate_rows`, `job_cards`, `email_logs`, `panel_photos`, `panels`, `modules`, `users`, `user_module_permissions`, `vehicles`.
+  - Next gate: apply dashboard restriction and confirm post-check reduction with no auth regression.
 
 ### Execution Update (2026-06-01)
 
