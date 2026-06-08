@@ -654,9 +654,26 @@ export default function AdminPage() {
     [employeeCatalog],
   )
 
+  const activeMappingDealerCodesByUserId = useMemo(() => {
+    const byUserId = new Map<string, string[]>()
+    mappings
+      .filter((mapping) => mapping.is_active)
+      .forEach((mapping) => {
+        const code = String(mapping.dealer_code ?? '').trim().toUpperCase()
+        if (!code) return
+
+        const existing = byUserId.get(mapping.user_id) ?? []
+        if (!existing.includes(code)) {
+          byUserId.set(mapping.user_id, [...existing, code])
+        }
+      })
+    return byUserId
+  }, [mappings])
+
   const filteredUsers = users.filter(u => {
     const term = search.toLowerCase()
-    const dealerCodesText = Array.isArray(u.dealer_codes) ? u.dealer_codes.join(' ').toLowerCase() : ''
+    const metadataDealerCodesText = Array.isArray(u.dealer_codes) ? u.dealer_codes.join(' ').toLowerCase() : ''
+    const mappingDealerCodesText = (activeMappingDealerCodesByUserId.get(u.id) ?? []).join(' ').toLowerCase()
     return (showInactive || u.is_active) &&
       (roleFilter === 'all' || u.role === roleFilter) &&
       (
@@ -664,7 +681,8 @@ export default function AdminPage() {
         u.email.toLowerCase().includes(term) ||
         (u.phone ?? '').toLowerCase().includes(term) ||
         (u.dealer_code ?? '').toLowerCase().includes(term) ||
-        dealerCodesText.includes(term)
+        metadataDealerCodesText.includes(term) ||
+        mappingDealerCodesText.includes(term)
       )
   })
 
@@ -852,9 +870,10 @@ export default function AdminPage() {
                             : (u.id === currentUserJWTDealers.id && Array.isArray(currentUserJWTDealers.dealer_codes)
                                 ? currentUserJWTDealers.dealer_codes
                                 : null)
+                          const mappingDealerCodes = activeMappingDealerCodesByUserId.get(u.id) ?? []
                           const normalizedAdditionalCodes = Array.from(
                             new Set(
-                              (displayDealerCodes ?? [])
+                              [...(displayDealerCodes ?? []), ...mappingDealerCodes]
                                 .map((code) => String(code ?? '').trim().toUpperCase())
                                 .filter(Boolean),
                             ),
