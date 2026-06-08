@@ -1239,13 +1239,24 @@ export default function ImportPage() {
           return inserted
         }
 
-<<<<<<< HEAD
         const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
           let inserted = 0
 
           for (let i = 0; i < rows.length; i += CHUNK) {
             const chunkRows = rows.slice(i, i + CHUNK)
-=======
+            if (chunkRows.length === 0) continue
+
+            const { error } = await supabase.from(tableName).insert(chunkRows)
+            if (error) {
+              throw new Error(error.message ?? 'Insert failed')
+            }
+
+            inserted += chunkRows.length
+          }
+
+          return inserted
+        }
+
         const upsertJcClosedRowsByBusinessKey = async (
           rows: Record<string, unknown>[],
         ): Promise<number> => {
@@ -1340,8 +1351,7 @@ export default function ImportPage() {
               const { data, error } = await updateQuery.select('id').limit(1)
               if (error) {
                 const lower = (error.message ?? '').toLowerCase()
-                const missingColumn =
-                  lower.includes('could not find the') && lower.includes('column of')
+                const missingColumn = lower.includes('could not find the') && lower.includes('column of')
                 if (missingColumn) {
                   continue
                 }
@@ -1390,18 +1400,70 @@ export default function ImportPage() {
 
           for (let i = 0; i < normalizedRows.length; i += CHUNK) {
             const chunkRows = normalizedRows.slice(i, i + CHUNK)
->>>>>>> 7cd82c1 (Changes by Harsh)
             if (chunkRows.length === 0) continue
 
-            const { error } = await supabase.from(tableName).insert(chunkRows)
-            if (error) {
-              throw new Error(error.message ?? 'Insert failed')
+            let chunkHandled = false
+
+            for (const onConflict of conflictCandidates) {
+              const { error } = await supabase.from(tableName).upsert(chunkRows, { onConflict })
+
+              if (!error) {
+                processed += chunkRows.length
+                chunkHandled = true
+                break
+              }
+
+              const lower = (error.message ?? '').toLowerCase()
+              const missingConflictConstraint = lower.includes(
+                'no unique or exclusion constraint matching the on conflict specification',
+              )
+
+              if (missingConflictConstraint) {
+                continue
+              }
+
+              const requiresRowWiseRetry =
+                lower.includes('cannot affect row a second time') ||
+                lower.includes('duplicate key value violates unique constraint')
+
+              if (!requiresRowWiseRetry) {
+                throw new Error(error.message ?? 'JC Closed chunk upsert failed')
+              }
+
+              for (const row of chunkRows) {
+                await upsertSingleRow(row)
+                processed += 1
+              }
+
+              chunkHandled = true
+              break
             }
 
-            inserted += chunkRows.length
+            if (!chunkHandled) {
+              try {
+                processed += await insertRowsWithDuplicateSkip(chunkRows)
+              } catch (insertFallbackError) {
+                const fallbackMessage =
+                  insertFallbackError instanceof Error
+                    ? insertFallbackError.message
+                    : String(insertFallbackError)
+                throw new Error(fallbackMessage)
+              }
+            }
           }
 
-          return inserted
+          return processed
+        }
+
+        const dedupeRowsByKeys = (
+          rows: Record<string, unknown>[],
+          keyBuilder: (row: Record<string, unknown>) => string,
+        ): Record<string, unknown>[] => {
+          const map = new Map<string, Record<string, unknown>>()
+          for (const row of rows) {
+            map.set(keyBuilder(row), row)
+          }
+          return Array.from(map.values())
         }
 
         // For VAS table, prepare header mapping upfront (extract from first available file)
@@ -1662,6 +1724,21 @@ export default function ImportPage() {
                 }
                 // Ensure branch is always set (fallback to selected branch if not set)
                 if (!row.branch) row.branch = standardBranch
+
+                const normalizedJobCardNumber =
+                  row.job_card_number == null ? '' : String(row.job_card_number).trim().toUpperCase()
+                if (!normalizedJobCardNumber) {
+                  jcParseErrors.push({
+                    rowNumber: rowIdx + 2,
+                    fieldName: 'job_card_number',
+                    columnName: 'job_card_number',
+                    value: row.job_card_number == null ? '' : String(row.job_card_number),
+                    error: 'Job card number is required for dedupe/update',
+                  })
+                  continue
+                }
+
+                row.job_card_number = normalizedJobCardNumber
                 insertRows.push(row)
               }
             }
@@ -1672,9 +1749,6 @@ export default function ImportPage() {
               )
             }
 
-<<<<<<< HEAD
-            totalInserted += await insertRowsInChunks(insertRows)
-=======
             const dedupedJcRows = dedupeRowsByKeys(
               insertRows,
               (row) =>
@@ -1688,7 +1762,6 @@ export default function ImportPage() {
             )
 
             totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
->>>>>>> 7cd82c1 (Changes by Harsh)
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
