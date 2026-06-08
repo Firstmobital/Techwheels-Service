@@ -1239,11 +1239,158 @@ export default function ImportPage() {
           return inserted
         }
 
+<<<<<<< HEAD
         const insertRowsInChunks = async (rows: Record<string, unknown>[]): Promise<number> => {
           let inserted = 0
 
           for (let i = 0; i < rows.length; i += CHUNK) {
             const chunkRows = rows.slice(i, i + CHUNK)
+=======
+        const upsertJcClosedRowsByBusinessKey = async (
+          rows: Record<string, unknown>[],
+        ): Promise<number> => {
+          const jcInvoiceConflictColumn =
+            jcInvoiceDateColumnKey && jcClosedColumnSet.has(jcInvoiceDateColumnKey)
+              ? jcInvoiceDateColumnKey
+              : null
+          const jcClosedHasLocationPortalKey =
+            jcClosedColumnSet.has('location') && jcClosedColumnSet.has('portal')
+
+          const conflictCandidates = jcInvoiceConflictColumn
+            ? [
+                `branch,job_card_number,${jcInvoiceConflictColumn}`,
+                `job_card_number,branch,${jcInvoiceConflictColumn}`,
+                ...(jcClosedHasLocationPortalKey
+                  ? [
+                      `location,portal,job_card_number,${jcInvoiceConflictColumn}`,
+                      `portal,location,job_card_number,${jcInvoiceConflictColumn}`,
+                    ]
+                  : []),
+              ]
+            : jcClosedHasLocationPortalKey
+              ? [
+                  'location,portal,job_card_number',
+                  'portal,location,job_card_number',
+                  'branch,job_card_number',
+                  'job_card_number,branch',
+                ]
+              : ['branch,job_card_number', 'job_card_number,branch']
+          type JcClosedUpsertRow = Record<string, unknown> & {
+            branch: string
+            job_card_number: string
+          }
+          const normalizedRows = rows
+            .map((row) => {
+              const branchKey = String(row.branch ?? '').trim()
+              const jobCardKey = String(row.job_card_number ?? '').trim().toUpperCase()
+              const locationKey = String(row.location ?? '').trim()
+              const portalKey = String(row.portal ?? '').trim()
+              const invoiceDateKey =
+                jcInvoiceConflictColumn == null
+                  ? ''
+                  : String(row[jcInvoiceConflictColumn] ?? '').trim().slice(0, 10)
+
+              if (!branchKey || !jobCardKey) return null
+              if (jcInvoiceConflictColumn && !invoiceDateKey) return null
+
+              return {
+                ...row,
+                branch: branchKey,
+                job_card_number: jobCardKey,
+                ...(jcInvoiceConflictColumn
+                  ? {
+                      [jcInvoiceConflictColumn]: invoiceDateKey,
+                    }
+                  : {}),
+                ...(jcClosedHasLocationPortalKey
+                  ? {
+                      location: locationKey,
+                      portal: portalKey,
+                    }
+                  : {}),
+              }
+            })
+            .filter((row): row is JcClosedUpsertRow => row !== null)
+
+          let processed = 0
+
+          const tryUpdateExistingJcClosedRow = async (payload: JcClosedUpsertRow): Promise<boolean> => {
+            for (const onConflict of conflictCandidates) {
+              const conflictColumns = onConflict
+                .split(',')
+                .map((column) => column.trim())
+                .filter(Boolean)
+
+              if (conflictColumns.length === 0) continue
+
+              const hasAllConflictValues = conflictColumns.every((column) => {
+                const value = payload[column]
+                if (value == null) return false
+                if (typeof value === 'string' && value.trim() === '') return false
+                return true
+              })
+
+              if (!hasAllConflictValues) continue
+
+              let updateQuery = supabase.from(tableName).update(payload)
+              for (const column of conflictColumns) {
+                updateQuery = updateQuery.eq(column, payload[column] as never)
+              }
+
+              const { data, error } = await updateQuery.select('id').limit(1)
+              if (error) {
+                const lower = (error.message ?? '').toLowerCase()
+                const missingColumn =
+                  lower.includes('could not find the') && lower.includes('column of')
+                if (missingColumn) {
+                  continue
+                }
+                throw new Error(error.message ?? 'JC Closed fallback update failed')
+              }
+
+              if ((data?.length ?? 0) > 0) {
+                return true
+              }
+            }
+
+            return false
+          }
+
+          const upsertSingleRow = async (payload: JcClosedUpsertRow): Promise<void> => {
+            for (const onConflict of conflictCandidates) {
+              const { error } = await supabase.from(tableName).upsert([payload], { onConflict })
+              if (!error) return
+
+              const lower = (error.message ?? '').toLowerCase()
+              const missingConflictConstraint = lower.includes(
+                'no unique or exclusion constraint matching the on conflict specification',
+              )
+              const duplicateViolation =
+                error.code === '23505' || lower.includes('duplicate key value violates unique constraint')
+
+              if (missingConflictConstraint) continue
+
+              if (duplicateViolation) {
+                const updated = await tryUpdateExistingJcClosedRow(payload)
+                if (updated) return
+                continue
+              }
+
+              throw new Error(error.message ?? 'JC Closed single-row upsert failed')
+            }
+
+            const { error: insertError } = await supabase.from(tableName).insert([payload])
+            if (!insertError || isDuplicateViolation(insertError)) return
+
+            const updated = await tryUpdateExistingJcClosedRow(payload)
+            if (updated) return
+
+            throw new Error(insertError.message ?? 'JC Closed single-row fallback insert failed')
+          }
+
+          for (let i = 0; i < normalizedRows.length; i += CHUNK) {
+            const chunkRows = normalizedRows.slice(i, i + CHUNK)
+>>>>>>> 7cd82c1 (Changes by Harsh)
             if (chunkRows.length === 0) continue
 
             const { error } = await supabase.from(tableName).insert(chunkRows)
@@ -1525,7 +1672,23 @@ export default function ImportPage() {
               )
             }
 
+<<<<<<< HEAD
             totalInserted += await insertRowsInChunks(insertRows)
+=======
+            const dedupedJcRows = dedupeRowsByKeys(
+              insertRows,
+              (row) =>
+                `${String(row.branch ?? '').trim().toLowerCase()}|${String(row.job_card_number ?? '')
+                  .trim()
+                  .toUpperCase()}|${String(
+                  row[jcInvoiceDateColumnKey ?? 'invoice_date'] ?? row.invoice_date ?? row.Invoice_date ?? '',
+                )
+                  .trim()
+                  .slice(0, 10)}`,
+            )
+
+            totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
+>>>>>>> 7cd82c1 (Changes by Harsh)
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
