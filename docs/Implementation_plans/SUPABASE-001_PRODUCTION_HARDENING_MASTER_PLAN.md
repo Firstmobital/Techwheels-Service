@@ -102,7 +102,7 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 |---|---|---|---|---|---|---|---|---|---|
 | P0-01 | Critical | Export and classify all 22 Advisor issues | Team | Done | 2026-06-08 | 2026-06-08 | Full advisor inventory captured and tracked across four fix batches; final rerun shows Security Advisor Errors = 0 | 2026-06-08 | - |
 | P0-02 | Critical | Enable RLS on exposed public tables | Team | Done | 2026-06-08 | 2026-06-08 | Fixes 1-4 executed (`20260608100000`, `20260608101500`, `20260608103000`, `20260608104500`); final rerun shows all `rls_disabled_in_public` errors cleared | 2026-06-08 | - |
-| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Step 1 and Step 2 validated: warranty + service-domain `p0_auth_delete` tightened with checks green. Step 3 draft prepared: `supabase/migrations/20260608123000_p0_step3_import_recon_tighten_delete_policy.sql`. | 2026-06-08 | Execute Step 3 draft and run `supabase/sql_checks/20260608123000_import_recon_tighten_step3_checks.sql` |
+| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Step 1, Step 2, and Step 3 validated: warranty + service + import/reconciliation `p0_auth_delete` tightening passed all checks. Step 4 draft prepared: `supabase/migrations/20260608130000_p0_step4_operational_staging_tighten_delete_policy.sql`. | 2026-06-08 | Execute Step 4 draft and run `supabase/sql_checks/20260608130000_operational_staging_tighten_step4_checks.sql` |
 | P0-04 | High | Restrict `anon` API key permissions in settings | Team | Not Started |  |  |  | 2026-06-04 | Validate no frontend breakage after restriction |
 | P0-05 | High | Enable leaked-password protection in Auth | Team | Not Started |  |  |  | 2026-06-04 | Toggle and test signup/login failure path |
 | P1-01 | Critical | Move app DB connection usage to pooler URL | Team | Not Started |  |  |  | 2026-06-04 | Identify all runtime connection string consumers |
@@ -152,6 +152,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Logged Step 1 warranty tightening migration execution; next checkpoint is SQL + frontend/mobile validation before Step 2 |
 | 2026-06-08 | Copilot | Step 1 warranty tightening validated (policy + baseline + RLS checks passed); prepared Step 2 service-domain delete-policy tightening draft and SQL checks |
 | 2026-06-08 | Copilot | Step 2 service-domain tightening validated (policy + baseline + RLS checks passed); prepared Step 3 import/reconciliation delete-policy tightening draft and SQL checks |
+| 2026-06-08 | Copilot | Step 3 import/reconciliation tightening validated (policy + baseline + RLS checks passed); prepared Step 4 operational/staging delete-policy tightening draft and SQL checks |
 
 ## 7) Update Protocol For Future Chats
 
@@ -489,4 +490,18 @@ Step 3 draft prepared:
 - Migration: `supabase/migrations/20260608123000_p0_step3_import_recon_tighten_delete_policy.sql`
 - Checks: `supabase/sql_checks/20260608123000_import_recon_tighten_step3_checks.sql`
 - Scope: `import_employee_mapping_issues`, `pending_drive_uploads`, `open_job_cards_import_staging`.
+- Action: tighten only `p0_auth_delete`; keep `p0_auth_select/insert/update` unchanged in this step.
+
+Step 3 validation outcome (2026-06-08):
+- PASS: `p0_auth_delete` now requires:
+	- `import_employee_mapping_issues`: `is_admin()` OR `has_module_delete('employees')`
+	- `pending_drive_uploads`: `is_admin()` OR `has_module_delete('job_cards')`
+	- `open_job_cards_import_staging`: `is_admin()` OR `has_module_delete('job_cards')`
+- PASS: `p0_auth_select`, `p0_auth_insert`, `p0_auth_update` remained present on all 3 tables.
+- PASS: RLS stayed enabled on all 3 tables.
+
+Step 4 draft prepared:
+- Migration: `supabase/migrations/20260608130000_p0_step4_operational_staging_tighten_delete_policy.sql`
+- Checks: `supabase/sql_checks/20260608130000_operational_staging_tighten_step4_checks.sql`
+- Scope: `cancel_job_card`, `closed_but_not_invoiced`, `open_job_cards`, `job_card_closed_data_duplicates_backup`.
 - Action: tighten only `p0_auth_delete`; keep `p0_auth_select/insert/update` unchanged in this step.

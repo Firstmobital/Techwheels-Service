@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-08 06:10 UTC  
+**Last Updated**: 2026-06-08 06:35 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-08)
@@ -50,9 +50,13 @@ Progress update (2026-06-08, staged tightening):
   - `service_jc_parts_data`
   - `service_invoice_data`
   - `service_invoice_order_data`
-- Step 3 draft prepared for import/reconciliation domain:
-  - Migration: `20260608123000_p0_step3_import_recon_tighten_delete_policy.sql`
-  - Checks: `20260608123000_import_recon_tighten_step3_checks.sql`
+- Step 3 (import/reconciliation domain) validated PASS:
+  - `import_employee_mapping_issues` delete constrained to `is_admin()` OR `has_module_delete('employees')`
+  - `pending_drive_uploads` delete constrained to `is_admin()` OR `has_module_delete('job_cards')`
+  - `open_job_cards_import_staging` delete constrained to `is_admin()` OR `has_module_delete('job_cards')`
+- Step 4 draft prepared for operational/staging domain:
+  - Migration: `20260608130000_p0_step4_operational_staging_tighten_delete_policy.sql`
+  - Checks: `20260608130000_operational_staging_tighten_step4_checks.sql`
 
 ### Execution Update (2026-06-01)
 
