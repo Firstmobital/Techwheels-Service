@@ -283,11 +283,29 @@ export default function TechnicianPage() {
       let revenueMap = new Map<string, RevenueRow>()
 
       if (completedJcNumbers.length > 0) {
-        // Fetch revenue data
-        const revenueRes = await supabase
-          .from('job_card_closed_data')
-          .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
-          .in('job_card_number', completedJcNumbers)
+        // Fetch revenue data with case-insensitive matching using RPC
+        const { data: revenueData, error: revenueError } = await supabase.rpc(
+          'get_revenue_by_jc_case_insensitive',
+          { p_jc_numbers: completedJcNumbers },
+        )
+
+        let revenueRes: any = { data: revenueData, error: revenueError }
+
+        // Fallback: if RPC fails (function doesn't exist yet), fetch all and filter in-memory
+        if (revenueError) {
+          const allRes = await supabase
+            .from('job_card_closed_data')
+            .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
+
+          const normalizedJcSet = new Set(completedJcNumbers.map((jc) => String(jc ?? '').trim().toUpperCase()))
+          if (allRes.data) {
+            allRes.data = allRes.data.filter((row: any) => {
+              const normalizedJc = String(row.job_card_number ?? '').trim().toUpperCase()
+              return normalizedJcSet.has(normalizedJc)
+            })
+          }
+          revenueRes = allRes
+        }
 
         if (revenueRes.error) {
           setError(revenueRes.error.message)
@@ -296,7 +314,7 @@ export default function TechnicianPage() {
           return
         }
 
-        ;(revenueRes.data ?? []).forEach((row) => {
+        ;(revenueRes.data ?? []).forEach((row: any) => {
           const key = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim().toUpperCase()
           if (!key) return
 
@@ -313,15 +331,33 @@ export default function TechnicianPage() {
           }
         })
 
-        // Fetch registration numbers from service_reception_entries (same source as Floor Incharge)
-        const receptionRes = await supabase
-          .from('service_reception_entries')
-          .select('jc_number, reg_number')
-          .in('jc_number', completedJcNumbers)
+        // Fetch registration numbers from service_reception_entries with case-insensitive matching
+        const { data: receptionData, error: receptionError } = await supabase.rpc(
+          'get_reception_by_jc_case_insensitive',
+          { p_jc_numbers: completedJcNumbers },
+        )
+
+        let receptionRes: any = { data: receptionData, error: receptionError }
+
+        // Fallback: if RPC fails, fetch all and filter in-memory
+        if (receptionError) {
+          const allRes = await supabase
+            .from('service_reception_entries')
+            .select('jc_number, reg_number')
+
+          const normalizedJcSet = new Set(completedJcNumbers)
+          if (allRes.data) {
+            allRes.data = allRes.data.filter((row: any) => {
+              const normalizedJc = String(row.jc_number ?? '').trim().toUpperCase()
+              return normalizedJcSet.has(normalizedJc)
+            })
+          }
+          receptionRes = allRes
+        }
 
         if (!receptionRes.error && receptionRes.data) {
-          ;(receptionRes.data ?? []).forEach((row) => {
-            const key = String((row as { jc_number?: string | null }).jc_number ?? '').trim()
+          ;(receptionRes.data ?? []).forEach((row: any) => {
+            const key = String((row as { jc_number?: string | null }).jc_number ?? '').trim().toUpperCase()
             if (!key) return
 
             const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
@@ -335,7 +371,7 @@ export default function TechnicianPage() {
       // Add reg_number to assignment rows
       const enrichedAssignmentRows = assignmentRows.map((row) => ({
         ...row,
-        reg_number: regNumberMap.get(String(row.job_card_number ?? '').trim()) ?? null,
+        reg_number: regNumberMap.get(String(row.job_card_number ?? '').trim().toUpperCase()) ?? null,
       }))
       setAssignments(enrichedAssignmentRows)
 

@@ -146,7 +146,7 @@ function getFuelTypeLabel(value: string | null | undefined): string {
 }
 
 function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
-  const assignmentKey = row.jc_number?.trim() || `RECEPTION-${row.id}`
+  const assignmentKey = (row.jc_number?.trim() || `RECEPTION-${row.id}`).toUpperCase()
 
   return {
     id: row.id,
@@ -339,8 +339,9 @@ export default function FloorInchargePage() {
         const assignMap: Record<string, TechnicianAssignment> = {}
         const nextDrafts: Record<string, StageDraft> = {}
         for (const a of assignRes.data as TechnicianAssignment[]) {
-          assignMap[a.job_card_number] = a
-          nextDrafts[a.job_card_number] = {
+          const normalizedJc = String(a.job_card_number ?? '').trim().toUpperCase()
+          assignMap[normalizedJc] = a
+          nextDrafts[normalizedJc] = {
             bay_no: a.bay_no ?? '',
             work_status: a.work_status ?? 'work_inprocess',
             remark: a.remark ?? '',
