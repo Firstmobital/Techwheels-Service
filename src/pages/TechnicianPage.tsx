@@ -274,7 +274,7 @@ export default function TechnicianPage() {
       const completed = Array.from(completedMap.values())
       const completedJcNumbers = Array.from(new Set(
         completed
-          .map((row) => String(row.job_card_number ?? '').trim())
+          .map((row) => String(row.job_card_number ?? '').trim().toUpperCase())
           .filter(Boolean),
       ))
 
@@ -297,7 +297,7 @@ export default function TechnicianPage() {
         }
 
         ;(revenueRes.data ?? []).forEach((row) => {
-          const key = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim()
+          const key = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim().toUpperCase()
           if (!key) return
 
           const existing = revenueMap.get(key)
@@ -356,7 +356,7 @@ export default function TechnicianPage() {
       const dayAgg = new Map<string, IncomeDayRow>()
 
       completed.forEach((assignment) => {
-        const jc = String(assignment.job_card_number ?? '').trim()
+        const jc = String(assignment.job_card_number ?? '').trim().toUpperCase()
         if (!jc) return
         const revenue = revenueMap.get(jc)
         if (!revenue) return
