@@ -301,6 +301,12 @@ export default function TechnicianPage() {
         from += QUERY_PAGE_SIZE
       }
 
+      const assignmentJcNumbers = Array.from(new Set(
+        assignmentRows
+          .map((row) => String(row.job_card_number ?? '').trim().toUpperCase())
+          .filter(Boolean),
+      ))
+
       // Get completed assignments to query revenue data
       const completedMap = new Map<string, TechnicianAssignmentRow>()
       assignmentRows
@@ -333,6 +339,25 @@ export default function TechnicianPage() {
       let regNumberMap = new Map<string, string>()
       let revenueMap = new Map<string, RevenueRow>()
 
+      if (assignmentJcNumbers.length > 0) {
+        const receptionRes = await supabase
+          .from('service_reception_entries')
+          .select('jc_number, reg_number')
+          .in('jc_number', assignmentJcNumbers)
+
+        if (!receptionRes.error && receptionRes.data) {
+          ;(receptionRes.data ?? []).forEach((row: any) => {
+            const key = String((row as { jc_number?: string | null }).jc_number ?? '').trim().toUpperCase()
+            if (!key) return
+
+            const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
+            if (regNum && !regNumberMap.has(key)) {
+              regNumberMap.set(key, regNum)
+            }
+          })
+        }
+      }
+
       if (completedJcNumbers.length > 0) {
         const revenueRes = await supabase
           .from('job_card_closed_data')
@@ -363,22 +388,6 @@ export default function TechnicianPage() {
           }
         })
 
-        const receptionRes = await supabase
-          .from('service_reception_entries')
-          .select('jc_number, reg_number')
-          .in('jc_number', completedJcNumbers)
-
-        if (!receptionRes.error && receptionRes.data) {
-          ;(receptionRes.data ?? []).forEach((row: any) => {
-            const key = String((row as { jc_number?: string | null }).jc_number ?? '').trim().toUpperCase()
-            if (!key) return
-
-            const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
-            if (regNum && !regNumberMap.has(key)) {
-              regNumberMap.set(key, regNum)
-            }
-          })
-        }
       }
 
       // Add reg_number to assignment rows
