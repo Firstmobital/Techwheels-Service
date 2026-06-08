@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-08 08:05 UTC  
+**Last Updated**: 2026-06-08 08:15 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-08)
@@ -62,19 +62,16 @@ Progress update (2026-06-08, staged tightening):
   - Baseline policy continuity check passed (`p0_auth_select/insert/update` present on all 4 tables)
   - RLS confirmation passed (`rls_enabled = true`) on all 4 tables
 - Staged `p0_auth_delete` tightening track status: COMPLETE (Step 1 through Step 4 validated)
-- Next hardening track kicked off:
-  - P0-04 anon-surface restriction validation pack prepared: `supabase/sql_checks/20260608171000_p0_04_anon_surface_and_post_toggle_checks.sql`
-  - P0-05 leaked-password rollout checklist prepared: `docs/Implementation_plans/SUPABASE_P0_05_LEAKED_PASSWORD_ROLLOUT_CHECKLIST.md`
+- P0-04 anon-surface restriction complete (0/0/0 post-migration confirmation).
+- P0-05 leaked-password protection rollout checklist prepared: `docs/Implementation_plans/SUPABASE_P0_05_LEAKED_PASSWORD_ROLLOUT_CHECKLIST.md`; queued for auth validation
 - P0-04 pre-check baseline captured (before dashboard restriction):
   - `public_policy_rows = 25`
   - `anon_table_grants = 322`
   - `anon_function_grants = 31`
   - Observed `{public}`-role policy families on: `documents`, `estimate_rows`, `job_cards`, `email_logs`, `panel_photos`, `panels`, `modules`, `users`, `user_module_permissions`, `vehicles`.
-  - Post-check attempt currently shows no reduction (still `25 / 322 / 31`).
-  - Dashboard-only status change was insufficient for effective grant/policy reduction.
-  - DB-level unblock path prepared:
-    - Migration: `20260608182000_p0_04_restrict_anon_public_surface.sql`
-    - Checks: `20260608182000_p0_04_restrict_anon_public_surface_checks.sql`
+  - DB-level migration executed: `20260608182000_p0_04_restrict_anon_public_surface.sql`
+  - Post-migration result: `0 / 0 / 0` (complete anon surface elimination from baseline 25/322/31)
+  - Status: COMPLETE — anon policy paths re-scoped to `authenticated` only; all anon object grants revoked
 
 ### Execution Update (2026-06-01)
 
