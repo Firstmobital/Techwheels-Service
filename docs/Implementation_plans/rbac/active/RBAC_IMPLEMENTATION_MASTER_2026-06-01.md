@@ -8,6 +8,13 @@
 
 ### Execution Update (2026-06-08)
 
+- Governance UX split implemented (web):
+  - Settings → Employee Master `role` is labeled and treated as **Business Role** source of truth (examples: SA, CRM, TECHNICIAN, FLOOR INCHARGE, SM, GM).
+  - Admin → Users `role` is labeled and treated as **Platform Role** (security posture + module governance).
+  - Admin → Permissions now shows an **Effective Access Summary** (platform role, business roles from active mappings, dealer scope, and granted module rights counts).
+  - Add User modal now warns that business personas belong to Employee Master, reducing governance drift.
+  - Contract: these two role layers are intentionally not auto-synced 1:1.
+
 - **Admin Bypass Governance Rule Established** ([ADMIN_BYPASS_RLS_GOVERNANCE.md](./../../runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md)):
   - **Core Rule:** Every RLS policy using `has_module_*()` or role-specific scope checks MUST include `is_admin() OR (original_logic)` pattern.
   - **Rationale:** Admin users must never be blocked by role-specific checks; they need full access for testing, debugging, and administration.

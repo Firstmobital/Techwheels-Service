@@ -1814,6 +1814,9 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4 px-5 py-4">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              Governance: This Role column is the Business Role source of truth (for example SA, CRM, TECHNICIAN, FLOOR INCHARGE, SM, GM). Platform Role is managed in Admin → Users.
+            </div>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="relative w-full sm:max-w-sm">
                 <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-gray-400">
@@ -1873,7 +1876,7 @@ export default function SettingsPage() {
               <input
                 value={newEmployee.role}
                 onChange={(event) => setNewEmployee((prev) => ({ ...prev, role: event.target.value }))}
-                placeholder="Role"
+                placeholder="Business Role"
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
               <div className="flex items-center md:justify-end">
@@ -1898,7 +1901,7 @@ export default function SettingsPage() {
                     <th className="px-3 py-2 font-semibold">Location</th>
                     <th className="px-3 py-2 font-semibold">Department</th>
                     <th className="px-3 py-2 font-semibold">Fuel Type</th>
-                    <th className="px-3 py-2 font-semibold">Role</th>
+                    <th className="px-3 py-2 font-semibold">Business Role</th>
                     <th className="px-3 py-2 font-semibold">Action</th>
                   </tr>
                 </thead>
@@ -2012,7 +2015,7 @@ export default function SettingsPage() {
                                 ),
                               )
                             }}
-                            placeholder="Role"
+                            placeholder="Business Role"
                             className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
                           />
                         </td>

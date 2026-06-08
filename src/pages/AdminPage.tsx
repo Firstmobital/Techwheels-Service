@@ -180,7 +180,7 @@ export default function AdminPage() {
 
   // Mappings tab
   const [mappings, setMappings]             = useState<UserEmployeeLinkRow[]>([])
-  const [employeeCatalog, setEmployeeCatalog] = useState<Array<{ employee_code: string; employee_name: string }>>([])
+  const [employeeCatalog, setEmployeeCatalog] = useState<Array<{ employee_code: string; employee_name: string; role?: string | null }>>([])
   const [showAddMapping, setShowAddMapping] = useState(false)
   const [editMapping, setEditMapping]       = useState<UserEmployeeLinkRow | null>(null)
   const [mapUserId, setMapUserId]           = useState('')
@@ -647,6 +647,10 @@ export default function AdminPage() {
   }
 
   const userLookup = useMemo(() => new Map(users.map(u => [u.id, u] as const)), [users])
+  const employeeRoleLookup = useMemo(
+    () => new Map(employeeCatalog.map((employee) => [employee.employee_code, String(employee.role ?? '').trim()] as const)),
+    [employeeCatalog],
+  )
 
   const filteredUsers = users.filter(u => {
     const term = search.toLowerCase()
@@ -687,6 +691,26 @@ export default function AdminPage() {
       m.dealer_code.toLowerCase().includes(term)
     )
   })
+
+  const selectedPermissionUser = selectedUserId ? users.find((user) => user.id === selectedUserId) ?? null : null
+  const selectedPermissionMappings = selectedUserId
+    ? mappings.filter((mapping) => mapping.user_id === selectedUserId && mapping.is_active)
+    : []
+  const selectedBusinessRoles = Array.from(
+    new Set(
+      selectedPermissionMappings
+        .map((mapping) => String(employeeRoleLookup.get(mapping.employee_code) ?? '').trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  )
+  const selectedDealerCodes = Array.from(
+    new Set(selectedPermissionMappings.map((mapping) => String(mapping.dealer_code ?? '').trim().toUpperCase()).filter(Boolean)),
+  )
+  const selectedPermissionCounts = {
+    view: Object.values(pendingPerms).filter((permission) => permission.can_view).length,
+    modify: Object.values(pendingPerms).filter((permission) => permission.can_modify).length,
+    delete: Object.values(pendingPerms).filter((permission) => permission.can_delete).length,
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) return (
@@ -781,6 +805,13 @@ export default function AdminPage() {
             >
               <Icon name="plus" size={16} strokeWidth={2} /> Add user
             </button>
+          </div>
+
+          <div className="note" style={{ marginBottom: 12 }}>
+            <span className="ic"><Icon name="shield" size={17} strokeWidth={1.9} /></span>
+            <div>
+              <b>Governance split:</b> Platform role in this screen controls admin/security posture. Business persona roles (SA/CRM/TECHNICIAN/FLOOR INCHARGE/SM/GM) are mastered in Settings → Employee Master and mapped via Admin → Mappings.
+            </div>
           </div>
 
           <div className="card">
@@ -929,6 +960,20 @@ export default function AdminPage() {
               </button>
             )}
           </div>
+
+          {selectedPermissionUser && (
+            <div className="note" style={{ marginBottom: 12 }}>
+              <span className="ic"><Icon name="shield" size={17} strokeWidth={1.9} /></span>
+              <div>
+                <b>Effective Access Summary:</b>
+                {' '}Platform role <code>{selectedPermissionUser.role}</code>
+                {' '}| Business role(s) <code>{selectedBusinessRoles.length ? selectedBusinessRoles.join(', ') : 'Not mapped'}</code>
+                {' '}| Active mappings <code>{selectedPermissionMappings.length}</code>
+                {' '}| Dealer scope <code>{selectedDealerCodes.length ? selectedDealerCodes.join(', ') : 'Not mapped'}</code>
+                {' '}| Modules (view/modify/delete) <code>{selectedPermissionCounts.view}/{selectedPermissionCounts.modify}/{selectedPermissionCounts.delete}</code>
+              </div>
+            </div>
+          )}
 
           {!selectedUserId ? (
             <div className="card">
@@ -1161,7 +1206,7 @@ export default function AdminPage() {
               <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="rajesh@dealer.in"
                 className={INPUT} />
             </Field>
-            <Field label="Role">
+            <Field label="Platform Role">
               <select value={newRole} onChange={e => setNewRole(e.target.value as UserRole)} className={INPUT}>
                 <option value="viewer">Viewer — read only</option>
                 <option value="staff">Staff — view + modify</option>
@@ -1169,6 +1214,9 @@ export default function AdminPage() {
                 <option value="admin">Admin — full access</option>
               </select>
             </Field>
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Governance: Platform Role is for security posture only. Keep business personas (SA/CRM/TECHNICIAN/FLOOR INCHARGE/SM/GM) in Settings → Employee Master.
+            </p>
             <Field label="Branch">
               <input value={newBranch} onChange={e => setNewBranch(e.target.value)} placeholder="e.g. Mumbai"
                 className={INPUT} />

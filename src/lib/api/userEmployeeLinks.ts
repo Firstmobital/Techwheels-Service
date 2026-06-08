@@ -218,12 +218,12 @@ export async function deactivateUserEmployeeLink(id: number): Promise<ApiResult<
 /**
  * Get all employees (for mapping dropdown in UI)
  */
-export async function listEmployees(): Promise<ApiResult<Array<{ employee_code: string; employee_name: string }>>> {
+export async function listEmployees(): Promise<ApiResult<Array<{ employee_code: string; employee_name: string; role?: string | null }>>> {
   try {
     // Employee mapping is role-agnostic: any employee can be linked to a user.
     const { data: allData, error: allError } = await supabase
       .from('employee_master')
-      .select('employee_code, employee_name')
+      .select('employee_code, employee_name, role')
       .order('employee_name')
 
     if (allError) return fail(`Failed to list employees: ${allError.message}`)
@@ -231,6 +231,7 @@ export async function listEmployees(): Promise<ApiResult<Array<{ employee_code: 
     const employees = (allData ?? []).map(e => ({
       employee_code: e.employee_code,
       employee_name: e.employee_name,
+      role: e.role ?? null,
     }))
 
     return ok(employees)
