@@ -15,6 +15,7 @@ type TechnicianAssignmentRow = {
   time_diff: string | null
   remark: string | null
   reg_number?: string | null
+  technician_income?: number
 }
 
 type RevenueRow = {
@@ -37,9 +38,28 @@ type IncomeDayRow = {
   technicianIncome: number
 }
 
-type TechnicianOption = {
+type TechnicianSummaryCard = {
   code: string
   name: string
+  rowCount: number
+  dayCount: number
+  totalIncome: number
+}
+
+type DayWiseCard = {
+  dateKey: string
+  label: string
+  rowCount: number
+  completedCount: number
+  totalIncome: number
+}
+
+type VehicleOnDayCard = {
+  regKey: string
+  label: string
+  rowCount: number
+  completedCount: number
+  totalIncome: number
 }
 
 const QUERY_PAGE_SIZE = 1000
@@ -132,13 +152,13 @@ export default function TechnicianPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<TechnicianAssignmentRow[]>([])
-  const [incomeByDay, setIncomeByDay] = useState<IncomeDayRow[]>([])
   const [technicianCodes, setTechnicianCodes] = useState<string[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
-  const [technicianOptions, setTechnicianOptions] = useState<TechnicianOption[]>([])
   const [selectedTechnicianCode, setSelectedTechnicianCode] = useState('')
+  const [selectedDayKey, setSelectedDayKey] = useState('')
+  const [selectedVehicleOnDayKey, setSelectedVehicleOnDayKey] = useState('')
 
-  async function loadData(adminSelectedCode?: string) {
+  async function loadData() {
     setLoading(true)
     setError(null)
 
@@ -147,10 +167,10 @@ export default function TechnicianPage() {
       const userId = authRes.data.user?.id
       if (!userId) {
         setAssignments([])
-        setIncomeByDay([])
         setTechnicianCodes([])
-        setTechnicianOptions([])
         setSelectedTechnicianCode('')
+        setSelectedDayKey('')
+        setSelectedVehicleOnDayKey('')
         setIsAdmin(false)
         setLoading(false)
         return
@@ -165,60 +185,6 @@ export default function TechnicianPage() {
       const userIsAdmin = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase() === 'admin'
       setIsAdmin(userIsAdmin)
 
-      let effectiveCodes: string[] = []
-
-      if (userIsAdmin) {
-        const allTechRes = await supabase
-          .from('employee_master')
-          .select('employee_code, employee_name, role')
-          .order('employee_name', { ascending: true })
-
-        if (allTechRes.error) {
-          setError(allTechRes.error.message)
-          setAssignments([])
-          setIncomeByDay([])
-          setTechnicianCodes([])
-          setTechnicianOptions([])
-          setSelectedTechnicianCode('')
-          setLoading(false)
-          return
-        }
-
-        const optionsMap = new Map<string, TechnicianOption>()
-        ;(allTechRes.data ?? [])
-          .filter((row) => String((row as { role?: string | null }).role ?? '').trim().toLowerCase() === 'technician')
-          .forEach((row) => {
-            const code = String((row as { employee_code?: string | null }).employee_code ?? '').trim().toUpperCase()
-            if (!code) return
-            const name = String((row as { employee_name?: string | null }).employee_name ?? '').trim()
-            optionsMap.set(code, {
-              code,
-              name: name || code,
-            })
-          })
-
-        const options = Array.from(optionsMap.values())
-        setTechnicianOptions(options)
-
-        const preferredCode = String(adminSelectedCode ?? selectedTechnicianCode).trim().toUpperCase()
-        const hasPreferredCode = preferredCode.length > 0 && options.some((opt) => opt.code === preferredCode)
-        const nextSelectedCode = hasPreferredCode ? preferredCode : (options[0]?.code ?? '')
-
-        setSelectedTechnicianCode(nextSelectedCode)
-        effectiveCodes = nextSelectedCode ? [nextSelectedCode] : []
-      } else {
-        setTechnicianOptions([])
-        setSelectedTechnicianCode('')
-      }
-
-      if (userIsAdmin && effectiveCodes.length === 0) {
-        setTechnicianCodes([])
-        setAssignments([])
-        setIncomeByDay([])
-        setLoading(false)
-        return
-      }
-
       const assignmentRows: TechnicianAssignmentRow[] = []
       let from = 0
 
@@ -229,16 +195,11 @@ export default function TechnicianPage() {
           .order('assigned_at', { ascending: false })
           .range(from, from + QUERY_PAGE_SIZE - 1)
 
-        if (userIsAdmin) {
-          assignQuery = assignQuery.in('technician_code', effectiveCodes)
-        }
-
         const assignRes = await assignQuery
 
         if (assignRes.error) {
           setError(assignRes.error.message)
           setAssignments([])
-          setIncomeByDay([])
           setLoading(false)
           return
         }
@@ -258,7 +219,7 @@ export default function TechnicianPage() {
           .map((row) => String(row.technician_code ?? '').trim().toUpperCase())
           .filter(Boolean),
       ))
-      setTechnicianCodes(userIsAdmin ? effectiveCodes : visibleTechnicianCodes)
+      setTechnicianCodes(visibleTechnicianCodes)
 
       const assignmentJcNumbers = Array.from(new Set(
         assignmentRows
@@ -325,7 +286,6 @@ export default function TechnicianPage() {
 
         if (revenueRes.error) {
           setError(revenueRes.error.message)
-          setIncomeByDay([])
           setLoading(false)
           return
         }
@@ -350,27 +310,7 @@ export default function TechnicianPage() {
       }
 
       // Add reg_number to assignment rows
-      const enrichedAssignmentRows = assignmentRows.map((row) => ({
-        ...row,
-        reg_number: regNumberMap.get(String(row.job_card_number ?? '').trim().toUpperCase()) ?? null,
-      }))
-      setAssignments(enrichedAssignmentRows)
-
-      // If no completed jobs, set empty income and return
-      if (completedJcNumbers.length === 0) {
-        setIncomeByDay([])
-        setLoading(false)
-        return
-      }
-
-      // Check if we have revenue data before processing income
-      if (revenueMap.size === 0) {
-        setIncomeByDay([])
-        setLoading(false)
-        return
-      }
-
-      const dayAgg = new Map<string, IncomeDayRow>()
+      const incomeByJc = new Map<string, number>()
 
       completed.forEach((assignment) => {
         const jc = String(assignment.job_card_number ?? '').trim().toUpperCase()
@@ -389,30 +329,25 @@ export default function TechnicianPage() {
         const netBeforeShare = gross / 1.18
         const technicianIncome = netBeforeShare * shareRate
 
-        const current = dayAgg.get(dateKey) ?? {
-          date: dateKey,
-          jobsCount: 0,
-          grossRevenue: 0,
-          netBeforeShare: 0,
-          technicianIncome: 0,
-        }
-
-        current.jobsCount += 1
-        current.grossRevenue += gross
-        current.netBeforeShare += netBeforeShare
-        current.technicianIncome += technicianIncome
-        dayAgg.set(dateKey, current)
+        incomeByJc.set(jc, technicianIncome)
       })
 
-      const dayRows = Array.from(dayAgg.values()).sort((a, b) => b.date.localeCompare(a.date))
-      setIncomeByDay(dayRows)
+      const enrichedAssignmentRows = assignmentRows.map((row) => {
+        const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+        return {
+          ...row,
+          reg_number: regNumberMap.get(jc) ?? null,
+          technician_income: incomeByJc.get(jc) ?? 0,
+        }
+      })
+      setAssignments(enrichedAssignmentRows)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load technician data')
       setAssignments([])
-      setIncomeByDay([])
       setTechnicianCodes([])
-      setTechnicianOptions([])
       setSelectedTechnicianCode('')
+      setSelectedDayKey('')
+      setSelectedVehicleOnDayKey('')
       setIsAdmin(false)
     } finally {
       setLoading(false)
@@ -423,24 +358,129 @@ export default function TechnicianPage() {
     void loadData()
   }, [])
 
-  const totalIncome = useMemo(
-    () => incomeByDay.reduce((sum, row) => sum + row.technicianIncome, 0),
-    [incomeByDay],
-  )
+  const technicianCards = useMemo<TechnicianSummaryCard[]>(() => {
+    const byTechnician = new Map<string, TechnicianSummaryCard & { days: Set<string> }>()
+
+    assignments.forEach((row) => {
+      const code = String(row.technician_code ?? '').trim().toUpperCase()
+      if (!code) return
+
+      const name = String(row.technician_name ?? '').trim() || code
+      const dateSource = row.out_ts ?? row.assigned_at ?? ''
+      const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
+      
+      const existing = byTechnician.get(code) ?? {
+        code,
+        name,
+        rowCount: 0,
+        dayCount: 0,
+        totalIncome: 0,
+        days: new Set<string>(),
+      }
+
+      existing.rowCount += 1
+      existing.totalIncome += Number(row.technician_income ?? 0)
+      existing.days.add(dateKey)
+      existing.dayCount = existing.days.size
+      byTechnician.set(code, existing)
+    })
+
+    return Array.from(byTechnician.values())
+      .map(({ days: _days, ...card }) => card)
+      .sort((a, b) => {
+        if (b.totalIncome !== a.totalIncome) return b.totalIncome - a.totalIncome
+        return b.rowCount - a.rowCount
+      })
+  }, [assignments])
+
+  useEffect(() => {
+    if (technicianCards.length === 0) {
+      if (selectedTechnicianCode) setSelectedTechnicianCode('')
+      return
+    }
+
+    const hasSelected = technicianCards.some((card) => card.code === selectedTechnicianCode)
+    if (!hasSelected && selectedTechnicianCode) {
+      setSelectedTechnicianCode('')
+      setSelectedDayKey('')
+    }
+  }, [selectedTechnicianCode, technicianCards])
 
   const selectedTechnicianName = useMemo(() => {
-    const selectedCode = String(selectedTechnicianCode ?? '').trim().toUpperCase()
-    if (!selectedCode) return ''
+    const selected = technicianCards.find((card) => card.code === selectedTechnicianCode)
+    return selected?.name ?? ''
+  }, [selectedTechnicianCode, technicianCards])
 
-    const option = technicianOptions.find((opt) => opt.code === selectedCode)
-    if (option?.name) return option.name
+  const selectedTechnicianRows = useMemo(() => {
+    const code = String(selectedTechnicianCode ?? '').trim().toUpperCase()
+    if (!code) return []
+    return assignments.filter((row) => String(row.technician_code ?? '').trim().toUpperCase() === code)
+  }, [assignments, selectedTechnicianCode])
 
-    const assignmentName = assignments
-      .find((row) => String(row.technician_code ?? '').trim().toUpperCase() === selectedCode)
-      ?.technician_name
+  const dayCards = useMemo<DayWiseCard[]>(() => {
+    const byDay = new Map<string, DayWiseCard>()
 
-    return assignmentName ? String(assignmentName).trim() : selectedCode
-  }, [assignments, selectedTechnicianCode, technicianOptions])
+    selectedTechnicianRows.forEach((row) => {
+      const dateSource = row.out_ts ?? row.assigned_at ?? ''
+      const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
+      const label = dateKey === 'unknown' ? 'No date' : new Date(dateKey).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })
+
+      const existing = byDay.get(dateKey) ?? {
+        dateKey,
+        label,
+        rowCount: 0,
+        completedCount: 0,
+        totalIncome: 0,
+      }
+
+      existing.rowCount += 1
+      existing.totalIncome += Number(row.technician_income ?? 0)
+      if (normalizeStatus(row.work_status) === 'completed') {
+        existing.completedCount += 1
+      }
+
+      byDay.set(dateKey, existing)
+    })
+
+    return Array.from(byDay.values()).sort((a, b) => {
+      if (a.dateKey === 'unknown') return 1
+      if (b.dateKey === 'unknown') return -1
+      return b.dateKey.localeCompare(a.dateKey)
+    })
+  }, [selectedTechnicianRows])
+
+  useEffect(() => {
+    if (dayCards.length === 0) {
+      if (selectedDayKey) setSelectedDayKey('')
+      return
+    }
+
+    const hasSelected = dayCards.some((card) => card.dateKey === selectedDayKey)
+    if (!hasSelected && selectedDayKey) {
+      setSelectedDayKey('')
+    }
+  }, [selectedDayKey, dayCards])
+
+  const finalRows = useMemo(() => {
+    if (!selectedDayKey) return []
+
+    return selectedTechnicianRows
+      .filter((row) => {
+        const dateSource = row.out_ts ?? row.assigned_at ?? ''
+        const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
+        return dateKey === selectedDayKey
+      })
+      .sort((a, b) => {
+        const aTs = new Date(a.assigned_at ?? 0).getTime()
+        const bTs = new Date(b.assigned_at ?? 0).getTime()
+        return bTs - aTs
+      })
+  }, [selectedTechnicianRows, selectedDayKey])
+
+  const totalIncome = useMemo(
+    () => technicianCards.reduce((sum, row) => sum + row.totalIncome, 0),
+    [technicianCards],
+  )
 
   return (
     <div>
@@ -450,33 +490,9 @@ export default function TechnicianPage() {
             <Icon name="tech" size={13} className="icon-align-text" />
             Technician
           </p>
-          <h1>Assigned rows & income</h1>
-          <p>Select any technician to view their assigned rows and day-wise income tracker.</p>
+          <h1>Technician earnings tracker</h1>
+          <p>Drill down: technician → vehicle → job card details (JC #, Reg, Bay, Status, IN/OUT TS, Time Diff, Remark).</p>
         </div>
-        {isAdmin && (
-          <label className="field field--no-gap tech-picker-field">
-            <span className="label">Technician</span>
-            <select
-              className="sel"
-              value={selectedTechnicianCode}
-              onChange={(e) => {
-                const nextCode = e.target.value
-                setSelectedTechnicianCode(nextCode)
-                void loadData(nextCode)
-              }}
-            >
-              {technicianOptions.length === 0 ? (
-                <option value="">No technician found</option>
-              ) : (
-                technicianOptions.map((opt) => (
-                  <option key={opt.code} value={opt.code}>
-                    {opt.code} — {opt.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
-        )}
       </div>
 
       {error && (
@@ -486,129 +502,159 @@ export default function TechnicianPage() {
         </div>
       )}
 
-      {/* Income tracker */}
-      <div className="card mb-gap">
-        <div className="card__head">
+      {/* Summary chips */}
+      <div className="summary">
+        <div className="schip">
+          <span className="ic">
+            <Icon name="tech" size={16} />
+          </span>
           <div>
-            <h3>Income tracker</h3>
-            <div className="sub">
-              Computed per completed case: (Labour Revenue ÷ 1.18) × 20% (PV) or 25% (EV).
-            </div>
-          </div>
-          <div className="tech-income-total">
-            <div className="tech-income-total__label">
-              Total earnings
-            </div>
-            <div className="tech-income-total__value">
-              {formatCurrency(totalIncome)}
-            </div>
+            <div className="n">{technicianCards.length}</div>
+            <div className="l">Technicians</div>
           </div>
         </div>
-        <div className="card__body dense">
-          {loading ? (
-            <div className="empty-state">Loading income tracker...</div>
-          ) : incomeByDay.length === 0 ? (
-            <div className="empty-state">
-              No completed-and-billed cases for income yet. Income appears once assigned cases are
-              completed and the PSF invoice is closed.
-            </div>
-          ) : (
-            <div className="tbl-wrap scroll">
-              <table className="tbl tech-income-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th className="ctr">Cases</th>
-                    <th className="text-right">Gross Revenue</th>
-                    <th className="text-right">Net (ex GST)</th>
-                    <th className="text-right">Technician Income</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {incomeByDay.map((row) => (
-                    <tr key={row.date}>
-                      <td className="strong">{row.date}</td>
-                      <td className="ctr">{row.jobsCount}</td>
-                      <td className="text-right num-tabular">
-                        {formatCurrency(row.grossRevenue)}
-                      </td>
-                      <td className="cell-muted text-right num-tabular">
-                        {formatCurrency(row.netBeforeShare)}
-                      </td>
-                      <td className="text-right strong num-tabular tech-income-cell">
-                        {formatCurrency(row.technicianIncome)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="schip">
+          <span className="ic" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>
+            <Icon name="checksm" size={16} />
+          </span>
+          <div>
+            <div className="n">{formatCurrency(totalIncome)}</div>
+            <div className="l">Total earnings</div>
+          </div>
         </div>
       </div>
 
-      {/* Assigned rows */}
-      <div className="card">
-        <div className="card__head">
-          <div>
-            <h3>
-              {selectedTechnicianName ? `${selectedTechnicianName} rows` : 'Technician rows'}{' '}
-              <span className="count-badge">({assignments.length})</span>
-            </h3>
-            <div className="sub">{selectedTechnicianCode || '—'}</div>
+      {/* Technician cards */}
+      {!loading && technicianCards.length > 0 && (
+        <div className="card mb-gap">
+          <div className="card__head">
+            <div>
+              <h3>Earnings by technician</h3>
+              <div className="sub">Sorted highest to lowest. Income = (Labour ÷ 1.18) × 20% (PV) or 25% (EV).</div>
+            </div>
+          </div>
+          <div className="card__body dense">
+            <div className="tech-drill-grid">
+              {technicianCards.map((card) => (
+                <button
+                  key={card.code}
+                  type="button"
+                  className={`tech-drill-btn ${selectedTechnicianCode === card.code ? 'is-active' : ''}`}
+                  onClick={() => {
+                    if (selectedTechnicianCode === card.code) {
+                      setSelectedTechnicianCode('')
+                      setSelectedDayKey('')
+                    } else {
+                      setSelectedTechnicianCode(card.code)
+                      setSelectedDayKey('')
+                    }
+                  }}
+                >
+                  <div className="tech-drill-btn__hd">
+                    <div className="tech-drill-btn__title">{card.name}</div>
+                    <div className="tech-drill-btn__code">{card.code}</div>
+                  </div>
+                  <div className="tech-drill-btn__value">{formatCurrency(card.totalIncome)}</div>
+                  <div className="tech-drill-btn__meta">{card.dayCount} days • {card.rowCount} rows</div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="card__body dense">
-          {loading ? (
-            <div className="empty-state">Loading technician rows...</div>
-          ) : assignments.length === 0 ? (
-            <div className="empty-state">
-              {isAdmin
-                ? technicianCodes.length === 0
-                  ? 'No TECHNICIAN found in Employee Master.'
-                  : 'No assigned rows found for the selected technician.'
-                : technicianCodes.length === 0
-                  ? 'No technician-visible rows found for your account scope.'
-                  : 'No assigned rows found for your technician code(s).'}
+      )}
+
+      {/* Day-wise cards */}
+      {!loading && selectedTechnicianCode && dayCards.length > 0 && (
+        <div className="card mb-gap">
+          <div className="card__head">
+            <div>
+              <h3>{selectedTechnicianName} — day-wise earnings</h3>
+              <div className="sub">Select a day to view job card details.</div>
             </div>
-          ) : (
-            <div className="tbl-wrap scroll">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th className="mono">JC Number</th>
-                    <th className="mono">Reg No</th>
-                    <th>Bay No</th>
-                    <th className="ctr">Status</th>
-                    <th className="ts-cell">IN TS</th>
-                    <th className="ts-cell">OUT TS</th>
-                    <th className="ctr">Time Diff</th>
-                    <th>Remark</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignments.map((row) => (
-                    <tr key={row.id}>
-                      <td className="mono ts-cell">{row.job_card_number}</td>
-                      <td className="mono ts-cell">{row.reg_number ?? '—'}</td>
-                      <td className="type-cell">{row.bay_no ?? '—'}</td>
-                      <td className="ctr">
-                        <span className={`pill ${statusPill(row.work_status)}`}>
-                          {statusLabel(row.work_status)}
-                        </span>
-                      </td>
-                      <td className="ts-cell">{formatDateTime(row.assigned_at)}</td>
-                      <td className="ts-cell">{formatDateTime(row.out_ts)}</td>
-                      <td className="ctr ts-cell">—</td>
-                      <td className="remark-cell">{row.remark ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </div>
+          <div className="card__body dense">
+            <div className="tech-drill-grid tech-drill-grid--sm">
+              {dayCards.map((card) => (
+                <button
+                  key={card.dateKey}
+                  type="button"
+                  className={`tech-drill-btn ${selectedDayKey === card.dateKey ? 'is-active' : ''}`}
+                  onClick={() => {
+                    if (selectedDayKey === card.dateKey) {
+                      setSelectedDayKey('')
+                    } else {
+                      setSelectedDayKey(card.dateKey)
+                    }
+                  }}
+                >
+                  <div className="tech-drill-btn__hd">
+                    <div className="tech-drill-btn__title">{card.label}</div>
+                  </div>
+                  <div className="tech-drill-btn__value">{formatCurrency(card.totalIncome)}</div>
+                  <div className="tech-drill-btn__meta">{card.rowCount} rows • {card.completedCount} done</div>
+                </button>
+              ))}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Final JC rows */}
+      {!loading && selectedTechnicianCode && (
+        <div className="card">
+          <div className="card__head">
+            <div>
+              <h3>Job card details</h3>
+              <div className="sub">
+                JC #, Reg #, Bay, Status, IN TS, OUT TS, Time Diff, Remark
+                {selectedDayKey && ` — ${dayCards.find((d) => d.dateKey === selectedDayKey)?.label || 'selected day'}`}
+              </div>
+            </div>
+          </div>
+          <div className="card__body dense">
+            {!selectedDayKey ? (
+              <div className="empty-state">Select a day card above to view rows.</div>
+            ) : finalRows.length === 0 ? (
+              <div className="empty-state">No job card rows for this day.</div>
+            ) : (
+              <div className="tbl-wrap scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th className="mono">JC Number</th>
+                      <th className="mono">Reg No</th>
+                      <th>Bay No</th>
+                      <th className="ctr">Status</th>
+                      <th className="ts-cell">IN TS</th>
+                      <th className="ts-cell">OUT TS</th>
+                      <th className="ctr">Time Diff</th>
+                      <th>Remark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finalRows.map((row) => (
+                      <tr key={row.id}>
+                        <td className="mono ts-cell">{row.job_card_number}</td>
+                        <td className="mono ts-cell">{row.reg_number ?? '—'}</td>
+                        <td className="type-cell">{row.bay_no ?? '—'}</td>
+                        <td className="ctr">
+                          <span className={`pill ${statusPill(row.work_status)}`}>
+                            {statusLabel(row.work_status)}
+                          </span>
+                        </td>
+                        <td className="ts-cell">{formatDateTime(row.assigned_at)}</td>
+                        <td className="ts-cell">{formatDateTime(row.out_ts)}</td>
+                        <td className="ctr ts-cell">{row.time_diff ?? '—'}</td>
+                        <td className="remark-cell">{row.remark ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
