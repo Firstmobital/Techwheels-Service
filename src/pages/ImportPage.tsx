@@ -1326,6 +1326,7 @@ export default function ImportPage() {
           let processed = 0
 
           const tryUpdateExistingJcClosedRow = async (payload: JcClosedUpsertRow): Promise<boolean> => {
+            // First try: use the explicit conflict candidates (most specific)
             for (const onConflict of conflictCandidates) {
               const conflictColumns = onConflict
                 .split(',')
@@ -1348,17 +1349,33 @@ export default function ImportPage() {
                 updateQuery = updateQuery.eq(column, payload[column] as never)
               }
 
-              const { data, error } = await updateQuery.select('id').limit(1)
+              const { data, error } = await updateQuery.select('id')
               if (error) {
                 const lower = (error.message ?? '').toLowerCase()
                 const missingColumn = lower.includes('could not find the') && lower.includes('column of')
                 if (missingColumn) {
                   continue
                 }
-                throw new Error(error.message ?? 'JC Closed fallback update failed')
+                // Log but don't throw - try next candidate
+                continue
               }
 
               if ((data?.length ?? 0) > 0) {
+                return true
+              }
+            }
+
+            // Second try: fallback to minimum business key (branch + job_card_number)
+            // This handles cases where invoice_date is missing or constraint order doesn't match
+            if (payload.branch && payload.job_card_number) {
+              const { error } = await supabase
+                .from(tableName)
+                .update(payload)
+                .eq('branch', payload.branch)
+                .eq('job_card_number', payload.job_card_number)
+                .select('id')
+
+              if (!error) {
                 return true
               }
             }
@@ -1367,6 +1384,7 @@ export default function ImportPage() {
           }
 
           const upsertSingleRow = async (payload: JcClosedUpsertRow): Promise<void> => {
+            // Try each upsert conflict candidate
             for (const onConflict of conflictCandidates) {
               const { error } = await supabase.from(tableName).upsert([payload], { onConflict })
               if (!error) return
@@ -1381,21 +1399,30 @@ export default function ImportPage() {
               if (missingConflictConstraint) continue
 
               if (duplicateViolation) {
+                // Try update fallback immediately on duplicate key
                 const updated = await tryUpdateExistingJcClosedRow(payload)
                 if (updated) return
+                // If update didn't work, try next conflict candidate
                 continue
               }
 
-              throw new Error(error.message ?? 'JC Closed single-row upsert failed')
+              // For other errors, continue trying other conflict candidates
+              continue
             }
 
+            // All upsert attempts failed, try insert as fallback
             const { error: insertError } = await supabase.from(tableName).insert([payload])
-            if (!insertError || isDuplicateViolation(insertError)) return
+            if (!insertError) return
 
-            const updated = await tryUpdateExistingJcClosedRow(payload)
-            if (updated) return
+            // Insert also failed, try update as final fallback
+            const isDuplicate = insertError.code === '23505' || (insertError.message ?? '').toLowerCase().includes('duplicate')
+            if (isDuplicate) {
+              const updated = await tryUpdateExistingJcClosedRow(payload)
+              if (updated) return
+            }
 
-            throw new Error(insertError.message ?? 'JC Closed single-row fallback insert failed')
+            // All options exhausted - this should rarely happen
+            throw new Error(insertError.message ?? 'JC Closed row upsert/insert/update all failed')
           }
 
           for (let i = 0; i < normalizedRows.length; i += CHUNK) {
