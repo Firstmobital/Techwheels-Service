@@ -3,7 +3,7 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-08 07:35 UTC  
+**Last Updated**: 2026-06-08 08:05 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-08)
@@ -70,7 +70,11 @@ Progress update (2026-06-08, staged tightening):
   - `anon_table_grants = 322`
   - `anon_function_grants = 31`
   - Observed `{public}`-role policy families on: `documents`, `estimate_rows`, `job_cards`, `email_logs`, `panel_photos`, `panels`, `modules`, `users`, `user_module_permissions`, `vehicles`.
-  - Next gate: apply dashboard restriction and confirm post-check reduction with no auth regression.
+  - Post-check attempt currently shows no reduction (still `25 / 322 / 31`).
+  - Dashboard-only status change was insufficient for effective grant/policy reduction.
+  - DB-level unblock path prepared:
+    - Migration: `20260608182000_p0_04_restrict_anon_public_surface.sql`
+    - Checks: `20260608182000_p0_04_restrict_anon_public_surface_checks.sql`
 
 ### Execution Update (2026-06-01)
 
