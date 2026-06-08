@@ -100,8 +100,8 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 
 | ID | Priority | Task | Owner | Status | Start Date | Target Date | Evidence | Last Update | Next Action |
 |---|---|---|---|---|---|---|---|---|---|
-| P0-01 | Critical | Export and classify all 22 Advisor issues | Team | In Progress | 2026-06-08 |  | Initial export: 23 errors. Post Fix 1: 21 errors. Post Fix 2: 20 errors (`rls_disabled_in_public` only; `security_definer_view` cleared). | 2026-06-08 | Execute Fix 3 for `user_employee_links` + `audit_logs`, rerun Advisor, then continue remaining table batches |
-| P0-02 | Critical | Enable RLS on exposed public tables | Team | In Progress | 2026-06-08 |  | Fix 1 and Fix 2 executed and validated by Advisor deltas. Fix 3 prepared: `supabase/migrations/20260608103000_p0_fix3_enable_rls_user_links_audit_logs.sql` (RLS + baseline non-breaking policies for sensitive linkage/audit tables). | 2026-06-08 | Execute Fix 3 migration and rerun Advisor; then batch remaining RLS-disabled tables by domain |
+| P0-01 | Critical | Export and classify all 22 Advisor issues | Team | In Progress | 2026-06-08 |  | Initial export: 23 errors. Post Fix 1: 21 errors. Post Fix 2: 20 errors. Post Fix 3: 18 errors (all are `rls_disabled_in_public`). | 2026-06-08 | Execute Fix 4 remaining-table batch and rerun Advisor |
+| P0-02 | Critical | Enable RLS on exposed public tables | Team | In Progress | 2026-06-08 |  | Fix 1, Fix 2, and Fix 3 executed and validated by Advisor deltas. Fix 4 prepared: `supabase/migrations/20260608104500_p0_fix4_enable_rls_remaining_tables_baseline.sql` for the remaining 18 tables (RLS + authenticated CRUD baseline policies). | 2026-06-08 | Execute Fix 4 migration and rerun Advisor; if clear, start policy-tightening pass |
 | P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | Not Started |  |  |  | 2026-06-04 | Map policies to each API path |
 | P0-04 | High | Restrict `anon` API key permissions in settings | Team | Not Started |  |  |  | 2026-06-04 | Validate no frontend breakage after restriction |
 | P0-05 | High | Enable leaked-password protection in Auth | Team | Not Started |  |  |  | 2026-06-04 | Toggle and test signup/login failure path |
@@ -145,6 +145,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Recorded post-Fix-1 Advisor delta (23 -> 21 errors) and created Fix 2 migration to set `vw_parts_stock_health` as `security_invoker` |
 | 2026-06-08 | Copilot | Logged Fix 2 execution; checked authoritative dump mirror for next sensitive tables (`audit_logs`, `user_employee_links`) and confirmed table presence with no current RLS/policy entries in active dump |
 | 2026-06-08 | Copilot | Logged post-Fix-2 Advisor delta (21 -> 20 errors, all RLS-disabled), and created Fix 3 migration for `user_employee_links` + `audit_logs` with baseline RBAC-safe policies |
+| 2026-06-08 | Copilot | Logged post-Fix-3 Advisor delta (20 -> 18 errors) and created Fix 4 migration to enable RLS + baseline authenticated policies for all remaining flagged tables |
 
 ## 7) Update Protocol For Future Chats
 
