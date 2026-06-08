@@ -157,11 +157,9 @@ export default function TechnicianPage() {
       const userId = authRes.data.user?.id
       if (!userId) {
         setAssignments([])
-        setTechnicianCodes([])
         setSelectedTechnicianCode('')
         setSelectedDayKey('')
         setSelectedVehicleOnDayKey('')
-        setIsAdmin(false)
         setLoading(false)
         return
       }
@@ -173,7 +171,6 @@ export default function TechnicianPage() {
         .maybeSingle()
 
       const userIsAdmin = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase() === 'admin'
-      setIsAdmin(userIsAdmin)
 
       const assignmentRows: TechnicianAssignmentRow[] = []
       let from = 0
@@ -209,7 +206,6 @@ export default function TechnicianPage() {
           .map((row) => String(row.technician_code ?? '').trim().toUpperCase())
           .filter(Boolean),
       ))
-      setTechnicianCodes(visibleTechnicianCodes)
 
       const assignmentJcNumbers = Array.from(new Set(
         assignmentRows
@@ -334,11 +330,9 @@ export default function TechnicianPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load technician data')
       setAssignments([])
-      setTechnicianCodes([])
       setSelectedTechnicianCode('')
       setSelectedDayKey('')
       setSelectedVehicleOnDayKey('')
-      setIsAdmin(false)
     } finally {
       setLoading(false)
     }
