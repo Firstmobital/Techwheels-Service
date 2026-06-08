@@ -1395,6 +1395,24 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   color: var(--muted);
 }
 
+.tech-share-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 180px)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.tech-share-field {
+  margin: 0;
+}
+
+.tech-share-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 1400px) {
   .tech-drill-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1419,6 +1437,11 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   .tech-drill-grid,
   .tech-drill-grid--sm {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tech-share-controls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }
 

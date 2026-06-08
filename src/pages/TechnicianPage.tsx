@@ -15,6 +15,7 @@ type TechnicianAssignmentRow = {
   time_diff: string | null
   remark: string | null
   reg_number?: string | null
+  gross_labour_amount?: number
   technician_income?: number
 }
 
@@ -55,6 +56,8 @@ type VehicleOnDayCard = {
 }
 
 const QUERY_PAGE_SIZE = 1000
+const DEFAULT_PV_SHARE_PERCENT = 20
+const DEFAULT_EV_SHARE_PERCENT = 25
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
@@ -140,10 +143,36 @@ function getIncomeDateKey(assignment: TechnicianAssignmentRow, revenue: RevenueR
   return parsedDate.toISOString().slice(0, 10)
 }
 
+function normalizeSharePercentInput(value: string, fallback: number): number {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return fallback
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(100, Math.max(0, parsed))
+}
+
+function calculateTechnicianIncome(
+  grossLabourAmount: number,
+  bayNo: string | null | undefined,
+  pvSharePercent: number,
+  evSharePercent: number,
+): number {
+  if (!Number.isFinite(grossLabourAmount) || grossLabourAmount <= 0) return 0
+  const fuel = extractFuelFromBay(bayNo)
+  const sharePercent = fuel === 'EV' ? evSharePercent : pvSharePercent
+  const netBeforeShare = grossLabourAmount / 1.18
+  return netBeforeShare * (sharePercent / 100)
+}
+
 export default function TechnicianPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<TechnicianAssignmentRow[]>([])
+  const [canEditSharePercent, setCanEditSharePercent] = useState(false)
+  const [pvSharePercent, setPvSharePercent] = useState(DEFAULT_PV_SHARE_PERCENT)
+  const [evSharePercent, setEvSharePercent] = useState(DEFAULT_EV_SHARE_PERCENT)
+  const [draftPvSharePercent, setDraftPvSharePercent] = useState(String(DEFAULT_PV_SHARE_PERCENT))
+  const [draftEvSharePercent, setDraftEvSharePercent] = useState(String(DEFAULT_EV_SHARE_PERCENT))
   const [selectedTechnicianCode, setSelectedTechnicianCode] = useState('')
   const [selectedDayKey, setSelectedDayKey] = useState('')
   const [selectedVehicleOnDayKey, setSelectedVehicleOnDayKey] = useState('')
@@ -157,12 +186,24 @@ export default function TechnicianPage() {
       const userId = authRes.data.user?.id
       if (!userId) {
         setAssignments([])
+        setCanEditSharePercent(false)
         setSelectedTechnicianCode('')
         setSelectedDayKey('')
         setSelectedVehicleOnDayKey('')
         setLoading(false)
         return
       }
+
+      const profileRes = await supabase
+        .from('users')
+        .select('role, is_active')
+        .eq('id', userId)
+        .maybeSingle()
+
+      const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+      const isActive = (profileRes.data as { is_active?: boolean | null } | null)?.is_active
+      const roleCanEdit = role === 'super_admin' || role === 'super admin' || role === 'admin'
+      setCanEditSharePercent(roleCanEdit && isActive !== false)
 
       const assignmentRows: TechnicianAssignmentRow[] = []
       let from = 0
@@ -282,7 +323,7 @@ export default function TechnicianPage() {
       }
 
       // Add reg_number to assignment rows
-      const incomeByJc = new Map<string, number>()
+      const grossByJc = new Map<string, number>()
 
       completed.forEach((assignment) => {
         const jc = String(assignment.job_card_number ?? '').trim().toUpperCase()
@@ -296,12 +337,7 @@ export default function TechnicianPage() {
         const dateKey = getIncomeDateKey(assignment, revenue)
         if (!dateKey) return
 
-        const fuel = extractFuelFromBay(assignment.bay_no)
-        const shareRate = fuel === 'EV' ? 0.25 : 0.2
-        const netBeforeShare = gross / 1.18
-        const technicianIncome = netBeforeShare * shareRate
-
-        incomeByJc.set(jc, technicianIncome)
+        grossByJc.set(jc, gross)
       })
 
       const enrichedAssignmentRows = assignmentRows.map((row) => {
@@ -309,13 +345,14 @@ export default function TechnicianPage() {
         return {
           ...row,
           reg_number: regNumberMap.get(jc) ?? null,
-          technician_income: incomeByJc.get(jc) ?? 0,
+          gross_labour_amount: grossByJc.get(jc) ?? 0,
         }
       })
       setAssignments(enrichedAssignmentRows)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load technician data')
       setAssignments([])
+      setCanEditSharePercent(false)
       setSelectedTechnicianCode('')
       setSelectedDayKey('')
       setSelectedVehicleOnDayKey('')
@@ -328,10 +365,35 @@ export default function TechnicianPage() {
     void loadData()
   }, [])
 
+  const assignmentsWithIncome = useMemo<TechnicianAssignmentRow[]>(() => {
+    return assignments.map((row) => ({
+      ...row,
+      technician_income: calculateTechnicianIncome(
+        Number(row.gross_labour_amount ?? 0),
+        row.bay_no,
+        pvSharePercent,
+        evSharePercent,
+      ),
+    }))
+  }, [assignments, pvSharePercent, evSharePercent])
+
+  const parsedDraftPvSharePercent = useMemo(
+    () => normalizeSharePercentInput(draftPvSharePercent, pvSharePercent),
+    [draftPvSharePercent, pvSharePercent],
+  )
+
+  const parsedDraftEvSharePercent = useMemo(
+    () => normalizeSharePercentInput(draftEvSharePercent, evSharePercent),
+    [draftEvSharePercent, evSharePercent],
+  )
+
+  const hasPendingShareChanges =
+    parsedDraftPvSharePercent !== pvSharePercent || parsedDraftEvSharePercent !== evSharePercent
+
   const technicianCards = useMemo<TechnicianSummaryCard[]>(() => {
     const byTechnician = new Map<string, TechnicianSummaryCard & { days: Set<string> }>()
 
-    assignments.forEach((row) => {
+    assignmentsWithIncome.forEach((row) => {
       const code = String(row.technician_code ?? '').trim().toUpperCase()
       if (!code) return
 
@@ -361,7 +423,7 @@ export default function TechnicianPage() {
         if (b.totalIncome !== a.totalIncome) return b.totalIncome - a.totalIncome
         return b.rowCount - a.rowCount
       })
-  }, [assignments])
+  }, [assignmentsWithIncome])
 
   useEffect(() => {
     if (technicianCards.length === 0) {
@@ -384,8 +446,8 @@ export default function TechnicianPage() {
   const selectedTechnicianRows = useMemo(() => {
     const code = String(selectedTechnicianCode ?? '').trim().toUpperCase()
     if (!code) return []
-    return assignments.filter((row) => String(row.technician_code ?? '').trim().toUpperCase() === code)
-  }, [assignments, selectedTechnicianCode])
+    return assignmentsWithIncome.filter((row) => String(row.technician_code ?? '').trim().toUpperCase() === code)
+  }, [assignmentsWithIncome, selectedTechnicianCode])
 
   const dayCards = useMemo<DayWiseCard[]>(() => {
     const byDay = new Map<string, DayWiseCard>()
@@ -517,7 +579,7 @@ export default function TechnicianPage() {
             Technician
           </p>
           <h1>Technician earnings tracker</h1>
-          <p>Drill down: technician → vehicle → job card details (JC #, Reg, Bay, Status, IN/OUT TS, Time Diff, Remark).</p>
+          <p>Drill down: technician → day → vehicle → job card details (JC #, Reg, Bay, Status, IN/OUT TS, Time Diff, Remark).</p>
         </div>
       </div>
 
@@ -550,13 +612,77 @@ export default function TechnicianPage() {
         </div>
       </div>
 
+      {!loading && canEditSharePercent && (
+        <div className="card mb-gap">
+          <div className="card__head">
+            <div>
+              <h3>Earnings percentage settings</h3>
+              <div className="sub">Set PV/EV technician share for this screen. Values apply instantly after clicking Apply.</div>
+            </div>
+          </div>
+          <div className="card__body dense">
+            <div className="tech-share-controls">
+              <label className="field field--no-gap tech-share-field">
+                <span className="label">PV share %</span>
+                <input
+                  className="inp"
+                  inputMode="decimal"
+                  value={draftPvSharePercent}
+                  onChange={(e) => setDraftPvSharePercent(e.target.value)}
+                  onBlur={() => setDraftPvSharePercent(String(parsedDraftPvSharePercent))}
+                  placeholder="e.g. 20"
+                />
+              </label>
+
+              <label className="field field--no-gap tech-share-field">
+                <span className="label">EV share %</span>
+                <input
+                  className="inp"
+                  inputMode="decimal"
+                  value={draftEvSharePercent}
+                  onChange={(e) => setDraftEvSharePercent(e.target.value)}
+                  onBlur={() => setDraftEvSharePercent(String(parsedDraftEvSharePercent))}
+                  placeholder="e.g. 25"
+                />
+              </label>
+
+              <div className="tech-share-actions">
+                <button
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  onClick={() => {
+                    setPvSharePercent(parsedDraftPvSharePercent)
+                    setEvSharePercent(parsedDraftEvSharePercent)
+                  }}
+                  disabled={!hasPendingShareChanges}
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => {
+                    setPvSharePercent(DEFAULT_PV_SHARE_PERCENT)
+                    setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
+                    setDraftPvSharePercent(String(DEFAULT_PV_SHARE_PERCENT))
+                    setDraftEvSharePercent(String(DEFAULT_EV_SHARE_PERCENT))
+                  }}
+                >
+                  Reset default
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Technician cards */}
       {!loading && technicianCards.length > 0 && (
         <div className="card mb-gap">
           <div className="card__head">
             <div>
               <h3>Earnings by technician</h3>
-              <div className="sub">Sorted highest to lowest. Income = (Labour ÷ 1.18) × 20% (PV) or 25% (EV).</div>
+              <div className="sub">Sorted highest to lowest. Income = (Labour ÷ 1.18) × {pvSharePercent}% (PV) or {evSharePercent}% (EV).</div>
             </div>
           </div>
           <div className="card__body dense">
