@@ -74,12 +74,56 @@ interface FunctionInvokeError extends Error {
   context?: Response
 }
 
+function normalizeDealerCodes(value: unknown): string[] | null {
+  const normalizeList = (input: unknown[]): string[] => {
+    const normalized = Array.from(
+      new Set(
+        input
+          .map((item) => String(item ?? '').trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    )
+    return normalized
+  }
+
+  if (Array.isArray(value)) {
+    const normalized = normalizeList(value)
+    return normalized.length > 0 ? normalized : null
+  }
+
+  if (typeof value === 'string') {
+    const raw = value.trim()
+    if (!raw) return null
+
+    if ((raw.startsWith('[') && raw.endsWith(']')) || (raw.startsWith('"[') && raw.endsWith(']"'))) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          const normalized = normalizeList(parsed)
+          return normalized.length > 0 ? normalized : null
+        }
+      } catch {
+        // Fall through to split-based parsing
+      }
+    }
+
+    const splitCodes = normalizeList(raw.split(/[\s,]+/))
+    return splitCodes.length > 0 ? splitCodes : null
+  }
+
+  return null
+}
+
 function isMissingDealerColumnError(error: unknown): boolean {
   const message =
     typeof error === 'object' && error !== null && 'message' in error
       ? String((error as { message?: unknown }).message ?? '')
       : ''
   return /dealer_code|dealer_name|column/i.test(message)
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -100,18 +144,19 @@ async function syncDealerToAuthMeta(
   dealerCode:  string | null,
   dealerName:  string | null,
   dealerCodes?: string[] | null,
-) {
+) : Promise<{ ok: boolean; error?: string }> {
   try {
     const { error } = await supabase.functions.invoke('sync-dealer-metadata', {
       body: { userId, dealerCode, dealerName, dealerCodes },
     })
     if (error) {
       console.warn('sync-dealer-metadata failed:', error)
-      // Non-fatal: user can re-login to pick up JWT changes
+      return { ok: false, error: error.message || 'sync-dealer-metadata failed' }
     }
+    return { ok: true }
   } catch (err) {
     console.warn('Edge function call failed:', err)
-    // Non-fatal: user can re-login to pick up JWT changes
+    return { ok: false, error: err instanceof Error ? err.message : 'Edge function call failed' }
   }
 }
 
@@ -155,6 +200,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast]     = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [supportsDealerColumns, setSupportsDealerColumns] = useState(true)
+  const [usersLoadMode, setUsersLoadMode] = useState<'edge' | 'fallback'>('edge')
+  const [usersEdgeError, setUsersEdgeError] = useState<string | null>(null)
 
   // Add user modal
   const [showAddUser, setShowAddUser]   = useState(false)
@@ -213,7 +260,7 @@ export default function AdminPage() {
         id: session.user.id,
         dealer_code: session.user.user_metadata?.dealer_code ?? null,
         dealer_name: session.user.user_metadata?.dealer_name ?? null,
-        dealer_codes: session.user.user_metadata?.dealer_codes ?? null,
+        dealer_codes: normalizeDealerCodes(session.user.user_metadata?.dealer_codes),
       })
     }
   }
@@ -223,6 +270,8 @@ export default function AdminPage() {
     if (!withPhone.error) {
       const payload = withPhone.data as UsersWithPhoneResponse | null
       if (payload?.users && Array.isArray(payload.users)) {
+        setUsersLoadMode('edge')
+        setUsersEdgeError(null)
         setSupportsDealerColumns(payload.supportsDealerColumns ?? true)
         setUsers(
           payload.users.map((u) => ({
@@ -234,7 +283,7 @@ export default function AdminPage() {
             branch: u.branch ?? null,
             dealer_code: u.dealer_code ?? null,
             dealer_name: u.dealer_name ?? null,
-            dealer_codes: Array.isArray(u.dealer_codes) ? u.dealer_codes : null,
+            dealer_codes: normalizeDealerCodes(u.dealer_codes),
             is_active: u.is_active,
             created_at: u.created_at,
           }))
@@ -242,6 +291,9 @@ export default function AdminPage() {
         return
       }
     }
+
+    setUsersLoadMode('fallback')
+    setUsersEdgeError(await extractFunctionErrorMessage(withPhone.error))
 
     const withDealer = await supabase
       .from('users')
@@ -504,7 +556,7 @@ export default function AdminPage() {
 
     const explicitPrimary = editDealerCode.trim().toUpperCase()
     const primaryCode = explicitPrimary || parsedCodes[0] || ''
-    const dealerCodes = parsedCodes
+    const dealerCodes = Array.from(new Set([primaryCode, ...parsedCodes].filter(Boolean)))
 
     const code = primaryCode || null
     const name = editDealerName.trim() || null
@@ -528,19 +580,87 @@ export default function AdminPage() {
     }
 
     // 2. Sync into auth.users.raw_user_meta_data so JWT contains dealer scope on next login
-    await syncDealerToAuthMeta(dealerEditUser.id, code, name, dealerCodes.length > 0 ? dealerCodes : null)
+    const metaSyncResult = await syncDealerToAuthMeta(
+      dealerEditUser.id,
+      code,
+      name,
+      dealerCodes.length > 0 ? dealerCodes : null,
+    )
+
+    if (!metaSyncResult.ok) {
+      setSavingDealer(false)
+      showToastMsg(`Dealer metadata sync failed: ${metaSyncResult.error ?? 'Unknown error'}`, 'error')
+      return
+    }
+
+    // 3. Validate persisted values from server before confirming success in UI.
+    // Auth metadata can take a short moment to reflect via admin users API.
+    let validatedFromServer = false
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const validationRes = await supabase.functions.invoke('list-users-with-phone', { body: {} })
+      if (!validationRes.error) {
+        const payload = validationRes.data as UsersWithPhoneResponse | null
+        if (payload?.users && Array.isArray(payload.users)) {
+          setSupportsDealerColumns(payload.supportsDealerColumns ?? true)
+          setUsers(
+            payload.users.map((u) => ({
+              id: u.id,
+              email: u.email,
+              phone: u.phone ?? null,
+              full_name: u.full_name ?? null,
+              role: u.role,
+              branch: u.branch ?? null,
+              dealer_code: u.dealer_code ?? null,
+              dealer_name: u.dealer_name ?? null,
+              dealer_codes: normalizeDealerCodes(u.dealer_codes),
+              is_active: u.is_active,
+              created_at: u.created_at,
+            }))
+          )
+
+          const saved = payload.users.find((user) => user.id === dealerEditUser.id)
+          if (saved) {
+            const normalizedSavedCodes = normalizeDealerCodes(saved.dealer_codes) ?? []
+            const serverCodes = Array.from(
+              new Set(
+                [saved.dealer_code, ...normalizedSavedCodes]
+                  .map((value) => String(value ?? '').trim().toUpperCase())
+                  .filter(Boolean),
+              ),
+            )
+            const expectedCodes = Array.from(new Set(dealerCodes.map((value) => String(value).trim().toUpperCase()).filter(Boolean)))
+            const codesMatch = expectedCodes.every((expectedCode) => serverCodes.includes(expectedCode))
+            const nameMatch = (String(saved.dealer_name ?? '').trim() || null) === name
+            validatedFromServer = code ? serverCodes.includes(code) && codesMatch && nameMatch : serverCodes.length === 0 && nameMatch
+            if (validatedFromServer) break
+          }
+        }
+      }
+
+      if (attempt < 3) {
+        await wait(500)
+      }
+    }
+
+    if (!validatedFromServer) {
+      await loadUsers()
+      setSavingDealer(false)
+      setDealerEditUser(null)
+      showToastMsg('Dealer saved, but validation is still syncing. Please refresh in a few seconds to confirm.', 'success')
+      return
+    }
 
     setSavingDealer(false)
     setDealerEditUser(null)
-    await loadUsers()
+
     if (usersUpdateSkippedReason) {
-      showToastMsg(`Dealer fallback metadata set in auth. public.users update skipped (${usersUpdateSkippedReason}). User must re-login for JWT fallback updates.`, 'success')
+      showToastMsg(`Dealer saved in auth metadata (database). public.users update skipped (${usersUpdateSkippedReason}). Dealer visibility in this schema comes from auth metadata + active mappings.`, 'success')
       return
     }
 
     showToastMsg(
       error && isMissingDealerColumnError(error)
-        ? 'Dealer fallback metadata updated in auth. public.users dealer columns are not present in this schema. Manage primary dealer scope in Admin → Mappings.'
+        ? 'Dealer saved in auth metadata (database). This schema does not use public.users dealer columns; Dealer display comes from auth metadata + active mappings.'
         : 'Dealer metadata saved. For SM/GM, Additional Dealer Codes control SA visibility; if left blank, scope falls back to mapped dealer codes. User must re-login for JWT updates.'
     )
   }
@@ -835,6 +955,16 @@ export default function AdminPage() {
               <b>Governance split:</b> Platform role in this screen controls admin/security posture. Business persona roles (SA/CRM/TECHNICIAN/FLOOR INCHARGE/SM/GM) are mastered in Settings → Employee Master and mapped via Admin → Mappings.
             </div>
           </div>
+
+          {usersLoadMode === 'fallback' && (
+            <div className="note note--warn" style={{ marginBottom: 12 }}>
+              <span className="ic"><Icon name="alert" size={17} strokeWidth={1.9} /></span>
+              <div>
+                <b>Admin data source fallback active:</b> <code>list-users-with-phone</code> failed, so phone numbers and some dealer metadata may be missing.
+                {usersEdgeError && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--faint)' }}>Error: {usersEdgeError}</div>}
+              </div>
+            </div>
+          )}
 
           <div className="card">
             <div className="tbl-wrap scroll">
