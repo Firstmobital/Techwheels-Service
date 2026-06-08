@@ -224,7 +224,6 @@ export default function ServiceAdvisorPage() {
   const waGroupNamePrefix = DEFAULT_GROUP_NAME_PREFIX
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
-  const [allRows, setAllRows] = useState<ReceptionEntryRow[]>([])
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set())
   const [isAdmin, setIsAdmin] = useState(false)
@@ -659,7 +658,6 @@ export default function ServiceAdvisorPage() {
 
     if (res.error) {
       setRows([])
-      setAllRows([])
       setDrafts({})
       setDirtyRowIds(new Set())
       setLoading(false)
@@ -669,13 +667,11 @@ export default function ServiceAdvisorPage() {
 
     const data = res.data ?? []
     if (nextIsAdmin) {
-      setAllRows(data)
       setRows(data)
       setSelectedBranch('all')
       setSelectedAdvisor('all')
     } else {
       setRows(data)
-      setAllRows(data)
       setSelectedAdvisor('all')
     }
 
