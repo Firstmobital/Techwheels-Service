@@ -3,8 +3,45 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-06 17:35 UTC  
+**Last Updated**: 2026-06-08 04:45 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-06-08)
+
+- Security Advisor error-elimination track completed (Errors = 0) via four executed migrations:
+  - `20260608100000_p0_fix1_enable_rls_job_card_closed_data.sql`
+  - `20260608101500_p0_fix2_set_vw_parts_stock_health_security_invoker.sql`
+  - `20260608103000_p0_fix3_enable_rls_user_links_audit_logs.sql`
+  - `20260608104500_p0_fix4_enable_rls_remaining_tables_baseline.sql`
+- Full pre-tightening compatibility audit completed across:
+  - Web frontend query paths (`src/**`)
+  - Mobile frontend query paths (`mobile/src/**`)
+  - Authoritative database mirror (`local_folder/backups/chunks/full_database.sql.part_*`)
+
+Authoritative findings (current mirror wins over older assumptions):
+- All previously flagged RLS-disabled tables exist and are now RLS-enabled in mirror.
+- Current mirror policy text now contains both families on the same table domains:
+  - `admin_unrestricted_all_ops_v1` (admin bypass)
+  - `p0_auth_select/insert/update/delete` (broad authenticated baseline)
+- RBAC helper functions used by frontend remain present in mirror:
+  - `is_admin`, `has_module_view`, `has_module_modify`, `has_module_delete`, `get_all_my_permissions`, `my_dealer_code`, `my_sa_employee_code`, `user_has_employee_code`.
+
+No-break compatibility constraints locked before tightening:
+- Do not remove authenticated read continuity for report-critical tables used in both web and mobile:
+  - `service_vas_jc_data`, `service_invoice_data`, `service_invoice_order_data`, `warranty_*`.
+- Preserve settings pendency resolver workflow rights:
+  - `import_employee_mapping_issues` read/update
+  - `service_vas_jc_data` targeted update for employee-code backfill.
+- Preserve floor-incharge mobile listing continuity:
+  - `open_job_cards` SELECT.
+- Preserve auth/dealer-context linkage behavior:
+  - `user_employee_links` must keep admin CRUD and self-scope read paths required by auth resolution logic.
+
+Tightening execution contract (starting next phase):
+- Replace `p0_auth_*` policies table-by-table, never all at once.
+- For each table batch, create scoped replacement policy first, then remove broad policy.
+- Validate impacted screens (web + mobile) immediately after each batch before continuing.
+- If any conflict appears between docs and mirror policy text, mirror policy text is authoritative.
 
 ### Execution Update (2026-06-01)
 

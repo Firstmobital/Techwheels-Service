@@ -100,9 +100,9 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 
 | ID | Priority | Task | Owner | Status | Start Date | Target Date | Evidence | Last Update | Next Action |
 |---|---|---|---|---|---|---|---|---|---|
-| P0-01 | Critical | Export and classify all 22 Advisor issues | Team | In Progress | 2026-06-08 |  | Initial export: 23 errors. Post Fix 1: 21 errors. Post Fix 2: 20 errors. Post Fix 3: 18 errors (all are `rls_disabled_in_public`). | 2026-06-08 | Execute Fix 4 remaining-table batch and rerun Advisor |
-| P0-02 | Critical | Enable RLS on exposed public tables | Team | In Progress | 2026-06-08 |  | Fix 1, Fix 2, and Fix 3 executed and validated by Advisor deltas. Fix 4 prepared: `supabase/migrations/20260608104500_p0_fix4_enable_rls_remaining_tables_baseline.sql` for the remaining 18 tables (RLS + authenticated CRUD baseline policies). | 2026-06-08 | Execute Fix 4 migration and rerun Advisor; if clear, start policy-tightening pass |
-| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | Not Started |  |  |  | 2026-06-04 | Map policies to each API path |
+| P0-01 | Critical | Export and classify all 22 Advisor issues | Team | Done | 2026-06-08 | 2026-06-08 | Full advisor inventory captured and tracked across four fix batches; final rerun shows Security Advisor Errors = 0 | 2026-06-08 | - |
+| P0-02 | Critical | Enable RLS on exposed public tables | Team | Done | 2026-06-08 | 2026-06-08 | Fixes 1-4 executed (`20260608100000`, `20260608101500`, `20260608103000`, `20260608104500`); final rerun shows all `rls_disabled_in_public` errors cleared | 2026-06-08 | - |
+| P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | In Progress | 2026-06-08 |  | Baseline authenticated CRUD policies were added to clear hard errors safely; tightening pass still required to replace broad rules with module/dealer scoped RBAC policies | 2026-06-08 | Start tightening pass by domain: warranty -> service imports -> staging/backup tables |
 | P0-04 | High | Restrict `anon` API key permissions in settings | Team | Not Started |  |  |  | 2026-06-04 | Validate no frontend breakage after restriction |
 | P0-05 | High | Enable leaked-password protection in Auth | Team | Not Started |  |  |  | 2026-06-04 | Toggle and test signup/login failure path |
 | P1-01 | Critical | Move app DB connection usage to pooler URL | Team | Not Started |  |  |  | 2026-06-04 | Identify all runtime connection string consumers |
@@ -130,6 +130,7 @@ Use one line per update so trend changes are visible over time.
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
 | 2026-06-08 | 64% | 2% | 27% | 16/60 | 3 (unchanged in latest screenshot context) | 1+ | 446 | 43 | Added Query Performance hotlist from production logs; memory usage ~408 MB and commitment ~1.33 GB during observed hour |
+| 2026-06-08 10:08 | - | - | - | - | 0 | 121 | - | - | Security Advisor milestone reached: no errors detected after Fix 4 execution |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -146,6 +147,7 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Logged Fix 2 execution; checked authoritative dump mirror for next sensitive tables (`audit_logs`, `user_employee_links`) and confirmed table presence with no current RLS/policy entries in active dump |
 | 2026-06-08 | Copilot | Logged post-Fix-2 Advisor delta (21 -> 20 errors, all RLS-disabled), and created Fix 3 migration for `user_employee_links` + `audit_logs` with baseline RBAC-safe policies |
 | 2026-06-08 | Copilot | Logged post-Fix-3 Advisor delta (20 -> 18 errors) and created Fix 4 migration to enable RLS + baseline authenticated policies for all remaining flagged tables |
+| 2026-06-08 | Copilot | Logged Fix 4 execution and Security Advisor milestone (Errors: 0); transitioned plan from error-clearance to least-privilege policy tightening |
 
 ## 7) Update Protocol For Future Chats
 
@@ -238,6 +240,10 @@ Fix 3 (sensitive data containment)
 
 Execution note:
 - Apply each fix separately and rerun Advisor after each one; record screenshots/evidence per fix before proceeding.
+
+Completion note (2026-06-08):
+- Steps 1-4 completed for error elimination track; Security Advisor now reports 0 errors.
+- Next track is policy hardening quality: replace broad baseline policies with least-privilege RBAC policies table-by-table.
 
 ## 9) Statement Timeout and Latency Hotlist (2026-06-08)
 
@@ -349,3 +355,69 @@ View truth and detected schema drift (authoritative-first):
 Conflict handling applied:
 - Per Rules R7-R10, this plan prefers active local dump truth without reconciliation to prior assumptions.
 - Any remediation/migration decisions must start from this audited object set and not from inferred/missing objects.
+
+## 11) Full Frontend + Dump Compatibility Audit (Pre-Tightening, 2026-06-08)
+
+Audit objective:
+- Verify that next-phase policy tightening will not break existing web/mobile behavior.
+- Restrict evidence to authoritative dump mirror and current frontend query paths.
+
+Authority used for this audit:
+- Mirror source: `local_folder/backups/chunks/full_database.sql.part_*`.
+- Conflict rule applied: if any prior note conflicts with mirror evidence, mirror evidence wins.
+
+### 11.1 Frontend Query Surface (Evidence)
+
+Web application touchpoints that rely on soon-to-tighten tables:
+- `src/pages/SettingsPage.tsx`: reads/updates `import_employee_mapping_issues` and updates `service_vas_jc_data` during pendency resolution workflows.
+- `src/pages/ImportPage.tsx`: upload pipeline writes to import/report tables with insert/upsert and duplicate handling.
+- `src/lib/reportQueries.ts`: paginated read paths over `service_vas_jc_data` and `service_invoice_data` power core reports.
+- `src/lib/warranty/jsonExtraction.ts`: warranty KPI extraction reads `warranty_*` tables and still uses exact-count on `warranty_wc_data`.
+- `src/pages/reports/labour-revenue/*.tsx`: reads `service_invoice_order_data` for labour-revenue reporting.
+- `src/lib/api/userEmployeeLinks.ts` and `src/lib/api/auth.ts`: dealer and mapping resolution paths depend on `user_employee_links` read/write semantics.
+
+Mobile application touchpoints that rely on soon-to-tighten tables:
+- `mobile/src/lib/reportQueries.ts`: heavy paginated reads on `service_vas_jc_data` and `service_invoice_data`.
+- `mobile/src/app/(tabs)/floor-incharge.tsx`: reads `open_job_cards`, `employee_master`, and writes `technician_assignments`.
+- `mobile/src/app/(tabs)/import.tsx`: generic insert/upsert import runner for configured data tables.
+
+### 11.2 Authoritative Dump Cross-Check (2026-06-08)
+
+Confirmed in mirror:
+- All 18 previously flagged tables exist in public schema.
+- Public RBAC helper functions used by frontend are present: `is_admin`, `has_module_view`, `has_module_modify`, `has_module_delete`, `get_all_my_permissions`, `my_dealer_code`, `my_sa_employee_code`, `user_has_employee_code`.
+- RLS is enabled for the previously flagged table set.
+- Policy baseline now includes both:
+	- `admin_unrestricted_all_ops_v1` (admin bypass), and
+	- `p0_auth_select/insert/update/delete` (broad authenticated baseline) on the same table family.
+
+Governance delta note:
+- Section 10 historical snapshot (2026-06-05) remains valuable as point-in-time evidence, but current mirror now reflects post-fix policy state.
+- Any upcoming tightening must start from this current mirror policy baseline, not from the older pre-fix snapshot.
+
+### 11.3 No-Break Guardrails For Tightening
+
+Do not remove required read paths before replacement policies are validated:
+- Keep authenticated read continuity for `service_vas_jc_data`, `service_invoice_data`, and `service_invoice_order_data` (web + mobile report stack).
+- Keep authenticated read continuity for `warranty_*` tables used by warranty overview/extraction paths.
+- Keep authenticated read/update continuity for `import_employee_mapping_issues` and update path for `service_vas_jc_data` used by settings pendency resolution.
+- Keep authenticated read continuity for `open_job_cards` for floor-incharge mobile screen.
+- Keep `user_employee_links` compatibility: admin CRUD + self-scope reads required by auth context resolution flows.
+
+Tightening method contract:
+- Migrate table-by-table by domain.
+- For each table, replace `p0_auth_*` only after introducing scoped policy equivalent.
+- Validate affected web/mobile screens immediately after each table batch.
+
+### 11.4 Tightening Order (Risk-Managed)
+
+1. Warranty tables (`warranty_*`): convert broad authenticated policies to admin + explicit module/dealer-scoped read/write where applicable.
+2. Service reporting tables (`service_vas_jc_data`, `service_invoice_data`, `service_invoice_order_data`, `service_jc_parts_data`): preserve report reads while constraining writes.
+3. Import and reconciliation tables (`import_employee_mapping_issues`, `pending_drive_uploads`, `open_job_cards_import_staging`): scope write paths to importer/admin roles.
+4. Operational/staging tables (`cancel_job_card`, `closed_but_not_invoiced`, `open_job_cards`, `job_card_closed_data_duplicates_backup`): restrict to explicit operational roles/admin.
+
+### 11.5 Exit Gate Before First Tightening Migration
+
+- Gate T1: This audit section reviewed and accepted.
+- Gate T2: Current authoritative mirror considered source of truth for policy text.
+- Gate T3: First tightening batch includes rollback SQL and post-check query list.
