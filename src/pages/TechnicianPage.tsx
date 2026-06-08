@@ -30,14 +30,6 @@ type ReceptionEntryRow = {
   reg_number: string | null
 }
 
-type IncomeDayRow = {
-  date: string
-  jobsCount: number
-  grossRevenue: number
-  netBeforeShare: number
-  technicianIncome: number
-}
-
 type TechnicianSummaryCard = {
   code: string
   name: string
@@ -152,8 +144,6 @@ export default function TechnicianPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<TechnicianAssignmentRow[]>([])
-  const [technicianCodes, setTechnicianCodes] = useState<string[]>([])
-  const [isAdmin, setIsAdmin] = useState(false)
   const [selectedTechnicianCode, setSelectedTechnicianCode] = useState('')
   const [selectedDayKey, setSelectedDayKey] = useState('')
   const [selectedVehicleOnDayKey, setSelectedVehicleOnDayKey] = useState('')
