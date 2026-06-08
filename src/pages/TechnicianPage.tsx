@@ -612,70 +612,6 @@ export default function TechnicianPage() {
         </div>
       </div>
 
-      {!loading && canEditSharePercent && (
-        <div className="card mb-gap">
-          <div className="card__head">
-            <div>
-              <h3>Earnings percentage settings</h3>
-              <div className="sub">Set PV/EV technician share for this screen. Values apply instantly after clicking Apply.</div>
-            </div>
-          </div>
-          <div className="card__body dense">
-            <div className="tech-share-controls">
-              <label className="field field--no-gap tech-share-field">
-                <span className="label">PV share %</span>
-                <input
-                  className="inp"
-                  inputMode="decimal"
-                  value={draftPvSharePercent}
-                  onChange={(e) => setDraftPvSharePercent(e.target.value)}
-                  onBlur={() => setDraftPvSharePercent(String(parsedDraftPvSharePercent))}
-                  placeholder="e.g. 20"
-                />
-              </label>
-
-              <label className="field field--no-gap tech-share-field">
-                <span className="label">EV share %</span>
-                <input
-                  className="inp"
-                  inputMode="decimal"
-                  value={draftEvSharePercent}
-                  onChange={(e) => setDraftEvSharePercent(e.target.value)}
-                  onBlur={() => setDraftEvSharePercent(String(parsedDraftEvSharePercent))}
-                  placeholder="e.g. 25"
-                />
-              </label>
-
-              <div className="tech-share-actions">
-                <button
-                  type="button"
-                  className="btn btn--primary btn--sm"
-                  onClick={() => {
-                    setPvSharePercent(parsedDraftPvSharePercent)
-                    setEvSharePercent(parsedDraftEvSharePercent)
-                  }}
-                  disabled={!hasPendingShareChanges}
-                >
-                  Apply
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  onClick={() => {
-                    setPvSharePercent(DEFAULT_PV_SHARE_PERCENT)
-                    setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
-                    setDraftPvSharePercent(String(DEFAULT_PV_SHARE_PERCENT))
-                    setDraftEvSharePercent(String(DEFAULT_EV_SHARE_PERCENT))
-                  }}
-                >
-                  Reset default
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Technician cards */}
       {!loading && technicianCards.length > 0 && (
         <div className="card mb-gap">
@@ -684,6 +620,62 @@ export default function TechnicianPage() {
               <h3>Earnings by technician</h3>
               <div className="sub">Sorted highest to lowest. Income = (Labour ÷ 1.18) × {pvSharePercent}% (PV) or {evSharePercent}% (EV).</div>
             </div>
+            {canEditSharePercent && (
+              <div className="tech-share-corner">
+                <h3>Earnings percentage settings</h3>
+                <div className="tech-share-controls">
+                  <label className="field field--no-gap tech-share-field">
+                    <span className="label">PV %</span>
+                    <input
+                      className="inp"
+                      inputMode="decimal"
+                      value={draftPvSharePercent}
+                      onChange={(e) => setDraftPvSharePercent(e.target.value)}
+                      onBlur={() => setDraftPvSharePercent(String(parsedDraftPvSharePercent))}
+                      placeholder="20"
+                    />
+                  </label>
+
+                  <label className="field field--no-gap tech-share-field">
+                    <span className="label">EV %</span>
+                    <input
+                      className="inp"
+                      inputMode="decimal"
+                      value={draftEvSharePercent}
+                      onChange={(e) => setDraftEvSharePercent(e.target.value)}
+                      onBlur={() => setDraftEvSharePercent(String(parsedDraftEvSharePercent))}
+                      placeholder="25"
+                    />
+                  </label>
+
+                  <div className="tech-share-actions">
+                    <button
+                      type="button"
+                      className="btn btn--primary btn--sm"
+                      onClick={() => {
+                        setPvSharePercent(parsedDraftPvSharePercent)
+                        setEvSharePercent(parsedDraftEvSharePercent)
+                      }}
+                      disabled={!hasPendingShareChanges}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => {
+                        setPvSharePercent(DEFAULT_PV_SHARE_PERCENT)
+                        setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
+                        setDraftPvSharePercent(String(DEFAULT_PV_SHARE_PERCENT))
+                        setDraftEvSharePercent(String(DEFAULT_EV_SHARE_PERCENT))
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="card__body dense">
             <div className="tech-drill-grid">
