@@ -266,7 +266,7 @@ async function fetchReceptionEntriesWithKeyset(
       return { data: null, error }
     }
 
-    const batch = (data ?? []) as ReceptionEntryRow[]
+    const batch = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
     rows.push(...batch)
 
     if (batch.length < RECEPTION_LIST_PAGE_SIZE) {
