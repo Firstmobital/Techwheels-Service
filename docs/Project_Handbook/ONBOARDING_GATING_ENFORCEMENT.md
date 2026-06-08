@@ -252,7 +252,7 @@ If gating enforcement needs to be relaxed (not recommended):
 - [ONBOARDING_POLICY.md](./ONBOARDING_POLICY.md) — Onboarding behavior decision
 - [MODULE_ROUTE_CONTRACT.md](./MODULE_ROUTE_CONTRACT.md) — Route definitions
 - [src/App.tsx](../../src/App.tsx) — Implementation
-- [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](../Implementation_plans/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md) — Overall RBAC plan
+- [RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall RBAC plan
 
 ---
 

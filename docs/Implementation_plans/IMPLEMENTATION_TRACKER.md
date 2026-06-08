@@ -14,17 +14,17 @@
 | SEC-001 | Security Refactor: Move Service Role Key | ✅ COMPLETED | [completed/](completed/) | 2026-05-22 | 2026-05-22 | 100% | 2026-05-22 |
 | RBAC-001 | Dynamic RBAC & Module Wiring | ✅ COMPLETED | [completed/](completed/) | 2026-05-23 | 2026-05-23 | 100% | 2026-05-23 |
 | AUTH-001 | Auth Email Recovery & User Access | ✅ COMPLETED | [completed/](completed/) | 2026-05-23 | 2026-05-23 | 100% | 2026-05-23 |
-| AUTODOC-001 | AutoDoc Execution Status Audit | 🟡 IN PROGRESS | [AUTODOC_EXECUTION_STATUS_2026-05-22.md](AUTODOC_EXECUTION_STATUS_2026-05-22.md) | 2026-05-22 | 2026-05-23 | 96% | 2026-05-22 |
-| BODYSHOP-001 | Bodyshop Module End-to-End Workflow | 🔴 PENDING | [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md) | 2026-05-22 | 2026-05-30 | 0% | 2026-05-22 |
-| DRIVE-001 | Universal Drive Upload & Storage Offload | 🔴 PENDING | [DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md](DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md) | 2026-05-23 | 2026-05-24 | 0% | 2026-05-23 |
-| MOBILE-001 | Techwheels Mobile App (Expo) | 🟡 IN PROGRESS | [MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md) | 2026-05-27 | 2026-06-06 | 71% (Phase 1-5 ✅) | 2026-05-27 |
-| MOBILE-009 | Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth) | 🟠 IN PROGRESS | [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md) | 2026-05-31 | TBD | 5% (Planning ✅) | 2026-05-31 |
+| AUTODOC-001 | AutoDoc Execution Status Audit | 🟡 IN PROGRESS | [AUTODOC_EXECUTION_STATUS_2026-05-22.md](autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md) | 2026-05-22 | 2026-05-23 | 96% | 2026-05-22 |
+| BODYSHOP-001 | Bodyshop Module End-to-End Workflow | 🔴 PENDING | [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](bodyshop/active/BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md) | 2026-05-22 | 2026-05-30 | 0% | 2026-05-22 |
+| DRIVE-001 | Universal Drive Upload & Storage Offload | 🔴 PENDING | [DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md](drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md) | 2026-05-23 | 2026-05-24 | 0% | 2026-05-23 |
+| MOBILE-001 | Techwheels Mobile App (Expo) | 🟡 IN PROGRESS | [MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md) | 2026-05-27 | 2026-06-06 | 71% (Phase 1-5 ✅) | 2026-05-27 |
+| MOBILE-009 | Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth) | 🟠 IN PROGRESS | [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](mobile/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md) | 2026-05-31 | TBD | 5% (Planning ✅) | 2026-05-31 |
 
 ---
 
 ## 🟢 Completed Plans (In `/completed/` Folder)
 
-- ✅ [SEC-001_SECURITY_REFACTOR_SERVICE_KEY.md](completed/SEC-001_SECURITY_REFACTOR_SERVICE_KEY.md)
+- ✅ [SECURITY_REFACTOR_SERVICE_KEY.md](completed/SECURITY_REFACTOR_SERVICE_KEY.md)
 - ✅ [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](completed/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md) + [RBAC-001_DAILY_STANDUP_CHECKLIST.md](completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md)
 - ✅ [AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md](completed/AUTH-001_EMAIL_DELIVERY_RECOVERY_AND_USER_ACCESS.md) + [AUTH-001_RUNBOOK.md](completed/AUTH-001_RUNBOOK.md)
 
@@ -33,7 +33,7 @@
 ## 🟡 Active Plans (Currently Executing)
 
 ### MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
-**File**: [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md)  
+**File**: [MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md](mobile/active/MOBILE-009_MOBILE_APP_REDESIGN_PARITY_TRACKER.md)  
 **Status**: Planning complete, screen implementation pending  
 **Next Step**: Implement BP-01 (Body & Paint Dashboard) with exact reference parity and DB-truth values only
 
@@ -46,8 +46,8 @@
 ---
 
 ### MOBILE-001: Techwheels Mobile App (Expo Implementation)
-**File**: [MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md)  
-**Daily Checklist**: [MOBILE-002_EXECUTION_CHECKLIST.md](MOBILE-002_EXECUTION_CHECKLIST.md)  
+**File**: [MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md)  
+**Daily Checklist**: [MOBILE-002_EXECUTION_CHECKLIST.md](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)  
 **Status**: Phase 5 ✅ COMPLETE → Phase 6 (Offline Support) READY  
 **Next Step**: Implement offline queue, network status indicator, cache management
 
@@ -84,8 +84,8 @@
 
 ### **PHASE 1: Project Setup & Dependencies** (Days 1-2)
 **Status**: ✅ COMPLETED (May 27, 2026)  
-**Reference File**: [MOBILE-001](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-1-project-initialization--setup-1-2-days)  
-**Daily Tasks**: [MOBILE-002 Section 1](MOBILE-002_EXECUTION_CHECKLIST.md)
+**Reference File**: [MOBILE-001](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-1-project-initialization--setup-1-2-days)  
+**Daily Tasks**: [MOBILE-002 Section 1](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)
 
 **Tasks**:
 - [x] Create `/mobile` folder
@@ -118,8 +118,8 @@
 
 ### **PHASE 2: Routing & Navigation Setup** (Days 2-3)
 **Status**: ✅ COMPLETED (May 27, 2026)  
-**Reference File**: [MOBILE-001](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-2-routing--navigation-setup-1-day)  
-**Daily Tasks**: [MOBILE-002 Section 2](MOBILE-002_EXECUTION_CHECKLIST.md)
+**Reference File**: [MOBILE-001](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-2-routing--navigation-setup-1-day)  
+**Daily Tasks**: [MOBILE-002 Section 2](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)
 
 **Tasks**:
 - [x] Create root layout with auth checking
@@ -154,8 +154,8 @@
 
 ### **PHASE 3: Shared Code Integration (Symlinks)** (Days 3-4)
 **Status**: ✅ COMPLETED (May 27, 2026)  
-**Reference File**: [MOBILE-001](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-3-shared-code-layer-1-day)  
-**Daily Tasks**: [MOBILE-002 Section 3](MOBILE-002_EXECUTION_CHECKLIST.md)
+**Reference File**: [MOBILE-001](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-3-shared-code-layer-1-day)  
+**Daily Tasks**: [MOBILE-002 Section 3](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)
 
 **Tasks**:
 - [x] Create symlinks for `mobile/lib/api/` → `src/lib/api/`
@@ -200,8 +200,8 @@ mobile/src/lib/
 
 ### **PHASE 4: Authentication & Session Management** (Days 4-5)
 **Status**: ✅ COMPLETED (May 27, 2026)  
-**Reference File**: [MOBILE-001](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-4-authentication--session-management-1-day)  
-**Daily Tasks**: [MOBILE-002 Section 4](MOBILE-002_EXECUTION_CHECKLIST.md)
+**Reference File**: [MOBILE-001](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-4-authentication--session-management-1-day)  
+**Daily Tasks**: [MOBILE-002 Section 4](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)
 
 **Tasks**:
 - [x] Implement Supabase auth integration (JWT) ✅ DONE
@@ -243,8 +243,8 @@ mobile/src/lib/
 
 ### **PHASE 5: Core Features Implementation** (Days 5-6)
 **Status**: ✅ COMPLETED (May 27, 2026)  
-**Reference File**: [MOBILE-004](MOBILE-004_FEATURE_MAPPING.md)  
-**Daily Tasks**: [MOBILE-002 Section 5](MOBILE-002_EXECUTION_CHECKLIST.md)
+**Reference File**: [MOBILE-004](mobile/evidence/MOBILE-004_FEATURE_MAPPING.md)  
+**Daily Tasks**: [MOBILE-002 Section 5](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)
 
 **Tasks**:
 - [x] **Import Screen**: Job cards list with live Supabase data ✅ DONE
@@ -305,8 +305,8 @@ mobile/src/lib/
 
 ### **PHASE 6: Offline Support & Advanced Features** (Days 6-7)
 **Status**: 🟡 NOT STARTED  
-**Reference File**: [MOBILE-001](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-6-offline-support--data-persistence-1-day)  
-**Daily Tasks**: [MOBILE-002 Section 6](MOBILE-002_EXECUTION_CHECKLIST.md)
+**Reference File**: [MOBILE-001](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-6-offline-support--data-persistence-1-day)  
+**Daily Tasks**: [MOBILE-002 Section 6](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)
 
 **Tasks**:
 - [ ] Implement offline queue for failed uploads
@@ -327,8 +327,8 @@ mobile/src/lib/
 
 ### **PHASE 7: Build, Test & Deployment** (Days 7-8)
 **Status**: 🟡 NOT STARTED  
-**Reference File**: [MOBILE-001](MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-7-deployment--ota-updates-1-day)  
-**Daily Tasks**: [MOBILE-002 Section 7](MOBILE-002_EXECUTION_CHECKLIST.md)
+**Reference File**: [MOBILE-001](mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md#phase-7-deployment--ota-updates-1-day)  
+**Daily Tasks**: [MOBILE-002 Section 7](mobile/evidence/MOBILE-002_EXECUTION_CHECKLIST.md)
 
 **Tasks**:
 - [ ] Run full QA testing checklist

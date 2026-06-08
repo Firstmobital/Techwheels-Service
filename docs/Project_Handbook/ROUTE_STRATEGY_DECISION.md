@@ -118,7 +118,7 @@ If this decision needs reversal (i.e., migrate to DB routes):
 
 - [MODULE_ROUTE_CONTRACT.md](./MODULE_ROUTE_CONTRACT.md) — Authoritative mapping
 - [src/App.tsx](../../src/App.tsx) — Implementation
-- [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](../Implementation_plans/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md) — Overall RBAC hardening plan
+- [RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall RBAC hardening plan
 
 ---
 

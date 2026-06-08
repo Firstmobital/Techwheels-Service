@@ -195,9 +195,9 @@ This plan restores immediate user access without relying on email delivery, pres
 
 ## Related Documentation
 
-- [Implementation Plans Index](INDEX.md)
+- [Implementation Plans Index](../INDEX.md)
 - [AUTH-001 Runbook](AUTH-001_RUNBOOK.md)
-- [Project Handbook README](../Project_Handbook/README.md)
+- [Project Handbook README](../../Project_Handbook/README.md)
 
 ---
 

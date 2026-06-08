@@ -171,23 +171,23 @@ Observed issue: new signup users could see all modules/pages despite no explicit
 ## Related Documentation
 
 **Project Handbook (Reference & Configuration):**
-- [docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md](../Project_Handbook/MODULE_ROUTE_CONTRACT.md) — Module-route mapping matrix
-- [docs/Project_Handbook/ROUTE_STRATEGY_DECISION.md](../Project_Handbook/ROUTE_STRATEGY_DECISION.md) — Decision to keep explicit mapping layer
-- [docs/Project_Handbook/ONBOARDING_POLICY.md](../Project_Handbook/ONBOARDING_POLICY.md) — New user default state (active, no modules)
-- [docs/Project_Handbook/ONBOARDING_GATING_ENFORCEMENT.md](../Project_Handbook/ONBOARDING_GATING_ENFORCEMENT.md) — How gating is enforced (frontend + backend)
-- [docs/Project_Handbook/CURRENT_STATE.md](../Project_Handbook/CURRENT_STATE.md) — Project state snapshot
+- [docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md](../../Project_Handbook/MODULE_ROUTE_CONTRACT.md) — Module-route mapping matrix
+- [docs/Project_Handbook/ROUTE_STRATEGY_DECISION.md](../../Project_Handbook/ROUTE_STRATEGY_DECISION.md) — Decision to keep explicit mapping layer
+- [docs/Project_Handbook/ONBOARDING_POLICY.md](../../Project_Handbook/ONBOARDING_POLICY.md) — New user default state (active, no modules)
+- [docs/Project_Handbook/ONBOARDING_GATING_ENFORCEMENT.md](../../Project_Handbook/ONBOARDING_GATING_ENFORCEMENT.md) — How gating is enforced (frontend + backend)
+- [docs/Project_Handbook/CURRENT_STATE.md](../../Project_Handbook/CURRENT_STATE.md) — Project state snapshot
 
 **Operations & Testing (Procedures & Checklists):**
-- [docs/RBAC_TABLE_ACCESS_VALIDATION_TESTS.md](../RBAC_TABLE_ACCESS_VALIDATION_TESTS.md) — Backend table access test suites
-- [docs/RBAC_ROLE_MATRIX_TESTING.md](../RBAC_ROLE_MATRIX_TESTING.md) — Role matrix regression test plan (9 suites)
-- [docs/RBAC_SECURITY_TESTING.md](../RBAC_SECURITY_TESTING.md) — Security/bypass test plan (7 suites)
-- [docs/RBAC_OPERATIONS_RUNBOOK.md](../RBAC_OPERATIONS_RUNBOOK.md) — Admin/ops procedures for onboarding, permissions, troubleshooting
+- [docs/rbac/evidence/RBAC_TABLE_ACCESS_VALIDATION_TESTS.md](../../rbac/evidence/RBAC_TABLE_ACCESS_VALIDATION_TESTS.md) — Backend table access test suites
+- [docs/rbac/evidence/RBAC_ROLE_MATRIX_TESTING.md](../../rbac/evidence/RBAC_ROLE_MATRIX_TESTING.md) — Role matrix regression test plan (9 suites)
+- [docs/rbac/evidence/RBAC_SECURITY_TESTING.md](../../rbac/evidence/RBAC_SECURITY_TESTING.md) — Security/bypass test plan (7 suites)
+- [docs/rbac/runbooks/RBAC_OPERATIONS_RUNBOOK.md](../../rbac/runbooks/RBAC_OPERATIONS_RUNBOOK.md) — Admin/ops procedures for onboarding, permissions, troubleshooting
 - [docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md](./RBAC-001_DAILY_STANDUP_CHECKLIST.md) — Daily execution tracking
 
 **Supporting Documentation:**
-- [docs/Implementation_plans/INDEX.md](./INDEX.md)
-- [docs/Project_Handbook/DB_CHANGE_LEDGER.md](../Project_Handbook/DB_CHANGE_LEDGER.md)
-- [docs/Project_Handbook/DB_CHANGE_PROTOCOL.md](../Project_Handbook/DB_CHANGE_PROTOCOL.md)
+- [docs/Implementation_plans/INDEX.md](../INDEX.md)
+- [docs/Project_Handbook/DB_CHANGE_LEDGER.md](../../Project_Handbook/DB_CHANGE_LEDGER.md)
+- [docs/Project_Handbook/DB_CHANGE_PROTOCOL.md](../../Project_Handbook/DB_CHANGE_PROTOCOL.md)
 - [local_folder/backups/full_database.sql](../../../local_folder/backups/full_database.sql) — Authoritative schema
 
 ---
