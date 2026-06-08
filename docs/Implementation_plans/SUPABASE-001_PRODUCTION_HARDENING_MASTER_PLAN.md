@@ -1,16 +1,17 @@
 # SUPABASE-001: Production Hardening Master Plan + Activity Tracker
 
-Last updated: 2026-06-05
+Last updated: 2026-06-08
 Scope: Security, performance, reliability, operations hygiene, and tracking discipline for the Supabase project `techwheels-services` (Free plan).
 
 ## 1) Current Snapshot (Baseline)
 
 - Plan: Free (Nano compute), region ap-south-1 (Mumbai)
-- Runtime: RAM 55%, CPU 2%, disk 28%, connections 9/60
-- Traffic (last 60 min): 194 DB requests, 10 Auth requests
+- Runtime: RAM 64%, CPU 2%, disk 27%, connections 16/60
+- Traffic (last 60 min): 446 DB requests, 43 Auth requests, 496 total requests (Storage 0, Realtime 7)
 - Advisory state: 22 issues, mostly Security/Critical
 - Migration visibility: last migration shown as `parts_phase1_alignment`
 - Operational flags: no backups configured, no repo connected in dashboard
+- DB observability window (2026-06-08 08:53-09:53 IST): memory usage ~408 MB, memory commitment ~1.33 GB, sustained cache-heavy read profile
 - Authoritative dump audit source: `local_folder/backups/full_database.sql` (80 MB), mirrored as `local_folder/backups/chunks/full_database.sql.part_*` (5 parts)
 - Authoritative dump timestamp: Started on 2026-06-05 10:06:12 IST (pg_dump 17.7, DB 17.6)
 
@@ -99,18 +100,20 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 
 | ID | Priority | Task | Owner | Status | Start Date | Target Date | Evidence | Last Update | Next Action |
 |---|---|---|---|---|---|---|---|---|---|
-| P0-01 | Critical | Export and classify all 22 Advisor issues | Team | Not Started |  |  |  | 2026-06-04 | Build issue inventory by table/setting |
-| P0-02 | Critical | Enable RLS on exposed public tables | Team | Not Started |  |  |  | 2026-06-04 | Start with highest-risk tables from Advisor |
+| P0-01 | Critical | Export and classify all 22 Advisor issues | Team | In Progress | 2026-06-08 |  | Initial export: 23 errors. Post Fix 1 rerun: 21 errors (20 x `rls_disabled_in_public`, 1 x `security_definer_view`). Fix 2 executed, pending rerun evidence. | 2026-06-08 | Rerun Advisor to confirm `security_definer_view` cleared, then lock Fix 3 table batch |
+| P0-02 | Critical | Enable RLS on exposed public tables | Team | In Progress | 2026-06-08 |  | Fix 1 executed and validated by Advisor delta. Fix 2 executed in SQL Editor: `supabase/migrations/20260608101500_p0_fix2_set_vw_parts_stock_health_security_invoker.sql`. Authoritative dump confirms `audit_logs` and `user_employee_links` tables exist but no active RLS/policy entries yet. | 2026-06-08 | Rerun Advisor after Fix 2; then apply non-breaking RLS+policy batch for next two sensitive tables |
 | P0-03 | Critical | Define least-privilege policies for `anon` and `authenticated` | Team | Not Started |  |  |  | 2026-06-04 | Map policies to each API path |
 | P0-04 | High | Restrict `anon` API key permissions in settings | Team | Not Started |  |  |  | 2026-06-04 | Validate no frontend breakage after restriction |
 | P0-05 | High | Enable leaked-password protection in Auth | Team | Not Started |  |  |  | 2026-06-04 | Toggle and test signup/login failure path |
 | P1-01 | Critical | Move app DB connection usage to pooler URL | Team | Not Started |  |  |  | 2026-06-04 | Identify all runtime connection string consumers |
 | P1-02 | High | Accept and triage Index Advisor suggestions | Team | Not Started |  |  |  | 2026-06-04 | Mark suggestions as apply/defer/reject with reason |
-| P1-03 | High | Analyze top 3-5 slow queries in dashboard | Team | Not Started |  |  |  | 2026-06-04 | Capture SQL IDs, mean time, total time |
+| P1-03 | High | Analyze top 3-5 slow queries in dashboard | Team | In Progress | 2026-06-08 |  | Query hotlist expanded from Supabase Query Performance logs (roles: authenticated/anon/supabase_admin/postgres) with prop-total-time ranking and query-family grouping | 2026-06-08 | Convert top offenders into index + query-shape migration tasks with EXPLAIN evidence |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Not Started |  |  |  | 2026-06-04 | Implement migration files for approved indexes |
 | P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | Not Started |  |  |  | 2026-06-05 | Convert to RPC/aggregate SQL and strict page limits |
 | P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | Not Started |  |  |  | 2026-06-05 | Use id/date cursors and verify no timeout regressions |
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Not Started |  |  |  | 2026-06-05 | Ship migration files and attach EXPLAIN evidence |
+| P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | Not Started |  |  |  | 2026-06-08 | Audit active subscriptions/channels and cap noisy clients |
+| P1-09 | High | Eliminate expensive exact-count list patterns in PostgREST paths | Team | Not Started |  |  |  | 2026-06-08 | Replace exact counts with planned/estimated counts or dedicated aggregate RPC |
 | P2-01 | High | Add free-plan inactivity prevention ping | Team | Not Started |  |  |  | 2026-06-04 | Define endpoint + schedule + monitoring |
 | P2-02 | Medium | Connect GitHub repo in Supabase dashboard | Team | Not Started |  |  |  | 2026-06-04 | Validate migration linkage after connection |
 | P2-03 | Critical | Reconcile deployed schema with migration history | Team | In Progress | 2026-06-05 |  | Authoritative dump audit completed (header + object/RLS/index extracts from `local_folder/backups/full_database.sql`) | 2026-06-05 | Convert confirmed schema drift points into migration/status actions without overriding dump authority |
@@ -126,6 +129,7 @@ Use one line per update so trend changes are visible over time.
 | Date | RAM | CPU | Disk | Connections | Advisor Critical | Advisor Medium | DB Req/60m | Auth Req/60m | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-06-04 | 55% | 2% | 28% | 9/60 | 3 (from screenshot section counters) | 1+ | 194 | 10 | Baseline from dashboard screenshot |
+| 2026-06-08 | 64% | 2% | 27% | 16/60 | 3 (unchanged in latest screenshot context) | 1+ | 446 | 43 | Added Query Performance hotlist from production logs; memory usage ~408 MB and commitment ~1.33 GB during observed hour |
 
 ## 6) Change Log (What Was Updated in This Plan)
 
@@ -135,6 +139,11 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-04 | Copilot | Added authoritative dump governance rules (authority source, chunk mirror, no-invention, and conflict preference) |
 | 2026-06-05 | Copilot | Added statement-timeout mitigation actions, tracker rows P1-05 to P1-07, and hot-query remediation matrix |
 | 2026-06-05 | Copilot | Audited active authoritative dump and recorded schema/index/RLS/view truth plus drift findings in Section 10 |
+| 2026-06-08 | Copilot | Refreshed production baseline from dashboard screenshots, replaced hot-query section using latest Supabase logs, and added tracker tasks P1-08/P1-09 |
+| 2026-06-08 | Copilot | Logged Security Advisor Error export (23 errors), added first-3-fix execution order, and drafted Fix 1 migration file for `job_card_closed_data` RLS enablement |
+| 2026-06-08 | Copilot | Validated Fix 1 against authoritative dump mirror: `job_card_closed_data` table and policy names are present in active dump; migration confirmed as authority-consistent and non-invented |
+| 2026-06-08 | Copilot | Recorded post-Fix-1 Advisor delta (23 -> 21 errors) and created Fix 2 migration to set `vw_parts_stock_health` as `security_invoker` |
+| 2026-06-08 | Copilot | Logged Fix 2 execution; checked authoritative dump mirror for next sensitive tables (`audit_logs`, `user_employee_links`) and confirmed table presence with no current RLS/policy entries in active dump |
 
 ## 7) Update Protocol For Future Chats
 
@@ -157,60 +166,141 @@ Definition of done for tracker row:
 - Weekly (30-45 min): Query performance + index follow-up.
 - Monthly (45-60 min): RLS/auth policy audit + backup drill readiness.
 
-## 9) Statement Timeout Hotlist (2026-06-05)
+## 8A) Step-by-Step Start (Base Track)
 
-Observed issue: recurrent `canceling statement due to statement timeout` on user pages despite low CPU.
+Use this sequence exactly. Do not start P1 actions until Step 4 is done.
+
+Step 1 - Build Advisor inventory (P0-01)
+- Open Supabase Dashboard -> Database -> Advisor.
+- Export/copy all open findings.
+- Classify each row by: severity, object type, object name, risk, fix owner.
+- Fill the working table below.
+
+Step 2 - Prioritize critical findings
+- Filter severity = Critical/High.
+- Mark quick-win fixes that do not require app contract changes.
+- Set target date for each critical item.
+
+Step 3 - Execute first 3 critical fixes
+- Apply the fixes one-by-one (RLS/policy/auth setting).
+- Capture evidence after each fix (screenshot or SQL evidence).
+
+Step 4 - Re-validate and log
+- Re-run Advisor.
+- Update Section 4 tracker status and Section 5 metrics.
+- Add one new row in Section 6 change log summarizing resolved findings.
+
+### P0-01 Working Table (Fill During Step 1)
+
+| Finding ID/Title | Severity | Object Type | Object Name | Risk Summary | Proposed Fix | Owner | Status | Evidence Link/Path |
+|---|---|---|---|---|---|---|---|---|
+|  |  |  |  |  |  |  | Not Started |  |
+|  |  |  |  |  |  |  | Not Started |  |
+|  |  |  |  |  |  |  | Not Started |  |
+|  |  |  |  |  |  |  | Not Started |  |
+|  |  |  |  |  |  |  | Not Started |  |
+
+### Step Gate (Must Pass Before P1)
+
+- Gate G1: All Advisor findings inventoried and classified.
+- Gate G2: At least 3 critical/high fixes completed with evidence.
+- Gate G3: Advisor rerun completed and delta recorded.
+
+### Step 1 Intake Snapshot (Received 2026-06-08)
+
+Error inventory from Security Advisor export:
+- Total errors: 23
+- `rls_disabled_in_public`: 21
+- `policy_exists_rls_disabled`: 1 (`public.job_card_closed_data`)
+- `security_definer_view`: 1 (`public.vw_parts_stock_health`)
+
+Grouped risk map:
+- Sensitive identity/audit tables without RLS: `public.user_employee_links`, `public.audit_logs`.
+- Core operations/reporting tables without RLS: job card, invoice, VAS, reception-adjacent, warranty, and staging/import tables.
+- Privilege model inconsistency: `public.job_card_closed_data` already has policies but table RLS is disabled.
+- View privilege bypass risk: `public.vw_parts_stock_health` flagged as security definer.
+
+### Step 2 Priority Output (Execute In Order)
+
+Fix 1 (highest confidence, lowest blast radius)
+- Enable RLS on `public.job_card_closed_data` to align existing policies with enforcement.
+- Expected lint delta: clears `policy_exists_rls_disabled` for this table and one `rls_disabled_in_public` entry.
+
+Fix 2 (high impact)
+- Change `public.vw_parts_stock_health` away from SECURITY DEFINER behavior (set security invoker or recreate view accordingly).
+- Expected lint delta: clears `security_definer_view`.
+
+Fix 3 (sensitive data containment)
+- Enable RLS on `public.user_employee_links` and `public.audit_logs`, then attach least-privilege read/write policies for intended roles only.
+- Expected lint delta: removes high-risk exposed-table errors for identity and audit domains.
+
+Execution note:
+- Apply each fix separately and rerun Advisor after each one; record screenshots/evidence per fix before proceeding.
+
+## 9) Statement Timeout and Latency Hotlist (2026-06-08)
+
+Observed issue:
+- PostgREST list endpoints with LIMIT/OFFSET continue to dominate database time.
+- High cache-hit rates (mostly ~100%) indicate logical query shape and row-width/scan patterns are the bottleneck, not disk I/O.
+- A high-frequency Realtime WAL polling query is now a top time consumer and must be treated as first-class load.
+
+Evidence summary from provided logs (ranked by proportional total time):
+1. `service_parts_consumption_data` fiscal-year list (`authenticated`): 2322 calls, mean ~792 ms, max ~7.94 s, ~20.82% total DB time.
+2. `service_reception_entries` full row list ordered by `created_at DESC` (`authenticated`): 1947 calls, mean ~610 ms, max ~1.85 s, ~13.46% total DB time.
+3. `realtime.list_changes(...)` (`supabase_admin`): 164,784 calls, mean ~6.09 ms, max ~14.1 s, ~11.37% total DB time.
+4. `COPY public.service_parts_stock_snapshot_data ... TO stdout` (`postgres`): 72 calls, mean ~13.8 s, ~11.25% total DB time (operational export workload).
+5. `vw_parts_stock_health` weeks-of-supply filter (`anon` + `authenticated`): 5808 + 3887 calls, mean ~58-85 ms, combined ~7.57% total DB time.
+6. `service_reception_entries` filtered by service type (`authenticated`): 703 calls, mean ~358 ms, ~2.85% total DB time.
+7. `service_vas_jc_data` date-window read (`authenticated`): 6218 calls, mean ~38 ms, max ~6.38 s, ~2.67% total DB time.
+8. `service_reception_entries` projected list (`authenticated`): 881 calls, mean ~264 ms, ~2.64% total DB time.
+9. `service_reception_entries` exact-count pattern via `pgrst_source_count` CTE (`authenticated`): 159 + 617 calls, mean up to ~1.14 s, combined ~3.97% total DB time.
+10. `service_parts_stock_snapshot_data` ordered list (`authenticated`): 87 calls, mean ~1.91 s, ~1.88% total DB time.
 
 Interpretation:
-- Most heavy queries are PostgREST-generated `WITH pgrst_source ... LIMIT/OFFSET` patterns over large base tables/views.
-- High cache hit rate indicates CPU is not the primary bottleneck; scan width, row volume, and repeated page-level refetch are driving latency.
-- Timeouts are amplified by client-side fetch-all loops and repeated exact counts.
+- The largest user-facing pain remains broad list endpoints that over-fetch columns and rely on OFFSET pagination.
+- Exact count requests in PostgREST are materially expensive at current table sizes.
+- Realtime polling frequency is high enough to become a top shared-cost driver even with low per-call mean time.
+- `index_advisor_result` is null for these log lines, so index work must be driven by EXPLAIN-based manual analysis.
 
-Top offenders and actions:
+Action matrix (execute in this order):
+1. `service_parts_consumption_data` fiscal-year lookup
+- Replace list scans with branch-scoped `SELECT DISTINCT fiscal_year` RPC.
+- Add/verify index strategy: `(branch, fiscal_year)` with optional partial index where `fiscal_year IS NOT NULL`.
+- Cache fiscal-year results per branch with short TTL.
 
-1. Query family: `service_parts_consumption_data` fiscal year lookup (`calls: 2189`, `mean: ~820ms`, `max: ~7.9s`, `~29.4% total time`).
-	Action:
-	- Replace raw fiscal-year scans with `SELECT DISTINCT fiscal_year` via RPC/view scoped by branch.
-	- Add index strategy: `(branch, fiscal_year)` and/or partial index where `fiscal_year IS NOT NULL`.
-	- Cache fiscal-year options per branch (short TTL).
+2. `service_reception_entries` list endpoints
+- Stop full-row list reads; use narrow projection in list views.
+- Replace OFFSET with keyset cursor pagination using `(created_at, id)`.
+- Add/verify index tuned for sort+seek path, for example `(created_at DESC, id DESC)` and common filters.
 
-2. Query family: `vw_parts_stock_health` branch filters (`calls: 5808+3887`, `mean: 58-85ms`, `max: up to ~2.7s`, `~10.9% total time combined`).
-	Action:
-	- Avoid `select('*')`; project only required columns.
-	- Push `weeks_of_supply` and branch filtering into indexed base-table predicates used by the view.
-	- Add default `limit` for dashboard widgets and lazy-load detail pages.
+3. Exact-count endpoints
+- Remove default `count=exact` usage on high-traffic pages.
+- Use planned/estimated counts for list UX, and move exact counts to explicit on-demand actions or aggregate RPC.
 
-3. Query family: `service_parts_stock_snapshot_data` ordered by `snapshot_date DESC` (`mean: ~1.9s`).
-	Action:
-	- Add composite index aligned to access path, e.g. `(branch, snapshot_date DESC, part_number)`.
-	- Replace offset loops with cursor pagination on `(snapshot_date, part_number)`.
+4. `vw_parts_stock_health` reads
+- Limit selected columns per widget.
+- Push predicate selectivity to underlying indexed base tables used by the view.
+- Enforce widget-level default limits and lazy-load deep slices.
 
-4. Query family: `service_reception_entries` full row listing plus count CTE (`mean: ~270ms`, `max: ~1.5s`).
-	Action:
-	- Avoid full-row `select('*')` in list screens.
-	- Use a minimal projection for list pages and fetch full record only on detail click.
-	- Ensure index for default sort path `(created_at DESC)` and key filters.
+5. Realtime load (`realtime.list_changes`)
+- Inventory active channels and remove duplicate/idle subscriptions.
+- Reduce client reconnection churn and enforce channel teardown on navigation/unmount.
+- Scope subscriptions to only required schemas/tables/events.
 
-5. Query family: `service_vas_jc_data` and `job_card_closed_data` date-window scans (`max > 6s`).
-	Action:
-	- Enforce mandatory date window on report pages.
-	- Add/verify composite indexes for common predicates: `(branch, jc_closed_date_time)`, `(branch, closed_date_time)`, plus service-type columns where used.
-	- Move aggregations from client-side loops to SQL/RPC grouping.
+6. `service_vas_jc_data` and `job_card_closed_data` date scans
+- Make date windows mandatory in API and UI defaults.
+- Add/verify composite indexes on date plus branch/service-type predicates used in report paths.
+- Move heavy aggregations into SQL/RPC group-by endpoints.
 
-6. Query family: warranty JSON tables (`warranty_wc_data`, `warranty_claim_settlement_report_data`, `warranty_updation_claim_data`, `warranty_fsb_data`).
-	Action:
-	- Replace repeated `count exact` and bulk JSON pulls with pre-aggregated SQL views/RPC returning KPI-level data.
-	- Add expression/GIN indexes for frequently filtered JSON keys where needed (for example claim status or job code).
+7. Export workload isolation
+- Treat `COPY ... TO stdout` entries as operational jobs; schedule outside peak user windows where possible.
+- Cap export concurrency and separate from interactive report traffic.
 
-Out-of-band noise to ignore in app remediation:
-- `COPY ... TO stdout` entries are operational export jobs, not user page reads.
-- Dashboard metadata introspection queries from `postgres` role are administrative noise unless they coincide with incidents.
-
-Immediate rollout order (safe and high impact):
-1. Remove fetch-all patterns from the highest-traffic pages.
-2. Add missing composite/partial indexes for top 3 query families.
-3. Shift expensive dashboard calculations to RPC/materialized summaries.
-4. Re-measure Query Performance after each batch and append evidence in Section 5.
+Immediate success criteria for next measurement cycle:
+1. Reduce combined proportional time of the top two application query families by at least 30%.
+2. Cut exact-count query family proportional time by at least 50%.
+3. Keep connection usage below 70% of pool under normal peak.
+4. Re-capture logs after each index/query-shape batch and append to Sections 5 and 6.
 
 ## 10) Authoritative Database Truth Audit (From Active Dump)
 
