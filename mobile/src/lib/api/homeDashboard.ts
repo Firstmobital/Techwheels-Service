@@ -23,7 +23,7 @@ export async function getHomeDashboardMetrics(): Promise<ApiResult<HomeDashboard
       .limit(500),
     supabase
       .from('users')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .eq('is_active', true),
   ])
 

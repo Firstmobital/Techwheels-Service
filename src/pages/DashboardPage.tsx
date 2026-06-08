@@ -85,7 +85,7 @@ function toDisplayCount(value: number | null) {
 }
 
 async function fetchCount(tableName: string) {
-  const { count, error } = await supabase.from(tableName).select('*', { count: 'exact', head: true })
+  const { count, error } = await supabase.from(tableName).select('*', { count: 'estimated', head: true })
   if (error) return null
   return count ?? 0
 }

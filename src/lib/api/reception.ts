@@ -75,6 +75,45 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
   'Campaign',
 ]
 
+const RECEPTION_LIST_PAGE_SIZE = 500
+
+const RECEPTION_ENTRY_SELECT_COLUMNS = [
+  'id',
+  'dealer_code',
+  'reg_number',
+  'model',
+  'service_type',
+  'sa_name',
+  'sa_employee_code',
+  'sa_display_name',
+  'jc_number',
+  'owner_name',
+  'owner_phone',
+  'branch',
+  'fuel_type',
+  'source',
+  'remark',
+  'estimate_storage_path',
+  'estimate_file_name',
+  'estimate_content_type',
+  'estimate_uploaded_at',
+  'estimate_uploaded_by',
+  'estimate_drive_url',
+  'estimate_drive_file_id',
+  'invoice_storage_path',
+  'invoice_file_name',
+  'invoice_content_type',
+  'invoice_uploaded_at',
+  'invoice_uploaded_by',
+  'invoice_drive_url',
+  'invoice_drive_file_id',
+  'invoice_done_at',
+  'invoice_done_by',
+  'created_by',
+  'created_at',
+  'updated_at',
+].join(', ')
+
 function normalizePhone(value?: string | null): string | null {
   const digits = String(value ?? '').replace(/\D/g, '')
   if (!digits) return null
@@ -199,11 +238,55 @@ export async function deleteServiceBranch(id: number): Promise<ApiResult<null>> 
   return ok(null)
 }
 
+async function fetchReceptionEntriesWithKeyset(
+  serviceTypes?: string[],
+): Promise<{ data: ReceptionEntryRow[] | null; error: unknown | null }> {
+  let cursorCreatedAt: string | null = null
+  let cursorId: number | null = null
+  const rows: ReceptionEntryRow[] = []
+
+  while (true) {
+    let query = supabase
+      .from('service_reception_entries')
+      .select(RECEPTION_ENTRY_SELECT_COLUMNS)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(RECEPTION_LIST_PAGE_SIZE)
+
+    if (serviceTypes && serviceTypes.length > 0) {
+      query = query.in('service_type', serviceTypes)
+    }
+
+    if (cursorCreatedAt && cursorId !== null) {
+      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      return { data: null, error }
+    }
+
+    const batch = (data ?? []) as ReceptionEntryRow[]
+    rows.push(...batch)
+
+    if (batch.length < RECEPTION_LIST_PAGE_SIZE) {
+      break
+    }
+
+    const lastRow = batch[batch.length - 1]
+    cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
+    cursorId = Number.isFinite(lastRow.id) ? Number(lastRow.id) : null
+
+    if (!cursorCreatedAt || cursorId === null) {
+      break
+    }
+  }
+
+  return { data: rows, error: null }
+}
+
 export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data, error } = await fetchReceptionEntriesWithKeyset()
 
   if (error) return fail(error)
   
@@ -213,10 +296,7 @@ export async function listReceptionEntries(): Promise<ApiResult<ReceptionEntryRo
 }
 
 export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data, error } = await fetchReceptionEntriesWithKeyset()
 
   if (error) return fail(error)
   
@@ -226,11 +306,7 @@ export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEn
 }
 
 export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const { data, error } = await supabase
-    .from('service_reception_entries')
-    .select('*')
-    .in('service_type', FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
-    .order('created_at', { ascending: false })
+  const { data, error } = await fetchReceptionEntriesWithKeyset(FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
 
   if (error) {
     const message = typeof error === 'string'

@@ -109,7 +109,8 @@ Status legend: `Not Started` | `In Progress` | `Blocked` | `Done`
 | P1-02 | High | Accept and triage Index Advisor suggestions | Team | Not Started |  |  |  | 2026-06-04 | Mark suggestions as apply/defer/reject with reason |
 | P1-03 | High | Analyze top 3-5 slow queries in dashboard | Team | Done | 2026-06-08 | 2026-06-08 | Comprehensive slow query analysis completed: ranked top 10 query families by proportional DB time (20.82% down to 1.88%), identified root causes (OFFSET pagination, missing indexes, wide projections), provided EXPLAIN strategy + recommended indexes. Analysis: `docs/Implementation_plans/P1_03_SLOW_QUERY_ANALYSIS.md` | 2026-06-08 | - |
 | P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created and audited against authoritative dump (full_database.sql). 2 CRITICAL + 2 OPTIONAL indexes: `idx_reception_entries_branch_created_at_desc` (missing branch+created index for Query 2), `idx_vas_jc_data_branch_created_at_desc` (missing branch+created for Query 7), `idx_parts_consumption_branch_fiscal_year_desc` (complementary to portal-based index), `idx_stock_snapshot_branch_snapshot_date_desc` (optional complement). All columns/tables verified in authoritative dump. Ready for execution. | 2026-06-08 | - |
-| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | P1-04 indexes complete. P1-05 focuses on query rewrites: keyset pagination (replace OFFSET), count=estimated (replace exact-count), narrow projections (SELECT only needed columns). Scope: web/mobile report pages, warranty extractors. | 2026-06-08 | Implement keyset pagination in top 5 slow queries + count=estimated in list UIs |
+| P1-04 | High | Add and verify indexes for sequential scans | Team | Done | 2026-06-08 | 2026-06-08 | 4 migration files created, audited, and DEPLOYED in Supabase. All indexes confirmed in production: idx_reception_entries_branch_created_at_desc, idx_vas_jc_data_branch_created_at_desc, idx_parts_consumption_branch_fiscal_year_desc, idx_stock_snapshot_branch_snapshot_date_desc. Ready for P1-05 query rewrites. | 2026-06-08 | Execute P1-05 query rewrites (keyset pagination) |
+| P1-05 | Critical | Remove fetch-all patterns from reports and warranty JSON extractors | Team | In Progress | 2026-06-08 |  | P1-04 indexes complete. P1-05 implementation started in app layer: keyset pagination shipped for `service_vas_jc_data` and `service_parts_consumption_data` fetchers (web+mobile), reception list APIs switched to keyset ordered reads, and exact-count switched to estimated in warranty extraction/dashboard metrics. | 2026-06-08 | Run performance capture (Query Performance + EXPLAIN) and complete remaining list paths still using range/OFFSET |
 | P1-06 | High | Replace OFFSET scans with cursor pagination in large tables/views | Team | Not Started |  |  |  | 2026-06-05 | Use id/date cursors and verify no timeout regressions |
 | P1-07 | High | Add targeted composite/partial indexes for timeout hotlist queries | Team | Not Started |  |  |  | 2026-06-05 | Ship migration files and attach EXPLAIN evidence |
 | P1-08 | High | Reduce Realtime WAL polling cost and fan-out | Team | Not Started |  |  |  | 2026-06-08 | Audit active subscriptions/channels and cap noisy clients |
@@ -164,6 +165,10 @@ Use one line per update so trend changes are visible over time.
 | 2026-06-08 | Copilot | Completed P1-01 audit: Connection string usage audited in web/mobile/edge-functions/scripts. Confirmed REST API pattern (pooling built-in), no direct postgres migration needed. Marked P1-01 Done. |
 | 2026-06-08 | Copilot | Completed P1-03 analysis: Top 10 slow queries ranked by proportional DB time. Root causes identified (OFFSET pagination, missing indexes, wide projections). 4 high-impact indexes recommended. Created P1_03_SLOW_QUERY_ANALYSIS.md. Marked P1-03 Done. |
 | 2026-06-08 | Copilot | Completed P1-04 migrations: Audited 4 target tables against authoritative dump (full_database.sql + chunks mirror). All columns verified in schema. Created 4 migration files: 2 CRITICAL (reception_entries, vas_jc_data branch+created indexes), 2 OPTIONAL (complementary fiscal/snapshot). Created P1_04_INDEX_AUDIT_REPORT.md with full governance audit. Marked P1-04 Done. |
+| 2026-06-08 | Copilot | Completed P1-04 migrations: Audited 4 target tables against authoritative dump (full_database.sql + chunks mirror). All columns verified in schema. Created 4 migration files: 2 CRITICAL (reception_entries, vas_jc_data branch+created indexes), 2 OPTIONAL (complementary fiscal/snapshot). Created P1_04_INDEX_AUDIT_REPORT.md with full governance audit. Marked P1-04 Done. |
+| 2026-06-08 | User | Executed all 4 P1-04 migration files in Supabase. Deployment confirmed: all indexes now present in production database. 2 CRITICAL indexes deployed (reception_entries, vas_jc_data); 2 OPTIONAL indexes deployed (parts_consumption, stock_snapshot). Ready for P1-05 query rewrites. |
+| 2026-06-08 | Copilot | Crash-recovery continuation: appended P1-05 execution pack (query rewrite batches, exact-count removal strategy, validation SQL, rollback, and completion gates) so implementation can resume without context loss. |
+| 2026-06-08 | Copilot | Implemented first P1-05 code batch: web/mobile `reportQueries` switched core VAS + parts-consumption loops from OFFSET (`.range`) to keyset (`order+limit+cursor`), reception list APIs moved to keyset ordered reads, and `count: 'exact'` replaced with `count: 'estimated'` in high-frequency dashboard/warranty count paths. |
 
 ## 7) Update Protocol For Future Chats
 
@@ -533,3 +538,130 @@ Step 4 execution outcome (2026-06-08):
 Staged tightening closeout (P0-03):
 - Completed Step 1 through Step 4 with policy-text evidence, baseline continuity checks, and RLS confirmations.
 - Scope of this staged track was `p0_auth_delete` tightening only; select/insert/update hardening remains a future scoped phase.
+
+## 13) P1-05 Query Rewrite Execution Pack (Crash-Recovery Continuation)
+
+Status at continuation point:
+- P1-04 indexes are already deployed in production.
+- P1-05 is the active bottleneck phase and should now focus on query shape fixes, not new broad schema changes.
+
+Execution objective:
+- Reduce high-cost OFFSET and exact-count query families by moving to keyset pagination, narrow projections, and planned/estimated counts.
+
+### 13.1 Rewrite Targets (Top-Impact First)
+
+Batch A (critical, first deploy):
+1. `service_reception_entries` list endpoints (web + mobile)
+- Replace `.range(from, to)` style OFFSET pagination with cursor pagination on `(created_at, id)`.
+- Keep projection narrow in list paths (avoid `select('*')` in list views).
+
+2. `service_vas_jc_data` paginated report endpoints (web + mobile)
+- Replace OFFSET pagination with keyset `(created_at, id)` for report listing flows.
+- Keep existing business filters intact (branch/date/service type), only pagination shape changes.
+
+3. High-frequency exact-count paths
+- Replace `count: 'exact'` for list UX with `count: 'planned'` or `count: 'estimated'`.
+- Keep exact count only for explicit user-triggered "export/final summary" style actions.
+
+Batch B (second deploy):
+1. `service_parts_consumption_data` fiscal-year list
+- Replace fetch-all/list pagination with branch-scoped distinct-year retrieval pattern.
+- Prefer RPC or narrow distinct query path that avoids broad row scans.
+
+2. Warranty extraction exact-count loop
+- Remove repeated exact-count per status loop and shift to one grouped aggregate path (RPC or SQL function) where feasible.
+
+### 13.2 Concrete Code Hotspots to Edit
+
+Primary hotspots already observed in codebase (web + mobile parity):
+- `src/lib/reportQueries.ts` (multiple `.range(...)` patterns over report tables)
+- `mobile/src/lib/reportQueries.ts` (matching `.range(...)` patterns)
+- `src/lib/warranty/jsonExtraction.ts` (`count: 'exact'` in stage-count extraction)
+- `src/pages/reports/warranty/WarrantyOverviewReport.tsx` (range-based list fetches)
+
+Guardrail:
+- Preserve response contracts expected by screens; pagination transport may change, but returned row shape and filter semantics must remain backward compatible.
+
+### 13.3 Keyset Pagination Contract (Standard)
+
+Required order:
+- `order('created_at', { ascending: false }).order('id', { ascending: false })`
+
+Cursor filters for next page:
+- `created_at < cursor_created_at`
+- OR same timestamp + `id < cursor_id`
+
+Pseudo-pattern:
+```ts
+let query = supabase
+	.from('target_table')
+	.select('id, created_at, ...narrow_columns')
+	.order('created_at', { ascending: false })
+	.order('id', { ascending: false })
+	.limit(PAGE_SIZE)
+
+if (cursor) {
+	query = query.or(
+		`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
+	)
+}
+```
+
+### 13.4 Validation Checklist (Per Batch)
+
+Functional validation:
+1. Web report pages load first page and next page without duplicates/skips.
+2. Mobile report pages show same ordering and pagination continuity.
+3. Warranty overview KPIs still render with no permission/query errors.
+
+Performance validation:
+1. Re-check Query Performance after each batch.
+2. Confirm reduced proportional DB time for:
+- `service_reception_entries` list family
+- `service_vas_jc_data` date-window list family
+- exact-count query family (`pgrst_source_count`-style)
+
+SQL spot checks:
+```sql
+-- Ensure new indexes are used by rewritten list shapes
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, jc_number, reg_number, service_type
+FROM service_reception_entries
+WHERE branch = 'BRANCH_NAME'
+ORDER BY created_at DESC, id DESC
+LIMIT 50;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, job_card_number, sr_type
+FROM service_vas_jc_data
+WHERE branch = 'BRANCH_NAME'
+	AND created_at >= NOW() - INTERVAL '7 days'
+ORDER BY created_at DESC, id DESC
+LIMIT 100;
+```
+
+Expected plan shape:
+- index scan using `idx_reception_entries_branch_created_at_desc` and `idx_vas_jc_data_branch_created_at_desc`
+- no large OFFSET-driven scan/sort in first page path
+
+### 13.5 Rollback Strategy (P1-05 Only)
+
+If regression is detected:
+1. Revert only query-shape changes in app code (keep deployed indexes; indexes are additive and already validated).
+2. Restore prior pagination/count behavior for the single failing screen/module.
+3. Capture failing filter/cursor payload and re-run with SQL explain before second attempt.
+
+### 13.6 Completion Gates for P1-05
+
+P1-05 can move to `Done` only when all gates pass:
+1. Keyset pagination live on top report list paths (web + mobile parity).
+2. Default exact-count removed from high-traffic list endpoints.
+3. No pagination correctness regressions (no duplicate/missing rows across page boundaries).
+4. Query Performance shows measurable drop in top list/query-family proportional time.
+
+### 13.7 Immediate Next Actions (Resume Queue)
+
+1. Implement Batch A in `src/lib/reportQueries.ts` and `mobile/src/lib/reportQueries.ts`.
+2. Replace exact-count default in `src/lib/warranty/jsonExtraction.ts` and any list UIs relying on default exact count.
+3. Re-measure performance and append new rows in Sections 5 and 6.
+4. Update tracker rows P1-05/P1-06/P1-09 based on measured outcomes.

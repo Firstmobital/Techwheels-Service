@@ -102,7 +102,7 @@ export async function extractPipelineStages(
   for (const stage of stages) {
     const { count, error } = await supabase
       .from('warranty_wc_data')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'estimated', head: true })
       .eq('branch', branch)
       .eq('location', location)
       .eq('portal', portal)

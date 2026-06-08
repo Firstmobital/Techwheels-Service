@@ -922,18 +922,38 @@ async function fetchVasRowsWithEmployeeData(
   return mergedData
 }
 
+function appendSelectColumns(selectColumns: string, requiredColumns: string[]): string {
+  const trimmed = selectColumns.trim()
+  if (!trimmed || trimmed === '*') {
+    return trimmed || '*'
+  }
+
+  const existing = new Set(trimmed.split(',').map((column) => column.trim()).filter(Boolean))
+  for (const requiredColumn of requiredColumns) {
+    if (!existing.has(requiredColumn)) {
+      existing.add(requiredColumn)
+    }
+  }
+
+  return Array.from(existing).join(', ')
+}
+
 async function fetchAllVasRowsWithoutFuelFilter(
   selectColumns: string,
   filters: JobCardClosedFetchFilters,
 ): Promise<Record<string, unknown>[]> {
-  let from = 0
+  let cursorCreatedAt: string | null = null
+  let cursorId: number | null = null
   const allRows: Record<string, unknown>[] = []
+  const selectWithCursorColumns = appendSelectColumns(selectColumns, ['id', 'created_at'])
 
   while (true) {
     let query = supabase
       .from('service_vas_jc_data')
-      .select(selectColumns)
-      .range(from, from + QUERY_PAGE_SIZE - 1)
+      .select(selectWithCursorColumns)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
@@ -950,6 +970,10 @@ async function fetchAllVasRowsWithoutFuelFilter(
       closedDateField: 'jc_closed_date_time',
     })
 
+    if (cursorCreatedAt && cursorId !== null) {
+      query = query.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
+    }
+
     const { data, error } = await query
 
     if (error) {
@@ -963,7 +987,15 @@ async function fetchAllVasRowsWithoutFuelFilter(
       break
     }
 
-    from += QUERY_PAGE_SIZE
+    const lastRow = batch[batch.length - 1] as { created_at?: unknown; id?: unknown }
+    cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
+
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+
+    if (!cursorCreatedAt || cursorId === null) {
+      break
+    }
   }
 
   return allRows
@@ -4534,20 +4566,30 @@ async function fetchAllPartsConsumptionRows(
   branch: BranchFilter,
   dateFilter?: DateRangeFilter,
 ): Promise<PartsConsumptionRecord[]> {
-  let from = 0
+  let cursorTransactionDate: string | null = null
+  let cursorId: number | null = null
   const allRows: PartsConsumptionRecord[] = []
   const bounds = dateFilter ? getDateRangeBounds(dateFilter) : null
+  const selectWithCursorColumns = appendSelectColumns(selectColumns, ['id', 'transaction_date'])
 
   while (true) {
     let query = supabase
       .from('service_parts_consumption_data')
-      .select(selectColumns)
-      .range(from, from + QUERY_PAGE_SIZE - 1)
+      .select(selectWithCursorColumns)
+      .order('transaction_date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(QUERY_PAGE_SIZE)
 
     query = applyBranchFilterToQuery(query, branch)
 
     if (bounds) {
       query = query.gte('transaction_date', bounds.from.slice(0, 10)).lt('transaction_date', bounds.toExclusive.slice(0, 10))
+    }
+
+    if (cursorTransactionDate && cursorId !== null) {
+      query = query.or(
+        `transaction_date.lt.${cursorTransactionDate},and(transaction_date.eq.${cursorTransactionDate},id.lt.${cursorId})`,
+      )
     }
 
     const { data, error } = await query
@@ -4557,7 +4599,14 @@ async function fetchAllPartsConsumptionRows(
     allRows.push(...batch)
 
     if (batch.length < QUERY_PAGE_SIZE) break
-    from += QUERY_PAGE_SIZE
+
+    const lastRow = batch[batch.length - 1] as { transaction_date?: unknown; id?: unknown }
+    cursorTransactionDate = lastRow.transaction_date ? String(lastRow.transaction_date) : null
+
+    const parsedId = Number(lastRow.id)
+    cursorId = Number.isFinite(parsedId) ? parsedId : null
+
+    if (!cursorTransactionDate || cursorId === null) break
   }
 
   return allRows
