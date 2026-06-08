@@ -204,13 +204,19 @@ Deno.serve(async (req) => {
       userRows = (await usersFallbackRes.json()) as typeof userRows
     }
 
-    const users = userRows.map((u) => ({
-      ...u,
-      phone: phoneByUserId.get(u.id) ?? phoneByEmail.get(u.email.toLowerCase()) ?? null,
-      dealer_code: u.dealer_code ?? dealerCodeByUserId.get(u.id) ?? null,
-      dealer_name: u.dealer_name ?? dealerNameByUserId.get(u.id) ?? null,
-      dealer_codes: dealerCodesByUserId.get(u.id) ?? null,
-    }))
+    const users = userRows.map((u) => {
+      const dbDealerCode = String(u.dealer_code ?? '').trim().toUpperCase() || null
+      const dbDealerName = String(u.dealer_name ?? '').trim() || null
+      const metaDealerCodes = dealerCodesByUserId.get(u.id) ?? null
+
+      return {
+        ...u,
+        phone: phoneByUserId.get(u.id) ?? phoneByEmail.get(u.email.toLowerCase()) ?? null,
+        dealer_code: dbDealerCode ?? dealerCodeByUserId.get(u.id) ?? null,
+        dealer_name: dbDealerName ?? dealerNameByUserId.get(u.id) ?? null,
+        dealer_codes: metaDealerCodes,
+      }
+    })
 
     return new Response(
       JSON.stringify({ users, supportsDealerColumns }),

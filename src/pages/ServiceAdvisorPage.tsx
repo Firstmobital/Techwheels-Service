@@ -381,6 +381,14 @@ export default function ServiceAdvisorPage() {
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [advisorCountRows])
 
+  const totalAdvisorOptionCount = useMemo(() => {
+    const keys = new Set<string>()
+    rows.forEach((row) => {
+      keys.add(getAdvisorFilterKey(row))
+    })
+    return keys.size
+  }, [rows])
+
   const displayedRows = useMemo(() => {
     const advisorScoped = selectedAdvisor === 'all'
       ? categoryFilteredRows
@@ -441,9 +449,36 @@ export default function ServiceAdvisorPage() {
   }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
 
   const availableBranches = useMemo(() => {
-    const branches = new Set(allRows.map(r => r.branch).filter(Boolean) as string[])
+    const branches = new Set(rows.map(r => r.branch).filter(Boolean) as string[])
     return Array.from(branches).sort()
-  }, [allRows])
+  }, [rows])
+
+  const availableFuelTypes = useMemo(() => {
+    const fuelTypes = new Set(rows.map((row) => getFuelTypeLabel(row.fuel_type)).filter(Boolean) as string[])
+    return Array.from(fuelTypes).sort()
+  }, [rows])
+
+  const availableCategories = useMemo(() => {
+    const categories = new Set(rows.map((row) => getCategoryForServiceType(row.service_type)))
+    return Array.from(categories)
+  }, [rows])
+
+  const showLocationFilter = availableBranches.length > 1
+  const showFuelTypeFilter = availableFuelTypes.length > 1
+  const showCategoryFilter = availableCategories.length > 1
+  const showAdvisorFilter = totalAdvisorOptionCount > 1
+
+  const showScopeFilters = useMemo(() => {
+    if (isSuperAdmin) return false
+    return (
+      isAdmin
+      || hasMultipleDealers
+      || showLocationFilter
+      || showFuelTypeFilter
+      || showCategoryFilter
+      || showAdvisorFilter
+    )
+  }, [isSuperAdmin, isAdmin, hasMultipleDealers, showLocationFilter, showFuelTypeFilter, showCategoryFilter, showAdvisorFilter])
 
   const categoryCounts = useMemo(() => {
     const floor = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
@@ -946,41 +981,43 @@ export default function ServiceAdvisorPage() {
         )}
 
         {/* Branch & Fuel Type Filters (Admin or Multi-Dealer Users) */}
-        {(isAdmin || hasMultipleDealers) && !isSuperAdmin && availableBranches.length > 0 && (
+        {showScopeFilters && (
           <>
-            <div className="toolbar toolbar--tight">
-              <span className="toolbar__label">Filter by location:</span>
-              <button
-                type="button"
-                onClick={() => setSelectedBranch('all')}
-                className={`btn btn--sm ${
-                  selectedBranch === 'all'
-                    ? 'btn--primary'
-                    : 'btn--ghost'
-                }`}
-              >
-                All ({locationCountRows.length})
-              </button>
-              {availableBranches.map((branch) => {
-                const count = locationCountRows.filter((row) => row.branch === branch).length
-                return (
-                  <button
-                    key={branch}
-                    type="button"
-                    onClick={() => setSelectedBranch(branch)}
-                    className={`btn btn--sm ${
-                      selectedBranch === branch
-                        ? 'btn--primary'
-                        : 'btn--ghost'
-                    }`}
-                  >
-                    {branch} ({count})
-                  </button>
-                )
-              })}
-            </div>
+            {showLocationFilter && (
+              <div className="toolbar toolbar--tight">
+                <span className="toolbar__label">Filter by location:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBranch('all')}
+                  className={`btn btn--sm ${
+                    selectedBranch === 'all'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
+                  }`}
+                >
+                  All ({locationCountRows.length})
+                </button>
+                {availableBranches.map((branch) => {
+                  const count = locationCountRows.filter((row) => row.branch === branch).length
+                  return (
+                    <button
+                      key={branch}
+                      type="button"
+                      onClick={() => setSelectedBranch(branch)}
+                      className={`btn btn--sm ${
+                        selectedBranch === branch
+                          ? 'btn--primary'
+                          : 'btn--ghost'
+                      }`}
+                    >
+                      {branch} ({count})
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
-            {advisorOptions.length > 0 && (
+            {showAdvisorFilter && (
               <div className="toolbar toolbar--tight">
                 <span className="toolbar__label">Filter by advisor:</span>
                 <select
@@ -999,7 +1036,7 @@ export default function ServiceAdvisorPage() {
               </div>
             )}
 
-            {fuelTypeOptions.length > 0 && (
+            {showFuelTypeFilter && fuelTypeOptions.length > 0 && (
               <div className="toolbar toolbar--tight">
                 <span className="toolbar__label">Filter by fuel type:</span>
                 <button
@@ -1033,53 +1070,55 @@ export default function ServiceAdvisorPage() {
               </div>
             )}
 
-            <div className="toolbar toolbar--tight">
-              <span className="toolbar__label">Filter by category:</span>
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('all')}
-                className={`btn btn--sm ${
-                  selectedCategory === 'all'
-                    ? 'btn--primary'
-                    : 'btn--ghost'
-                }`}
-              >
-                All ({categoryCounts.all})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('floor')}
-                className={`btn btn--sm ${
-                  selectedCategory === 'floor'
-                    ? 'btn--primary'
-                    : 'btn--ghost'
-                }`}
-              >
-                Floor ({categoryCounts.floor})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('other')}
-                className={`btn btn--sm ${
-                  selectedCategory === 'other'
-                    ? 'btn--primary'
-                    : 'btn--ghost'
-                }`}
-              >
-                Other ({categoryCounts.other})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedCategory('null')}
-                className={`btn btn--sm ${
-                  selectedCategory === 'null'
-                    ? 'btn--primary'
-                    : 'btn--ghost'
-                }`}
-              >
-                Null ({categoryCounts.null})
-              </button>
-            </div>
+            {showCategoryFilter && (
+              <div className="toolbar toolbar--tight">
+                <span className="toolbar__label">Filter by category:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={`btn btn--sm ${
+                    selectedCategory === 'all'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
+                  }`}
+                >
+                  All ({categoryCounts.all})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('floor')}
+                  className={`btn btn--sm ${
+                    selectedCategory === 'floor'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
+                  }`}
+                >
+                  Floor ({categoryCounts.floor})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('other')}
+                  className={`btn btn--sm ${
+                    selectedCategory === 'other'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
+                  }`}
+                >
+                  Other ({categoryCounts.other})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('null')}
+                  className={`btn btn--sm ${
+                    selectedCategory === 'null'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
+                  }`}
+                >
+                  Null ({categoryCounts.null})
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

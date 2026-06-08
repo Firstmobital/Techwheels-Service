@@ -656,13 +656,15 @@ export default function AdminPage() {
 
   const filteredUsers = users.filter(u => {
     const term = search.toLowerCase()
+    const dealerCodesText = Array.isArray(u.dealer_codes) ? u.dealer_codes.join(' ').toLowerCase() : ''
     return (showInactive || u.is_active) &&
       (roleFilter === 'all' || u.role === roleFilter) &&
       (
         (u.full_name ?? '').toLowerCase().includes(term) ||
         u.email.toLowerCase().includes(term) ||
         (u.phone ?? '').toLowerCase().includes(term) ||
-        (u.dealer_code ?? '').toLowerCase().includes(term)
+        (u.dealer_code ?? '').toLowerCase().includes(term) ||
+        dealerCodesText.includes(term)
       )
   })
 
@@ -839,15 +841,38 @@ export default function AdminPage() {
                       <td>
                         {(() => {
                           // Use JWT data as fallback for current session user
-                          const displayCode = u.dealer_code ?? 
-                            (u.id === currentUserJWTDealers.id ? currentUserJWTDealers.dealer_code : null)
-                          const displayName = u.dealer_name ?? 
-                            (u.id === currentUserJWTDealers.id ? currentUserJWTDealers.dealer_name : null)
+                          const primaryCodeFromRow = String(u.dealer_code ?? '').trim().toUpperCase() || null
+                          const primaryCodeFromSession = u.id === currentUserJWTDealers.id
+                            ? (String(currentUserJWTDealers.dealer_code ?? '').trim().toUpperCase() || null)
+                            : null
+                          const displayName = (String(u.dealer_name ?? '').trim() || null)
+                            ?? (u.id === currentUserJWTDealers.id ? (String(currentUserJWTDealers.dealer_name ?? '').trim() || null) : null)
+                          const displayDealerCodes = Array.isArray(u.dealer_codes)
+                            ? u.dealer_codes
+                            : (u.id === currentUserJWTDealers.id && Array.isArray(currentUserJWTDealers.dealer_codes)
+                                ? currentUserJWTDealers.dealer_codes
+                                : null)
+                          const normalizedAdditionalCodes = Array.from(
+                            new Set(
+                              (displayDealerCodes ?? [])
+                                .map((code) => String(code ?? '').trim().toUpperCase())
+                                .filter(Boolean),
+                            ),
+                          )
+                          const displayCode = primaryCodeFromRow ?? primaryCodeFromSession ?? normalizedAdditionalCodes[0] ?? null
+                          const visibleAdditionalCodes = normalizedAdditionalCodes.filter(
+                            (code) => code !== displayCode,
+                          )
                           
                           return displayCode ? (
                             <>
                               <span className="code-badge">{displayCode}</span>
                               {displayName && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{displayName}</div>}
+                              {visibleAdditionalCodes.length > 0 && (
+                                <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>
+                                  + {visibleAdditionalCodes.join(', ')}
+                                </div>
+                              )}
                             </>
                           ) : (
                             <span className="notset">Not set</span>
