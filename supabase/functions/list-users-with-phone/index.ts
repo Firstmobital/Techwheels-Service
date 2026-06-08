@@ -91,6 +91,9 @@ Deno.serve(async (req) => {
     // Fetch all auth.users with phone via admin API (pagination required)
     const phoneByUserId = new Map<string, string | null>()
     const phoneByEmail = new Map<string, string | null>()
+    const dealerCodesByUserId = new Map<string, string[] | null>()
+    const dealerCodeByUserId = new Map<string, string | null>()
+    const dealerNameByUserId = new Map<string, string | null>()
     const perPage = 1000
 
     for (let page = 1; page <= 20; page += 1) {
@@ -111,7 +114,16 @@ Deno.serve(async (req) => {
       }
 
       const authPayload = (await authUsersRes.json()) as {
-        users?: Array<{ id?: string; email?: string; phone?: string | null }>
+        users?: Array<{
+          id?: string
+          email?: string
+          phone?: string | null
+          user_metadata?: {
+            dealer_code?: string | null
+            dealer_name?: string | null
+            dealer_codes?: string[] | null
+          } | null
+        }>
         error?: string
       }
 
@@ -123,6 +135,20 @@ Deno.serve(async (req) => {
       pageUsers.forEach((u) => {
         if (u.id) phoneByUserId.set(u.id, u.phone ?? null)
         if (u.email) phoneByEmail.set((u.email ?? '').toLowerCase(), u.phone ?? null)
+        if (u.id) {
+          const metadataCodes = Array.isArray(u.user_metadata?.dealer_codes)
+            ? Array.from(
+                new Set(
+                  (u.user_metadata?.dealer_codes ?? [])
+                    .map((value) => String(value ?? '').trim().toUpperCase())
+                    .filter(Boolean),
+                ),
+              )
+            : []
+          dealerCodesByUserId.set(u.id, metadataCodes.length > 0 ? metadataCodes : null)
+          dealerCodeByUserId.set(u.id, u.user_metadata?.dealer_code ? String(u.user_metadata.dealer_code).trim().toUpperCase() : null)
+          dealerNameByUserId.set(u.id, u.user_metadata?.dealer_name ? String(u.user_metadata.dealer_name).trim() : null)
+        }
       })
 
       if (pageUsers.length < perPage) {
@@ -181,8 +207,9 @@ Deno.serve(async (req) => {
     const users = userRows.map((u) => ({
       ...u,
       phone: phoneByUserId.get(u.id) ?? phoneByEmail.get(u.email.toLowerCase()) ?? null,
-      dealer_code: u.dealer_code ?? null,
-      dealer_name: u.dealer_name ?? null,
+      dealer_code: u.dealer_code ?? dealerCodeByUserId.get(u.id) ?? null,
+      dealer_name: u.dealer_name ?? dealerNameByUserId.get(u.id) ?? null,
+      dealer_codes: dealerCodesByUserId.get(u.id) ?? null,
     }))
 
     return new Response(

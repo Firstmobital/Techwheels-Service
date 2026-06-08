@@ -23,6 +23,7 @@ interface AppUser {
   branch:      string | null
   dealer_code: string | null
   dealer_name: string | null
+  dealer_codes?: string[] | null
   is_active:   boolean
   created_at:  string
 }
@@ -62,6 +63,7 @@ interface UsersWithPhoneResponse {
     branch?: string | null
     dealer_code?: string | null
     dealer_name?: string | null
+    dealer_codes?: string[] | null
     is_active: boolean
     created_at: string
   }>
@@ -232,6 +234,7 @@ export default function AdminPage() {
             branch: u.branch ?? null,
             dealer_code: u.dealer_code ?? null,
             dealer_name: u.dealer_name ?? null,
+            dealer_codes: Array.isArray(u.dealer_codes) ? u.dealer_codes : null,
             is_active: u.is_active,
             created_at: u.created_at,
           }))
@@ -280,6 +283,7 @@ export default function AdminPage() {
         phone: null,
         dealer_code: null,
         dealer_name: null,
+        dealer_codes: null,
       }))
     )
   }
@@ -484,7 +488,7 @@ export default function AdminPage() {
     setDealerEditUser(u)
     setEditDealerCode(u.dealer_code ?? '')
     setEditDealerName(u.dealer_name ?? '')
-    setEditDealerCodes(u.dealer_code ?? '')
+    setEditDealerCodes(Array.isArray(u.dealer_codes) ? u.dealer_codes.join(', ') : '')
   }
 
   async function saveDealer() {
@@ -500,9 +504,7 @@ export default function AdminPage() {
 
     const explicitPrimary = editDealerCode.trim().toUpperCase()
     const primaryCode = explicitPrimary || parsedCodes[0] || ''
-    const dealerCodes = primaryCode
-      ? Array.from(new Set([primaryCode, ...parsedCodes]))
-      : parsedCodes
+    const dealerCodes = parsedCodes
 
     const code = primaryCode || null
     const name = editDealerName.trim() || null
@@ -539,7 +541,7 @@ export default function AdminPage() {
     showToastMsg(
       error && isMissingDealerColumnError(error)
         ? 'Dealer fallback metadata updated in auth. public.users dealer columns are not present in this schema. Manage primary dealer scope in Admin → Mappings.'
-        : 'Dealer fallback metadata set (including additional dealer codes). Primary scope is from Mappings tab. User must re-login for JWT fallback updates.'
+        : 'Dealer metadata saved. For SM/GM, Additional Dealer Codes control SA visibility; if left blank, scope falls back to mapped dealer codes. User must re-login for JWT updates.'
     )
   }
 
@@ -1289,7 +1291,7 @@ export default function AdminPage() {
             </Field>
           </div>
           <p className="mt-3 text-xs text-gray-600">
-            This sets fallback metadata only. Primary dealer scope is managed in Admin → Mappings (from employee_master). User must sign out and sign back in for JWT fallback updates.
+            This sets fallback metadata only. For SM/GM SA visibility: Additional Dealer Codes take precedence; if blank, scope falls back to mapped dealer codes from Admin → Mappings. User must sign out and sign back in for JWT updates.
           </p>
           <div className="mt-5 flex justify-end gap-3">
             <button onClick={() => setDealerEditUser(null)} className={BTN_SECONDARY}>Cancel</button>

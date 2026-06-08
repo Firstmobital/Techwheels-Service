@@ -38,9 +38,7 @@ Deno.serve(async (req) => {
       : []
 
     const normalizedPrimary = String(dealerCode ?? '').trim().toUpperCase()
-    const finalCodes = normalizedPrimary
-      ? Array.from(new Set([normalizedPrimary, ...normalizedCodes]))
-      : normalizedCodes
+    const finalCodes = normalizedCodes
 
     // Call Supabase Auth API to update metadata
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {

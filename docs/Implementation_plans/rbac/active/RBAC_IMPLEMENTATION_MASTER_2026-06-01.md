@@ -15,6 +15,26 @@
   - Add User modal now warns that business personas belong to Employee Master, reducing governance drift.
   - Contract: these two role layers are intentionally not auto-synced 1:1.
 
+- SM/GM dealer-scope precedence (Service Advisor rows) updated:
+  - Source 1 (priority): JWT `dealer_codes` metadata (Admin → Set Dealer → Additional Dealer Codes).
+  - Source 2 (fallback): active `user_employee_links.dealer_code` mappings when `dealer_codes` is empty/missing.
+  - Result semantics:
+    - `dealer_codes = ['3000840']` -> only dealer `3000840` rows.
+    - `dealer_codes = ['3000840','500A840']` -> both dealer row families.
+    - `dealer_codes = ['3000840','500A840','3001440']` -> all three dealer row families.
+    - `dealer_codes` blank -> mapped dealer rows only.
+
+- Cross-module row-scope unification (all-pages governance):
+  - Canonical helper contract introduced in SQL policy layer:
+    - `my_effective_dealer_codes()`
+    - `dealer_code_in_scope(text)`
+    - `sa_code_in_scope(text)`
+  - Dealer precedence is now intended to be uniform across module-bound pages:
+    - Non-empty JWT `dealer_codes` array -> authoritative row scope.
+    - Empty/missing `dealer_codes` -> active `user_employee_links.dealer_code` fallback.
+  - Policy families targeted for unification include reception/service, parts-orders, settings-models, vehicles/job-cards/autodoc chain, and floor-incharge reception row visibility.
+  - Additional hardening: `service_reception_select_rbac` now requires both dealer scope and SA-code scope (when `sa_employee_code` is present) to prevent mismatched branch/dealer data from leaking through dealer_code-only checks.
+
 - **Admin Bypass Governance Rule Established** ([ADMIN_BYPASS_RLS_GOVERNANCE.md](./../../runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md)):
   - **Core Rule:** Every RLS policy using `has_module_*()` or role-specific scope checks MUST include `is_admin() OR (original_logic)` pattern.
   - **Rationale:** Admin users must never be blocked by role-specific checks; they need full access for testing, debugging, and administration.
