@@ -301,6 +301,19 @@ Deno.serve(async (req) => {
       })
     }
 
+    const grossByJc = new Map<string, number>()
+    completedAssignments.forEach((assignment) => {
+      const jc = normalizeCode(assignment.job_card_number)
+      if (!jc) return
+
+      const revenue = revenueMap.get(jc)
+      if (!revenue) return
+
+      const gross = parseRevenueAmount(revenue.final_labour_amount)
+      if (!Number.isFinite(gross) || gross <= 0) return
+      grossByJc.set(jc, gross)
+    })
+
     type Aggregated = {
       technicianCode: string
       technicianName: string
@@ -309,24 +322,17 @@ Deno.serve(async (req) => {
 
     const aggregatedMap = new Map<string, Aggregated>()
 
-    completedAssignments.forEach((assignment) => {
-      const jc = normalizeCode(assignment.job_card_number)
-      if (!jc) return
-
-      const revenue = revenueMap.get(jc)
-      if (!revenue) return
-
-      // Filter by assignment date (when technician completed work), not income/close date
+    assignmentRows.forEach((assignment) => {
       const assignmentDateKey = getIstDateKey(assignment.out_ts ?? assignment.assigned_at)
       if (assignmentDateKey !== targetDateKey) return
-
-      const gross = parseRevenueAmount(revenue.final_labour_amount)
-      const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no)
-      if (!Number.isFinite(technicianIncome) || technicianIncome <= 0) return
 
       const code = normalizeCode(assignment.technician_code)
       if (!code) return
       const name = String(assignment.technician_name ?? '').trim() || code
+
+      const jc = normalizeCode(assignment.job_card_number)
+      const gross = jc ? grossByJc.get(jc) ?? 0 : 0
+      const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no)
 
       const existing = aggregatedMap.get(code) ?? {
         technicianCode: code,
@@ -334,7 +340,7 @@ Deno.serve(async (req) => {
         earnings: 0,
       }
 
-      existing.earnings += technicianIncome
+      existing.earnings += Number.isFinite(technicianIncome) ? technicianIncome : 0
       aggregatedMap.set(code, existing)
     })
 
