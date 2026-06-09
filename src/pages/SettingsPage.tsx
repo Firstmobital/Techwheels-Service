@@ -27,6 +27,9 @@ interface EmployeeRow {
   department: string | null
   fuel_type: string | null
   role: string | null
+  bank_name: string | null
+  account_number: string | null
+  ifsc: string | null
 }
 
 interface MappingIssueRow {
@@ -49,6 +52,9 @@ interface EmployeeUploadRow {
   department: string | null
   fuel_type: string | null
   role: string | null
+  bank_name: string | null
+  account_number: string | null
+  ifsc: string | null
 }
 
 interface RateUploadRow {
@@ -143,10 +149,16 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
           }
         }
 
-        // Optional headers for location, fuel_type and role.
+        // Optional headers for location, fuel_type, role, and bank details.
         const locationHeader = normalizedToOriginal.get('location')
         const fuelTypeHeader = normalizedToOriginal.get('fuel type') || normalizedToOriginal.get('fuel_type')
         const roleHeader = normalizedToOriginal.get('role') || normalizedToOriginal.get('rote')
+        const bankNameHeader = normalizedToOriginal.get('bank name') || normalizedToOriginal.get('bank_name')
+        const accountNumberHeader =
+          normalizedToOriginal.get('account number') ||
+          normalizedToOriginal.get('account_number') ||
+          normalizedToOriginal.get('a/c number')
+        const ifscHeader = normalizedToOriginal.get('ifsc') || normalizedToOriginal.get('ifsc code') || normalizedToOriginal.get('ifsc_code')
 
         if (missingHeaders.length > 0) {
           reject(new Error(`Missing required headers: ${missingHeaders.join(', ')}`))
@@ -161,6 +173,9 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
             const location = locationHeader ? String(row[locationHeader] ?? '').trim() : ''
             const fuelType = fuelTypeHeader ? String(row[fuelTypeHeader] ?? '').trim() : ''
             const role = roleHeader ? String(row[roleHeader] ?? '').trim() : ''
+            const bankName = bankNameHeader ? String(row[bankNameHeader] ?? '').trim() : ''
+            const accountNumber = accountNumberHeader ? String(row[accountNumberHeader] ?? '').trim() : ''
+            const ifsc = ifscHeader ? String(row[ifscHeader] ?? '').trim() : ''
             const derived = deriveLocationAndFuelType(code)
 
             if (!code || !name) {
@@ -174,6 +189,9 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
               department: department || null,
               fuel_type: derived?.fuel_type ?? (fuelType || null),
               role: role || null,
+              bank_name: bankName || null,
+              account_number: accountNumber || null,
+              ifsc: ifsc || null,
             }
           })
           .filter((row): row is EmployeeUploadRow => row !== null)
@@ -309,6 +327,9 @@ export default function SettingsPage() {
     department: '',
     fuel_type: '',
     role: '',
+    bank_name: '',
+    account_number: '',
+    ifsc: '',
   })
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false)
@@ -325,6 +346,9 @@ export default function SettingsPage() {
         employee.department ?? '',
         employee.fuel_type ?? '',
         employee.role ?? '',
+        employee.bank_name ?? '',
+        employee.account_number ?? '',
+        employee.ifsc ?? '',
       ]
         .join(' ')
         .toLowerCase()
@@ -345,6 +369,9 @@ export default function SettingsPage() {
       Department: emp.department || '',
       'Fuel Type': emp.fuel_type || '',
       Role: emp.role || '',
+      'Bank Name': emp.bank_name || '',
+      'Account Number': emp.account_number || '',
+      IFSC: emp.ifsc || '',
     }))
 
     const worksheet = XLSX.utils.json_to_sheet(exportData)
@@ -540,7 +567,7 @@ export default function SettingsPage() {
     setLoadingEmployees(true)
     const { data, error: fetchError } = await supabase
       .from('employee_master')
-      .select('id, employee_code, employee_name, location, department, fuel_type, role')
+      .select('id, employee_code, employee_name, location, department, fuel_type, role, bank_name, account_number, ifsc')
       .order('employee_code', { ascending: true })
 
     if (fetchError) {
@@ -1119,6 +1146,9 @@ export default function SettingsPage() {
       department: employee.department?.trim() || null,
       fuel_type: employee.fuel_type?.trim() || null,
       role: employee.role?.trim() || null,
+      bank_name: employee.bank_name?.trim() || null,
+      account_number: employee.account_number?.trim() || null,
+      ifsc: employee.ifsc?.trim().toUpperCase() || null,
     }
 
     // Avoid updating employee_code unless it was actually changed.
@@ -1168,6 +1198,9 @@ export default function SettingsPage() {
       department: newEmployee.department.trim() || null,
       fuel_type: newEmployee.fuel_type.trim() || derived?.fuel_type || null,
       role: newEmployee.role.trim() || null,
+      bank_name: newEmployee.bank_name.trim() || null,
+      account_number: newEmployee.account_number.trim() || null,
+      ifsc: newEmployee.ifsc.trim().toUpperCase() || null,
     }
 
     if (!payload.employee_code || !payload.employee_name) {
@@ -1184,7 +1217,17 @@ export default function SettingsPage() {
       return
     }
 
-    setNewEmployee({ employee_code: '', employee_name: '', location: '', department: '', fuel_type: '', role: '' })
+    setNewEmployee({
+      employee_code: '',
+      employee_name: '',
+      location: '',
+      department: '',
+      fuel_type: '',
+      role: '',
+      bank_name: '',
+      account_number: '',
+      ifsc: '',
+    })
     setMessage(`Added ${payload.employee_code}.`)
     await fetchEmployees()
   }, [fetchEmployees, newEmployee])
@@ -1839,7 +1882,7 @@ export default function SettingsPage() {
                 <input
                   value={employeeSearch}
                   onChange={(event) => setEmployeeSearch(event.target.value)}
-                  placeholder="Search code, name, role, location"
+                  placeholder="Search code, name, role, location, bank, IFSC"
                   className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-xs outline-none ring-blue-100 focus:border-blue-500 focus:ring"
                 />
               </div>
@@ -1847,7 +1890,7 @@ export default function SettingsPage() {
             </div>
 
             {showAddEmployeeForm && (
-            <div className="grid grid-cols-1 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-7">
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-10">
               <input
                 value={newEmployee.employee_code}
                 onChange={(event) => {
@@ -1893,6 +1936,24 @@ export default function SettingsPage() {
                 placeholder="Business Role"
                 className="rounded border border-gray-300 px-2 py-1 text-xs"
               />
+              <input
+                value={newEmployee.bank_name}
+                onChange={(event) => setNewEmployee((prev) => ({ ...prev, bank_name: event.target.value }))}
+                placeholder="Bank Name"
+                className="rounded border border-gray-300 px-2 py-1 text-xs"
+              />
+              <input
+                value={newEmployee.account_number}
+                onChange={(event) => setNewEmployee((prev) => ({ ...prev, account_number: event.target.value }))}
+                placeholder="Account Number"
+                className="rounded border border-gray-300 px-2 py-1 text-xs"
+              />
+              <input
+                value={newEmployee.ifsc}
+                onChange={(event) => setNewEmployee((prev) => ({ ...prev, ifsc: event.target.value.toUpperCase() }))}
+                placeholder="IFSC"
+                className="rounded border border-gray-300 px-2 py-1 text-xs uppercase"
+              />
               <div className="flex items-center md:justify-end">
                 <button
                   type="button"
@@ -1916,17 +1977,20 @@ export default function SettingsPage() {
                     <th className="px-3 py-2 font-semibold">Department</th>
                     <th className="px-3 py-2 font-semibold">Fuel Type</th>
                     <th className="px-3 py-2 font-semibold">Business Role</th>
+                    <th className="px-3 py-2 font-semibold">Bank Name</th>
+                    <th className="px-3 py-2 font-semibold">Account Number</th>
+                    <th className="px-3 py-2 font-semibold">IFSC</th>
                     <th className="px-3 py-2 font-semibold">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loadingEmployees ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={7}>Loading employees...</td>
+                      <td className="px-3 py-3 text-gray-400" colSpan={10}>Loading employees...</td>
                     </tr>
                   ) : filteredEmployees.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-3 text-gray-400" colSpan={7}>
+                      <td className="px-3 py-3 text-gray-400" colSpan={10}>
                         {employees.length === 0 ? 'No employees found.' : 'No matching employees for current search.'}
                       </td>
                     </tr>
@@ -2031,6 +2095,54 @@ export default function SettingsPage() {
                             }}
                             placeholder="Business Role"
                             className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={employee.bank_name ?? ''}
+                            disabled={editingEmployeeId !== employee.id}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setEmployees((prev) =>
+                                prev.map((row) =>
+                                  row.id === employee.id ? { ...row, bank_name: value } : row,
+                                ),
+                              )
+                            }}
+                            placeholder="Bank Name"
+                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={employee.account_number ?? ''}
+                            disabled={editingEmployeeId !== employee.id}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setEmployees((prev) =>
+                                prev.map((row) =>
+                                  row.id === employee.id ? { ...row, account_number: value } : row,
+                                ),
+                              )
+                            }}
+                            placeholder="Account Number"
+                            className="w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100 disabled:text-gray-600"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={employee.ifsc ?? ''}
+                            disabled={editingEmployeeId !== employee.id}
+                            onChange={(event) => {
+                              const value = event.target.value.toUpperCase()
+                              setEmployees((prev) =>
+                                prev.map((row) =>
+                                  row.id === employee.id ? { ...row, ifsc: value } : row,
+                                ),
+                              )
+                            }}
+                            placeholder="IFSC"
+                            className="w-full rounded border border-gray-300 px-2 py-1 uppercase disabled:bg-gray-100 disabled:text-gray-600"
                           />
                         </td>
                         <td className="px-3 py-2">

@@ -230,84 +230,85 @@ export const ComplaintPortalPage: React.FC = () => {
           </div>
         )}
 
-        {/* Service Context Card - Prominent at top for mobile */}
-        {data.entry_summary && (
-          <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-4 mb-6 sticky top-4 z-40">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="text-2xl">🛡️</div>
-              <div className="flex-1">
-                <div className="text-xs font-semibold text-blue-600 uppercase tracking-wider">TechWheels Care</div>
-                <div className="text-sm font-semibold text-gray-900">{data.entry_summary.reg_number}</div>
-              </div>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              <span className="font-semibold">{data.entry_summary.model}</span> • {data.entry_summary.service_type}
-            </p>
-            {data.entry_summary.branch && (
-              <p className="text-xs text-gray-500 mt-1">📍 {data.entry_summary.branch}</p>
-            )}
-          </div>
-        )}
-
         {/* VERIFY SCREEN - Landing Page */}
         {mode === 'verify' && (
-          <div className="space-y-4 pb-8">
-            {/* Blue Header Section */}
-            <div className="bg-gradient-to-b from-blue-700 to-blue-600 rounded-2xl text-white p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-2xl">🛡️</span>
-                <div className="text-lg font-bold">TechWheels Care</div>
-              </div>
-              <p className="text-sm opacity-90 mb-4">Service feedback for</p>
-              
-              {/* Vehicle Info Card within header */}
-              {data.entry_summary && (
-                <div className="bg-blue-600/40 backdrop-blur rounded-2xl p-4 border border-white/25">
-                  <div className="text-xl font-bold mb-2">{data.entry_summary.reg_number}</div>
-                  <p className="text-sm opacity-95 leading-relaxed">
-                    {data.entry_summary.model} • {data.entry_summary.service_type}
+          <div style={{paddingBottom: '32px'}}>
+            {data.entry_summary && (
+              <>
+                {/* Dark Blue Header Section */}
+                <div style={{background: '#1e3a8a', padding: '24px 20px', marginBottom: '0', borderRadius: '0'}}>
+                  {/* TechWheels Care Header */}
+                  <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px'}}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+                    </svg>
+                    <div style={{fontSize: '16px', fontWeight: 700, color: 'white'}}>TechWheels Care</div>
+                  </div>
+                  
+                  {/* Service Feedback Label */}
+                  <p style={{fontSize: '13px', color: '#e0e7ff', marginBottom: '14px', margin: '0 0 14px 0'}}>Service feedback for</p>
+                  
+                  {/* Vehicle Card - Light Blue inside Dark Blue */}
+                  <div style={{background: '#E8F1FD', border: '1px solid #D0DFF0', borderRadius: '10px', padding: '12px 14px'}}>
+                    <div style={{fontFamily: 'monospace', fontSize: '18px', fontWeight: 700, letterSpacing: '.04em', color: '#0E1726', marginBottom: '6px'}}>{data.entry_summary.reg_number}</div>
+                    <p style={{fontSize: '13px', color: '#62708A', margin: '0 0 6px 0'}}>
+                      {data.entry_summary.model} • {data.entry_summary.service_type}
+                    </p>
+                    {data.entry_summary.branch && (
+                      <p style={{fontSize: '12px', color: '#62708A', margin: '0'}}>JC-Fs...</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* White Background Section */}
+                <div style={{padding: '20px', background: '#ffffff'}}>
+                  {/* Main Content */}
+                  <h1 style={{fontSize: '21px', fontWeight: 700, letterSpacing: '-.01em', color: '#0E1726', marginBottom: '8px', margin: '0 0 8px 0'}}>
+                    Not happy with your service?
+                  </h1>
+                  <p style={{fontSize: '13.5px', color: '#62708A', lineHeight: 1.55, margin: '0 0 20px 0'}}>
+                    We're sorry if your visit at <span style={{fontWeight: 600, color: '#2B3852'}}>{data.entry_summary.branch}</span> on 06 Jun 2026 didn't go as expected. Raise a complaint and our team will personally resolve it.
+                  </p>
+
+                  {/* Value Props */}
+                  <div style={{display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px'}}>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+                      </svg>
+                      <span style={{fontSize: '13px', fontWeight: 600, color: '#2B3852'}}>This link is unique to your vehicle visit</span>
+                    </div>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="8" r="3.5" />
+                        <path d="M5 20a7 7 0 0 1 14 0" />
+                      </svg>
+                      <span style={{fontSize: '13px', fontWeight: 600, color: '#2B3852'}}>Goes straight to your advisor, Arjhant Jain</span>
+                    </div>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="8" />
+                        <path d="M12 8v4l3 2" />
+                      </svg>
+                      <span style={{fontSize: '13px', fontWeight: 600, color: '#2B3852'}}>Track the resolution live on this same link</span>
+                    </div>
+                  </div>
+
+                  {/* CTA Button */}
+                  <button
+                    onClick={() => setMode('raise')}
+                    style={{background: '#2563EB', height: '50px', borderRadius: '10px', fontSize: '15px', fontWeight: 600, width: '100%', border: 'none', color: 'white', cursor: 'pointer', marginBottom: '12px'}}
+                    className="hover:opacity-90 transition-all"
+                  >
+                    Raise a complaint
+                  </button>
+
+                  <p style={{fontSize: '12.5px', color: '#62708A', textAlign: 'center', margin: 0}}>
+                    Just visiting? You can also view past requests here.
                   </p>
                 </div>
-              )}
-            </div>
-
-            {/* Main Content */}
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">
-                Not happy with your service?
-              </h1>
-              <p className="text-gray-600 text-sm mb-6 leading-relaxed">
-                We're sorry if your visit at <span className="font-semibold">{data.entry_summary?.branch}</span> on 06 Jun 2026 didn't go as expected. Raise a complaint and our team will personally resolve it.
-              </p>
-
-              {/* Value Props - Simple bullet list style */}
-              <div className="space-y-3 mb-6">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">🛡️</span>
-                  <span className="text-gray-700 font-semibold text-sm">This link is unique to your vehicle visit</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">👤</span>
-                  <span className="text-gray-700 font-semibold text-sm">Goes straight to your advisor, Arjhant Jain</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">⏱️</span>
-                  <span className="text-gray-700 font-semibold text-sm">Track the resolution live on this same link</span>
-                </div>
-              </div>
-
-              {/* CTA Button */}
-              <button
-                onClick={() => setMode('raise')}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all min-h-12 text-base font-medium mb-3"
-              >
-                Raise a complaint
-              </button>
-
-              <p className="text-xs text-gray-600 text-center">
-                Just visiting? You can also view past requests here.
-              </p>
-            </div>
+              </>
+            )}
           </div>
         )}
 

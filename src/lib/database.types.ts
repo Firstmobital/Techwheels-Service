@@ -76,34 +76,43 @@ export type Database = {
       }
       employee_master: {
         Row: {
+          account_number: string | null
+          bank_name: string | null
           created_at: string
           department: string | null
           employee_code: string
           employee_name: string
           fuel_type: string | null
           id: number
+          ifsc: string | null
           location: string | null
           role: string | null
           updated_at: string
         }
         Insert: {
+          account_number?: string | null
+          bank_name?: string | null
           created_at?: string
           department?: string | null
           employee_code: string
           employee_name: string
           fuel_type?: string | null
           id?: never
+          ifsc?: string | null
           location?: string | null
           role?: string | null
           updated_at?: string
         }
         Update: {
+          account_number?: string | null
+          bank_name?: string | null
           created_at?: string
           department?: string | null
           employee_code?: string
           employee_name?: string
           fuel_type?: string | null
           id?: never
+          ifsc?: string | null
           location?: string | null
           role?: string | null
           updated_at?: string

@@ -20,6 +20,7 @@ import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
 import ComplaintsPage from './pages/ComplaintsPage'
 import ComplaintPortalPage from './pages/ComplaintPortalPage'
+import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
@@ -700,6 +701,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
   if (location.pathname.startsWith('/c/')) {
     return (
       <Routes>
+        <Route path="/verify-preview" element={<VerifyScreenPreview />} />
         <Route path="/c/:token" element={<ComplaintPortalPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
