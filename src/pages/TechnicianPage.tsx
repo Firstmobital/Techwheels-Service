@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
+import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
 
 type TechnicianAssignmentRow = {
   id: number
@@ -205,6 +206,8 @@ function calculateTechnicianIncome(
 export default function TechnicianPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reportEmailState, setReportEmailState] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [sendingReportEmail, setSendingReportEmail] = useState(false)
   const [assignments, setAssignments] = useState<TechnicianAssignmentRow[]>([])
   const [canEditSharePercent, setCanEditSharePercent] = useState(false)
   const [pvSharePercent, setPvSharePercent] = useState(DEFAULT_PV_SHARE_PERCENT)
@@ -707,6 +710,27 @@ export default function TechnicianPage() {
     [technicianCards],
   )
 
+  async function handleSendYesterdayReportEmail() {
+    setSendingReportEmail(true)
+    setReportEmailState(null)
+
+    const res = await sendTechnicianDailyEarningsTestEmail()
+    if (res.error || !res.data) {
+      setReportEmailState({
+        type: 'error',
+        message: res.error ?? 'Failed to send technician report email.',
+      })
+      setSendingReportEmail(false)
+      return
+    }
+
+    setReportEmailState({
+      type: 'success',
+      message: `Email sent for ${res.data.reportDateIst}. Rows: ${res.data.rowCount}, Total: ${formatCurrency(res.data.totalEarnings)}.`,
+    })
+    setSendingReportEmail(false)
+  }
+
   return (
     <div>
       <div className="pagehead">
@@ -766,12 +790,33 @@ export default function TechnicianPage() {
             )
           })}
         </div>
+
+        {canEditSharePercent && (
+          <div className="toolbar toolbar--tight">
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={() => void handleSendYesterdayReportEmail()}
+              disabled={sendingReportEmail}
+            >
+              <Icon name="mail" size={14} className="icon-align-text" />
+              {sendingReportEmail ? 'Sending test email…' : 'Send Yesterday Earnings Test Email'}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
         <div className="toast error">
           <Icon name="alert" size={14} />
           {error}
+        </div>
+      )}
+
+      {reportEmailState && (
+        <div className={`toast ${reportEmailState.type === 'error' ? 'error' : ''}`} style={reportEmailState.type === 'success' ? { borderColor: 'rgba(34,197,94,.35)', color: '#166534', background: '#f0fdf4' } : undefined}>
+          <Icon name={reportEmailState.type === 'error' ? 'alert' : 'checksm'} size={14} />
+          {reportEmailState.message}
         </div>
       )}
 

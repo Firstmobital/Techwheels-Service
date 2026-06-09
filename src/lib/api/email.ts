@@ -287,3 +287,51 @@ This is an automated message from the AutoDoc Warranty Manager. Please do not re
 
   return { subject, html, plainText }
 }
+
+export interface TechnicianDailyEarningsTestResult {
+  success: boolean
+  reportDateIst: string
+  recipients: string[]
+  rowCount: number
+  totalEarnings: number
+  attachment: {
+    bucket: string
+    storagePath: string
+    filename: string
+  }
+}
+
+export async function sendTechnicianDailyEarningsTestEmail(
+  runDateIst?: string,
+): Promise<ApiResult<TechnicianDailyEarningsTestResult>> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
+    if (!accessToken) return fail('No authenticated session for report email send')
+
+    const response = await fetch(
+      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/technician-daily-earnings-report`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          runMode: 'test',
+          ...(runDateIst ? { runDateIst } : {}),
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      const details = await response.text()
+      return fail(`Technician report email failed: ${details}`)
+    }
+
+    const payload = await response.json() as TechnicianDailyEarningsTestResult
+    return ok(payload)
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'Unknown error sending technician report email')
+  }
+}

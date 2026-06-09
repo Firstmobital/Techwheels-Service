@@ -284,7 +284,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const auth = await validateRequest(req)
+    const INTERNAL_EMAIL_DISPATCH_SECRET = Deno.env.get('INTERNAL_EMAIL_DISPATCH_SECRET') ?? ''
+    const providedInternalSecret = req.headers.get('x-internal-email-secret') ?? ''
+    const isInternalDispatch = Boolean(INTERNAL_EMAIL_DISPATCH_SECRET) && providedInternalSecret === INTERNAL_EMAIL_DISPATCH_SECRET
+
+    const auth = isInternalDispatch
+      ? { userId: 'system:internal-dispatch' }
+      : await validateRequest(req)
 
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
     const FROM_EMAIL = Deno.env.get('RESEND_FROM_EMAIL') ?? ''
