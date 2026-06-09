@@ -79,6 +79,7 @@ interface UploadProgressState {
   currentBranch: Branch | null
   processedRows: number
   totalRows: number
+  currentStep: 'processing' | 'uploading' | null
 }
 
 interface CardState {
@@ -256,6 +257,7 @@ function emptyCard(branches: readonly Branch[]): CardState {
       currentBranch: null,
       processedRows: 0,
       totalRows: 0,
+      currentStep: null,
     },
     portal: 'EV',
   }
@@ -904,7 +906,12 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
           </div>
           {state.uploadProgress.currentBranch && (
             <div className="imp-card__progcur">
-              Uploading {state.uploadProgress.currentBranch}…
+              {state.uploadProgress.currentStep === 'processing' ? 'Processing' : 'Uploading'} {state.uploadProgress.currentBranch}…
+            </div>
+          )}
+          {state.uploadProgress.currentStep === 'processing' && (
+            <div className="imp-card__progcur" style={{ opacity: 0.8 }}>
+              Validating and mapping rows…
             </div>
           )}
         </div>
@@ -1024,6 +1031,7 @@ export default function ImportPage() {
           currentBranch: null,
           processedRows: 0,
           totalRows: 0,
+          currentStep: null,
         },
         slots: { ...prev.slots, [branch]: { file, rowCount: null, parseError } },
       }))
@@ -1069,6 +1077,7 @@ export default function ImportPage() {
           currentBranch: null,
           processedRows: 0,
           totalRows: 0,
+          currentStep: null,
         },
         slots: { ...prev.slots, [branch]: emptySlot() },
       }))
@@ -1081,14 +1090,16 @@ export default function ImportPage() {
   const handleUpload = useCallback(
     async (config: CardConfig) => {
       const { tableName } = config
+      const isJcClosedUpload = tableName === 'job_card_closed_data'
       const cardState = cards[tableName]
       const branchesForCard = config.branches ?? PORTAL_BRANCHES
       const readyBranches = branchesForCard.filter((branch) => {
         const slot = cardState.slots[branch]
         return !!slot.file && !slot.parseError && slot.rowCount !== null
       })
+      const rowProgressMultiplier = isJcClosedUpload ? 2 : 1
       const totalRowsToUpload = readyBranches.reduce(
-        (sum, branch) => sum + (cardState.slots[branch].rowCount ?? 0),
+        (sum, branch) => sum + (cardState.slots[branch].rowCount ?? 0) * rowProgressMultiplier,
         0,
       )
 
@@ -1102,6 +1113,7 @@ export default function ImportPage() {
           currentBranch: readyBranches[0] ?? null,
           processedRows: 0,
           totalRows: totalRowsToUpload,
+          currentStep: isJcClosedUpload ? 'processing' : 'uploading',
         },
       })
 
@@ -1166,7 +1178,7 @@ export default function ImportPage() {
               'part_number,branch,order_date',
             ].filter((candidate) => partsOrderIncludesAll(candidate.split(',')))
           : []
-        const CHUNK = isVasTable ? 5000 : 2000  // Larger chunks for VAS (faster, uses batch upsert)
+        const CHUNK = isVasTable || isJcClosedTable ? 5000 : 2000
         let totalInserted = 0
         let processedRows = 0
         const mappingIssues: MappingIssueInsert[] = []
@@ -1681,6 +1693,7 @@ export default function ImportPage() {
             uploadProgress: {
               ...prev.uploadProgress,
               currentBranch: branch,
+              currentStep: isJcClosedTable ? 'processing' : 'uploading',
             },
           }))
 
@@ -1749,6 +1762,19 @@ export default function ImportPage() {
           } else if (isJcClosedTable && jcHeaderMapping) {
             const jcParseErrors: JcClosedParseError[] = []
             const insertRows: Record<string, unknown>[] = []
+            let processingRowsBatch = 0
+            const PROCESSING_PROGRESS_BATCH_SIZE = 250
+
+            const flushProcessingProgress = async (yieldToUI = false): Promise<void> => {
+              if (processingRowsBatch > 0) {
+                incrementProcessedRows(processingRowsBatch)
+                processingRowsBatch = 0
+              }
+
+              if (yieldToUI) {
+                await new Promise<void>((resolve) => setTimeout(resolve, 0))
+              }
+            }
 
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildJcClosedInsertRow(
@@ -1861,7 +1887,14 @@ export default function ImportPage() {
                 row.job_card_number = normalizedJobCardNumber
                 insertRows.push(row)
               }
+
+              processingRowsBatch += 1
+              if (processingRowsBatch >= PROCESSING_PROGRESS_BATCH_SIZE) {
+                await flushProcessingProgress(true)
+              }
             }
+
+            await flushProcessingProgress(false)
 
             if (jcParseErrors.length > 0) {
               throw new Error(
@@ -1880,6 +1913,14 @@ export default function ImportPage() {
                   .trim()
                   .slice(0, 10)}`,
             )
+
+            updateCard(tableName, (prev) => ({
+              ...prev,
+              uploadProgress: {
+                ...prev.uploadProgress,
+                currentStep: 'uploading',
+              },
+            }))
 
             totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
           } else if (isInvoiceTable) {
@@ -2290,6 +2331,7 @@ export default function ImportPage() {
             processedBranches: prev.uploadProgress.totalBranches,
             currentBranch: null,
             processedRows: prev.uploadProgress.totalRows,
+            currentStep: null,
           },
         }))
       } catch (err) {
@@ -2309,6 +2351,7 @@ export default function ImportPage() {
           uploadProgress: {
             ...prev.uploadProgress,
             currentBranch: null,
+            currentStep: null,
           },
         }))
       }
