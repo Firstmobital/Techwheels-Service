@@ -376,39 +376,41 @@ export default function ReportsPage() {
           <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
         </div>
 
-        {headerStatsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="animate-pulse bg-gray-100 rounded h-24" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="rounded-xl border border-gray-200 border-l-4 border-l-blue-500 bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Job Cards This Month</p>
-              <p className="mt-1 text-2xl font-semibold text-gray-900">
-                {headerStats.monthlyJobCards.toLocaleString('en-IN')}
-              </p>
+        {resolvedCategoryId !== 'parts' && (
+          headerStatsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <div key={idx} className="animate-pulse bg-gray-100 rounded h-24" />
+              ))}
             </div>
-            <div className="rounded-xl border border-gray-200 border-l-4 border-l-green-500 bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Revenue This Month</p>
-              <p className="mt-1 text-2xl font-semibold text-gray-900">
-                ₹{(headerStats.monthlyRevenue / 100000).toFixed(1)}L
-              </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-xl border border-gray-200 border-l-4 border-l-blue-500 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Job Cards This Month</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">
+                  {headerStats.monthlyJobCards.toLocaleString('en-IN')}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 border-l-4 border-l-green-500 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Revenue This Month</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">
+                  ₹{(headerStats.monthlyRevenue / 100000).toFixed(1)}L
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 border-l-4 border-l-red-500 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Total VAS Revenue</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">
+                  ₹{(headerStats.totalVasRevenue / 100000).toFixed(1)}L
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 border-l-4 border-l-amber-500 bg-white p-4 shadow-sm">
+                <p className="text-sm text-gray-600">Total VAS Count</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">
+                  {headerStats.totalVasCount.toLocaleString('en-IN')}
+                </p>
+              </div>
             </div>
-            <div className="rounded-xl border border-gray-200 border-l-4 border-l-red-500 bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Total VAS Revenue</p>
-              <p className="mt-1 text-2xl font-semibold text-gray-900">
-                ₹{(headerStats.totalVasRevenue / 100000).toFixed(1)}L
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 border-l-4 border-l-amber-500 bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-600">Total VAS Count</p>
-              <p className="mt-1 text-2xl font-semibold text-gray-900">
-                {headerStats.totalVasCount.toLocaleString('en-IN')}
-              </p>
-            </div>
-          </div>
+          )
         )}
 
         <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -434,38 +436,40 @@ export default function ReportsPage() {
           </div>
         </section>
 
-        <ReportFiltersPanel
-          branch={branch}
-          onBranchChange={setBranch}
-          branchOptions={branchOptions}
-          branchError={null}
-          fuelType={fuelType}
-          onFuelTypeChange={setFuelType}
-          disableFuelType={!canApplyFuelTypeFilter}
-          showServiceTypeFilter={shouldShowServiceTypeFilter}
-          showManpowerFilters={shouldShowManpowerWiseFilter}
-          serviceTypeFilter={serviceTypeFilter}
-          onServiceTypeFilterChange={setServiceTypeFilter}
-          serviceTypeOptions={serviceTypeOptions}
-          parentProductLineFilter={parentProductLineFilter}
-          onParentProductLineFilterChange={setParentProductLineFilter}
-          parentProductLineOptions={parentProductLineOptions}
-          manpowerFilterLabel={isManpowerReportSelected ? 'Parent Product Line' : 'Manpower Wise'}
-          showServiceAdvisorFilter={shouldShowServiceAdvisorFilter}
-          serviceAdvisorFilter={serviceAdvisorFilter}
-          onServiceAdvisorFilterChange={setServiceAdvisorFilter}
-          serviceAdvisorOptions={serviceAdvisorOptions}
-          datePreset={datePreset}
-          onDatePresetChange={setDatePreset}
-          dateFieldType={effectiveDateFieldType}
-          onDateFieldTypeChange={setDateFieldType}
-          showDateFieldTypeFilter={showDateFieldTypeFilter}
-          customFrom={customFrom}
-          onCustomFromChange={setCustomFrom}
-          customTo={customTo}
-          onCustomToChange={setCustomTo}
-          customDateError={customDateError}
-        />
+        {resolvedCategoryId !== 'parts' && (
+          <ReportFiltersPanel
+            branch={branch}
+            onBranchChange={setBranch}
+            branchOptions={branchOptions}
+            branchError={null}
+            fuelType={fuelType}
+            onFuelTypeChange={setFuelType}
+            disableFuelType={!canApplyFuelTypeFilter}
+            showServiceTypeFilter={shouldShowServiceTypeFilter}
+            showManpowerFilters={shouldShowManpowerWiseFilter}
+            serviceTypeFilter={serviceTypeFilter}
+            onServiceTypeFilterChange={setServiceTypeFilter}
+            serviceTypeOptions={serviceTypeOptions}
+            parentProductLineFilter={parentProductLineFilter}
+            onParentProductLineFilterChange={setParentProductLineFilter}
+            parentProductLineOptions={parentProductLineOptions}
+            manpowerFilterLabel={isManpowerReportSelected ? 'Parent Product Line' : 'Manpower Wise'}
+            showServiceAdvisorFilter={shouldShowServiceAdvisorFilter}
+            serviceAdvisorFilter={serviceAdvisorFilter}
+            onServiceAdvisorFilterChange={setServiceAdvisorFilter}
+            serviceAdvisorOptions={serviceAdvisorOptions}
+            datePreset={datePreset}
+            onDatePresetChange={setDatePreset}
+            dateFieldType={effectiveDateFieldType}
+            onDateFieldTypeChange={setDateFieldType}
+            showDateFieldTypeFilter={showDateFieldTypeFilter}
+            customFrom={customFrom}
+            onCustomFromChange={setCustomFrom}
+            customTo={customTo}
+            onCustomToChange={setCustomTo}
+            customDateError={customDateError}
+          />
+        )}
 
         {customDateError ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700 shadow-sm">
