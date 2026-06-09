@@ -1,7 +1,7 @@
 # COMPLAINTS MODULE — COMPREHENSIVE IMPLEMENTATION PLAN
 
 **Project Name:** Complaint Ticketing System  
-**Status:** 🔄 PLANNING PHASE  
+**Status:** 🔄 CORE IMPLEMENTED; POLISH/QA PENDING  
 **Created:** 2026-06-08  
 **Target Deployment:** 2–3 sprints  
 **Repository:** Firstmobital/Techwheels-Service (Vite + React + TS + Supabase)
@@ -1986,6 +1986,21 @@ Evidence gathered:
 **Status: Phase 3 (Customer Portal) & Phase 4 (Staff Module) COMPLETE**
 - Production readiness: Portal & dashboard both live-tested with real DB data; no critical issues remaining
 - Remaining work (out of scope for this session): pgTAP test suite execution, production deployment checklist
+
+### Pending Work Snapshot (as of 2026-06-09)
+
+1. Testing hardening
+   - pgTAP suite is still pending for: single-use raise, tenant isolation, internal-note hiding, SLA breach checks.
+2. Staff module completeness
+   - Inbox and detail modal are live, but dedicated Board tab and SLA tab are still pending.
+   - Reassign and set-priority controls are not exposed in current UI actions yet.
+   - Action visibility is not yet explicitly gated by can_modify in the page-level controls.
+3. Customer portal finish
+   - Mobile-first pass is still pending against design parity checklist.
+   - Full scripted E2E workflow (mint link -> raise -> track -> reopen) is pending as a formal test artifact.
+4. Notification and reporting layer
+   - Outbox/event pipeline and SMS or email stubs are pending.
+   - Complaints reports page is still optional and not implemented.
 
 ---
 
