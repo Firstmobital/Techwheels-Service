@@ -161,6 +161,12 @@ function normalizeCode(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
 
+function isSbiBank(bank: EmployeeBankRow | undefined): boolean {
+  const bankName = String(bank?.bank_name ?? '').trim().toUpperCase()
+  const ifsc = String(bank?.ifsc ?? '').trim().toUpperCase()
+  return bankName.includes('STATE BANK OF INDIA') || bankName === 'SBI' || ifsc.startsWith('SBIN')
+}
+
 function chunk<T>(input: T[], size: number): T[][] {
   const out: T[][] = []
   for (let i = 0; i < input.length; i += size) {
@@ -355,30 +361,31 @@ Deno.serve(async (req) => {
     }
 
     // Build worksheet rows matching sample format (13 columns A-M)
-    // A, B, C, D: static values (0, 1, 6, 8)
+    // No header row in generated file.
+    // A: static 300971 for all rows
+    // B, C, D: static values as per sample
     // E: Technician Name, F: Account Number, G: IFSC, H: Earnings
-    // I: Sequential counter (234+), J, K, L, M: static values (2, 3, 4, 5)
-    const worksheetRows: Array<Array<string | number>> = [
-      ['Category', 'Type', 'Region', 'Branch', 'Advisor Name', 'Bank Account', 'IFSC Code', 'Earnings (INR)', 'ID', 'Field J', 'Field K', 'Field L', 'Field M'],
-    ]
+    // I: Sequential counter (234+), J, K, L, M: static values as per sample
+    const worksheetRows: Array<Array<string | number>> = []
     let sequenceCounter = 234
 
     aggregatedRows.forEach((row) => {
       const bank = bankByCode.get(row.technicianCode)
+      const paymentMode = isSbiBank(bank) ? 'DCR' : 'NEFT'
       worksheetRows.push([
-        0, // A: static
-        1, // B: static
-        6, // C: static
-        8, // D: static
+        '300971', // A: static
+        '1', // B: static
+        '6', // C: static
+        paymentMode, // D: DCR for SBI, NEFT for others
         row.technicianName, // E: Technician Name
         String(bank?.account_number ?? '').trim(), // F: Account Number
         String(bank?.ifsc ?? '').trim().toUpperCase(), // G: IFSC
         Number(row.earnings.toFixed(2)), // H: Earnings Amount
-        sequenceCounter++, // I: Sequential counter (234, 235, 236...)
-        2, // J: static
-        3, // K: static
-        4, // L: static
-        5, // M: static
+        String(sequenceCounter++), // I: Sequential counter (234, 235, 236...)
+        '2', // J: static
+        '3', // K: static
+        '4', // L: static
+        '5', // M: static
       ])
     })
 
