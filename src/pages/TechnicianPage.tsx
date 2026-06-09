@@ -151,6 +151,15 @@ function normalizeSharePercentInput(value: string, fallback: number): number {
   return Math.min(100, Math.max(0, parsed))
 }
 
+function getAssignmentDateKey(row: TechnicianAssignmentRow): string | null {
+  const dateSource = row.out_ts ?? row.assigned_at
+  if (!dateSource) return null
+
+  const parsed = new Date(dateSource)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString().slice(0, 10)
+}
+
 function calculateTechnicianIncome(
   grossLabourAmount: number,
   bayNo: string | null | undefined,
@@ -176,6 +185,8 @@ export default function TechnicianPage() {
   const [selectedTechnicianCode, setSelectedTechnicianCode] = useState('')
   const [selectedDayKey, setSelectedDayKey] = useState('')
   const [selectedVehicleOnDayKey, setSelectedVehicleOnDayKey] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   async function loadData() {
     setLoading(true)
@@ -377,6 +388,20 @@ export default function TechnicianPage() {
     }))
   }, [assignments, pvSharePercent, evSharePercent])
 
+  const filteredAssignmentsWithIncome = useMemo(() => {
+    const hasFrom = Boolean(fromDate)
+    const hasTo = Boolean(toDate)
+    if (!hasFrom && !hasTo) return assignmentsWithIncome
+
+    return assignmentsWithIncome.filter((row) => {
+      const dateKey = getAssignmentDateKey(row)
+      if (!dateKey) return false
+      if (hasFrom && dateKey < fromDate) return false
+      if (hasTo && dateKey > toDate) return false
+      return true
+    })
+  }, [assignmentsWithIncome, fromDate, toDate])
+
   const parsedDraftPvSharePercent = useMemo(
     () => normalizeSharePercentInput(draftPvSharePercent, pvSharePercent),
     [draftPvSharePercent, pvSharePercent],
@@ -393,13 +418,12 @@ export default function TechnicianPage() {
   const technicianCards = useMemo<TechnicianSummaryCard[]>(() => {
     const byTechnician = new Map<string, TechnicianSummaryCard & { days: Set<string> }>()
 
-    assignmentsWithIncome.forEach((row) => {
+    filteredAssignmentsWithIncome.forEach((row) => {
       const code = String(row.technician_code ?? '').trim().toUpperCase()
       if (!code) return
 
       const name = String(row.technician_name ?? '').trim() || code
-      const dateSource = row.out_ts ?? row.assigned_at ?? ''
-      const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
+      const dateKey = getAssignmentDateKey(row) ?? 'unknown'
       
       const existing = byTechnician.get(code) ?? {
         code,
@@ -423,7 +447,7 @@ export default function TechnicianPage() {
         if (b.totalIncome !== a.totalIncome) return b.totalIncome - a.totalIncome
         return b.rowCount - a.rowCount
       })
-  }, [assignmentsWithIncome])
+  }, [filteredAssignmentsWithIncome])
 
   useEffect(() => {
     if (technicianCards.length === 0) {
@@ -446,15 +470,14 @@ export default function TechnicianPage() {
   const selectedTechnicianRows = useMemo(() => {
     const code = String(selectedTechnicianCode ?? '').trim().toUpperCase()
     if (!code) return []
-    return assignmentsWithIncome.filter((row) => String(row.technician_code ?? '').trim().toUpperCase() === code)
-  }, [assignmentsWithIncome, selectedTechnicianCode])
+    return filteredAssignmentsWithIncome.filter((row) => String(row.technician_code ?? '').trim().toUpperCase() === code)
+  }, [filteredAssignmentsWithIncome, selectedTechnicianCode])
 
   const dayCards = useMemo<DayWiseCard[]>(() => {
     const byDay = new Map<string, DayWiseCard>()
 
     selectedTechnicianRows.forEach((row) => {
-      const dateSource = row.out_ts ?? row.assigned_at ?? ''
-      const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
+      const dateKey = getAssignmentDateKey(row) ?? 'unknown'
       const label = dateKey === 'unknown' ? 'No date' : new Date(dateKey).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })
 
       const existing = byDay.get(dateKey) ?? {
@@ -496,8 +519,7 @@ export default function TechnicianPage() {
   const dayRowsForSelectedDay = useMemo(() => {
     if (!selectedDayKey) return []
     return selectedTechnicianRows.filter((row) => {
-      const dateSource = row.out_ts ?? row.assigned_at ?? ''
-      const dateKey = dateSource ? new Date(dateSource).toISOString().slice(0, 10) : 'unknown'
+      const dateKey = getAssignmentDateKey(row) ?? 'unknown'
       return dateKey === selectedDayKey
     })
   }, [selectedTechnicianRows, selectedDayKey])
@@ -608,6 +630,56 @@ export default function TechnicianPage() {
           <div>
             <div className="n">{formatCurrency(totalIncome)}</div>
             <div className="l">Total earnings</div>
+          </div>
+        </div>
+        <div className="schip schip--date-filter">
+          <div className="schip-date-filter__head">
+            <div className="l">Date range filter</div>
+          </div>
+          <div className="schip-date-filter__controls">
+            <label className="schip-date-filter__field" htmlFor="tech-date-from">
+              <span>From</span>
+              <input
+                id="tech-date-from"
+                type="date"
+                className="inp"
+                value={fromDate}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setFromDate(next)
+                  if (toDate && next && next > toDate) {
+                    setToDate(next)
+                  }
+                }}
+              />
+            </label>
+            <label className="schip-date-filter__field" htmlFor="tech-date-to">
+              <span>To</span>
+              <input
+                id="tech-date-to"
+                type="date"
+                className="inp"
+                value={toDate}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setToDate(next)
+                  if (fromDate && next && next < fromDate) {
+                    setFromDate(next)
+                  }
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm schip-date-filter__clear"
+              onClick={() => {
+                setFromDate('')
+                setToDate('')
+              }}
+              disabled={!fromDate && !toDate}
+            >
+              Clear
+            </button>
           </div>
         </div>
       </div>

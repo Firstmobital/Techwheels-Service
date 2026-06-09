@@ -3,10 +3,23 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-09 12:40 UTC  
+**Last Updated**: 2026-06-09 13:25 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 ### Execution Update (2026-06-09)
+
+- Floor Incharge EV/PV scope policy corrected and executed in Supabase SQL Editor:
+  - Executed migration: `supabase/migrations/20260609_fix_floor_incharge_scope_respect_employee_master_fuel.sql`
+  - Root cause: policy drift had added `sa_code_in_scope(sa_employee_code)` to Floor Incharge visibility. This reintroduced dealer-prefix gating from SA code fragments (for example, `PS2_3000840`) and could block valid Floor Incharge users whose mapped dealer code differed but fuel scope matched.
+  - Policy contract after execution:
+    - keep `has_module_view('floor_incharge')`
+    - keep `user_has_floor_incharge_scope_for_sa_code(sa_employee_code)` (role + fuel_type from Employee Master)
+    - remove SA-code dealer-prefix gate from Floor Incharge select policy
+  - Business impact: forced fuel-type overrides in Employee Master are now honored for Floor Incharge row visibility without being negated by SA-code prefix compatibility checks.
+  - Concrete validation case recorded:
+    - vehicle `RJ60CE2883`
+    - SA code `PS2_3000840` (EV)
+    - EV floor user `evfloor.techwheels@gmail.com` (mapped to `500A840_444`) was previously blocked by SA-code scope mismatch and is now policy-eligible via fuel-scope match.
 
 - Complaints module introduced a controlled anonymous access path by design:
   - Public route: `/c/:token` (customer complaint portal).
@@ -49,6 +62,9 @@
     - Non-empty JWT `dealer_codes` array -> authoritative row scope.
     - Empty/missing `dealer_codes` -> active `user_employee_links.dealer_code` fallback.
   - Policy families targeted for unification include reception/service, parts-orders, settings-models, vehicles/job-cards/autodoc chain, and floor-incharge reception row visibility.
+  - Exception recorded on 2026-06-09 for Floor Incharge policy family:
+    - Floor Incharge visibility is intentionally dealer-prefix agnostic and must be controlled by module permission + Employee Master fuel-scope matching only.
+    - Do not append `sa_code_in_scope(sa_employee_code)` to `service_reception_select_floor_incharge`.
   - Additional hardening: `service_reception_select_rbac` now requires both dealer scope and SA-code scope (when `sa_employee_code` is present) to prevent mismatched branch/dealer data from leaking through dealer_code-only checks.
 
 - **Admin Bypass Governance Rule Established** ([ADMIN_BYPASS_RLS_GOVERNANCE.md](./../../runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md)):

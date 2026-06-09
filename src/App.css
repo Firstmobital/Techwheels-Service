@@ -1442,6 +1442,47 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   flex-wrap: wrap;
 }
 
+.schip--date-filter {
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.schip-date-filter__head {
+  display: flex;
+  align-items: center;
+}
+
+.schip-date-filter__controls {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schip-date-filter__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 148px;
+}
+
+.schip-date-filter__field span {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.schip-date-filter__field .inp {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.schip-date-filter__clear {
+  height: 30px;
+}
+
 @media (max-width: 1400px) {
   .tech-drill-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1466,6 +1507,19 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   .tech-drill-grid,
   .tech-drill-grid--sm {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .schip--date-filter {
+    width: 100%;
+  }
+
+  .schip-date-filter__controls {
+    width: 100%;
+  }
+
+  .schip-date-filter__field {
+    min-width: 0;
+    flex: 1 1 170px;
   }
 
   .tech-share-corner {
