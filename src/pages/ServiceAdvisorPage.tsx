@@ -6,6 +6,7 @@ import {
   uploadServiceAdvisorEstimate,
   markServiceAdvisorInvoiceDone,
   getDealerScopeContext,
+  generateComplaintLink,
   type ReceptionEntryRow,
 } from '../lib/api'
 import { supabase } from '../lib/supabase'
@@ -250,6 +251,10 @@ export default function ServiceAdvisorPage() {
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
   const [inProcessJobCardNumbers, setInProcessJobCardNumbers] = useState<Set<string>>(new Set())
   const [allAssignedJobCardNumbers, setAllAssignedJobCardNumbers] = useState<Set<string>>(new Set())
+
+  // Complaint link modal state
+  const [complaintLinkModal, setComplaintLinkModal] = useState<{ open: boolean; url: string | null; regNumber: string | null }>({ open: false, url: null, regNumber: null })
+  const [generatingComplaintLink, setGeneratingComplaintLink] = useState<number | null>(null)
 
   const searchQuery = useMemo(() => search.trim().toLowerCase(), [search])
 
@@ -931,6 +936,33 @@ export default function ServiceAdvisorPage() {
     window.open(waUrl, '_blank', 'noopener,noreferrer')
   }
 
+  async function handleGenerateComplaintLink(row: ReceptionEntryRow) {
+    setGeneratingComplaintLink(row.id)
+    setError(null)
+
+    try {
+      const result = await generateComplaintLink(BigInt(row.id))
+      const baseUrl = window.location.origin
+      const complaintUrl = `${baseUrl}/c/${result.token}`
+      setComplaintLinkModal({ open: true, url: complaintUrl, regNumber: row.reg_number })
+      showToast('Complaint link generated')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to generate complaint link'
+      setError(message)
+      showToast(message)
+    } finally {
+      setGeneratingComplaintLink(null)
+    }
+  }
+
+  function copyComplaintLinkToClipboard() {
+    if (complaintLinkModal.url) {
+      navigator.clipboard.writeText(complaintLinkModal.url)
+        .then(() => showToast('Link copied to clipboard'))
+        .catch(() => showToast('Failed to copy link'))
+    }
+  }
+
   return (
     <div>
       {/* Toast Notification */}
@@ -938,6 +970,84 @@ export default function ServiceAdvisorPage() {
         <div className="sa-toast">
           <Icon name="checksm" size={16} strokeWidth={2.4} />
           {toastMsg}
+        </div>
+      )}
+
+      {/* Complaint Link Modal */}
+      {complaintLinkModal.open && complaintLinkModal.url && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+          }}>
+            <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Complaint Link for {complaintLinkModal.regNumber}</h3>
+            <p style={{ marginBottom: '16px', color: '#666', fontSize: '14px' }}>
+              Share this link with the customer to raise a complaint. They can open it directly in any browser without authentication.
+            </p>
+            <div style={{
+              backgroundColor: '#f5f5f5',
+              padding: '12px',
+              borderRadius: '6px',
+              marginBottom: '16px',
+              wordBreak: 'break-all',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              color: '#333',
+            }}>
+              {complaintLinkModal.url}
+            </div>
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              justifyContent: 'flex-end',
+            }}>
+              <button
+                type="button"
+                onClick={() => setComplaintLinkModal({ open: false, url: null, regNumber: null })}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #ddd',
+                  backgroundColor: '#f5f5f5',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={copyComplaintLinkToClipboard}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#0066cc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                }}
+              >
+                Copy Link
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1471,6 +1581,16 @@ export default function ServiceAdvisorPage() {
                             >
                               Create Group
                             </button>
+                            {isCompleted && <button
+                              type="button"
+                              onClick={() => void handleGenerateComplaintLink(row)}
+                              disabled={generatingComplaintLink === row.id}
+                              className="tbtn tbtn--compact"
+                              title="Generate complaint link for customer"
+                            >
+                              <Icon name="complaints" size={13} strokeWidth={2} />
+                              {generatingComplaintLink === row.id ? 'Generating...' : 'Complaint'}
+                            </button>}
                           </div>
                         </td>
                       </tr>

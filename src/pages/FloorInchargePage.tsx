@@ -145,6 +145,10 @@ function getFuelTypeLabel(value: string | null | undefined): string {
   return trimmed || UNKNOWN_FUEL_TYPE
 }
 
+function normalizeEmployeeCode(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
 function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
   const assignmentKey = (row.jc_number?.trim() || `RECEPTION-${row.id}`).toUpperCase()
 
@@ -162,7 +166,7 @@ function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
     owner_phone: row.owner_phone ?? null,
     branch: row.branch ?? null,
     sa_employee_code: row.sa_employee_code ?? null,
-    fuel_type: null,
+    fuel_type: row.fuel_type ?? null,
     assignment_key: assignmentKey,
   }
 }
@@ -288,7 +292,6 @@ export default function FloorInchargePage() {
         supabase
           .from('employee_master')
           .select('id, employee_code, employee_name, department, location, role')
-          .ilike('role', 'technician')
           .order('employee_name'),
       ])
 
@@ -302,7 +305,7 @@ export default function FloorInchargePage() {
 
       const saCodes = Array.from(new Set(
         baseRows
-          .map((row) => row.sa_employee_code)
+          .map((row) => normalizeEmployeeCode(row.sa_employee_code))
           .filter((value): value is string => Boolean(value)),
       ))
 
@@ -315,7 +318,7 @@ export default function FloorInchargePage() {
 
         if (!saFuelRes.error) {
           ;(saFuelRes.data ?? []).forEach((row) => {
-            const code = String((row as { employee_code?: string }).employee_code ?? '').trim()
+            const code = normalizeEmployeeCode((row as { employee_code?: string }).employee_code)
             if (!code) return
             const fuelType = String((row as { fuel_type?: string | null }).fuel_type ?? '').trim()
             saFuelMap.set(code, fuelType || null)
@@ -325,12 +328,17 @@ export default function FloorInchargePage() {
 
       const receptionRows = baseRows.map((row) => ({
         ...row,
-        fuel_type: row.sa_employee_code ? (saFuelMap.get(row.sa_employee_code) ?? null) : null,
+        fuel_type: (() => {
+          const normalizedCode = normalizeEmployeeCode(row.sa_employee_code)
+          if (!normalizedCode) return row.fuel_type ?? null
+          return saFuelMap.get(normalizedCode) ?? row.fuel_type ?? null
+        })(),
       }))
 
-      const technicianEmployees = (empRes.data ?? []).filter((employee) =>
-        String(employee.role ?? '').trim().toLowerCase() === 'technician',
-      )
+      const technicianEmployees = (empRes.data ?? []).filter((employee) => {
+        const normalizedRole = String(employee.role ?? '').trim().toLowerCase()
+        return normalizedRole === 'technician' || normalizedRole.includes('technician')
+      })
 
       setJobCards(receptionRows)
       setEmployees(technicianEmployees)

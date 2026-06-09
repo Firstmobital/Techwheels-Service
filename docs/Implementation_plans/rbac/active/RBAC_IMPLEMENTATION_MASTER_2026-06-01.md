@@ -3,8 +3,24 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-08 08:20 UTC  
+**Last Updated**: 2026-06-09 12:40 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-06-09)
+
+- Complaints module introduced a controlled anonymous access path by design:
+  - Public route: `/c/:token` (customer complaint portal).
+  - Access model: no direct table grants to anon; access is only through `SECURITY DEFINER` RPCs with token validation.
+  - Approved anon RPCs:
+    - `public.get_complaint_by_token(text)`
+    - `public.raise_complaint(text, text, text, text, text, text, text)`
+    - `public.add_customer_message(text, text)`
+    - `public.submit_csat(text, integer, text)`
+    - `public.reopen_complaint(text, text)`
+- Governance clarification:
+  - P0-04 "anon surface elimination" remains valid for legacy public/object exposure cleanup.
+  - Current posture is now "deny-by-default anon" with explicit, audited RPC allowlist for customer portal flows.
+  - Any future anon grant must be tied to token-scoped `SECURITY DEFINER` RPCs only and recorded in this master plan.
 
 ### Execution Update (2026-06-08)
 
@@ -104,7 +120,7 @@ Progress update (2026-06-08, staged tightening):
   - Baseline policy continuity check passed (`p0_auth_select/insert/update` present on all 4 tables)
   - RLS confirmation passed (`rls_enabled = true`) on all 4 tables
 - Staged `p0_auth_delete` tightening track status: COMPLETE (Step 1 through Step 4 validated)
-- P0-04 anon-surface restriction complete (0/0/0 post-migration confirmation).
+- P0-04 anon-surface restriction complete (0/0/0 post-migration confirmation, prior to complaints anon RPC allowlist).
 - P0-05 leaked-password protection rollout checklist prepared: `docs/Implementation_plans/supabase/runbooks/SUPABASE_P0_05_LEAKED_PASSWORD_ROLLOUT_CHECKLIST.md`; queued for auth validation
 - P0-04 pre-check baseline captured (before dashboard restriction):
   - `public_policy_rows = 25`
@@ -113,7 +129,7 @@ Progress update (2026-06-08, staged tightening):
   - Observed `{public}`-role policy families on: `documents`, `estimate_rows`, `job_cards`, `email_logs`, `panel_photos`, `panels`, `modules`, `users`, `user_module_permissions`, `vehicles`.
   - DB-level migration executed: `20260608182000_p0_04_restrict_anon_public_surface.sql`
   - Post-migration result: `0 / 0 / 0` (complete anon surface elimination from baseline 25/322/31)
-  - Status: COMPLETE — anon policy paths re-scoped to `authenticated` only; all anon object grants revoked
+  - Status: COMPLETE — anon policy paths re-scoped to `authenticated` only; all anon object grants revoked (with later exception for complaints token-RPC allowlist)
 
 ### Execution Update (2026-06-01)
 

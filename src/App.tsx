@@ -18,6 +18,8 @@ import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
 import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
+import ComplaintsPage from './pages/ComplaintsPage'
+import ComplaintPortalPage from './pages/ComplaintPortalPage'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
 import { DirtyProvider, useDirty } from './context/DirtyContext'
@@ -36,8 +38,9 @@ const NAV_ITEMS = [
   { to: '/autodoc', label: 'AutoDoc', icon: 'autodoc' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
   { to: '/admin', label: 'Admin', icon: 'admin' },
-]
 
+  { to: '/complaints', label: 'Complaints', icon: 'complaints' },
+]
 type ModuleName =
   | 'job_cards'
   | 'invoices'
@@ -52,8 +55,9 @@ type ModuleName =
   | 'service_advisor'
   | 'floor_incharge'
   | 'technician'
+  | 'complaints'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/technician'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/technician' | '/complaints'
 
 interface PermissionRow {
   module_name: string
@@ -69,6 +73,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/service-advisor': ['service_advisor'],
   '/floor-incharge': ['floor_incharge'],
   '/technician': ['technician'],
+  '/complaints': ['complaints'],
 }
 
 type NavItem = {
@@ -80,7 +85,7 @@ type NavItem = {
 const HOME_ROUTE = '/home'
 
 function isPublicAuthPath(pathname: string): boolean {
-  return pathname === '/' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/auth/callback'
+  return pathname === '/' || pathname === '/signup' || pathname === '/forgot-password' || pathname === '/auth/callback' || pathname.startsWith('/c/')
 }
 
 function isNavItemActive(pathname: string, route: AppRoute) {
@@ -394,6 +399,8 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
   if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
+  if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
+  if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
   return false
 }
@@ -690,6 +697,15 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
 
   if (location.pathname === '/auth/callback') return <AuthCallback />
 
+  if (location.pathname.startsWith('/c/')) {
+    return (
+      <Routes>
+        <Route path="/c/:token" element={<ComplaintPortalPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    )
+  }
+
   if (permissionsLoading) {
     return (
       <AuthGate>
@@ -837,11 +853,20 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                     </RequireAccess>
                   )}
                 />
+                <Route
+                  path="/complaints"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/complaints']}>
+                      <ComplaintsPage />
+                    </RequireAccess>
+                  )}
+                />
                 <Route path="*" element={<Navigate to={HOME_ROUTE} replace />} />
               </Routes>
             )}
           </div>
         </main>
+
       </div>
     </AuthGate>
   )

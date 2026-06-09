@@ -206,8 +206,9 @@ textarea.inp { height: auto; padding: 11px 13px; resize: vertical; line-height: 
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 9px 10px; border-radius: var(--r-xs); border: 0; background: none;
   font-size: 13.5px; font-weight: 500; color: var(--ink-2); text-align: left;
+  min-height: 36px; line-height: 1.1;
 }
-.menu__item .ic { color: var(--faint); display: grid; place-items: center; }
+.menu__item .ic { width: 16px; height: 16px; flex: none; color: var(--faint); display: grid; place-items: center; }
 .menu__item:hover { background: var(--canvas); color: var(--ink); }
 .menu__item.is-active { background: var(--accent-soft); color: var(--accent); }
 .menu__item.is-active .ic { color: var(--accent); }
