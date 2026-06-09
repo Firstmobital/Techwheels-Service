@@ -112,10 +112,10 @@ CREATE POLICY job_card_support_assignments_delete_rbac ON public.job_card_suppor
   USING (public.is_admin() OR public.has_module_delete('floor_incharge'));
 
 COMMENT ON TABLE public.job_card_support_assignments IS
-  'Stores one active support-person assignment per job card for floor incharge workflow.';
+  'Stores multiple active support-person assignments per job card for floor incharge workflow.';
 
 COMMENT ON COLUMN public.job_card_support_assignments.support_role IS
-  'Allowed roles: DET, ELECTRICIAN, DENTER, TECHNICIAN.';
+  'Support role: DET, ELECTRICIAN, DENTER, or TECHNICIAN. Multiple people per job card allowed.';
 
 COMMENT ON COLUMN public.job_card_support_assignments.is_active IS
   'Soft-active flag. Allows multiple active support assignments per job card.';
