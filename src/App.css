@@ -1139,13 +1139,19 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 260px;
+  max-width: 100%;
   font-size: 11.5px;
   color: var(--ink-2);
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 3px 9px;
+}
+
+.fi-support-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .fi-support-pill__role {
@@ -1195,6 +1201,33 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   margin: 0;
   color: var(--warn);
   font-size: 12px;
+}
+
+.fi-support-existing {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fi-support-existing p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.fi-support-existing__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fi-support-existing__label {
+  font-size: 12px;
+  color: var(--ink-2);
 }
 
 .fi-remove-btn {

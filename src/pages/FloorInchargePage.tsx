@@ -308,7 +308,7 @@ export default function FloorInchargePage() {
   const [allEmployees, setAllEmployees] = useState<Employee[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [assignments, setAssignments] = useState<Record<string, TechnicianAssignment>>({})
-  const [supportAssignments, setSupportAssignments] = useState<Record<string, SupportAssignment>>({})
+  const [supportAssignments, setSupportAssignments] = useState<Record<string, SupportAssignment[]>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [supportSaving, setSupportSaving] = useState<string | null>(null)
@@ -447,15 +447,30 @@ export default function FloorInchargePage() {
       }
 
       if (supportRows.length > 0) {
-        const supportMap: Record<string, SupportAssignment> = {}
+        const supportMap: Record<string, SupportAssignment[]> = {}
         for (const supportAssignment of supportRows) {
           const normalizedJc = String(supportAssignment.job_card_number ?? '').trim().toUpperCase()
           if (!normalizedJc) continue
-          supportMap[normalizedJc] = {
+          const normalizedSupportAssignment: SupportAssignment = {
             ...supportAssignment,
             support_role: normalizeSupportRole(supportAssignment.support_role) ?? 'TECHNICIAN',
           }
+
+          if (!supportMap[normalizedJc]) {
+            supportMap[normalizedJc] = [normalizedSupportAssignment]
+          } else {
+            supportMap[normalizedJc].push(normalizedSupportAssignment)
+          }
         }
+
+        Object.keys(supportMap).forEach((key) => {
+          supportMap[key].sort((a, b) => {
+            const aTime = new Date(a.assigned_at).getTime()
+            const bTime = new Date(b.assigned_at).getTime()
+            return bTime - aTime
+          })
+        })
+
         setSupportAssignments(supportMap)
       } else {
         setSupportAssignments({})
@@ -560,10 +575,9 @@ export default function FloorInchargePage() {
   }
 
   function openSupportModal(jobCard: JobCard) {
-    const existing = supportAssignments[jobCard.assignment_key]
     setSupportModalJobCard(jobCard)
-    setSupportModalRole(existing?.support_role ?? '')
-    setSupportModalEmployeeCode(existing?.employee_code ?? '')
+    setSupportModalRole('')
+    setSupportModalEmployeeCode('')
   }
 
   async function saveSupportAssignment() {
@@ -604,32 +618,33 @@ export default function FloorInchargePage() {
         is_active: true,
       }
 
-      const existing = supportAssignments[jobCardNumber]
-      let result
+      const existingForJob = supportAssignments[jobCardNumber] ?? []
+      const alreadyExists = existingForJob.some((item) =>
+        normalizeEmployeeCode(item.employee_code) === supportEmployeeCode,
+      )
 
-      if (existing?.id) {
-        result = await supabase
-          .from('job_card_support_assignments')
-          .update(payload)
-          .eq('id', existing.id)
-          .select()
-          .single()
-      } else {
-        result = await supabase
-          .from('job_card_support_assignments')
-          .insert(payload)
-          .select()
-          .single()
+      if (alreadyExists) {
+        showToast('This person is already added to the job card', 'error')
+        return
       }
+
+      const result = await supabase
+        .from('job_card_support_assignments')
+        .insert(payload)
+        .select()
+        .single()
 
       if (result.error) throw result.error
 
       setSupportAssignments((prev) => ({
         ...prev,
-        [jobCardNumber]: {
-          ...(result.data as SupportAssignment),
-          support_role: normalizeSupportRole((result.data as SupportAssignment).support_role) ?? supportModalRole,
-        },
+        [jobCardNumber]: [
+          {
+            ...(result.data as SupportAssignment),
+            support_role: normalizeSupportRole((result.data as SupportAssignment).support_role) ?? supportModalRole,
+          },
+          ...(prev[jobCardNumber] ?? []),
+        ],
       }))
 
       showToast(`Support person assigned to ${jobCardNumber}`, 'success')
@@ -642,33 +657,28 @@ export default function FloorInchargePage() {
     }
   }
 
-  async function clearSupportAssignment() {
-    if (!supportModalJobCard) return
-
-    const jobCardNumber = supportModalJobCard.assignment_key
-    const existing = supportAssignments[jobCardNumber]
-    if (!existing?.id) {
-      closeSupportModal()
-      return
-    }
-
+  async function removeSupportAssignment(jobCardNumber: string, assignmentId: number) {
     setSupportSaving(jobCardNumber)
     try {
       const result = await supabase
         .from('job_card_support_assignments')
         .update({ is_active: false })
-        .eq('id', existing.id)
+        .eq('id', assignmentId)
 
       if (result.error) throw result.error
 
       setSupportAssignments((prev) => {
         const next = { ...prev }
-        delete next[jobCardNumber]
+        const nextRows = (next[jobCardNumber] ?? []).filter((item) => item.id !== assignmentId)
+        if (nextRows.length === 0) {
+          delete next[jobCardNumber]
+        } else {
+          next[jobCardNumber] = nextRows
+        }
         return next
       })
 
       showToast(`Support person removed from ${jobCardNumber}`, 'success')
-      closeSupportModal()
     } catch (err: unknown) {
       const msg = getErrorMessage(err, 'Failed to remove support assignment')
       showToast(msg, 'error')
@@ -770,7 +780,7 @@ export default function FloorInchargePage() {
 
     return statusScopedRows.filter((jc) => {
       const assignment = assignments[jc.assignment_key]
-      const supportAssignment = supportAssignments[jc.assignment_key]
+      const supportPeople = supportAssignments[jc.assignment_key] ?? []
       const searchText = [
         jc.jc_number ?? '',
         jc.reg_number ?? '',
@@ -783,9 +793,9 @@ export default function FloorInchargePage() {
         jc.branch ?? '',
         assignment?.technician_name ?? '',
         assignment?.technician_code ?? '',
-        supportAssignment?.employee_name ?? '',
-        supportAssignment?.employee_code ?? '',
-        supportAssignment?.support_role ?? '',
+        supportPeople.map((item) => item.employee_name).join(' '),
+        supportPeople.map((item) => item.employee_code).join(' '),
+        supportPeople.map((item) => item.support_role).join(' '),
       ]
         .join(' ')
         .toLowerCase()
@@ -1156,7 +1166,7 @@ export default function FloorInchargePage() {
                 <tbody>
                   {filtered.map((jc) => {
                     const assignment = assignments[jc.assignment_key]
-                    const supportAssignment = supportAssignments[jc.assignment_key]
+                    const supportPeople = supportAssignments[jc.assignment_key] ?? []
                     const isSaving = saving === jc.assignment_key
                     const draft = stageDrafts[jc.assignment_key] ?? {
                       bay_no: assignment?.bay_no ?? '',
@@ -1214,10 +1224,18 @@ export default function FloorInchargePage() {
                                 <Icon name="plus" size={14} strokeWidth={2.2} />
                               </button>
                             </div>
-                            {supportAssignment ? (
-                              <div className="fi-support-pill" title={`${supportAssignment.employee_code} • ${supportRoleLabel(supportAssignment.support_role)}`}>
-                                <span className="fi-support-pill__role">{supportRoleLabel(supportAssignment.support_role)}</span>
-                                <span>{supportAssignment.employee_name}</span>
+                            {supportPeople.length > 0 ? (
+                              <div className="fi-support-list">
+                                {supportPeople.map((person) => (
+                                  <div
+                                    key={person.id ?? `${person.employee_code}-${person.assigned_at}`}
+                                    className="fi-support-pill"
+                                    title={`${person.employee_code} • ${supportRoleLabel(person.support_role)}`}
+                                  >
+                                    <span className="fi-support-pill__role">{supportRoleLabel(person.support_role)}</span>
+                                    <span>{person.employee_name}</span>
+                                  </div>
+                                ))}
                               </div>
                             ) : (
                               <div className="fi-support-empty">No support person</div>
@@ -1369,23 +1387,36 @@ export default function FloorInchargePage() {
               {supportModalRole && supportModalEmployees.length === 0 && (
                 <p className="fi-support-hint">No employees found for the selected role in Employee Master.</p>
               )}
+
+              {(supportAssignments[supportModalJobCard.assignment_key] ?? []).length > 0 && (
+                <div className="fi-support-existing">
+                  <p>Added support people</p>
+                  {(supportAssignments[supportModalJobCard.assignment_key] ?? []).map((person) => (
+                    <div key={person.id ?? `${person.employee_code}-${person.assigned_at}`} className="fi-support-existing__row">
+                      <span className="fi-support-existing__label">
+                        {person.employee_name} ({person.employee_code}) • {supportRoleLabel(person.support_role)}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm fi-remove-btn"
+                        onClick={() => {
+                          if (person.id) {
+                            removeSupportAssignment(supportModalJobCard.assignment_key, person.id)
+                          }
+                        }}
+                        disabled={Boolean(supportSaving) || !person.id}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="modal__foot">
               <button type="button" className="btn btn--ghost" onClick={closeSupportModal} disabled={Boolean(supportSaving)}>
                 Cancel
               </button>
-              {supportAssignments[supportModalJobCard.assignment_key]?.id && (
-                <button
-                  type="button"
-                  className="btn btn--ghost fi-remove-btn"
-                  onClick={() => {
-                    clearSupportAssignment()
-                  }}
-                  disabled={Boolean(supportSaving)}
-                >
-                  Remove
-                </button>
-              )}
               <button
                 type="button"
                 className="btn btn--primary"

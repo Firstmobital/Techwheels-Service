@@ -81,8 +81,10 @@ CREATE INDEX IF NOT EXISTS idx_job_card_support_assignments_employee_code
 CREATE INDEX IF NOT EXISTS idx_job_card_support_assignments_is_active
   ON public.job_card_support_assignments (is_active);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_job_card_support_assignments_active_job_card
-  ON public.job_card_support_assignments ((upper(btrim(job_card_number))))
+DROP INDEX IF EXISTS public.uq_job_card_support_assignments_active_job_card;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_job_card_support_assignments_active_job_card_employee
+  ON public.job_card_support_assignments ((upper(btrim(job_card_number))), (upper(btrim(employee_code))))
   WHERE is_active;
 
 ALTER TABLE public.job_card_support_assignments ENABLE ROW LEVEL SECURITY;
@@ -116,6 +118,6 @@ COMMENT ON COLUMN public.job_card_support_assignments.support_role IS
   'Allowed roles: DET, ELECTRICIAN, DENTER, TECHNICIAN.';
 
 COMMENT ON COLUMN public.job_card_support_assignments.is_active IS
-  'Soft-active flag. Unique active support assignment per job card.';
+  'Soft-active flag. Allows multiple active support assignments per job card.';
 
 COMMIT;

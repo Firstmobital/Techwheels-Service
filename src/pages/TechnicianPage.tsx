@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { supabase } from '../lib/supabase'
+import { listFloorInchargeEntries, listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
 
 type TechnicianAssignmentRow = {
   id: number
@@ -26,13 +27,6 @@ type RevenueRow = {
   closed_date_time: string | null
   invoice_date: string | null
   final_labour_amount: number | string | null
-}
-
-type ReceptionEntryRow = {
-  jc_number: string | null
-  reg_number: string | null
-  branch?: string | null
-  fuel_type?: string | null
 }
 
 type TechnicianSummaryCard = {
@@ -128,6 +122,18 @@ function getAssignmentFuelTypeLabel(row: TechnicianAssignmentRow): string {
   if (mappedFuelType !== UNKNOWN_FUEL_TYPE) return mappedFuelType
   const fallbackFuel = extractFuelFromBay(row.bay_no)
   return fallbackFuel ?? UNKNOWN_FUEL_TYPE
+}
+
+function inferBranchFromAssignment(row: TechnicianAssignmentRow): string | null {
+  const technicianCode = String(row.technician_code ?? '').trim().toUpperCase()
+  if (technicianCode.includes('3000840') || technicianCode.includes('500A840')) return 'Sitapura'
+  if (technicianCode.includes('3001440')) return 'Ajmer Road'
+
+  const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+  if (jc.includes('-JP2-')) return 'Sitapura'
+  if (jc.includes('-JP1-')) return 'Ajmer Road'
+
+  return null
 }
 
 function parseRevenueAmount(value: unknown): number {
@@ -304,22 +310,20 @@ export default function TechnicianPage() {
           .filter(Boolean),
       ))
 
-      // Fetch from service_reception_entries (same source as Floor Incharge page)
+      // Reuse Floor Incharge API enrichment path to keep branch/fuel logic consistent.
       let regNumberMap = new Map<string, string>()
       let branchMap = new Map<string, string>()
       let fuelTypeMap = new Map<string, string>()
       let revenueMap = new Map<string, RevenueRow>()
 
       if (assignmentJcNumbers.length > 0) {
-        const receptionRes = await supabase
-          .from('service_reception_entries')
-          .select('jc_number, reg_number, branch, fuel_type')
-          .in('jc_number', assignmentJcNumbers)
-
-        if (!receptionRes.error && receptionRes.data) {
-          ;(receptionRes.data ?? []).forEach((row: any) => {
-            const key = String((row as { jc_number?: string | null }).jc_number ?? '').trim().toUpperCase()
+        const assignmentJcSet = new Set(assignmentJcNumbers)
+        const floorEntriesRes = await listFloorInchargeEntries()
+        if (!floorEntriesRes.error && floorEntriesRes.data) {
+          ;(floorEntriesRes.data ?? []).forEach((row) => {
+            const key = String(row.jc_number ?? '').trim().toUpperCase()
             if (!key) return
+            if (!assignmentJcSet.has(key)) return
 
             const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
             if (regNum && !regNumberMap.has(key)) {
@@ -336,6 +340,35 @@ export default function TechnicianPage() {
               fuelTypeMap.set(key, fuelType)
             }
           })
+        }
+
+        // Fallback for technician JC rows outside Floor Incharge allowed service types.
+        const unresolvedJcNumbers = assignmentJcNumbers.filter((jc) => !branchMap.has(jc) || !regNumberMap.has(jc) || !fuelTypeMap.has(jc))
+        if (unresolvedJcNumbers.length > 0) {
+          const unresolvedSet = new Set(unresolvedJcNumbers)
+          const receptionEntriesRes = await listReceptionEntries()
+          if (!receptionEntriesRes.error && receptionEntriesRes.data) {
+            ;(receptionEntriesRes.data ?? []).forEach((row) => {
+              const key = String(row.jc_number ?? '').trim().toUpperCase()
+              if (!key) return
+              if (!unresolvedSet.has(key)) return
+
+              const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
+              if (regNum && !regNumberMap.has(key)) {
+                regNumberMap.set(key, regNum)
+              }
+
+              const branch = String((row as ReceptionEntryRow).branch ?? '').trim()
+              if (branch && !branchMap.has(key)) {
+                branchMap.set(key, branch)
+              }
+
+              const fuelType = String((row as ReceptionEntryRow).fuel_type ?? '').trim().toUpperCase()
+              if (fuelType && !fuelTypeMap.has(key)) {
+                fuelTypeMap.set(key, fuelType)
+              }
+            })
+          }
         }
       }
 
@@ -390,10 +423,11 @@ export default function TechnicianPage() {
 
       const enrichedAssignmentRows = assignmentRows.map((row) => {
         const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+        const inferredBranch = inferBranchFromAssignment(row)
         return {
           ...row,
           reg_number: regNumberMap.get(jc) ?? null,
-          branch: branchMap.get(jc) ?? null,
+          branch: branchMap.get(jc) ?? inferredBranch,
           fuel_type: fuelTypeMap.get(jc) ?? null,
           gross_labour_amount: grossByJc.get(jc) ?? 0,
         }
