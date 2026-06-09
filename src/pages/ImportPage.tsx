@@ -1103,6 +1103,10 @@ export default function ImportPage() {
         (sum, branch) => sum + (cardState.slots[branch].rowCount ?? 0) * rowProgressMultiplier,
         0,
       )
+      const totalReadyRowsForUpload = readyBranches.reduce(
+        (sum, branch) => sum + (cardState.slots[branch].rowCount ?? 0),
+        0,
+      )
 
       updateCard(tableName, {
         status: 'uploading',
@@ -2347,10 +2351,15 @@ export default function ImportPage() {
 
         broadcastLastUpdated(tableName, persistedLastUpdated)
 
+        const displayedInsertedCount =
+          isJcClosedTable && PSF_REVENUE_REPLACE_ALL_ON_IMPORT
+            ? Math.max(totalInserted, totalReadyRowsForUpload)
+            : totalInserted
+
         updateCard(tableName, (prev) => ({
           ...prev,
           status: 'success',
-          insertedCount: totalInserted,
+          insertedCount: displayedInsertedCount,
           uploadProgress: {
             ...prev.uploadProgress,
             processedBranches: prev.uploadProgress.totalBranches,
