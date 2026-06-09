@@ -170,7 +170,12 @@ function getIncomeDateKey(assignment: TechnicianAssignmentRow, revenue: RevenueR
 
   const parsedDate = new Date(source)
   if (Number.isNaN(parsedDate.getTime())) return null
-  return parsedDate.toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(parsedDate)
 }
 
 function normalizeSharePercentInput(value: string, fallback: number): number {
@@ -187,7 +192,12 @@ function getAssignmentDateKey(row: TechnicianAssignmentRow): string | null {
 
   const parsed = new Date(dateSource)
   if (Number.isNaN(parsed.getTime())) return null
-  return parsed.toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(parsed)
 }
 
 function calculateTechnicianIncome(

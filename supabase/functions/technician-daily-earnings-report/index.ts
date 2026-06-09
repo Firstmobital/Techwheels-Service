@@ -367,25 +367,25 @@ Deno.serve(async (req) => {
     // E: Technician Name, F: Account Number, G: IFSC, H: Earnings
     // I: Sequential counter (234+), J, K, L, M: static values as per sample
     const worksheetRows: Array<Array<string | number>> = []
-    let sequenceCounter = 234
+    let sequenceCounter = 1
 
     aggregatedRows.forEach((row) => {
       const bank = bankByCode.get(row.technicianCode)
       const paymentMode = isSbiBank(bank) ? 'DCR' : 'NEFT'
       worksheetRows.push([
         '300971', // A: static
-        '1', // B: static
-        '6', // C: static
+        'FIRST MOBITAL PRIVATE LIMITED', // B: static
+        '39171760445', // C: static
         paymentMode, // D: DCR for SBI, NEFT for others
         row.technicianName, // E: Technician Name
         String(bank?.account_number ?? '').trim(), // F: Account Number
         String(bank?.ifsc ?? '').trim().toUpperCase(), // G: IFSC
         Number(row.earnings.toFixed(2)), // H: Earnings Amount
-        String(sequenceCounter++), // I: Sequential counter (234, 235, 236...)
-        '2', // J: static
-        '3', // K: static
-        '4', // L: static
-        '5', // M: static
+        `SALARY${sequenceCounter++}`, // I: Sequential counter (SALARY1, SALARY2, ...)
+        'INR', // J: static
+        'JAIPUR', // K: static
+        'SHRUTI@INDIRASWITCH.COM', // L: static
+        'E', // M: static
       ])
     })
 
