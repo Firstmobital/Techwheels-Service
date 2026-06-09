@@ -354,28 +354,31 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Build worksheet rows matching sample format (13 columns A-M)
+    // A, B, C, D: static values (0, 1, 6, 8)
+    // E: Technician Name, F: Account Number, G: IFSC, H: Earnings
+    // I: Sequential counter (234+), J, K, L, M: static values (2, 3, 4, 5)
     const worksheetRows: Array<Array<string | number>> = [
-      [
-        'Technician Code',
-        'Technician Name',
-        'Bank Name',
-        'Account Number',
-        'IFSC',
-        'Earnings Date (IST)',
-        'Yesterday Earnings (INR)',
-      ],
+      ['Category', 'Type', 'Region', 'Branch', 'Advisor Name', 'Bank Account', 'IFSC Code', 'Earnings (INR)', 'ID', 'Field J', 'Field K', 'Field L', 'Field M'],
     ]
+    let sequenceCounter = 234
 
     aggregatedRows.forEach((row) => {
       const bank = bankByCode.get(row.technicianCode)
       worksheetRows.push([
-        row.technicianCode,
-        row.technicianName,
-        String(bank?.bank_name ?? '').trim(),
-        String(bank?.account_number ?? '').trim(),
-        String(bank?.ifsc ?? '').trim().toUpperCase(),
-        targetDateKey,
-        Number(row.earnings.toFixed(2)),
+        0, // A: static
+        1, // B: static
+        6, // C: static
+        8, // D: static
+        row.technicianName, // E: Technician Name
+        String(bank?.account_number ?? '').trim(), // F: Account Number
+        String(bank?.ifsc ?? '').trim().toUpperCase(), // G: IFSC
+        Number(row.earnings.toFixed(2)), // H: Earnings Amount
+        sequenceCounter++, // I: Sequential counter (234, 235, 236...)
+        2, // J: static
+        3, // K: static
+        4, // L: static
+        5, // M: static
       ])
     })
 
