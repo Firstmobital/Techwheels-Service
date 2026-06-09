@@ -316,8 +316,9 @@ Deno.serve(async (req) => {
       const revenue = revenueMap.get(jc)
       if (!revenue) return
 
-      const incomeDateKey = getIncomeDateKey(assignment, revenue)
-      if (incomeDateKey !== targetDateKey) return
+      // Filter by assignment date (when technician completed work), not income/close date
+      const assignmentDateKey = getIstDateKey(assignment.out_ts ?? assignment.assigned_at)
+      if (assignmentDateKey !== targetDateKey) return
 
       const gross = parseRevenueAmount(revenue.final_labour_amount)
       const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no)
