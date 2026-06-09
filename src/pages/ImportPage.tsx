@@ -2351,8 +2351,11 @@ export default function ImportPage() {
 
         broadcastLastUpdated(tableName, persistedLastUpdated)
 
+        const shouldShowUploadedRowsCount =
+          REVENUE_REPORT_TABLES.has(tableName) || PARTS_REPORT_TABLES.has(tableName)
+
         const displayedInsertedCount =
-          isJcClosedTable && PSF_REVENUE_REPLACE_ALL_ON_IMPORT
+          shouldShowUploadedRowsCount
             ? Math.max(totalInserted, totalReadyRowsForUpload)
             : totalInserted
 
