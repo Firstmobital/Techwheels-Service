@@ -53,31 +53,14 @@ ALTER TABLE public.complaint_sla_policies ENABLE ROW LEVEL SECURITY;
 CREATE INDEX ix_complaint_sla_policies_dealer_priority
   ON public.complaint_sla_policies (dealer_code, priority);
 
--- Seed SLA defaults (one-time; ON CONFLICT safe for all dealers)
-INSERT INTO public.complaint_sla_policies (dealer_code, priority, response_mins, resolution_mins)
-SELECT 
-    dealer_code,
-    priority,
-    response_mins,
-    resolution_mins
-FROM (
-    SELECT DISTINCT my_dealer_code() AS dealer_code,
-           priority,
-           CASE priority
-               WHEN 'urgent'   THEN 60
-               WHEN 'high'     THEN 240
-               WHEN 'medium'   THEN 480
-               WHEN 'low'      THEN 1440
-           END AS response_mins,
-           CASE priority
-               WHEN 'urgent'   THEN 480
-               WHEN 'high'     THEN 1440
-               WHEN 'medium'   THEN 2880
-               WHEN 'low'      THEN 5760
-           END AS resolution_mins
-    FROM (VALUES ('urgent'::text), ('high'), ('medium'), ('low')) AS t(priority)
-) AS defaults
-ON CONFLICT (dealer_code, priority) DO NOTHING;
+-- NOTE: Seed SLA defaults per dealer manually after migration
+-- Example for FstMbl dealer:
+-- INSERT INTO public.complaint_sla_policies (dealer_code, priority, response_mins, resolution_mins) VALUES
+--   ('FstMbl', 'urgent', 60, 480),
+--   ('FstMbl', 'high', 240, 1440),
+--   ('FstMbl', 'medium', 480, 2880),
+--   ('FstMbl', 'low', 1440, 5760)
+-- ON CONFLICT (dealer_code, priority) DO NOTHING;
 
 -- ============================================================================
 -- 3. TABLE: complaint_tickets
