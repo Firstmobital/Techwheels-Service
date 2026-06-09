@@ -39,6 +39,7 @@ interface DetailModalState {
 }
 
 export const ComplaintsPage: React.FC = () => {
+  const [currentTab, setCurrentTab] = useState<'inbox' | 'board' | 'sla'>('inbox')
   const [tickets, setTickets] = useState<ComplaintTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -316,99 +317,248 @@ export const ComplaintsPage: React.FC = () => {
           </>
         )}
 
-        {/* Filters */}
-        <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Status
-              </label>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value as ComplaintStatus | 'all' })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Statuses</option>
-                <option value="new">New</option>
-                <option value="acknowledged">Acknowledged</option>
-                <option value="in_progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
-                <option value="reopened">Reopened</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Priority
-              </label>
-              <select
-                value={filters.priority}
-                onChange={(e) => setFilters({ ...filters, priority: e.target.value as ComplaintPriority | 'all' })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Priorities</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Search
-              </label>
-              <input
-                type="text"
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                placeholder="Search by ticket number..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+        {/* Tab Navigation */}
+        <div className="mb-6 border-b border-gray-200">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setCurrentTab('inbox')}
+              className={`px-4 py-3 font-semibold border-b-2 transition ${
+                currentTab === 'inbox'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Inbox
+            </button>
+            <button
+              onClick={() => setCurrentTab('board')}
+              className={`px-4 py-3 font-semibold border-b-2 transition ${
+                currentTab === 'board'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Board
+            </button>
+            <button
+              onClick={() => setCurrentTab('sla')}
+              className={`px-4 py-3 font-semibold border-b-2 transition ${
+                currentTab === 'sla'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              SLA Breaches
+            </button>
           </div>
         </div>
 
-        {/* Tickets List */}
-        <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-          {filteredTickets.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-gray-600">No complaints match the current filters.</p>
+        {/* INBOX TAB */}
+        {currentTab === 'inbox' && (
+          <>
+            {/* Filters */}
+            <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters({ ...filters, status: e.target.value as ComplaintStatus | 'all' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="new">New</option>
+                    <option value="acknowledged">Acknowledged</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                    <option value="reopened">Reopened</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Priority
+                  </label>
+                  <select
+                    value={filters.priority}
+                    onChange={(e) => setFilters({ ...filters, priority: e.target.value as ComplaintPriority | 'all' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Priorities</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Search
+                  </label>
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                    placeholder="Search by ticket number..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="divide-y">
-              {filteredTickets.map((ticket) => (
-                <div
-                  key={ticket.id.toString()}
-                  onClick={() => openDetailModal(ticket.id)}
-                  className="p-4 hover:bg-gray-50 cursor-pointer transition"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{ticket.ticket_number}</h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {ticket.reg_number} • {ticket.title}
-                      </p>
-                      <div className="flex gap-2 mt-2">
-                        <StatusBadge status={ticket.status as ComplaintStatus} />
-                        <PriorityBadge priority={ticket.priority as ComplaintPriority} />
+
+            {/* Tickets List */}
+            <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+              {filteredTickets.length === 0 ? (
+                <div className="p-8 text-center">
+                  <p className="text-gray-600">No complaints match the current filters.</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {filteredTickets.map((ticket) => (
+                    <div
+                      key={ticket.id.toString()}
+                      onClick={() => openDetailModal(ticket.id)}
+                      className="p-4 hover:bg-gray-50 cursor-pointer transition"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900">{ticket.ticket_number}</h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {ticket.reg_number} • {ticket.title}
+                          </p>
+                          <div className="flex gap-2 mt-2">
+                            <StatusBadge status={ticket.status as ComplaintStatus} />
+                            <PriorityBadge priority={ticket.priority as ComplaintPriority} />
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">
+                            {new Date(ticket.created_at).toLocaleDateString()}
+                          </p>
+                          {ticket.is_escalated && (
+                            <p className="text-xs text-red-600 font-semibold mt-1">🚨 Escalated</p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-500">
-                        {new Date(ticket.created_at).toLocaleDateString()}
-                      </p>
-                      {ticket.is_escalated && (
-                        <p className="text-xs text-red-600 font-semibold mt-1">🚨 Escalated</p>
-                      )}
-                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* BOARD TAB */}
+        {currentTab === 'board' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            {(['new', 'acknowledged', 'in_progress', 'resolved', 'closed'] as const).map((status) => {
+              const statusTickets = tickets.filter((t) => t.status === status)
+              const columnTitles: Record<string, string> = {
+                new: 'New',
+                acknowledged: 'Acknowledged',
+                in_progress: 'In Progress',
+                resolved: 'Resolved',
+                closed: 'Closed',
+              }
+
+              return (
+                <div key={status} className="bg-white border rounded-lg p-4 shadow-sm">
+                  <h3 className="font-semibold text-gray-900 mb-3">
+                    {columnTitles[status]}
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-3">{statusTickets.length} tickets</p>
+                  <div className="space-y-2">
+                    {statusTickets.map((ticket) => (
+                      <div
+                        key={ticket.id.toString()}
+                        onClick={() => openDetailModal(ticket.id)}
+                        className="p-3 bg-gray-50 hover:bg-gray-100 border rounded cursor-pointer transition"
+                      >
+                        <p className="font-semibold text-sm text-gray-900">
+                          {ticket.ticket_number}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-1">{ticket.reg_number}</p>
+                        <div className="flex gap-1 mt-2">
+                          <PriorityBadge priority={ticket.priority as ComplaintPriority} />
+                        </div>
+                        {ticket.is_escalated && (
+                          <p className="text-xs text-red-600 font-semibold mt-2">🚨 Escalated</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* SLA BREACHES TAB */}
+        {currentTab === 'sla' && (
+          <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+            {(() => {
+              const slaBreaches = tickets.filter(
+                (t) =>
+                  (t.response_breached || t.resolution_breached) &&
+                  !['closed', 'resolved'].includes(t.status)
+              )
+
+              if (slaBreaches.length === 0) {
+                return (
+                  <div className="p-8 text-center">
+                    <p className="text-gray-600">✓ No SLA breaches! All tickets are on track.</p>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="divide-y">
+                  {slaBreaches.map((ticket) => (
+                    <div
+                      key={ticket.id.toString()}
+                      onClick={() => openDetailModal(ticket.id)}
+                      className="p-4 hover:bg-red-50 cursor-pointer transition border-l-4 border-l-red-500"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900">{ticket.ticket_number}</h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {ticket.reg_number} • {ticket.title}
+                          </p>
+                          <div className="flex gap-2 mt-2">
+                            <StatusBadge status={ticket.status as ComplaintStatus} />
+                            <PriorityBadge priority={ticket.priority as ComplaintPriority} />
+                          </div>
+                          <div className="mt-2">
+                            {ticket.response_breached && (
+                              <p className="text-xs text-red-600 font-semibold">
+                                ⚠️ Response SLA breached
+                              </p>
+                            )}
+                            {ticket.resolution_breached && (
+                              <p className="text-xs text-red-600 font-semibold">
+                                ⚠️ Resolution SLA breached
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">
+                            {new Date(ticket.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+        )}
 
         {/* Detail Modal */}
         {detailModal.open && selectedTicket && (
