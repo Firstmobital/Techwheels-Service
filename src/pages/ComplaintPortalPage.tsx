@@ -24,7 +24,7 @@ import {
 } from '../components/complaints/UI'
 import type { ComplaintPortalResponse, ComplaintStatus } from '../components/complaints/types'
 
-type PortalMode = 'raise' | 'view'
+type PortalMode = 'verify' | 'raise' | 'submitted' | 'view'
 
 interface FormState {
   category: string
@@ -41,7 +41,7 @@ export const ComplaintPortalPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [data, setData] = useState<ComplaintPortalResponse | null>(null)
-  const [mode, setMode] = useState<PortalMode>('raise')
+  const [mode, setMode] = useState<PortalMode>('verify')
   const [formState, setFormState] = useState<FormState>({
     category: 'service_quality',
     title: '',
@@ -78,7 +78,7 @@ export const ComplaintPortalPage: React.FC = () => {
       try {
         const response = await getComplaintByToken(token)
         setData(response)
-        setMode(response.mode)
+        setMode(response.mode === 'raise' ? 'verify' : 'view')
         setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load complaint')
@@ -123,7 +123,7 @@ export const ComplaintPortalPage: React.FC = () => {
         customer_phone: trimmedPhone || undefined,
       })
       setData(response)
-      setMode('view')
+      setMode('submitted')
       setSuccess('Complaint raised successfully!')
       setFormState({ category: 'service_quality', title: '', description: '', severitySelf: 'medium', customerName: '', customerPhone: '' })
     } catch (err) {
@@ -249,7 +249,77 @@ export const ComplaintPortalPage: React.FC = () => {
           </div>
         )}
 
-        {/* RAISE MODE */}
+        {/* VERIFY SCREEN - Landing Page */}
+        {mode === 'verify' && (
+          <div className="space-y-6 pb-8">
+            {/* Blue Header Section */}
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl text-white p-6 -mx-4 px-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="text-3xl">🛡️</div>
+                <div>
+                  <div className="text-sm font-semibold opacity-90">TechWheels Care</div>
+                  <div className="text-2xl font-bold">Service Feedback</div>
+                </div>
+              </div>
+              
+              {/* Vehicle Info Card within header */}
+              {data.entry_summary && (
+                <div className="bg-white/10 backdrop-blur rounded-lg p-4 mt-4 border border-white/20">
+                  <div className="text-sm font-semibold mb-2">{data.entry_summary.reg_number}</div>
+                  <p className="text-sm opacity-95">
+                    {data.entry_summary.model} • {data.entry_summary.service_type}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Main Content */}
+            <div className="px-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">
+                Not happy with your service?
+              </h1>
+              <p className="text-gray-700 mb-6 leading-relaxed">
+                We're sorry if your visit at <span className="font-semibold">{data.entry_summary?.branch}</span> didn't go as expected. Raise a complaint and our team will personally resolve it.
+              </p>
+
+              {/* Value Props */}
+              <div className="space-y-3 mb-8">
+                <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <span className="text-xl mt-0.5">🛡️</span>
+                  <div>
+                    <div className="font-semibold text-gray-900 text-sm">This link is unique to your vehicle visit</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <span className="text-xl mt-0.5">👤</span>
+                  <div>
+                    <div className="font-semibold text-gray-900 text-sm">Goes straight to your advisor</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <span className="text-xl mt-0.5">⏱️</span>
+                  <div>
+                    <div className="font-semibold text-gray-900 text-sm">Track the resolution live on this same link</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CTA Button */}
+              <button
+                onClick={() => setMode('raise')}
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 px-6 rounded-lg shadow-md hover:shadow-lg transition-all min-h-12 text-base mb-3"
+              >
+                Raise a Complaint
+              </button>
+
+              <p className="text-xs text-gray-600 text-center">
+                Just visiting? You can also view past requests here.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* RAISE SCREEN - Complaint Form */}
         {mode === 'raise' && (
           <form onSubmit={handleRaise} className="space-y-5 pb-8">
             {/* Header */}
@@ -411,7 +481,69 @@ export const ComplaintPortalPage: React.FC = () => {
           </form>
         )}
 
-        {/* VIEW MODE */}
+        {/* SUBMITTED SCREEN - Confirmation */}
+        {mode === 'submitted' && data.ticket && (
+          <div className="space-y-6 pb-8">
+            {/* Success Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="bg-emerald-100 rounded-full p-6 flex items-center justify-center">
+                <span className="text-5xl">✓</span>
+              </div>
+            </div>
+
+            {/* Heading */}
+            <div className="text-center">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Complaint Received</h1>
+              <p className="text-gray-600 text-sm">
+                Thank you. Your complaint is logged and assigned to your advisor.
+              </p>
+            </div>
+
+            {/* Details Card */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
+              <div className="flex justify-between items-start border-b pb-4">
+                <span className="text-gray-600 font-semibold text-sm">Complaint No.</span>
+                <span className="text-lg font-bold text-blue-600 text-right">{data.ticket.ticket_number}</span>
+              </div>
+              
+              <div className="flex justify-between items-start border-b pb-4">
+                <span className="text-gray-600 font-semibold text-sm">Assigned To</span>
+                <span className="text-gray-900 font-semibold text-sm">{data.ticket.assigned_to_name || 'Support Team'}</span>
+              </div>
+              
+              <div className="flex justify-between items-start border-b pb-4">
+                <span className="text-gray-600 font-semibold text-sm">First Response</span>
+                <span className="text-emerald-600 font-semibold text-sm">Within 4 hours</span>
+              </div>
+              
+              <div className="flex justify-between items-start">
+                <span className="text-gray-600 font-semibold text-sm">Target Resolution</span>
+                <span className="text-gray-900 font-semibold text-sm">Within 24 hours</span>
+              </div>
+            </div>
+
+            {/* Bookmark Note */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+              <span className="text-2xl flex-shrink-0">🛡️</span>
+              <div>
+                <div className="font-semibold text-gray-900 text-sm mb-1">Bookmark this page</div>
+                <p className="text-gray-700 text-xs">
+                  This same link now shows your complaint's live status. We've also texted it to {data.ticket.customer_phone || 'your phone'}.
+                </p>
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <button
+              onClick={() => setMode('view')}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 px-6 rounded-lg shadow-md hover:shadow-lg transition-all min-h-12 text-base"
+            >
+              Track My Complaint
+            </button>
+          </div>
+        )}
+
+        {/* TRACKING SCREEN - Live View */}
         {mode === 'view' && data.ticket && (
           <div className="space-y-5 pb-8">
             {/* Ticket Header */}

@@ -1538,6 +1538,48 @@ Implement behind a `complaint_notifications` outbox table or reuse existing `ema
 
 ## 9. FRONTEND IMPLEMENTATION
 
+### 9.0 UI/UX Design Reference & Current Status ⚠️ CRITICAL GAPS
+
+**Design Source:** `local_folder/Reference/complains_modules_reference/Complaints/Complaint Customer Portal.html`
+
+**Customer Portal: 5-Screen Customer Journey**
+
+| # | Screen | Purpose | Design | Impl. | Priority |
+|---|--------|---------|--------|------|----------|
+| 1️⃣ | **Verify (Landing)** | Initial touchpoint: vehicle context, value props, "Raise complaint" CTA | ✅ | ❌ MISSING | **CRITICAL** |
+| 2️⃣ | **Raise Form** | Multi-field form: categories, severity, description, phone, photo | ✅ | ⚠️ Partial | **CRITICAL** |
+| 3️⃣ | **Submitted** | Confirmation card: ticket #, assigned advisor, SLA targets, "Track" CTA | ✅ | ❌ MISSING | **CRITICAL** |
+| 4️⃣ | **Live Tracking** | Status stepper, SLA countdown ring, message thread, reply composer | ✅ | ❌ MISSING | **CRITICAL** |
+| 5️⃣ | **Resolved + Rating** | Resolution summary, 5-star CSAT widget, reopen button | ✅ | ❌ MISSING | **CRITICAL** |
+
+**Gap Details:**
+
+| Component | Design Spec | Current | Action |
+|-----------|---|---|---|
+| **Verify Screen** | Blue header, vehicle card, 3 value props (shield icons), "Raise complaint" button | Jump straight to form | **Implement verify screen** |
+| **Severity Selector** | "How much affecting?" with 3 radio buttons (A little \| Quite a bit \| Very urgent) | Not visible in form | **Add to raise form** |
+| **Phone Field** | Required text input, "We'll send updates here" helper note | Unknown if present | **Verify/add** |
+| **Photo Upload** | "+ Add" button with file input | Unknown if present | **Verify/add** |
+| **Category Radio** | Single-select radio buttons (not multi-select checkboxes) | Currently grid layout | **Change to radio style** |
+| **Submitted Screen** | Green checkmark, "Complaint received" heading, card with ticket details, "Track my complaint" button | Missing entirely | **Implement screen** |
+| **Status Stepper** | 5-node progress bar (Raised ✓ → Acknowledged ✓ → In progress → Resolved → Closed) with colored nodes | Missing from tracking view | **Add to tracking screen** |
+| **SLA Ring Timer** | Circular progress indicator showing "18h left • RESOLUTION SLA" | Missing from tracking view | **Add to tracking screen** |
+| **CSAT 5-Star** | Click to select 1-5 stars, optional feedback textarea appears on selection, submit button | Missing entirely | **Implement on resolved screen** |
+| **Reopen Button** | Ghost button "Issue not fixed? Reopen complaint" at bottom | Unknown if present | **Verify/add** |
+
+**Implementation Roadmap (In Priority Order):**
+1. ✅ Implement Verify (landing) screen
+2. ✅ Add Severity selector to Raise form
+3. ✅ Verify/add Phone number field
+4. ✅ Verify/add Photo upload section
+5. ✅ Update category selection to radio button styling
+6. ✅ Implement Submitted confirmation screen
+7. ✅ Implement Live Tracking with status stepper + SLA ring
+8. ✅ Implement Resolved screen with 5-star CSAT widget
+9. ✅ Build & test in production
+
+---
+
 ### 9.1 Tech Stack & Conventions
 
 - **Repo:** Firstmobital/Techwheels-Service
@@ -1549,20 +1591,19 @@ Implement behind a `complaint_notifications` outbox table or reuse existing `ema
 
 ### 9.2 Customer Portal (`/c/:token`)
 
-**Design reference:** `Complaints/Complaint Customer Portal.html`  
+**Design reference:** `Complaints/Complaint Customer Portal.html` (5 screens)  
 **Features:**
 - Public route (no authentication, no AuthShell)
-- Mobile-first
+- Mobile-first, fully responsive
 - On load: call `get_complaint_by_token(token)`
-  - If `mode === 'raise'`: show verification screen, then raise form (category, title, description, severity, contact, photo upload)
-  - If `mode === 'view'`: show live tracker (status stepper, SLA ring, assigned advisor, thread, customer reply, CSAT when resolved, reopen button)
-- States to match:
-  - Verify token (optional: phone re-check)
-  - Raise form (multi-step if needed)
-  - Submitted (confirmation)
-  - Track (live status, SLA, messages, activity)
-  - Resolved (show CSAT stars)
-  - Reopened (show re-escalation notification)
+  - If `mode === 'raise'`: show **Verify** landing screen → **Raise** form (8 categories, severity, title, description, phone, photo)
+  - If `mode === 'view'`: show **Submitted** confirmation → **Live Tracker** → **Resolved + CSAT**
+- 5-screen state machine:
+  1. **Verify** — Blue header, vehicle context card, 3 value props, "Raise complaint" button
+  2. **Raise Form** — Categories (radio), severity (3-option toggle), description, phone, photo upload, submit
+  3. **Submitted** — Green checkmark, ticket details card, "Track my complaint" button
+  4. **Live Tracking** — Status stepper (5 nodes), SLA ring timer, advisor card, message thread, reply composer
+  5. **Resolved** — Resolution summary, 5-star rating widget with optional feedback, "Reopen" button
 
 ### 9.3 Staff Module (`src/pages/ComplaintsPage.tsx`)
 
