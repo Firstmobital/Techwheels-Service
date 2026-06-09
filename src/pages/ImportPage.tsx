@@ -228,6 +228,7 @@ const WARRANTY_REPORT_TABLES = new Set([
 
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 const MAX_PARALLEL_BRANCH_UPLOADS = 2
+const PSF_REVENUE_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
   { key: '3000840', location: 'Sitapura', portal: 'PV' },
@@ -1228,6 +1229,26 @@ export default function ImportPage() {
           return []
         }
 
+        if (isJcClosedTable && PSF_REVENUE_REPLACE_ALL_ON_IMPORT && readyBranches.length > 0) {
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            uploadProgress: {
+              ...prev.uploadProgress,
+              currentStep: 'processing',
+              currentBranch: 'Clearing all PSF rows',
+            },
+          }))
+
+          const { error: clearExistingError } = await supabase
+            .from(tableName)
+            .delete()
+            .not('id', 'is', null)
+
+          if (clearExistingError) {
+            throw new Error(`Failed to clear all PSF rows: ${clearExistingError.message}`)
+          }
+        }
+
         const isDuplicateViolation = (error: { code?: string; message?: string }): boolean => {
           const message = (error.message ?? '').toLowerCase()
           return error.code === '23505' || message.includes('duplicate key value violates unique constraint')
@@ -1922,7 +1943,11 @@ export default function ImportPage() {
               },
             }))
 
-            totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
+            if (PSF_REVENUE_REPLACE_ALL_ON_IMPORT) {
+              totalInserted += await insertRowsInChunks(dedupedJcRows)
+            } else {
+              totalInserted += await upsertJcClosedRowsByBusinessKey(dedupedJcRows)
+            }
           } else if (isInvoiceTable) {
             // Invoice table: map only required headers and parse date/amount fields
             const excelHeaders = Object.keys(rawRows[0] ?? {})
