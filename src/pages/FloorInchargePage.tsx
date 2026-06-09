@@ -180,6 +180,45 @@ interface Employee {
   role?: string | null
 }
 
+type SupportRole = 'DET' | 'ELECTRICIAN' | 'DENTER' | 'TECHNICIAN'
+
+const SUPPORT_ROLE_OPTIONS: Array<{ value: SupportRole; label: string }> = [
+  { value: 'DET', label: 'DET' },
+  { value: 'ELECTRICIAN', label: 'Electrician' },
+  { value: 'DENTER', label: 'Denter' },
+  { value: 'TECHNICIAN', label: 'Technician' },
+]
+
+interface SupportAssignment {
+  id?: number
+  job_card_number: string
+  support_role: SupportRole
+  employee_code: string
+  employee_name: string
+  assigned_at: string
+  assigned_by: string | null
+  is_active?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+function normalizeSupportRole(value: string | null | undefined): SupportRole | null {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (!normalized) return null
+
+  if (normalized.includes('TECHNICIAN')) return 'TECHNICIAN'
+  if (normalized.includes('ELECTRICIAN')) return 'ELECTRICIAN'
+  if (normalized.includes('DENTER')) return 'DENTER'
+  if (normalized.includes('DET')) return 'DET'
+
+  return null
+}
+
+function supportRoleLabel(role: SupportRole): string {
+  const option = SUPPORT_ROLE_OPTIONS.find((item) => item.value === role)
+  return option?.label ?? role
+}
+
 interface TechnicianAssignment {
   id?: number
   job_card_number: string
@@ -266,11 +305,17 @@ function applyAssignmentViewFilter(
 
 export default function FloorInchargePage() {
   const [jobCards, setJobCards] = useState<JobCard[]>([])
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [assignments, setAssignments] = useState<Record<string, TechnicianAssignment>>({})
+  const [supportAssignments, setSupportAssignments] = useState<Record<string, SupportAssignment>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
+  const [supportSaving, setSupportSaving] = useState<string | null>(null)
   const [stageDrafts, setStageDrafts] = useState<Record<string, StageDraft>>({})
+  const [supportModalJobCard, setSupportModalJobCard] = useState<JobCard | null>(null)
+  const [supportModalRole, setSupportModalRole] = useState<SupportRole | ''>('')
+  const [supportModalEmployeeCode, setSupportModalEmployeeCode] = useState('')
   const [search, setSearch] = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
   const [fuelTypeFilter, setFuelTypeFilter] = useState('all')
@@ -341,6 +386,7 @@ export default function FloorInchargePage() {
       })
 
       setJobCards(receptionRows)
+      setAllEmployees((empRes.data ?? []) as Employee[])
       setEmployees(technicianEmployees)
 
       // Try to fetch assignments — graceful fallback if table doesn't exist yet
@@ -376,6 +422,43 @@ export default function FloorInchargePage() {
         }
         setAssignments(assignMap)
         setStageDrafts(nextDrafts)
+      } else {
+        setAssignments({})
+        setStageDrafts({})
+      }
+
+      const supportRows: SupportAssignment[] = []
+      let supportFrom = 0
+
+      while (true) {
+        const supportRes = await supabase
+          .from('job_card_support_assignments')
+          .select('*')
+          .eq('is_active', true)
+          .range(supportFrom, supportFrom + QUERY_PAGE_SIZE - 1)
+
+        if (supportRes.error) break
+
+        const batch = (supportRes.data ?? []) as SupportAssignment[]
+        supportRows.push(...batch)
+
+        if (batch.length < QUERY_PAGE_SIZE) break
+        supportFrom += QUERY_PAGE_SIZE
+      }
+
+      if (supportRows.length > 0) {
+        const supportMap: Record<string, SupportAssignment> = {}
+        for (const supportAssignment of supportRows) {
+          const normalizedJc = String(supportAssignment.job_card_number ?? '').trim().toUpperCase()
+          if (!normalizedJc) continue
+          supportMap[normalizedJc] = {
+            ...supportAssignment,
+            support_role: normalizeSupportRole(supportAssignment.support_role) ?? 'TECHNICIAN',
+          }
+        }
+        setSupportAssignments(supportMap)
+      } else {
+        setSupportAssignments({})
       }
     } catch (err) {
       console.error(err)
@@ -439,6 +522,158 @@ export default function FloorInchargePage() {
       showToast(msg, 'error')
     } finally {
       setSaving(null)
+    }
+  }
+
+  const supportEmployeesByRole = useMemo<Record<SupportRole, Employee[]>>(() => {
+    const grouped: Record<SupportRole, Employee[]> = {
+      DET: [],
+      ELECTRICIAN: [],
+      DENTER: [],
+      TECHNICIAN: [],
+    }
+
+    allEmployees.forEach((employee) => {
+      const normalizedRole = normalizeSupportRole(employee.role)
+      if (!normalizedRole) return
+      grouped[normalizedRole].push(employee)
+    })
+
+    return {
+      DET: grouped.DET.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
+      ELECTRICIAN: grouped.ELECTRICIAN.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
+      DENTER: grouped.DENTER.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
+      TECHNICIAN: grouped.TECHNICIAN.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
+    }
+  }, [allEmployees])
+
+  const supportModalEmployees = useMemo(() => {
+    if (!supportModalRole) return []
+    return supportEmployeesByRole[supportModalRole]
+  }, [supportModalRole, supportEmployeesByRole])
+
+  function closeSupportModal() {
+    if (supportSaving) return
+    setSupportModalJobCard(null)
+    setSupportModalRole('')
+    setSupportModalEmployeeCode('')
+  }
+
+  function openSupportModal(jobCard: JobCard) {
+    const existing = supportAssignments[jobCard.assignment_key]
+    setSupportModalJobCard(jobCard)
+    setSupportModalRole(existing?.support_role ?? '')
+    setSupportModalEmployeeCode(existing?.employee_code ?? '')
+  }
+
+  async function saveSupportAssignment() {
+    if (!supportModalJobCard || !supportModalRole || !supportModalEmployeeCode) {
+      showToast('Select role and employee before saving support assignment', 'error')
+      return
+    }
+
+    const jobCardNumber = supportModalJobCard.assignment_key
+    const employee = supportEmployeesByRole[supportModalRole].find(
+      (item) => item.employee_code === supportModalEmployeeCode,
+    )
+
+    if (!employee) {
+      showToast('Selected employee is not available for the chosen role', 'error')
+      return
+    }
+
+    const primaryTechnicianCode = normalizeEmployeeCode(assignments[jobCardNumber]?.technician_code)
+    const supportEmployeeCode = normalizeEmployeeCode(employee.employee_code)
+    if (supportModalRole === 'TECHNICIAN' && primaryTechnicianCode && primaryTechnicianCode === supportEmployeeCode) {
+      showToast('Primary technician cannot be added again as support technician', 'error')
+      return
+    }
+
+    setSupportSaving(jobCardNumber)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      const payload: Omit<SupportAssignment, 'id'> = {
+        job_card_number: jobCardNumber,
+        support_role: supportModalRole,
+        employee_code: employee.employee_code,
+        employee_name: employee.employee_name,
+        assigned_at: new Date().toISOString(),
+        assigned_by: user?.email ?? null,
+        is_active: true,
+      }
+
+      const existing = supportAssignments[jobCardNumber]
+      let result
+
+      if (existing?.id) {
+        result = await supabase
+          .from('job_card_support_assignments')
+          .update(payload)
+          .eq('id', existing.id)
+          .select()
+          .single()
+      } else {
+        result = await supabase
+          .from('job_card_support_assignments')
+          .insert(payload)
+          .select()
+          .single()
+      }
+
+      if (result.error) throw result.error
+
+      setSupportAssignments((prev) => ({
+        ...prev,
+        [jobCardNumber]: {
+          ...(result.data as SupportAssignment),
+          support_role: normalizeSupportRole((result.data as SupportAssignment).support_role) ?? supportModalRole,
+        },
+      }))
+
+      showToast(`Support person assigned to ${jobCardNumber}`, 'success')
+      closeSupportModal()
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, 'Failed to save support assignment')
+      showToast(msg, 'error')
+    } finally {
+      setSupportSaving(null)
+    }
+  }
+
+  async function clearSupportAssignment() {
+    if (!supportModalJobCard) return
+
+    const jobCardNumber = supportModalJobCard.assignment_key
+    const existing = supportAssignments[jobCardNumber]
+    if (!existing?.id) {
+      closeSupportModal()
+      return
+    }
+
+    setSupportSaving(jobCardNumber)
+    try {
+      const result = await supabase
+        .from('job_card_support_assignments')
+        .update({ is_active: false })
+        .eq('id', existing.id)
+
+      if (result.error) throw result.error
+
+      setSupportAssignments((prev) => {
+        const next = { ...prev }
+        delete next[jobCardNumber]
+        return next
+      })
+
+      showToast(`Support person removed from ${jobCardNumber}`, 'success')
+      closeSupportModal()
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, 'Failed to remove support assignment')
+      showToast(msg, 'error')
+    } finally {
+      setSupportSaving(null)
     }
   }
 
@@ -535,6 +770,7 @@ export default function FloorInchargePage() {
 
     return statusScopedRows.filter((jc) => {
       const assignment = assignments[jc.assignment_key]
+      const supportAssignment = supportAssignments[jc.assignment_key]
       const searchText = [
         jc.jc_number ?? '',
         jc.reg_number ?? '',
@@ -547,13 +783,16 @@ export default function FloorInchargePage() {
         jc.branch ?? '',
         assignment?.technician_name ?? '',
         assignment?.technician_code ?? '',
+        supportAssignment?.employee_name ?? '',
+        supportAssignment?.employee_code ?? '',
+        supportAssignment?.support_role ?? '',
       ]
         .join(' ')
         .toLowerCase()
 
       return searchText.includes(searchQuery)
     })
-  }, [statusScopedRows, assignments, searchQuery])
+  }, [statusScopedRows, assignments, supportAssignments, searchQuery])
 
   const branches = useMemo(() => {
     const b = new Set(searchScopedRows.map((j) => j.branch).filter(Boolean) as string[])
@@ -917,6 +1156,7 @@ export default function FloorInchargePage() {
                 <tbody>
                   {filtered.map((jc) => {
                     const assignment = assignments[jc.assignment_key]
+                    const supportAssignment = supportAssignments[jc.assignment_key]
                     const isSaving = saving === jc.assignment_key
                     const draft = stageDrafts[jc.assignment_key] ?? {
                       bay_no: assignment?.bay_no ?? '',
@@ -949,19 +1189,40 @@ export default function FloorInchargePage() {
                         </td>
                         <td>{jc.branch || '—'}</td>
                         <td>
-                          <select
-                            className="sel sel-md"
-                            value={assignment?.technician_code ?? ''}
-                            onChange={(e) => assignTechnician(jc.assignment_key, e.target.value)}
-                            disabled={isSaving}
-                          >
-                            <option value="">— Select Technician —</option>
-                            {employees.map((emp) => (
-                              <option key={emp.employee_code} value={emp.employee_code}>
-                                {emp.employee_name}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="fi-assignment-cell">
+                            <div className="fi-assignment-row">
+                              <select
+                                className="sel sel-md"
+                                value={assignment?.technician_code ?? ''}
+                                onChange={(e) => assignTechnician(jc.assignment_key, e.target.value)}
+                                disabled={isSaving}
+                              >
+                                <option value="">— Select Technician —</option>
+                                {employees.map((emp) => (
+                                  <option key={emp.employee_code} value={emp.employee_code}>
+                                    {emp.employee_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--sm fi-support-btn"
+                                onClick={() => openSupportModal(jc)}
+                                title="Assign additional person"
+                                aria-label="Assign additional person"
+                              >
+                                <Icon name="plus" size={14} strokeWidth={2.2} />
+                              </button>
+                            </div>
+                            {supportAssignment ? (
+                              <div className="fi-support-pill" title={`${supportAssignment.employee_code} • ${supportRoleLabel(supportAssignment.support_role)}`}>
+                                <span className="fi-support-pill__role">{supportRoleLabel(supportAssignment.support_role)}</span>
+                                <span>{supportAssignment.employee_name}</span>
+                              </div>
+                            ) : (
+                              <div className="fi-support-empty">No support person</div>
+                            )}
+                          </div>
                         </td>
                         <td className="ts-cell">
                           {formatTimestamp(assignment?.assigned_at) || '—'}
@@ -1044,6 +1305,101 @@ export default function FloorInchargePage() {
           )}
         </div>
       </div>
+
+      {supportModalJobCard && (
+        <div className="modal-back" role="presentation" onClick={closeSupportModal}>
+          <div
+            className="modal fi-support-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Assign support person"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal__head">
+              <h3>Assign Additional Person</h3>
+              <button type="button" className="modal__x" onClick={closeSupportModal} aria-label="Close">
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="modal__body fi-support-modal__body">
+              <div className="fi-support-meta">
+                <span className="fi-support-meta__jc">{supportModalJobCard.assignment_key}</span>
+                <span>{supportModalJobCard.reg_number || '—'}</span>
+                <span>{supportModalJobCard.branch || '—'}</span>
+              </div>
+
+              <label className="fi-support-field">
+                <span>Role</span>
+                <select
+                  className="sel"
+                  value={supportModalRole}
+                  onChange={(event) => {
+                    const nextRole = event.target.value as SupportRole | ''
+                    setSupportModalRole(nextRole)
+                    setSupportModalEmployeeCode('')
+                  }}
+                  disabled={Boolean(supportSaving)}
+                >
+                  <option value="">— Select Role —</option>
+                  {SUPPORT_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="fi-support-field">
+                <span>Employee</span>
+                <select
+                  className="sel"
+                  value={supportModalEmployeeCode}
+                  onChange={(event) => setSupportModalEmployeeCode(event.target.value)}
+                  disabled={!supportModalRole || Boolean(supportSaving)}
+                >
+                  <option value="">— Select Employee —</option>
+                  {supportModalEmployees.map((employee) => (
+                    <option key={employee.employee_code} value={employee.employee_code}>
+                      {employee.employee_name} ({employee.employee_code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {supportModalRole && supportModalEmployees.length === 0 && (
+                <p className="fi-support-hint">No employees found for the selected role in Employee Master.</p>
+              )}
+            </div>
+            <div className="modal__foot">
+              <button type="button" className="btn btn--ghost" onClick={closeSupportModal} disabled={Boolean(supportSaving)}>
+                Cancel
+              </button>
+              {supportAssignments[supportModalJobCard.assignment_key]?.id && (
+                <button
+                  type="button"
+                  className="btn btn--ghost fi-remove-btn"
+                  onClick={() => {
+                    clearSupportAssignment()
+                  }}
+                  disabled={Boolean(supportSaving)}
+                >
+                  Remove
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => {
+                  saveSupportAssignment()
+                }}
+                disabled={!supportModalRole || !supportModalEmployeeCode || Boolean(supportSaving)}
+              >
+                {supportSaving === supportModalJobCard.assignment_key ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

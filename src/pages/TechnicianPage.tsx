@@ -15,6 +15,8 @@ type TechnicianAssignmentRow = {
   time_diff: string | null
   remark: string | null
   reg_number?: string | null
+  branch?: string | null
+  fuel_type?: string | null
   gross_labour_amount?: number
   technician_income?: number
 }
@@ -29,6 +31,8 @@ type RevenueRow = {
 type ReceptionEntryRow = {
   jc_number: string | null
   reg_number: string | null
+  branch?: string | null
+  fuel_type?: string | null
 }
 
 type TechnicianSummaryCard = {
@@ -58,6 +62,8 @@ type VehicleOnDayCard = {
 const QUERY_PAGE_SIZE = 1000
 const DEFAULT_PV_SHARE_PERCENT = 20
 const DEFAULT_EV_SHARE_PERCENT = 25
+const UNKNOWN_FUEL_TYPE = 'Unknown'
+const UNKNOWN_LOCATION = 'Unknown location'
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
@@ -105,6 +111,23 @@ function extractFuelFromBay(bayNo: string | null | undefined): 'PV' | 'EV' | nul
   if (normalized.startsWith('PV-')) return 'PV'
   if (normalized.startsWith('EV-')) return 'EV'
   return null
+}
+
+function getBranchLabel(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_LOCATION
+}
+
+function getFuelTypeLabel(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_FUEL_TYPE
+}
+
+function getAssignmentFuelTypeLabel(row: TechnicianAssignmentRow): string {
+  const mappedFuelType = getFuelTypeLabel(row.fuel_type)
+  if (mappedFuelType !== UNKNOWN_FUEL_TYPE) return mappedFuelType
+  const fallbackFuel = extractFuelFromBay(row.bay_no)
+  return fallbackFuel ?? UNKNOWN_FUEL_TYPE
 }
 
 function parseRevenueAmount(value: unknown): number {
@@ -187,6 +210,8 @@ export default function TechnicianPage() {
   const [selectedVehicleOnDayKey, setSelectedVehicleOnDayKey] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [fuelTypeFilter, setFuelTypeFilter] = useState('all')
 
   async function loadData() {
     setLoading(true)
@@ -281,12 +306,14 @@ export default function TechnicianPage() {
 
       // Fetch from service_reception_entries (same source as Floor Incharge page)
       let regNumberMap = new Map<string, string>()
+      let branchMap = new Map<string, string>()
+      let fuelTypeMap = new Map<string, string>()
       let revenueMap = new Map<string, RevenueRow>()
 
       if (assignmentJcNumbers.length > 0) {
         const receptionRes = await supabase
           .from('service_reception_entries')
-          .select('jc_number, reg_number')
+          .select('jc_number, reg_number, branch, fuel_type')
           .in('jc_number', assignmentJcNumbers)
 
         if (!receptionRes.error && receptionRes.data) {
@@ -297,6 +324,16 @@ export default function TechnicianPage() {
             const regNum = String((row as ReceptionEntryRow).reg_number ?? '').trim()
             if (regNum && !regNumberMap.has(key)) {
               regNumberMap.set(key, regNum)
+            }
+
+            const branch = String((row as ReceptionEntryRow).branch ?? '').trim()
+            if (branch && !branchMap.has(key)) {
+              branchMap.set(key, branch)
+            }
+
+            const fuelType = String((row as ReceptionEntryRow).fuel_type ?? '').trim().toUpperCase()
+            if (fuelType && !fuelTypeMap.has(key)) {
+              fuelTypeMap.set(key, fuelType)
             }
           })
         }
@@ -356,6 +393,8 @@ export default function TechnicianPage() {
         return {
           ...row,
           reg_number: regNumberMap.get(jc) ?? null,
+          branch: branchMap.get(jc) ?? null,
+          fuel_type: fuelTypeMap.get(jc) ?? null,
           gross_labour_amount: grossByJc.get(jc) ?? 0,
         }
       })
@@ -388,7 +427,7 @@ export default function TechnicianPage() {
     }))
   }, [assignments, pvSharePercent, evSharePercent])
 
-  const filteredAssignmentsWithIncome = useMemo(() => {
+  const dateScopedAssignmentsWithIncome = useMemo(() => {
     const hasFrom = Boolean(fromDate)
     const hasTo = Boolean(toDate)
     if (!hasFrom && !hasTo) return assignmentsWithIncome
@@ -401,6 +440,48 @@ export default function TechnicianPage() {
       return true
     })
   }, [assignmentsWithIncome, fromDate, toDate])
+
+  const branches = useMemo(() => {
+    const values = new Set(dateScopedAssignmentsWithIncome.map((row) => getBranchLabel(row.branch)))
+    return Array.from(values).sort((a, b) => {
+      if (a === UNKNOWN_LOCATION) return 1
+      if (b === UNKNOWN_LOCATION) return -1
+      return a.localeCompare(b)
+    })
+  }, [dateScopedAssignmentsWithIncome])
+
+  useEffect(() => {
+    if (branchFilter === 'all') return
+    if (!branches.includes(branchFilter)) {
+      setBranchFilter('all')
+    }
+  }, [branchFilter, branches])
+
+  const branchScopedAssignmentsWithIncome = useMemo(() => {
+    if (branchFilter === 'all') return dateScopedAssignmentsWithIncome
+    return dateScopedAssignmentsWithIncome.filter((row) => getBranchLabel(row.branch) === branchFilter)
+  }, [dateScopedAssignmentsWithIncome, branchFilter])
+
+  const fuelTypeOptions = useMemo(() => {
+    const values = new Set(branchScopedAssignmentsWithIncome.map((row) => getAssignmentFuelTypeLabel(row)))
+    return Array.from(values).sort((a, b) => {
+      if (a === UNKNOWN_FUEL_TYPE) return 1
+      if (b === UNKNOWN_FUEL_TYPE) return -1
+      return a.localeCompare(b)
+    })
+  }, [branchScopedAssignmentsWithIncome])
+
+  useEffect(() => {
+    if (fuelTypeFilter === 'all') return
+    if (!fuelTypeOptions.includes(fuelTypeFilter)) {
+      setFuelTypeFilter('all')
+    }
+  }, [fuelTypeFilter, fuelTypeOptions])
+
+  const filteredAssignmentsWithIncome = useMemo(() => {
+    if (fuelTypeFilter === 'all') return branchScopedAssignmentsWithIncome
+    return branchScopedAssignmentsWithIncome.filter((row) => getAssignmentFuelTypeLabel(row) === fuelTypeFilter)
+  }, [branchScopedAssignmentsWithIncome, fuelTypeFilter])
 
   const parsedDraftPvSharePercent = useMemo(
     () => normalizeSharePercentInput(draftPvSharePercent, pvSharePercent),
@@ -602,6 +683,54 @@ export default function TechnicianPage() {
           </p>
           <h1>Technician earnings tracker</h1>
           <p>Drill down: technician → day → vehicle → job card details (JC #, Reg, Bay, Status, IN/OUT TS, Time Diff, Remark).</p>
+        </div>
+
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by location:</span>
+          <button
+            type="button"
+            onClick={() => setBranchFilter('all')}
+            className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          >
+            All ({dateScopedAssignmentsWithIncome.length})
+          </button>
+          {branches.map((branch) => {
+            const count = dateScopedAssignmentsWithIncome.filter((row) => getBranchLabel(row.branch) === branch).length
+            return (
+              <button
+                key={branch}
+                type="button"
+                onClick={() => setBranchFilter(branch)}
+                className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
+              >
+                {branch} ({count})
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by fuel type:</span>
+          <button
+            type="button"
+            onClick={() => setFuelTypeFilter('all')}
+            className={`btn btn--sm ${fuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          >
+            All ({branchScopedAssignmentsWithIncome.length})
+          </button>
+          {fuelTypeOptions.map((fuelType) => {
+            const count = branchScopedAssignmentsWithIncome.filter((row) => getAssignmentFuelTypeLabel(row) === fuelType).length
+            return (
+              <button
+                key={fuelType}
+                type="button"
+                onClick={() => setFuelTypeFilter(fuelType)}
+                className={`btn btn--sm ${fuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+              >
+                {fuelType} ({count})
+              </button>
+            )
+          })}
         </div>
       </div>
 
