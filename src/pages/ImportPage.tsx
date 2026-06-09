@@ -229,6 +229,7 @@ const WARRANTY_REPORT_TABLES = new Set([
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
 const MAX_PARALLEL_BRANCH_UPLOADS = 2
 const PSF_REVENUE_REPLACE_ALL_ON_IMPORT = true
+const PARTS_REPLACE_ALL_ON_IMPORT = true
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
   { key: '3000840', location: 'Sitapura', portal: 'PV' },
@@ -1250,6 +1251,29 @@ export default function ImportPage() {
 
           if (clearExistingError) {
             throw new Error(`Failed to clear all PSF rows: ${clearExistingError.message}`)
+          }
+        }
+
+        const isPartsTableForReplaceAll =
+          isPartsConsumptionTable || isPartsOrderTable || isPartsStockTable
+
+        if (isPartsTableForReplaceAll && PARTS_REPLACE_ALL_ON_IMPORT && readyBranches.length > 0) {
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            uploadProgress: {
+              ...prev.uploadProgress,
+              currentStep: 'processing',
+              currentBranch: 'Clearing old parts rows',
+            },
+          }))
+
+          const { error: clearExistingPartsError } = await supabase
+            .from(tableName)
+            .delete()
+            .not('id', 'is', null)
+
+          if (clearExistingPartsError) {
+            throw new Error(`Failed to clear old parts rows: ${clearExistingPartsError.message}`)
           }
         }
 
