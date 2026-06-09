@@ -14,6 +14,8 @@ import {
   close,
   escalate,
   addStaffMessage,
+  reassign,
+  setPriority,
 } from '../lib/api/complaints'
 import {
   StatusBadge,
@@ -48,6 +50,8 @@ export const ComplaintsPage: React.FC = () => {
   const [newMessage, setNewMessage] = useState('')
   const [isInternal, setIsInternal] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [staffList, setStaffList] = useState<Array<{ id: string; full_name: string }>>([])
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
 
   const clearFeedback = () => {
     setError(null)
@@ -59,6 +63,26 @@ export const ComplaintsPage: React.FC = () => {
     const timeout = window.setTimeout(() => setSuccess(null), 3500)
     return () => window.clearTimeout(timeout)
   }, [success])
+
+  // ── Load staff list ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const loadStaff = async () => {
+      try {
+        const { data, error: err } = await supabase
+          .from('users')
+          .select('id, full_name')
+          .eq('is_active', true)
+          .order('full_name')
+
+        if (err) throw err
+        setStaffList((data || []) as Array<{ id: string; full_name: string }>)
+      } catch (err) {
+        console.error('Failed to load staff list:', err)
+      }
+    }
+
+    loadStaff()
+  }, [])
 
   // ── Load complaints ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -170,6 +194,50 @@ export const ComplaintsPage: React.FC = () => {
       setSuccess('Complaint escalated')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to escalate complaint')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleReassign = async () => {
+    if (!selectedTicket || !selectedStaffId) return
+
+    try {
+      clearFeedback()
+      setActionLoading(true)
+      await reassign(selectedTicket.id, selectedStaffId)
+      const staffMember = staffList.find(s => s.id === selectedStaffId)
+      setSelectedTicket({ ...selectedTicket, assigned_to: selectedStaffId })
+      setTickets(
+        tickets.map((t) =>
+          t.id === selectedTicket.id ? { ...t, assigned_to: selectedStaffId } : t,
+        ),
+      )
+      setSuccess(`Reassigned to ${staffMember?.full_name || 'staff member'}`)
+      setSelectedStaffId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reassign complaint')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleChangePriority = async (newPriority: ComplaintPriority) => {
+    if (!selectedTicket) return
+
+    try {
+      clearFeedback()
+      setActionLoading(true)
+      await setPriority(selectedTicket.id, newPriority)
+      setSelectedTicket({ ...selectedTicket, priority: newPriority })
+      setTickets(
+        tickets.map((t) =>
+          t.id === selectedTicket.id ? { ...t, priority: newPriority } : t,
+        ),
+      )
+      setSuccess(`Priority changed to ${newPriority}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change priority')
     } finally {
       setActionLoading(false)
     }
@@ -421,13 +489,59 @@ export const ComplaintsPage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Priority & Reassignment */}
+                <div className="bg-gray-50 border rounded p-3">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Settings</p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Priority</label>
+                      <select
+                        value={selectedTicket.priority}
+                        onChange={(e) => handleChangePriority(e.target.value as ComplaintPriority)}
+                        disabled={actionLoading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Assign to Staff</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={selectedStaffId || ''}
+                          onChange={(e) => setSelectedStaffId(e.target.value)}
+                          disabled={actionLoading}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select staff member...</option>
+                          {staffList.map((staff) => (
+                            <option key={staff.id} value={staff.id}>
+                              {staff.full_name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={handleReassign}
+                          disabled={actionLoading || !selectedStaffId}
+                          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-3 py-2 rounded text-sm font-semibold transition"
+                        >
+                          {actionLoading ? 'Assigning...' : 'Assign'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Details */}
                 <div className="text-sm space-y-2">
                   <p>
                     <span className="text-gray-600">Complaint description:</span> {selectedTicket.description || 'No description provided'}
                   </p>
                   <p>
-                    <span className="text-gray-600">Assigned staff:</span> {selectedTicket.assigned_to ? selectedTicket.assigned_to : 'Unassigned'}
+                    <span className="text-gray-600">Assigned staff:</span> {selectedTicket.assigned_to ? staffList.find(s => s.id === selectedTicket.assigned_to)?.full_name || selectedTicket.assigned_to : 'Unassigned'}
                   </p>
                   {selectedTicket.is_escalated && (
                     <p className="text-red-600">
