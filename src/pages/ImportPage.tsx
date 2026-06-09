@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { Icon } from '../components/Icon'
@@ -77,6 +77,8 @@ interface UploadProgressState {
   processedBranches: number
   totalBranches: number
   currentBranch: Branch | null
+  processedRows: number
+  totalRows: number
 }
 
 interface CardState {
@@ -224,6 +226,7 @@ const WARRANTY_REPORT_TABLES = new Set([
 ])
 
 const SYSTEM_COLS = new Set(['id', 'created_at', 'updated_at', 'branch'])
+const MAX_PARALLEL_BRANCH_UPLOADS = 2
 
 const DEALER_CODE_LOCATION_PORTAL_RULES = [
   { key: '3000840', location: 'Sitapura', portal: 'PV' },
@@ -251,9 +254,19 @@ function emptyCard(branches: readonly Branch[]): CardState {
       processedBranches: 0,
       totalBranches: 0,
       currentBranch: null,
+      processedRows: 0,
+      totalRows: 0,
     },
     portal: 'EV',
   }
+}
+
+function getFileSignature(file: File): string {
+  return `${file.name}::${file.size}::${file.lastModified}`
+}
+
+function getSlotCacheKey(tableName: string, branch: Branch): string {
+  return `${tableName}::${branch}`
 }
 
 function parseWorkbook(file: File, tableName?: string): Promise<Record<string, unknown>[]> {
@@ -822,9 +835,11 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
   const hasValidFile = branches.some((b) => state.slots[b].file && !state.slots[b].parseError && state.slots[b].rowCount !== null)
   const totalRows = branches.reduce((sum, b) => sum + (state.slots[b].rowCount ?? 0), 0)
   const progressPercent =
-    state.uploadProgress.totalBranches > 0
-      ? Math.round((state.uploadProgress.processedBranches / state.uploadProgress.totalBranches) * 100)
-      : 0
+    state.uploadProgress.totalRows > 0
+      ? Math.round((state.uploadProgress.processedRows / state.uploadProgress.totalRows) * 100)
+      : state.uploadProgress.totalBranches > 0
+        ? Math.round((state.uploadProgress.processedBranches / state.uploadProgress.totalBranches) * 100)
+        : 0
 
   const lastUpdatedLabel = lastUpdated
     ? lastUpdated.toLocaleString('en-IN', {
@@ -876,7 +891,12 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
           <div className="imp-card__progrow">
             <span>Upload progress</span>
             <span>
-              {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches · {progressPercent}%
+              {state.uploadProgress.processedBranches}/{state.uploadProgress.totalBranches} branches
+              {state.uploadProgress.totalRows > 0
+                ? ` · ${state.uploadProgress.processedRows.toLocaleString('en-IN')}/${state.uploadProgress.totalRows.toLocaleString('en-IN')} rows`
+                : ''}
+              {' · '}
+              {progressPercent}%
             </span>
           </div>
           <div className="imp-bar">
@@ -944,6 +964,7 @@ function ImportCard({ config, state, branches, onSlotFile, onSlotClear, onUpload
 // ─── ImportPage ────────────────────────────────────────────────────────────────
 
 export default function ImportPage() {
+  const parsedRowsCacheRef = useRef<Map<string, { fileSignature: string; rows: Record<string, unknown>[] }>>(new Map())
   const [cards, setCards] = useState<Record<string, CardState>>(() =>
     Object.fromEntries(CARDS.map((c) => [c.tableName, emptyCard(c.branches ?? PORTAL_BRANCHES)])),
   )
@@ -1001,25 +1022,37 @@ export default function ImportPage() {
           processedBranches: 0,
           totalBranches: 0,
           currentBranch: null,
+          processedRows: 0,
+          totalRows: 0,
         },
         slots: { ...prev.slots, [branch]: { file, rowCount: null, parseError } },
       }))
 
+      const cacheKey = getSlotCacheKey(tableName, branch)
+      parsedRowsCacheRef.current.delete(cacheKey)
+
       if (parseError) return
 
       parseWorkbook(file, tableName)
-        .then((rows) =>
+        .then((rows) => {
+          parsedRowsCacheRef.current.set(cacheKey, {
+            fileSignature: getFileSignature(file),
+            rows,
+          })
+
           updateCard(tableName, (prev) => ({
             ...prev,
             slots: { ...prev.slots, [branch]: { file, rowCount: rows.length, parseError: null } },
-          })),
-        )
-        .catch((err: Error) =>
+          }))
+        })
+        .catch((err: Error) => {
+          parsedRowsCacheRef.current.delete(cacheKey)
+
           updateCard(tableName, (prev) => ({
             ...prev,
             slots: { ...prev.slots, [branch]: { file, rowCount: null, parseError: err.message } },
-          })),
-        )
+          }))
+        })
     },
     [updateCard],
   )
@@ -1034,9 +1067,13 @@ export default function ImportPage() {
           processedBranches: 0,
           totalBranches: 0,
           currentBranch: null,
+          processedRows: 0,
+          totalRows: 0,
         },
         slots: { ...prev.slots, [branch]: emptySlot() },
       }))
+
+      parsedRowsCacheRef.current.delete(getSlotCacheKey(tableName, branch))
     },
     [updateCard],
   )
@@ -1050,6 +1087,10 @@ export default function ImportPage() {
         const slot = cardState.slots[branch]
         return !!slot.file && !slot.parseError && slot.rowCount !== null
       })
+      const totalRowsToUpload = readyBranches.reduce(
+        (sum, branch) => sum + (cardState.slots[branch].rowCount ?? 0),
+        0,
+      )
 
       updateCard(tableName, {
         status: 'uploading',
@@ -1059,6 +1100,8 @@ export default function ImportPage() {
           processedBranches: 0,
           totalBranches: readyBranches.length,
           currentBranch: readyBranches[0] ?? null,
+          processedRows: 0,
+          totalRows: totalRowsToUpload,
         },
       })
 
@@ -1125,16 +1168,46 @@ export default function ImportPage() {
           : []
         const CHUNK = isVasTable ? 5000 : 2000  // Larger chunks for VAS (faster, uses batch upsert)
         let totalInserted = 0
-        const allParseErrors: VasParseError[] = []
+        let processedRows = 0
         const mappingIssues: MappingIssueInsert[] = []
         const requiresEmployeeLookup = isVasTable || isJcClosedTable
         const employeeLookup = requiresEmployeeLookup ? await getEmployeeLookupIndex() : null
+
+        const incrementProcessedRows = (count: number): void => {
+          if (count <= 0) return
+          processedRows += count
+
+          updateCard(tableName, (prev) => ({
+            ...prev,
+            uploadProgress: {
+              ...prev.uploadProgress,
+              processedRows,
+            },
+          }))
+        }
+
+        const getRowsForSlot = async (branch: Branch, file: File): Promise<Record<string, unknown>[]> => {
+          const cacheKey = getSlotCacheKey(tableName, branch)
+          const fileSignature = getFileSignature(file)
+          const cached = parsedRowsCacheRef.current.get(cacheKey)
+
+          if (cached && cached.fileSignature === fileSignature) {
+            return cached.rows
+          }
+
+          const rows = await parseWorkbook(file, tableName)
+          parsedRowsCacheRef.current.set(cacheKey, {
+            fileSignature,
+            rows,
+          })
+          return rows
+        }
 
         const getFirstAvailableHeaders = async (): Promise<string[]> => {
           for (const branch of branchesForCard) {
             const slot = cardState.slots[branch]
             if (slot.file && !slot.parseError && slot.rowCount !== null) {
-              const rows = await parseWorkbook(slot.file, tableName)
+              const rows = await getRowsForSlot(branch, slot.file)
               if (rows.length > 0) {
                 return Object.keys(rows[0])
               }
@@ -1148,7 +1221,12 @@ export default function ImportPage() {
           return error.code === '23505' || message.includes('duplicate key value violates unique constraint')
         }
 
-        const insertRowsWithDuplicateSkip = async (rows: Record<string, unknown>[]): Promise<number> => {
+        const insertRowsWithDuplicateSkip = async (
+          rows: Record<string, unknown>[],
+          options?: { trackProgress?: boolean },
+        ): Promise<number> => {
+          const trackProgress = options?.trackProgress ?? true
+
           const insertChunk = async (chunkRows: Record<string, unknown>[]): Promise<number> => {
             if (chunkRows.length === 0) return 0
 
@@ -1177,7 +1255,11 @@ export default function ImportPage() {
 
           let inserted = 0
           for (let i = 0; i < rows.length; i += CHUNK) {
-            inserted += await insertChunk(rows.slice(i, i + CHUNK))
+            const chunkRows = rows.slice(i, i + CHUNK)
+            inserted += await insertChunk(chunkRows)
+            if (trackProgress) {
+              incrementProcessedRows(chunkRows.length)
+            }
           }
           return inserted
         }
@@ -1221,10 +1303,14 @@ export default function ImportPage() {
               throw new Error(message)
             }
 
-            if (upsertHandled) continue
+            if (upsertHandled) {
+              incrementProcessedRows(chunkRows.length)
+              continue
+            }
 
             try {
-              inserted += await insertRowsWithDuplicateSkip(chunkRows)
+              inserted += await insertRowsWithDuplicateSkip(chunkRows, { trackProgress: false })
+              incrementProcessedRows(chunkRows.length)
             } catch (insertFallbackError) {
               const fallbackMessage =
                 insertFallbackError instanceof Error
@@ -1252,6 +1338,7 @@ export default function ImportPage() {
             }
 
             inserted += chunkRows.length
+            incrementProcessedRows(chunkRows.length)
           }
 
           return inserted
@@ -1436,6 +1523,7 @@ export default function ImportPage() {
 
               if (!error) {
                 processed += chunkRows.length
+                incrementProcessedRows(chunkRows.length)
                 chunkHandled = true
                 break
               }
@@ -1462,13 +1550,16 @@ export default function ImportPage() {
                 processed += 1
               }
 
+              incrementProcessedRows(chunkRows.length)
+
               chunkHandled = true
               break
             }
 
             if (!chunkHandled) {
               try {
-                processed += await insertRowsWithDuplicateSkip(chunkRows)
+                processed += await insertRowsWithDuplicateSkip(chunkRows, { trackProgress: false })
+                incrementProcessedRows(chunkRows.length)
               } catch (insertFallbackError) {
                 const fallbackMessage =
                   insertFallbackError instanceof Error
@@ -1584,7 +1675,7 @@ export default function ImportPage() {
 
         let processedBranches = 0
 
-        for (const branch of readyBranches) {
+        const processBranch = async (branch: Branch): Promise<void> => {
           updateCard(tableName, (prev) => ({
             ...prev,
             uploadProgress: {
@@ -1594,15 +1685,17 @@ export default function ImportPage() {
           }))
 
           const slot = cardState.slots[branch]
-          if (!slot.file || slot.parseError || slot.rowCount === null) continue
+          if (!slot.file || slot.parseError || slot.rowCount === null) return
+          const file = slot.file
 
           const slotLocationPortal = resolveLocationAndPortalFromSlotBranch(branch)
           const standardBranch = resolveStandardBranchFromSlot(branch)
 
-          const rawRows = await parseWorkbook(slot.file, tableName)
+          const rawRows = await getRowsForSlot(branch, file)
 
           if (isVasTable && vasHeaderMapping) {
             // VAS table: use special parsing with numeric and date conversion
+            const vasParseErrors: VasParseError[] = []
             const insertRows: Record<string, unknown>[] = []
 
             // Replace mode for VAS: clear current branch data, then insert full file rows.
@@ -1619,7 +1712,7 @@ export default function ImportPage() {
             for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
               const { row, errors } = buildVasInsertRow(rawRows[rowIdx], standardBranch, vasHeaderMapping, rowIdx + 2) // +2 because row 1 is header
               if (errors.length > 0) {
-                allParseErrors.push(...errors)
+                vasParseErrors.push(...errors)
               } else if (row) {
                 if (employeeLookup) {
                   const srAssignedTo = row.sr_assigned_to
@@ -1645,9 +1738,9 @@ export default function ImportPage() {
             }
 
             // If there were any parse errors, throw before inserting
-            if (allParseErrors.length > 0) {
+            if (vasParseErrors.length > 0) {
               throw new Error(
-                `Parse errors found:\n${formatParseErrors(allParseErrors.slice(0, 10))}`
+                `Parse errors found:\n${formatParseErrors(vasParseErrors.slice(0, 10))}`
               )
             }
 
@@ -1799,7 +1892,7 @@ export default function ImportPage() {
               invoiceHeaderMapping = mapInvoiceHeaders(excelHeaders)
             } catch (err) {
               throw new Error(
-                `Invoice Data (${branch}, ${slot.file.name}): ${err instanceof Error ? err.message : String(err)}`,
+                `Invoice Data (${branch}, ${file.name}): ${err instanceof Error ? err.message : String(err)}`,
               )
             }
 
@@ -2111,9 +2204,39 @@ export default function ImportPage() {
             uploadProgress: {
               ...prev.uploadProgress,
               processedBranches,
-              currentBranch: processedBranches < readyBranches.length ? readyBranches[processedBranches] : null,
+              currentBranch: processedBranches >= readyBranches.length ? null : prev.uploadProgress.currentBranch,
             },
           }))
+        }
+
+        let nextBranchIndex = 0
+        let uploadFailure: Error | null = null
+
+        const runBranchWorker = async (): Promise<void> => {
+          while (true) {
+            if (uploadFailure) return
+
+            const branchIndex = nextBranchIndex
+            if (branchIndex >= readyBranches.length) return
+            nextBranchIndex += 1
+
+            const branch = readyBranches[branchIndex]
+
+            try {
+              await processBranch(branch)
+            } catch (err) {
+              if (!uploadFailure) {
+                uploadFailure = err instanceof Error ? err : new Error(String(err))
+              }
+            }
+          }
+        }
+
+        const workerCount = Math.min(MAX_PARALLEL_BRANCH_UPLOADS, readyBranches.length)
+        await Promise.all(Array.from({ length: workerCount }, () => runBranchWorker()))
+
+        if (uploadFailure) {
+          throw uploadFailure
         }
 
         await insertMappingIssues(mappingIssues)
@@ -2166,6 +2289,7 @@ export default function ImportPage() {
             ...prev.uploadProgress,
             processedBranches: prev.uploadProgress.totalBranches,
             currentBranch: null,
+            processedRows: prev.uploadProgress.totalRows,
           },
         }))
       } catch (err) {
@@ -2195,6 +2319,13 @@ export default function ImportPage() {
   const handleReset = useCallback((tableName: string) => {
     const config = CARDS.find((card) => card.tableName === tableName)
     const branches = config?.branches ?? PORTAL_BRANCHES
+
+    for (const key of parsedRowsCacheRef.current.keys()) {
+      if (key.startsWith(`${tableName}::`)) {
+        parsedRowsCacheRef.current.delete(key)
+      }
+    }
+
     setCards((prev) => ({ ...prev, [tableName]: emptyCard(branches) }))
   }, [])
 
