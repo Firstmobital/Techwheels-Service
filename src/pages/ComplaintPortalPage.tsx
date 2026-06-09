@@ -214,183 +214,206 @@ export const ComplaintPortalPage: React.FC = () => {
   if (!data) return <ErrorAlert message="No data loaded" />
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Complaint Portal</h1>
-          <p className="text-gray-600 mt-2">Track and manage your service complaint</p>
-        </div>
-
-        {/* Success/Error Alerts */}
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-50">
+      {/* Mobile-optimized container */}
+      <div className="w-full max-w-2xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
+        
+        {/* Success/Error Alerts - Sticky top */}
         {success && (
-          <>
+          <div className="fixed top-0 left-0 right-0 mx-4 mt-4 max-w-2xl z-50">
             <SuccessAlert message={success} />
-            <button
-              onClick={() => setSuccess(null)}
-              className="mt-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              Dismiss
-            </button>
-          </>
+          </div>
         )}
         {error && (
-          <>
+          <div className="fixed top-0 left-0 right-0 mx-4 mt-4 max-w-2xl z-50">
             <ErrorAlert message={error} />
-            <button
-              onClick={() => setError(null)}
-              className="mt-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              Dismiss
-            </button>
-          </>
+          </div>
         )}
 
-        {/* Entry Summary */}
+        {/* Service Context Card - Prominent at top for mobile */}
         {data.entry_summary && (
-          <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm">
-            <h3 className="font-semibold text-gray-900 mb-2">Service Visit</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-600">Registration:</span>
-                <p className="font-semibold">{data.entry_summary.reg_number}</p>
-              </div>
-              <div>
-                <span className="text-gray-600">Model:</span>
-                <p className="font-semibold">{data.entry_summary.model || 'N/A'}</p>
-              </div>
-              <div>
-                <span className="text-gray-600">Branch:</span>
-                <p className="font-semibold">{data.entry_summary.branch || 'N/A'}</p>
-              </div>
-              <div>
-                <span className="text-gray-600">Service Type:</span>
-                <p className="font-semibold">{data.entry_summary.service_type || 'N/A'}</p>
+          <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-4 mb-6 sticky top-4 z-40">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="text-2xl">🛡️</div>
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-blue-600 uppercase tracking-wider">TechWheels Care</div>
+                <div className="text-sm font-semibold text-gray-900">{data.entry_summary.reg_number}</div>
               </div>
             </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              <span className="font-semibold">{data.entry_summary.model}</span> • {data.entry_summary.service_type}
+            </p>
+            {data.entry_summary.branch && (
+              <p className="text-xs text-gray-500 mt-1">📍 {data.entry_summary.branch}</p>
+            )}
           </div>
         )}
 
         {/* RAISE MODE */}
         {mode === 'raise' && (
-          <form
-            onSubmit={handleRaise}
-            className="bg-white border rounded-lg p-6 shadow-sm"
-          >
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Raise a Complaint</h2>
-
-            <div className="space-y-4">
-              {/* Category */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Category <span className="text-red-600">*</span>
-                </label>
-                <select
-                  value={formState.category}
-                  onChange={(e) => setFormState({ ...formState, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="service_quality">Service Quality</option>
-                  <option value="billing">Billing</option>
-                  <option value="delivery_delay">Delivery Delay</option>
-                  <option value="staff_behaviour">Staff Behaviour</option>
-                  <option value="parts_spares">Parts/Spares</option>
-                  <option value="damage_during_service">Damage During Service</option>
-                  <option value="cleanliness">Cleanliness</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              {/* Title */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Title <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formState.title}
-                  onChange={(e) => setFormState({ ...formState, title: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Brief summary of complaint"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Description <span className="text-red-600">*</span>
-                </label>
-                <textarea
-                  value={formState.description}
-                  onChange={(e) => setFormState({ ...formState, description: e.target.value })}
-                  required
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Describe your complaint in detail"
-                />
-              </div>
-
-              {/* Severity */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Severity
-                </label>
-                <select
-                  value={formState.severitySelf}
-                  onChange={(e) => setFormState({ ...formState, severitySelf: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Not specified</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-
-              {/* Customer Name */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Your Name
-                </label>
-                <input
-                  type="text"
-                  value={formState.customerName}
-                  onChange={(e) => setFormState({ ...formState, customerName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Optional"
-                />
-              </div>
-
-              {/* Customer Phone */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Your Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formState.customerPhone}
-                  onChange={(e) => setFormState({ ...formState, customerPhone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="10-digit phone number (optional)"
-                />
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition"
-              >
-                {loading ? 'Submitting...' : 'Submit Complaint'}
-              </button>
+          <form onSubmit={handleRaise} className="space-y-5 pb-8">
+            {/* Header */}
+            <div className="mb-6">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                Raise a Complaint
+              </h1>
+              <p className="text-gray-600 text-sm">
+                Tell us what went wrong so we can fix it fast.
+              </p>
             </div>
+
+            {/* Category Selection - Visual grid */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-3">
+                What went wrong? <span className="text-red-600">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                {[
+                  { value: 'service_quality', label: '🔧 Service Quality', desc: 'Issue not fixed' },
+                  { value: 'billing', label: '💰 Billing', desc: 'Unexpected charges' },
+                  { value: 'delivery_delay', label: '⏱️ Delivery Delay', desc: 'Late delivery' },
+                  { value: 'staff_behaviour', label: '👤 Staff Behaviour', desc: 'Staff conduct' },
+                  { value: 'parts_spares', label: '📦 Parts/Spares', desc: 'Wrong/missing' },
+                  { value: 'damage_during_service', label: '⚠️ Damage', desc: 'New damage' },
+                  { value: 'cleanliness', label: '🧹 Cleanliness', desc: 'Wash not done' },
+                  { value: 'other', label: '📝 Other', desc: 'Something else' },
+                ].map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setFormState({ ...formState, category: cat.value })}
+                    className={`p-3 sm:p-4 rounded-lg border-2 transition-all text-left ${
+                      formState.category === cat.value
+                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-semibold text-sm sm:text-base text-gray-900 mb-1">
+                      {cat.label}
+                    </div>
+                    <div className="text-xs text-gray-600">{cat.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Title */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Summary <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="text"
+                value={formState.title}
+                onChange={(e) => setFormState({ ...formState, title: e.target.value })}
+                required
+                maxLength={100}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base sm:text-sm"
+                placeholder="Brief summary of your complaint"
+              />
+              <p className="text-xs text-gray-500 mt-1">{formState.title.length}/100 characters</p>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Details <span className="text-red-600">*</span>
+              </label>
+              <textarea
+                value={formState.description}
+                onChange={(e) => setFormState({ ...formState, description: e.target.value })}
+                required
+                maxLength={500}
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base sm:text-sm"
+                placeholder="Describe what happened and what you'd like us to do about it"
+              />
+              <p className="text-xs text-gray-500 mt-1">{formState.description.length}/500 characters</p>
+            </div>
+
+            {/* Optional Section */}
+            <div className="border-t pt-4 mt-4">
+              <details className="cursor-pointer">
+                <summary className="text-sm font-semibold text-gray-700 hover:text-gray-900 flex items-center gap-2">
+                  <span>+ Optional Details</span>
+                </summary>
+                <div className="space-y-3 mt-4">
+                  {/* Severity */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      How urgent is this?
+                    </label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: 'low', label: '😊 Low', desc: 'Can wait' },
+                        { value: 'medium', label: '😐 Medium', desc: 'Soon' },
+                        { value: 'high', label: '😟 High', desc: 'Urgent' },
+                      ].map((sev) => (
+                        <button
+                          key={sev.value}
+                          type="button"
+                          onClick={() => setFormState({ ...formState, severitySelf: sev.value })}
+                          className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm transition-all ${
+                            formState.severitySelf === sev.value
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 bg-white'
+                          }`}
+                        >
+                          <div className="font-semibold">{sev.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Customer Name */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Your Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formState.customerName}
+                      onChange={(e) => setFormState({ ...formState, customerName: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  {/* Customer Phone */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Your Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={formState.customerPhone}
+                      onChange={(e) => setFormState({ ...formState, customerPhone: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="10-digit number (optional)"
+                    />
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            {/* Submit Button - Large, touch-friendly */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-400 disabled:to-gray-400 text-white font-semibold py-4 px-6 rounded-lg transition-all shadow-md hover:shadow-lg min-h-12 flex items-center justify-center gap-2 text-base"
+            >
+              {loading ? '⏳ Submitting...' : '✓ Submit Complaint'}
+            </button>
+
+            <p className="text-xs text-gray-600 text-center">
+              ✓ Your complaint goes directly to your service advisor
+            </p>
           </form>
         )}
 
         {/* VIEW MODE */}
         {mode === 'view' && data.ticket && (
-          <div className="space-y-6">
+          <div className="space-y-5 pb-8">
             {/* Ticket Header */}
             <TicketHeaderCard
               ticketNumber={data.ticket.ticket_number}
@@ -403,53 +426,72 @@ export const ComplaintPortalPage: React.FC = () => {
 
             {/* SLA Status */}
             {data.ticket.sla_status && (
-              <div className="bg-white border rounded-lg p-4 shadow-sm">
-                <h3 className="font-semibold text-gray-900 mb-2">Resolution Status</h3>
-                <SLAStatusBadge status={data.ticket.sla_status} />
-                {data.ticket.response_due_at && (
-                  <p className="text-sm text-gray-600 mt-2">
-                    Expected response by: {new Date(data.ticket.response_due_at).toLocaleString()}
-                  </p>
-                )}
-                {data.ticket.resolution_due_at && (
-                  <p className="text-sm text-gray-600">
-                    Expected resolution by: {new Date(data.ticket.resolution_due_at).toLocaleString()}
-                  </p>
-                )}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">📋</span>
+                  <h3 className="font-semibold text-gray-900">Resolution Status</h3>
+                </div>
+                <div className="mb-3">
+                  <SLAStatusBadge status={data.ticket.sla_status} />
+                </div>
+                <div className="space-y-1 text-sm">
+                  {data.ticket.response_due_at && (
+                    <p className="text-gray-600">
+                      <span className="font-semibold">Response by:</span> {new Date(data.ticket.response_due_at).toLocaleDateString()}
+                    </p>
+                  )}
+                  {data.ticket.resolution_due_at && (
+                    <p className="text-gray-600">
+                      <span className="font-semibold">Resolution by:</span> {new Date(data.ticket.resolution_due_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Ticket Details */}
-            <div className="bg-white border rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold text-gray-900 mb-2">Complaint Details</h3>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="text-gray-600">Title:</span> <span className="font-semibold">{data.ticket.title}</span>
-                </p>
-                <p>
-                  <span className="text-gray-600">Description:</span> <span>{data.ticket.description}</span>
-                </p>
-                <p>
-                  <span className="text-gray-600">Assigned to:</span> <span className="font-semibold">{data.ticket.assigned_to_name || 'Unassigned'}</span>
-                </p>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">📝</span>
+                <h3 className="font-semibold text-gray-900">Your Complaint</h3>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <span className="text-gray-600 font-semibold">{data.ticket.title}</span>
+                </div>
+                <p className="text-gray-700 leading-relaxed">{data.ticket.description}</p>
+                <div className="flex items-center gap-2 pt-2 border-t">
+                  <span className="text-lg">👤</span>
+                  <span className="text-gray-600">
+                    Assigned to <span className="font-semibold">{data.ticket.assigned_to_name || 'Support team'}</span>
+                  </span>
+                </div>
                 {data.ticket.is_escalated && (
-                  <p className="text-red-600 font-semibold">🚨 Escalated: {data.ticket.escalation_reason}</p>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-2">
+                    <p className="text-red-700 font-semibold">🚨 Escalated</p>
+                    <p className="text-red-600 text-sm mt-1">{data.ticket.escalation_reason}</p>
+                  </div>
                 )}
               </div>
             </div>
 
             {/* Messages */}
             {data.messages && (
-              <div className="bg-white border rounded-lg p-4 shadow-sm">
-                <h3 className="font-semibold text-gray-900 mb-4">Conversation</h3>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">💬</span>
+                  <h3 className="font-semibold text-gray-900">Conversation</h3>
+                </div>
                 {data.messages.length === 0 ? (
-                  <p className="text-sm text-gray-500 mb-4">No messages yet. Start the conversation below.</p>
+                  <p className="text-sm text-gray-600 py-4">
+                    No messages yet. Your advisor will respond here.
+                  </p>
                 ) : (
-                  <div className="max-h-96 overflow-y-auto mb-4">
+                  <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
                     {data.messages.map((msg) => (
                       <MessageBubble
                         key={msg.id.toString()}
-                        author={msg.author_name || 'Support Team'}
+                        author={msg.author_name || 'Support'}
                         body={msg.body}
                         timestamp={msg.created_at}
                         isCustomer={msg.author_type === 'customer'}
@@ -464,17 +506,21 @@ export const ComplaintPortalPage: React.FC = () => {
                     <textarea
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
-                      placeholder="Add a message..."
-                      rows={3}
+                      placeholder="Send a message..."
+                      maxLength={300}
+                      rows={2}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     />
-                    <button
-                      type="submit"
-                      disabled={loading || !newMessage.trim()}
-                      className="mt-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition"
-                    >
-                      {loading ? 'Sending...' : 'Send'}
-                    </button>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs text-gray-500">{newMessage.length}/300</span>
+                      <button
+                        type="submit"
+                        disabled={loading || !newMessage.trim()}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition text-sm"
+                      >
+                        Send
+                      </button>
+                    </div>
                   </form>
                 )}
               </div>
@@ -482,22 +528,25 @@ export const ComplaintPortalPage: React.FC = () => {
 
             {/* CSAT Rating */}
             {(data.ticket.status === 'resolved' || data.ticket.status === 'closed') && !data.ticket.csat_rating && (
-              <div className="bg-white border rounded-lg p-4 shadow-sm">
-                <h3 className="font-semibold text-gray-900 mb-3">How was your experience?</h3>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">⭐</span>
+                  <h3 className="font-semibold text-gray-900">How was your experience?</h3>
+                </div>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Rate your satisfaction (1-5 stars)
-                    </label>
-                    <div className="flex gap-2">
+                    <p className="text-sm text-gray-700 mb-2">Would you like to rate your service?</p>
+                    <div className="flex justify-center gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
                         <button
                           key={star}
                           type="button"
                           onClick={() => setCsatRating(star)}
-                          className={`text-2xl transition ${
-                            csatRating === star ? 'scale-125' : ''
-                          } ${csatRating === star || csatRating === null ? 'text-yellow-400' : 'text-gray-300'}`}
+                          className={`text-3xl transition transform ${
+                            csatRating && csatRating >= star
+                              ? 'text-yellow-400 scale-110'
+                              : 'text-gray-300 hover:scale-105'
+                          }`}
                         >
                           ★
                         </button>
@@ -507,16 +556,17 @@ export const ComplaintPortalPage: React.FC = () => {
                   <textarea
                     value={csatComment}
                     onChange={(e) => setCsatComment(e.target.value)}
-                    placeholder="Additional comments (optional)"
+                    placeholder="Optional: Share your feedback"
+                    maxLength={200}
                     rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
                   />
                   <button
                     onClick={handleSubmitCsat}
                     disabled={loading || csatRating === null}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition"
+                    className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition text-sm"
                   >
-                    {loading ? 'Submitting...' : 'Submit Rating'}
+                    Submit Rating
                   </button>
                 </div>
               </div>
@@ -524,11 +574,11 @@ export const ComplaintPortalPage: React.FC = () => {
 
             {/* CSAT Display */}
             {data.ticket.csat_rating && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                <h3 className="font-semibold text-emerald-900 mb-2">Your Rating</h3>
-                <p className="text-2xl">{'★'.repeat(data.ticket.csat_rating)}{'☆'.repeat(5 - data.ticket.csat_rating)}</p>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                <p className="font-semibold text-emerald-900 mb-2">Your Rating</p>
+                <p className="text-4xl mb-2">{'★'.repeat(data.ticket.csat_rating)}{'☆'.repeat(5 - data.ticket.csat_rating)}</p>
                 {data.ticket.csat_comment && (
-                  <p className="text-sm text-emerald-700 mt-2">{data.ticket.csat_comment}</p>
+                  <p className="text-sm text-emerald-700">"{data.ticket.csat_comment}"</p>
                 )}
               </div>
             )}
@@ -536,25 +586,29 @@ export const ComplaintPortalPage: React.FC = () => {
             {/* Reopen Button */}
             {(data.ticket.status === 'resolved' || data.ticket.status === 'closed') &&
               !reopenReason && (
-                <div className="bg-white border rounded-lg p-4 shadow-sm">
-                  <h3 className="font-semibold text-gray-900 mb-3">Not satisfied?</h3>
-                  <p className="text-sm text-gray-600 mb-3">
-                    You can reopen this complaint if the issue isn't fully resolved.
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">🔄</span>
+                    <h3 className="font-semibold text-gray-900">Not fully resolved?</h3>
+                  </div>
+                  <p className="text-sm text-gray-700 mb-3">
+                    You can reopen this complaint if the issue persists.
                   </p>
                   <form onSubmit={handleReopen}>
                     <textarea
                       value={reopenReason}
                       onChange={(e) => setReopenReason(e.target.value)}
-                      placeholder="Tell us why you're reopening this complaint..."
+                      placeholder="Why are you reopening this complaint?"
+                      maxLength={300}
                       rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                      className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-2"
                     />
                     <button
                       type="submit"
                       disabled={loading || !reopenReason.trim()}
-                      className="mt-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition"
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition text-sm"
                     >
-                      {loading ? 'Reopening...' : 'Reopen Complaint'}
+                      Reopen Complaint
                     </button>
                   </form>
                 </div>
