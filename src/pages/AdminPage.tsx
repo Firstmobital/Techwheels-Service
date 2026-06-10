@@ -210,7 +210,7 @@ export default function AdminPage() {
   const [newRole, setNewRole]           = useState<UserRole>('staff')
 
   // Change-role modal
-  const [roleEditUser, setRoleEditUser]     = useState<CRMUser | null>(null)
+  const [roleEditUser, setRoleEditUser]     = useState<AppUser | null>(null)
   const [roleEditValue, setRoleEditValue]   = useState<UserRole>('staff')
   const [roleEditSaving, setRoleEditSaving] = useState(false)
   const [newBranch, setNewBranch]       = useState('')
@@ -516,7 +516,26 @@ export default function AdminPage() {
   }
 
   // ── Activate / Deactivate ─────────────────────────────────────────────────
-  async function toggleUserActive(u: AppUser) {
+  async function saveRoleChange() {
+    if (!roleEditUser) return
+    setRoleEditSaving(true)
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ role: roleEditValue })
+        .eq('id', roleEditUser.id)
+      if (error) throw error
+      setUsers(prev => prev.map(u => u.id === roleEditUser!.id ? { ...u, role: roleEditValue } : u))
+      showToastMsg(`Role updated to "${roleEditValue}" for ${roleEditUser.full_name || roleEditUser.email}`)
+      setRoleEditUser(null)
+    } catch (err) {
+      showToastMsg(err instanceof Error ? err.message : 'Failed to update role', 'error')
+    } finally {
+      setRoleEditSaving(false)
+    }
+  }
+
+    async function toggleUserActive(u: AppUser) {
     const activating = !u.is_active
     const { error } = await supabase.from('users').update({ is_active: activating }).eq('id', u.id)
     if (error) { showToastMsg(error.message, 'error'); return }
