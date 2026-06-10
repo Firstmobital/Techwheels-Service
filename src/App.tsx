@@ -16,6 +16,7 @@ import JobCardPage from './pages/JobCardPage'
 import ReceptionPage from './pages/ReceptionPage'
 import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
 import SATrackerPage from './pages/SATrackerPage'
+import BodyshopTrackerPage from './pages/BodyshopTrackerPage'
 import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
@@ -34,7 +35,7 @@ const NAV_ITEMS = [
   { to: '/reception', label: 'Reception', icon: 'reception' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
   { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
-  { to: '/sa-tracker', label: 'SA Tracker', icon: 'person' },
+  { to: '/sa-tracker' | '/bodyshop-tracker', label: 'SA Tracker', icon: 'person' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
   { to: '/import', label: 'Imports', icon: 'import' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
@@ -58,10 +59,11 @@ type ModuleName =
   | 'service_advisor'
   | 'floor_incharge'
   | 'sa_tracker'
+  | 'bodyshop_tracker'
   | 'technician'
   | 'complaints'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/technician' | '/complaints'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/technician' | '/complaints'
 
 interface PermissionRow {
   module_name: string
@@ -76,7 +78,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/reception': ['reception'],
   '/service-advisor': ['service_advisor'],
   '/floor-incharge': ['floor_incharge'],
-  '/sa-tracker': ['sa_tracker'],
+  '/sa-tracker' | '/bodyshop-tracker': ['sa_tracker'],
   '/technician': ['technician'],
   '/complaints': ['complaints'],
 }
@@ -403,7 +405,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
   if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
   if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
-  if (pathname.startsWith('/sa-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker'])
+  if (pathname.startsWith('/sa-tracker' | '/bodyshop-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker' | '/bodyshop-tracker'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
   if (pathname.startsWith('/c/')) return true
@@ -838,7 +840,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                 <Route
                   path="/sa-tracker"
                   element={(
-                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/sa-tracker']}>
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/sa-tracker' | '/bodyshop-tracker']}>
                       <SATrackerPage />
                     </RequireAccess>
                   )}
