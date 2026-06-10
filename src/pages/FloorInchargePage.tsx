@@ -311,6 +311,7 @@ export default function FloorInchargePage() {
   const [assignments, setAssignments] = useState<Record<string, TechnicianAssignment>>({})
   const [supportAssignments, setSupportAssignments] = useState<Record<string, SupportAssignment[]>>({})
   const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [saving, setSaving] = useState<string | null>(null)
   const [supportSaving, setSupportSaving] = useState<string | null>(null)
   const [stageDrafts, setStageDrafts] = useState<Record<string, StageDraft>>({})
