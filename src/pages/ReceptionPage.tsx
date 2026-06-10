@@ -8,7 +8,6 @@ import {
   createReceptionEntry,
   deleteReceptionEntry,
   listReceptionEmployees,
-  listReceptionEntries,
   type ReceptionEmployeeOption,
   type ReceptionEntryInput,
   type ReceptionEntryRow,
@@ -469,17 +468,22 @@ export default function ReceptionPage() {
     setLoading(true)
     setError(null)
 
-    const [entriesRes, employeeRes, authRes] = await Promise.all([
-      listReceptionEntries(),
+    const [{ data: _entriesRaw, error: _entriesErr }, employeeRes, authRes] = await Promise.all([
+      supabase
+        .from('service_reception_entries')
+        .select('*')
+        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
+        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
+        .order('created_at', { ascending: false }),
       listReceptionEmployees(),
       supabase.auth.getSession(),
     ])
 
-    if (entriesRes.error) {
-      setError(entriesRes.error)
+    if (_entriesErr) {
+      setError(_entriesErr.message)
       setEntries([])
     } else {
-      setEntries(entriesRes.data ?? [])
+      setEntries(_entriesRaw ?? [])
     }
 
     if (!employeeRes.error) {
