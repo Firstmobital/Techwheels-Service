@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
@@ -267,6 +268,8 @@ export default function TechnicianPage() {
         let assignQuery = supabase
           .from('technician_assignments')
           .select('*')
+          .gte('assigned_at', dateRange.from + 'T00:00:00+05:30')
+          .lte('assigned_at', dateRange.to + 'T23:59:59+05:30')
           .order('assigned_at', { ascending: false })
           .range(from, from + QUERY_PAGE_SIZE - 1)
 
@@ -460,7 +463,8 @@ export default function TechnicianPage() {
 
   useEffect(() => {
     void loadData()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange])
 
   const assignmentsWithIncome = useMemo<TechnicianAssignmentRow[]>(() => {
     return assignments.map((row) => ({
