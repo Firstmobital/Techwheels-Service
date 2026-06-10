@@ -18,6 +18,7 @@ import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
 import SATrackerPage from './pages/SATrackerPage'
 import BodyshopTrackerPage from './pages/BodyshopTrackerPage'
 import BodyshopFloorPage from './pages/BodyshopFloorPage'
+import BodyshopRepairPage from './pages/BodyshopRepairPage'
 import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
@@ -47,6 +48,7 @@ const NAV_ITEMS = [
   { to: '/admin', label: 'Admin', icon: 'admin' },
 
   { to: '/complaints', label: 'Complaints', icon: 'complaints' },
+  { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
 ]
 type ModuleName =
   | 'job_cards'
@@ -67,7 +69,7 @@ type ModuleName =
   | 'technician'
   | 'complaints'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair'
 
 interface PermissionRow {
   module_name: string
@@ -87,6 +89,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/bodyshop-floor': ['bodyshop_floor'],
   '/technician': ['technician'],
   '/complaints': ['complaints'],
+  '/bodyshop-repair': ['bodyshop_repair'],
 }
 
 type NavItem = {
@@ -421,6 +424,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/bodyshop-floor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-floor'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
+  if (pathname.startsWith('/bodyshop-repair')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-repair'])
   if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
   return false
@@ -904,6 +908,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/complaints']}>
                       <ComplaintsPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/bodyshop-repair"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-repair']}>
+                      <BodyshopRepairPage />
                     </RequireAccess>
                   )}
                 />
