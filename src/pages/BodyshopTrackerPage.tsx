@@ -225,7 +225,8 @@ export default function BodyshopTrackerPage() {
     }
   }
 
-  useEffect(() => { void loadData() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadData() }, [dateRange])
 
   // ── Employee code sets by role (memo) ──────────────────────────────────────
 

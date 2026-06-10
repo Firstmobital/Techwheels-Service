@@ -326,9 +326,10 @@ export default function FloorInchargePage() {
   const [dataError, setDataError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchAll()
-  }, [])
+  }, [dateRange])
 
   async function fetchAll() {
     setLoading(true)
