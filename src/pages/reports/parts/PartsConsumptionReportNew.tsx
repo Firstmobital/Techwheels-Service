@@ -337,7 +337,7 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
       'Part Number': row.partNumber,
       Description: row.partDescription || '-',
       'Total Consumed': row.totalConsumption,
-      'Avg Monthly': Math.round(row.avgMonthlyConsumption),
+      'Avg Monthly': row.avgMonthlyConsumption,
       Months: row.monthsCount,
       Records: row.recordsCount,
       Trend: row.consumptionTrend,
@@ -612,7 +612,7 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
                     <td className="px-4 py-3 text-sm text-gray-600">{row.partDescription || '-'}</td>
                     <td className="px-4 py-3 text-sm text-right text-gray-700">{row.totalConsumption.toLocaleString('en-IN')}</td>
                     <td className="px-4 py-3 text-sm text-right text-gray-700">
-                      {Math.round(row.avgMonthlyConsumption).toLocaleString('en-IN')}
+                      {row.avgMonthlyConsumption.toLocaleString('en-IN')}
                     </td>
                     <td className="px-4 py-3 text-sm text-right text-gray-700">{row.monthsCount.toLocaleString('en-IN')}</td>
                     <td className="px-4 py-3 text-sm text-right text-gray-700">{row.recordsCount.toLocaleString('en-IN')}</td>
