@@ -68,6 +68,7 @@ type ModuleName =
   | 'bodyshop_floor'
   | 'technician'
   | 'complaints'
+  | 'bodyshop_repair'
 
 type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair'
 

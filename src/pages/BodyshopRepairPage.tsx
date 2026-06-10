@@ -50,7 +50,7 @@ export default function BodyshopRepairPage() {
     setLoading(true)
     try {
       const [data, br] = await Promise.all([
-        listRepairCards({ from: dateRange.from?.toISOString(), to: dateRange.to?.toISOString() }),
+        listRepairCards({ from: dateRange.from, to: dateRange.to }),
         supabase.from('service_branches').select('name').order('name'),
       ])
       setCards(data)
