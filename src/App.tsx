@@ -34,6 +34,7 @@ const NAV_ITEMS = [
   { to: '/reception', label: 'Reception', icon: 'reception' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
   { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
+  { to: '/sa-tracker', label: 'SA Tracker', icon: 'person' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
   { to: '/import', label: 'Imports', icon: 'import' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
@@ -831,6 +832,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/floor-incharge']}>
                       <FloorInchargePage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/sa-tracker"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/sa-tracker']}>
+                      <SATrackerPage />
                     </RequireAccess>
                   )}
                 />
