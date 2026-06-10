@@ -260,12 +260,6 @@ export default function BodyshopTrackerPage() {
     branchFilter === 'all' ? dateScopedRows : dateScopedRows.filter((r) => getBranchLabel(r.branch) === branchFilter),
   [dateScopedRows, branchFilter])
 
-  // ── All unique SA names (for tabs that don't have employee_master entries) ─
-
-  const allSANames = useMemo(() =>
-    Array.from(new Set(branchRows.map((r) => String(r.sr_assigned_to ?? '').trim()).filter(Boolean))),
-  [branchRows])
-
   // ── Tab rows: for SA tab show all; for others filter by employee role ──────
 
   const tabRows = useMemo(() => {
@@ -426,7 +420,6 @@ export default function BodyshopTrackerPage() {
                   padding: '14px 20px',
                   fontWeight: activeTab === tab.key ? 700 : 400,
                   color: activeTab === tab.key ? '#2563eb' : '#64748b',
-                  borderBottom: activeTab === tab.key ? '2px solid #2563eb' : '2px solid transparent',
                   background: 'none',
                   border: 'none',
                   borderBottom: activeTab === tab.key ? '2px solid #2563eb' : '2px solid transparent',
