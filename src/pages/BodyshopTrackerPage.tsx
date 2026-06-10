@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -175,6 +176,8 @@ export default function BodyshopTrackerPage() {
         const res = await supabase.from('job_card_closed_data')
           .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, vehicle_registration_number, sr_type')
           .eq('sr_type', 'Accident')
+          .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
+          .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
           .order('closed_date_time', { ascending: false })
           .range(from, from + QUERY_PAGE - 1)
         if (res.error) { setError(res.error.message); setLoading(false); return }
