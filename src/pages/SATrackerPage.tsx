@@ -144,6 +144,29 @@ export default function SATrackerPage() {
     setError(null)
 
     try {
+      // ── 1. Role check first (same pattern as TechnicianPage) ──
+      const authRes = await supabase.auth.getUser()
+      const userId = authRes.data.user?.id
+
+      if (!userId) {
+        setRows([])
+        setCanEditShare(false)
+        setLoading(false)
+        return
+      }
+
+      const profileRes = await supabase
+        .from('users')
+        .select('role, is_active')
+        .eq('id', userId)
+        .maybeSingle()
+
+      const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+      const isActive = (profileRes.data as { is_active?: boolean | null } | null)?.is_active
+      const roleCanEdit = role === 'admin' || role === 'super_admin' || role === 'super admin'
+      setCanEditShare(roleCanEdit && isActive !== false)
+
+      // ── 2. Load closed JC data ──
       const allRows: ClosedJCRow[] = []
       let from = 0
 
@@ -163,18 +186,10 @@ export default function SATrackerPage() {
       }
 
       setRows(allRows)
-
-      // Check if user can edit share %
-      const authRes = await supabase.auth.getUser()
-      const userId = authRes.data.user?.id
-      if (userId) {
-        const profileRes = await supabase.from('users').select('role, is_active').eq('id', userId).maybeSingle()
-        const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
-        const isActive = (profileRes.data as { is_active?: boolean | null } | null)?.is_active
-        setCanEditShare((role === 'admin' || role === 'super_admin' || role === 'super admin') && isActive !== false)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load SA data')
+      setRows([])
+      setCanEditShare(false)
     } finally {
       setLoading(false)
     }
