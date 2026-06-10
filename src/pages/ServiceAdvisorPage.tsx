@@ -9,6 +9,7 @@ import {
   generateComplaintLink,
   type ReceptionEntryRow,
 } from '../lib/api'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 
@@ -656,7 +657,13 @@ export default function ServiceAdvisorPage() {
     // Fetch appropriate data
     let res
     if (nextIsAdmin) {
-      res = await listReceptionEntries() // Admin: see all reception entries
+      const { data: allEntriesRaw } = await supabase
+        .from('service_reception_entries')
+        .select('*')
+        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
+        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
+        .order('created_at', { ascending: false })
+      res = { data: allEntriesRaw ?? [], error: null } // Admin: see all reception entries
     } else {
       res = await listServiceAdvisorEntries() // SA: see only assigned rows
     }
@@ -707,7 +714,8 @@ export default function ServiceAdvisorPage() {
 
   useEffect(() => {
     void loadRows()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange])
 
   // Subscribe to real-time updates for completed/hold/work-in-process job cards
   useEffect(() => {
