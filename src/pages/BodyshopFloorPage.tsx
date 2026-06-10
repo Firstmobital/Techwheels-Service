@@ -345,11 +345,6 @@ export default function BodyshopFloorPage() {
 
   // ── Modal ────────────────────────────────────────────────────────────────
 
-  function openModal(car: AccidentCar, role: BSRole) {
-    setModalCar(car)
-    setModalRole(role)
-    setModalEmpCode(assignments[jcKey(car)]?.[role]?.employee_code ?? '')
-  }
   function closeModal() { if (!modalSaving) { setModalCar(null); setModalEmpCode('') } }
 
   async function saveModal() {
