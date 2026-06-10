@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { getModelNames } from '../lib/api/settings'
 import {
@@ -504,7 +505,8 @@ export default function ReceptionPage() {
   useEffect(() => {
     void loadData()
     void loadModelOptions()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange])
 
   function resetForm() {
     setForm(EMPTY_FORM)
@@ -679,7 +681,9 @@ export default function ReceptionPage() {
       {error && <div className="alert alert--err mb-gap">{error}</div>}
       {notice && <div className="alert alert--ok mb-gap">{notice}</div>}
 
-      <div className="toolbar toolbar--tight">
+      <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+
+        <div className="toolbar toolbar--tight">
         <span className="toolbar__label">Filter by fuel type:</span>
         <button
           type="button"
