@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   listServiceAdvisorEntries,
-  listReceptionEntries,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
   markServiceAdvisorInvoiceDone,
@@ -241,6 +240,7 @@ export default function ServiceAdvisorPage() {
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [loading, setLoading] = useState(true)
+const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [error, setError] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
@@ -1098,6 +1098,9 @@ export default function ServiceAdvisorPage() {
         {showScopeFilters && (
           <>
             {showLocationFilter && (
+              <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+
+
               <div className="toolbar toolbar--tight">
                 <span className="toolbar__label">Filter by location:</span>
                 <button
