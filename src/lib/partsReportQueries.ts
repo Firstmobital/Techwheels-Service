@@ -480,7 +480,7 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
     let query = supabase
       .from('service_parts_order_data')
       .select(
-        'part_number, part_description, order_status, status, spares_order_type, ordered_quantity, confirmation_qty, invoice_qty, received_quantity, intransit_qty, dealer_name, order_date, eta_1, portal',
+        'part_number, part_description, order_status, status, spares_order_type, ordered_quantity, confirmation_qty, invoice_qty, received_quantity, intransit_qty, dealer_name, order_date, eta_1, portal, invoice_number',
       )
 
     query = applyBranchFilterToQuery(query, filters.branch)
@@ -511,6 +511,10 @@ export async function getOrderStatusReport(filters: PartsReportFilters): Promise
 
     return (data || [])
       .filter((row: any) => {
+        // Only include rows WITH invoice numbers (not blank/null)
+        const invoiceNumber = String(row.invoice_number ?? row.invoice_no ?? row.invoice_num ?? '').trim()
+        if (!invoiceNumber) return false
+
         const rowStatus = resolveStatus(row)
         if (filters.status && normalizeStatus(rowStatus) !== normalizeStatus(filters.status)) return false
         if (!filters.vendor && !filters.productCategory) return true

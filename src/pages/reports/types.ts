@@ -29,6 +29,7 @@ export type ReportId =
   | 'invoice-daily-trend'
   | 'parts-consumption'
   | 'parts-backorder'
+  | 'parts-back-order'
   | 'parts-stock-planning'
   | 'parts-order-justification'
   | 'parts-monthly-consumption'
