@@ -97,9 +97,9 @@ function dateLabel(key: string): string {
 }
 
 
-function calculateSAIncome(totalInvoice: number, saSharePercent: number): number {
-  if (!Number.isFinite(totalInvoice) || totalInvoice <= 0) return 0
-  return totalInvoice * (saSharePercent / 100)
+function calculateSAIncome(labourAmount: number, saSharePercent: number): number {
+  if (!Number.isFinite(labourAmount) || labourAmount <= 0) return 0
+  return labourAmount * (saSharePercent / 100)
 }
 
 function normalizeShareInput(value: string, fallback: number): number {
@@ -253,7 +253,7 @@ export default function SATrackerPage() {
     return Array.from(map.values())
       .map(({ days: _d, ...card }) => ({
         ...card,
-        totalIncome: calculateSAIncome(card.totalInvoice, saSharePercent),
+        totalIncome: calculateSAIncome(card.totalLabour, saSharePercent),
       }))
       .sort((a, b) => b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
   }, [filteredRows, saSharePercent])
@@ -277,7 +277,7 @@ export default function SATrackerPage() {
       existing.totalLabour += r.labourAmt
       existing.totalSpares += r.sparesAmt
       existing.totalInvoice += r.invoiceAmt
-      existing.totalIncome = calculateSAIncome(existing.totalInvoice, saSharePercent)
+      existing.totalIncome = calculateSAIncome(existing.totalLabour, saSharePercent)
       map.set(dateKey, existing)
     })
     return Array.from(map.values()).sort((a, b) => {
@@ -433,8 +433,8 @@ export default function SATrackerPage() {
             <Icon name="checksm" size={16} />
           </span>
           <div>
-            <div className="n">{formatCurrency(totals.invoice * saSharePercent / 100)}</div>
-            <div className="l">SA Income ({saSharePercent}%)</div>
+            <div className="n">{formatCurrency(totals.labour * saSharePercent / 100)}</div>
+            <div className="l">SA Income ({saSharePercent}% of Labour)</div>
           </div>
         </div>
 
@@ -476,7 +476,7 @@ export default function SATrackerPage() {
           <div className="card__head">
             <div>
               <h3>Revenue by Service Advisor</h3>
-              <div className="sub">Sorted by total invoice value. Income = Total Invoice × {saSharePercent}%. Click an SA to drill down by day.</div>
+              <div className="sub">Sorted by total invoice value. Income = Labour × {saSharePercent}%. Click an SA to drill down by day.</div>
             </div>
             {canEditShare && (
               <div className="tech-share-corner">
@@ -638,6 +638,7 @@ export default function SATrackerPage() {
                   <th style={{ textAlign: 'right' }}>Labour</th>
                   <th style={{ textAlign: 'right' }}>Spares</th>
                   <th style={{ textAlign: 'right' }}>Total Invoice</th>
+                  <th style={{ textAlign: 'right', color: '#2563eb' }}>SA Income ({saSharePercent}%)</th>
                 </tr>
               </thead>
               <tbody>
@@ -655,6 +656,7 @@ export default function SATrackerPage() {
                     <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.labourAmt)}</td>
                     <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{formatCurrency(r.sparesAmt)}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(r.invoiceAmt)}</td>
+                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calculateSAIncome(r.labourAmt, saSharePercent))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -669,6 +671,9 @@ export default function SATrackerPage() {
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     {formatCurrency(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}
+                  </td>
+                  <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>
+                    {formatCurrency(dayDetailRows.reduce((s, r) => s + calculateSAIncome(r.labourAmt, saSharePercent), 0))}
                   </td>
                 </tr>
               </tfoot>
