@@ -1658,35 +1658,7 @@ export default function AdminPage() {
       )}
 
     </div>
-  )
-}
 
-// ── Shared mini-components ─────────────────────────────────────────────────────
-
-const INPUT = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500'
-const BTN_PRIMARY   = 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
-const BTN_SECONDARY = 'rounded-lg border border-gray-200 px-4 py-2 text-sm transition-colors hover:bg-gray-50'
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="mb-1 block text-sm text-gray-600">{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button onClick={onClose} className="text-2xl leading-none text-gray-400 hover:text-gray-600">×</button>
-        </div>
-        {children}
-      </div>
-    </div>
       {/* ─── Change Role Modal ─── */}
       {roleEditUser && (
         <div className="modal-back" role="presentation" onClick={() => { if (!roleEditSaving) setRoleEditUser(null) }}>
@@ -1745,7 +1717,34 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
           </div>
         </div>
       )}
+  )
+}
 
+// ── Shared mini-components ─────────────────────────────────────────────────────
 
+const INPUT = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500'
+const BTN_PRIMARY   = 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50'
+const BTN_SECONDARY = 'rounded-lg border border-gray-200 px-4 py-2 text-sm transition-colors hover:bg-gray-50'
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm text-gray-600">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="text-2xl leading-none text-gray-400 hover:text-gray-600">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
   )
 }
