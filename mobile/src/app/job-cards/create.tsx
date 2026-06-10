@@ -1329,7 +1329,7 @@ export default function CreateJobCardScreen() {
               </View>
             </View>
           </View>
-        ) : null}}
+        ) : null}
 
         {showVehicleDetailsForm ? (
           <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>

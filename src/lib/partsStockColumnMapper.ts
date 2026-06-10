@@ -267,8 +267,10 @@ export function buildPartsStockInsertRow(
 
   const weightedCost = parseOptionalNumber(headerMapping.weightedCost, 'weighted_cost')
   const inventoryValue = parseOptionalNumber(headerMapping.inventoryValue, 'inventory_value')
+  // Keep 0 as a valid quantity/cost input. Avoid truthy checks here,
+  // otherwise qty=0 rows are treated like missing values.
   const totalPriceValue =
-    onHandQuantity && weightedCost ? onHandQuantity * weightedCost : null
+    weightedCost === null ? null : onHandQuantity * weightedCost
 
   const row: Record<string, unknown> = {
     part_number: partNumber,
