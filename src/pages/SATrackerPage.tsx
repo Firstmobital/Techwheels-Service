@@ -131,8 +131,6 @@ export default function SATrackerPage() {
   const [evSharePercent, setEvSharePercent] = useState(DEFAULT_EV_SHARE_PERCENT)
   const [draftSaShare, setDraftSaShare] = useState(String(DEFAULT_SA_SHARE_PERCENT))
   const [draftEvShare, setDraftEvShare] = useState(String(DEFAULT_EV_SHARE_PERCENT))
-  const [canEditShare, setCanEditShare] = useState(false)
-
   // Drill-down state
   const [selectedSA, setSelectedSA] = useState('')
   const [selectedDayKey, setSelectedDayKey] = useState('')
@@ -144,29 +142,6 @@ export default function SATrackerPage() {
     setError(null)
 
     try {
-      // ── 1. Role check first (same pattern as TechnicianPage) ──
-      const authRes = await supabase.auth.getUser()
-      const userId = authRes.data.user?.id
-
-      if (!userId) {
-        setRows([])
-        setCanEditShare(false)
-        setLoading(false)
-        return
-      }
-
-      const profileRes = await supabase
-        .from('users')
-        .select('role, is_active')
-        .eq('id', userId)
-        .maybeSingle()
-
-      const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
-      const isActive = (profileRes.data as { is_active?: boolean | null } | null)?.is_active
-      const roleCanEdit = role === 'admin' || role === 'super_admin' || role === 'super admin'
-      setCanEditShare(roleCanEdit && isActive !== false)
-
-      // ── 2. Load closed JC data ──
       const allRows: ClosedJCRow[] = []
       let from = 0
 
@@ -189,7 +164,6 @@ export default function SATrackerPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load SA data')
       setRows([])
-      setCanEditShare(false)
     } finally {
       setLoading(false)
     }
@@ -493,8 +467,7 @@ export default function SATrackerPage() {
               <h3>Revenue by Service Advisor</h3>
               <div className="sub">Sorted by total invoice value. Income = Labour × {saSharePercent}%. Click an SA to drill down by day.</div>
             </div>
-            {canEditShare && (
-              <div className="tech-share-corner">
+            <div className="tech-share-corner">
                 <h3>Earnings percentage settings</h3>
                 <div className="tech-share-controls">
                   <label className="field field--no-gap tech-share-field">
@@ -546,7 +519,6 @@ export default function SATrackerPage() {
                   </div>
                 </div>
               </div>
-            )}
           </div>
           <div className="card__body dense">
             <div className="tech-drill-grid">
