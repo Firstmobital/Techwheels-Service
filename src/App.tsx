@@ -35,7 +35,8 @@ const NAV_ITEMS = [
   { to: '/reception', label: 'Reception', icon: 'reception' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
   { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
-  { to: '/sa-tracker' | '/bodyshop-tracker', label: 'SA Tracker', icon: 'person' },
+  { to: '/sa-tracker', label: 'SA Tracker', icon: 'person' },
+  { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
   { to: '/import', label: 'Imports', icon: 'import' },
   { to: '/reports', label: 'Reports', icon: 'reports' },
@@ -78,7 +79,8 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/reception': ['reception'],
   '/service-advisor': ['service_advisor'],
   '/floor-incharge': ['floor_incharge'],
-  '/sa-tracker' | '/bodyshop-tracker': ['sa_tracker'],
+  '/sa-tracker': ['sa_tracker'],
+  '/bodyshop-tracker': ['bodyshop_tracker'],
   '/technician': ['technician'],
   '/complaints': ['complaints'],
 }
@@ -405,7 +407,8 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
   if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
   if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
-  if (pathname.startsWith('/sa-tracker' | '/bodyshop-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker' | '/bodyshop-tracker'])
+  if (pathname.startsWith('/sa-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker'])
+  if (pathname.startsWith('/bodyshop-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-tracker'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
   if (pathname.startsWith('/c/')) return true
@@ -840,8 +843,16 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                 <Route
                   path="/sa-tracker"
                   element={(
-                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/sa-tracker' | '/bodyshop-tracker']}>
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/sa-tracker']}>
                       <SATrackerPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/bodyshop-tracker"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/bodyshop-tracker']}>
+                      <BodyshopTrackerPage />
                     </RequireAccess>
                   )}
                 />
