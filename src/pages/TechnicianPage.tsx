@@ -216,6 +216,7 @@ function calculateTechnicianIncome(
 
 export default function TechnicianPage() {
   const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [error, setError] = useState<string | null>(null)
   const [reportEmailState, setReportEmailState] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [sendingReportEmail, setSendingReportEmail] = useState(false)
@@ -756,6 +757,10 @@ export default function TechnicianPage() {
           <h1>Technician earnings tracker</h1>
           <p>Drill down: technician → day → vehicle → job card details (JC #, Reg, Bay, Status, IN/OUT TS, Time Diff, Remark).</p>
         </div>
+
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+
+
 
         <div className="toolbar toolbar--tight">
           <span className="toolbar__label">Filter by location:</span>
