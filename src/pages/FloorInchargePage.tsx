@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, type ReceptionEntryRow } from '../lib/api'
 import Icon from '../components/Icon'
@@ -397,6 +398,8 @@ export default function FloorInchargePage() {
         const assignRes = await supabase
           .from('technician_assignments')
           .select('*')
+          .gte('assigned_at', dateRange.from + 'T00:00:00+05:30')
+          .lte('assigned_at', dateRange.to + 'T23:59:59+05:30')
           .range(from, from + QUERY_PAGE_SIZE - 1)
 
         if (assignRes.error) break
@@ -940,6 +943,8 @@ export default function FloorInchargePage() {
           <h1>Assign technicians</h1>
           <p>Reception job cards with floor assignment controls — set bay, technician, work status, and remark.</p>
         </div>
+
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
         <div className="toolbar toolbar--tight">
           <span className="toolbar__label">Filter by location:</span>
