@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type ClosedJCRow = {
+type AccidentJCRow = {
   id: number
   job_card_number: string
   sr_assigned_to: string | null
@@ -16,7 +16,12 @@ type ClosedJCRow = {
   branch: string | null
   vehicle_registration_number: string | null
   sr_type: string | null
-  insurance_company_name?: string | null
+}
+
+type AssignmentRow = {
+  job_card_number: string
+  technician_name: string
+  technician_code: string
 }
 
 type EmployeeRow = {
@@ -26,167 +31,189 @@ type EmployeeRow = {
   role: string | null
 }
 
-type MemberCard = {
-  name: string
-  jcCount: number
-  dayCount: number
-  totalLabour: number
-  totalSpares: number
-  totalInvoice: number
-  totalIncome: number
+// Enriched closed JC (used for SA tab)
+type JCDetail = AccidentJCRow & {
+  labourAmt: number; sparesAmt: number; invoiceAmt: number; dateKey: string | null
 }
 
-type DayCard = {
-  dateKey: string
-  label: string
-  jcCount: number
-  totalLabour: number
-  totalSpares: number
-  totalInvoice: number
-  totalIncome: number
-}
-
-type JCDetail = ClosedJCRow & {
-  labourAmt: number
-  sparesAmt: number
-  invoiceAmt: number
+// Enriched technician row (Dentor / Painter / Technician tabs)
+type TechJCRow = {
+  job_card_number: string
+  technician_name: string
+  technician_code: string
+  labourAmt: number; sparesAmt: number; invoiceAmt: number
+  branch: string | null; sr_type: string | null
+  closed_date_time: string | null; invoice_date: string | null
+  vehicle_registration_number: string | null
   dateKey: string | null
 }
 
-// ── Role tabs ──────────────────────────────────────────────────────────────────
+type MemberCard = {
+  name: string; jcCount: number; dayCount: number
+  totalLabour: number; totalSpares: number; totalInvoice: number; totalIncome: number
+}
+type DayCard = {
+  dateKey: string; label: string; jcCount: number
+  totalLabour: number; totalSpares: number; totalInvoice: number; totalIncome: number
+}
 
-type RoleTab = { key: string; label: string; icon: string; defaultPct: number }
+// ── Tabs ───────────────────────────────────────────────────────────────────────
 
-const ROLE_TABS: RoleTab[] = [
-  { key: 'SA',       label: 'SA',         icon: '🧑‍💼', defaultPct: 3  },
-  { key: 'DENTOR',   label: 'Dentor',     icon: '🔨', defaultPct: 5  },
-  { key: 'DET',      label: 'Painter',    icon: '🎨', defaultPct: 5  },
-  { key: 'TECHNICIAN', label: 'Technician', icon: '🔧', defaultPct: 4 },
+type TabKey = 'SA' | 'DENTOR' | 'PAINTER' | 'TECHNICIAN'
+type TabMeta = { key: TabKey; label: string; icon: string; defaultPct: number; mode: 'sa' | 'tech' }
+
+const TABS: TabMeta[] = [
+  { key: 'SA',         label: 'SA',         icon: '🧑‍💼', defaultPct: 3, mode: 'sa'   },
+  { key: 'DENTOR',     label: 'Dentor',     icon: '🔨', defaultPct: 5, mode: 'tech' },
+  { key: 'PAINTER',    label: 'Painter',    icon: '🎨', defaultPct: 5, mode: 'tech' },
+  { key: 'TECHNICIAN', label: 'Technician', icon: '🔧', defaultPct: 4, mode: 'tech' },
 ]
 
-const BODYSHOP_SR_TYPES = new Set(['Accident'])
-
-const QUERY_PAGE_SIZE = 1000
+// Bodyshop departments (both spellings)
+const BS_DEPTS = new Set(['BODY SHOP', 'BODYSHOP'])
+const QUERY_PAGE = 1000
 const UNKNOWN_BRANCH = 'Unknown'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value)
+function fmt(v: number) {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v)
 }
-
-function formatDate(value: string | null | undefined): string {
-  if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
+function fmtDate(v: string | null | undefined) {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return v
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
-
-function parseAmount(value: unknown): number {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
-  if (value == null) return 0
-  const raw = String(value).trim()
+function parseAmt(v: unknown): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  if (v == null) return 0
+  const raw = String(v).trim()
   if (!raw) return 0
   const neg = raw.startsWith('(') && raw.endsWith(')')
-  const cleaned = raw.replace(/[₹,\s()]/g, '').replace(/RS\.?/gi, '')
-  const n = Number(cleaned)
-  if (!Number.isFinite(n)) return 0
-  return neg ? -n : n
+  const n = Number(raw.replace(/[₹,\s()]/g, '').replace(/RS\.?/gi, ''))
+  return Number.isFinite(n) ? (neg ? -n : n) : 0
 }
-
-function getDateKey(row: ClosedJCRow): string | null {
+function dateKey(row: { closed_date_time?: string | null; invoice_date?: string | null }): string | null {
   const src = row.closed_date_time ?? row.invoice_date
   if (!src) return null
   const d = new Date(src)
   if (Number.isNaN(d.getTime())) return null
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(d)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
 }
-
-function dateLabel(key: string): string {
-  if (key === 'unknown') return 'No date'
-  return new Date(key).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })
+function dayLabel(key: string) {
+  return key === 'unknown' ? 'No date' : new Date(key).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })
 }
-
-function getBranchLabel(v: string | null | undefined): string {
-  return String(v ?? '').trim() || UNKNOWN_BRANCH
-}
-
-function calcIncome(labourAmt: number, pct: number): number {
-  if (!Number.isFinite(labourAmt) || labourAmt <= 0) return 0
-  return labourAmt * (pct / 100)
-}
-
-function normalizeShareInput(value: string, fallback: number): number {
-  const n = Number(String(value).trim())
-  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : fallback
+function branchOf(v: string | null | undefined) { return String(v ?? '').trim() || UNKNOWN_BRANCH }
+function income(labour: number, pct: number) { return labour > 0 ? labour * pct / 100 : 0 }
+function normPct(s: string, fallback: number) {
+  const n = Number(s.trim()); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : fallback
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function BodyshopTrackerPage() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
 
   // Raw data
-  const [jcRows, setJcRows] = useState<ClosedJCRow[]>([])
-  const [employees, setEmployees] = useState<EmployeeRow[]>([])
+  const [accidentJCs, setAccidentJCs] = useState<AccidentJCRow[]>([])
+  const [assignments, setAssignments] = useState<AssignmentRow[]>([])
+  const [employees, setEmployees]     = useState<EmployeeRow[]>([])
+  // Map jc_number → closed JC data (for tech tab join)
+  const [jcMap, setJcMap] = useState<Map<string, AccidentJCRow>>(new Map())
 
-  // Filters
-  const [activeTab, setActiveTab] = useState<string>('SA')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  // UI state
+  const [activeTab, setActiveTab]     = useState<TabKey>('SA')
+  const [fromDate, setFromDate]       = useState('')
+  const [toDate, setToDate]           = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
-
-  // Drill-down
   const [selectedMember, setSelectedMember] = useState('')
   const [selectedDayKey, setSelectedDayKey] = useState('')
 
-  // Per-role earning % (keyed by role key)
-  const [sharePct, setSharePct] = useState<Record<string, number>>(() =>
-    Object.fromEntries(ROLE_TABS.map((t) => [t.key, t.defaultPct]))
-  )
-  const [draftPct, setDraftPct] = useState<Record<string, string>>(() =>
-    Object.fromEntries(ROLE_TABS.map((t) => [t.key, String(t.defaultPct)]))
-  )
+  // Per-tab earning %
+  const [sharePct, setSharePct] = useState<Record<TabKey, number>>({
+    SA: 3, DENTOR: 5, PAINTER: 5, TECHNICIAN: 4
+  })
+  const [draftPct, setDraftPct] = useState<Record<TabKey, string>>({
+    SA: '3', DENTOR: '5', PAINTER: '5', TECHNICIAN: '4'
+  })
 
-  const currentPct = sharePct[activeTab] ?? 3
-  const currentDraft = draftPct[activeTab] ?? String(currentPct)
-  const parsedDraft = normalizeShareInput(currentDraft, currentPct)
-  const hasPending = parsedDraft !== currentPct
+  const curPct    = sharePct[activeTab]
+  const curDraft  = draftPct[activeTab]
+  const parsed    = normPct(curDraft, curPct)
+  const hasPend   = parsed !== curPct
+  const tabMeta   = TABS.find((t) => t.key === activeTab)!
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
   async function loadData() {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
-      // 1. Load employees (for role mapping)
-      const empRes = await supabase
-        .from('employee_master')
-        .select('employee_code, employee_name, department, role')
-        .limit(500)
-      setEmployees((empRes.data ?? []) as EmployeeRow[])
+      // 1. Employees
+      const empRes = await supabase.from('employee_master')
+        .select('employee_code, employee_name, department, role').limit(500)
+      const emps = (empRes.data ?? []) as EmployeeRow[]
+      setEmployees(emps)
 
-      // 2. Load all bodyshop (Accident) JCs
-      const allRows: ClosedJCRow[] = []
+      // Bodyshop employee codes by role
+      const bsCodes: Record<string, Set<string>> = { DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set() }
+      emps.forEach((e) => {
+        if (!BS_DEPTS.has(String(e.department ?? '').trim().toUpperCase())) return
+        const role = String(e.role ?? '').trim().toUpperCase()
+        if (role === 'DENTOR') bsCodes.DENTOR.add(e.employee_code)
+        else if (role === 'PAINTER') bsCodes.PAINTER.add(e.employee_code)
+        else if (role === 'TECHNICIAN') bsCodes.TECHNICIAN.add(e.employee_code)
+        // Also include DET as Painter
+        else if (role === 'DET') bsCodes.PAINTER.add(e.employee_code)
+      })
+
+      // 2. Accident JCs (for SA tab)
+      const accRows: AccidentJCRow[] = []
       let from = 0
       while (true) {
-        const res = await supabase
-          .from('job_card_closed_data')
+        const res = await supabase.from('job_card_closed_data')
           .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, vehicle_registration_number, sr_type')
-          .in('sr_type', Array.from(BODYSHOP_SR_TYPES))
+          .eq('sr_type', 'Accident')
           .order('closed_date_time', { ascending: false })
-          .range(from, from + QUERY_PAGE_SIZE - 1)
-
+          .range(from, from + QUERY_PAGE - 1)
         if (res.error) { setError(res.error.message); setLoading(false); return }
-        const batch = (res.data ?? []) as ClosedJCRow[]
-        allRows.push(...batch)
-        if (batch.length < QUERY_PAGE_SIZE) break
-        from += QUERY_PAGE_SIZE
+        const batch = (res.data ?? []) as AccidentJCRow[]
+        accRows.push(...batch)
+        if (batch.length < QUERY_PAGE) break
+        from += QUERY_PAGE
       }
-      setJcRows(allRows)
+      setAccidentJCs(accRows)
+
+      // 3. Technician assignments for ALL bodyshop codes (Dentor + Painter + Tech)
+      const allBsCodes = [
+        ...Array.from(bsCodes.DENTOR),
+        ...Array.from(bsCodes.PAINTER),
+        ...Array.from(bsCodes.TECHNICIAN),
+      ]
+
+      if (allBsCodes.length > 0) {
+        const assRes = await supabase.from('technician_assignments')
+          .select('job_card_number, technician_name, technician_code')
+          .in('technician_code', allBsCodes)
+          .limit(5000)
+        const assRows = (assRes.data ?? []) as AssignmentRow[]
+        setAssignments(assRows)
+
+        // 4. Fetch closed JC data for those JC numbers (for labour/spares/invoice)
+        const jcNums = Array.from(new Set(assRows.map((a) => a.job_card_number)))
+        const newMap = new Map<string, AccidentJCRow>()
+        // batch 50 at a time
+        for (let i = 0; i < jcNums.length; i += 50) {
+          const batch = jcNums.slice(i, i + 50)
+          const res2 = await supabase.from('job_card_closed_data')
+            .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, vehicle_registration_number, sr_type')
+            .in('job_card_number', batch)
+          const rows2 = (res2.data ?? []) as AccidentJCRow[]
+          rows2.forEach((r) => newMap.set(r.job_card_number, r))
+        }
+        setJcMap(newMap)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bodyshop data')
     } finally {
@@ -196,58 +223,80 @@ export default function BodyshopTrackerPage() {
 
   useEffect(() => { void loadData() }, [])
 
-  // ── Enrich rows ────────────────────────────────────────────────────────────
+  // ── Employee code sets by role (memo) ──────────────────────────────────────
 
-  const enrichedRows = useMemo<JCDetail[]>(() =>
-    jcRows.map((r) => ({
-      ...r,
-      labourAmt: parseAmount(r.final_labour_amount),
-      sparesAmt: parseAmount(r.final_spares_amount),
-      invoiceAmt: parseAmount(r.total_invoice_amount),
-      dateKey: getDateKey(r),
-    })),
-  [jcRows])
-
-  // ── SA name → role mapping from employee_master ────────────────────────────
-  // employees have employee_name; JC rows have sr_assigned_to (like "SAINI, DASHRATH")
-  // We build a set of names per role tab
-
-  const roleNameSets = useMemo<Record<string, Set<string>>>(() => {
-    const map: Record<string, Set<string>> = {}
-    ROLE_TABS.forEach((t) => { map[t.key] = new Set() })
-
-    employees.forEach((emp) => {
-      const role = String(emp.role ?? '').trim().toUpperCase()
-      if (map[role]) {
-        // Normalize: "AMAN GUPTA" → try to match "GUPTA, AMAN" format
-        const parts = emp.employee_name.trim().split(/\s+/)
-        if (parts.length >= 2) {
-          const last = parts[parts.length - 1].toUpperCase()
-          const first = parts.slice(0, parts.length - 1).join(' ').toUpperCase()
-          map[role].add(`${last}, ${first}`)
-        }
-        map[role].add(emp.employee_name.toUpperCase())
-      }
+  const bsCodesByRole = useMemo<Record<TabKey, Set<string>>>(() => {
+    const map: Record<TabKey, Set<string>> = { SA: new Set(), DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set() }
+    employees.forEach((e) => {
+      if (!BS_DEPTS.has(String(e.department ?? '').trim().toUpperCase())) return
+      const role = String(e.role ?? '').trim().toUpperCase()
+      if (role === 'SA') map.SA.add(e.employee_code)
+      else if (role === 'DENTOR') map.DENTOR.add(e.employee_code)
+      else if (role === 'PAINTER' || role === 'DET') map.PAINTER.add(e.employee_code)
+      else if (role === 'TECHNICIAN') map.TECHNICIAN.add(e.employee_code)
     })
     return map
   }, [employees])
 
+  // ── Enrich accident JCs ────────────────────────────────────────────────────
+
+  const enrichedAccident = useMemo<JCDetail[]>(() =>
+    accidentJCs.map((r) => ({
+      ...r,
+      labourAmt: parseAmt(r.final_labour_amount),
+      sparesAmt: parseAmt(r.final_spares_amount),
+      invoiceAmt: parseAmt(r.total_invoice_amount),
+      dateKey: dateKey(r),
+    })),
+  [accidentJCs])
+
+  // ── Enrich tech assignments ────────────────────────────────────────────────
+
+  const enrichedTechRows = useMemo<TechJCRow[]>(() =>
+    assignments.map((a) => {
+      const jc = jcMap.get(a.job_card_number)
+      return {
+        job_card_number: a.job_card_number,
+        technician_name: a.technician_name,
+        technician_code: a.technician_code,
+        labourAmt: parseAmt(jc?.final_labour_amount),
+        sparesAmt: parseAmt(jc?.final_spares_amount),
+        invoiceAmt: parseAmt(jc?.total_invoice_amount),
+        branch: jc?.branch ?? null,
+        sr_type: jc?.sr_type ?? null,
+        closed_date_time: jc?.closed_date_time ?? null,
+        invoice_date: jc?.invoice_date ?? null,
+        vehicle_registration_number: jc?.vehicle_registration_number ?? null,
+        dateKey: jc ? dateKey(jc) : null,
+      }
+    }),
+  [assignments, jcMap])
+
+  // ── Active rows (union of SA or Tech) ─────────────────────────────────────
+
+  const activeRows = useMemo(() => {
+    if (tabMeta.mode === 'sa') return enrichedAccident
+    // Filter tech rows by current tab role (via employee code set)
+    const codeSet = bsCodesByRole[activeTab]
+    return enrichedTechRows.filter((r) => codeSet.has(r.technician_code))
+  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, bsCodesByRole])
+
   // ── Date scope ─────────────────────────────────────────────────────────────
 
   const dateScopedRows = useMemo(() => {
-    if (!fromDate && !toDate) return enrichedRows
-    return enrichedRows.filter((r) => {
+    if (!fromDate && !toDate) return activeRows
+    return activeRows.filter((r) => {
       if (!r.dateKey) return false
       if (fromDate && r.dateKey < fromDate) return false
       if (toDate && r.dateKey > toDate) return false
       return true
     })
-  }, [enrichedRows, fromDate, toDate])
+  }, [activeRows, fromDate, toDate])
 
   // ── Branch options ─────────────────────────────────────────────────────────
 
   const branches = useMemo(() => {
-    const s = new Set(dateScopedRows.map((r) => getBranchLabel(r.branch)))
+    const s = new Set(dateScopedRows.map((r) => branchOf(r.branch)))
     return Array.from(s).sort((a, b) => {
       if (a === UNKNOWN_BRANCH) return 1; if (b === UNKNOWN_BRANCH) return -1
       return a.localeCompare(b)
@@ -256,31 +305,25 @@ export default function BodyshopTrackerPage() {
 
   // ── Branch filter ──────────────────────────────────────────────────────────
 
-  const branchRows = useMemo(() =>
-    branchFilter === 'all' ? dateScopedRows : dateScopedRows.filter((r) => getBranchLabel(r.branch) === branchFilter),
+  const filteredRows = useMemo(() =>
+    branchFilter === 'all' ? dateScopedRows : dateScopedRows.filter((r) => branchOf(r.branch) === branchFilter),
   [dateScopedRows, branchFilter])
 
-  // ── Tab rows: for SA tab show all; for others filter by employee role ──────
+  // ── Name extractor ─────────────────────────────────────────────────────────
 
-  const tabRows = useMemo(() => {
-    if (activeTab === 'SA') return branchRows
-    const roleSet = roleNameSets[activeTab] ?? new Set()
-    if (roleSet.size === 0) return [] // No employees for this role yet
-    // Match sr_assigned_to against known names for this role
-    return branchRows.filter((r) => {
-      const name = String(r.sr_assigned_to ?? '').trim().toUpperCase()
-      return roleSet.has(name)
-    })
-  }, [branchRows, activeTab, roleNameSets])
+  function nameOf(r: JCDetail | TechJCRow): string {
+    if ('sr_assigned_to' in r) return String((r as JCDetail).sr_assigned_to ?? '').trim()
+    return String((r as TechJCRow).technician_name ?? '').trim()
+  }
 
   // ── Member cards ───────────────────────────────────────────────────────────
 
   const memberCards = useMemo<MemberCard[]>(() => {
     const map = new Map<string, MemberCard & { days: Set<string> }>()
-    tabRows.forEach((r) => {
-      const name = String(r.sr_assigned_to ?? '').trim()
+    filteredRows.forEach((r) => {
+      const name = nameOf(r)
       if (!name) return
-      const dateKey = r.dateKey ?? 'unknown'
+      const dk = r.dateKey ?? 'unknown'
       const ex = map.get(name) ?? {
         name, jcCount: 0, dayCount: 0,
         totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0,
@@ -290,277 +333,213 @@ export default function BodyshopTrackerPage() {
       ex.totalLabour += r.labourAmt
       ex.totalSpares += r.sparesAmt
       ex.totalInvoice += r.invoiceAmt
-      ex.days.add(dateKey)
+      ex.days.add(dk)
       ex.dayCount = ex.days.size
-      ex.totalIncome = calcIncome(ex.totalLabour, currentPct)
+      ex.totalIncome = income(ex.totalLabour, curPct)
       map.set(name, ex)
     })
     return Array.from(map.values())
-      .map(({ days: _d, ...card }) => card)
+      .map(({ days: _d, ...c }) => c)
       .sort((a, b) => b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
-  }, [tabRows, currentPct])
+  }, [filteredRows, curPct])
 
   // ── Day cards ──────────────────────────────────────────────────────────────
 
-  const selectedMemberRows = useMemo(() =>
-    tabRows.filter((r) => String(r.sr_assigned_to ?? '').trim() === selectedMember),
-  [tabRows, selectedMember])
+  const memberRows = useMemo(() =>
+    filteredRows.filter((r) => nameOf(r) === selectedMember),
+  [filteredRows, selectedMember])
 
   const dayCards = useMemo<DayCard[]>(() => {
     const map = new Map<string, DayCard>()
-    selectedMemberRows.forEach((r) => {
-      const dateKey = r.dateKey ?? 'unknown'
-      const ex = map.get(dateKey) ?? {
-        dateKey, label: dateLabel(dateKey),
-        jcCount: 0, totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0,
-      }
-      ex.jcCount += 1
-      ex.totalLabour += r.labourAmt
-      ex.totalSpares += r.sparesAmt
-      ex.totalInvoice += r.invoiceAmt
-      ex.totalIncome = calcIncome(ex.totalLabour, currentPct)
-      map.set(dateKey, ex)
+    memberRows.forEach((r) => {
+      const dk = r.dateKey ?? 'unknown'
+      const ex = map.get(dk) ?? { dateKey: dk, label: dayLabel(dk), jcCount: 0, totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0 }
+      ex.jcCount += 1; ex.totalLabour += r.labourAmt; ex.totalSpares += r.sparesAmt; ex.totalInvoice += r.invoiceAmt
+      ex.totalIncome = income(ex.totalLabour, curPct)
+      map.set(dk, ex)
     })
     return Array.from(map.values()).sort((a, b) => {
       if (a.dateKey === 'unknown') return 1; if (b.dateKey === 'unknown') return -1
       return b.dateKey.localeCompare(a.dateKey)
     })
-  }, [selectedMemberRows, currentPct])
+  }, [memberRows, curPct])
 
   // ── JC detail ──────────────────────────────────────────────────────────────
 
   const dayDetailRows = useMemo(() =>
-    selectedMemberRows.filter((r) => (r.dateKey ?? 'unknown') === selectedDayKey),
-  [selectedMemberRows, selectedDayKey])
+    memberRows.filter((r) => (r.dateKey ?? 'unknown') === selectedDayKey),
+  [memberRows, selectedDayKey])
 
   // ── Totals ─────────────────────────────────────────────────────────────────
 
   const totals = useMemo(() => ({
-    labour: tabRows.reduce((s, r) => s + r.labourAmt, 0),
-    spares: tabRows.reduce((s, r) => s + r.sparesAmt, 0),
-    invoice: tabRows.reduce((s, r) => s + r.invoiceAmt, 0),
-    jcCount: tabRows.length,
+    labour: filteredRows.reduce((s, r) => s + r.labourAmt, 0),
+    spares: filteredRows.reduce((s, r) => s + r.sparesAmt, 0),
+    invoice: filteredRows.reduce((s, r) => s + r.invoiceAmt, 0),
+    jcCount: filteredRows.length,
     memberCount: memberCards.length,
-  }), [tabRows, memberCards])
+  }), [filteredRows, memberCards])
 
   // Reset drill-down on tab/filter change
   useEffect(() => { setSelectedMember(''); setSelectedDayKey('') }, [activeTab, branchFilter, fromDate, toDate])
-  useEffect(() => {
-    if (selectedMember && !memberCards.some((c) => c.name === selectedMember)) {
-      setSelectedMember(''); setSelectedDayKey('')
-    }
-  }, [memberCards, selectedMember])
+
+  // ── Branch counts ──────────────────────────────────────────────────────────
+  // Use allDateScoped (before branch filter) for branch chip counts
+  const allDateScoped = useMemo(() => {
+    if (tabMeta.mode === 'sa') return enrichedAccident
+    const codeSet = bsCodesByRole[activeTab]
+    const rows = enrichedTechRows.filter((r) => codeSet.has(r.technician_code))
+    if (!fromDate && !toDate) return rows
+    return rows.filter((r) => {
+      if (!r.dateKey) return false
+      if (fromDate && r.dateKey < fromDate) return false
+      if (toDate && r.dateKey > toDate) return false
+      return true
+    })
+  }, [tabMeta, activeTab, enrichedAccident, enrichedTechRows, bsCodesByRole, fromDate, toDate])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="page-loading">
-        <Icon name="spinner" size={24} className="spin" />
-        <p>Loading Bodyshop tracker…</p>
-      </div>
-    )
-  }
-
-  const activeTabMeta = ROLE_TABS.find((t) => t.key === activeTab)!
+  if (loading) return (
+    <div className="page-loading">
+      <Icon name="spinner" size={24} className="spin" />
+      <p>Loading Bodyshop tracker…</p>
+    </div>
+  )
 
   return (
     <div className="page">
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="page-head card mb-gap">
         <div className="page-head__text">
           <p className="page-head__label">
-            <Icon name="floor" size={14} className="icon-align-text" />
-            Bodyshop
+            <Icon name="floor" size={14} className="icon-align-text" /> Bodyshop
           </p>
           <h1>Bodyshop Earnings Tracker</h1>
-          <p>Accident job cards — drill down by role → member → day → job card.</p>
+          <p>SA: Accident JCs by SA name · Dentor/Painter/Technician: all assigned JCs by role</p>
         </div>
-
-        {/* Branch filter */}
         <div className="toolbar toolbar--tight">
           <span className="toolbar__label">Branch:</span>
           <button type="button" onClick={() => setBranchFilter('all')}
             className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}>
-            All ({dateScopedRows.length})
+            All ({allDateScoped.length})
           </button>
           {branches.map((b) => (
             <button key={b} type="button" onClick={() => setBranchFilter(b)}
               className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}>
-              {b} ({dateScopedRows.filter((r) => getBranchLabel(r.branch) === b).length})
+              {b} ({allDateScoped.filter((r) => branchOf(r.branch) === b).length})
             </button>
           ))}
         </div>
       </div>
 
       {error && (
-        <div className="toast error">
-          <Icon name="alert" size={14} />
-          {error}
-        </div>
+        <div className="toast error"><Icon name="alert" size={14} />{error}</div>
       )}
 
-      {/* Role tabs */}
-      <div className="card mb-gap" style={{ padding: '0' }}>
+      {/* ── Role tabs ── */}
+      <div className="card mb-gap" style={{ padding: 0 }}>
         <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', overflowX: 'auto' }}>
-          {ROLE_TABS.map((tab) => {
-            const tabJcCount = (() => {
-              if (tab.key === 'SA') return branchRows.length
-              const roleSet = roleNameSets[tab.key] ?? new Set()
-              return branchRows.filter((r) => roleSet.has(String(r.sr_assigned_to ?? '').trim().toUpperCase())).length
+          {TABS.map((tab) => {
+            const tabCount = (() => {
+              if (tab.mode === 'sa') return enrichedAccident.length
+              const codeSet = bsCodesByRole[tab.key]
+              return enrichedTechRows.filter((r) => codeSet.has(r.technician_code)).length
             })()
             return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
+              <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
                 style={{
-                  flex: '0 0 auto',
-                  padding: '14px 20px',
+                  flex: '0 0 auto', padding: '14px 20px', background: 'none', border: 'none',
+                  borderBottom: activeTab === tab.key ? '2px solid #2563eb' : '2px solid transparent',
                   fontWeight: activeTab === tab.key ? 700 : 400,
                   color: activeTab === tab.key ? '#2563eb' : '#64748b',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === tab.key ? '2px solid #2563eb' : '2px solid transparent',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  whiteSpace: 'nowrap',
-                }}
-              >
+                  cursor: 'pointer', fontSize: 14, whiteSpace: 'nowrap',
+                }}>
                 {tab.icon} {tab.label}
-                <span style={{ marginLeft: 6, fontSize: 12, color: '#94a3b8', fontWeight: 400 }}>
-                  ({tabJcCount})
-                </span>
+                <span style={{ marginLeft: 6, fontSize: 12, color: '#94a3b8', fontWeight: 400 }}>({tabCount})</span>
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* Summary chips */}
+      {/* ── Summary chips ── */}
       <div className="summary">
         <div className="schip">
           <span className="ic"><Icon name="person" size={16} /></span>
-          <div>
-            <div className="n">{totals.memberCount}</div>
-            <div className="l">{activeTabMeta.label}s</div>
-          </div>
+          <div><div className="n">{totals.memberCount}</div><div className="l">{tabMeta.label}s</div></div>
         </div>
         <div className="schip">
-          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}>
-            <Icon name="jc" size={16} />
-          </span>
-          <div>
-            <div className="n">{totals.jcCount.toLocaleString('en-IN')}</div>
-            <div className="l">Accident JCs</div>
-          </div>
+          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}><Icon name="jc" size={16} /></span>
+          <div><div className="n">{totals.jcCount.toLocaleString('en-IN')}</div><div className="l">Job Cards</div></div>
         </div>
         <div className="schip">
-          <span className="ic" style={{ background: '#f0fdf4', color: '#16a34a' }}>
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totals.labour)}</div>
-            <div className="l">Total Labour</div>
-          </div>
+          <span className="ic" style={{ background: '#f0fdf4', color: '#16a34a' }}><Icon name="checksm" size={16} /></span>
+          <div><div className="n">{fmt(totals.labour)}</div><div className="l">Total Labour</div></div>
         </div>
         <div className="schip">
-          <span className="ic" style={{ background: '#fdf4ff', color: '#9333ea' }}>
-            <Icon name="parts" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totals.spares)}</div>
-            <div className="l">Total Spares</div>
-          </div>
+          <span className="ic" style={{ background: '#fdf4ff', color: '#9333ea' }}><Icon name="parts" size={16} /></span>
+          <div><div className="n">{fmt(totals.spares)}</div><div className="l">Total Spares</div></div>
         </div>
         <div className="schip">
-          <span className="ic" style={{ background: '#fff7ed', color: '#ea580c' }}>
-            <Icon name="invoice" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totals.invoice)}</div>
-            <div className="l">Total Invoice</div>
-          </div>
+          <span className="ic" style={{ background: '#fff7ed', color: '#ea580c' }}><Icon name="invoice" size={16} /></span>
+          <div><div className="n">{fmt(totals.invoice)}</div><div className="l">Total Invoice</div></div>
         </div>
         <div className="schip">
-          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}>
-            <Icon name="checksm" size={16} />
-          </span>
+          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}><Icon name="checksm" size={16} /></span>
           <div>
-            <div className="n">{formatCurrency(totals.labour * currentPct / 100)}</div>
-            <div className="l">{activeTabMeta.label} Income ({currentPct}%)</div>
+            <div className="n">{fmt(totals.labour * curPct / 100)}</div>
+            <div className="l">{tabMeta.label} Income ({curPct}%)</div>
           </div>
         </div>
-
-        {/* Date range filter */}
+        {/* Date filter */}
         <div className="schip schip--date-filter">
           <div className="schip-date-filter__head"><div className="l">Date range</div></div>
           <div className="schip-date-filter__controls">
-            <label className="schip-date-filter__field" htmlFor="bs-date-from">
+            <label className="schip-date-filter__field" htmlFor="bs-from">
               <span>From</span>
-              <input id="bs-date-from" type="date" className="inp" value={fromDate}
-                onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v && v > toDate) setToDate(v) }} />
+              <input id="bs-from" type="date" className="inp" value={fromDate}
+                onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v > toDate) setToDate(v) }} />
             </label>
-            <label className="schip-date-filter__field" htmlFor="bs-date-to">
+            <label className="schip-date-filter__field" htmlFor="bs-to">
               <span>To</span>
-              <input id="bs-date-to" type="date" className="inp" value={toDate}
-                onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v && v < fromDate) setFromDate(v) }} />
+              <input id="bs-to" type="date" className="inp" value={toDate}
+                onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v < fromDate) setFromDate(v) }} />
             </label>
             <button type="button" className="btn btn--ghost btn--sm schip-date-filter__clear"
-              onClick={() => { setFromDate(''); setToDate('') }}
-              disabled={!fromDate && !toDate}>
-              Clear
-            </button>
+              onClick={() => { setFromDate(''); setToDate('') }} disabled={!fromDate && !toDate}>Clear</button>
           </div>
         </div>
       </div>
 
-      {/* Member cards */}
+      {/* ── Member cards ── */}
       {memberCards.length > 0 && (
         <div className="card mb-gap">
           <div className="card__head">
             <div>
-              <h3>{activeTabMeta.icon} {activeTabMeta.label} — Revenue</h3>
-              <div className="sub">
-                Income = Labour × {currentPct}%. Click a member to drill down by day.
-              </div>
+              <h3>{tabMeta.icon} {tabMeta.label} — Revenue</h3>
+              <div className="sub">Income = Labour × {curPct}%. Click a member to drill down by day.</div>
             </div>
-            {/* Earnings % settings */}
+            {/* Earnings % settings — always visible */}
             <div className="tech-share-corner">
-              <h3>Earnings % — {activeTabMeta.label}</h3>
+              <h3>Earnings % — {tabMeta.label}</h3>
               <div className="tech-share-controls">
                 <label className="field field--no-gap tech-share-field">
-                  <span className="label">{activeTabMeta.label} %</span>
-                  <input
-                    className="inp"
-                    inputMode="decimal"
-                    value={currentDraft}
-                    onChange={(e) => setDraftPct((prev) => ({ ...prev, [activeTab]: e.target.value }))}
-                    onBlur={() => setDraftPct((prev) => ({ ...prev, [activeTab]: String(parsedDraft) }))}
-                    placeholder={String(activeTabMeta.defaultPct)}
-                  />
+                  <span className="label">{tabMeta.label} %</span>
+                  <input className="inp" inputMode="decimal" value={curDraft}
+                    onChange={(e) => setDraftPct((p) => ({ ...p, [activeTab]: e.target.value }))}
+                    onBlur={() => setDraftPct((p) => ({ ...p, [activeTab]: String(parsed) }))}
+                    placeholder={String(tabMeta.defaultPct)} />
                 </label>
                 <div className="tech-share-actions">
-                  <button
-                    type="button"
-                    className="btn btn--primary btn--sm"
-                    disabled={!hasPending}
-                    onClick={() => setSharePct((prev) => ({ ...prev, [activeTab]: parsedDraft }))}
-                  >
-                    Apply
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
+                  <button type="button" className="btn btn--primary btn--sm" disabled={!hasPend}
+                    onClick={() => setSharePct((p) => ({ ...p, [activeTab]: parsed }))}>Apply</button>
+                  <button type="button" className="btn btn--ghost btn--sm"
                     onClick={() => {
-                      const def = activeTabMeta.defaultPct
-                      setSharePct((prev) => ({ ...prev, [activeTab]: def }))
-                      setDraftPct((prev) => ({ ...prev, [activeTab]: String(def) }))
-                    }}
-                  >
-                    Reset
-                  </button>
+                      setSharePct((p) => ({ ...p, [activeTab]: tabMeta.defaultPct }))
+                      setDraftPct((p) => ({ ...p, [activeTab]: String(tabMeta.defaultPct) }))
+                    }}>Reset</button>
                 </div>
               </div>
             </div>
@@ -568,26 +547,23 @@ export default function BodyshopTrackerPage() {
           <div className="card__body dense">
             <div className="tech-drill-grid">
               {memberCards.map((card) => (
-                <button
-                  key={card.name}
-                  type="button"
+                <button key={card.name} type="button"
                   className={`tech-drill-btn ${selectedMember === card.name ? 'is-active' : ''}`}
                   onClick={() => {
                     if (selectedMember === card.name) { setSelectedMember(''); setSelectedDayKey('') }
                     else { setSelectedMember(card.name); setSelectedDayKey('') }
-                  }}
-                >
+                  }}>
                   <div className="tech-drill-btn__hd">
                     <div className="tech-drill-btn__title">{card.name}</div>
                     <div className="tech-drill-btn__code">{card.jcCount} JCs · {card.dayCount} days</div>
                   </div>
-                  <div className="tech-drill-btn__value" style={{ color: '#2563eb' }}>{formatCurrency(card.totalIncome)}</div>
+                  <div className="tech-drill-btn__value" style={{ color: '#2563eb' }}>{fmt(card.totalIncome)}</div>
                   <div className="tech-drill-btn__meta" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>Invoice: {formatCurrency(card.totalInvoice)}</span>
-                    <span style={{ fontSize: '11px' }}>
-                      <span style={{ color: '#16a34a' }}>L: {formatCurrency(card.totalLabour)}</span>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>Invoice: {fmt(card.totalInvoice)}</span>
+                    <span style={{ fontSize: 11 }}>
+                      <span style={{ color: '#16a34a' }}>L: {fmt(card.totalLabour)}</span>
                       {' · '}
-                      <span style={{ color: '#9333ea' }}>S: {formatCurrency(card.totalSpares)}</span>
+                      <span style={{ color: '#9333ea' }}>S: {fmt(card.totalSpares)}</span>
                     </span>
                   </div>
                 </button>
@@ -597,7 +573,7 @@ export default function BodyshopTrackerPage() {
         </div>
       )}
 
-      {/* Day cards */}
+      {/* ── Day cards ── */}
       {selectedMember && dayCards.length > 0 && (
         <div className="card mb-gap">
           <div className="card__head">
@@ -606,30 +582,25 @@ export default function BodyshopTrackerPage() {
               <div className="sub">Click a day to see individual job cards.</div>
             </div>
             <button type="button" className="btn btn--ghost btn--sm"
-              onClick={() => { setSelectedMember(''); setSelectedDayKey('') }}>
-              ✕ Close
-            </button>
+              onClick={() => { setSelectedMember(''); setSelectedDayKey('') }}>✕ Close</button>
           </div>
           <div className="card__body dense">
             <div className="tech-drill-grid">
               {dayCards.map((day) => (
-                <button
-                  key={day.dateKey}
-                  type="button"
+                <button key={day.dateKey} type="button"
                   className={`tech-drill-btn ${selectedDayKey === day.dateKey ? 'is-active' : ''}`}
-                  onClick={() => setSelectedDayKey(selectedDayKey === day.dateKey ? '' : day.dateKey)}
-                >
+                  onClick={() => setSelectedDayKey(selectedDayKey === day.dateKey ? '' : day.dateKey)}>
                   <div className="tech-drill-btn__hd">
                     <div className="tech-drill-btn__title">{day.label}</div>
                     <div className="tech-drill-btn__code">{day.jcCount} JCs</div>
                   </div>
-                  <div className="tech-drill-btn__value" style={{ color: '#2563eb' }}>{formatCurrency(day.totalIncome)}</div>
+                  <div className="tech-drill-btn__value" style={{ color: '#2563eb' }}>{fmt(day.totalIncome)}</div>
                   <div className="tech-drill-btn__meta" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>Invoice: {formatCurrency(day.totalInvoice)}</span>
-                    <span style={{ fontSize: '11px' }}>
-                      <span style={{ color: '#16a34a' }}>L: {formatCurrency(day.totalLabour)}</span>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>Invoice: {fmt(day.totalInvoice)}</span>
+                    <span style={{ fontSize: 11 }}>
+                      <span style={{ color: '#16a34a' }}>L: {fmt(day.totalLabour)}</span>
                       {' · '}
-                      <span style={{ color: '#9333ea' }}>S: {formatCurrency(day.totalSpares)}</span>
+                      <span style={{ color: '#9333ea' }}>S: {fmt(day.totalSpares)}</span>
                     </span>
                   </div>
                 </button>
@@ -639,12 +610,12 @@ export default function BodyshopTrackerPage() {
         </div>
       )}
 
-      {/* JC detail table */}
+      {/* ── JC detail table ── */}
       {selectedDayKey && dayDetailRows.length > 0 && (
         <div className="card mb-gap">
           <div className="card__head">
             <div>
-              <h3>{selectedMember} — {dateLabel(selectedDayKey)}</h3>
+              <h3>{selectedMember} — {dayLabel(selectedDayKey)}</h3>
               <div className="sub">{dayDetailRows.length} job card{dayDetailRows.length !== 1 ? 's' : ''}</div>
             </div>
             <button type="button" className="btn btn--ghost btn--sm" onClick={() => setSelectedDayKey('')}>✕ Close</button>
@@ -661,35 +632,35 @@ export default function BodyshopTrackerPage() {
                   <th style={{ textAlign: 'right' }}>Labour</th>
                   <th style={{ textAlign: 'right' }}>Spares</th>
                   <th style={{ textAlign: 'right' }}>Total Invoice</th>
-                  <th style={{ textAlign: 'right', color: '#2563eb' }}>Income ({currentPct}%)</th>
+                  <th style={{ textAlign: 'right', color: '#2563eb' }}>Income ({curPct}%)</th>
                 </tr>
               </thead>
               <tbody>
-                {dayDetailRows.map((r) => (
-                  <tr key={r.id}>
+                {dayDetailRows.map((r, idx) => (
+                  <tr key={idx}>
                     <td>
-                      <code style={{ fontSize: '11px', background: '#eff6ff', color: '#2563eb', borderRadius: '4px', padding: '2px 6px' }}>
+                      <code style={{ fontSize: 11, background: '#eff6ff', color: '#2563eb', borderRadius: 4, padding: '2px 6px' }}>
                         {r.job_card_number}
                       </code>
                     </td>
                     <td>{r.vehicle_registration_number ?? '—'}</td>
                     <td>{r.branch ?? '—'}</td>
                     <td>{r.sr_type ?? '—'}</td>
-                    <td style={{ fontSize: '12px', color: '#64748b' }}>{formatDate(r.closed_date_time)}</td>
-                    <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{formatCurrency(r.labourAmt)}</td>
-                    <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{formatCurrency(r.sparesAmt)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(r.invoiceAmt)}</td>
-                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{formatCurrency(calcIncome(r.labourAmt, currentPct))}</td>
+                    <td style={{ fontSize: 12, color: '#64748b' }}>{fmtDate(r.closed_date_time)}</td>
+                    <td style={{ textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{fmt(r.labourAmt)}</td>
+                    <td style={{ textAlign: 'right', color: '#9333ea', fontWeight: 600 }}>{fmt(r.sparesAmt)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(r.invoiceAmt)}</td>
+                    <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{fmt(income(r.labourAmt, curPct))}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
                   <td colSpan={5}>Day Total</td>
-                  <td style={{ textAlign: 'right', color: '#16a34a' }}>{formatCurrency(dayDetailRows.reduce((s, r) => s + r.labourAmt, 0))}</td>
-                  <td style={{ textAlign: 'right', color: '#9333ea' }}>{formatCurrency(dayDetailRows.reduce((s, r) => s + r.sparesAmt, 0))}</td>
-                  <td style={{ textAlign: 'right' }}>{formatCurrency(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}</td>
-                  <td style={{ textAlign: 'right', color: '#2563eb' }}>{formatCurrency(dayDetailRows.reduce((s, r) => s + calcIncome(r.labourAmt, currentPct), 0))}</td>
+                  <td style={{ textAlign: 'right', color: '#16a34a' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.labourAmt, 0))}</td>
+                  <td style={{ textAlign: 'right', color: '#9333ea' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.sparesAmt, 0))}</td>
+                  <td style={{ textAlign: 'right' }}>{fmt(dayDetailRows.reduce((s, r) => s + r.invoiceAmt, 0))}</td>
+                  <td style={{ textAlign: 'right', color: '#2563eb' }}>{fmt(dayDetailRows.reduce((s, r) => s + income(r.labourAmt, curPct), 0))}</td>
                 </tr>
               </tfoot>
             </table>
@@ -697,13 +668,15 @@ export default function BodyshopTrackerPage() {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* ── Empty state ── */}
       {!loading && memberCards.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>🔨</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b' }}>No bodyshop data found</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b' }}>No data for {tabMeta.label}</div>
           <div style={{ fontSize: 13, marginTop: 4 }}>
-            {fromDate || toDate ? 'Try widening the date range.' : 'No Accident job cards found for this tab.'}
+            {tabMeta.mode === 'tech'
+              ? 'No technician assignments found for bodyshop employees in this role. Check employee_master dept = BODY SHOP.'
+              : fromDate || toDate ? 'Try widening the date range.' : 'No Accident job cards found.'}
           </div>
         </div>
       )}
