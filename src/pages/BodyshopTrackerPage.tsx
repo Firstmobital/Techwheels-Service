@@ -115,6 +115,7 @@ function normPct(s: string, fallback: number) {
 
 export default function BodyshopTrackerPage() {
   const [loading, setLoading]     = useState(true)
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [error, setError]         = useState<string | null>(null)
 
   // Raw data
@@ -422,6 +423,9 @@ export default function BodyshopTrackerPage() {
           <h1>Bodyshop Earnings Tracker</h1>
           <p>SA: Accident JCs by SA name · Dentor/Painter/Technician: all assigned JCs by role</p>
         </div>
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+
+
         <div className="toolbar toolbar--tight">
           <span className="toolbar__label">Branch:</span>
           <button type="button" onClick={() => setBranchFilter('all')}
