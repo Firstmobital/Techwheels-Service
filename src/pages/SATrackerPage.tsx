@@ -119,6 +119,7 @@ function getBranchLabel(v: string | null | undefined): string {
 
 export default function SATrackerPage() {
   const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<ClosedJCRow[]>([])
 
@@ -172,6 +173,7 @@ export default function SATrackerPage() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadData() }, [dateRange])
 
   // ── Enriched rows ─────────────────────────────────────────────────────────
@@ -346,6 +348,9 @@ export default function SATrackerPage() {
         </div>
 
         {/* Branch filter */}
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+
+
         <div className="toolbar toolbar--tight">
           <span className="toolbar__label">Branch:</span>
           <button
