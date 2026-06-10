@@ -2,15 +2,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  RefreshControl, ActivityIndicator, Modal, FlatList, Alert,
+  RefreshControl, ActivityIndicator, Modal, Alert, FlatList,
 } from 'react-native'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type CustomerType = 'individual' | 'firm' | 'foc' | 'cash'
-type OverallStatus = 'active' | 'delivered' | 'cancelled'
 
 interface RepairCard {
   id: number
@@ -23,320 +20,250 @@ interface RepairCard {
   sa_name: string | null
   current_stage: number
   current_stage_name: string
-  overall_status: OverallStatus
+  overall_status: string
   received_at: string | null
-}
-
-interface StageLog {
-  id: number
-  repair_card_id: number
-  stage_no: number
-  stage_name: string
-  status: string
-  done_by_name: string | null
-  notes: string | null
-  hold_reason: string | null
-  logged_at: string
+  // docs
+  doc_claim_form: boolean; doc_rc: boolean; doc_insurance: boolean
+  doc_dl: boolean; doc_aadhaar: boolean; doc_pan: boolean; doc_kyc: boolean
+  // survey
+  survey_status: string | null; claim_intimation_no: string | null
+  surveyor_name: string | null; surveyor_contact: string | null
+  // floor
+  denter_name: string | null; painter_name: string | null; technician_name: string | null
+  floor_status: string | null
+  // qc
+  qc_status: string | null; qc_checked_by: string | null
+  delivery_status: string | null
+  // billing
+  billed_amount: number | null; do_amount: number | null
+  payment_status: string | null; do_status: string | null
 }
 
 const STAGE_LABELS: Record<number, string> = {
-  1: 'Vehicle Receiving', 2: 'Receiving Photos', 3: 'Job Card',
-  4: 'Customer Group',    5: 'Documentation',    6: 'Estimation',
-  7: 'Est. Approval',     8: 'Claim Intimation', 9: 'Survey',
-  10: 'Parts Status',     11: 'Floor Assignment', 12: 'Add. Approval',
-  13: 'Quality Check',    14: 'Re-Inspection',   15: 'Billing',
-  16: 'DO Status',        17: 'Delivery',         18: 'Payment',
+  1:'Vehicle Receiving', 2:'Receiving Photos', 3:'Job Card', 4:'Customer Group',
+  5:'Documentation', 6:'Estimation', 7:'Est. Approval', 8:'Claim Intimation',
+  9:'Survey', 10:'Parts Status', 11:'Floor Assignment', 12:'Add. Approval',
+  13:'Quality Check', 14:'Re-Inspection', 15:'Billing', 16:'DO Status',
+  17:'Delivery', 18:'Payment',
 }
-
 const STAGE_GROUPS = [
-  { label: 'SA Intake',    stages: [1,2,3,4,5,6,7,8,9,10], color: '#3b82f6' },
-  { label: 'Floor Work',   stages: [11,12],                  color: '#8b5cf6' },
-  { label: 'QC',           stages: [13,14],                  color: '#f59e0b' },
-  { label: 'Billing',      stages: [15,16],                  color: '#10b981' },
-  { label: 'Delivery',     stages: [17,18],                  color: '#6b7280' },
+  { label: 'SA Intake',  stages: [1,2,3,4,5,6,7,8,9,10], color: '#3b82f6' },
+  { label: 'Floor',      stages: [11,12],                  color: '#8b5cf6' },
+  { label: 'QC',         stages: [13,14],                  color: '#f59e0b' },
+  { label: 'Billing',    stages: [15,16],                  color: '#10b981' },
+  { label: 'Delivery',   stages: [17,18],                  color: '#6b7280' },
 ]
-
-function getGroupColor(stage: number): string {
-  return STAGE_GROUPS.find((g) => g.stages.includes(stage))?.color ?? '#3b82f6'
+function grpColor(stage: number) {
+  return STAGE_GROUPS.find(g => g.stages.includes(stage))?.color ?? '#3b82f6'
 }
-
-function fmtDate(v: string | null | undefined) {
+function inr(v: number | null) { return v == null ? '—' : '₹' + v.toLocaleString('en-IN') }
+function fmtD(v: string | null) {
   if (!v) return '—'
-  return new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+type TabKey = 'overview' | 'docs' | 'survey' | 'floor' | 'qc' | 'billing'
+const TABS: TabKey[] = ['overview','docs','survey','floor','qc','billing']
 
 export default function BodyshopRepairScreen() {
   const { user } = useAuth()
-
-  const [cards, setCards]       = useState<RepairCard[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [cards, setCards]           = useState<RepairCard[]>([])
+  const [loading, setLoading]       = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [search, setSearch]     = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'delivered'>('active')
+  const [search, setSearch]         = useState('')
+  const [statusFilter, setStatusFilter] = useState('active')
+  const [branches, setBranches]     = useState<string[]>([])
 
-  // Detail modal
+  // detail
   const [selected, setSelected]     = useState<RepairCard | null>(null)
-  const [stageLogs, setStageLogs]   = useState<StageLog[]>([])
-  const [detailLoading, setDetailLoading] = useState(false)
+  const [tab, setTab]               = useState<TabKey>('overview')
+  const [patch, setPatch]           = useState<Partial<RepairCard>>({})
+  const [saving, setSaving]         = useState(false)
 
-  // New card modal
-  const [newModalVisible, setNewModalVisible] = useState(false)
-  const [newForm, setNewForm] = useState({
-    job_card_no: '', reg_number: '', customer_name: '',
-    customer_phone: '', branch: '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [branches, setBranches] = useState<string[]>([])
+  // new
+  const [showNew, setShowNew]       = useState(false)
+  const [nf, setNf]                 = useState({ job_card_no:'', reg_number:'', customer_name:'', customer_phone:'', branch:'' })
 
-  useEffect(() => { void loadAll() }, [])
+  useEffect(() => { void load() }, [])
 
-  async function loadAll() {
+  async function load() {
     setLoading(true)
-    const [cardsRes, branchesRes] = await Promise.all([
-      supabase
-        .from('bodyshop_repair_cards')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200),
+    const [cardsRes, brRes] = await Promise.all([
+      supabase.from('bodyshop_repair_cards').select('*').order('created_at', { ascending: false }).limit(300),
       supabase.from('service_branches').select('name').order('name'),
     ])
     if (cardsRes.data) setCards(cardsRes.data as RepairCard[])
-    if (branchesRes.data) setBranches((branchesRes.data as { name: string }[]).map((b) => b.name))
+    if (brRes.data)    setBranches((brRes.data as any[]).map(b => b.name))
     setLoading(false)
   }
 
-  async function onRefresh() {
-    setRefreshing(true)
-    await loadAll()
-    setRefreshing(false)
+  async function onRefresh() { setRefreshing(true); await load(); setRefreshing(false) }
+
+  function applyPatch(key: keyof RepairCard, val: any) {
+    setPatch(p => ({ ...p, [key]: val }))
+    setSelected(s => s ? { ...s, [key]: val } : s)
   }
 
-  async function openDetail(card: RepairCard) {
-    setSelected(card)
-    setDetailLoading(true)
-    const { data } = await supabase
-      .from('bodyshop_stage_logs')
-      .select('*')
-      .eq('repair_card_id', card.id)
-      .order('logged_at', { ascending: true })
-    setStageLogs((data as StageLog[]) ?? [])
-    setDetailLoading(false)
+  async function savePatch() {
+    if (!selected || !Object.keys(patch).length) return
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('bodyshop_repair_cards')
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('id', selected.id)
+      .select().single()
+    setSaving(false)
+    if (error) { Alert.alert('Error', error.message); return }
+    setSelected(data as RepairCard)
+    setCards(prev => prev.map(c => c.id === selected.id ? data as RepairCard : c))
+    setPatch({})
+  }
+
+  async function handleAdvance() {
+    if (!selected) return
+    Alert.alert('Advance Stage', `Mark Stage ${selected.current_stage} done?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Confirm', onPress: async () => {
+        const next = Math.min(selected.current_stage + 1, 18)
+        const isLast = next >= 18 && selected.current_stage === 18
+        const { data, error } = await supabase
+          .from('bodyshop_repair_cards')
+          .update({ current_stage: next, current_stage_name: STAGE_LABELS[next], updated_at: new Date().toISOString() })
+          .eq('id', selected.id).select().single()
+        if (error) { Alert.alert('Error', error.message); return }
+        setSelected(data as RepairCard)
+        setCards(prev => prev.map(c => c.id === selected.id ? data as RepairCard : c))
+      }},
+    ])
   }
 
   async function handleCreate() {
-    if (!newForm.job_card_no.trim()) {
-      Alert.alert('Error', 'Job card number is required')
-      return
-    }
+    if (!nf.job_card_no.trim()) { Alert.alert('Error','Job card number required'); return }
     setSaving(true)
     const { error } = await supabase.from('bodyshop_repair_cards').insert({
-      ...newForm,
-      customer_type: 'individual',
-      current_stage: 1,
-      current_stage_name: 'vehicle_receiving',
-      overall_status: 'active',
-      created_by: user?.id,
+      ...nf, customer_type: 'individual', current_stage: 1,
+      current_stage_name: 'vehicle_receiving', overall_status: 'active', created_by: user?.id,
     })
     setSaving(false)
     if (error) { Alert.alert('Error', error.message); return }
-    setNewModalVisible(false)
-    setNewForm({ job_card_no: '', reg_number: '', customer_name: '', customer_phone: '', branch: '' })
-    void loadAll()
+    setShowNew(false)
+    setNf({ job_card_no:'', reg_number:'', customer_name:'', customer_phone:'', branch:'' })
+    void load()
   }
 
-  async function handleAdvance(card: RepairCard) {
-    if (card.current_stage >= 18) return
-    Alert.alert(
-      'Advance Stage',
-      `Mark Stage ${card.current_stage} done and move to Stage ${card.current_stage + 1}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            const nextStage = card.current_stage + 1
-            await supabase.from('bodyshop_stage_logs').insert({
-              repair_card_id: card.id,
-              stage_no: card.current_stage,
-              stage_name: STAGE_LABELS[card.current_stage] ?? '',
-              status: 'done',
-              done_by_name: user?.email ?? 'User',
-              done_by_role: 'staff',
-            })
-            await supabase.from('bodyshop_repair_cards').update({
-              current_stage: nextStage,
-              current_stage_name: STAGE_LABELS[nextStage] ?? '',
-              updated_at: new Date().toISOString(),
-            }).eq('id', card.id)
+  const filtered = useMemo(() => cards.filter(c => {
+    if (statusFilter !== 'all' && c.overall_status !== statusFilter) return false
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      return c.job_card_no?.toLowerCase().includes(q) ||
+             (c.reg_number ?? '').toLowerCase().includes(q) ||
+             (c.customer_name ?? '').toLowerCase().includes(q)
+    }
+    return true
+  }), [cards, statusFilter, search])
 
-            // Refresh detail
-            const updated = { ...card, current_stage: nextStage }
-            setSelected(updated)
-            void loadAll()
-          },
-        },
-      ]
-    )
-  }
+  const pipeline = useMemo(() => STAGE_GROUPS.map(g => ({
+    ...g, count: cards.filter(c => g.stages.includes(c.current_stage) && c.overall_status === 'active').length,
+  })), [cards])
 
-  const filtered = useMemo(() => {
-    return cards.filter((c) => {
-      if (statusFilter !== 'all' && c.overall_status !== statusFilter) return false
-      if (search.trim()) {
-        const q = search.toLowerCase()
-        return (
-          c.job_card_no?.toLowerCase().includes(q) ||
-          (c.reg_number ?? '').toLowerCase().includes(q) ||
-          (c.customer_name ?? '').toLowerCase().includes(q)
-        )
-      }
-      return true
-    })
-  }, [cards, statusFilter, search])
-
-  const pipeline = useMemo(() =>
-    STAGE_GROUPS.map((g) => ({
-      ...g,
-      count: cards.filter((c) => g.stages.includes(c.current_stage) && c.overall_status === 'active').length,
-    })),
-  [cards])
-
-  // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
-
+    <View style={{ flex:1, backgroundColor:'#f8fafc' }}>
       {/* Header */}
-      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', padding: 16, paddingTop: 52 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>🔧 Bodyshop Repairs</Text>
-          <TouchableOpacity
-            onPress={() => setNewModalVisible(true)}
-            style={{ backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>+ New Intake</Text>
+      <View style={{ backgroundColor:'#fff', borderBottomWidth:1, borderBottomColor:'#e5e7eb', padding:16, paddingTop:52 }}>
+        <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <Text style={{ fontSize:17, fontWeight:'700' }}>🔧 Bodyshop Repairs</Text>
+          <TouchableOpacity onPress={() => setShowNew(true)}
+            style={{ backgroundColor:'#2563eb', borderRadius:8, paddingHorizontal:12, paddingVertical:7 }}>
+            <Text style={{ color:'#fff', fontWeight:'700', fontSize:13 }}>+ New</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Pipeline chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-          {pipeline.map((g) => (
-            <View key={g.label}
-              style={{ marginRight: 8, borderRadius: 20, borderWidth: 1.5, borderColor: g.color,
-                       paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: g.color }}>{g.count}</Text>
-              <Text style={{ fontSize: 11, color: g.color }}>{g.label}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom:10 }}>
+          {pipeline.map(g => (
+            <View key={g.label} style={{ marginRight:8, borderRadius:20, borderWidth:1.5, borderColor:g.color, paddingHorizontal:10, paddingVertical:4, flexDirection:'row', alignItems:'center', gap:4 }}>
+              <Text style={{ fontSize:15, fontWeight:'700', color:g.color }}>{g.count}</Text>
+              <Text style={{ fontSize:11, color:g.color }}>{g.label}</Text>
             </View>
           ))}
         </ScrollView>
 
-        {/* Search */}
         <TextInput
-          style={{ backgroundColor: '#f3f4f6', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, marginBottom: 8 }}
-          placeholder="Search job card, reg, customer…"
-          value={search}
-          onChangeText={setSearch}
-        />
+          style={{ backgroundColor:'#f3f4f6', borderRadius:8, paddingHorizontal:12, paddingVertical:8, fontSize:14, marginBottom:8 }}
+          placeholder="Search job card / reg / customer…"
+          value={search} onChangeText={setSearch} />
 
-        {/* Status filter tabs */}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {(['all','active','delivered'] as const).map((s) => (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {['all','active','delivered','cancelled'].map(s => (
             <TouchableOpacity key={s} onPress={() => setStatusFilter(s)}
-              style={{ borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
-                       backgroundColor: statusFilter === s ? '#2563eb' : '#f3f4f6' }}>
-              <Text style={{ fontSize: 12, fontWeight: '600',
-                             color: statusFilter === s ? '#fff' : '#6b7280' }}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
+              style={{ marginRight:6, borderRadius:20, paddingHorizontal:12, paddingVertical:5, backgroundColor: statusFilter === s ? '#2563eb' : '#f3f4f6' }}>
+              <Text style={{ fontSize:12, fontWeight:'600', color: statusFilter === s ? '#fff' : '#6b7280' }}>
+                {s.charAt(0).toUpperCase()+s.slice(1)}
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
-      {/* Cards list */}
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563eb" />
-      ) : (
+      {/* List */}
+      {loading ? <ActivityIndicator style={{ marginTop:40 }} size="large" color="#2563eb" /> : (
         <FlatList
           data={filtered}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={item => String(item.id)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 100 }}
-          ListEmptyComponent={
-            <Text style={{ textAlign: 'center', marginTop: 40, color: '#9ca3af' }}>No repair cards found</Text>
-          }
+          contentContainerStyle={{ padding:12, gap:10, paddingBottom:100 }}
+          ListEmptyComponent={<Text style={{ textAlign:'center', marginTop:40, color:'#9ca3af' }}>No repair cards found</Text>}
           renderItem={({ item: card }) => {
-            const color = getGroupColor(card.current_stage)
+            const color = grpColor(card.current_stage)
             return (
-              <TouchableOpacity
-                onPress={() => void openDetail(card)}
-                style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14,
-                         borderLeftWidth: 4, borderLeftColor: color,
-                         shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }}
-              >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ fontWeight: '700', fontSize: 15, color: '#111827' }}>{card.job_card_no}</Text>
-                  <View style={{ backgroundColor: card.overall_status === 'active' ? '#dbeafe' : '#d1fae5',
-                                 paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
-                    <Text style={{ fontSize: 11, color: card.overall_status === 'active' ? '#1d4ed8' : '#065f46', fontWeight: '600' }}>
+              <TouchableOpacity onPress={() => { setSelected(card); setTab('overview'); setPatch({}) }}
+                style={{ backgroundColor:'#fff', borderRadius:12, padding:14, borderLeftWidth:4, borderLeftColor:color, shadowColor:'#000', shadowOpacity:0.05, shadowRadius:4, elevation:2 }}>
+                <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:4 }}>
+                  <Text style={{ fontWeight:'700', fontSize:15 }}>{card.job_card_no}</Text>
+                  <View style={{ backgroundColor: card.overall_status==='active' ? '#dbeafe' : card.overall_status==='delivered' ? '#d1fae5' : '#fee2e2', paddingHorizontal:8, paddingVertical:2, borderRadius:10 }}>
+                    <Text style={{ fontSize:11, fontWeight:'600', color: card.overall_status==='active' ? '#1d4ed8' : card.overall_status==='delivered' ? '#065f46' : '#991b1b' }}>
                       {card.overall_status}
                     </Text>
                   </View>
                 </View>
-                <Text style={{ fontSize: 13, color: '#6b7280', marginBottom: 2 }}>{card.reg_number ?? '—'} · {card.customer_name ?? '—'}</Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                  <View style={{ backgroundColor: `${color}20`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color }}>
-                      Stage {card.current_stage} — {STAGE_LABELS[card.current_stage]}
-                    </Text>
+                <Text style={{ fontSize:13, color:'#6b7280' }}>{card.reg_number ?? '—'} · {card.customer_name ?? '—'}</Text>
+                <View style={{ marginTop:6, flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
+                  <View style={{ backgroundColor:`${color}20`, paddingHorizontal:8, paddingVertical:3, borderRadius:6 }}>
+                    <Text style={{ fontSize:11, fontWeight:'600', color }}>Stage {card.current_stage} — {STAGE_LABELS[card.current_stage]}</Text>
                   </View>
-                  {card.branch && (
-                    <Text style={{ fontSize: 11, color: '#9ca3af' }}>{card.branch}</Text>
-                  )}
+                  <Text style={{ fontSize:11, color:'#9ca3af' }}>{card.branch ?? '—'}</Text>
                 </View>
-                <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
-                  In: {fmtDate(card.received_at)} · SA: {card.sa_name ?? '—'}
-                </Text>
+                <Text style={{ fontSize:11, color:'#9ca3af', marginTop:4 }}>In: {fmtD(card.received_at)} · SA: {card.sa_name ?? '—'}</Text>
               </TouchableOpacity>
             )
           }}
         />
       )}
 
-      {/* ── Detail Modal ──────────────────────────────────────────────────── */}
+      {/* Detail Modal */}
       <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSelected(null)}>
         {selected && (
-          <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
-            <View style={{ backgroundColor: '#fff', padding: 16, paddingTop: 52,
-                           borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 17, fontWeight: '700', color: '#111827' }}>
-                    {selected.job_card_no} — {selected.reg_number ?? '—'}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
-                    {selected.customer_name} · {selected.branch}
-                  </Text>
+          <View style={{ flex:1, backgroundColor:'#f8fafc' }}>
+            <View style={{ backgroundColor:'#fff', padding:16, paddingTop:52, borderBottomWidth:1, borderBottomColor:'#e5e7eb' }}>
+              <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start' }}>
+                <View style={{ flex:1 }}>
+                  <Text style={{ fontSize:17, fontWeight:'700' }}>{selected.job_card_no} — {selected.reg_number ?? '—'}</Text>
+                  <Text style={{ fontSize:13, color:'#6b7280', marginTop:2 }}>{selected.customer_name} · {selected.branch}</Text>
                 </View>
-                <TouchableOpacity onPress={() => setSelected(null)}
-                  style={{ padding: 8 }}>
-                  <Text style={{ fontSize: 20, color: '#6b7280' }}>✕</Text>
+                <TouchableOpacity onPress={() => setSelected(null)} style={{ padding:8 }}>
+                  <Text style={{ fontSize:20, color:'#6b7280' }}>✕</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Stage progress */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-                {STAGE_GROUPS.map((g) => {
-                  const inGroup = g.stages.includes(selected.current_stage)
-                  const done = g.stages[g.stages.length - 1] < selected.current_stage
+              {/* stage groups */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop:10 }}>
+                {STAGE_GROUPS.map(g => {
+                  const inGrp = g.stages.includes(selected.current_stage)
+                  const done  = g.stages[g.stages.length-1] < selected.current_stage
                   return (
-                    <View key={g.label}
-                      style={{ marginRight: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16,
-                               backgroundColor: done ? g.color : inGroup ? `${g.color}30` : '#f3f4f6',
-                               borderWidth: inGroup ? 1.5 : 0, borderColor: g.color }}>
-                      <Text style={{ fontSize: 11, fontWeight: '600',
-                                     color: done ? '#fff' : inGroup ? g.color : '#9ca3af' }}>
+                    <View key={g.label} style={{ marginRight:6, paddingHorizontal:10, paddingVertical:5, borderRadius:16,
+                      backgroundColor: done ? g.color : inGrp ? `${g.color}30` : '#f3f4f6',
+                      borderWidth: inGrp ? 1.5 : 0, borderColor: g.color }}>
+                      <Text style={{ fontSize:11, fontWeight:'600', color: done ? '#fff' : inGrp ? g.color : '#9ca3af' }}>
                         {done ? '✓ ' : ''}{g.label}
                       </Text>
                     </View>
@@ -344,117 +271,252 @@ export default function BodyshopRepairScreen() {
                 })}
               </ScrollView>
 
-              {/* Current stage badge */}
-              <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={{ backgroundColor: `${getGroupColor(selected.current_stage)}20`,
-                               paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-                  <Text style={{ fontWeight: '700', color: getGroupColor(selected.current_stage) }}>
-                    Stage {selected.current_stage} — {STAGE_LABELS[selected.current_stage]}
-                  </Text>
-                </View>
-              </View>
+              {/* tabs */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop:8 }}>
+                {TABS.map(t => (
+                  <TouchableOpacity key={t} onPress={() => setTab(t)}
+                    style={{ marginRight:4, paddingHorizontal:12, paddingVertical:6, borderRadius:16,
+                      backgroundColor: tab===t ? '#2563eb' : '#f3f4f6' }}>
+                    <Text style={{ fontSize:12, fontWeight:'600', color: tab===t ? '#fff' : '#6b7280' }}>
+                      {t.charAt(0).toUpperCase()+t.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
 
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
-              {/* Advance stage button */}
-              {selected.overall_status === 'active' && selected.current_stage < 18 && (
-                <TouchableOpacity
-                  onPress={() => void handleAdvance(selected)}
-                  style={{ backgroundColor: '#2563eb', borderRadius: 10, padding: 14,
-                           alignItems: 'center', marginBottom: 16 }}>
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                    ✓ Done — Advance to Stage {selected.current_stage + 1}
-                  </Text>
-                </TouchableOpacity>
-              )}
+            <ScrollView style={{ flex:1 }} contentContainerStyle={{ padding:16, paddingBottom:120 }}>
 
-              {/* Stage history */}
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 10 }}>
-                Stage History
-              </Text>
-              {detailLoading ? (
-                <ActivityIndicator color="#2563eb" />
-              ) : (
-                Object.entries(STAGE_LABELS).map(([numStr, label]) => {
-                  const num = Number(numStr)
-                  const log = stageLogs.find((l) => l.stage_no === num && l.status === 'done')
-                  const isHold = stageLogs.some((l) => l.stage_no === num && l.status === 'hold')
-                  const isCurrent = selected.current_stage === num
-                  const isDone = selected.current_stage > num
-                  const color = getGroupColor(num)
-
-                  return (
-                    <View key={num}
-                      style={{ flexDirection: 'row', marginBottom: 8, alignItems: 'flex-start' }}>
-                      {/* dot */}
-                      <View style={{ width: 18, height: 18, borderRadius: 9, marginTop: 2, marginRight: 10,
-                                     backgroundColor: isDone ? color : isCurrent ? color : '#e5e7eb',
-                                     borderWidth: isCurrent ? 2 : 0, borderColor: color }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: isCurrent ? '700' : '500',
-                                       color: isDone ? '#374151' : isCurrent ? '#111827' : '#9ca3af' }}>
-                          {num}. {label}
-                          {isCurrent && <Text style={{ color }}> ← current</Text>}
-                          {isHold && <Text style={{ color: '#ef4444' }}> ⚠ hold</Text>}
-                        </Text>
-                        {isDone && log && (
-                          <Text style={{ fontSize: 11, color: '#9ca3af' }}>
-                            {log.done_by_name ?? '—'} · {fmtDate(log.logged_at)}
-                          </Text>
-                        )}
+              {/* Overview */}
+              {tab==='overview' && (
+                <View>
+                  {selected.overall_status==='active' && selected.current_stage < 18 && (
+                    <TouchableOpacity onPress={handleAdvance}
+                      style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center', marginBottom:16 }}>
+                      <Text style={{ color:'#fff', fontWeight:'700' }}>✓ Done — Advance to Stage {selected.current_stage+1}</Text>
+                    </TouchableOpacity>
+                  )}
+                  <View style={{ backgroundColor:'#fff', borderRadius:10, padding:14, marginBottom:12 }}>
+                    {[
+                      ['Current Stage', `Stage ${selected.current_stage} — ${STAGE_LABELS[selected.current_stage]}`],
+                      ['Reg No.', selected.reg_number ?? '—'],
+                      ['Customer', selected.customer_name ?? '—'],
+                      ['Branch', selected.branch ?? '—'],
+                      ['SA', selected.sa_name ?? '—'],
+                      ['Received', fmtD(selected.received_at)],
+                    ].map(([l,v]) => (
+                      <View key={String(l)} style={{ flexDirection:'row', justifyContent:'space-between', paddingVertical:6, borderBottomWidth:1, borderBottomColor:'#f3f4f6' }}>
+                        <Text style={{ fontSize:13, color:'#9ca3af' }}>{l}</Text>
+                        <Text style={{ fontSize:13, fontWeight:'600', color:'#111827' }}>{v}</Text>
                       </View>
-                    </View>
-                  )
-                })
+                    ))}
+                  </View>
+                  {/* stage stepper */}
+                  <Text style={{ fontSize:14, fontWeight:'700', marginBottom:8 }}>All Stages</Text>
+                  <View style={{ flexDirection:'row', flexWrap:'wrap', gap:6 }}>
+                    {Object.entries(STAGE_LABELS).map(([ns, label]) => {
+                      const n = Number(ns)
+                      const isDone = selected.current_stage > n
+                      const isCur  = selected.current_stage === n
+                      const color  = grpColor(n)
+                      return (
+                        <View key={n} style={{ flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:10, paddingVertical:5, borderRadius:8,
+                          backgroundColor: isCur ? `${color}15` : isDone ? '#f0fdf4' : '#f9fafb',
+                          borderWidth:1, borderColor: isCur ? color : isDone ? '#bbf7d0' : '#e5e7eb',
+                          width:'47%' }}>
+                          <View style={{ width:10, height:10, borderRadius:5, backgroundColor: isDone ? '#16a34a' : isCur ? color : '#d1d5db' }} />
+                          <Text style={{ fontSize:11, fontWeight: isCur ? '700' : '500', color: isCur ? color : isDone ? '#374151' : '#9ca3af', flex:1 }}>
+                            {n}. {label}
+                          </Text>
+                        </View>
+                      )
+                    })}
+                  </View>
+                </View>
               )}
+
+              {/* Docs */}
+              {tab==='docs' && (
+                <View>
+                  <Text style={{ fontSize:14, fontWeight:'700', marginBottom:12 }}>Document Checklist</Text>
+                  {[
+                    {k:'doc_claim_form',label:'Claim Form'}, {k:'doc_rc',label:'RC'},
+                    {k:'doc_insurance',label:'Insurance'}, {k:'doc_dl',label:'Driving Licence'},
+                    {k:'doc_aadhaar',label:'Aadhaar'}, {k:'doc_pan',label:'PAN'},
+                    {k:'doc_kyc',label:'KYC'}, {k:'doc_gst',label:'GST'},
+                    {k:'doc_company_pan',label:'Company PAN'}, {k:'doc_bank_detail',label:'Bank Detail'},
+                  ].map(({k,label}) => (
+                    <TouchableOpacity key={k} onPress={() => applyPatch(k as keyof RepairCard, !(selected as any)[k])}
+                      style={{ flexDirection:'row', alignItems:'center', padding:12, backgroundColor:'#fff', borderRadius:8, marginBottom:6, borderWidth:1, borderColor:'#e5e7eb' }}>
+                      <View style={{ width:20, height:20, borderRadius:4, borderWidth:2,
+                        borderColor: (selected as any)[k] ? '#16a34a' : '#d1d5db',
+                        backgroundColor: (selected as any)[k] ? '#16a34a' : '#fff',
+                        alignItems:'center', justifyContent:'center', marginRight:10 }}>
+                        {(selected as any)[k] && <Text style={{ color:'#fff', fontSize:12, fontWeight:'700' }}>✓</Text>}
+                      </View>
+                      <Text style={{ fontSize:14, fontWeight:'500' }}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {Object.keys(patch).length > 0 && (
+                    <TouchableOpacity onPress={savePatch} disabled={saving}
+                      style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center', marginTop:8 }}>
+                      <Text style={{ color:'#fff', fontWeight:'700' }}>{saving ? 'Saving…' : 'Save Docs'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Survey */}
+              {tab==='survey' && (
+                <View style={{ gap:12 }}>
+                  {[
+                    {k:'claim_intimation_no',label:'Claim Intimation No.'},
+                    {k:'surveyor_name',label:'Surveyor Name'},
+                    {k:'surveyor_contact',label:'Surveyor Contact'},
+                    {k:'approved_parts',label:'Approved Parts'},
+                    {k:'estimation_by',label:'Estimation By'},
+                    {k:'survey_hold_reason',label:'Hold Reason'},
+                  ].map(({k,label}) => (
+                    <View key={k}>
+                      <Text style={{ fontSize:12, color:'#6b7280', marginBottom:4 }}>{label}</Text>
+                      <TextInput style={{ backgroundColor:'#fff', borderRadius:8, padding:10, fontSize:14, borderWidth:1, borderColor:'#e5e7eb' }}
+                        value={(selected as any)[k] ?? ''} onChangeText={v => applyPatch(k as keyof RepairCard, v)} />
+                    </View>
+                  ))}
+                  {Object.keys(patch).length > 0 && (
+                    <TouchableOpacity onPress={savePatch} disabled={saving}
+                      style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center' }}>
+                      <Text style={{ color:'#fff', fontWeight:'700' }}>{saving ? 'Saving…' : 'Save Survey'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Floor */}
+              {tab==='floor' && (
+                <View style={{ gap:12 }}>
+                  {[
+                    {k:'denter_name',label:'Denter Name'}, {k:'painter_name',label:'Painter Name'},
+                    {k:'technician_name',label:'Technician Name'}, {k:'floor_hold_reason',label:'Hold Reason'},
+                    {k:'additional_approval',label:'Additional Approval'},
+                  ].map(({k,label}) => (
+                    <View key={k}>
+                      <Text style={{ fontSize:12, color:'#6b7280', marginBottom:4 }}>{label}</Text>
+                      <TextInput style={{ backgroundColor:'#fff', borderRadius:8, padding:10, fontSize:14, borderWidth:1, borderColor:'#e5e7eb' }}
+                        value={(selected as any)[k] ?? ''} onChangeText={v => applyPatch(k as keyof RepairCard, v)} />
+                    </View>
+                  ))}
+                  {Object.keys(patch).length > 0 && (
+                    <TouchableOpacity onPress={savePatch} disabled={saving}
+                      style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center' }}>
+                      <Text style={{ color:'#fff', fontWeight:'700' }}>{saving ? 'Saving…' : 'Save Floor'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* QC */}
+              {tab==='qc' && (
+                <View style={{ gap:12 }}>
+                  <View style={{ backgroundColor:'#fff', borderRadius:10, padding:14, gap:10 }}>
+                    {[
+                      ['QC', selected.qc_status ?? 'pending', ['pending','pass','fail']],
+                      ['Delivery', selected.delivery_status ?? 'pending', ['pending','done']],
+                    ].map(([label, val, opts]) => (
+                      <View key={String(label)}>
+                        <Text style={{ fontSize:12, color:'#6b7280', marginBottom:6 }}>{label} Status</Text>
+                        <View style={{ flexDirection:'row', gap:8 }}>
+                          {(opts as string[]).map(o => (
+                            <TouchableOpacity key={o} onPress={() => applyPatch(label==='QC' ? 'qc_status' : 'delivery_status', o)}
+                              style={{ flex:1, padding:8, borderRadius:8, alignItems:'center',
+                                backgroundColor: val===o ? '#2563eb' : '#f3f4f6' }}>
+                              <Text style={{ fontSize:12, fontWeight:'600', color: val===o ? '#fff' : '#6b7280', textTransform:'capitalize' }}>{o}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                  {[{k:'qc_checked_by',label:'QC Checked By'},{k:'qc_fail_reason',label:'Fail Reason'},{k:'reinspection_by',label:'Re-Inspection By'}].map(({k,label}) => (
+                    <View key={k}>
+                      <Text style={{ fontSize:12, color:'#6b7280', marginBottom:4 }}>{label}</Text>
+                      <TextInput style={{ backgroundColor:'#fff', borderRadius:8, padding:10, fontSize:14, borderWidth:1, borderColor:'#e5e7eb' }}
+                        value={(selected as any)[k] ?? ''} onChangeText={v => applyPatch(k as keyof RepairCard, v)} />
+                    </View>
+                  ))}
+                  {Object.keys(patch).length > 0 && (
+                    <TouchableOpacity onPress={savePatch} disabled={saving}
+                      style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center' }}>
+                      <Text style={{ color:'#fff', fontWeight:'700' }}>{saving ? 'Saving…' : 'Save QC'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Billing */}
+              {tab==='billing' && (
+                <View style={{ gap:12 }}>
+                  <View style={{ backgroundColor:'#fff', borderRadius:10, padding:14, flexDirection:'row', justifyContent:'space-around' }}>
+                    {[['Billed', selected.billed_amount],['DO', selected.do_amount]].map(([l,v]) => (
+                      <View key={String(l)} style={{ alignItems:'center' }}>
+                        <Text style={{ fontSize:11, color:'#9ca3af' }}>{l}</Text>
+                        <Text style={{ fontSize:18, fontWeight:'700', color:'#111827' }}>{inr(v as number|null)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  {[{k:'billed_amount',label:'Billed Amount (₹)',num:true},{k:'do_amount',label:'DO Amount (₹)',num:true},{k:'customer_diff_amount',label:'Customer Diff (₹)',num:true}].map(({k,label,num}) => (
+                    <View key={k}>
+                      <Text style={{ fontSize:12, color:'#6b7280', marginBottom:4 }}>{label}</Text>
+                      <TextInput style={{ backgroundColor:'#fff', borderRadius:8, padding:10, fontSize:14, borderWidth:1, borderColor:'#e5e7eb' }}
+                        keyboardType={num ? 'numeric' : 'default'}
+                        value={(selected as any)[k]?.toString() ?? ''}
+                        onChangeText={v => applyPatch(k as keyof RepairCard, num ? (v ? Number(v) : null) : v)} />
+                    </View>
+                  ))}
+                  {Object.keys(patch).length > 0 && (
+                    <TouchableOpacity onPress={savePatch} disabled={saving}
+                      style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center' }}>
+                      <Text style={{ color:'#fff', fontWeight:'700' }}>{saving ? 'Saving…' : 'Save Billing'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
             </ScrollView>
           </View>
         )}
       </Modal>
 
-      {/* ── New Card Modal ────────────────────────────────────────────────── */}
-      <Modal visible={newModalVisible} animationType="slide" presentationStyle="formSheet" onRequestClose={() => setNewModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: '#fff' }}>
-          <View style={{ padding: 16, paddingTop: 52, borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
-                         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontSize: 17, fontWeight: '700' }}>New Car Intake</Text>
-            <TouchableOpacity onPress={() => setNewModalVisible(false)}>
-              <Text style={{ fontSize: 16, color: '#6b7280' }}>Cancel</Text>
+      {/* New Card Modal */}
+      <Modal visible={showNew} animationType="slide" presentationStyle="formSheet" onRequestClose={() => setShowNew(false)}>
+        <View style={{ flex:1, backgroundColor:'#fff' }}>
+          <View style={{ padding:16, paddingTop:52, borderBottomWidth:1, borderBottomColor:'#e5e7eb', flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
+            <Text style={{ fontSize:17, fontWeight:'700' }}>New Car Intake</Text>
+            <TouchableOpacity onPress={() => setShowNew(false)}>
+              <Text style={{ fontSize:16, color:'#6b7280' }}>Cancel</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+          <ScrollView contentContainerStyle={{ padding:16, gap:14 }}>
             {[
-              { key: 'job_card_no', label: 'Job Card No. *', placeholder: 'e.g. JC-2026-001' },
-              { key: 'reg_number',  label: 'Reg. Number',    placeholder: 'e.g. RJ14AB1234' },
-              { key: 'customer_name', label: 'Customer Name', placeholder: '' },
-              { key: 'customer_phone', label: 'Customer Phone', placeholder: '' },
-              { key: 'branch',      label: 'Branch',         placeholder: 'e.g. Sitapura' },
-            ].map((f) => (
-              <View key={f.key}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 4 }}>{f.label}</Text>
-                <TextInput
-                  style={{ backgroundColor: '#f3f4f6', borderRadius: 8, paddingHorizontal: 12,
-                           paddingVertical: 10, fontSize: 14 }}
-                  placeholder={f.placeholder}
-                  value={(newForm as any)[f.key]}
-                  onChangeText={(v) => setNewForm((prev) => ({ ...prev, [f.key]: v }))}
-                />
+              {k:'job_card_no',label:'Job Card No. *'},
+              {k:'reg_number',label:'Reg. Number'},
+              {k:'customer_name',label:'Customer Name'},
+              {k:'customer_phone',label:'Customer Phone'},
+              {k:'branch',label:'Branch'},
+            ].map(({k,label}) => (
+              <View key={k}>
+                <Text style={{ fontSize:13, fontWeight:'600', color:'#374151', marginBottom:4 }}>{label}</Text>
+                <TextInput style={{ backgroundColor:'#f3f4f6', borderRadius:8, paddingHorizontal:12, paddingVertical:10, fontSize:14 }}
+                  value={(nf as any)[k]} onChangeText={v => setNf(p => ({ ...p, [k]: v }))} />
               </View>
             ))}
-
-            <TouchableOpacity
-              onPress={() => void handleCreate()}
-              disabled={saving}
-              style={{ backgroundColor: saving ? '#93c5fd' : '#2563eb', borderRadius: 10,
-                       padding: 14, alignItems: 'center', marginTop: 8 }}>
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
-                {saving ? 'Creating…' : 'Create Repair Card'}
-              </Text>
+            <TouchableOpacity onPress={handleCreate} disabled={saving}
+              style={{ backgroundColor: saving ? '#93c5fd' : '#2563eb', borderRadius:10, padding:14, alignItems:'center', marginTop:8 }}>
+              <Text style={{ color:'#fff', fontWeight:'700', fontSize:15 }}>{saving ? 'Creating…' : 'Create Repair Card'}</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
       </Modal>
-
     </View>
   )
 }
