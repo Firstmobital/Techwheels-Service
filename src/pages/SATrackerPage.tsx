@@ -226,7 +226,7 @@ export default function SATrackerPage() {
 
       const existing = map.get(name) ?? {
         name, jcCount: 0, dayCount: 0,
-        totalLabour: 0, totalSpares: 0, totalInvoice: 0,
+        totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0,
         days: new Set<string>(),
       }
 
