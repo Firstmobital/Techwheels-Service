@@ -12,6 +12,7 @@ import {
 } from '../lib/reportQueries'
 import ReportFiltersPanel from './reports/components/ReportFiltersPanel'
 import {
+  REPORT_CATEGORIES,
   getReportById,
   getReportsByCategory,
   isCategoryId,
@@ -87,10 +88,12 @@ export default function ReportsPage() {
     return report
   }, [params.reportId, resolvedCategoryId])
 
-  const isManpowerReportSelected = selectedReport?.id === 'manpower-wise-labour-revenue'
-  const isServiceTypeWiseReportSelected = selectedReport?.id === 'service-type-labour-revenue'
-  const isBranchLabourRevenueReportSelected = selectedReport?.id === 'branch-labour-revenue'
-  const isVasRevenueReportSelected = selectedReport?.id === 'vas-revenue-report'
+  const activeReport = selectedReport ?? reportsInCategory[0] ?? null
+
+  const isManpowerReportSelected = activeReport?.id === 'manpower-wise-labour-revenue'
+  const isServiceTypeWiseReportSelected = activeReport?.id === 'service-type-labour-revenue'
+  const isBranchLabourRevenueReportSelected = activeReport?.id === 'branch-labour-revenue'
+  const isVasRevenueReportSelected = activeReport?.id === 'vas-revenue-report'
   const isRevenueCategorySelected = resolvedCategoryId === 'revenue'
   const shouldShowServiceTypeFilter =
     isRevenueCategorySelected ||
@@ -354,10 +357,10 @@ export default function ReportsPage() {
   ])
 
   // Render warranty report full-page without parent Reports layout
-  if (selectedReport?.id === 'warranty-overview') {
+  if (activeReport?.id === 'warranty-overview') {
     return (
       <div className="page">
-        <selectedReport.Component
+        <activeReport.Component
           branch={effectiveBranchFilter}
           dateFilter={dateFilter}
           fuelType={fuelType}
@@ -414,9 +417,30 @@ export default function ReportsPage() {
         )}
 
         <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
+            {REPORT_CATEGORIES.map((category) => {
+              const isActive = resolvedCategoryId === category.id
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => navigate(`/reports/${category.id}`)}
+                  className={[
+                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-slate-900 text-white'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                  ].join(' ')}
+                >
+                  {category.label}
+                </button>
+              )
+            })}
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {reportsInCategory.map((report) => {
-              const isActive = selectedReport?.id === report.id
+              const isActive = activeReport?.id === report.id
               return (
                 <button
                   key={report.id}
@@ -477,8 +501,8 @@ export default function ReportsPage() {
           </div>
         ) : (
           <>
-            {selectedReport ? (
-              <selectedReport.Component
+            {activeReport ? (
+              <activeReport.Component
                 branch={effectiveBranchFilter}
                 dateFilter={dateFilter}
                 fuelType={fuelType}

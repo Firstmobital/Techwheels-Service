@@ -172,6 +172,11 @@ function TopNav({
   const dealerName = effectiveDealerName || 'No dealer assigned'
   const dealerCode = effectiveDealerCode || 'NO-DEALER'
 
+  const resolveNavTarget = (to: string) => {
+    if (to === '/reports') return '/reports/labour-revenue/service-type-labour-revenue'
+    return to
+  }
+
   const navToReportsCategory = (categoryId: string) => onNavigate(`/reports/${categoryId}`)
 
   function renderNavItem(item: NavItem) {
@@ -185,7 +190,7 @@ function TopNav({
           className={[`navitem`, active ? 'is-active' : '', open === item.to ? 'open' : ''].join(' ').trim()}
           onClick={() => {
             if (!hasMenu) {
-              onNavigate(item.to)
+              onNavigate(resolveNavTarget(item.to))
               setOpen(null)
               return
             }
@@ -299,7 +304,7 @@ function TopNav({
                       type="button"
                       className={[`menu__item`, isNavItemActive(pathname, item.to) ? 'is-active' : ''].join(' ').trim()}
                       onClick={() => {
-                        onNavigate(item.to)
+                        onNavigate(resolveNavTarget(item.to))
                         setOpen(null)
                       }}
                     >
@@ -376,7 +381,7 @@ function TopNav({
               type="button"
               className={[`navdrawer__item`, isNavItemActive(pathname, item.to) ? 'is-active' : ''].join(' ').trim()}
               onClick={() => {
-                onNavigate(item.to)
+                onNavigate(resolveNavTarget(item.to))
                 setMobileDrawerOpen(false)
                 setOpen(null)
               }}
