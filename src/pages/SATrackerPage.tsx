@@ -26,6 +26,7 @@ type SASummaryCard = {
   totalLabour: number
   totalSpares: number
   totalInvoice: number
+  totalIncome: number
 }
 
 type DayWiseCard = {
@@ -35,6 +36,7 @@ type DayWiseCard = {
   totalLabour: number
   totalSpares: number
   totalInvoice: number
+  totalIncome: number
 }
 
 type JCDetailRow = ClosedJCRow & {
@@ -46,6 +48,8 @@ type JCDetailRow = ClosedJCRow & {
 
 const QUERY_PAGE_SIZE = 1000
 const UNKNOWN_BRANCH = 'Unknown location'
+const DEFAULT_SA_SHARE_PERCENT = 3
+const DEFAULT_EV_SHARE_PERCENT = 4
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -92,6 +96,20 @@ function dateLabel(key: string): string {
   return new Date(key).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' })
 }
 
+
+function calculateSAIncome(totalInvoice: number, saSharePercent: number): number {
+  if (!Number.isFinite(totalInvoice) || totalInvoice <= 0) return 0
+  return totalInvoice * (saSharePercent / 100)
+}
+
+function normalizeShareInput(value: string, fallback: number): number {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return fallback
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(100, Math.max(0, parsed))
+}
+
 function getBranchLabel(v: string | null | undefined): string {
   return String(v ?? '').trim() || UNKNOWN_BRANCH
 }
@@ -107,6 +125,13 @@ export default function SATrackerPage() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
+
+  // Share % settings
+  const [saSharePercent, setSaSharePercent] = useState(DEFAULT_SA_SHARE_PERCENT)
+  const [evSharePercent, setEvSharePercent] = useState(DEFAULT_EV_SHARE_PERCENT)
+  const [draftSaShare, setDraftSaShare] = useState(String(DEFAULT_SA_SHARE_PERCENT))
+  const [draftEvShare, setDraftEvShare] = useState(String(DEFAULT_EV_SHARE_PERCENT))
+  const [canEditShare, setCanEditShare] = useState(false)
 
   // Drill-down state
   const [selectedSA, setSelectedSA] = useState('')
@@ -138,6 +163,16 @@ export default function SATrackerPage() {
       }
 
       setRows(allRows)
+
+      // Check if user can edit share %
+      const authRes = await supabase.auth.getUser()
+      const userId = authRes.data.user?.id
+      if (userId) {
+        const profileRes = await supabase.from('users').select('role, is_active').eq('id', userId).maybeSingle()
+        const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+        const isActive = (profileRes.data as { is_active?: boolean | null } | null)?.is_active
+        setCanEditShare((role === 'admin' || role === 'super_admin' || role === 'super admin') && isActive !== false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load SA data')
     } finally {
@@ -216,9 +251,12 @@ export default function SATrackerPage() {
     })
 
     return Array.from(map.values())
-      .map(({ days: _d, ...card }) => card)
+      .map(({ days: _d, ...card }) => ({
+        ...card,
+        totalIncome: calculateSAIncome(card.totalInvoice, saSharePercent),
+      }))
       .sort((a, b) => b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
-  }, [filteredRows])
+  }, [filteredRows, saSharePercent])
 
   // ── Day cards for selected SA ─────────────────────────────────────────────
 
@@ -233,12 +271,13 @@ export default function SATrackerPage() {
       const dateKey = r.dateKey ?? 'unknown'
       const existing = map.get(dateKey) ?? {
         dateKey, label: dateLabel(dateKey),
-        jcCount: 0, totalLabour: 0, totalSpares: 0, totalInvoice: 0,
+        jcCount: 0, totalLabour: 0, totalSpares: 0, totalInvoice: 0, totalIncome: 0,
       }
       existing.jcCount += 1
       existing.totalLabour += r.labourAmt
       existing.totalSpares += r.sparesAmt
       existing.totalInvoice += r.invoiceAmt
+      existing.totalIncome = calculateSAIncome(existing.totalInvoice, saSharePercent)
       map.set(dateKey, existing)
     })
     return Array.from(map.values()).sort((a, b) => {
@@ -246,7 +285,7 @@ export default function SATrackerPage() {
       if (b.dateKey === 'unknown') return -1
       return b.dateKey.localeCompare(a.dateKey)
     })
-  }, [selectedSARows])
+  }, [selectedSARows, saSharePercent])
 
   // ── JC detail rows for selected day ──────────────────────────────────────
 
@@ -264,6 +303,17 @@ export default function SATrackerPage() {
     jcCount: filteredRows.length,
     saCount: saCards.length,
   }), [filteredRows, saCards])
+
+
+  const parsedDraftSaShare = useMemo(
+    () => normalizeShareInput(draftSaShare, saSharePercent),
+    [draftSaShare, saSharePercent],
+  )
+  const parsedDraftEvShare = useMemo(
+    () => normalizeShareInput(draftEvShare, evSharePercent),
+    [draftEvShare, evSharePercent],
+  )
+  const hasPendingShareChanges = parsedDraftSaShare !== saSharePercent || parsedDraftEvShare !== evSharePercent
 
   // Reset drill-down when SA list changes
   useEffect(() => {
@@ -378,6 +428,15 @@ export default function SATrackerPage() {
             <div className="l">Total Invoice</div>
           </div>
         </div>
+        <div className="schip">
+          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}>
+            <Icon name="checksm" size={16} />
+          </span>
+          <div>
+            <div className="n">{formatCurrency(totals.invoice * saSharePercent / 100)}</div>
+            <div className="l">SA Income ({saSharePercent}%)</div>
+          </div>
+        </div>
 
         {/* Date range filter */}
         <div className="schip schip--date-filter">
@@ -417,8 +476,62 @@ export default function SATrackerPage() {
           <div className="card__head">
             <div>
               <h3>Revenue by Service Advisor</h3>
-              <div className="sub">Sorted by total invoice value. Click an SA to drill down by day.</div>
+              <div className="sub">Sorted by total invoice value. Income = Total Invoice × {saSharePercent}%. Click an SA to drill down by day.</div>
             </div>
+            {canEditShare && (
+              <div className="tech-share-corner">
+                <h3>Earnings percentage settings</h3>
+                <div className="tech-share-controls">
+                  <label className="field field--no-gap tech-share-field">
+                    <span className="label">SA %</span>
+                    <input
+                      className="inp"
+                      inputMode="decimal"
+                      value={draftSaShare}
+                      onChange={(e) => setDraftSaShare(e.target.value)}
+                      onBlur={() => setDraftSaShare(String(parsedDraftSaShare))}
+                      placeholder={String(DEFAULT_SA_SHARE_PERCENT)}
+                    />
+                  </label>
+                  <label className="field field--no-gap tech-share-field">
+                    <span className="label">EV %</span>
+                    <input
+                      className="inp"
+                      inputMode="decimal"
+                      value={draftEvShare}
+                      onChange={(e) => setDraftEvShare(e.target.value)}
+                      onBlur={() => setDraftEvShare(String(parsedDraftEvShare))}
+                      placeholder={String(DEFAULT_EV_SHARE_PERCENT)}
+                    />
+                  </label>
+                  <div className="tech-share-actions">
+                    <button
+                      type="button"
+                      className="btn btn--primary btn--sm"
+                      onClick={() => {
+                        setSaSharePercent(parsedDraftSaShare)
+                        setEvSharePercent(parsedDraftEvShare)
+                      }}
+                      disabled={!hasPendingShareChanges}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => {
+                        setSaSharePercent(DEFAULT_SA_SHARE_PERCENT)
+                        setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
+                        setDraftSaShare(String(DEFAULT_SA_SHARE_PERCENT))
+                        setDraftEvShare(String(DEFAULT_EV_SHARE_PERCENT))
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="card__body dense">
             <div className="tech-drill-grid">
@@ -437,10 +550,13 @@ export default function SATrackerPage() {
                     <div className="tech-drill-btn__code">{card.jcCount} JCs • {card.dayCount} days</div>
                   </div>
                   <div className="tech-drill-btn__value">{formatCurrency(card.totalInvoice)}</div>
-                  <div className="tech-drill-btn__meta">
-                    <span style={{ color: '#16a34a' }}>L: {formatCurrency(card.totalLabour)}</span>
-                    {' · '}
-                    <span style={{ color: '#9333ea' }}>S: {formatCurrency(card.totalSpares)}</span>
+                  <div className="tech-drill-btn__meta" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 700 }}>Income: {formatCurrency(card.totalIncome)}</span>
+                    <span>
+                      <span style={{ color: '#16a34a' }}>L: {formatCurrency(card.totalLabour)}</span>
+                      {' · '}
+                      <span style={{ color: '#9333ea' }}>S: {formatCurrency(card.totalSpares)}</span>
+                    </span>
                   </div>
                 </button>
               ))}
@@ -479,10 +595,13 @@ export default function SATrackerPage() {
                     <div className="tech-drill-btn__code">{day.jcCount} JCs</div>
                   </div>
                   <div className="tech-drill-btn__value">{formatCurrency(day.totalInvoice)}</div>
-                  <div className="tech-drill-btn__meta">
-                    <span style={{ color: '#16a34a' }}>L: {formatCurrency(day.totalLabour)}</span>
-                    {' · '}
-                    <span style={{ color: '#9333ea' }}>S: {formatCurrency(day.totalSpares)}</span>
+                  <div className="tech-drill-btn__meta" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 700 }}>Income: {formatCurrency(day.totalIncome)}</span>
+                    <span>
+                      <span style={{ color: '#16a34a' }}>L: {formatCurrency(day.totalLabour)}</span>
+                      {' · '}
+                      <span style={{ color: '#9333ea' }}>S: {formatCurrency(day.totalSpares)}</span>
+                    </span>
                   </div>
                 </button>
               ))}
