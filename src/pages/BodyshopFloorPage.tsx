@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 
@@ -78,6 +79,7 @@ function jcKey(car: AccidentCar): string {
 
 export default function BodyshopFloorPage() {
   const [loading, setLoading]   = useState(true)
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [dataError, setDataError] = useState(false)
   const [toast, setToast]       = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
@@ -115,6 +117,8 @@ export default function BodyshopFloorPage() {
         .from('service_reception_entries')
         .select('id, jc_number, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
         .eq('service_type', 'Accident')
+        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
+        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
         .order('created_at', { ascending: false })
       if (recErr) throw recErr
       const carList = (recData ?? []) as AccidentCar[]
@@ -176,7 +180,7 @@ export default function BodyshopFloorPage() {
     }
   }
 
-  useEffect(() => { void loadAll() }, [])
+  useEffect(() => { void loadAll() }, [dateRange])
 
   // ── Employees by role ────────────────────────────────────────────────────
 
@@ -383,6 +387,8 @@ export default function BodyshopFloorPage() {
           <h1>Assign Bodyshop Team</h1>
           <p>Accident vehicles received at reception — assign Dentor, Painter, and Technician per car.</p>
         </div>
+
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
         {/* Branch filter */}
         <div className="toolbar toolbar--tight">
