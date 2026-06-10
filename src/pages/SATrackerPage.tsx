@@ -536,10 +536,10 @@ export default function SATrackerPage() {
                     <div className="tech-drill-btn__title">{card.name}</div>
                     <div className="tech-drill-btn__code">{card.jcCount} JCs • {card.dayCount} days</div>
                   </div>
-                  <div className="tech-drill-btn__value">{formatCurrency(card.totalInvoice)}</div>
+                  <div className="tech-drill-btn__value" style={{ color: '#2563eb' }}>{formatCurrency(card.totalIncome)}</div>
                   <div className="tech-drill-btn__meta" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: '#2563eb', fontWeight: 700 }}>Income: {formatCurrency(card.totalIncome)}</span>
-                    <span>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Invoice: {formatCurrency(card.totalInvoice)}</span>
+                    <span style={{ fontSize: '11px' }}>
                       <span style={{ color: '#16a34a' }}>L: {formatCurrency(card.totalLabour)}</span>
                       {' · '}
                       <span style={{ color: '#9333ea' }}>S: {formatCurrency(card.totalSpares)}</span>
@@ -581,10 +581,10 @@ export default function SATrackerPage() {
                     <div className="tech-drill-btn__title">{day.label}</div>
                     <div className="tech-drill-btn__code">{day.jcCount} JCs</div>
                   </div>
-                  <div className="tech-drill-btn__value">{formatCurrency(day.totalInvoice)}</div>
+                  <div className="tech-drill-btn__value" style={{ color: '#2563eb' }}>{formatCurrency(day.totalIncome)}</div>
                   <div className="tech-drill-btn__meta" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: '#2563eb', fontWeight: 700 }}>Income: {formatCurrency(day.totalIncome)}</span>
-                    <span>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Invoice: {formatCurrency(day.totalInvoice)}</span>
+                    <span style={{ fontSize: '11px' }}>
                       <span style={{ color: '#16a34a' }}>L: {formatCurrency(day.totalLabour)}</span>
                       {' · '}
                       <span style={{ color: '#9333ea' }}>S: {formatCurrency(day.totalSpares)}</span>
