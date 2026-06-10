@@ -104,6 +104,7 @@ export default function PartsFastMovingReport({ branch }: ReportViewProps) {
   })
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'daysOfSupply', direction: 'asc' })
   const [currentPage, setCurrentPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
   const pageSize = 25
 
   const riskLevels = ['critical', 'high', 'medium', 'low'] as const
@@ -142,10 +143,20 @@ export default function PartsFastMovingReport({ branch }: ReportViewProps) {
     return rows.filter((row) => getConsumptionBucket(row.avgConsumption4Week) === filters.consumptionBucket)
   }, [rows, filters.consumptionBucket])
 
-  const filteredRows = useMemo(() => {
+  const filteredByRiskRows = useMemo(() => {
     if (filters.riskLevel === 'all') return filteredByBucketRows
     return filteredByBucketRows.filter((row) => row.stockoutRisk === filters.riskLevel)
   }, [filteredByBucketRows, filters.riskLevel])
+
+  const filteredRows = useMemo(() => {
+    if (!searchQuery.trim()) return filteredByRiskRows
+
+    const query = searchQuery.toLowerCase().trim()
+    return filteredByRiskRows.filter((row) =>
+      row.partNumber.toLowerCase().includes(query) ||
+      (row.partDescription && row.partDescription.toLowerCase().includes(query))
+    )
+  }, [filteredByRiskRows, searchQuery])
 
   const sortedRows = useMemo(() => {
     const sorted = [...filteredRows].sort((a, b) => {
@@ -295,6 +306,7 @@ export default function PartsFastMovingReport({ branch }: ReportViewProps) {
     filters.riskLevel,
     sortConfig.key,
     sortConfig.direction,
+    searchQuery,
   ])
 
   useEffect(() => {
@@ -321,10 +333,38 @@ export default function PartsFastMovingReport({ branch }: ReportViewProps) {
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Fast Moving Parts Report</h2>
-        <p className="mt-1 text-sm text-gray-500">High-consumption parts with stockout risk and supply coverage.</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Fast Moving Parts Report</h2>
+            <p className="mt-1 text-sm text-gray-500">Parts with high consumption rates and potential stockout risks.</p>
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ width: '180px' }}
+            />
+            <svg
+              className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          </div>
+        </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">Branch</label>
             <select

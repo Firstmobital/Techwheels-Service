@@ -188,6 +188,7 @@ export interface PartsReportFilters {
   portal?: 'ALL' | 'EV' | 'PV'
   vendor?: string
   productCategory?: string
+  status?: string
   fiscalYear?: number
   monthName?: string
 }
@@ -461,27 +462,76 @@ export async function getFastMovingParts(filters: PartsReportFilters): Promise<F
 // Order Status Report
 export async function getOrderStatusReport(filters: PartsReportFilters): Promise<OrderStatusData[]> {
   try {
+    const normalizeStatus = (value: unknown): string =>
+      String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+
+    const resolveStatus = (row: any): string | null => {
+      const candidates = [row.order_status, row.status, row.spares_order_type]
+      for (const candidate of candidates) {
+        const text = String(candidate ?? '').trim()
+        if (text) return text
+      }
+      return null
+    }
+
     let query = supabase
-      .from('vw_parts_active_orders')
-      .select('*')
+      .from('service_parts_order_data')
+      .select(
+        'part_number, part_description, order_status, status, spares_order_type, ordered_quantity, confirmation_qty, invoice_qty, received_quantity, intransit_qty, dealer_name, order_date, eta_1, portal',
+      )
 
     query = applyBranchFilterToQuery(query, filters.branch)
 
-    const data = applyPortalFilter(await fetchAllRows<any>((from, to) => query.range(from, to)), filters.portal)
+    const data = applyPortalFilter(
+      await fetchAllRows<any>((from, to) => query.order('order_date', { ascending: false }).range(from, to)),
+      filters.portal,
+    )
 
-    return (data || []).map((row: any) => ({
-      partNumber: row.part_number,
-      partDescription: row.part_description,
-      status: row.order_status,
-      orderQty: row.ordered_quantity,
-      confirmedQty: row.confirmation_qty,
-      invoicedQty: row.invoice_qty,
-      receivedQty: row.received_quantity,
-      intransitQty: row.intransit_qty,
-      dealerName: row.dealer_name,
-      orderDate: row.order_date,
-      eta1: row.eta_1,
-    }))
+    const partNumbers = Array.from(new Set((data || []).map((row: any) => row.part_number).filter(Boolean)))
+
+    const partMeta = new Map<string, { vendor: string | null; product_category: string | null }>()
+
+    if ((filters.vendor || filters.productCategory) && partNumbers.length > 0) {
+      const masterRows = await fetchAllRows<{ part_number: string; vendor: string | null; product_category: string | null }>(
+        (from, to) =>
+          supabase
+            .from('part_master')
+            .select('part_number, vendor, product_category')
+            .in('part_number', partNumbers)
+            .range(from, to),
+      )
+
+      masterRows.forEach((row) => {
+        partMeta.set(row.part_number, { vendor: row.vendor, product_category: row.product_category })
+      })
+    }
+
+    return (data || [])
+      .filter((row: any) => {
+        const rowStatus = resolveStatus(row)
+        if (filters.status && normalizeStatus(rowStatus) !== normalizeStatus(filters.status)) return false
+        if (!filters.vendor && !filters.productCategory) return true
+        const meta = partMeta.get(row.part_number)
+        if (filters.vendor && meta?.vendor !== filters.vendor) return false
+        if (filters.productCategory && meta?.product_category !== filters.productCategory) return false
+        return true
+      })
+      .map((row: any) => ({
+        partNumber: row.part_number,
+        partDescription: row.part_description,
+        status: resolveStatus(row),
+        orderQty: row.ordered_quantity,
+        confirmedQty: row.confirmation_qty,
+        invoicedQty: row.invoice_qty,
+        receivedQty: row.received_quantity,
+        intransitQty: row.intransit_qty,
+        dealerName: row.dealer_name,
+        orderDate: row.order_date,
+        eta1: row.eta_1,
+      }))
   } catch (err) {
     console.error('Error fetching order status report:', err)
     return []

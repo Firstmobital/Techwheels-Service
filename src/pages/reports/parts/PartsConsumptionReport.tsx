@@ -122,6 +122,10 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
     key: 'totalConsumption',
     direction: 'desc',
   })
+  const [currentPage, setCurrentPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const pageSize = 25
 
   const totals = useMemo(() => {
     const totalConsumed = rows.reduce((sum, row) => sum + row.totalConsumption, 0)
@@ -153,8 +157,18 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
     })
   }, [rows, filters.consumptionBucket])
 
+  const searchedRows = useMemo(() => {
+    if (!searchQuery.trim()) return filteredByBucket
+
+    const query = searchQuery.toLowerCase().trim()
+    return filteredByBucket.filter((row) =>
+      row.partNumber.toLowerCase().includes(query) ||
+      (row.partDescription && row.partDescription.toLowerCase().includes(query))
+    )
+  }, [filteredByBucket, searchQuery])
+
   const sortedRows = useMemo(() => {
-    const sorted = [...filteredByBucket].sort((a, b) => {
+    const sorted = [...searchedRows].sort((a, b) => {
       const aVal = a[sortConfig.key] ?? 0
       const bVal = b[sortConfig.key] ?? 0
 
@@ -170,7 +184,14 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
     })
 
     return sorted
-  }, [filteredByBucket, sortConfig])
+  }, [searchedRows, sortConfig])
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
+
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return sortedRows.slice(start, start + pageSize)
+  }, [sortedRows, currentPage])
 
   const handleSort = (key: keyof ConsumptionReportRow) => {
     setSortConfig((prev) => ({
@@ -330,6 +351,25 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
     void runReport()
   }, [runReport])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [
+    filters.branch,
+    filters.fuelType,
+    filters.fiscalYear,
+    filters.monthName,
+    filters.consumptionBucket,
+    sortConfig.key,
+    sortConfig.direction,
+    searchQuery,
+  ])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
   const handleExport = () => {
     if (sortedRows.length === 0) return
 
@@ -350,10 +390,38 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Parts Consumption Report</h2>
-        <p className="mt-1 text-sm text-gray-500">Part-wise consumption from latest uploaded Parts Consumption data.</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Parts Consumption Report</h2>
+            <p className="mt-1 text-sm text-gray-500">Part-wise consumption from latest uploaded Parts Consumption data.</p>
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ width: '180px' }}
+            />
+            <svg
+              className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          </div>
+        </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">Branch</label>
             <select
@@ -606,7 +674,7 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {sortedRows.map((row) => (
+                {paginatedRows.map((row) => (
                   <tr key={row.partNumber} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.partNumber}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{row.partDescription || '-'}</td>
@@ -629,6 +697,31 @@ export default function PartsConsumptionReport({ branch }: ReportViewProps) {
               </div>
             )}
           </div>
+
+          {sortedRows.length > 0 && (
+            <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 text-sm">
+              <p className="text-gray-600">
+                Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedRows.length)} of {sortedRows.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded border border-gray-300 px-3 py-1 text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="text-gray-700">Page {currentPage} / {totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded border border-gray-300 px-3 py-1 text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
