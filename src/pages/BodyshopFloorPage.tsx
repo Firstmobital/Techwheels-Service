@@ -278,6 +278,36 @@ export default function BodyshopFloorPage() {
       }
       if (result.error) throw result.error
 
+      // ── Auto-create repair card on first assignment ──────────────────────
+      if (!existing?.id) {
+        const hasAny = Object.values(assignments[k] ?? {}).some(Boolean)
+        if (!hasAny) {
+          // First role assigned for this car — create the repair card if absent
+          const { data: existingCard } = await supabase
+            .from('bodyshop_repair_cards')
+            .select('id')
+            .eq('job_card_no', k)
+            .maybeSingle()
+          if (!existingCard) {
+            await supabase.from('bodyshop_repair_cards').insert({
+              job_card_no:    k,
+              reg_number:     car.reg_number,
+              customer_name:  car.owner_name,
+              customer_phone: car.owner_phone,
+              customer_type:  'individual',
+              branch:         car.branch,
+              sa_name:        car.sa_name ?? car.sa_display_name,
+              current_stage:       11,
+              current_stage_name:  'Floor Assignment',
+              overall_status:      'active',
+              received_at:         car.created_at ?? new Date().toISOString(),
+              created_by:          user?.email ?? null,
+            })
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       const newA = result.data as BSAssignment
       setAssignments((prev) => ({
         ...prev,
