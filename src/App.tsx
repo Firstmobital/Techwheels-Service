@@ -15,6 +15,7 @@ import AutoDocPage from './pages/AutoDocPage'
 import JobCardPage from './pages/JobCardPage'
 import ReceptionPage from './pages/ReceptionPage'
 import ServiceAdvisorPage from './pages/ServiceAdvisorPage'
+import SATrackerPage from './pages/SATrackerPage'
 import FloorInchargePage from './pages/FloorInchargePage'
 import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
@@ -55,10 +56,11 @@ type ModuleName =
   | 'reception'
   | 'service_advisor'
   | 'floor_incharge'
+  | 'sa_tracker'
   | 'technician'
   | 'complaints'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/technician' | '/complaints'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/technician' | '/complaints'
 
 interface PermissionRow {
   module_name: string
@@ -73,6 +75,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/reception': ['reception'],
   '/service-advisor': ['service_advisor'],
   '/floor-incharge': ['floor_incharge'],
+  '/sa-tracker': ['sa_tracker'],
   '/technician': ['technician'],
   '/complaints': ['complaints'],
 }
@@ -399,6 +402,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/reception')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/reception'])
   if (pathname.startsWith('/service-advisor')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-advisor'])
   if (pathname.startsWith('/floor-incharge')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/floor-incharge'])
+  if (pathname.startsWith('/sa-tracker')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/sa-tracker'])
   if (pathname.startsWith('/technician')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/technician'])
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
   if (pathname.startsWith('/c/')) return true
