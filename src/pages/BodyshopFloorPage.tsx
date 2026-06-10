@@ -6,7 +6,7 @@ import Icon from '../components/Icon'
 
 interface AccidentCar {
   id: number
-  jc_number: string
+  jc_number: string | null
   reg_number: string | null
   model: string | null
   owner_name: string | null
@@ -39,66 +39,76 @@ interface BSAssignment {
   out_ts: string | null
 }
 
-type ViewFilter = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed'
+type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed'
 
-const ROLE_META: Record<BSRole, { label: string; icon: string; color: string; bg: string }> = {
-  DENTOR:     { label: 'Dentor',     icon: '🔨', color: '#b45309', bg: '#fef3c7' },
-  PAINTER:    { label: 'Painter',    icon: '🎨', color: '#7c3aed', bg: '#ede9fe' },
-  TECHNICIAN: { label: 'Technician', icon: '🔧', color: '#0369a1', bg: '#e0f2fe' },
+const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
+  DENTOR:     { label: 'Dentor',     icon: '🔨' },
+  PAINTER:    { label: 'Painter',    icon: '🎨' },
+  TECHNICIAN: { label: 'Technician', icon: '🔧' },
 }
 
 const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN']
 
 const STATUS_OPTIONS = [
-  { value: 'work_inprocess', label: 'Work In Process' },
-  { value: 'hold',           label: 'Hold'            },
-  { value: 'completed',      label: 'Completed'       },
+  { value: 'work_inprocess', label: 'Work Inprocess' },
+  { value: 'hold',           label: 'Hold'           },
+  { value: 'completed',      label: 'Completed'      },
 ]
 
 const BS_DEPTS = new Set(['BODY SHOP', 'BODYSHOP'])
 
-function fmt(v: string | null | undefined) { return v || '—' }
 function fmtDate(v: string | null | undefined) {
   if (!v) return '—'
   return new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
 function normRole(r: string | null): BSRole | null {
   const v = String(r ?? '').trim().toUpperCase()
-  if (v === 'DENTOR') return 'DENTOR'
+  if (v === 'DENTOR')     return 'DENTOR'
   if (v === 'PAINTER' || v === 'DET') return 'PAINTER'
   if (v === 'TECHNICIAN') return 'TECHNICIAN'
   return null
 }
 
+function jcKey(car: AccidentCar): string {
+  return (car.jc_number ?? '').trim().toUpperCase()
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function BodyshopFloorPage() {
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState<string | null>(null)
-  const [toast, setToast]         = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [dataError, setDataError] = useState(false)
+  const [toast, setToast]       = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   // Data
   const [cars, setCars]               = useState<AccidentCar[]>([])
   const [employees, setEmployees]     = useState<Employee[]>([])
-  const [assignments, setAssignments] = useState<Record<string, BSAssignment[]>>({})
+  // assignments keyed by JC_NUMBER (uppercase)  →  per-role map
+  const [assignments, setAssignments] = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
 
-  // UI filters
-  const [viewFilter, setViewFilter]   = useState<ViewFilter>('all')
-  const [branchFilter, setBranchFilter] = useState('all')
-  const [search, setSearch]           = useState('')
+  // Filters
+  const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
+  const [branchFilter, setBranchFilter]     = useState('all')
+  const [roleFilter, setRoleFilter]         = useState<BSRole | 'all'>('all')
+  const [search, setSearch]                 = useState('')
 
-  // Assign modal
-  const [modalCar, setModalCar]       = useState<AccidentCar | null>(null)
-  const [modalRole, setModalRole]     = useState<BSRole>('DENTOR')
+  // Inline draft: stageDrafts[jcKey][role] = { status, remark }
+  const [stageDrafts, setStageDrafts] = useState<
+    Record<string, Record<BSRole, { work_status: string; remark: string }>>
+  >({})
+  const [saving, setSaving]   = useState<string | null>(null) // jcKey being saved
+
+  // Modal state
+  const [modalCar, setModalCar]         = useState<AccidentCar | null>(null)
+  const [modalRole, setModalRole]       = useState<BSRole>('DENTOR')
   const [modalEmpCode, setModalEmpCode] = useState('')
-  const [modalRemark, setModalRemark] = useState('')
-  const [modalStatus, setModalStatus] = useState('work_inprocess')
-  const [saving, setSaving]           = useState(false)
+  const [modalSaving, setModalSaving]   = useState(false)
 
   // ── Load ─────────────────────────────────────────────────────────────────
 
   async function loadAll() {
-    setLoading(true); setError(null)
+    setLoading(true); setDataError(false)
     try {
       // 1. Accident reception entries
       const { data: recData, error: recErr } = await supabase
@@ -106,20 +116,20 @@ export default function BodyshopFloorPage() {
         .select('id, jc_number, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
         .eq('service_type', 'Accident')
         .order('created_at', { ascending: false })
-
       if (recErr) throw recErr
-      setCars((recData ?? []) as AccidentCar[])
+      const carList = (recData ?? []) as AccidentCar[]
+      setCars(carList)
 
       // 2. Bodyshop employees
       const { data: empData } = await supabase
         .from('employee_master')
         .select('employee_code, employee_name, department, role')
         .limit(500)
-
-      const bsEmps = ((empData ?? []) as Employee[]).filter((e) =>
-        BS_DEPTS.has(String(e.department ?? '').trim().toUpperCase())
+      setEmployees(
+        ((empData ?? []) as Employee[]).filter((e) =>
+          BS_DEPTS.has(String(e.department ?? '').trim().toUpperCase())
+        )
       )
-      setEmployees(bsEmps)
 
       // 3. Bodyshop assignments
       const { data: assData, error: assErr } = await supabase
@@ -129,20 +139,38 @@ export default function BodyshopFloorPage() {
         .order('assigned_at', { ascending: false })
 
       if (assErr) {
-        // Table may not exist yet — graceful fallback
-        console.warn('bodyshop_assignments not found:', assErr.message)
+        console.warn('bodyshop_assignments:', assErr.message)
+        setDataError(true)
         setAssignments({})
       } else {
-        const map: Record<string, BSAssignment[]> = {}
+        const map: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
         for (const a of (assData ?? []) as BSAssignment[]) {
-          const jc = a.job_card_number.toUpperCase()
-          if (!map[jc]) map[jc] = []
-          map[jc].push(a)
+          const k = a.job_card_number.toUpperCase()
+          if (!map[k]) map[k] = { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }
+          // Keep latest per role
+          const existing = map[k][a.role]
+          if (!existing || new Date(a.assigned_at) > new Date(existing.assigned_at)) {
+            map[k][a.role] = a
+          }
         }
         setAssignments(map)
+
+        // Populate stage drafts from existing assignments
+        const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
+        for (const [k, roleMap] of Object.entries(map)) {
+          drafts[k] = {} as Record<BSRole, { work_status: string; remark: string }>
+          for (const role of ALL_ROLES) {
+            const a = roleMap[role as BSRole]
+            drafts[k][role as BSRole] = {
+              work_status: a?.work_status ?? 'work_inprocess',
+              remark:      a?.remark ?? '',
+            }
+          }
+        }
+        setStageDrafts(drafts)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load bodyshop floor data')
+      showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
     } finally {
       setLoading(false)
     }
@@ -154,23 +182,46 @@ export default function BodyshopFloorPage() {
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
     const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [] }
-    employees.forEach((e) => {
-      const r = normRole(e.role)
-      if (r) m[r].push(e)
-    })
+    employees.forEach((e) => { const r = normRole(e.role); if (r) m[r].push(e) })
+    ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m
   }, [employees])
 
-  // ── Filtered cars ─────────────────────────────────────────────────────────
+  // ── Branch options ───────────────────────────────────────────────────────
 
   const branches = useMemo(() =>
     Array.from(new Set(cars.map((c) => c.branch ?? 'Unknown'))).sort(),
   [cars])
 
+  // ── Counts ───────────────────────────────────────────────────────────────
+
+  function hasAnyAssignment(c: AccidentCar) { return Boolean(assignments[jcKey(c)]) }
+  function hasStatus(c: AccidentCar, status: string) {
+    const m = assignments[jcKey(c)]
+    if (!m) return false
+    return ALL_ROLES.some((r) => m[r]?.work_status === status)
+  }
+
+  const counts = useMemo(() => ({
+    all:            cars.length,
+    unassigned:     cars.filter((c) => !hasAnyAssignment(c)).length,
+    assigned:       cars.filter((c) =>  hasAnyAssignment(c)).length,
+    work_inprocess: cars.filter((c) =>  hasStatus(c, 'work_inprocess')).length,
+    hold:           cars.filter((c) =>  hasStatus(c, 'hold')).length,
+    completed:      cars.filter((c) =>  hasStatus(c, 'completed')).length,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [cars, assignments])
+
+  // ── Filtered rows ────────────────────────────────────────────────────────
+
   const filtered = useMemo(() => {
     let list = [...cars]
 
-    if (branchFilter !== 'all') list = list.filter((c) => (c.branch ?? 'Unknown') === branchFilter)
+    if (branchFilter !== 'all')
+      list = list.filter((c) => (c.branch ?? 'Unknown') === branchFilter)
+
+    if (roleFilter !== 'all')
+      list = list.filter((c) => assignments[jcKey(c)]?.[roleFilter])
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -178,167 +229,135 @@ export default function BodyshopFloorPage() {
         c.reg_number?.toLowerCase().includes(q) ||
         c.jc_number?.toLowerCase().includes(q) ||
         c.owner_name?.toLowerCase().includes(q) ||
-        c.model?.toLowerCase().includes(q)
+        c.model?.toLowerCase().includes(q) ||
+        (c.sa_display_name ?? c.sa_name)?.toLowerCase().includes(q)
       )
     }
 
-    const jcKey = (c: AccidentCar) => c.jc_number?.toUpperCase() ?? ''
-    const hasAny = (c: AccidentCar) => (assignments[jcKey(c)] ?? []).length > 0
-
-    if (viewFilter === 'unassigned') return list.filter((c) => !hasAny(c))
-    if (viewFilter === 'assigned')   return list.filter((c) => hasAny(c))
-
-    if (viewFilter === 'work_inprocess' || viewFilter === 'hold' || viewFilter === 'completed') {
-      return list.filter((c) => {
-        const ass = assignments[jcKey(c)] ?? []
-        return ass.some((a) => a.work_status === viewFilter)
-      })
-    }
-
+    if (assignmentView === 'unassigned')     return list.filter((c) => !hasAnyAssignment(c))
+    if (assignmentView === 'assigned')       return list.filter((c) =>  hasAnyAssignment(c))
+    if (assignmentView === 'work_inprocess') return list.filter((c) =>  hasStatus(c, 'work_inprocess'))
+    if (assignmentView === 'hold')           return list.filter((c) =>  hasStatus(c, 'hold'))
+    if (assignmentView === 'completed')      return list.filter((c) =>  hasStatus(c, 'completed'))
     return list
-  }, [cars, branchFilter, search, viewFilter, assignments])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cars, branchFilter, roleFilter, search, assignmentView, assignments])
 
-  // ── Counts for tabs ───────────────────────────────────────────────────────
+  // ── Assign (inline select) ───────────────────────────────────────────────
 
-  const counts = useMemo(() => {
-    const jcKey = (c: AccidentCar) => c.jc_number?.toUpperCase() ?? ''
-    return {
-      all:           cars.length,
-      unassigned:    cars.filter((c) => !(assignments[jcKey(c)] ?? []).length).length,
-      assigned:      cars.filter((c) =>  (assignments[jcKey(c)] ?? []).length > 0).length,
-      work_inprocess: cars.filter((c) => (assignments[jcKey(c)] ?? []).some((a) => a.work_status === 'work_inprocess')).length,
-      hold:           cars.filter((c) => (assignments[jcKey(c)] ?? []).some((a) => a.work_status === 'hold')).length,
-      completed:      cars.filter((c) => (assignments[jcKey(c)] ?? []).some((a) => a.work_status === 'completed')).length,
-    }
-  }, [cars, assignments])
-
-  // ── Open modal ────────────────────────────────────────────────────────────
-
-  function openModal(car: AccidentCar) {
-    setModalCar(car)
-    setModalRole('DENTOR')
-    setModalEmpCode('')
-    setModalRemark('')
-    setModalStatus('work_inprocess')
-  }
-
-  function closeModal() {
-    if (saving) return
-    setModalCar(null)
-  }
-
-  // ── Save assignment ───────────────────────────────────────────────────────
-
-  async function saveAssignment() {
-    if (!modalCar || !modalEmpCode) {
-      showToast('Select an employee before saving', 'error'); return
-    }
-
-    const emp = empByRole[modalRole].find((e) => e.employee_code === modalEmpCode)
-    if (!emp) { showToast('Employee not found', 'error'); return }
-
-    const jcNumber = (modalCar.jc_number ?? '').toUpperCase()
-
-    // Check duplicate
-    const existing = assignments[jcNumber] ?? []
-    const dupe = existing.find(
-      (a) => a.role === modalRole && a.employee_code === modalEmpCode && a.work_status !== 'completed'
-    )
-    if (dupe) { showToast(`${emp.employee_name} already assigned as ${ROLE_META[modalRole].label}`, 'error'); return }
-
-    setSaving(true)
+  async function assignRole(car: AccidentCar, role: BSRole, empCode: string) {
+    if (!empCode) return
+    const emp = empByRole[role].find((e) => e.employee_code === empCode)
+    if (!emp) return
+    const k = jcKey(car)
+    setSaving(`${k}-${role}`)
     try {
+      const existing = assignments[k]?.[role]
       const { data: { user } } = await supabase.auth.getUser()
       const payload = {
-        job_card_number: jcNumber,
-        role: modalRole,
+        job_card_number: k,
+        role,
         employee_code: emp.employee_code,
         employee_name: emp.employee_name,
-        work_status: modalStatus,
-        remark: modalRemark.trim() || null,
+        work_status: stageDrafts[k]?.[role]?.work_status ?? 'work_inprocess',
+        remark: stageDrafts[k]?.[role]?.remark ?? null,
         assigned_at: new Date().toISOString(),
         assigned_by: user?.email ?? null,
         is_active: true,
       }
 
-      const result = await supabase
-        .from('bodyshop_assignments')
-        .insert(payload)
-        .select()
-        .single()
-
+      let result
+      if (existing?.id) {
+        result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existing.id).select().single()
+      } else {
+        result = await supabase.from('bodyshop_assignments').insert(payload).select().single()
+      }
       if (result.error) throw result.error
 
-      const newAss = result.data as BSAssignment
+      const newA = result.data as BSAssignment
       setAssignments((prev) => ({
         ...prev,
-        [jcNumber]: [newAss, ...(prev[jcNumber] ?? [])],
+        [k]: { ...(prev[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }), [role]: newA },
       }))
+      setStageDrafts((prev) => ({
+        ...prev,
+        [k]: { ...(prev[k] ?? {}), [role]: { work_status: newA.work_status, remark: newA.remark ?? '' } },
+      }))
+      showToast(`${ROLE_META[role].label} assigned: ${emp.employee_name}`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
 
-      showToast(`${emp.employee_name} assigned as ${ROLE_META[modalRole].label}`, 'success')
-      // Reset for next assignment without closing modal
-      setModalEmpCode('')
-      setModalRemark('')
-      setModalStatus('work_inprocess')
+  // ── Save stage (status + remark) ─────────────────────────────────────────
+
+  async function saveStage(car: AccidentCar, role: BSRole) {
+    const k = jcKey(car)
+    const assignment = assignments[k]?.[role]
+    if (!assignment?.id) { showToast('Assign person first', 'error'); return }
+    const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
+    setSaving(`${k}-${role}-stage`)
+    try {
+      const update: Record<string, unknown> = {
+        work_status: draft.work_status,
+        remark: draft.remark.trim() || null,
+      }
+      if (draft.work_status === 'completed' && !assignment.out_ts) {
+        update.out_ts = new Date().toISOString()
+      }
+      const { error } = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id)
+      if (error) throw error
+
+      setAssignments((prev) => ({
+        ...prev,
+        [k]: {
+          ...(prev[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }),
+          [role]: { ...assignment, ...update },
+        },
+      }))
+      showToast('Stage saved', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save', 'error')
     } finally {
-      setSaving(false)
+      setSaving(null)
     }
   }
 
-  // ── Update status ─────────────────────────────────────────────────────────
-
-  async function updateStatus(assignmentId: number, jcNumber: string, status: string) {
-    try {
-      const payload: Record<string, unknown> = { work_status: status }
-      if (status === 'completed') payload.out_ts = new Date().toISOString()
-
-      const { error } = await supabase
-        .from('bodyshop_assignments')
-        .update(payload)
-        .eq('id', assignmentId)
-
-      if (error) throw error
-
-      setAssignments((prev) => {
-        const jc = jcNumber.toUpperCase()
-        return {
-          ...prev,
-          [jc]: (prev[jc] ?? []).map((a) =>
-            a.id === assignmentId ? { ...a, work_status: status, out_ts: status === 'completed' ? new Date().toISOString() : a.out_ts } : a
-          ),
-        }
-      })
-      showToast('Status updated', 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update status', 'error')
-    }
+  function patchDraft(k: string, role: BSRole, patch: Partial<{ work_status: string; remark: string }>) {
+    setStageDrafts((prev) => ({
+      ...prev,
+      [k]: {
+        ...(prev[k] ?? {}),
+        [role]: { ...(prev[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }), ...patch },
+      },
+    }))
   }
 
-  // ── Remove assignment ─────────────────────────────────────────────────────
+  function hasDraftChanges(k: string, role: BSRole): boolean {
+    const assignment = assignments[k]?.[role]
+    if (!assignment) return false
+    const draft = stageDrafts[k]?.[role]
+    if (!draft) return false
+    return draft.work_status !== assignment.work_status || draft.remark !== (assignment.remark ?? '')
+  }
 
-  async function removeAssignment(assignmentId: number, jcNumber: string) {
-    try {
-      const { error } = await supabase
-        .from('bodyshop_assignments')
-        .update({ is_active: false })
-        .eq('id', assignmentId)
+  // ── Modal ────────────────────────────────────────────────────────────────
 
-      if (error) throw error
+  function openModal(car: AccidentCar, role: BSRole) {
+    setModalCar(car)
+    setModalRole(role)
+    setModalEmpCode(assignments[jcKey(car)]?.[role]?.employee_code ?? '')
+  }
+  function closeModal() { if (!modalSaving) { setModalCar(null); setModalEmpCode('') } }
 
-      setAssignments((prev) => {
-        const jc = jcNumber.toUpperCase()
-        const next = (prev[jc] ?? []).filter((a) => a.id !== assignmentId)
-        const updated = { ...prev }
-        if (next.length === 0) delete updated[jc]
-        else updated[jc] = next
-        return updated
-      })
-      showToast('Assignment removed', 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to remove', 'error')
-    }
+  async function saveModal() {
+    if (!modalCar || !modalEmpCode) { showToast('Select an employee', 'error'); return }
+    setModalSaving(true)
+    await assignRole(modalCar, modalRole, modalEmpCode)
+    setModalSaving(false)
+    closeModal()
   }
 
   function showToast(msg: string, type: 'success' | 'error') {
@@ -348,66 +367,31 @@ export default function BodyshopFloorPage() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  const modalAssignments = useMemo(() => {
-    if (!modalCar) return []
-    return assignments[(modalCar.jc_number ?? '').toUpperCase()] ?? []
-  }, [modalCar, assignments])
-
-  if (loading) return (
-    <div className="page-loading">
-      <Icon name="spinner" size={24} className="spin" />
-      <p>Loading Bodyshop Floor…</p>
-    </div>
-  )
-
   return (
-    <div className="page">
+    <div>
 
       {/* Toast */}
       {toast && (
-        <div className={`toast ${toast.type}`} style={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, minWidth: 260, padding: '10px 16px', borderRadius: 8, background: toast.type === 'success' ? '#16a34a' : '#dc2626', color: '#fff', fontWeight: 600, fontSize: 14, boxShadow: '0 4px 16px rgba(0,0,0,.15)' }}>
+        <div className={`toast${toast.type === 'error' ? ' error' : ''}`}>
+          <Icon name={toast.type === 'error' ? 'alert' : 'checksm'} size={16} strokeWidth={2.4} />
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div className="page-head card mb-gap">
-        <div className="page-head__text">
-          <p className="page-head__label">
-            <Icon name="floor" size={14} className="icon-align-text" /> Bodyshop
+      {/* Page Head */}
+      <div className="pagehead">
+        <div>
+          <p className="greet">
+            <Icon name="floor" size={13} className="icon-align-text" />
+            Bodyshop Floor
           </p>
-          <h1>Bodyshop Floor</h1>
-          <p>Accident vehicles received at reception. Assign Dentor · Painter · Technician per car.</p>
+          <h1>Assign Bodyshop Team</h1>
+          <p>Accident vehicles received at reception — assign Dentor, Painter, and Technician per car.</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            className="inp"
-            placeholder="Search reg / JC / owner…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ width: 220 }}
-          />
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>
-            <Icon name="refresh" size={14} /> Refresh
-          </button>
-        </div>
-      </div>
 
-      {error && (
-        <div className="toast error" style={{ marginBottom: 12, background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 8, padding: '10px 16px' }}>
-          <Icon name="alert" size={14} /> {error}
-          {error.includes('bodyshop_assignments') && (
-            <div style={{ fontSize: 12, marginTop: 4 }}>
-              Run the SQL script in Supabase to create the <code>bodyshop_assignments</code> table.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Branch filter */}
-      <div className="card mb-gap" style={{ padding: '12px 16px' }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Branch:</span>
+        {/* Branch filter */}
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by branch:</span>
           <button type="button" onClick={() => setBranchFilter('all')}
             className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}>
             All ({cars.length})
@@ -419,245 +403,277 @@ export default function BodyshopFloorPage() {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* View filter tabs */}
-      <div className="card mb-gap" style={{ padding: 0 }}>
-        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', overflowX: 'auto' }}>
-          {([ 
-            { key: 'all',            label: 'All',           count: counts.all            },
-            { key: 'unassigned',     label: 'Unassigned',    count: counts.unassigned     },
-            { key: 'assigned',       label: 'Assigned',      count: counts.assigned       },
-            { key: 'work_inprocess', label: 'Work In Process', count: counts.work_inprocess },
-            { key: 'hold',           label: 'Hold',          count: counts.hold           },
-            { key: 'completed',      label: 'Completed',     count: counts.completed      },
-          ] as { key: ViewFilter; label: string; count: number }[]).map((tab) => (
-            <button key={tab.key} type="button" onClick={() => setViewFilter(tab.key)}
-              style={{
-                flex: '0 0 auto', padding: '12px 18px', background: 'none', border: 'none',
-                borderBottom: viewFilter === tab.key ? '2px solid #2563eb' : '2px solid transparent',
-                fontWeight: viewFilter === tab.key ? 700 : 400,
-                color: viewFilter === tab.key ? '#2563eb' : '#64748b',
-                cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap',
-              }}>
-              {tab.label}
-              <span style={{ marginLeft: 5, fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>({tab.count})</span>
-            </button>
-          ))}
+        {/* Role filter */}
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by role assigned:</span>
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as BSRole | 'all')}
+            className="sel sel--advisor-filter">
+            <option value="all">All roles</option>
+            {ALL_ROLES.map((r) => (
+              <option key={r} value={r}>{ROLE_META[r].icon} {ROLE_META[r].label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Car cards grid */}
-      {filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>🚗</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b' }}>No accident vehicles found</div>
-          <div style={{ fontSize: 13, marginTop: 4 }}>
-            {search ? 'Try clearing your search.' : viewFilter !== 'all' ? 'No cars match this filter.' : 'No accident entries in reception.'}
+      {/* Summary chips */}
+      <div className="summary">
+        {([
+          { key: 'all',            label: 'Job cards',   icon: 'floor',   count: counts.all            },
+          { key: 'unassigned',     label: 'Unassigned',  icon: 'clock',   count: counts.unassigned,  warn: true },
+          { key: 'assigned',       label: 'Assigned',    icon: 'checksm', count: counts.assigned       },
+          { key: 'hold',           label: 'Hold',        icon: 'clock',   count: counts.hold,        warn: true },
+          { key: 'work_inprocess', label: 'In-Process',  icon: 'checksm', count: counts.work_inprocess },
+          { key: 'completed',      label: 'Completed',   icon: 'checksm', count: counts.completed      },
+        ] as { key: AssignmentView; label: string; icon: string; count: number; warn?: boolean }[]).map((chip) => (
+          <button key={chip.key} type="button"
+            className={`schip schip--btn${chip.warn ? ' warn' : ''}${assignmentView === chip.key ? ' schip--active' : ''}`}
+            onClick={() => setAssignmentView(chip.key)}
+            aria-pressed={assignmentView === chip.key}
+            disabled={chip.count === 0}>
+            <span className="ic"><Icon name={chip.icon as 'floor'} size={16} /></span>
+            <div>
+              <div className="n">{chip.count}</div>
+              <div className="l">{chip.label}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Main card */}
+      <div className="card">
+        <div className="card__head">
+          <div>
+            <h3>Accident vehicles <span className="count-badge">({filtered.length})</span></h3>
+          </div>
+          <div className="card__head-flex">
+            <span className="inp-wrap inp-wrap-lg">
+              <span className="icon-l"><Icon name="search" size={16} /></span>
+              <input className="inp inp-lg" placeholder="Search JC / reg / model / SA / owner"
+                value={search} onChange={(e) => setSearch(e.target.value)} />
+            </span>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>
+              <Icon name="refresh" size={14} /> Refresh
+            </button>
           </div>
         </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
-          {filtered.map((car) => {
-            const jcKey = (car.jc_number ?? '').toUpperCase()
-            const carAssignments = assignments[jcKey] ?? []
-            const isAssigned = carAssignments.length > 0
 
-            return (
-              <div key={car.id} className="card" style={{ padding: 0, overflow: 'hidden', border: isAssigned ? '1px solid #bfdbfe' : '1px solid #e2e8f0' }}>
-                {/* Car header */}
-                <div style={{ padding: '12px 14px', background: isAssigned ? '#eff6ff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>
-                        {fmt(car.reg_number)}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{fmt(car.model)}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 11, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 6px', color: '#2563eb', fontWeight: 600, fontFamily: 'monospace' }}>
-                        {car.jc_number ?? '—'}
-                      </div>
-                      {car.branch && (
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>{car.branch}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 12, color: '#64748b', flexWrap: 'wrap' }}>
-                    <span>👤 {fmt(car.owner_name)}</span>
-                    {car.owner_phone && <span>📞 {car.owner_phone}</span>}
-                    <span>🧑‍💼 {fmt(car.sa_display_name ?? car.sa_name)}</span>
-                    <span>📅 {fmtDate(car.created_at)}</span>
-                  </div>
-                </div>
+        <div className="card__body dense">
+          {loading ? (
+            <div className="empty-state">Loading bodyshop floor…</div>
+          ) : dataError ? (
+            <div className="empty-state">
+              Table <code>bodyshop_assignments</code> not found — run the SQL script in Supabase first.
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="empty-state">
+              {search.trim() || branchFilter !== 'all' || assignmentView !== 'all'
+                ? 'No cars match your filters.'
+                : 'No accident entries found in reception.'}
+            </div>
+          ) : (
+            <div className="tbl-wrap scroll">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Received</th>
+                    <th>Reg No</th>
+                    <th>Model</th>
+                    <th>Owner</th>
+                    <th>SA</th>
+                    <th>JC Number</th>
+                    <th>Branch</th>
+                    <th>🔨 Dentor</th>
+                    <th>🎨 Painter</th>
+                    <th>🔧 Technician</th>
+                    <th>IN TS</th>
+                    <th>OUT TS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((car) => {
+                    const k = jcKey(car)
+                    const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }
 
-                {/* Assignments list */}
-                <div style={{ padding: '10px 14px' }}>
-                  {ALL_ROLES.map((role) => {
-                    const roleAssignments = carAssignments.filter((a) => a.role === role)
-                    const meta = ROLE_META[role]
                     return (
-                      <div key={role} style={{ marginBottom: 6 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
-                          {meta.icon} {meta.label}
-                        </div>
-                        {roleAssignments.length === 0 ? (
-                          <div style={{ fontSize: 12, color: '#cbd5e1', fontStyle: 'italic' }}>Not assigned</div>
-                        ) : (
-                          roleAssignments.map((a) => (
-                            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, padding: '4px 8px', background: meta.bg, borderRadius: 6, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: meta.color, flex: 1 }}>{a.employee_name}</span>
-                              <select
-                                value={a.work_status}
-                                onChange={(e) => void updateStatus(a.id, jcKey, e.target.value)}
-                                style={{ fontSize: 11, padding: '2px 4px', borderRadius: 4, border: '1px solid #e2e8f0', background: '#fff', color: '#374151', cursor: 'pointer' }}
-                              >
-                                {STATUS_OPTIONS.map((s) => (
-                                  <option key={s.value} value={s.value}>{s.label}</option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => void removeAssignment(a.id, jcKey)}
-                                style={{ fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                                title="Remove"
-                              >✕</button>
-                            </div>
-                          ))
-                        )}
+                      <tr key={car.id}>
+                        <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--muted)' }}>{fmtDate(car.created_at)}</td>
+                        <td style={{ fontWeight: 600 }}>{car.reg_number ?? '—'}</td>
+                        <td>{car.model ?? '—'}</td>
+                        <td>
+                          <div style={{ fontSize: 13 }}>{car.owner_name ?? '—'}</div>
+                          {car.owner_phone && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{car.owner_phone}</div>}
+                        </td>
+                        <td style={{ fontSize: 12 }}>{car.sa_display_name ?? car.sa_name ?? '—'}</td>
+                        <td>
+                          <code style={{ fontSize: 11, background: 'var(--blue-50,#eff6ff)', color: 'var(--blue-600,#2563eb)', borderRadius: 4, padding: '2px 5px' }}>
+                            {car.jc_number ?? '—'}
+                          </code>
+                        </td>
+                        <td style={{ fontSize: 12 }}>{car.branch ?? '—'}</td>
+
+                        {/* Role columns */}
+                        {ALL_ROLES.map((role) => {
+                          const ass = carMap[role]
+                          const draft = stageDrafts[k]?.[role] ?? { work_status: ass?.work_status ?? 'work_inprocess', remark: '' }
+                          const isSavingThis = saving === `${k}-${role}` || saving === `${k}-${role}-stage`
+                          const changed = hasDraftChanges(k, role)
+
+                          return (
+                            <td key={role} style={{ minWidth: 220, verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 }}>
+                              {/* Assign select */}
+                              <div className="fi-assignment-cell">
+                                <div className="fi-assignment-row">
+                                  <select
+                                    className="sel sel-md"
+                                    value={ass?.employee_code ?? ''}
+                                    disabled={isSavingThis}
+                                    onChange={(e) => void assignRole(car, role, e.target.value)}
+                                  >
+                                    <option value="">— Select {ROLE_META[role].label} —</option>
+                                    {empByRole[role].map((emp) => (
+                                      <option key={emp.employee_code} value={emp.employee_code}>
+                                        {emp.employee_name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Status + remark + save (only when assigned) */}
+                                {ass && (
+                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <select
+                                      className="sel sel-sm"
+                                      value={draft.work_status}
+                                      onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
+                                    >
+                                      {STATUS_OPTIONS.map((s) => (
+                                        <option key={s.value} value={s.value}>{s.label}</option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      className="inp inp-md"
+                                      placeholder="Add remark"
+                                      value={draft.remark}
+                                      onChange={(e) => patchDraft(k, role, { remark: e.target.value })}
+                                    />
+                                    <button
+                                      className="btn btn--primary btn--sm"
+                                      disabled={!changed || isSavingThis}
+                                      style={{ opacity: changed && !isSavingThis ? 1 : 0.5 }}
+                                      onClick={() => void saveStage(car, role)}
+                                    >
+                                      {isSavingThis ? 'Saving…' : 'Save stage'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          )
+                        })}
+
+                        {/* IN / OUT timestamps — use earliest assigned_at / latest out_ts across roles */}
+                        <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            const times = ALL_ROLES.map((r) => carMap[r]?.assigned_at).filter(Boolean) as string[]
+                            if (!times.length) return '—'
+                            return fmtDate(times.sort()[0])
+                          })()}
+                        </td>
+                        <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            const completed = ALL_ROLES.every((r) => carMap[r]?.work_status === 'completed')
+                            if (!completed) return '—'
+                            const times = ALL_ROLES.map((r) => carMap[r]?.out_ts).filter(Boolean) as string[]
+                            if (!times.length) return '—'
+                            return fmtDate(times.sort().reverse()[0])
+                          })()}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Assign Modal (quick-add from outside table) ─────────────────────── */}
+      {modalCar && (
+        <div className="modal-back" role="presentation" onClick={closeModal}>
+          <div className="modal fi-support-modal" role="dialog" aria-modal="true"
+            aria-label="Assign bodyshop team member"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="modal__head">
+              <h3>Assign Bodyshop Team</h3>
+              <button type="button" className="modal__x" onClick={closeModal} aria-label="Close">
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="modal__body fi-support-modal__body">
+              <div className="fi-support-meta">
+                <span className="fi-support-meta__jc">{modalCar.jc_number ?? '—'}</span>
+                <span>{modalCar.reg_number ?? '—'}</span>
+                <span>{modalCar.branch ?? '—'}</span>
+              </div>
+
+              <label className="fi-support-field">
+                <span>Role</span>
+                <select className="sel" value={modalRole}
+                  onChange={(e) => { setModalRole(e.target.value as BSRole); setModalEmpCode('') }}
+                  disabled={modalSaving}>
+                  {ALL_ROLES.map((r) => (
+                    <option key={r} value={r}>{ROLE_META[r].icon} {ROLE_META[r].label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="fi-support-field">
+                <span>Employee</span>
+                <select className="sel" value={modalEmpCode}
+                  onChange={(e) => setModalEmpCode(e.target.value)}
+                  disabled={modalSaving}>
+                  <option value="">— Select Employee —</option>
+                  {empByRole[modalRole].map((emp) => (
+                    <option key={emp.employee_code} value={emp.employee_code}>
+                      {emp.employee_name} ({emp.employee_code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {empByRole[modalRole].length === 0 && (
+                <p className="fi-support-hint">
+                  No {ROLE_META[modalRole].label} employees found in BODY SHOP department.
+                </p>
+              )}
+
+              {/* Current assignments summary */}
+              {ALL_ROLES.some((r) => assignments[jcKey(modalCar)]?.[r]) && (
+                <div className="fi-support-existing">
+                  <p>Current assignments</p>
+                  {ALL_ROLES.filter((r) => assignments[jcKey(modalCar)]?.[r]).map((r) => {
+                    const a = assignments[jcKey(modalCar)]![r]!
+                    return (
+                      <div key={r} className="fi-support-existing__row">
+                        <span className="fi-support-existing__label">
+                          {ROLE_META[r].icon} {a.employee_name} • {ROLE_META[r].label} • {a.work_status.replace('_', ' ')}
+                        </span>
                       </div>
                     )
                   })}
                 </div>
+              )}
 
-                {/* Assign button */}
-                <div style={{ padding: '8px 14px', borderTop: '1px solid #e2e8f0' }}>
-                  <button type="button" className="btn btn--primary btn--sm" style={{ width: '100%' }}
-                    onClick={() => openModal(car)}>
-                    + Assign Team Member
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ─── Assign Modal ──────────────────────────────────────────────────────── */}
-      {modalCar && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}>
-          <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
-
-            {/* Modal header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>Assign Team — {modalCar.reg_number ?? modalCar.jc_number}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{modalCar.model} · {modalCar.jc_number}</div>
-              </div>
-              <button type="button" onClick={closeModal} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94a3b8', cursor: 'pointer', lineHeight: 1 }}>✕</button>
-            </div>
-
-            {/* Current assignments in modal */}
-            {modalAssignments.length > 0 && (
-              <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>CURRENT ASSIGNMENTS</div>
-                {modalAssignments.map((a) => {
-                  const meta = ROLE_META[a.role]
-                  return (
-                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, padding: '5px 10px', background: meta.bg, borderRadius: 6 }}>
-                      <span style={{ fontSize: 12, color: meta.color }}>{meta.icon}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: meta.color, flex: 1 }}>{a.employee_name}</span>
-                      <span style={{ fontSize: 11, color: '#64748b' }}>{meta.label}</span>
-                      <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: a.work_status === 'completed' ? '#dcfce7' : a.work_status === 'hold' ? '#fef3c7' : '#dbeafe', color: a.work_status === 'completed' ? '#16a34a' : a.work_status === 'hold' ? '#b45309' : '#2563eb' }}>
-                        {a.work_status.replace('_', ' ')}
-                      </span>
-                      <button type="button" onClick={() => void removeAssignment(a.id, (modalCar.jc_number ?? '').toUpperCase())}
-                        style={{ fontSize: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Add new assignment form */}
-            <div style={{ padding: '16px 20px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 12 }}>ADD TEAM MEMBER</div>
-
-              {/* Role selector */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                {ALL_ROLES.map((role) => {
-                  const meta = ROLE_META[role]
-                  return (
-                    <button key={role} type="button"
-                      onClick={() => { setModalRole(role); setModalEmpCode('') }}
-                      style={{
-                        flex: 1, padding: '8px 4px', borderRadius: 8, border: `2px solid ${modalRole === role ? meta.color : '#e2e8f0'}`,
-                        background: modalRole === role ? meta.bg : '#fff', color: modalRole === role ? meta.color : '#64748b',
-                        fontWeight: modalRole === role ? 700 : 400, fontSize: 13, cursor: 'pointer',
-                      }}>
-                      {meta.icon} {meta.label}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Employee selector */}
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>
-                  Select {ROLE_META[modalRole].label}
-                </label>
-                {empByRole[modalRole].length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#94a3b8', padding: '8px 0' }}>
-                    No {ROLE_META[modalRole].label} employees found in BODY SHOP department.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
-                    {empByRole[modalRole].map((emp) => (
-                      <button key={emp.employee_code} type="button"
-                        onClick={() => setModalEmpCode(emp.employee_code)}
-                        style={{
-                          padding: '8px 12px', borderRadius: 8, textAlign: 'left', cursor: 'pointer',
-                          border: `2px solid ${modalEmpCode === emp.employee_code ? ROLE_META[modalRole].color : '#e2e8f0'}`,
-                          background: modalEmpCode === emp.employee_code ? ROLE_META[modalRole].bg : '#fff',
-                          fontWeight: modalEmpCode === emp.employee_code ? 700 : 400,
-                          color: modalEmpCode === emp.employee_code ? ROLE_META[modalRole].color : '#374151',
-                          fontSize: 13,
-                        }}>
-                        {emp.employee_name}
-                        <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{emp.employee_code}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Status */}
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Status</label>
-                <select value={modalStatus} onChange={(e) => setModalStatus(e.target.value)}
-                  className="inp" style={{ width: '100%' }}>
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Remark */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Remark (optional)</label>
-                <input className="inp" style={{ width: '100%' }} placeholder="e.g. Front bumper denting…"
-                  value={modalRemark} onChange={(e) => setModalRemark(e.target.value)} />
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" className="btn btn--primary" style={{ flex: 1 }}
-                  onClick={() => void saveAssignment()} disabled={saving || !modalEmpCode}>
-                  {saving ? 'Saving…' : `Assign ${ROLE_META[modalRole].label}`}
+                  disabled={modalSaving || !modalEmpCode} onClick={() => void saveModal()}>
+                  {modalSaving ? 'Saving…' : `Assign ${ROLE_META[modalRole].label}`}
                 </button>
-                <button type="button" className="btn btn--ghost" onClick={closeModal} disabled={saving}>
-                  Close
+                <button type="button" className="btn btn--ghost" onClick={closeModal} disabled={modalSaving}>
+                  Cancel
                 </button>
               </div>
             </div>
