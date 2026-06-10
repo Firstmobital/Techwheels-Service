@@ -1098,10 +1098,10 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
         {showScopeFilters && (
           <>
             {showLocationFilter && (
-              <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+              <>
+                <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
-
-              <div className="toolbar toolbar--tight">
+                <div className="toolbar toolbar--tight">
                 <span className="toolbar__label">Filter by location:</span>
                 <button
                   type="button"
@@ -1132,6 +1132,7 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
                   )
                 })}
               </div>
+              </>
             )}
 
             {showAdvisorFilter && (
