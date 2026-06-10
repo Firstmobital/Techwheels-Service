@@ -1657,8 +1657,6 @@ export default function AdminPage() {
         </Modal>
       )}
 
-    </div>
-
       {/* ─── Change Role Modal ─── */}
       {roleEditUser && (
         <div className="modal-back" role="presentation" onClick={() => { if (!roleEditSaving) setRoleEditUser(null) }}>
@@ -1717,6 +1715,8 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+    </div>
   )
 }
 
