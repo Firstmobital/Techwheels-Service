@@ -208,6 +208,11 @@ export default function AdminPage() {
   const [newName, setNewName]           = useState('')
   const [newEmail, setNewEmail]         = useState('')
   const [newRole, setNewRole]           = useState<UserRole>('staff')
+
+  // Change-role modal
+  const [roleEditUser, setRoleEditUser]     = useState<CRMUser | null>(null)
+  const [roleEditValue, setRoleEditValue]   = useState<UserRole>('staff')
+  const [roleEditSaving, setRoleEditSaving] = useState(false)
   const [newBranch, setNewBranch]       = useState('')
   const [newDealerCode, setNewDealerCode] = useState('')
   const [newDealerName, setNewDealerName] = useState('')
@@ -1051,6 +1056,12 @@ export default function AdminPage() {
                             <Icon name="key" size={13} strokeWidth={1.9} /> Pwd
                           </button>
                           <button
+                            className="tbtn tbtn--accent"
+                            onClick={() => { setRoleEditUser(u); setRoleEditValue(u.role) }}
+                          >
+                            <Icon name="shield" size={13} strokeWidth={1.9} /> Role
+                          </button>
+                          <button
                             className={`tbtn ${u.is_active ? 'tbtn--danger' : 'tbtn--accent'}`}
                             onClick={() => toggleUserActive(u)}
                           >
@@ -1676,5 +1687,65 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         {children}
       </div>
     </div>
+      {/* ─── Change Role Modal ─── */}
+      {roleEditUser && (
+        <div className="modal-back" role="presentation" onClick={() => { if (!roleEditSaving) setRoleEditUser(null) }}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 400 }}>
+            <div className="modal__head">
+              <h3>Change Role</h3>
+              <button type="button" className="modal__x" onClick={() => setRoleEditUser(null)} aria-label="Close">
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="modal__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                <strong>{roleEditUser.full_name || roleEditUser.email}</strong>
+                <div style={{ marginTop: 4 }}>{roleEditUser.email}</div>
+                <div style={{ marginTop: 4 }}>
+                  Current role: <span className={`badge badge--${roleEditUser.role}`}>{roleEditUser.role}</span>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                  New Role
+                </label>
+                <select
+                  className="sel"
+                  value={roleEditValue}
+                  onChange={e => setRoleEditValue(e.target.value as UserRole)}
+                  disabled={roleEditSaving}
+                  style={{ width: '100%' }}
+                >
+                  <option value="admin">admin</option>
+                  <option value="manager">manager</option>
+                  <option value="staff">staff</option>
+                  <option value="viewer">viewer</option>
+                </select>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', background: 'var(--warn-bg,#fffbeb)', borderRadius: 6, padding: '8px 10px', border: '1px solid var(--warn-border,#fde68a)' }}>
+                ⚠️ <strong>admin</strong> gets full access to all modules and users. The user must sign out and back in for the change to take effect.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  style={{ flex: 1 }}
+                  disabled={roleEditSaving || roleEditValue === roleEditUser.role}
+                  onClick={() => void saveRoleChange()}
+                >
+                  {roleEditSaving ? 'Saving…' : 'Save Role'}
+                </button>
+                <button type="button" className="btn btn--ghost"
+                  onClick={() => setRoleEditUser(null)} disabled={roleEditSaving}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
   )
 }
