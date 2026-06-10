@@ -257,6 +257,7 @@ export default function ReceptionPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
 
   const [loading, setLoading] = useState(true)
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
