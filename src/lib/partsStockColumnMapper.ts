@@ -208,6 +208,11 @@ export function buildPartsStockInsertRow(
     })
   }
 
+  // Business rule: ignore zero-qty rows from stock snapshot imports.
+  if (onHandQuantity === 0) {
+    return { row: null, errors: [] }
+  }
+
   const parseOptionalNumber = (header: string | undefined, columnName: string): number | null => {
     if (!header) return null
     const raw = excelRow[header]
@@ -267,8 +272,6 @@ export function buildPartsStockInsertRow(
 
   const weightedCost = parseOptionalNumber(headerMapping.weightedCost, 'weighted_cost')
   const inventoryValue = parseOptionalNumber(headerMapping.inventoryValue, 'inventory_value')
-  // Keep 0 as a valid quantity/cost input. Avoid truthy checks here,
-  // otherwise qty=0 rows are treated like missing values.
   const totalPriceValue =
     weightedCost === null ? null : onHandQuantity * weightedCost
 
