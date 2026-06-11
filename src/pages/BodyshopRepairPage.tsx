@@ -285,55 +285,142 @@ export default function BodyshopRepairPage() {
         </div>
       )}
 
-      {/* ── Detail Modal ───────────────────────────────────────────────────── */}
+      {/* ── Detail Full-Screen ────────────────────────────────────────────── */}
       {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal modal--xl" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            {/* header */}
-            <div className="modal__header" style={{ flexShrink: 0 }}>
-              <div>
-                <h2 className="modal__title">{selected.job_card_no} — {selected.reg_number ?? '—'}</h2>
-                <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
-                  {selected.customer_name} · {selected.branch} · {CT_LABELS[selected.customer_type ?? ''] ?? '—'} · SA: {selected.sa_name ?? '—'}
-                </p>
-              </div>
-              <button className="modal__close" onClick={() => setSelected(null)}>✕</button>
-            </div>
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: '#f1f5f9',
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
+        }}>
 
-            {/* stage progress bar */}
-            <div style={{ display: 'flex', padding: '0 20px 0', flexShrink: 0, gap: 4, marginBottom: 0 }}>
+          {/* ── Top Bar ── */}
+          <div style={{
+            background: '#fff', borderBottom: '1px solid #e5e7eb',
+            padding: '0 24px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16,
+            height: 60,
+          }}>
+            <button onClick={() => setSelected(null)} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 14, fontWeight: 600, color: '#6b7280',
+              padding: '6px 10px', borderRadius: 8,
+            }}>
+              ← Back
+            </button>
+            <div style={{ width: 1, height: 28, background: '#e5e7eb' }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                🔧 {selected.job_card_no} — {selected.reg_number ?? '—'}
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280' }}>
+                {selected.customer_name} · {selected.branch} · {CT_LABELS[selected.customer_type ?? ''] ?? '—'} · SA: {selected.sa_name ?? '—'}
+              </div>
+            </div>
+            {/* Stage group pills */}
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
               {STAGE_GROUPS.map((g) => {
                 const inGroup = g.stages.includes(selected.current_stage)
                 const done    = g.stages[g.stages.length - 1] < selected.current_stage
                 return (
                   <div key={g.label} style={{
-                    flex: 1, padding: '6px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600,
-                    borderRadius: 6, marginTop: 8,
-                    background: done ? g.color : inGroup ? `${g.color}25` : '#f3f4f6',
+                    padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 20,
+                    background: done ? g.color : inGroup ? `${g.color}20` : '#f3f4f6',
                     color: done ? '#fff' : inGroup ? g.color : '#9ca3af',
-                    border: inGroup ? `1.5px solid ${g.color}` : '1.5px solid transparent',
+                    border: `1.5px solid ${inGroup ? g.color : 'transparent'}`,
+                    whiteSpace: 'nowrap',
                   }}>
-                    {done ? '✓ ' : ''}{g.label}
+                    {done ? '✓ ' : inGroup ? '● ' : ''}{g.label}
                   </div>
                 )
               })}
             </div>
+            <span style={{
+              fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
+              background: selected.overall_status === 'active' ? '#dbeafe' : selected.overall_status === 'delivered' ? '#d1fae5' : '#fee2e2',
+              color: selected.overall_status === 'active' ? '#1d4ed8' : selected.overall_status === 'delivered' ? '#065f46' : '#991b1b',
+              flexShrink: 0,
+            }}>{selected.overall_status}</span>
+          </div>
 
-            {/* tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '0 20px', flexShrink: 0, marginTop: 8 }}>
-              {tabs.map((t) => (
-                <button key={t} onClick={() => setDetailTab(t)} style={{
-                  padding: '8px 14px', fontSize: 13, fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer',
-                  borderBottom: detailTab === t ? '2px solid #2563eb' : '2px solid transparent',
-                  color: detailTab === t ? '#2563eb' : '#6b7280',
-                }}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </button>
-              ))}
+          {/* ── Body: Left sidebar + Right content ── */}
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+            {/* ── Left: Stage Panel ── */}
+            <div style={{
+              width: 260, flexShrink: 0, background: '#fff',
+              borderRight: '1px solid #e5e7eb',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            }}>
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Current Stage</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: getGroupForStage(selected.current_stage).color }}>
+                  Stage {selected.current_stage} — {STAGE_LABELS[selected.current_stage]}
+                </div>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
+                {Object.entries(STAGE_LABELS).map(([numStr, label]) => {
+                  const num    = Number(numStr)
+                  const isDone = selected.current_stage > num
+                  const isCur  = selected.current_stage === num
+                  const grp    = getGroupForStage(num)
+                  return (
+                    <div key={num} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '7px 10px', borderRadius: 8, marginBottom: 3,
+                      background: isCur ? `${grp.color}15` : isDone ? '#f0fdf4' : '#fafafa',
+                      border: `1px solid ${isCur ? grp.color : isDone ? '#bbf7d0' : '#f1f5f9'}`,
+                    }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 11, flexShrink: 0,
+                        background: isDone ? '#16a34a' : isCur ? grp.color : '#e5e7eb',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, fontWeight: 800, color: isDone || isCur ? '#fff' : '#9ca3af',
+                      }}>
+                        {isDone ? '✓' : num}
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: isCur ? 700 : 500, color: isCur ? grp.color : isDone ? '#374151' : '#9ca3af', flex: 1 }}>
+                        {label}
+                      </span>
+                      {isCur && <span style={{ fontSize: 10, color: grp.color }}>●</span>}
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Advance button at bottom of stage panel */}
+              {selected.overall_status === 'active' && selected.current_stage < 18 && (
+                <div style={{ padding: 12, borderTop: '1px solid #e5e7eb' }}>
+                  <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
+                    style={{ width: '100%', fontSize: 13 }}>
+                    {saving ? 'Saving…' : `✓ Stage ${selected.current_stage} Done →`}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* tab content */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+            {/* ── Right: Tab content ── */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+              {/* Tab bar */}
+              <div style={{
+                display: 'flex', borderBottom: '2px solid #e5e7eb',
+                padding: '0 24px', background: '#fff', flexShrink: 0,
+              }}>
+                {tabs.map((t) => (
+                  <button key={t} onClick={() => setDetailTab(t)} style={{
+                    padding: '12px 18px', fontSize: 13, fontWeight: 600,
+                    border: 'none', background: 'none', cursor: 'pointer',
+                    borderBottom: detailTab === t ? '2px solid #2563eb' : '2px solid transparent',
+                    color: detailTab === t ? '#2563eb' : '#6b7280',
+                    marginBottom: -2,
+                  }}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab content scroll area */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
 
               {/* ── Overview ── */}
               {detailTab === 'overview' && (
@@ -778,6 +865,7 @@ export default function BodyshopRepairPage() {
                 </div>
               )}
 
+              </div>
             </div>
           </div>
         </div>
