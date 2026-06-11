@@ -160,6 +160,7 @@ const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   owner_name: ['owner_name', 'owner name'],
   owner_phone: ['owner_phone', 'owner phone'],
   source: ['source'],
+  service_type: ['service_type', 'service type'],
 }
 
 const IMPORT_SERVICE_TYPE_ALIASES = ['service_type', 'service type']
