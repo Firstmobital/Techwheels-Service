@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import {
@@ -285,8 +286,8 @@ export default function BodyshopRepairPage() {
         </div>
       )}
 
-      {/* ── Detail Full-Screen ────────────────────────────────────────────── */}
-      {selected && (
+      {/* ── Detail Full-Screen (Portal — escapes stacking context of .main) ── */}
+      {selected && createPortal((
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
           background: '#f1f5f9',
@@ -869,7 +870,7 @@ export default function BodyshopRepairPage() {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   )
 }
