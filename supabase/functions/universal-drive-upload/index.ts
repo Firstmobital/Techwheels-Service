@@ -2,8 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
 
 type UploadBody = {
-  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice'
-  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice'
+  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo'
+  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo'
   bucket_id?: string
   bucketId?: string
   object_name?: string
@@ -65,20 +65,17 @@ function normalizeBody(body: UploadBody) {
       ? 'reception_estimate'
       : rawResourceType === 'reception_invoice'
         ? 'reception_invoice'
+        : rawResourceType === 'bodyshop_intake_photo'
+          ? 'bodyshop_intake_photo'
       : 'document'
   const bucketId = String(body.bucket_id ?? body.bucketId ?? 'autodoc').trim()
   const objectName = String(body.object_name ?? body.objectName ?? '').trim().replace(/^\/+/, '')
   const jobCardId = String(body.job_card_id ?? body.jobCardId ?? '').trim()
-  const receptionEntryId = String(
-    body.reception_entry_id
-    ?? body.receptionEntryId
-    ?? body.resource_id
-    ?? body.resourceId
-    ?? '',
-  ).trim()
+  const receptionEntryId = String(body.reception_entry_id ?? body.receptionEntryId ?? '').trim()
+  const resourceId = String(body.resource_id ?? body.resourceId ?? '').trim()
   const fileType = String(body.file_type ?? body.fileType ?? body.doc_type ?? body.docType ?? '').trim()
   const fileSizeMb = Number(body.file_size_mb ?? body.fileSizeMb ?? 0)
-  return { resourceType, bucketId, objectName, jobCardId, receptionEntryId, fileType, fileSizeMb }
+  return { resourceType, bucketId, objectName, jobCardId, receptionEntryId, resourceId, fileType, fileSizeMb }
 }
 
 function toYmd(input: string | null | undefined): string {
@@ -378,12 +375,16 @@ Deno.serve(async (req) => {
   try {
     const body = normalizeBody(await req.json() as UploadBody)
     const isReceptionUpload = body.resourceType === 'reception_estimate' || body.resourceType === 'reception_invoice'
+    const isBodyshopIntakeUpload = body.resourceType === 'bodyshop_intake_photo'
 
-    if (!isReceptionUpload && !body.jobCardId) {
+    if (!isReceptionUpload && !isBodyshopIntakeUpload && !body.jobCardId) {
       return json(400, { ok: false, error: 'job_card_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isReceptionUpload && !body.receptionEntryId) {
       return json(400, { ok: false, error: 'reception_entry_id is required', error_code: 'VALIDATION_ERROR' })
+    }
+    if (isBodyshopIntakeUpload && !body.resourceId) {
+      return json(400, { ok: false, error: 'resource_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (!body.objectName) {
       return json(400, { ok: false, error: 'object_name is required', error_code: 'VALIDATION_ERROR' })
@@ -541,6 +542,48 @@ Deno.serve(async (req) => {
       rowCreatedAt = photoRow.created_at
       existingDriveFileId = String(photoRow.drive_file_id ?? '').trim()
       effectiveFileType = String(photoRow.photo_type ?? body.fileType)
+    } else if (body.resourceType === 'bodyshop_intake_photo') {
+      const intakePhotoId = Number(body.resourceId)
+      if (!Number.isFinite(intakePhotoId)) {
+        return json(400, {
+          ok: false,
+          error: 'Invalid resource_id for bodyshop_intake_photo',
+          error_code: 'VALIDATION_ERROR',
+        })
+      }
+
+      const { data: intakeRows, error: intakeErr } = await supabase
+        .from('bodyshop_intake_vehicle_photos')
+        .select('id, created_at, reg_number, drive_file_id')
+        .eq('id', intakePhotoId)
+        .limit(1)
+
+      if (intakeErr) {
+        return json(500, { ok: false, error: intakeErr.message, error_code: 'DB_ERROR' })
+      }
+
+      const intakeRow = intakeRows?.[0]
+      if (!intakeRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Bodyshop intake photo row not found for upload payload',
+          error_code: 'BODYSHOP_INTAKE_PHOTO_NOT_FOUND',
+        })
+      }
+
+      registrationNo = String(intakeRow.reg_number ?? '').trim()
+      if (!registrationNo) {
+        return json(400, {
+          ok: false,
+          error: 'Registration number not found for bodyshop intake photo row',
+          error_code: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+
+      rowId = String(intakeRow.id)
+      rowCreatedAt = intakeRow.created_at
+      existingDriveFileId = String(intakeRow.drive_file_id ?? '').trim()
+      effectiveFileType = body.fileType || 'bodyshop_intake_photo'
     } else {
       const receptionId = Number(body.receptionEntryId)
       if (!Number.isFinite(receptionId)) {
@@ -608,6 +651,8 @@ Deno.serve(async (req) => {
       ? `${normalizedReg}_${normalizedFileType}_${datePart}.${ext}`
       : body.resourceType === 'panel_photo'
         ? `${normalizedReg}_PANEL_${normalizedFileType}_${datePart}_${rowId.slice(0, 8)}.${ext}`
+        : body.resourceType === 'bodyshop_intake_photo'
+          ? `${normalizedReg}_SA_BODYSHOP_PHOTO_${datePart}_${rowId}.${ext}`
         : body.resourceType === 'reception_invoice'
           ? `${normalizedReg}_SA_INVOICE_${datePart}_${rowId}.${ext}`
           : `${normalizedReg}_SA_ESTIMATE_${datePart}_${rowId}.${ext}`
@@ -685,6 +730,11 @@ Deno.serve(async (req) => {
             invoice_content_type: mimeType,
             invoice_uploaded_at: new Date().toISOString(),
           }
+        : body.resourceType === 'bodyshop_intake_photo'
+          ? {
+              drive_url: driveUrl,
+              drive_file_id: fileId,
+            }
         : {
             drive_url: driveUrl,
             drive_file_id: fileId,
@@ -693,6 +743,8 @@ Deno.serve(async (req) => {
       ? 'documents'
       : body.resourceType === 'panel_photo'
         ? 'panel_photos'
+        : body.resourceType === 'bodyshop_intake_photo'
+          ? 'bodyshop_intake_vehicle_photos'
         : 'service_reception_entries'
     const { error: updateErr } = await supabase
       .from(targetTable)

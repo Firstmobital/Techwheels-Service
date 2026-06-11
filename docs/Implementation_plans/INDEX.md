@@ -1,6 +1,6 @@
 # Implementation Plans Index
 
-**Last Updated:** 2026-05-31  
+**Last Updated:** 2026-06-11  
 **Total Active Plans:** 8
 **Mobile App Plans Added:** 2026-05-27
 
@@ -44,7 +44,7 @@ Supabase mapping (active):
 | SEC-001 | Security Refactor: Move Service Role Key | 🔴 CRITICAL | ✅ COMPLETED | Dev Team | 2026-05-22 | 2026-05-22 | 100% |
 | RBAC-001 | Dynamic RBAC and Module Wiring Hardening | 🔴 CRITICAL | ✅ COMPLETED | Techwheels Admin + Dev Team + GitHub Copilot | 2026-05-23 | 2026-05-23 | 100% |
 | AUTODOC-STATUS-001 | AutoDoc Prompt Execution Status Audit | 🟠 HIGH | 🟡 IN PROGRESS | GitHub Copilot | 2026-05-22 | 2026-05-23 | 96% |
-| BODYSHOP-001 | Bodyshop Module End-to-End Workflow and Live Dashboard | 🔴 CRITICAL | 🔴 PENDING | Techwheels Product + Dev Team | 2026-05-22 | 2026-05-30 | 0% |
+| BODYSHOP-002 | Service Advisor Accident to Bodyshop Routing and Intake Controls | 🟡 HIGH | 🔴 PENDING | Techwheels Product + Web Dev Team | 2026-06-11 | 2026-06-14 | 0% |
 | DRIVE-001 | Universal Drive Upload and Storage Offload | 🟠 HIGH | 🔴 PENDING | Techwheels Admin + Dev Team | 2026-05-23 | 2026-05-24 | 0% |
 | MOBILE-001 | Techwheels Mobile App - Expo Implementation | 🟡 HIGH | 🟠 IN PROGRESS | Development Team | 2026-05-27 | 2026-06-10 | 45% |
 | MOBILE-005 | AutoDoc Mobile Parity with Mandatory GPS-Stamped Damage Photos | 🟡 HIGH | 🔴 PENDING | Techwheels Product + Mobile Dev Team | 2026-05-28 | 2026-06-05 | 0% |
@@ -55,12 +55,12 @@ Supabase mapping (active):
 
 ## Active Plans
 
-### BODYSHOP-001: Bodyshop Module End-to-End Workflow and Live Dashboard
-- **File:** [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](bodyshop/active/BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md)
-- **Risk Level:** 🔴 HIGH (multi-role operational workflow + strict guardrail enforcement)
+### BODYSHOP-002: Service Advisor Accident to Bodyshop Routing and Intake Controls
+- **File:** [Bodyshop-Flow.md](bodyshop/active/Bodyshop-Flow.md)
+- **Risk Level:** 🟡 MEDIUM (category routing + bodyshop-only intake controls)
 - **Status:** Pending kickoff
-- **Latest Update:** 2026-05-22 - End-to-end implementation plan created for 23-stage SOP, live dashboard, pending trackers, and operational control points
-- **Next Step:** Start Phase 1 (freeze schema contract, stage definitions, and validation guardrails)
+- **Latest Update:** 2026-06-11 - New plan created to route `Accident` service type into `Bodyshop` category while keeping `Floor` unchanged and adding bodyshop-only customer-type plus max-20 photo intake tasks.
+- **Next Step:** Execute Phase 1 category routing changes in Service Advisor.
 
 ### AUTODOC-STATUS-001: AutoDoc Prompt Execution Status Audit
 - **File:** [AUTODOC_EXECUTION_STATUS_2026-05-22.md](autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md)
@@ -228,7 +228,7 @@ Next: Complete edge function, then move to frontend refactor
 - 📄 [completed/AUTH-001_RUNBOOK.md](completed/AUTH-001_RUNBOOK.md) - Operator runbook for temporary-password fallback and SMTP hardening
 - 📄 [completed/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](completed/RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md) - Dynamic module permission enforcement and backend RBAC hardening plan
 - 📄 [completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md](completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md) - Compact daily standup checklist (done/in-progress/next/blockers)
-- 📄 [BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md](bodyshop/active/BODYSHOP-001_BODYSHOP_MODULE_END_TO_END.md) - Bodyshop module implementation plan (23-stage workflow + live dashboard)
+- 📄 [Bodyshop-Flow.md](bodyshop/active/Bodyshop-Flow.md) - Bodyshop plan for Service Advisor Accident routing, category split, and intake controls
 - 📄 [DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md](drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md) - Universal Drive upload, DB link writeback, and Supabase storage cleanup plan
 - 📄 COMPLETED_PLANS.md (Coming soon)
 

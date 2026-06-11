@@ -5,18 +5,21 @@ import {
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
   markServiceAdvisorInvoiceDone,
+  getDealerContext,
   getDealerScopeContext,
   generateComplaintLink,
   type ReceptionEntryRow,
 } from '../lib/api'
 import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePreset } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
+import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import Icon from '../components/Icon'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 
 type RowDraft = {
   service_type: string
   jc_number: string
+  customer_type: '' | 'individual' | 'firm' | 'foc' | 'cash'
   remark: string
 }
 
@@ -44,12 +47,13 @@ const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = new Set([
   'campaign',
 ])
 
-type CategoryFilter = 'all' | 'floor' | 'other' | 'null'
+type CategoryFilter = 'all' | 'floor' | 'bodyshop' | 'others' | 'null'
 type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estimate_pending' | 'invoice_pending' | 'no_technician' | 'floor_hold' | 'in_process' | 'completed'
 
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
   jc_number: '',
+  customer_type: '',
   remark: '',
 }
 
@@ -64,6 +68,12 @@ const SOURCE_TONE_MAP: Record<string, string> = {
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const QUERY_PAGE_SIZE = 1000
 const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
+const BODYSHOP_AUTO_STAGE_NAMES: Record<number, string> = {
+  1: 'Vehicle Receiving',
+  2: 'Receiving Photos',
+  3: 'Job Card',
+  4: 'Customer Group',
+}
 
 function toISTDate(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -181,7 +191,7 @@ function applySummaryCardFilter(
     return rows.filter((row) => isServiceTypeMissing(row.service_type))
   }
   if (selectedSummaryCard === 'estimate_pending') {
-    return rows.filter((row) => !row.estimate_storage_path)
+    return rows.filter((row) => !isBodyshopServiceType(row.service_type) && !row.estimate_storage_path)
   }
   if (selectedSummaryCard === 'no_technician') {
     // Match Floor Incharge's "Unassigned" logic: entries with NO assignment row
@@ -204,7 +214,7 @@ function applySummaryCardFilter(
   if (selectedSummaryCard === 'completed') {
     return rows.filter((row) => isCompleted(row) && Boolean(row.invoice_done_at))
   }
-  return rows.filter((row) => isCompleted(row) && !row.invoice_done_at)
+  return rows.filter((row) => !isBodyshopServiceType(row.service_type) && isCompleted(row) && !row.invoice_done_at)
 }
 
 function mergeServiceTypes(...groups: Array<string[]>): string[] {
@@ -230,8 +240,9 @@ function mergeServiceTypes(...groups: Array<string[]>): string[] {
 function getCategoryForServiceType(serviceType: string | null | undefined): Exclude<CategoryFilter, 'all'> {
   const normalized = normalizeServiceType(String(serviceType ?? '')).toLowerCase()
   if (!normalized) return 'null'
+  if (normalized === 'accident') return 'bodyshop'
   if (FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES.has(normalized)) return 'floor'
-  return 'other'
+  return 'others'
 }
 
 function isJobCardPending(jcNumber: string | null | undefined): boolean {
@@ -257,8 +268,56 @@ function getServiceTypeForMessage(rowServiceType: string | null | undefined, dra
   return rowValue || 'Service'
 }
 
+function isValidCustomerType(value: string | null | undefined): value is RowDraft['customer_type'] {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === 'individual' || normalized === 'firm' || normalized === 'foc' || normalized === 'cash'
+}
+
+function getBodyshopAutoStage(params: {
+  customerType: string | null | undefined
+  hasIntakePhoto: boolean
+  jcNumber: string | null | undefined
+}): number {
+  if (String(params.jcNumber ?? '').trim()) return 4
+  if (params.hasIntakePhoto) return 3
+  if (isValidCustomerType(params.customerType)) return 2
+  return 1
+}
+
+type BodyshopCardLite = {
+  id: number
+  job_card_no: string | null
+  reg_number: string | null
+  customer_type: string | null
+  current_stage: number | null
+}
+
+function findMatchingBodyshopCard(row: ReceptionEntryRow, cards: BodyshopCardLite[]): BodyshopCardLite | undefined {
+  const rowJc = String(row.jc_number ?? '').trim().toUpperCase()
+  const rowReg = String(row.reg_number ?? '').trim().toUpperCase()
+  return cards.find((card) => {
+    const cardJc = String(card.job_card_no ?? '').trim().toUpperCase()
+    const cardReg = String(card.reg_number ?? '').trim().toUpperCase()
+    if (rowJc && cardJc) return rowJc === cardJc
+    return rowReg && cardReg && rowReg === cardReg
+  })
+}
+
+function sanitizeFileNamePart(raw: string): string {
+  const cleaned = String(raw ?? '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return cleaned || 'upload'
+}
+
+function isBodyshopServiceType(serviceType: string | null | undefined): boolean {
+  return getCategoryForServiceType(serviceType) === 'bodyshop'
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const bodyshopPhotoInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
@@ -283,6 +342,7 @@ export default function ServiceAdvisorPage() {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null)
+  const [uploadingBodyshopPhotosId, setUploadingBodyshopPhotosId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
@@ -524,12 +584,14 @@ export default function ServiceAdvisorPage() {
 
   const categoryCounts = useMemo(() => {
     const floor = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'floor').length
-    const other = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'other').length
+    const bodyshop = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'bodyshop').length
+    const others = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'others').length
     const nullCount = categoryCountRows.filter((row) => getCategoryForServiceType(row.service_type) === 'null').length
     return {
       all: categoryCountRows.length,
       floor,
-      other,
+      bodyshop,
+      others,
       null: nullCount,
     }
   }, [categoryCountRows])
@@ -568,7 +630,7 @@ export default function ServiceAdvisorPage() {
     return 'Multiple branches'
   }, [rows, isAdmin, selectedBranch])
   const pendingEstimateCount = useMemo(
-    () => displayedRows.filter(r => !r.estimate_storage_path).length,
+    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && !r.estimate_storage_path).length,
     [displayedRows],
   )
   const pendingJobCardCount = useMemo(
@@ -580,7 +642,7 @@ export default function ServiceAdvisorPage() {
     [displayedRows],
   )
   const pendingInvoiceCount = useMemo(
-    () => displayedRows.filter((r) => isWorkCompleted(r) && !r.invoice_done_at).length,
+    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && isWorkCompleted(r) && !r.invoice_done_at).length,
     [displayedRows, completedJobCardNumbers],
   )
   const noTechnicianCount = useMemo(
@@ -746,9 +808,68 @@ export default function ServiceAdvisorPage() {
       mappedDrafts[row.id] = {
         service_type: typeof row.service_type === 'string' ? row.service_type : '',
         jc_number: row.jc_number ?? '',
+        customer_type: '',
         remark: row.remark ?? '',
       }
     })
+
+    const bodyshopRows = data.filter((row) => isBodyshopServiceType(row.service_type))
+    const regNumbers = Array.from(new Set(bodyshopRows.map((row) => String(row.reg_number ?? '').trim()).filter(Boolean)))
+    if (regNumbers.length > 0) {
+      const { data: bodyshopCards } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id, job_card_no, reg_number, customer_type, current_stage')
+        .in('reg_number', regNumbers)
+
+      const cards = (bodyshopCards ?? []) as BodyshopCardLite[]
+      bodyshopRows.forEach((row) => {
+        const matched = findMatchingBodyshopCard(row, cards)
+        const customerType = String(matched?.customer_type ?? '').trim().toLowerCase()
+        if (isValidCustomerType(customerType)) {
+          mappedDrafts[row.id].customer_type = customerType
+        }
+      })
+
+      const receptionIds = bodyshopRows.map((row) => row.id)
+      const photoCountByReceptionId = new Map<number, number>()
+      if (receptionIds.length > 0) {
+        const { data: photoRows } = await supabase
+          .from('bodyshop_intake_vehicle_photos')
+          .select('reception_entry_id')
+          .in('reception_entry_id', receptionIds)
+
+        ;((photoRows ?? []) as Array<{ reception_entry_id: number | null }>).forEach((item) => {
+          const receptionId = Number(item.reception_entry_id)
+          if (!Number.isFinite(receptionId)) return
+          photoCountByReceptionId.set(receptionId, (photoCountByReceptionId.get(receptionId) ?? 0) + 1)
+        })
+      }
+
+      await Promise.all(
+        bodyshopRows.map(async (row) => {
+          const matched = findMatchingBodyshopCard(row, cards)
+          if (!matched?.id) return
+
+          const desiredStage = getBodyshopAutoStage({
+            customerType: mappedDrafts[row.id]?.customer_type,
+            hasIntakePhoto: (photoCountByReceptionId.get(row.id) ?? 0) > 0,
+            jcNumber: row.jc_number,
+          })
+
+          const currentStage = Number(matched.current_stage ?? 1)
+          const nextStage = Math.max(currentStage, desiredStage)
+          if (nextStage === currentStage || nextStage > 4) return
+
+          await supabase
+            .from('bodyshop_repair_cards')
+            .update({
+              current_stage: nextStage,
+              current_stage_name: BODYSHOP_AUTO_STAGE_NAMES[nextStage] ?? BODYSHOP_AUTO_STAGE_NAMES[1],
+            })
+            .eq('id', matched.id)
+        }),
+      )
+    }
 
     setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
 
@@ -874,8 +995,44 @@ export default function ServiceAdvisorPage() {
     const draft = drafts[id]
     if (!draft) return
 
-    setSavingId(id)
     setError(null)
+
+    const row = rows.find((r) => r.id === id)
+    const effectiveServiceType = String(draft.service_type ?? row?.service_type ?? '').trim()
+    const isBodyshopRow = isBodyshopServiceType(effectiveServiceType)
+
+    if (isBodyshopRow) {
+      const jcNumber = String(draft.jc_number ?? '').trim().toUpperCase()
+      const customerType = String(draft.customer_type ?? '').trim().toLowerCase()
+
+      if (!jcNumber) {
+        setError('JC Number is required for Accident entries.')
+        return
+      }
+      if (!customerType) {
+        setError('Customer Type is required for Accident entries.')
+        return
+      }
+
+      const dealerCtx = await getDealerContext()
+      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
+      const folder = `${dealerCode}/service-advisor-bodyshop-intake/${id}`
+      const { data: existingFiles, error: photoListError } = await supabase.storage
+        .from(AUTODOC_BUCKET)
+        .list(folder, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
+
+      if (photoListError) {
+        setError(photoListError.message)
+        return
+      }
+
+      if ((existingFiles ?? []).length === 0) {
+        setError('Attach at least one vehicle photo for Accident entry before saving.')
+        return
+      }
+    }
+
+    setSavingId(id)
 
     const res = await updateServiceAdvisorEntry(id, {
       service_type: draft.service_type,
@@ -890,6 +1047,67 @@ export default function ServiceAdvisorPage() {
       return
     }
 
+    if (isBodyshopRow && row) {
+      const jcNumber = String(draft.jc_number ?? '').trim().toUpperCase()
+      const customerType = String(draft.customer_type ?? '').trim().toLowerCase()
+
+      const { count: intakePhotoCount } = await supabase
+        .from('bodyshop_intake_vehicle_photos')
+        .select('id', { count: 'exact', head: true })
+        .eq('reception_entry_id', row.id)
+
+      const desiredStage = getBodyshopAutoStage({
+        customerType,
+        hasIntakePhoto: (intakePhotoCount ?? 0) > 0,
+        jcNumber,
+      })
+
+      const { data: existingCard } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id, current_stage')
+        .eq('job_card_no', jcNumber)
+        .maybeSingle()
+
+      const existingStage = Number(existingCard?.current_stage ?? 1)
+      const nextStage = Math.max(existingStage, desiredStage)
+
+      const cardPayload = {
+        job_card_no: jcNumber,
+        reg_number: row.reg_number,
+        customer_name: row.owner_name ?? null,
+        customer_phone: row.owner_phone ?? null,
+        customer_type: customerType,
+        branch: row.branch ?? null,
+        sa_employee_code: row.sa_employee_code ?? null,
+        sa_name: row.sa_display_name ?? row.sa_name ?? null,
+        current_stage: nextStage,
+        current_stage_name: BODYSHOP_AUTO_STAGE_NAMES[nextStage] ?? BODYSHOP_AUTO_STAGE_NAMES[1],
+      }
+
+      if (existingCard?.id) {
+        const { error: updateCardError } = await supabase
+          .from('bodyshop_repair_cards')
+          .update(cardPayload)
+          .eq('id', existingCard.id)
+        if (updateCardError) {
+          setError(updateCardError.message)
+          return
+        }
+      } else {
+        const { error: insertCardError } = await supabase
+          .from('bodyshop_repair_cards')
+          .insert({
+            ...cardPayload,
+            overall_status: 'active',
+            received_at: new Date().toISOString(),
+          })
+        if (insertCardError) {
+          setError(insertCardError.message)
+          return
+        }
+      }
+    }
+
     setDirtyRowIds((prev) => {
       const next = new Set(prev)
       next.delete(id)
@@ -897,6 +1115,131 @@ export default function ServiceAdvisorPage() {
     })
     showToast(`Saved ${rows.find((r) => r.id === id)?.reg_number || 'entry'}`)
     await loadRows()
+  }
+
+  async function handleBodyshopPhotoUpload(row: ReceptionEntryRow, files: FileList | null) {
+    if (!files || files.length === 0) return
+
+    const selected = Array.from(files)
+    if (selected.some((file) => !String(file.type ?? '').startsWith('image/'))) {
+      setError('Only image files are allowed for vehicle photos.')
+      return
+    }
+
+    setUploadingBodyshopPhotosId(row.id)
+    setError(null)
+
+    try {
+      const draft = drafts[row.id] ?? EMPTY_DRAFT
+      const jcNumber = String(draft.jc_number ?? row.jc_number ?? '').trim().toUpperCase()
+      const customerType = String(draft.customer_type ?? '').trim().toLowerCase()
+      if (!jcNumber) {
+        setError('JC Number is required before attaching Accident vehicle photos.')
+        return
+      }
+      if (!customerType) {
+        setError('Customer Type is required before attaching Accident vehicle photos.')
+        return
+      }
+
+      const dealerCtx = await getDealerContext()
+      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
+      const folder = `${dealerCode}/service-advisor-bodyshop-intake/${row.id}`
+
+      const { data: existingFiles, error: listError } = await supabase.storage
+        .from(AUTODOC_BUCKET)
+        .list(folder, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
+
+      if (listError) {
+        setError(listError.message)
+        return
+      }
+
+      const existingCount = (existingFiles ?? []).length
+      const remaining = 20 - existingCount
+      if (remaining <= 0) {
+        setError('Maximum 20 vehicle photos already uploaded for this Accident entry.')
+        return
+      }
+      if (selected.length > remaining) {
+        setError(`You can upload only ${remaining} more photo${remaining === 1 ? '' : 's'} (max 20).`)
+        return
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+      const sessionRes = await supabase.auth.getSession()
+      const token = sessionRes.data.session?.access_token
+      if (!supabaseUrl || !token) {
+        setError('No active session for Drive offload request.')
+        return
+      }
+
+      for (const file of selected) {
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
+        const safeName = sanitizeFileNamePart(file.name || `photo.${ext}`)
+        const storagePath = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName}`
+
+        const uploadRes = await supabase.storage
+          .from(AUTODOC_BUCKET)
+          .upload(storagePath, file, { upsert: false, contentType: file.type || 'application/octet-stream' })
+
+        if (uploadRes.error) {
+          setError(uploadRes.error.message)
+          return
+        }
+
+        const { data: photoMeta, error: photoMetaErr } = await supabase
+          .from('bodyshop_intake_vehicle_photos')
+          .insert({
+            dealer_code: dealerCode,
+            reception_entry_id: row.id,
+            job_card_no: jcNumber,
+            reg_number: row.reg_number,
+            customer_type: customerType,
+            storage_bucket: AUTODOC_BUCKET,
+            storage_path: storagePath,
+            file_name: file.name,
+            content_type: file.type || null,
+            file_size_bytes: file.size,
+          })
+          .select('id')
+          .single()
+
+        if (photoMetaErr || !photoMeta?.id) {
+          setError(photoMetaErr?.message ?? 'Failed to persist bodyshop intake photo metadata.')
+          return
+        }
+
+        const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            resource_type: 'bodyshop_intake_photo',
+            resource_id: photoMeta.id,
+            bucket_id: AUTODOC_BUCKET,
+            object_name: storagePath,
+            file_type: 'intake_photo',
+            file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
+          }),
+        })
+
+        const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+        if (!driveRes.ok || drivePayload?.error) {
+          setError(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`)
+          return
+        }
+      }
+
+      const nextCount = existingCount + selected.length
+      showToast(`Uploaded ${selected.length} photo${selected.length === 1 ? '' : 's'} (${nextCount}/20)`)
+      setDirtyRowIds((prev) => new Set([...prev, row.id]))
+      await loadRows()
+    } finally {
+      setUploadingBodyshopPhotosId(null)
+    }
   }
 
   async function handleEstimateUpload(id: number, file: File) {
@@ -1148,7 +1491,7 @@ export default function ServiceAdvisorPage() {
             </>
           ) : (
             <>
-              Showing only rows assigned to <b className="text-ink-2">{advisorName}</b> ({advisorCode}). Edit service type, JC number, remark, and upload the estimate.
+              Showing only rows assigned to <b className="text-ink-2">{advisorName}</b> ({advisorCode}). For Accident entries, update JC Number and Customer Type, attach vehicle photos, then save.
             </>
           )}
         </p>
@@ -1279,14 +1622,25 @@ export default function ServiceAdvisorPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedCategory('other')}
+                  onClick={() => setSelectedCategory('bodyshop')}
                   className={`btn btn--sm ${
-                    selectedCategory === 'other'
+                    selectedCategory === 'bodyshop'
                       ? 'btn--primary'
                       : 'btn--ghost'
                   }`}
                 >
-                  Other ({categoryCounts.other})
+                  Bodyshop ({categoryCounts.bodyshop})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('others')}
+                  className={`btn btn--sm ${
+                    selectedCategory === 'others'
+                      ? 'btn--primary'
+                      : 'btn--ghost'
+                  }`}
+                >
+                  Others ({categoryCounts.others})
                 </button>
                 <button
                   type="button"
@@ -1485,6 +1839,7 @@ export default function ServiceAdvisorPage() {
                     <th>Model</th>
                     <th>Service Type</th>
                     <th>JC Number</th>
+                    <th>Customer Type</th>
                     <th>Owner</th>
                     <th>Remark</th>
                     <th>Estimate</th>
@@ -1497,6 +1852,8 @@ export default function ServiceAdvisorPage() {
                     const draft = drafts[row.id] ?? EMPTY_DRAFT
                     const draftServiceType = String(draft.service_type ?? '')
                     const normalizedDraftServiceType = draftServiceType.trim().toLowerCase()
+                    const effectiveServiceType = String(draft.service_type || row.service_type || '')
+                    const isBodyshopRow = isBodyshopServiceType(effectiveServiceType)
                     const isDirty = dirtyRowIds.has(row.id)
                     const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
@@ -1549,6 +1906,23 @@ export default function ServiceAdvisorPage() {
                             )
                           })()}
                         </td>
+                        <td>
+                          {isBodyshopRow ? (
+                            <select
+                              value={draft.customer_type}
+                              onChange={(event) => patchDraft(row.id, { customer_type: event.target.value as RowDraft['customer_type'] })}
+                              className="sel sel--service-type"
+                            >
+                              <option value="">Select customer type</option>
+                              <option value="individual">Individual</option>
+                              <option value="firm">Firm</option>
+                              <option value="foc">FOC</option>
+                              <option value="cash">Cash</option>
+                            </select>
+                          ) : (
+                            <span className="td-muted-nowrap">-</span>
+                          )}
+                        </td>
                         <td className="td-owner">
                           <div className="strong owner-name">{row.owner_name || '-'}</div>
                           <div className="mono owner-phone">{row.owner_phone || '-'}</div>
@@ -1563,79 +1937,112 @@ export default function ServiceAdvisorPage() {
                           />
                         </td>
                         <td className="td-estimate">
-                          <div className="estimate-col">
-                            {row.estimate_storage_path ? (
-                              <>
-                                <span className="estimate-status">
-                                  <Icon name="checksm" size={13} strokeWidth={2.4} />
-                                  {row.estimate_file_name || 'Estimate uploaded'}
-                                </span>
-                                <div className="estimate-actions">
-                                  {row.estimate_drive_url && (
-                                    <a
-                                      href={row.estimate_drive_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="linkbtn linkbtn--sm"
-                                    >
-                                      View estimate
-                                    </a>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => fileInputRefs.current[row.id]?.click()}
-                                    disabled={uploadingId === row.id}
-                                    className="tbtn tbtn--compact"
-                                  >
-                                    Replace
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
+                          {isBodyshopRow ? (
+                            <div className="estimate-col">
                               <button
                                 type="button"
-                                onClick={() => fileInputRefs.current[row.id]?.click()}
-                                disabled={uploadingId === row.id}
+                                onClick={() => bodyshopPhotoInputRefs.current[row.id]?.click()}
+                                disabled={uploadingBodyshopPhotosId === row.id}
                                 className="tbtn tbtn--accent"
                               >
                                 <Icon name="upload" size={13} strokeWidth={2} />
-                                {uploadingId === row.id ? 'Uploading...' : 'Upload'}
+                                {uploadingBodyshopPhotosId === row.id ? 'Uploading...' : 'Attach photos (max 20)'}
                               </button>
-                            )}
-                            <input
-                              ref={(el) => {
-                                fileInputRefs.current[row.id] = el
-                              }}
-                              type="file"
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0]
-                                if (!file) return
-                                void handleEstimateUpload(row.id, file)
-                                event.target.value = ''
-                              }}
-                            />
-                          </div>
+                              <input
+                                ref={(el) => {
+                                  bodyshopPhotoInputRefs.current[row.id] = el
+                                }}
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(event) => {
+                                  void handleBodyshopPhotoUpload(row, event.target.files)
+                                  event.target.value = ''
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="estimate-col">
+                              {row.estimate_storage_path ? (
+                                <>
+                                  <span className="estimate-status">
+                                    <Icon name="checksm" size={13} strokeWidth={2.4} />
+                                    {row.estimate_file_name || 'Estimate uploaded'}
+                                  </span>
+                                  <div className="estimate-actions">
+                                    {row.estimate_drive_url && (
+                                      <a
+                                        href={row.estimate_drive_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="linkbtn linkbtn--sm"
+                                      >
+                                        View estimate
+                                      </a>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => fileInputRefs.current[row.id]?.click()}
+                                      disabled={uploadingId === row.id}
+                                      className="tbtn tbtn--compact"
+                                    >
+                                      Replace
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => fileInputRefs.current[row.id]?.click()}
+                                  disabled={uploadingId === row.id}
+                                  className="tbtn tbtn--accent"
+                                >
+                                  <Icon name="upload" size={13} strokeWidth={2} />
+                                  {uploadingId === row.id ? 'Uploading...' : 'Upload'}
+                                </button>
+                              )}
+                              <input
+                                ref={(el) => {
+                                  fileInputRefs.current[row.id] = el
+                                }}
+                                type="file"
+                                className="hidden"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0]
+                                  if (!file) return
+                                  void handleEstimateUpload(row.id, file)
+                                  event.target.value = ''
+                                }}
+                              />
+                            </div>
+                          )}
                         </td>
                         <td className="td-invoice">
-                          <div className="invoice-col">
-                            {row.invoice_done_at ? (
-                              <span className="invoice-status">
-                                <Icon name="checksm" size={13} strokeWidth={2.4} />
-                                Done
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => void handleInvoiceDone(row)}
-                                disabled={uploadingInvoiceId === row.id || !canMarkDone}
-                                className="tbtn tbtn--accent"
-                                title={!canUpdateRow(row) ? 'Edit permission required' : !isCompleted ? 'Work status must be completed in Floor Incharge first' : undefined}
-                              >
-                                {uploadingInvoiceId === row.id ? 'Marking...' : 'Mark Done'}
-                              </button>
-                            )}
-                          </div>
+                          {isBodyshopRow ? (
+                            <div className="invoice-col">
+                              <span className="td-muted-nowrap">Not applicable</span>
+                            </div>
+                          ) : (
+                            <div className="invoice-col">
+                              {row.invoice_done_at ? (
+                                <span className="invoice-status">
+                                  <Icon name="checksm" size={13} strokeWidth={2.4} />
+                                  Done
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleInvoiceDone(row)}
+                                  disabled={uploadingInvoiceId === row.id || !canMarkDone}
+                                  className="tbtn tbtn--accent"
+                                  title={!canUpdateRow(row) ? 'Edit permission required' : !isCompleted ? 'Work status must be completed in Floor Incharge first' : undefined}
+                                >
+                                  {uploadingInvoiceId === row.id ? 'Marking...' : 'Mark Done'}
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="td-save">
                           <div className="tactions tactions--stack">

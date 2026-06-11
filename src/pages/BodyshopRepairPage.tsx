@@ -47,14 +47,89 @@ export default function BodyshopRepairPage() {
 
   useEffect(() => { void load() }, [dateRange])
 
+  type AccidentReceptionRow = {
+    id: number
+    jc_number: string | null
+    reg_number: string | null
+    owner_name: string | null
+    owner_phone: string | null
+    sa_employee_code: string | null
+    sa_name: string | null
+    sa_display_name: string | null
+    branch: string | null
+    created_at: string | null
+  }
+
+  function intakeKey(row: { jc_number: string | null; reg_number: string | null }) {
+    const jc = String(row.jc_number ?? '').trim().toUpperCase()
+    if (jc) return jc
+    return String(row.reg_number ?? '').trim().toUpperCase()
+  }
+
   async function load() {
     setLoading(true)
     try {
-      const [data, br] = await Promise.all([
+      const [data, br, accidentRes] = await Promise.all([
         listRepairCards({ from: dateRange.from, to: dateRange.to }),
         supabase.from('service_branches').select('name').order('name'),
+        supabase
+          .from('service_reception_entries')
+          .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
+          .eq('service_type', 'Accident')
+          .gte('created_at', dateRange.from + 'T00:00:00+05:30')
+          .lte('created_at', dateRange.to + 'T23:59:59+05:30')
+          .order('created_at', { ascending: false }),
       ])
-      setCards(data)
+
+      const accidentRows = (accidentRes.data ?? []) as AccidentReceptionRow[]
+      const accidentKeys = Array.from(
+        new Set(accidentRows.map((row) => intakeKey(row)).filter(Boolean)),
+      )
+
+      const existingKeys = new Set<string>()
+      if (accidentKeys.length > 0) {
+        const { data: existingCards } = await supabase
+          .from('bodyshop_repair_cards')
+          .select('job_card_no')
+          .in('job_card_no', accidentKeys)
+
+        ;(existingCards ?? []).forEach((row) => {
+          const key = String((row as { job_card_no?: string | null }).job_card_no ?? '').trim().toUpperCase()
+          if (key) existingKeys.add(key)
+        })
+      }
+
+      const seenInsert = new Set<string>()
+      const toInsert = accidentRows
+        .map((row) => {
+          const key = intakeKey(row)
+          if (!key || existingKeys.has(key) || seenInsert.has(key)) return null
+          seenInsert.add(key)
+          return {
+            job_card_no: key,
+            reg_number: row.reg_number,
+            customer_name: row.owner_name,
+            customer_phone: row.owner_phone,
+            branch: row.branch,
+            sa_employee_code: row.sa_employee_code,
+            sa_name: row.sa_display_name ?? row.sa_name,
+            current_stage: 1,
+            current_stage_name: 'Vehicle Receiving',
+            overall_status: 'active',
+            received_at: row.created_at ?? new Date().toISOString(),
+          }
+        })
+        .filter(Boolean) as Array<Record<string, unknown>>
+
+      if (toInsert.length > 0) {
+        await supabase.from('bodyshop_repair_cards').insert(toInsert)
+      }
+
+      const mergedData = toInsert.length > 0
+        ? await listRepairCards({ from: dateRange.from, to: dateRange.to })
+        : data
+
+      setCards(mergedData)
       setBranches((br.data ?? []).map((b: { name: string }) => b.name))
     } catch { /* ignore */ }
     setLoading(false)
