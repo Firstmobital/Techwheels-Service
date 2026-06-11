@@ -345,6 +345,7 @@ export default function ServiceAdvisorPage() {
   const [uploadingBodyshopPhotosId, setUploadingBodyshopPhotosId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
+  const [bodyshopPhotoCountByEntryId, setBodyshopPhotoCountByEntryId] = useState<Record<number, number>>({})
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
   const [inProcessJobCardNumbers, setInProcessJobCardNumbers] = useState<Set<string>>(new Set())
@@ -815,7 +816,8 @@ export default function ServiceAdvisorPage() {
 
     const bodyshopRows = data.filter((row) => isBodyshopServiceType(row.service_type))
     const regNumbers = Array.from(new Set(bodyshopRows.map((row) => String(row.reg_number ?? '').trim()).filter(Boolean)))
-    if (regNumbers.length > 0) {
+    const nextPhotoCountByEntryId: Record<number, number> = {}
+    if (bodyshopRows.length > 0 && regNumbers.length > 0) {
       const { data: bodyshopCards } = await supabase
         .from('bodyshop_repair_cards')
         .select('id, job_card_no, reg_number, customer_type, current_stage')
@@ -841,7 +843,9 @@ export default function ServiceAdvisorPage() {
         ;((photoRows ?? []) as Array<{ reception_entry_id: number | null }>).forEach((item) => {
           const receptionId = Number(item.reception_entry_id)
           if (!Number.isFinite(receptionId)) return
-          photoCountByReceptionId.set(receptionId, (photoCountByReceptionId.get(receptionId) ?? 0) + 1)
+          const nextCount = (photoCountByReceptionId.get(receptionId) ?? 0) + 1
+          photoCountByReceptionId.set(receptionId, nextCount)
+          nextPhotoCountByEntryId[receptionId] = nextCount
         })
       }
 
@@ -870,6 +874,7 @@ export default function ServiceAdvisorPage() {
         }),
       )
     }
+    setBodyshopPhotoCountByEntryId(nextPhotoCountByEntryId)
 
     setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
 
@@ -1014,19 +1019,17 @@ export default function ServiceAdvisorPage() {
         return
       }
 
-      const dealerCtx = await getDealerContext()
-      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
-      const folder = `${dealerCode}/service-advisor-bodyshop-intake/${id}`
-      const { data: existingFiles, error: photoListError } = await supabase.storage
-        .from(AUTODOC_BUCKET)
-        .list(folder, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
+      const { count: metadataPhotoCount, error: metadataCountError } = await supabase
+        .from('bodyshop_intake_vehicle_photos')
+        .select('id', { count: 'exact', head: true })
+        .eq('reception_entry_id', id)
 
-      if (photoListError) {
-        setError(photoListError.message)
+      if (metadataCountError) {
+        setError(metadataCountError.message)
         return
       }
 
-      if ((existingFiles ?? []).length === 0) {
+      if ((metadataPhotoCount ?? 0) === 0) {
         setError('Attach at least one vehicle photo for Accident entry before saving.')
         return
       }
@@ -1855,6 +1858,10 @@ export default function ServiceAdvisorPage() {
                     const effectiveServiceType = String(draft.service_type || row.service_type || '')
                     const isBodyshopRow = isBodyshopServiceType(effectiveServiceType)
                     const isDirty = dirtyRowIds.has(row.id)
+                    const hasCustomerType = isValidCustomerType(draft.customer_type)
+                    const hasJcNumber = Boolean(String(draft.jc_number ?? '').trim())
+                    const hasBodyshopPhoto = (bodyshopPhotoCountByEntryId[row.id] ?? 0) > 0
+                    const isBodyshopPending = isBodyshopRow && (!hasCustomerType || !hasJcNumber || !hasBodyshopPhoto)
                     const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
                     const canMarkDone = canUpdateRow(row) && isCompleted
@@ -2049,13 +2056,13 @@ export default function ServiceAdvisorPage() {
                             <button
                               type="button"
                               onClick={() => void saveRow(row.id)}
-                              disabled={savingId === row.id || !isDirty}
+                              disabled={savingId === row.id || (!isDirty && !isBodyshopPending)}
                               className={[
                                 'btn btn--primary btn--sm',
-                                !isDirty && savingId !== row.id ? 'btn--dim' : '',
+                                !isDirty && !isBodyshopPending && savingId !== row.id ? 'btn--dim' : '',
                               ].join(' ').trim()}
                             >
-                              {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
+                              {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : isBodyshopPending ? 'Pending' : 'Saved'}
                             </button>
                             {isCompleted && <button
                               type="button"
