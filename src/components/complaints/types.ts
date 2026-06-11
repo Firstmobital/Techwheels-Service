@@ -94,6 +94,7 @@ export interface ComplaintPortalResponse {
   entry_summary?: {
     reception_entry_id: bigint
     reg_number: string
+    jc_number?: string
     model?: string
     customer_name?: string
     service_type?: string

@@ -322,7 +322,7 @@ export const ComplaintPortalPage: React.FC = () => {
               <div className="twcp-veh">
                 <div className="twcp-reg">{entry?.reg_number || '--'}</div>
                 <div className="twcp-veh-meta">{entry?.model || '--'} · {entry?.service_type || '--'}</div>
-                <div className="twcp-veh-jc">{ticket?.jc_number || 'JC number will be visible after submit'}</div>
+                <div className="twcp-veh-jc">{entry?.jc_number || ticket?.jc_number || '--'}</div>
               </div>
             </div>
             <div className="twcp-body">

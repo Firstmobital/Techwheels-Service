@@ -49,6 +49,7 @@ BEGIN
   SELECT jsonb_build_object(
     'reception_entry_id', id,
     'reg_number', reg_number,
+    'jc_number', jc_number,
     'model', model,
     'customer_name', owner_name,
     'service_type', service_type,
