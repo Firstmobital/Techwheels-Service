@@ -1,249 +1,213 @@
-# WhatsApp Group Creation Feature - Implementation Plan
+# WhatsApp Customer Message Sender - Implementation Plan
 
-**Project:** Techwheels Service  
-**Feature:** Create WA Group Button in Service Advisor Page  
-**Started:** 2026-06-05  
-**Status:** IN PROGRESS  
+Project: Techwheels Service  
+Feature: Replace Create Group with Send WA (template-driven)  
+Started: 2026-06-11  
+Status: RE-SCOPED (GROUP FLOW RETIRED)
 
 ---
 
 ## Executive Summary
 
-Implementing a one-click guided WhatsApp group creation flow in the Service Advisor page. Users click "Create Group" on any vehicle row, and the system prepares a guided checklist with predefined Owner, Service Advisor, and Super Admin phone numbers, plus a dynamic service completion message (Reg No + Service Type). WhatsApp opens automatically and user completes group creation + message send manually (policy-compliant, no bot automation).
+Previous behavior assumed automated WhatsApp group creation from the Service Advisor page. That is not viable as a reliable automated workflow. This plan pivots to a robust and scalable pattern:
+
+1. Replace row action with Send WA (or WhatsApp icon button with tooltip Send WA).
+2. Send a direct WhatsApp message to the customer mobile number using a predefined template.
+3. Use a dynamic complaint tracking URL for each row/reception entry.
+4. Build a universal WhatsApp sender architecture, similar to universal email sender, so future templates can be plugged in without rewriting sender logic.
 
 ---
 
-## What's Been Done ✅
+## Product Decision
 
-### 1. **Core Logic Implementation** (COMPLETE)
-- [x] Phone normalization function: `normalizeWhatsAppPhone()` in ServiceAdvisorPage.tsx:115
-  - Handles 10-digit, 12-digit (91-prefixed), and invalid inputs
-  - Returns null for missing/invalid numbers
-- [x] Phone map parser: `parsePhoneMap()` in ServiceAdvisorPage.tsx:123
-  - Parses env config: `SA001:9196XXXXX,SA002:9197XXXXX`
-  - Maps employee code → WhatsApp-ready phone number
-- [x] Service type message builder: `getServiceTypeForMessage()` in ServiceAdvisorPage.tsx:137
-  - Prioritizes draft (in-progress) value over row value
-  - Falls back to generic "Service" if neither available
-- [x] Dynamic message template: `buildServiceCompleteMessage()` in ServiceAdvisorPage.tsx:144
-  - Format: "Your vehicle {Reg No} with {Service Type} is complete. Please come and collect."
-- [x] Group creation handler: `handleCreateGroup()` in ServiceAdvisorPage.tsx:571
-  - Collects owner phone from row + temporary login user phone + temporary role contact phone
-  - Deduplicates members (Set)
-  - Generates checklist with group name, member list, message
-  - Copies checklist to clipboard
-  - Opens WhatsApp automatically (mobile vs. desktop)
+### UI Recommendation
 
-### 2. **Current Contact Sourcing** (READY FOR TEST)
-- [x] Contact source behavior currently active in code:
-  - Owner phone is dynamic per row (`row.owner_phone`)
-  - Login user contact uses temporary fixed value: `1234567678`
-  - Role contact uses temporary fixed value: `1234345656`
-  - Group name prefix is fixed as "Service Delivery"
+Default recommendation:
+- Use a single WhatsApp icon button in the Action column for compact table UX.
+- Tooltip: Send WA.
+- Accessibility label: Send WA to customer.
 
-### 3. **UI/UX Implementation** (COMPLETE)
-- [x] New button: "Create Group" in Action column (td-save) of each row
-  - Placed below Save button
-  - Uses tbtn--compact styling
-  - Right next to Save for discoverability
-- [x] Layout adjustments:
-  - td-save width increased from 80px → 132px (src/App.css:360)
-  - tactions--stack utility added for vertical button layout (src/App.css:513)
-  - Buttons now stack cleanly with proper spacing
+Fallback option:
+- If discoverability is a concern during rollout, use text button Send WA for 1 sprint, then switch to icon once adoption is stable.
 
-### 4. **Data Flow & Safety** (COMPLETE)
-- [x] Per-row dynamic data:
-  - Reg No from row.reg_number
-  - Service Type from draft (editable) or row (original)
-  - Owner phone from row.owner_phone
-  - Additional members currently from temporary fixed contacts
-- [x] Error handling:
-  - Validates at least one valid phone number before proceeding
-  - Toast notification for failure (no members found)
-  - User-friendly error message
-- [x] Policy compliance:
-  - No bot automation or forced actions
-  - User manually creates group and sends message in WhatsApp
-  - Message prefilled via wa.me link (official WhatsApp API)
-  - Clipboard fallback for cases where window.open doesn't copy
+### Messaging Behavior
 
-### 5. **Code Quality** (COMPLETE)
-- [x] TypeScript: No compile errors
-- [x] Consistent with existing codebase style
-- [x] All functions are pure/testable utilities
-- [x] Error messages clear and actionable
+On click:
+1. Validate customer phone on row.
+2. Resolve or generate complaint URL for that vehicle/reception entry.
+3. Render template sa_floor_completed_wa with dynamic placeholders.
+4. Dispatch message using universal WhatsApp sender.
+5. Log send attempt + status (sent/failed) for audit.
 
 ---
 
-## What's Pending ⏳
+## Template Contract (Initial)
 
-### PHASE 1: Testing & Validation (READY)
-- [ ] **Local Development Test**
-  - [ ] Start dev server: `npm run dev`
-  - [ ] Open Service Advisor page
-  - [ ] Verify "Create Group" button appears in action column
-  - [ ] Click button on a row with owner_phone + service type
-  - [ ] Confirm clipboard contains checklist
-  - [ ] Confirm WhatsApp opens (web or mobile)
-  - [ ] Verify message text includes correct Reg No and Service Type
-  - [ ] Test edge cases:
-    - Row with missing owner_phone (expect error)
-    - Row with custom (draft) service type
-    - Deduplication when owner phone matches one of fixed contacts
+Template key: sa_floor_completed_wa
 
-### PHASE 2: Dynamic Contact Upgrade (NEXT STEP)
-- [ ] **Schema + Data Preparation**
-  - [ ] Add contact number field for login users (users table)
-  - [ ] Add contact number field for employee role contact source
-  - [ ] Backfill valid phone numbers for active users/employees
-- [ ] **Code Upgrade**
-  - [ ] Replace temporary fixed login user phone with authenticated user phone
-  - [ ] Replace temporary fixed role phone with role-based lookup
-  - [ ] Keep hardcoded numbers only as explicit fallback for rollback safety
+Required dynamic fields:
+- customer_name
+- reg_number
+- vehicle_details (model + service type)
+- completed_on
+- complaint_url
 
-### PHASE 3: User Acceptance & Documentation (FUTURE)
-- [ ] **UAT Checklist**
-  - [ ] Service Advisor tests flow with real numbers
-  - [ ] Verify group name format matches dealer branding expectations
-  - [ ] Test on iOS (WhatsApp app native behavior)
-  - [ ] Test on Android (WhatsApp app native behavior)
-  - [ ] Test on desktop (WhatsApp Web)
-- [ ] **User Documentation**
-  - [ ] Create "Create Group" how-to guide
-  - [ ] Document expected checklist format
-  - [ ] Document what happens after WhatsApp opens
-- [ ] **Metrics/Analytics (Optional)**
-  - [ ] Log "Create Group" clicks (for feature usage)
-  - [ ] Track success rate (e.g., return to SA page after group creation)
+Message intent:
+- Inform customer work completion.
+- Invite issue reporting via complaint URL.
 
-### PHASE 4: Future Enhancements (BACKLOG)
-- [ ] **Advanced Features**
-  - [ ] Allow custom phone number input (if user wants to add more members)
-  - [ ] Save group creation history (group name, members, timestamp)
-  - [ ] Template message customization per dealership
-  - [ ] Bulk Create Group for multiple rows
-  - [ ] Integration with WhatsApp Business API (if upgrade needed for analytics)
-- [ ] **Mobile App Parity**
-  - [ ] Implement same feature in mobile app (if Service Advisor role exists there)
+Canonical copy:
+
+Hello {customer_name},
+
+Your vehicle {reg_number} ({vehicle_details}) work is completed on {completed_on}.
+
+If you face any issue, please raise a complaint here:
+{complaint_url}
+
+Thank you,
+Techwheels Service
 
 ---
 
-## Implementation Tracker
+## Technical Architecture (Universal Sender Pattern)
 
-### Overall Progress
-```
-[████████████░░░░░░░░░░░░░░░░] 35% Complete
-```
+### Layer 1: Template Layer (reusable)
+- Path: src/lib/waTemplates/
+- One file per template.
+- Exports template builder functions that return final message text.
 
-### Breakdown by Phase
-| Phase | Status | Progress | ETA |
-|-------|--------|----------|-----|
-| Core Logic | ✅ Complete | 100% | Done |
-| UI/UX | ✅ Complete | 100% | Done |
-| Testing & Validation | ⏳ Pending | 0% | Start immediately |
-| Config Integration | ⏳ Pending | 0% | After testing |
-| UAT & Docs | ⏳ Pending | 0% | After config |
-| Future Enhancements | 📋 Backlog | 0% | Post-launch |
+### Layer 2: Universal WhatsApp Sender (generic delivery)
+- Suggested endpoint: supabase/functions/send-whatsapp/index.ts
+- Responsibilities:
+  - validate internal auth/secret
+  - normalize/validate destination phone
+  - send via configured provider (Cloud API/Gupshup/etc.)
+  - return delivery status + provider reference
+  - write audit logs
 
----
+### Layer 3: Feature Orchestrator (Service Advisor action)
+- ServiceAdvisor page handler should:
+  - gather row data
+  - obtain complaint URL dynamically
+  - call template builder
+  - invoke universal sender
+  - show toast feedback to user
 
-## Configuration Examples
-
-### Temporary Contact Constants (Current)
-```bash
-TEMP_LOGIN_USER_PHONE=1234567678
-TEMP_ROLE_CONTACT_PHONE=1234345656
-DEFAULT_GROUP_NAME_PREFIX=Service Delivery
-```
-
-### Future Dynamic Source (Recommended)
-```
-Owner Phone: reception_entries.owner_phone
-Login User Phone: users.contact_phone (to be added)
-Role Contact Phone: employee_master.contact_phone by role (to be added)
-```
+This mirrors the existing universal email sender model:
+- template composition separated from transport
+- sender remains generic
+- feature modules only orchestrate payload
 
 ---
 
-## Key Files Modified
+## Dynamic Complaint URL Strategy
 
-| File | Change | Lines |
-|------|--------|-------|
-| `src/pages/ServiceAdvisorPage.tsx` | Added helpers + handler + button | 115-145, 151-157, 571-605, 1102-1107 |
-| `src/App.css` | Updated td-save width, added tactions--stack | 360, 513 |
+Use existing complaints link generation mechanism per reception entry.
 
----
+Preferred flow:
+1. Call complaints utility/RPC to get active link token for row reception entry.
+2. Construct complaint URL as /c/{token}.
+3. Inject URL into template before dispatch.
 
-## Testing Checklist
-
-### Unit Tests (If Needed)
-- [ ] `normalizeWhatsAppPhone()` with 10 digits
-- [ ] `normalizeWhatsAppPhone()` with 12 digits (91-prefixed)
-- [ ] `normalizeWhatsAppPhone()` with invalid input
-- [ ] `getServiceTypeForMessage()` with draft value
-- [ ] `getServiceTypeForMessage()` without draft
-- [ ] `buildServiceCompleteMessage()` output format
-
-### Integration Tests
-- [ ] Env vars load correctly in dev
-- [ ] Env vars load correctly in prod
-- [ ] Button appears only when conditions are met
-- [ ] Handler executes without crashing
-- [ ] Clipboard receives correct data
-
-### Manual Testing
-- [ ] Mobile device (iOS) - WhatsApp app opens
-- [ ] Mobile device (Android) - WhatsApp app opens
-- [ ] Desktop (browser) - WhatsApp Web opens
-- [ ] Missing phone numbers trigger error
-- [ ] Custom service type in draft is used in message
+If link generation fails:
+- Do not send a partial message.
+- Show error: Unable to generate complaint link. Please retry.
 
 ---
 
-## Risk Assessment
+## Scope Changes from Old Plan
 
-| Risk | Severity | Mitigation |
-|------|----------|-----------|
-| Invalid phone numbers passed | Medium | Validation in handler, error toast |
-| Clipboard write fails on some browsers | Low | Fallback: still opens WhatsApp |
-| WhatsApp not installed on user device | Low | User sees browser/app store hint from WhatsApp |
-| Env vars missing in production | High | Provide clear docs, test in staging first |
-| User cancels group creation | Low | Expected behavior, no side effects |
+Retired:
+- Automated/manual group creation checklist flow.
+- Multi-member group assembly logic.
+- Create Group label and behavior.
 
----
-
-## Sign-Off & Approval
-
-- [ ] Development Complete: ✅ 2026-06-05
-- [ ] QA Testing: ⏳ Pending
-- [ ] Product Approval: ⏳ Pending
-- [ ] Deployment: ⏳ Pending
+New scope:
+- One-click customer WhatsApp send.
+- Template-driven message payload.
+- Universal sender + future template expansion.
 
 ---
 
-## Notes & Updates Log
+## Implementation Phases
 
-### 2026-06-05 - Initial Implementation
-- Core logic fully implemented and tested for compile errors
-- UI buttons added to Service Advisor table
-- All helpers type-safe and ready for testing
-- Next: Local dev testing with real phone numbers
+### Phase 1 - Plan and UI Rename
+- [ ] Replace Create Group action label with Send WA or WhatsApp icon.
+- [ ] Update tooltip/help text and user copy.
+- [ ] Remove group-creation wording from UI and docs.
+
+### Phase 2 - Template Layer
+- [ ] Create src/lib/waTemplates/index.ts.
+- [ ] Create src/lib/waTemplates/sa_floor_completed_wa.ts.
+- [ ] Add placeholder contract typing and validation.
+
+### Phase 3 - Universal Sender
+- [ ] Create/extend send-whatsapp edge function.
+- [ ] Add provider adapter interface for future provider swap.
+- [ ] Add request validation, error taxonomy, and audit logging.
+
+### Phase 4 - Service Advisor Integration
+- [ ] Replace old handler with handleSendWhatsApp().
+- [ ] Fetch dynamic complaint URL per row.
+- [ ] Build template payload and dispatch message.
+- [ ] Show success/failure toasts with actionable detail.
+
+### Phase 5 - QA and Rollout
+- [ ] Validate on rows with valid/invalid phone.
+- [ ] Validate complaint URL generation for each send.
+- [ ] Validate template placeholder substitutions.
+- [ ] Validate audit logs and retry behavior.
+- [ ] Roll out to production.
 
 ---
 
-## Quick Start for Testing
+## QA Acceptance Criteria
 
-```bash
-# 1. Start dev server
-npm run dev
-
-# 2. Navigate to Service Advisor page
-# 3. Click "Create Group" on any row
-# 4. Verify clipboard & WhatsApp behavior
-```
+- [ ] Action column no longer shows Create Group.
+- [ ] Send WA action is visible and clickable per row.
+- [ ] Message lands on customer number with correct dynamic values.
+- [ ] Complaint URL opens correct customer complaint page.
+- [ ] Failed sends are surfaced clearly to user and logged.
+- [ ] Universal sender works with at least one template now and is reusable for new templates later.
 
 ---
 
-**Last Updated:** 2026-06-05  
-**Last Updated By:** GitHub Copilot  
-**Next Review:** After testing phase
+## Risks and Mitigations
+
+1. Missing/invalid customer phone
+- Mitigation: strict phone validation before dispatch.
+
+2. Complaint URL not generated
+- Mitigation: block send when URL generation fails; show retry guidance.
+
+3. Provider outages/rate limits
+- Mitigation: sender retries + explicit failure logging + non-silent errors.
+
+4. Template drift across teams
+- Mitigation: single template folder + typed payload contracts + review checklist.
+
+---
+
+## Files and Structure (Target)
+
+- docs/Implementation_plans/operations/active/WA_GROUP_CREATION_IMPLEMENTATION_PLAN.md (this document; now re-scoped)
+- docs/wa_templates/sa_floor_completed_wa.md (template documentation)
+- src/lib/waTemplates/index.ts (template exports)
+- src/lib/waTemplates/sa_floor_completed_wa.ts (template builder)
+- src/pages/ServiceAdvisorPage.tsx (Send WA action wiring)
+- supabase/functions/send-whatsapp/index.ts (universal sender)
+
+---
+
+## Update Log
+
+2026-06-11
+- Plan re-scoped from group creation to template-based customer WhatsApp sender.
+- Added universal sender recommendation aligned with email sender architecture.
+- Added first template definition: sa_floor_completed_wa.
+
+---
+
+Last Updated: 2026-06-11  
+Last Updated By: GitHub Copilot

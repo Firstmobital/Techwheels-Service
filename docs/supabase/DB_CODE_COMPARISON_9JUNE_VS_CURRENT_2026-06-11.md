@@ -177,6 +177,65 @@ GRANT ALL ON TABLE realtime.messages_2026_06_06 TO postgres;
 - Migration `20260610130000_skip_zero_qty_parts_stock.sql` hard-deletes existing zero-qty rows and suppresses future zero-qty inserts/updates.
 - This may be intentional, but it removes historical zero-stock points and can affect audit/analytics continuity.
 
+### 7.7 High: Branch vs Location logic is mixed and creates business confusion
+
+#### What was expected (business intent)
+
+For long-term reporting and operations, these should be treated as different concepts:
+
+1. Location = physical workshop site (for example: Ajmer Road, Sitapura).
+2. Portal/Fuel channel = EV or PV business stream.
+3. Branch label = a display value only, derived from location + portal if needed.
+
+Expected behavior by page:
+
+1. Floor Incharge "Filter by location" should always filter by location only.
+2. SA Tracker should clearly show either:
+  - only location, or
+  - location + portal together.
+3. Reports should not use one text field for two different meanings.
+
+#### What was actually done
+
+1. Floor Incharge "Filter by location" is built from the `branch` value on reception entries.
+2. SA Tracker "Branch" is built from the `branch` value in closed job card data.
+3. During import, `branch` is often filled from employee location or slot location, so in practice `branch` behaves like location in many cases.
+
+#### Why this is a problem for business users
+
+1. Two words (Branch and Location) appear to mean the same thing on screen, but not by formal definition.
+2. Users can lose trust in numbers because labels are inconsistent between modules.
+3. Future expansion (new locations, mixed EV/PV workflows, dealer-specific logic) becomes hard to manage and error-prone.
+4. Audit and compliance reviews become harder because one field is overloaded.
+
+#### What should have been done
+
+1. Keep separate columns as source of truth:
+  - `location` (physical site)
+  - `portal` (EV/PV)
+2. Use a derived display label for UI where needed (for example: "Sitapura EV").
+3. Keep legacy `branch` only for backward compatibility during transition.
+4. Standardize all filters:
+  - "Filter by location" uses `location`
+  - "Portal/Fuel" uses `portal`
+  - combined chip (if needed) uses derived label only.
+
+#### Plain-language example
+
+If one car is from "Sitapura" and "EV":
+
+1. Location should always be "Sitapura".
+2. Portal should always be "EV".
+3. Display label can be "Sitapura EV".
+
+No page should guess this from one generic text value.
+
+#### Business impact rating
+
+- Severity: High
+- Type: Data semantics and reporting consistency risk
+- Recommended priority: Immediate design decision, phased implementation
+
 ## 8) RBAC-Focused Verdict
 
 1. Route-level RBAC wiring in application code improved.
@@ -195,7 +254,21 @@ GRANT ALL ON TABLE realtime.messages_2026_06_06 TO postgres;
 3. Review and tighten table grants for anon where unnecessary.
 4. Add explicit SQL checks validating policy semantics (not just object existence).
 5. Re-run dump compare after corrective migration to confirm drift closure.
+6. Approve and document canonical business definitions:
+  - Location = physical site
+  - Portal = EV/PV stream
+  - Branch label = derived display text only
+7. Add migration plan to introduce/standardize `location` and `portal` in all affected tables, with dual-write period before deprecating overloaded `branch` behavior.
+8. Update UI labels for clarity so non-technical users see consistent terms across Floor Incharge, SA Tracker, and reports.
 
-## 11) Final Conclusion
+## 11) Non-Developer Summary (What to understand quickly)
+
+1. Good news: a lot of useful work was delivered and the application builds successfully.
+2. Main concern: security and database change governance still need tightening.
+3. Important data concern: the system is currently mixing "branch" and "location" ideas in ways that can confuse reporting.
+4. Correct long-term direction: store location and EV/PV separately, then create display labels from those fields.
+5. This is fixable in a phased manner without stopping operations, but should be planned now before more data is added.
+
+## 12) Final Conclusion
 
 The post-9 June work delivered substantial functionality and UI integration, and the project builds cleanly. However, there are major correctness gaps in migration integrity and RBAC hardening on newly introduced bodyshop data structures. The most urgent fixes are migration reconciliation and policy tightening so deployed behavior matches intended access governance.

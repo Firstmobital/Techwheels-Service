@@ -11,6 +11,7 @@ import {
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
+import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 
 type RowDraft = {
   service_type: string
@@ -212,17 +213,8 @@ function getServiceTypeForMessage(rowServiceType: string | null | undefined, dra
   return rowValue || 'Service'
 }
 
-function buildServiceCompleteMessage(regNumber: string, serviceType: string): string {
-  return `Your vehicle ${regNumber} with ${serviceType} is complete. Please come and collect.`
-}
-
-const TEMP_LOGIN_USER_PHONE = '911234567678'
-const TEMP_ROLE_CONTACT_PHONE = '911234345656'
-const DEFAULT_GROUP_NAME_PREFIX = 'Service Delivery'
-
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
-  const waGroupNamePrefix = DEFAULT_GROUP_NAME_PREFIX
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
@@ -903,45 +895,56 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
     }
   }
 
-  async function handleCreateGroup(row: ReceptionEntryRow) {
+  async function handleSendWhatsApp(row: ReceptionEntryRow) {
     const draft = drafts[row.id] ?? EMPTY_DRAFT
     const ownerPhone = normalizeWhatsAppPhone(row.owner_phone)
-    const loginUserPhone = normalizeWhatsAppPhone(TEMP_LOGIN_USER_PHONE)
-    const roleContactPhone = normalizeWhatsAppPhone(TEMP_ROLE_CONTACT_PHONE)
 
-    const memberNumbers = Array.from(
-      new Set([ownerPhone, loginUserPhone, roleContactPhone].filter(Boolean) as string[]),
-    )
-
-    if (memberNumbers.length === 0) {
-      setError('Create Group needs at least one valid phone number (owner/SA/super admin).')
+    if (!ownerPhone) {
+      setError('Send WA needs a valid customer mobile number on this row.')
       return
     }
 
     const regNo = String(row.reg_number ?? '').trim().toUpperCase() || 'REG-NO'
     const serviceType = getServiceTypeForMessage(row.service_type, draft.service_type)
-    const message = buildServiceCompleteMessage(regNo, serviceType)
-    const groupName = `${waGroupNamePrefix} ${regNo}`.trim()
+    const vehicleModel = String(row.model ?? '').trim()
+    const vehicleDetails = vehicleModel ? `${vehicleModel} - ${serviceType}` : serviceType
+    const completedOn = row.invoice_done_at
+      ? formatDate(row.invoice_done_at)
+      : formatDate(new Date().toISOString())
 
-    const checklist = [
-      `Group Name: ${groupName}`,
-      `Add Members: ${memberNumbers.map((phone) => `+${phone}`).join(', ')}`,
-      `Message: ${message}`,
-    ].join('\n')
+    let complaintUrl = ''
 
     try {
-      await navigator.clipboard.writeText(checklist)
-      showToast('Group details copied. Complete group creation in WhatsApp.')
+      const link = await generateComplaintLink(BigInt(row.id))
+      complaintUrl = `${window.location.origin}/c/${link.token}`
     } catch {
-      showToast('WhatsApp opened. Use manual copy for group details.')
+      setError('Unable to generate complaint link for this row. Please retry.')
+      showToast('Unable to generate complaint link')
+      return
     }
+
+    const message = buildSaFloorCompletedWaTemplate({
+      customerName: String(row.owner_name ?? '').trim() || 'Customer',
+      regNumber: regNo,
+      vehicleDetails,
+      completedOn,
+      complaintUrl,
+    })
 
     const isMobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
     const waUrl = isMobileDevice
-      ? `https://wa.me/?text=${encodeURIComponent(message)}`
-      : 'https://web.whatsapp.com/'
+      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(message)}`
+      : `https://web.whatsapp.com/send?phone=${ownerPhone}&text=${encodeURIComponent(message)}`
 
-    window.open(waUrl, '_blank', 'noopener,noreferrer')
+    const opened = window.open(waUrl, '_blank', 'noopener,noreferrer')
+
+    if (!opened) {
+      // Popup blockers may block window.open; fallback to same-tab navigation.
+      window.location.href = waUrl
+      return
+    }
+
+    showToast('WhatsApp opened with prefilled message. Please click Send manually.')
   }
 
   async function handleGenerateComplaintLink(row: ReceptionEntryRow) {
@@ -1588,10 +1591,11 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
                             </button>
                             <button
                               type="button"
-                              onClick={() => void handleCreateGroup(row)}
+                              onClick={() => void handleSendWhatsApp(row)}
                               className="tbtn tbtn--compact"
+                              title="Send WA to customer"
                             >
-                              Create Group
+                              Send WA
                             </button>
                             {isCompleted && <button
                               type="button"
