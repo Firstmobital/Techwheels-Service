@@ -110,17 +110,17 @@ DONE | 2.4 | Replay-safe guards and deterministic upserts | Team | 2026-06-11 | 
 
 ### Phase 3
 
-IN PROGRESS | 3.1 | Scope bodyshop_assignments read policy | Team | 2026-06-11 | - | Drafted in 20260611182000_supabase_002_bodyshop_rbac_grants_hardening.sql (awaiting execution)
-IN PROGRESS | 3.2 | Scope bodyshop_assignments insert/update policies | Team | 2026-06-11 | - | Drafted in 20260611182000_supabase_002_bodyshop_rbac_grants_hardening.sql (awaiting execution)
-IN PROGRESS | 3.3 | Define non-admin bodyshop_repair_cards policy set | Team | 2026-06-11 | - | Scoped non-admin policy logic drafted via policy alteration (awaiting execution)
-IN PROGRESS | 3.4 | Remove unnecessary anon grants | Team | 2026-06-11 | - | REVOKE statements drafted for tables/sequences/function (awaiting execution)
-IN PROGRESS | 3.5 | Add deny-by-default policy semantic checks | Team | 2026-06-11 | - | Check pack added: supabase/sql_checks/20260611182000_supabase_002_bodyshop_rbac_grants_hardening_checks.sql
+DONE | 3.1 | Scope bodyshop_assignments read policy | Team | 2026-06-11 | 2026-06-11 | Executed via 20260611182000_supabase_002_bodyshop_rbac_grants_hardening.sql
+DONE | 3.2 | Scope bodyshop_assignments insert/update policies | Team | 2026-06-11 | 2026-06-11 | Executed scoped USING/WITH CHECK predicates
+DONE | 3.3 | Define non-admin bodyshop_repair_cards policy set | Team | 2026-06-11 | 2026-06-11 | Executed scoped non-admin allow paths while preserving admin bypass
+DONE | 3.4 | Remove unnecessary anon grants | Team | 2026-06-11 | 2026-06-11 | Verified no anon grants on bodyshop tables/sequences/function
+DONE | 3.5 | Add deny-by-default policy semantic checks | Team | 2026-06-11 | 2026-06-11 | Check pack executed successfully: 20260611182000_supabase_002_bodyshop_rbac_grants_hardening_checks.sql
 
 ### Phase 4
 
-PENDING | 4.1 | Replace destructive zero-qty handling strategy | Team | - | - | Preserve analytics and audit continuity
-PENDING | 4.2 | Separate location and portal schema semantics | Team | - | - | Backward-compatible transition
-PENDING | 4.3 | Derived display label for branch representation | Team | - | - | Keep UI compatibility during migration
+DONE | 4.1 | Replace destructive zero-qty handling strategy | Team | 2026-06-11 | 2026-06-11 | Executed + checks passed for retention-mode function behavior
+IN PROGRESS | 4.2 | Separate location and portal schema semantics | Team | 2026-06-11 | - | Migration drafted: 20260611201500_supabase_002_location_portal_semantics_split.sql (awaiting execution)
+IN PROGRESS | 4.3 | Derived display label for branch representation | Team | 2026-06-11 | - | branch_label column + deterministic backfill drafted (awaiting execution)
 PENDING | 4.4 | Align query/filter contracts to new semantics | Team | - | - | Floor Incharge, SA Tracker, reports
 PENDING | 4.5 | Add semantic validation checks for filters | Team | - | - | Include sample row assertions
 
@@ -204,6 +204,46 @@ PENDING | 5.4 | Final sign-off and archive transition | Team | - | - | Move to c
 - Added rollback pair SQL: supabase/migrations/20260611182000_supabase_002_bodyshop_rbac_grants_hardening_rollback.sql.
 - Added Phase 3 semantic check pack: supabase/sql_checks/20260611182000_supabase_002_bodyshop_rbac_grants_hardening_checks.sql.
 - Next action: execute Phase 3 migration/check in SQL Editor and capture outputs into evidence.
+
+### 2026-06-11 - Execution Update (Batch 3)
+
+- User executed 20260611182000_supabase_002_bodyshop_rbac_grants_hardening.sql successfully in Supabase SQL Editor.
+- User ran 20260611182000_supabase_002_bodyshop_rbac_grants_hardening_checks.sql and reported pass conditions:
+  - scoped policies active,
+  - targeted permissive true regression check returned zero rows,
+  - anon grant surface checks returned zero rows.
+- Phase 3 marked DONE.
+- Next action moves to Phase 4 (data lifecycle and semantics repair).
+
+### 2026-06-11 - Execution Update (Batch 4)
+
+- Added Phase 4.1 zero-qty retention migration:
+  - supabase/migrations/20260611193000_supabase_002_parts_stock_zero_qty_retention.sql
+- Added rollback pair SQL:
+  - supabase/migrations/20260611193000_supabase_002_parts_stock_zero_qty_retention_rollback.sql
+- Added paired SQL checks:
+  - supabase/sql_checks/20260611193000_supabase_002_parts_stock_zero_qty_retention_checks.sql
+- Note: this change prevents future zero-qty data loss; previously deleted rows are not recoverable from this migration.
+
+### 2026-06-11 - Execution Update (Batch 5)
+
+- User executed 20260611193000_supabase_002_parts_stock_zero_qty_retention.sql successfully in Supabase SQL Editor.
+- User ran 20260611193000_supabase_002_parts_stock_zero_qty_retention_checks.sql and confirmed:
+  - behavior_mode = retention_mode,
+  - trigger present,
+  - zero_qty_rows baseline captured.
+- Phase 4.1 marked DONE.
+- Next action: implement Phase 4.2 to separate location and portal semantics with compatibility-safe migration.
+
+### 2026-06-11 - Execution Update (Batch 6)
+
+- Added Phase 4.2/4.3 migration draft:
+  - supabase/migrations/20260611201500_supabase_002_location_portal_semantics_split.sql
+- Added rollback pair SQL:
+  - supabase/migrations/20260611201500_supabase_002_location_portal_semantics_split_rollback.sql
+- Added paired SQL checks:
+  - supabase/sql_checks/20260611201500_supabase_002_location_portal_semantics_split_checks.sql
+- Strategy is compatibility-safe: legacy branch remains unchanged; new columns location, portal, and branch_label are additive and backfilled deterministically.
 
 ---
 

@@ -132,3 +132,49 @@ Key verification output provided by user:
 8. ACL snapshot verified
 - broad grants still present for anon/authenticated/service_role on both bodyshop tables.
 - this confirms Phase 3 grant hardening is required and pending execution.
+
+## Execution Evidence (User-Executed in Supabase SQL Editor) - Phase 3
+
+Date: 2026-06-11
+Migration executed:
+- supabase/migrations/20260611182000_supabase_002_bodyshop_rbac_grants_hardening.sql
+
+Phase 3 check outcome summary (user provided):
+
+1. Policy expression snapshot
+- bodyshop_assignments_read now uses scoped predicate (no longer USING true).
+- bodyshop_assignments_insert now uses scoped WITH CHECK predicate.
+- bodyshop_assignments_update now uses scoped USING and WITH CHECK predicates.
+- bodyshop_repair_cards admin_unrestricted_all_ops_v1 now includes scoped non-admin allow paths plus admin bypass.
+- service_role policy bodyshop_assignments_service_all remains true/true as intended.
+
+2. Guard check status
+- No rows returned for permissive true predicate regression on targeted assignment policies.
+
+3. Grant hardening status
+- No rows returned for anon table grants on bodyshop tables.
+- No rows returned for anon sequence grants on bodyshop sequences.
+- No rows returned for anon routine privileges on update_bodyshop_assignments_updated_at.
+
+Conclusion:
+- Phase 3 migration executed successfully and corresponding SQL checks passed.
+
+## Execution Evidence (User-Executed in Supabase SQL Editor) - Phase 4.1
+
+Date: 2026-06-11
+Migration executed:
+- supabase/migrations/20260611193000_supabase_002_parts_stock_zero_qty_retention.sql
+
+Phase 4.1 check outcome summary (user provided):
+
+1. Function behavior mode
+- skip_zero_qty_parts_stock_rows -> retention_mode
+
+2. Trigger presence
+- trg_skip_zero_qty_parts_stock_rows present on service_parts_stock_snapshot_data
+
+3. Current zero-qty observability snapshot
+- zero_qty_rows = 0 (informational baseline)
+
+Conclusion:
+- Phase 4.1 migration executed successfully and retention-mode behavior is active.
