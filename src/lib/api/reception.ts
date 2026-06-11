@@ -239,6 +239,8 @@ export async function deleteServiceBranch(id: number): Promise<ApiResult<null>> 
 
 async function fetchReceptionEntriesWithKeyset(
   serviceTypes?: string[],
+  createdAtFrom?: string,
+  createdAtTo?: string,
 ): Promise<{ data: ReceptionEntryRow[] | null; error: unknown | null }> {
   let cursorCreatedAt: string | null = null
   let cursorId: number | null = null
@@ -254,6 +256,14 @@ async function fetchReceptionEntriesWithKeyset(
 
     if (serviceTypes && serviceTypes.length > 0) {
       query = query.in('service_type', serviceTypes)
+    }
+
+    if (createdAtFrom) {
+      query = query.gte('created_at', createdAtFrom)
+    }
+
+    if (createdAtTo) {
+      query = query.lte('created_at', createdAtTo)
     }
 
     if (cursorCreatedAt && cursorId !== null) {
@@ -320,6 +330,24 @@ export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEnt
     }
     return fail(error)
   }
+
+  const entries = (data ?? []) as ReceptionEntryRow[]
+  const enriched = await enrichEntriesWithEmployeeBranch(entries)
+  return ok(enriched)
+}
+
+export async function listReceptionEntriesByDateRange(range: { from: string; to: string }): Promise<ApiResult<ReceptionEntryRow[]>> {
+  const from = String(range.from ?? '').trim()
+  const to = String(range.to ?? '').trim()
+
+  if (!from || !to) return fail('Date range is required')
+
+  const createdAtFrom = `${from}T00:00:00+05:30`
+  const createdAtTo = `${to}T23:59:59+05:30`
+
+  const { data, error } = await fetchReceptionEntriesWithKeyset(undefined, createdAtFrom, createdAtTo)
+
+  if (error) return fail(error)
 
   const entries = (data ?? []) as ReceptionEntryRow[]
   const enriched = await enrichEntriesWithEmployeeBranch(entries)

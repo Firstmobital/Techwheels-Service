@@ -1,6 +1,6 @@
 # Current Project State Snapshot
 
-Snapshot Date: 2026-05-22
+Snapshot Date: 2026-06-11
 Version Context: Techwheels Service v1.0 (current workspace state)
 
 ## Product Scope
@@ -44,6 +44,8 @@ Version Context: Techwheels Service v1.0 (current workspace state)
 - Mandatory DB workflow file introduced: `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`.
 - RBAC daily execution tracking file introduced: `docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md`.
 - DBL-0002 helper permission functions migration is verified via read-only checks and archived under supabase/exec_success_migrations.
+- Reception branch mapping trigger contract has a new pending migration to prefer `employee_master.location` over SA-code fallback mapping on insert/update of `sa_employee_code`.
+- Pending migration file: `supabase/migrations/20260611123000_prefer_employee_master_location_in_reception_trigger.sql`.
 
 ## Module-Route Contract
 

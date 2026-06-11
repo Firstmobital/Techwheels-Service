@@ -1,6 +1,6 @@
 # Database Change Ledger
 
-Last Updated: 2026-05-23
+Last Updated: 2026-06-11
 Authority: local_folder/backups/full_database.sql is the authoritative schema reference.
 Purpose: Single source of truth for planned and applied DB changes so no one guesses schema state.
 
@@ -25,6 +25,7 @@ Purpose: Single source of truth for planned and applied DB changes so no one gue
 | DBL-0003 | 2026-05-23 | Introduce executed-migration archive workflow and folder | docs/process | N/A | GitHub Copilot | Techwheels Admin | VERIFIED | N/A | README + protocol updated; archive folder created | local_folder/backups/full_database.sql |
 | DBL-0004 | 2026-05-23 | Tighten RLS for import/parts tables by replacing permissive anon policies with module-aware authenticated policies | rls | supabase/exec_success_migrations/20260523162000_phase33_tighten_parts_import_rls_locktimeout_retry.sql | GitHub Copilot | Techwheels Admin + Dev Team | VERIFIED | Supabase SQL Editor (prod) | Verified 2026-05-23 with read-only checks: phase33_status=READY, legacy_count=0, present_count=16, rls_count=5; legacy anon/authenticated permissive policies removed; 16 RBAC policies present across 5 tables | local_folder/backups/full_database.sql |
 | DBL-0005 | 2026-05-23 | Register AutoDoc as top-level module for RBAC permission assignment | schema | supabase/migrations/20260523180000_add_autodoc_module.sql | GitHub Copilot | Techwheels Admin + Dev Team | VERIFIED | Supabase SQL Editor (prod) | Verified 2026-05-23: module_creation_check=PASS (count=1), autodoc_module_details=COMPLETE (id=9, name=autodoc, label=AutoDoc, route=/autodoc, sort_order=9, is_active=true), sequence_check=PASS | local_folder/backups/full_database.sql |
+| DBL-0006 | 2026-06-11 | Change reception branch trigger precedence: prefer Employee Master location; fallback to SA-code branch mapping only when location is blank | function | supabase/migrations/20260611123000_prefer_employee_master_location_in_reception_trigger.sql | GitHub Copilot | Techwheels Admin | PROPOSED | N/A | Pending manual apply and post-apply validation (create/update reception rows for SA code variants including EAA_500A840) | local_folder/backups/full_database.sql (function `public.apply_sa_business_mapping_on_reception`) |
 
 ---
 

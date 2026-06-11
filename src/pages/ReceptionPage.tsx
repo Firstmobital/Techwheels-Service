@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePreset } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import { getModelNames } from '../lib/api/settings'
 import {
@@ -19,6 +19,7 @@ const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 const SETTINGS_MODELS_STORAGE_KEY = 'settings.models.v1'
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const UNKNOWN_SERVICE_TYPE = 'Null'
+const UNKNOWN_LOCATION = 'Unknown'
 
 const SERVICE_TYPE_ABBREVIATIONS: Record<string, string> = {
   'running repairs': 'RR',
@@ -47,6 +48,50 @@ const SERVICE_TYPE_CARD_ORDER = [
   'pdi',
   'null',
 ]
+
+const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
+
+function toISTDate(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function getRangeFromPreset(preset: DateRangePreset): DateRange {
+  const now = new Date()
+  const today = toISTDate(now)
+
+  if (preset === 'this-month') {
+    return currentMonthRange()
+  }
+
+  if (preset === 'last-month') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const y = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 4)
+    const m = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(5, 7)
+    const lastDay = new Date(Number(y), Number(m), 0).getDate()
+    return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
+  }
+
+  if (preset === 'this-week') {
+    const day = now.getDay()
+    const mon = new Date(now)
+    mon.setDate(now.getDate() - ((day + 6) % 7))
+    return { from: toISTDate(mon), to: today }
+  }
+
+  if (preset === 'last-7') {
+    const d = new Date(now)
+    d.setDate(now.getDate() - 6)
+    return { from: toISTDate(d), to: today }
+  }
+
+  if (preset === 'last-30') {
+    const d = new Date(now)
+    d.setDate(now.getDate() - 29)
+    return { from: toISTDate(d), to: today }
+  }
+
+  return currentMonthRange()
+}
 
 const DEFAULT_MODEL_OPTIONS = [
   'Nexon',
@@ -220,6 +265,11 @@ function getFuelTypeLabel(value: string | null | undefined): string {
   return trimmed || UNKNOWN_FUEL_TYPE
 }
 
+function getLocationLabel(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_LOCATION
+}
+
 function normalizeName(value: string | null | undefined): string {
   return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 }
@@ -257,6 +307,7 @@ export default function ReceptionPage() {
 
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
+  const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -265,6 +316,7 @@ export default function ReceptionPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [selectedListFilter, setSelectedListFilter] = useState<ReceptionListFilter>('default')
+  const [selectedLocation, setSelectedLocation] = useState<string | 'all'>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string | 'all'>('all')
 
@@ -294,10 +346,22 @@ export default function ReceptionPage() {
     })
   }, [entries, todayKey])
 
-  const fuelFilterBaseEntries = useMemo(() => {
+  const locationFilterBaseEntries = useMemo(() => {
     if (selectedListFilter === 'today') return todayEntries
     return entries
   }, [entries, selectedListFilter, todayEntries])
+
+  const locationOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(locationFilterBaseEntries.map((entry) => getLocationLabel(entry.branch))),
+    )
+    return values.sort((a, b) => a.localeCompare(b))
+  }, [locationFilterBaseEntries])
+
+  const fuelFilterBaseEntries = useMemo(() => {
+    if (selectedLocation === 'all') return locationFilterBaseEntries
+    return locationFilterBaseEntries.filter((entry) => getLocationLabel(entry.branch) === selectedLocation)
+  }, [locationFilterBaseEntries, selectedLocation])
 
   const employeeFuelTypeByCode = useMemo(() => {
     return new Map(
@@ -425,6 +489,12 @@ export default function ReceptionPage() {
     setSelectedServiceType('all')
   }, [selectedServiceType, serviceTypeOptions])
 
+  useEffect(() => {
+    if (selectedLocation === 'all') return
+    if (locationOptions.includes(selectedLocation)) return
+    setSelectedLocation('all')
+  }, [selectedLocation, locationOptions])
+
   async function loadModelOptions() {
     const result = await getModelNames()
     if (!result.error && (result.data?.length ?? 0) > 0) {
@@ -467,6 +537,29 @@ export default function ReceptionPage() {
   async function loadData() {
     setLoading(true)
     setError(null)
+
+    const presetAvailability = await Promise.all(
+      PERIOD_PRESETS.map(async (preset) => {
+        const presetRange = getRangeFromPreset(preset)
+        const { count, error: countError } = await supabase
+          .from('service_reception_entries')
+          .select('id', { count: 'exact', head: true })
+          .gte('created_at', `${presetRange.from}T00:00:00+05:30`)
+          .lte('created_at', `${presetRange.to}T23:59:59+05:30`)
+
+        if (countError) {
+          return { preset, hasData: true }
+        }
+
+        return { preset, hasData: (count ?? 0) > 0 }
+      }),
+    )
+
+    setDisabledPeriodPresets(
+      presetAvailability
+        .filter((item) => !item.hasData)
+        .map((item) => item.preset),
+    )
 
     const [{ data: _entriesRaw, error: _entriesErr }, employeeRes, authRes] = await Promise.all([
       supabase
@@ -686,9 +779,33 @@ export default function ReceptionPage() {
       {error && <div className="alert alert--err mb-gap">{error}</div>}
       {notice && <div className="alert alert--ok mb-gap">{notice}</div>}
 
-      <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+      <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
 
-        <div className="toolbar toolbar--tight">
+      <div className="toolbar toolbar--tight">
+        <span className="toolbar__label">Filter by location:</span>
+        <button
+          type="button"
+          onClick={() => setSelectedLocation('all')}
+          className={`btn btn--sm ${selectedLocation === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+        >
+          All ({locationFilterBaseEntries.length})
+        </button>
+        {locationOptions.map((location) => {
+          const count = locationFilterBaseEntries.filter((entry) => getLocationLabel(entry.branch) === location).length
+          return (
+            <button
+              key={location}
+              type="button"
+              onClick={() => setSelectedLocation(location)}
+              className={`btn btn--sm ${selectedLocation === location ? 'btn--primary' : 'btn--ghost'}`}
+            >
+              {location} ({count})
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="toolbar toolbar--tight">
         <span className="toolbar__label">Filter by fuel type:</span>
         <button
           type="button"
@@ -887,6 +1004,7 @@ export default function ReceptionPage() {
               <div className="sub">
                 Newest first · {visibleEntries.length} shown
                 {selectedListFilter === 'today' ? ' · Today filter' : ''}
+                {selectedLocation !== 'all' ? ` · ${selectedLocation}` : ''}
                 {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
                 {selectedServiceType !== 'all' ? ` · ${selectedServiceType}` : ''}
               </div>

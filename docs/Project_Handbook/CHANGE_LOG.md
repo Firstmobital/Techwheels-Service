@@ -2,6 +2,13 @@
 
 Tracks documentation-sync updates for business logic, architecture, and access control.
 
+## 2026-06-11
+
+- Added migration to change reception branch mapping precedence so Employee Master forced location wins before SA-code fallback mapping.
+- New migration file: `supabase/migrations/20260611123000_prefer_employee_master_location_in_reception_trigger.sql`.
+- Updated trigger function contract: `public.apply_sa_business_mapping_on_reception()` now reads `employee_master.location` first and only falls back to `%500A840%/%3001440%/%3000840%` branch mapping when location is blank.
+- Added DB ledger entry `DBL-0006` with status `PROPOSED` pending manual migration apply and verification evidence.
+
 ## 2026-05-22
 
 - Added initial living handbook system under `docs/Project_Handbook/`.

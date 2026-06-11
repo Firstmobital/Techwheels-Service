@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   listServiceAdvisorEntries,
+  listReceptionEntriesByDateRange,
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
   markServiceAdvisorInvoiceDone,
@@ -8,7 +9,7 @@ import {
   generateComplaintLink,
   type ReceptionEntryRow,
 } from '../lib/api'
-import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePreset } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
@@ -62,6 +63,49 @@ const SOURCE_TONE_MAP: Record<string, string> = {
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const QUERY_PAGE_SIZE = 1000
+const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
+
+function toISTDate(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function getRangeFromPreset(preset: DateRangePreset): DateRange {
+  const now = new Date()
+  const today = toISTDate(now)
+
+  if (preset === 'this-month') {
+    return currentMonthRange()
+  }
+
+  if (preset === 'last-month') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const y = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 4)
+    const m = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(5, 7)
+    const lastDay = new Date(Number(y), Number(m), 0).getDate()
+    return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
+  }
+
+  if (preset === 'this-week') {
+    const day = now.getDay()
+    const mon = new Date(now)
+    mon.setDate(now.getDate() - ((day + 6) % 7))
+    return { from: toISTDate(mon), to: today }
+  }
+
+  if (preset === 'last-7') {
+    const d = new Date(now)
+    d.setDate(now.getDate() - 6)
+    return { from: toISTDate(d), to: today }
+  }
+
+  if (preset === 'last-30') {
+    const d = new Date(now)
+    d.setDate(now.getDate() - 29)
+    return { from: toISTDate(d), to: today }
+  }
+
+  return currentMonthRange()
+}
 
 function formatDate(value: string): string {
   const date = new Date(value)
@@ -232,7 +276,8 @@ export default function ServiceAdvisorPage() {
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [loading, setLoading] = useState(true)
-const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
+  const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
   const [error, setError] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
@@ -460,7 +505,7 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
     return Array.from(categories)
   }, [rows])
 
-  const showLocationFilter = availableBranches.length > 1
+  const showLocationFilter = availableBranches.length > 0
   const showFuelTypeFilter = availableFuelTypes.length > 1
   const showCategoryFilter = availableCategories.length > 1
   const showAdvisorFilter = totalAdvisorOptionCount > 1
@@ -646,16 +691,33 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
     // Check if user is admin
     const nextIsAdmin = await checkIfAdmin()
 
+    const presetAvailability = await Promise.all(
+      PERIOD_PRESETS.map(async (preset) => {
+        const presetRange = getRangeFromPreset(preset)
+        const { count, error: countError } = await supabase
+          .from('service_reception_entries')
+          .select('id', { count: 'exact', head: true })
+          .gte('created_at', `${presetRange.from}T00:00:00+05:30`)
+          .lte('created_at', `${presetRange.to}T23:59:59+05:30`)
+
+        if (countError) {
+          return { preset, hasData: true }
+        }
+
+        return { preset, hasData: (count ?? 0) > 0 }
+      }),
+    )
+
+    setDisabledPeriodPresets(
+      presetAvailability
+        .filter((item) => !item.hasData)
+        .map((item) => item.preset),
+    )
+
     // Fetch appropriate data
     let res
     if (nextIsAdmin) {
-      const { data: allEntriesRaw } = await supabase
-        .from('service_reception_entries')
-        .select('*')
-        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
-        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
-        .order('created_at', { ascending: false })
-      res = { data: allEntriesRaw ?? [], error: null } // Admin: see all reception entries
+      res = await listReceptionEntriesByDateRange(dateRange) // Admin: date-scoped + enriched reception entries
     } else {
       res = await listServiceAdvisorEntries() // SA: see only assigned rows
     }
@@ -1100,10 +1162,9 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
         {/* Branch & Fuel Type Filters (Admin or Multi-Dealer Users) */}
         {showScopeFilters && (
           <>
-            {showLocationFilter && (
-              <>
-                <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+              <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
 
+              {showLocationFilter && (
                 <div className="toolbar toolbar--tight">
                 <span className="toolbar__label">Filter by location:</span>
                 <button
@@ -1135,7 +1196,6 @@ const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
                   )
                 })}
               </div>
-              </>
             )}
 
             {showAdvisorFilter && (

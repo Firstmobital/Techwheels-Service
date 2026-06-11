@@ -5,7 +5,7 @@ import { useState } from 'react'
 
 export type DateRange = { from: string; to: string }
 
-type Preset = 'this-month' | 'last-month' | 'this-week' | 'last-7' | 'last-30' | 'custom'
+export type DateRangePreset = 'this-month' | 'last-month' | 'this-week' | 'last-7' | 'last-30' | 'custom'
 
 function toIST(d: Date) {
   // returns YYYY-MM-DD in Asia/Kolkata
@@ -20,7 +20,7 @@ export function currentMonthRange(): DateRange {
   return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
 }
 
-function getRange(preset: Preset, custom: DateRange): DateRange {
+function getRange(preset: DateRangePreset, custom: DateRange): DateRange {
   const now = new Date()
   const today = toIST(now)
 
@@ -57,24 +57,27 @@ interface Props {
   range: DateRange
   onChange: (r: DateRange) => void
   label?: string
+  disabledPresets?: DateRangePreset[]
 }
 
-export default function DateRangeFilter({ range, onChange, label }: Props) {
-  const [preset, setPreset] = useState<Preset>('this-month')
+export default function DateRangeFilter({ range, onChange, label, disabledPresets }: Props) {
+  const [preset, setPreset] = useState<DateRangePreset>('this-month')
   const [custom, setCustom] = useState<DateRange>(range)
+  const disabledSet = new Set(disabledPresets ?? [])
 
-  function apply(p: Preset, c?: DateRange) {
+  function apply(p: DateRangePreset, c?: DateRange) {
     const resolved = c ?? custom
     const r = getRange(p, resolved)
     onChange(r)
   }
 
-  function handlePreset(p: Preset) {
+  function handlePreset(p: DateRangePreset) {
+    if (disabledSet.has(p)) return
     setPreset(p)
     if (p !== 'custom') apply(p)
   }
 
-  const PRESETS: { key: Preset; label: string }[] = [
+  const PRESETS: { key: DateRangePreset; label: string }[] = [
     { key: 'this-month', label: 'This Month' },
     { key: 'last-month', label: 'Last Month' },
     { key: 'this-week',  label: 'This Week'  },
@@ -90,7 +93,9 @@ export default function DateRangeFilter({ range, onChange, label }: Props) {
         <button
           key={p.key}
           type="button"
+          disabled={disabledSet.has(p.key)}
           className={`btn btn--sm ${preset === p.key ? 'btn--primary' : 'btn--ghost'}`}
+          style={disabledSet.has(p.key) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
           onClick={() => handlePreset(p.key)}
         >
           {p.label}
@@ -123,9 +128,6 @@ export default function DateRangeFilter({ range, onChange, label }: Props) {
           />
         </>
       )}
-      <span style={{ fontSize: 11, color: 'var(--muted)', alignSelf: 'center', marginLeft: 4 }}>
-        {range.from} → {range.to}
-      </span>
     </div>
   )
 }
