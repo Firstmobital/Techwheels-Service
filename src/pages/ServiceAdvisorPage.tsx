@@ -64,7 +64,6 @@ const SOURCE_TONE_MAP: Record<string, string> = {
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const QUERY_PAGE_SIZE = 1000
 const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
-const LOAD_MORE_DAYS = 7
 
 function toISTDate(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -106,13 +105,6 @@ function getRangeFromPreset(preset: DateRangePreset): DateRange {
   }
 
   return currentMonthRange()
-}
-
-function shiftISODateByDays(isoDate: string, days: number): string {
-  const base = new Date(`${isoDate}T00:00:00+05:30`)
-  if (Number.isNaN(base.getTime())) return isoDate
-  base.setDate(base.getDate() + days)
-  return toISTDate(base)
 }
 
 function formatDate(value: string): string {
@@ -284,7 +276,7 @@ export default function ServiceAdvisorPage() {
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState<DateRange>(getRangeFromPreset('last-7'))
+  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
   const [error, setError] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
@@ -774,13 +766,6 @@ export default function ServiceAdvisorPage() {
     setLoading(false)
   }
 
-  function handleLoadMoreDays() {
-    setDateRange((prev) => ({
-      from: shiftISODateByDays(prev.from, -LOAD_MORE_DAYS),
-      to: prev.to,
-    }))
-  }
-
   useEffect(() => {
     void loadRows()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1178,13 +1163,7 @@ export default function ServiceAdvisorPage() {
         {/* Branch & Fuel Type Filters (Admin or Multi-Dealer Users) */}
         {showScopeFilters && (
           <>
-              <DateRangeFilter
-                range={dateRange}
-                onChange={setDateRange}
-                label="Period:"
-                disabledPresets={disabledPeriodPresets}
-                initialPreset="last-7"
-              />
+              <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
 
               {showLocationFilter && (
                 <div className="toolbar toolbar--tight">
@@ -1479,14 +1458,6 @@ export default function ServiceAdvisorPage() {
                 onChange={(event) => setSearch(event.target.value)}
               />
             </span>
-            <button
-              type="button"
-              onClick={handleLoadMoreDays}
-              className="btn btn--ghost btn--sm"
-              title="Extend from-date by 7 days to load older entries"
-            >
-              Load 7 More Days
-            </button>
           </div>
         </div>
 
