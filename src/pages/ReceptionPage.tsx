@@ -668,16 +668,49 @@ export default function ReceptionPage() {
 
     // Auto-create bodyshop repair card for Accident service type
     if (editingId === null && form.service_type === 'Accident' && result.data) {
-      const entry = result.data as { jc_number?: string | null; reg_number?: string; owner_name?: string | null; owner_phone?: string | null; branch?: string | null; sa_name?: string | null; sa_display_name?: string | null; created_at?: string }
+      const entry = result.data as { id?: number; jc_number?: string | null; reg_number?: string; owner_name?: string | null; owner_phone?: string | null; branch?: string | null; sa_name?: string | null; sa_display_name?: string | null; created_at?: string }
       const jcNo = entry.jc_number ?? form.reg_number
-      // Only create if no card exists yet for this JC
-      const { data: existing } = await supabase
+      const receptionEntryId = Number(entry.id)
+      let existingCard: { id: number } | null = null
+
+      if (Number.isFinite(receptionEntryId)) {
+        const byReceptionRes = await supabase
+          .from('bodyshop_repair_cards')
+          .select('id')
+          .eq('reception_entry_id', receptionEntryId)
+          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+      }
+
+      // Fallback for old rows before reception_entry_id migration backfill
+      const byJcRes = await supabase
         .from('bodyshop_repair_cards')
         .select('id')
         .eq('job_card_no', jcNo)
-        .maybeSingle()
-      if (!existing) {
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      const existingByJc = ((byJcRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+      if (!existingCard) existingCard = existingByJc
+      if (!existingCard && form.reg_number) {
+        const byRegRes = await supabase
+          .from('bodyshop_repair_cards')
+          .select('id')
+          .eq('reg_number', form.reg_number)
+          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        existingCard = ((byRegRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+      }
+
+      if (!existingCard) {
         await supabase.from('bodyshop_repair_cards').insert({
+          reception_entry_id:  Number.isFinite(receptionEntryId) ? receptionEntryId : null,
           job_card_no:         jcNo,
           reg_number:          form.reg_number,
           customer_name:       form.owner_name || null,

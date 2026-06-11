@@ -19,6 +19,36 @@ function inr(v: number | null | undefined) {
 }
 const CT_LABELS: Record<string, string> = { individual: 'Individual', firm: 'Firm', foc: 'FOC', cash: 'Cash' }
 
+function normalizeCardKey(card: { job_card_no: string | null | undefined; reg_number: string | null | undefined }) {
+  const receptionId = Number((card as { reception_entry_id?: number | null }).reception_entry_id)
+  if (Number.isFinite(receptionId) && receptionId > 0) return `reception:${receptionId}`
+  const jc = String(card.job_card_no ?? '').trim().toUpperCase()
+  if (jc) return `jc:${jc}`
+  const reg = String(card.reg_number ?? '').trim().toUpperCase()
+  if (reg) return `reg:${reg}`
+  return ''
+}
+
+function cardTimestamp(card: { updated_at?: string | null; created_at?: string | null }) {
+  const updatedAt = new Date(String(card.updated_at ?? '')).getTime()
+  if (Number.isFinite(updatedAt)) return updatedAt
+  const createdAt = new Date(String(card.created_at ?? '')).getTime()
+  return Number.isFinite(createdAt) ? createdAt : 0
+}
+
+function dedupeCards(cards: RepairCard[]): RepairCard[] {
+  const byKey = new Map<string, RepairCard>()
+  cards.forEach((card) => {
+    const key = normalizeCardKey(card)
+    if (!key) return
+    const existing = byKey.get(key)
+    if (!existing || cardTimestamp(card) >= cardTimestamp(existing)) {
+      byKey.set(key, card)
+    }
+  })
+  return Array.from(byKey.values())
+}
+
 type DetailTab = 'overview' | 'docs' | 'survey' | 'floor' | 'qc' | 'billing'
 
 // ── component ──────────────────────────────────────────────────────────────────
@@ -82,30 +112,60 @@ export default function BodyshopRepairPage() {
       ])
 
       const accidentRows = (accidentRes.data ?? []) as AccidentReceptionRow[]
+      const receptionIds = accidentRows.map((row) => row.id)
       const accidentKeys = Array.from(
         new Set(accidentRows.map((row) => intakeKey(row)).filter(Boolean)),
       )
 
       const existingKeys = new Set<string>()
-      if (accidentKeys.length > 0) {
-        const { data: existingCards } = await supabase
-          .from('bodyshop_repair_cards')
-          .select('job_card_no')
-          .in('job_card_no', accidentKeys)
+      const existingReceptionIds = new Set<number>()
+      if (receptionIds.length > 0 || accidentKeys.length > 0) {
+        const [existingByReceptionRes, existingByJcRes, existingByRegRes] = await Promise.all([
+          receptionIds.length > 0
+            ? supabase
+                .from('bodyshop_repair_cards')
+                .select('reception_entry_id')
+                .in('reception_entry_id', receptionIds)
+            : Promise.resolve({ data: [] as Array<{ reception_entry_id?: number | null }> }),
+          supabase
+            .from('bodyshop_repair_cards')
+            .select('job_card_no, reg_number')
+            .in('job_card_no', accidentKeys),
+          supabase
+            .from('bodyshop_repair_cards')
+            .select('job_card_no, reg_number')
+            .in('reg_number', accidentKeys),
+        ])
 
-        ;(existingCards ?? []).forEach((row) => {
-          const key = String((row as { job_card_no?: string | null }).job_card_no ?? '').trim().toUpperCase()
-          if (key) existingKeys.add(key)
+        ;((existingByReceptionRes.data ?? []) as Array<{ reception_entry_id?: number | null }>).forEach((row) => {
+          const receptionId = Number(row.reception_entry_id)
+          if (Number.isFinite(receptionId)) existingReceptionIds.add(receptionId)
+        })
+
+        const existingCards = [
+          ...((existingByJcRes.data ?? []) as Array<{ job_card_no?: string | null; reg_number?: string | null }>),
+          ...((existingByRegRes.data ?? []) as Array<{ job_card_no?: string | null; reg_number?: string | null }>),
+        ]
+
+        existingCards.forEach((row) => {
+          const jcKey = String(row.job_card_no ?? '').trim().toUpperCase()
+          const regKey = String(row.reg_number ?? '').trim().toUpperCase()
+          if (jcKey) existingKeys.add(jcKey)
+          if (regKey) existingKeys.add(regKey)
         })
       }
 
       const seenInsert = new Set<string>()
       const toInsert = accidentRows
         .map((row) => {
+          if (existingReceptionIds.has(row.id)) return null
           const key = intakeKey(row)
-          if (!key || existingKeys.has(key) || seenInsert.has(key)) return null
+          const regKey = String(row.reg_number ?? '').trim().toUpperCase()
+          if (!key || existingKeys.has(key) || (regKey && existingKeys.has(regKey)) || seenInsert.has(key)) return null
           seenInsert.add(key)
+          if (regKey) seenInsert.add(regKey)
           return {
+            reception_entry_id: row.id,
             job_card_no: key,
             reg_number: row.reg_number,
             customer_name: row.owner_name,
@@ -129,7 +189,7 @@ export default function BodyshopRepairPage() {
         ? await listRepairCards({ from: dateRange.from, to: dateRange.to })
         : data
 
-      setCards(mergedData)
+      setCards(dedupeCards(mergedData))
       setBranches((br.data ?? []).map((b: { name: string }) => b.name))
     } catch { /* ignore */ }
     setLoading(false)

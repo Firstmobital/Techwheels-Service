@@ -40,6 +40,7 @@ export function getGroupForStage(stage: number) {
 
 export interface RepairCard {
   id: number
+  reception_entry_id: number | null
   job_card_no: string
   reg_number: string | null
   customer_name: string | null
@@ -147,10 +148,95 @@ export async function getRepairCard(id: number): Promise<RepairCard> {
 }
 
 export async function createRepairCard(input: Partial<RepairCard> & { job_card_no: string }): Promise<RepairCard> {
+  const jcNo = String(input.job_card_no ?? '').trim()
+  const regNo = String(input.reg_number ?? '').trim()
+
+  let resolvedReceptionEntryId: number | null = Number.isFinite(Number(input.reception_entry_id))
+    ? Number(input.reception_entry_id)
+    : null
+
+  if (!resolvedReceptionEntryId) {
+    let receptionLookup = supabase
+      .from('service_reception_entries')
+      .select('id')
+      .eq('service_type', 'Accident')
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (jcNo) {
+      receptionLookup = receptionLookup.eq('jc_number', jcNo)
+    } else if (regNo) {
+      receptionLookup = receptionLookup.eq('reg_number', regNo)
+    }
+
+    const receptionRes = await receptionLookup
+    if (receptionRes.error) throw receptionRes.error
+    resolvedReceptionEntryId = ((receptionRes.data ?? []) as Array<{ id: number }>)[0]?.id ?? null
+  }
+
+  if (!resolvedReceptionEntryId) {
+    throw new Error('Cannot create Bodyshop Repair card without matching Accident reception entry. Create/update from Reception or Service Advisor.')
+  }
+
+  let existingId: number | null = null
+
+  const byReceptionRes = await supabase
+    .from('bodyshop_repair_cards')
+    .select('id')
+    .eq('reception_entry_id', resolvedReceptionEntryId)
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (byReceptionRes.error) throw byReceptionRes.error
+  existingId = ((byReceptionRes.data ?? []) as Array<{ id: number }>)[0]?.id ?? null
+
+  if (!existingId && jcNo) {
+    const byJcRes = await supabase
+      .from('bodyshop_repair_cards')
+      .select('id')
+      .eq('job_card_no', jcNo)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (byJcRes.error) throw byJcRes.error
+    existingId = ((byJcRes.data ?? []) as Array<{ id: number }>)[0]?.id ?? null
+  }
+
+  if (!existingId && regNo) {
+    const byRegRes = await supabase
+      .from('bodyshop_repair_cards')
+      .select('id')
+      .eq('reg_number', regNo)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (byRegRes.error) throw byRegRes.error
+    existingId = ((byRegRes.data ?? []) as Array<{ id: number }>)[0]?.id ?? null
+  }
+
+  if (existingId) {
+    const { data, error } = await supabase
+      .from('bodyshop_repair_cards')
+      .update({
+        ...input,
+        reception_entry_id: resolvedReceptionEntryId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingId)
+      .select()
+      .single()
+    if (error) throw error
+    return data as RepairCard
+  }
+
   const { data, error } = await supabase
     .from('bodyshop_repair_cards')
     .insert({
       ...input,
+      reception_entry_id: resolvedReceptionEntryId,
       current_stage: 1,
       current_stage_name: 'vehicle_receiving',
       overall_status: 'active',

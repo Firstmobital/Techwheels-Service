@@ -241,7 +241,7 @@ Stage-governance note:
 ⏳ 5.1 | Verify SA -> Bodyshop Floor traceability | QA + Web Dev | - | - | jc/reg mapping parity
 ✅ 5.2 | Verify SA -> Bodyshop Repair data handoff | QA + Web Dev | 2026-06-11 | 2026-06-11 | SA Accident intake now syncs to repair cards + intake photo metadata/drive links
 ⏳ 5.3 | Add cross-module reconciliation checklist | QA | - | - | service-advisor/bodyshop-floor/bodyshop-repair
-🔄 5.4 | Validate duplicate/orphan prevention | QA + API | 2026-06-11 | - | Bodyshop Repair now auto-inserts missing Accident intakes with duplicate key guard (jc/reg)
+✅ 5.4 | Validate duplicate/orphan prevention (app + DB hardening) | QA + API | 2026-06-11 | 2026-06-12 | Canonical reception identity migration prepared; app write paths aligned to reception key
 ⏳ 5.5 | Complete end-to-end UAT handoff sign-off | Ops + QA | - | - | reception -> SA -> floor -> repair
 🔄 5.6 | Validate 18-stage continuity in bodyshop-repair | QA + Ops | 2026-06-11 | - | Stages 1-4 now auto-progress from SA signals (customer type, photos, jc no)
 ⏳ 5.7 | Validate Stage10->Stage11 floor handoff | QA + Floor Team | - | - | parts status to floor assignment gate
@@ -255,6 +255,7 @@ Stage-governance note:
 - [x] Final decision on bodyshop photo metadata table contract.
 - [x] Storage bucket path convention approval.
 - [ ] UAT sample entries covering Accident + non-Accident service types.
+- [x] DB-level canonical key hardening for bodyshop cards (`reception_entry_id` + uniqueness) prepared in migration file; pending user-run apply.
 
 ---
 
@@ -431,6 +432,39 @@ After migration apply:
 - Local validation:
   - Verified in localhost Service Advisor and Bodyshop Repair flows.
   - Known unrelated build blocker remains: unused symbol in `FloorInchargePage.tsx`.
+
+### 2026-06-11 - Duplicate Bodyshop Card Hotfix Across Modules
+- Root-cause observed: same vehicle/job card being written from multiple modules without a DB uniqueness guard on `bodyshop_repair_cards`.
+- Implemented app-level duplicate prevention now:
+  - Reception: create path checks existing card by JC, fallback reg, before insert.
+  - Service Advisor: save path updates latest matching card deterministically (duplicate-safe lookup; no `maybeSingle` for potentially duplicated keys).
+  - Bodyshop Floor: first-assignment path checks existing card by JC/reg before insert.
+  - Bodyshop Repair: accident auto-intake insert guard checks both JC and reg keys.
+  - Bodyshop Repair: render list dedupes to latest record per key so repeated historical duplicates are not shown as separate cards.
+  - Bodyshop Repair API `createRepairCard`: now reuses existing card (JC/reg) and updates instead of always inserting.
+- Validation:
+  - Local production build passes after hotfix.
+- Scope note:
+  - This hotfix prevents new duplicate drift in app paths and suppresses duplicate display.
+  - Long-term canonical fix remains DB-level schema hardening (`reception_entry_id` identity + unique constraint).
+
+### 2026-06-12 - Canonical Reception Identity Hardening Implemented (Code + Migration)
+- Added migration file:
+  - `supabase/migrations/20260612001000_bodyshop_repair_cards_canonical_reception_identity.sql`
+- Migration actions:
+  - Adds `reception_entry_id` to `public.bodyshop_repair_cards`
+  - Backfills reception linkage from Accident reception rows using JC/reg matching preference
+  - Deletes duplicate rows keeping latest per `reception_entry_id`
+  - Adds FK to `public.service_reception_entries(id)` and unique partial index on `reception_entry_id`
+  - Adds index on `reception_entry_id` for lookup performance
+- App alignment to canonical key:
+  - Service Advisor now reads/updates Bodyshop cards primarily by `reception_entry_id`
+  - Reception accident-create path writes `reception_entry_id` and checks existing by that key first
+  - Bodyshop Floor first-assignment path checks/inserts by `reception_entry_id`
+  - Bodyshop Repair accident sync inserts with `reception_entry_id`; dedupe prefers canonical reception key
+  - Bodyshop Repair API `createRepairCard` now resolves/uses `reception_entry_id` and blocks orphan creation when no Accident reception source is found
+- Validation:
+  - Local production build passes after all updates.
 
 ---
 

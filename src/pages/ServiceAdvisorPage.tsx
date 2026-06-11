@@ -286,21 +286,41 @@ function getBodyshopAutoStage(params: {
 
 type BodyshopCardLite = {
   id: number
+  reception_entry_id: number | null
   job_card_no: string | null
   reg_number: string | null
   customer_type: string | null
   current_stage: number | null
+  updated_at?: string | null
+  created_at?: string | null
 }
 
 function findMatchingBodyshopCard(row: ReceptionEntryRow, cards: BodyshopCardLite[]): BodyshopCardLite | undefined {
   const rowJc = String(row.jc_number ?? '').trim().toUpperCase()
   const rowReg = String(row.reg_number ?? '').trim().toUpperCase()
-  return cards.find((card) => {
+  const candidates = cards.filter((card) => {
     const cardJc = String(card.job_card_no ?? '').trim().toUpperCase()
     const cardReg = String(card.reg_number ?? '').trim().toUpperCase()
     if (rowJc && cardJc) return rowJc === cardJc
     return rowReg && cardReg && rowReg === cardReg
   })
+
+  const score = (card: BodyshopCardLite): number => {
+    const cardJc = String(card.job_card_no ?? '').trim().toUpperCase()
+    const cardReg = String(card.reg_number ?? '').trim().toUpperCase()
+    const exactJc = rowJc && cardJc && rowJc === cardJc ? 1000000000000 : 0
+    const exactReg = rowReg && cardReg && rowReg === cardReg ? 1000000000 : 0
+    const hasCustomerType = isValidCustomerType(card.customer_type) ? 1000000 : 0
+    const updatedTs = Number.isFinite(new Date(String(card.updated_at ?? '')).getTime())
+      ? new Date(String(card.updated_at ?? '')).getTime()
+      : 0
+    const createdTs = Number.isFinite(new Date(String(card.created_at ?? '')).getTime())
+      ? new Date(String(card.created_at ?? '')).getTime()
+      : 0
+    return exactJc + exactReg + hasCustomerType + updatedTs + createdTs
+  }
+
+  return candidates.sort((a, b) => score(b) - score(a))[0]
 }
 
 function sanitizeFileNamePart(raw: string): string {
@@ -345,7 +365,6 @@ export default function ServiceAdvisorPage() {
   const [uploadingBodyshopPhotosId, setUploadingBodyshopPhotosId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
-  const [bodyshopPhotoCountByEntryId, setBodyshopPhotoCountByEntryId] = useState<Record<number, number>>({})
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
   const [holdJobCardNumbers, setHoldJobCardNumbers] = useState<Set<string>>(new Set())
   const [inProcessJobCardNumbers, setInProcessJobCardNumbers] = useState<Set<string>>(new Set())
@@ -815,15 +834,20 @@ export default function ServiceAdvisorPage() {
     })
 
     const bodyshopRows = data.filter((row) => isBodyshopServiceType(row.service_type))
-    const regNumbers = Array.from(new Set(bodyshopRows.map((row) => String(row.reg_number ?? '').trim()).filter(Boolean)))
-    const nextPhotoCountByEntryId: Record<number, number> = {}
-    if (bodyshopRows.length > 0 && regNumbers.length > 0) {
-      const { data: bodyshopCards } = await supabase
-        .from('bodyshop_repair_cards')
-        .select('id, job_card_no, reg_number, customer_type, current_stage')
-        .in('reg_number', regNumbers)
+    const receptionIds = bodyshopRows.map((row) => row.id)
+    if (bodyshopRows.length > 0 && receptionIds.length > 0) {
+      const cardsById = new Map<number, BodyshopCardLite>()
 
-      const cards = (bodyshopCards ?? []) as BodyshopCardLite[]
+      const { data: cardsByReception } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id, reception_entry_id, job_card_no, reg_number, customer_type, current_stage, updated_at, created_at')
+        .in('reception_entry_id', receptionIds)
+
+      ;((cardsByReception ?? []) as BodyshopCardLite[]).forEach((card) => {
+        cardsById.set(card.id, card)
+      })
+
+      const cards = Array.from(cardsById.values())
       bodyshopRows.forEach((row) => {
         const matched = findMatchingBodyshopCard(row, cards)
         const customerType = String(matched?.customer_type ?? '').trim().toLowerCase()
@@ -832,7 +856,6 @@ export default function ServiceAdvisorPage() {
         }
       })
 
-      const receptionIds = bodyshopRows.map((row) => row.id)
       const photoCountByReceptionId = new Map<number, number>()
       if (receptionIds.length > 0) {
         const { data: photoRows } = await supabase
@@ -845,7 +868,6 @@ export default function ServiceAdvisorPage() {
           if (!Number.isFinite(receptionId)) return
           const nextCount = (photoCountByReceptionId.get(receptionId) ?? 0) + 1
           photoCountByReceptionId.set(receptionId, nextCount)
-          nextPhotoCountByEntryId[receptionId] = nextCount
         })
       }
 
@@ -874,7 +896,6 @@ export default function ServiceAdvisorPage() {
         }),
       )
     }
-    setBodyshopPhotoCountByEntryId(nextPhotoCountByEntryId)
 
     setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
 
@@ -1018,21 +1039,6 @@ export default function ServiceAdvisorPage() {
         setError('Customer Type is required for Accident entries.')
         return
       }
-
-      const { count: metadataPhotoCount, error: metadataCountError } = await supabase
-        .from('bodyshop_intake_vehicle_photos')
-        .select('id', { count: 'exact', head: true })
-        .eq('reception_entry_id', id)
-
-      if (metadataCountError) {
-        setError(metadataCountError.message)
-        return
-      }
-
-      if ((metadataPhotoCount ?? 0) === 0) {
-        setError('Attach at least one vehicle photo for Accident entry before saving.')
-        return
-      }
     }
 
     setSavingId(id)
@@ -1065,11 +1071,22 @@ export default function ServiceAdvisorPage() {
         jcNumber,
       })
 
-      const { data: existingCard } = await supabase
+      let existingCard: { id: number; current_stage: number | null } | null = null
+
+      const byReceptionRes = await supabase
         .from('bodyshop_repair_cards')
         .select('id, current_stage')
-        .eq('job_card_no', jcNumber)
-        .maybeSingle()
+        .eq('reception_entry_id', row.id)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (byReceptionRes.error) {
+        setError(byReceptionRes.error.message)
+        return
+      }
+
+      existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number; current_stage: number | null }>)[0] ?? null
 
       const existingStage = Number(existingCard?.current_stage ?? 1)
       const nextStage = Math.max(existingStage, desiredStage)
@@ -1080,6 +1097,7 @@ export default function ServiceAdvisorPage() {
         customer_name: row.owner_name ?? null,
         customer_phone: row.owner_phone ?? null,
         customer_type: customerType,
+        reception_entry_id: row.id,
         branch: row.branch ?? null,
         sa_employee_code: row.sa_employee_code ?? null,
         sa_name: row.sa_display_name ?? row.sa_name ?? null,
@@ -1860,8 +1878,7 @@ export default function ServiceAdvisorPage() {
                     const isDirty = dirtyRowIds.has(row.id)
                     const hasCustomerType = isValidCustomerType(draft.customer_type)
                     const hasJcNumber = Boolean(String(draft.jc_number ?? '').trim())
-                    const hasBodyshopPhoto = (bodyshopPhotoCountByEntryId[row.id] ?? 0) > 0
-                    const isBodyshopPending = isBodyshopRow && (!hasCustomerType || !hasJcNumber || !hasBodyshopPhoto)
+                    const isBodyshopPending = isBodyshopRow && (!hasCustomerType || !hasJcNumber)
                     const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
                     const canMarkDone = canUpdateRow(row) && isCompleted

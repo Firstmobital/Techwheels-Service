@@ -283,13 +283,48 @@ export default function BodyshopFloorPage() {
         const hasAny = Object.values(assignments[k] ?? {}).some(Boolean)
         if (!hasAny) {
           // First role assigned for this car — create the repair card if absent
-          const { data: existingCard } = await supabase
+          const receptionEntryId = Number(car.id)
+          let existingCard: { id: number } | null = null
+
+          if (Number.isFinite(receptionEntryId)) {
+            const byReceptionRes = await supabase
+              .from('bodyshop_repair_cards')
+              .select('id')
+              .eq('reception_entry_id', receptionEntryId)
+              .order('updated_at', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(1)
+
+            existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+          }
+
+          const byJcRes = await supabase
             .from('bodyshop_repair_cards')
             .select('id')
             .eq('job_card_no', k)
-            .maybeSingle()
+            .order('updated_at', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(1)
+
+          if (!existingCard) {
+            existingCard = ((byJcRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+          }
+
+          if (!existingCard && car.reg_number) {
+            const byRegRes = await supabase
+              .from('bodyshop_repair_cards')
+              .select('id')
+              .eq('reg_number', car.reg_number)
+              .order('updated_at', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(1)
+
+            existingCard = ((byRegRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+          }
+
           if (!existingCard) {
             await supabase.from('bodyshop_repair_cards').insert({
+              reception_entry_id: Number.isFinite(receptionEntryId) ? receptionEntryId : null,
               job_card_no:    k,
               reg_number:     car.reg_number,
               customer_name:  car.owner_name,
