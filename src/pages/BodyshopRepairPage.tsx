@@ -449,6 +449,32 @@ export default function BodyshopRepairPage() {
                       </div>
                     </div>
 
+                    {/* Insurance Details — always shown for individual & firm */}
+                    {!noDocsRequired && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                        <div style={{ gridColumn: '1/-1', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 4 }}>
+                          🛡️ Insurance Details
+                        </div>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Policy No.</span>
+                          <input className="inp" value={selected.insurance_policy_no ?? ''}
+                            onChange={(e) => patch('insurance_policy_no', e.target.value || null)}
+                            placeholder="e.g. POL-2024-001234" />
+                        </label>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Insurance Company</span>
+                          <input className="inp" value={selected.insurance_company ?? ''}
+                            onChange={(e) => patch('insurance_company', e.target.value || null)}
+                            placeholder="e.g. New India Assurance" />
+                        </label>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
+                          <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Valid Until</span>
+                          <input className="inp" type="date" value={selected.insurance_valid_date ?? ''}
+                            onChange={(e) => patch('insurance_valid_date', e.target.value || null)} />
+                        </label>
+                      </div>
+                    )}
+
                     {noDocsRequired ? (
                       <div style={{ textAlign: 'center', padding: '32px 16px', background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0' }}>
                         <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>

@@ -22,6 +22,10 @@ interface RepairCard {
   current_stage_name: string
   overall_status: string
   received_at: string | null
+  // insurance details
+  insurance_policy_no: string | null
+  insurance_company: string | null
+  insurance_valid_date: string | null
   // docs
   doc_claim_form: boolean; doc_rc: boolean; doc_insurance: boolean
   doc_dl: boolean; doc_aadhaar: boolean; doc_pan: boolean; doc_kyc: boolean
@@ -376,6 +380,43 @@ export default function BodyshopRepairScreen() {
                         ))}
                       </View>
                     </View>
+
+                    {/* Insurance Details */}
+                    {!noDocsRequired && (
+                      <View style={{ backgroundColor:'#f8fafc', borderRadius:10, padding:14, marginBottom:14, borderWidth:1, borderColor:'#e5e7eb' }}>
+                        <Text style={{ fontSize:13, fontWeight:'700', color:'#374151', marginBottom:10 }}>🛡️ Insurance Details</Text>
+                        <View style={{ marginBottom:10 }}>
+                          <Text style={{ fontSize:11, fontWeight:'600', color:'#6b7280', marginBottom:4 }}>Policy No.</Text>
+                          <TextInput
+                            value={selected.insurance_policy_no ?? ''}
+                            onChangeText={(t) => applyPatch('insurance_policy_no', t || null)}
+                            placeholder="e.g. POL-2024-001234"
+                            placeholderTextColor="#9ca3af"
+                            style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:10, fontSize:14, backgroundColor:'#fff' }}
+                          />
+                        </View>
+                        <View style={{ marginBottom:10 }}>
+                          <Text style={{ fontSize:11, fontWeight:'600', color:'#6b7280', marginBottom:4 }}>Insurance Company</Text>
+                          <TextInput
+                            value={selected.insurance_company ?? ''}
+                            onChangeText={(t) => applyPatch('insurance_company', t || null)}
+                            placeholder="e.g. New India Assurance"
+                            placeholderTextColor="#9ca3af"
+                            style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:10, fontSize:14, backgroundColor:'#fff' }}
+                          />
+                        </View>
+                        <View>
+                          <Text style={{ fontSize:11, fontWeight:'600', color:'#6b7280', marginBottom:4 }}>Valid Until (YYYY-MM-DD)</Text>
+                          <TextInput
+                            value={selected.insurance_valid_date ?? ''}
+                            onChangeText={(t) => applyPatch('insurance_valid_date', t || null)}
+                            placeholder="e.g. 2025-12-31"
+                            placeholderTextColor="#9ca3af"
+                            style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:10, fontSize:14, backgroundColor:'#fff' }}
+                          />
+                        </View>
+                      </View>
+                    )}
 
                     {noDocsRequired ? (
                       <View style={{ alignItems:'center', padding:32, backgroundColor:'#f0fdf4', borderRadius:12, borderWidth:1, borderColor:'#bbf7d0' }}>

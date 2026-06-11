@@ -51,6 +51,10 @@ export interface RepairCard {
   current_stage: number
   current_stage_name: string
   overall_status: OverallStatus
+  // insurance details
+  insurance_policy_no: string | null
+  insurance_company: string | null
+  insurance_valid_date: string | null
   // docs
   doc_claim_form: boolean
   doc_rc: boolean
