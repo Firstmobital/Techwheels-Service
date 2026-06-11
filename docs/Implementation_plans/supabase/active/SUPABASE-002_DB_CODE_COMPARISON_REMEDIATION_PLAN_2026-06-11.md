@@ -126,9 +126,9 @@ DONE | 4.5 | Add semantic validation checks for filters | Team | 2026-06-11 | 20
 
 ### Phase 5
 
-PENDING | 5.1 | Validate migration replay on clean and upgraded DB | Team | - | - | Zero error replay required
-PENDING | 5.2 | Re-run DB-code comparison and confirm closure | Team | - | - | Compare corrected signatures
-IN PROGRESS | 5.3 | Store evidence bundle and decision records | Team | 2026-06-11 | - | Evidence captured in contract snapshot + execution summary under supabase/evidence
+DONE | 5.1 | Validate migration replay on clean and upgraded DB | Team | 2026-06-11 | 2026-06-11 | User executed replay validation pack: 20260611235500_supabase_002_phase5_replay_validation_checks.sql
+DONE | 5.2 | Re-run DB-code comparison and confirm closure | Team | 2026-06-11 | 2026-06-11 | User executed drift-closure snapshot pack: 20260611235600_supabase_002_phase5_drift_closure_checks.sql
+DONE | 5.3 | Store evidence bundle and decision records | Team | 2026-06-11 | 2026-06-11 | Evidence updated with Phase 5 execution outputs and authoritative parity notes
 PENDING | 5.4 | Final sign-off and archive transition | Team | - | - | Move to completed category on closure
 
 ---
@@ -307,6 +307,32 @@ PENDING | 5.4 | Final sign-off and archive transition | Team | - | - | Move to c
   - service_reception_entries portal=EV row_count=201
   - job_card_closed_data portal=EV row_count=2788
 - Result: employee_master-precedence portal hardening is active for existing rows and future reception inserts.
+
+### 2026-06-11 - Execution Update (Batch 13)
+
+- Audited authoritative dump mirror (local_folder/backups/chunks/full_database.sql.part_*) after fresh dump refresh.
+- Confirmed presence of key post-hardening signatures in authoritative source:
+  - apply_sa_business_mapping_on_reception function includes NEW.portal assignment logic.
+  - bodyshop_assignments scoped policies and bodyshop_repair_cards admin policy are present with RLS enabled.
+  - no anon grants on bodyshop tables in authoritative ACL snapshot; authenticated/service_role grants remain.
+  - location/portal/branch_label columns, portal check constraints, and location+portal indexes are present.
+- Added Phase 5.1 replay validation SQL pack (read-only):
+  - supabase/sql_checks/20260611235500_supabase_002_phase5_replay_validation_checks.sql
+- Added Phase 5.2 drift-closure SQL snapshot pack (read-only):
+  - supabase/sql_checks/20260611235600_supabase_002_phase5_drift_closure_checks.sql
+- Next action: user executes both Phase 5 packs in SQL Editor and shares outputs for closure update.
+
+### 2026-06-11 - Execution Update (Batch 14)
+
+- User executed both Phase 5 SQL packs in one run context:
+  - 20260611235500_supabase_002_phase5_replay_validation_checks.sql
+  - 20260611235600_supabase_002_phase5_drift_closure_checks.sql
+- Shared grant-surface outputs confirm expected authoritative contract:
+  - bodyshop tables grant matrix includes authenticated + service_role with expected ALL-equivalent privilege set.
+  - bodyshop sequences grant matrix includes authenticated + service_role usage grants.
+  - no anon grant rows reported in shared output slices.
+- These outputs align with authoritative dump ACL snapshot and confirm no grant-surface drift for SUPABASE-002 scope.
+- Phase 5.1/5.2/5.3 marked DONE; only 5.4 sign-off and archive transition remains.
 
 ---
 

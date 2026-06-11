@@ -269,3 +269,70 @@ Conclusion:
 - The portal precedence hardening migration is successfully applied.
 - Deterministic mapping coverage for targeted dealer-code cohorts is complete (no unresolved portal rows).
 - Forward behavior is enforced through trigger logic, preventing recurrence on new reception inserts.
+
+## Execution Evidence (Authoritative Dump Audit) - Phase 5 Preparation
+
+Date: 2026-06-11
+Audit source:
+- local_folder/backups/full_database.sql
+- local_folder/backups/chunks/full_database.sql.part_* (mirror access path)
+
+Audit outcome summary:
+
+1. Trigger/function contract in authoritative dump
+- apply_sa_business_mapping_on_reception function body includes NEW.portal assignment logic.
+- trg_apply_sa_business_mapping_on_reception present on service_reception_entries.
+
+2. Bodyshop security contract in authoritative dump
+- RLS enabled on bodyshop_assignments and bodyshop_repair_cards.
+- bodyshop_assignments scoped policies present:
+  - bodyshop_assignments_read
+  - bodyshop_assignments_insert
+  - bodyshop_assignments_update
+  - bodyshop_assignments_service_all
+- admin_unrestricted_all_ops_v1 present on bodyshop_assignments and bodyshop_repair_cards.
+
+3. Grant surface in authoritative dump
+- No anon grants observed for bodyshop_assignments/bodyshop_repair_cards table ACL lines.
+- authenticated and service_role grants present for bodyshop tables and sequences.
+
+4. Semantics split contract in authoritative dump
+- location, portal, branch_label present on service_reception_entries, bodyshop_repair_cards, job_card_closed_data.
+- Portal constraints present:
+  - service_reception_entries_portal_check
+  - bodyshop_repair_cards_portal_check
+  - job_card_closed_data_portal_check
+- location+portal indexes present:
+  - idx_sre_location_portal
+  - idx_brc_location_portal
+  - idx_jccd_location_portal
+
+5. Phase 5 check-pack artifacts prepared
+- Replay validation checks:
+  - supabase/sql_checks/20260611235500_supabase_002_phase5_replay_validation_checks.sql
+- Drift closure snapshot checks:
+  - supabase/sql_checks/20260611235600_supabase_002_phase5_drift_closure_checks.sql
+
+## Execution Evidence (User-Executed in Supabase SQL Editor) - Phase 5 Replay + Drift Closure
+
+Date: 2026-06-11
+Check packs executed (same run context):
+- supabase/sql_checks/20260611235500_supabase_002_phase5_replay_validation_checks.sql
+- supabase/sql_checks/20260611235600_supabase_002_phase5_drift_closure_checks.sql
+
+Shared output summary (user provided):
+
+1. Bodyshop table grant matrix
+- bodyshop_assignments: grantees authenticated and service_role with privilege set
+  DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+- bodyshop_repair_cards: grantees authenticated and service_role with privilege set
+  DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+
+2. Bodyshop sequence grant matrix
+- bodyshop_assignments_id_seq: usage grants include authenticated and service_role
+- bodyshop_repair_cards_id_seq: usage grants include authenticated and service_role
+
+3. Drift parity interpretation
+- Shared rows match authoritative dump ACL contract for SUPABASE-002 bodyshop scope.
+- No anon grant rows appear in shared result slices.
+- Grant-surface drift is considered closed for bodyshop objects in this remediation scope.
