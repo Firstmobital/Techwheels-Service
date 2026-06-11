@@ -58,10 +58,11 @@ interface Props {
   onChange: (r: DateRange) => void
   label?: string
   disabledPresets?: DateRangePreset[]
+  initialPreset?: DateRangePreset
 }
 
-export default function DateRangeFilter({ range, onChange, label, disabledPresets }: Props) {
-  const [preset, setPreset] = useState<DateRangePreset>('this-month')
+export default function DateRangeFilter({ range, onChange, label, disabledPresets, initialPreset = 'this-month' }: Props) {
+  const [preset, setPreset] = useState<DateRangePreset>(initialPreset)
   const [custom, setCustom] = useState<DateRange>(range)
   const disabledSet = new Set(disabledPresets ?? [])
 
