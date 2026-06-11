@@ -2,6 +2,7 @@ import PartsConsumptionReport from './PartsConsumptionReport'
 import PartsFastMovingReport from './PartsFastMovingReport'
 import PartsOrderStatusReport from './PartsOrderStatusReport'
 import BackOrderPartsReport from './BackOrderPartsReport'
+import PartsInStockReport from './PartsInStockReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -43,5 +44,13 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     description: 'Monitor parts with unfulfilled orders and overdue deliveries.',
     cardHint: 'Best for identifying critical backorders and delays.',
     Component: BackOrderPartsReport,
+  },
+  {
+    id: 'parts-in-stock',
+    categoryId: 'parts',
+    label: 'Part In Stock',
+    description: 'Live stock visibility from service parts stock snapshot uploads.',
+    cardHint: 'Best for current stock health and inventory value tracking.',
+    Component: PartsInStockReport,
   },
 ]

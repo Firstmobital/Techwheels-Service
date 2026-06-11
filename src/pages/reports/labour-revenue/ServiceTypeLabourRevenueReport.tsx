@@ -31,6 +31,8 @@ export default function ServiceTypeLabourRevenueReport({
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('totalLabourRevenue')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [minJobs, setMinJobs] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -103,9 +105,21 @@ export default function ServiceTypeLabourRevenueReport({
     }),
     [rows],
   )
+
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+
+    return sortedRows.filter((row) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 || row.serviceType.toLowerCase().includes(normalizedSearch)
+      const matchesMinJobs = row.jobCardCount >= minJobs
+      return matchesSearch && matchesMinJobs
+    })
+  }, [sortedRows, searchTerm, minJobs])
+
   const maxRevenue = useMemo(
-    () => rows.reduce((max, row) => (row.totalLabourRevenue > max ? row.totalLabourRevenue : max), 0),
-    [rows],
+    () => filteredRows.reduce((max, row) => (row.totalLabourRevenue > max ? row.totalLabourRevenue : max), 0),
+    [filteredRows],
   )
 
   const totalLabourRevenueExcludingGst = useMemo(
@@ -117,6 +131,35 @@ export default function ServiceTypeLabourRevenueReport({
     [totalLabourRevenueExcludingGst, totals.totalSparesRevenue],
   )
 
+  const topServiceType = useMemo(() => {
+    if (rows.length === 0) return null
+
+    return rows.reduce((best, row) =>
+      row.totalLabourRevenue > best.totalLabourRevenue ? row : best,
+    )
+  }, [rows])
+
+  const topThreeLabourContribution = useMemo(() => {
+    if (totals.totalLabourRevenue <= 0) return 0
+
+    const topThreeRevenue = [...rows]
+      .sort((a, b) => b.totalLabourRevenue - a.totalLabourRevenue)
+      .slice(0, 3)
+      .reduce((sum, row) => sum + row.totalLabourRevenue, 0)
+
+    return (topThreeRevenue / totals.totalLabourRevenue) * 100
+  }, [rows, totals.totalLabourRevenue])
+
+  const overallAvgLabourPerJob = useMemo(() => {
+    if (totals.totalJobs <= 0) return 0
+    return totals.totalLabourRevenue / totals.totalJobs
+  }, [totals.totalJobs, totals.totalLabourRevenue])
+
+  const sparesToLabourRatio = useMemo(() => {
+    if (totals.totalLabourRevenue <= 0) return 0
+    return totals.totalSparesRevenue / totals.totalLabourRevenue
+  }, [totals.totalSparesRevenue, totals.totalLabourRevenue])
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
@@ -127,13 +170,18 @@ export default function ServiceTypeLabourRevenueReport({
   }
 
   const handleExport = () => {
-    const exportData = sortedRows.map((row) => ({
+    const exportData = filteredRows.map((row, index) => ({
+      Rank: index + 1,
       'Service Type': row.serviceType,
       'Labour Revenue': formatCurrencyForExport(row.totalLabourRevenue),
       'Spares Revenue': formatCurrencyForExport(row.totalSparesRevenue),
       'Total Revenue': formatCurrencyForExport(row.totalRevenue),
       'Job Cards': row.jobCardCount.toString(),
       'Avg Revenue Per Job': formatCurrencyForExport(row.avgLabourRevenue),
+      'Labour Revenue Share %':
+        totals.totalLabourRevenue > 0
+          ? ((row.totalLabourRevenue / totals.totalLabourRevenue) * 100).toFixed(2)
+          : '0.00',
     }))
 
     const filename = generateExportFilename('service-type-labour-revenue')
@@ -227,6 +275,30 @@ export default function ServiceTypeLabourRevenueReport({
               Rs. {(totalLabourRevenueExcludingGst + totalVasRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 sm:col-span-2 lg:col-span-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-rose-600">Top Service Type</p>
+            <p className="mt-1 truncate text-base font-semibold text-rose-900">
+              {topServiceType?.serviceType ?? 'N/A'}
+            </p>
+            <p className="mt-1 text-sm text-rose-700">
+              Rs. {Math.round(topServiceType?.totalLabourRevenue ?? 0).toLocaleString('en-IN')}
+            </p>
+          </div>
+          <div className="rounded-lg border border-fuchsia-100 bg-fuchsia-50 px-4 py-3 sm:col-span-2 lg:col-span-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-fuchsia-600">Top 3 Contribution</p>
+            <p className="mt-1 text-2xl font-semibold text-fuchsia-900">
+              {topThreeLabourContribution.toLocaleString('en-IN', { maximumFractionDigits: 1 })}%
+            </p>
+            <p className="mt-1 text-sm text-fuchsia-700">
+              Avg Labour/JC: Rs. {Math.round(overallAvgLabourPerJob).toLocaleString('en-IN')}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-600">Labour vs Spares Mix</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">
+              {sparesToLabourRatio.toLocaleString('en-IN', { maximumFractionDigits: 2 })} : 1 (Spares / Labour)
+            </p>
+          </div>
         </div>
       </div>
 
@@ -243,21 +315,62 @@ export default function ServiceTypeLabourRevenueReport({
           No records found for the selected filters.
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Search Service Type</span>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Type service type name..."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Minimum Job Cards</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={minJobs}
+                  onChange={(event) => {
+                    const parsed = Number(event.target.value)
+                    setMinJobs(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0)
+                  }}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-500"
+                />
+              </label>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              Showing {filteredRows.length.toLocaleString()} of {rows.length.toLocaleString()} service types.
+            </p>
+          </div>
+
+          {filteredRows.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">
+              No records match the report refinement criteria.
+            </div>
+          ) : (
+            <div className="grid gap-5 lg:grid-cols-2">
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-900">Bar Chart</h3>
               <span className="text-xs text-gray-400">Relative to highest revenue</span>
             </div>
             <div className="space-y-3">
-              {sortedRows.map((row) => {
+              {filteredRows.map((row) => {
                 const width = maxRevenue > 0 ? (row.totalLabourRevenue / maxRevenue) * 100 : 0
+                const share =
+                  totals.totalLabourRevenue > 0
+                    ? (row.totalLabourRevenue / totals.totalLabourRevenue) * 100
+                    : 0
                 return (
                   <div key={row.serviceType}>
                     <div className="mb-1 flex items-center justify-between gap-3 text-xs text-gray-600">
                       <span className="truncate font-medium text-gray-700">{row.serviceType}</span>
-                      <span>
-                        Rs. {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      <span className="text-right">
+                        Rs. {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · {share.toFixed(1)}%
                       </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-gray-100">
@@ -278,6 +391,7 @@ export default function ServiceTypeLabourRevenueReport({
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600">Rank</th>
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">
                       <button
                         onClick={() => toggleSort('serviceType')}
@@ -316,11 +430,19 @@ export default function ServiceTypeLabourRevenueReport({
                         Avg / Job Card
                       </button>
                     </th>
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600">Share %</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {sortedRows.map((row) => (
+                  {filteredRows.map((row, index) => {
+                    const share =
+                      totals.totalLabourRevenue > 0
+                        ? (row.totalLabourRevenue / totals.totalLabourRevenue) * 100
+                        : 0
+
+                    return (
                     <tr key={row.serviceType} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-right font-medium text-gray-600">{index + 1}</td>
                       <td className="px-3 py-2 text-gray-700">{row.serviceType}</td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
@@ -337,12 +459,17 @@ export default function ServiceTypeLabourRevenueReport({
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.avgLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
+                      <td className="px-3 py-2 text-right font-medium text-gray-900">
+                        {share.toLocaleString('en-IN', { maximumFractionDigits: 1 })}%
+                      </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
           </div>
+            </div>
+          )}
         </div>
       )}
     </div>
