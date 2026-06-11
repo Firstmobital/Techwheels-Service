@@ -1,4 +1,5 @@
 .twcp-page {
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --twcp-accent: #2563eb;
   --twcp-accent-strong: #1e3a8a;
   --twcp-ink: #0e1726;
@@ -23,6 +24,38 @@
   margin: 0 auto;
   background: var(--twcp-canvas);
   min-height: 100vh;
+}
+
+.twcp-urlbar {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  background: #e9edf4;
+  color: var(--twcp-muted);
+  font-size: 11.5px;
+  border-bottom: 1px solid #e5e9f0;
+}
+
+.twcp-mode-pill {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.twcp-mode-pill.raise {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--twcp-accent);
+}
+
+.twcp-mode-pill.view {
+  background: #e6f6ef;
+  color: #0e7c5a;
 }
 
 .twcp-banner {
@@ -208,6 +241,7 @@
 
 .twcp-optcard {
   display: flex;
+  width: 100%;
   gap: 12px;
   align-items: center;
   padding: 13px;
@@ -215,6 +249,7 @@
   border-radius: 10px;
   background: #fff;
   margin-bottom: 10px;
+  text-align: left;
 }
 
 .twcp-optcard.sel {
@@ -397,11 +432,12 @@
 }
 
 .twcp-bignum {
-  font-size: 32px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--twcp-accent);
   overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .twcp-ok-mark {
@@ -624,6 +660,11 @@
 
 .twcp-star.on {
   color: #f5a623;
+}
+
+.twcp-muted-mini {
+  font-size: 12.5px;
+  color: var(--twcp-muted);
 }
 
 @media (min-width: 768px) {

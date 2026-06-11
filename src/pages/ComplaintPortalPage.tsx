@@ -32,7 +32,6 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
 
 interface FormState {
   category: string
-  title: string
   description: string
   severitySelf: string
   customerName: string
@@ -122,7 +121,6 @@ export const ComplaintPortalPage: React.FC = () => {
 
   const [formState, setFormState] = useState<FormState>({
     category: 'service_quality',
-    title: '',
     description: '',
     severitySelf: 'medium',
     customerName: '',
@@ -134,6 +132,7 @@ export const ComplaintPortalPage: React.FC = () => {
   const [csatRating, setCsatRating] = useState<number | null>(null)
   const [csatComment, setCsatComment] = useState('')
   const [reopenReason, setReopenReason] = useState('')
+  const [showReopenForm, setShowReopenForm] = useState(false)
 
   const ticket = data?.ticket
   const entry = data?.entry_summary
@@ -186,14 +185,8 @@ export const ComplaintPortalPage: React.FC = () => {
     e.preventDefault()
     if (!token) return
 
-    const trimmedTitle = formState.title.trim()
     const trimmedDescription = formState.description.trim()
     const trimmedPhone = formState.customerPhone.trim()
-
-    if (trimmedTitle.length < 5) {
-      setError('Summary should be at least 5 characters.')
-      return
-    }
 
     if (trimmedDescription.length < 10) {
       setError('Details should be at least 10 characters.')
@@ -208,12 +201,15 @@ export const ComplaintPortalPage: React.FC = () => {
     try {
       clearFeedback()
       setLoading(true)
-      const response = await raiseComplaint(token, formState.category, trimmedTitle, trimmedDescription, {
+      const selectedCategory = CATEGORY_OPTIONS.find((c) => c.value === formState.category)
+      const derivedTitle = trimmedDescription.slice(0, 100) || selectedCategory?.title || 'Complaint raised'
+      // Keep backend title mandatory while matching reference UI (single issue description input).
+      const payloadResponse = await raiseComplaint(token, formState.category, derivedTitle, trimmedDescription, {
         severity_self: formState.severitySelf,
         customer_name: formState.customerName.trim() || entry?.customer_name || undefined,
         customer_phone: trimmedPhone,
       })
-      setData(response)
+      setData(payloadResponse)
       setMode('submitted')
       setSuccess('Complaint submitted successfully.')
       setAttachmentFiles([])
@@ -307,12 +303,18 @@ export const ComplaintPortalPage: React.FC = () => {
   }
 
   const sla = getSlaText(ticket?.resolution_due_at)
+  const isConsumedView = mode === 'submitted' || mode === 'view'
 
   return (
     <div className="twcp-page">
       <div className="twcp-shell">
         {success && <div className="twcp-banner ok">{success}</div>}
         {error && <div className="twcp-banner err">{error}</div>}
+        <div className="twcp-urlbar">
+          <span style={{ color: '#0e7c5a' }}>🔒</span>
+          <span>tw.care/c/{token ? token.slice(0, 8) : '--------'}</span>
+          <span className={`twcp-mode-pill ${isConsumedView ? 'view' : 'raise'}`}>{isConsumedView ? 'View' : 'Raise'}</span>
+        </div>
 
         {mode === 'verify' && (
           <>
@@ -346,7 +348,7 @@ export const ComplaintPortalPage: React.FC = () => {
         {mode === 'raise' && (
           <form onSubmit={handleRaise}>
             <div className="twcp-body" style={{ paddingTop: 18 }}>
-              <button type="button" className="twcp-back" onClick={() => setMode('verify')}>←</button>
+              <button type="button" className="twcp-back twcp-muted-mini" onClick={() => setMode('verify')}>← Back</button>
               <h1 className="twcp-title" style={{ marginTop: 12 }}>Raise a complaint</h1>
               <p className="twcp-lead">A few quick details so we can fix this fast.</p>
 
@@ -390,27 +392,14 @@ export const ComplaintPortalPage: React.FC = () => {
               </div>
 
               <div className="twcp-field">
-                <label>Summary <span className="twcp-req">*</span></label>
-                <input
-                  className="twcp-inp"
-                  maxLength={100}
-                  value={formState.title}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, title: e.target.value }))}
-                  placeholder="Brief summary of your complaint"
-                  required
-                />
-                <div className="twcp-count">{formState.title.length}/100 characters</div>
-              </div>
-
-              <div className="twcp-field">
-                <label>Details <span className="twcp-req">*</span></label>
+                <label>Describe the issue <span className="twcp-req">*</span></label>
                 <textarea
                   className="twcp-inp"
                   rows={4}
                   maxLength={500}
                   value={formState.description}
                   onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Describe what happened and what you'd like us to do about it"
+                  placeholder="e.g. The AC was serviced but cooling dropped again the next morning..."
                   required
                 />
                 <div className="twcp-count">{formState.description.length}/500 characters</div>
@@ -447,16 +436,6 @@ export const ComplaintPortalPage: React.FC = () => {
                   required
                 />
                 <div className="twcp-count">We'll send status updates here. We never share your number.</div>
-              </div>
-
-              <div className="twcp-field">
-                <label>Your name</label>
-                <input
-                  className="twcp-inp"
-                  value={formState.customerName}
-                  onChange={(e) => setFormState((prev) => ({ ...prev, customerName: e.target.value }))}
-                  placeholder="Optional"
-                />
               </div>
             </div>
 
@@ -517,7 +496,7 @@ export const ComplaintPortalPage: React.FC = () => {
                 <span className="twcp-brand-mark">{isFullyResolvedView ? '✓' : iconShield()}</span>
                 {isFullyResolvedView ? 'Complaint resolved' : 'TechWheels Care'}
               </div>
-              <div className="twcp-bignum" style={{ color: '#fff', fontSize: 22, marginTop: 14 }}>{ticket.ticket_number}</div>
+              <div className="twcp-bignum" style={{ color: '#fff', marginTop: 14 }}>{ticket.ticket_number}</div>
               <div className="twcp-veh-meta" style={{ marginTop: 6, fontSize: 14, opacity: 0.95 }}>
                 {ticket.reg_number} · {isFullyResolvedView ? 'resolved' : (ticket.model || 'In progress')}
               </div>
@@ -563,7 +542,7 @@ export const ComplaintPortalPage: React.FC = () => {
                   {!ticket.csat_rating && (
                     <div className="twcp-card" style={{ marginTop: 16 }}>
                       <div className="twcp-card-body" style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: 34, marginBottom: 4 }}>How did we do?</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>How did we do?</div>
                         <p className="twcp-lead" style={{ marginBottom: 12 }}>Rate how we handled your complaint.</p>
                         <div className="twcp-stars">
                           {[1, 2, 3, 4, 5].map((n) => (
@@ -666,21 +645,32 @@ export const ComplaintPortalPage: React.FC = () => {
 
               {isResolvedState && (
                 <div style={{ marginTop: 16, textAlign: 'center' }}>
-                  <textarea
-                    className="twcp-inp"
-                    rows={2}
-                    value={reopenReason}
-                    onChange={(e) => setReopenReason(e.target.value)}
-                    placeholder="Issue not fixed? Tell us why to reopen"
-                  />
-                  <button
-                    className="twcp-btn ghost"
-                    style={{ marginTop: 10 }}
-                    onClick={handleReopen}
-                    disabled={loading || reopenReason.trim().length < 8}
-                  >
-                    Issue not fixed? Reopen complaint
-                  </button>
+                  {!showReopenForm ? (
+                    <button
+                      className="twcp-btn ghost"
+                      onClick={() => setShowReopenForm(true)}
+                    >
+                      Issue not fixed? Reopen complaint
+                    </button>
+                  ) : (
+                    <>
+                      <textarea
+                        className="twcp-inp"
+                        rows={2}
+                        value={reopenReason}
+                        onChange={(e) => setReopenReason(e.target.value)}
+                        placeholder="Tell us why you want to reopen"
+                      />
+                      <button
+                        className="twcp-btn primary"
+                        style={{ marginTop: 10 }}
+                        onClick={handleReopen}
+                        disabled={loading || reopenReason.trim().length < 8}
+                      >
+                        Confirm reopen
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
