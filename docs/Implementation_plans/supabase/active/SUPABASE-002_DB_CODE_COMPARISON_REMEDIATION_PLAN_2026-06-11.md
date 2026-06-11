@@ -119,16 +119,16 @@ DONE | 3.5 | Add deny-by-default policy semantic checks | Team | 2026-06-11 | 20
 ### Phase 4
 
 DONE | 4.1 | Replace destructive zero-qty handling strategy | Team | 2026-06-11 | 2026-06-11 | Executed + checks passed for retention-mode function behavior
-IN PROGRESS | 4.2 | Separate location and portal schema semantics | Team | 2026-06-11 | - | Migration drafted: 20260611201500_supabase_002_location_portal_semantics_split.sql (awaiting execution)
-IN PROGRESS | 4.3 | Derived display label for branch representation | Team | 2026-06-11 | - | branch_label column + deterministic backfill drafted (awaiting execution)
-PENDING | 4.4 | Align query/filter contracts to new semantics | Team | - | - | Floor Incharge, SA Tracker, reports
-PENDING | 4.5 | Add semantic validation checks for filters | Team | - | - | Include sample row assertions
+DONE | 4.2 | Separate location and portal schema semantics | Team | 2026-06-11 | 2026-06-11 | Executed 20260611201500_supabase_002_location_portal_semantics_split.sql and validated checks
+DONE | 4.3 | Derived display label for branch representation | Team | 2026-06-11 | 2026-06-11 | branch_label additive column and deterministic backfill validated
+DONE | 4.4 | Align query/filter contracts to new semantics | Team | 2026-06-11 | 2026-06-11 | Floor Incharge + SA Tracker contract paths aligned to location/portal semantics with compatibility fallback
+DONE | 4.5 | Add semantic validation checks for filters | Team | 2026-06-11 | 2026-06-11 | Check pack executed; contract guards passed (location mismatch=0, invalid portal=0)
 
 ### Phase 5
 
 PENDING | 5.1 | Validate migration replay on clean and upgraded DB | Team | - | - | Zero error replay required
 PENDING | 5.2 | Re-run DB-code comparison and confirm closure | Team | - | - | Compare corrected signatures
-IN PROGRESS | 5.3 | Store evidence bundle and decision records | Team | 2026-06-11 | - | Execution evidence captured in supabase/evidence/2026-06-11_supabase-002_bodyshop_authoritative_contract_snapshot.md
+IN PROGRESS | 5.3 | Store evidence bundle and decision records | Team | 2026-06-11 | - | Evidence captured in contract snapshot + execution summary under supabase/evidence
 PENDING | 5.4 | Final sign-off and archive transition | Team | - | - | Move to completed category on closure
 
 ---
@@ -244,6 +244,56 @@ PENDING | 5.4 | Final sign-off and archive transition | Team | - | - | Move to c
 - Added paired SQL checks:
   - supabase/sql_checks/20260611201500_supabase_002_location_portal_semantics_split_checks.sql
 - Strategy is compatibility-safe: legacy branch remains unchanged; new columns location, portal, and branch_label are additive and backfilled deterministically.
+
+### 2026-06-11 - Execution Update (Batch 7)
+
+- User executed 20260611201500_supabase_002_location_portal_semantics_split.sql successfully in Supabase SQL Editor.
+- User ran 20260611201500_supabase_002_location_portal_semantics_split_checks.sql and confirmed:
+  - additive columns present,
+  - portal constraints present,
+  - invalid portal rows = 0,
+  - legacy branch compatibility retained.
+- Phase 4.2 and 4.3 marked DONE.
+- Next action: execute Phase 4.4/4.5 app query/filter contract alignment using location/portal semantics.
+
+### 2026-06-11 - Execution Update (Batch 8)
+
+- Updated reception API contract to include additive semantics columns: location, portal, branch_label.
+- Updated Floor Incharge page contract usage:
+  - location filter now uses location (fallback branch),
+  - portal filter now uses portal (fallback fuel_type),
+  - location display updated in key table/modal surfaces.
+- Updated SA Tracker page contract usage:
+  - location filter now uses location (fallback branch),
+  - added portal filter using portal values.
+- Added Phase 4.5 semantic check pack:
+  - supabase/sql_checks/20260611213000_supabase_002_semantic_filter_contract_checks.sql
+- Remaining scope for 4.4 completion: report surfaces final alignment and UI validation pass.
+
+### 2026-06-11 - Execution Update (Batch 9)
+
+- User executed 20260611213000_supabase_002_semantic_filter_contract_checks.sql and shared outputs.
+- Contract guards passed:
+  - mismatched_location_rows = 0
+  - invalid_portal_rows = 0 across target tables.
+- Portal remains NULL/Unknown for current legacy unsuffixed branch data, which is expected in compatibility mode.
+- Phase 4 marked functionally complete (4.1 through 4.5 DONE).
+
+### 2026-06-11 - Execution Update (Batch 10)
+
+- Added consolidated evidence summary for completed execution work:
+  - supabase/evidence/2026-06-11_supabase-002_execution_summary_phase1_to_phase4.md
+- Next actions narrowed to Phase 5 closure activities (replay validation, drift closure compare, sign-off).
+
+### 2026-06-11 - Execution Update (Batch 11)
+
+- Added portal backfill hardening migration to enforce business mapping for dealer-code based SA identifiers with employee_master precedence:
+  - supabase/migrations/20260611224500_supabase_002_portal_backfill_employee_master_precedence.sql
+- Added rollback pair SQL:
+  - supabase/migrations/20260611224500_supabase_002_portal_backfill_employee_master_precedence_rollback.sql
+- Added paired SQL checks:
+  - supabase/sql_checks/20260611224500_supabase_002_portal_backfill_employee_master_precedence_checks.sql
+- This batch enforces the business rule that rows with mapped SA/dealer identifiers should not remain without portal where mapping is deterministically available.
 
 ---
 

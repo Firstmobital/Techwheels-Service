@@ -19,6 +19,9 @@ interface JobCard {
   owner_name: string | null
   owner_phone: string | null
   branch: string | null
+  location: string | null
+  portal: string | null
+  branch_label: string | null
   sa_employee_code: string | null
   fuel_type: string | null
   assignment_key: string
@@ -37,6 +40,8 @@ const STATUS_OPTIONS = [
 ]
 
 const UNKNOWN_FUEL_TYPE = 'Unknown'
+const UNKNOWN_LOCATION = 'Unknown location'
+const UNKNOWN_PORTAL = 'Unknown portal'
 
 function formatDate(value: string | null): string {
   if (!value) return '—'
@@ -146,6 +151,17 @@ function getFuelTypeLabel(value: string | null | undefined): string {
   return trimmed || UNKNOWN_FUEL_TYPE
 }
 
+function getLocationLabel(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || UNKNOWN_LOCATION
+}
+
+function getPortalLabel(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (normalized === 'EV' || normalized === 'PV') return normalized
+  return UNKNOWN_PORTAL
+}
+
 function normalizeEmployeeCode(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
@@ -166,6 +182,9 @@ function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
     owner_name: row.owner_name ?? null,
     owner_phone: row.owner_phone ?? null,
     branch: row.branch ?? null,
+    location: row.location ?? row.branch ?? null,
+    portal: row.portal ?? null,
+    branch_label: row.branch_label ?? row.branch ?? null,
     sa_employee_code: row.sa_employee_code ?? null,
     fuel_type: row.fuel_type ?? null,
     assignment_key: assignmentKey,
@@ -796,6 +815,8 @@ export default function FloorInchargePage() {
         jc.owner_phone ?? '',
         jc.source ?? '',
         jc.branch ?? '',
+        jc.location ?? '',
+        jc.portal ?? '',
         assignment?.technician_name ?? '',
         assignment?.technician_code ?? '',
         supportPeople.map((item) => item.employee_name).join(' '),
@@ -810,25 +831,29 @@ export default function FloorInchargePage() {
   }, [statusScopedRows, assignments, supportAssignments, searchQuery])
 
   const branches = useMemo(() => {
-    const b = new Set(searchScopedRows.map((j) => j.branch).filter(Boolean) as string[])
-    return Array.from(b).sort()
+    const b = new Set(searchScopedRows.map((j) => getLocationLabel(j.location ?? j.branch)))
+    return Array.from(b).sort((a, b) => {
+      if (a === UNKNOWN_LOCATION) return 1
+      if (b === UNKNOWN_LOCATION) return -1
+      return a.localeCompare(b)
+    })
   }, [searchScopedRows])
 
   const statusScopedBranchRows = useMemo(() => {
     if (branchFilter === 'all') return searchScopedRows
-    return searchScopedRows.filter((jc) => jc.branch === branchFilter)
+    return searchScopedRows.filter((jc) => getLocationLabel(jc.location ?? jc.branch) === branchFilter)
   }, [searchScopedRows, branchFilter])
 
   const statusScopedFuelRows = useMemo(() => {
     if (fuelTypeFilter === 'all') return statusScopedBranchRows
-    return statusScopedBranchRows.filter((jc) => getFuelTypeLabel(jc.fuel_type) === fuelTypeFilter)
+    return statusScopedBranchRows.filter((jc) => getPortalLabel(jc.portal ?? jc.fuel_type) === fuelTypeFilter)
   }, [statusScopedBranchRows, fuelTypeFilter])
 
   const fuelTypeOptions = useMemo(() => {
-    const fuelTypes = new Set(statusScopedBranchRows.map((jc) => getFuelTypeLabel(jc.fuel_type)))
+    const fuelTypes = new Set(statusScopedBranchRows.map((jc) => getPortalLabel(jc.portal ?? jc.fuel_type)))
     return Array.from(fuelTypes).sort((a, b) => {
-      if (a === UNKNOWN_FUEL_TYPE) return 1
-      if (b === UNKNOWN_FUEL_TYPE) return -1
+      if (a === UNKNOWN_PORTAL) return 1
+      if (b === UNKNOWN_PORTAL) return -1
       return a.localeCompare(b)
     })
   }, [statusScopedBranchRows])
@@ -841,7 +866,7 @@ export default function FloorInchargePage() {
 
   const technicianCountRows = useMemo(() => {
     return statusScopedBranchRows.filter((jc) => {
-      return fuelTypeFilter === 'all' || getFuelTypeLabel(jc.fuel_type) === fuelTypeFilter
+      return fuelTypeFilter === 'all' || getPortalLabel(jc.portal ?? jc.fuel_type) === fuelTypeFilter
     })
   }, [statusScopedBranchRows, fuelTypeFilter])
 
@@ -958,7 +983,7 @@ export default function FloorInchargePage() {
             All ({searchScopedRows.length})
           </button>
           {branches.map((branch) => {
-            const count = searchScopedRows.filter((jc) => jc.branch === branch).length
+            const count = searchScopedRows.filter((jc) => getLocationLabel(jc.location ?? jc.branch) === branch).length
             return (
               <button
                 key={branch}
@@ -973,7 +998,7 @@ export default function FloorInchargePage() {
         </div>
 
         <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by fuel type:</span>
+          <span className="toolbar__label">Filter by portal:</span>
           <button
             type="button"
             onClick={() => setFuelTypeFilter('all')}
@@ -982,7 +1007,7 @@ export default function FloorInchargePage() {
             All ({statusScopedBranchRows.length})
           </button>
           {fuelTypeOptions.map((fuelType) => {
-            const count = statusScopedBranchRows.filter((jc) => getFuelTypeLabel(jc.fuel_type) === fuelType).length
+            const count = statusScopedBranchRows.filter((jc) => getPortalLabel(jc.portal ?? jc.fuel_type) === fuelType).length
             return (
               <button
                 key={fuelType}
@@ -1159,7 +1184,7 @@ export default function FloorInchargePage() {
                     <th>Service Type</th>
                     <th>SA Name</th>
                     <th>JC Number</th>
-                    <th>Branch</th>
+                    <th>Location</th>
                     <th>Assign Technician</th>
                     <th>IN TS</th>
                     <th>OUT TS</th>
@@ -1204,7 +1229,7 @@ export default function FloorInchargePage() {
                         <td className="mono">
                           {jc.jc_number || '—'}
                         </td>
-                        <td>{jc.branch || '—'}</td>
+                        <td>{jc.location || jc.branch || '—'}</td>
                         <td>
                           <div className="fi-assignment-cell">
                             <div className="fi-assignment-row">
@@ -1350,7 +1375,7 @@ export default function FloorInchargePage() {
               <div className="fi-support-meta">
                 <span className="fi-support-meta__jc">{supportModalJobCard.assignment_key}</span>
                 <span>{supportModalJobCard.reg_number || '—'}</span>
-                <span>{supportModalJobCard.branch || '—'}</span>
+                <span>{supportModalJobCard.location || supportModalJobCard.branch || '—'}</span>
               </div>
 
               <label className="fi-support-field">

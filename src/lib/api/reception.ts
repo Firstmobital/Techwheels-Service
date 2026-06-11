@@ -16,6 +16,9 @@ export interface ReceptionEntryRow {
   owner_name: string | null
   owner_phone: string | null
   branch: string | null
+  location: string | null
+  portal: string | null
+  branch_label: string | null
   fuel_type: string | null
   source: string
   remark: string | null
@@ -90,6 +93,9 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'owner_name',
   'owner_phone',
   'branch',
+  'location',
+  'portal',
+  'branch_label',
   'source',
   'remark',
   'estimate_storage_path',

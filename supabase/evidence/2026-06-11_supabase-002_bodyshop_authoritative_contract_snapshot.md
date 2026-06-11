@@ -178,3 +178,66 @@ Phase 4.1 check outcome summary (user provided):
 
 Conclusion:
 - Phase 4.1 migration executed successfully and retention-mode behavior is active.
+
+## Execution Evidence (User-Executed in Supabase SQL Editor) - Phase 4.2/4.3
+
+Date: 2026-06-11
+Migration executed:
+- supabase/migrations/20260611201500_supabase_002_location_portal_semantics_split.sql
+
+Phase 4.2/4.3 check outcome summary (user provided):
+
+1. New columns verified
+- location, portal, branch_label present on:
+  - service_reception_entries
+  - bodyshop_repair_cards
+  - job_card_closed_data
+
+2. Portal constraints verified
+- service_reception_entries_portal_check
+- bodyshop_repair_cards_portal_check
+- job_card_closed_data_portal_check
+
+3. Data validity verified
+- invalid_portal_rows = 0 for all three tables.
+
+4. Backfill coverage snapshot
+- service_reception_entries: total=744, location_filled=744, portal_filled=0, branch_label_filled=744
+- bodyshop_repair_cards: total=1, location_filled=1, portal_filled=0, branch_label_filled=1
+- job_card_closed_data: total=11481, location_filled=11481, portal_filled=0, branch_label_filled=11481
+
+5. Legacy compatibility verified
+- branch column still present on all three tables.
+
+6. Sample projection verified
+- branch and location values align; portal remains NULL for current unsuffixed branch data.
+
+Conclusion:
+- Phase 4.2 and 4.3 migration executed successfully with compatibility-safe additive semantics.
+
+## Execution Evidence (User-Executed in Supabase SQL Editor) - Phase 4.5
+
+Date: 2026-06-11
+Check pack executed:
+- supabase/sql_checks/20260611213000_supabase_002_semantic_filter_contract_checks.sql
+
+Phase 4.5 check outcome summary (user provided):
+
+1. Semantic completeness
+- service_reception_entries: total=745, location_filled=744, portal_filled=0, branch_label_filled=744
+- job_card_closed_data: total=11481, location_filled=11481, portal_filled=0, branch_label_filled=11481
+- bodyshop_repair_cards: total=1, location_filled=1, portal_filled=0, branch_label_filled=1
+
+2. Contract guards
+- mismatched_location_rows = 0
+- invalid_portal_rows = 0 for all target tables
+
+3. Distribution snapshot (service_reception_entries)
+- Sitapura / Unknown portal: 9615
+- Ajmer Road / Unknown portal: 1322
+- Tonk / Unknown portal: 309
+- Shahpura / Unknown portal: 235
+
+Interpretation:
+- Location semantics are aligned and deterministic fallback behavior is working.
+- Portal is currently NULL/Unknown for existing rows because source branch values are unsuffixed; this is expected under compatibility mode and not a contract failure.

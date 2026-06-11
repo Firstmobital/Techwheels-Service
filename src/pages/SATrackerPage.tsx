@@ -15,6 +15,9 @@ type ClosedJCRow = {
   closed_date_time: string | null
   invoice_date: string | null
   branch: string | null
+  location: string | null
+  portal: string | null
+  branch_label: string | null
   vehicle_registration_number: string | null
   sr_type: string | null
   product_line: string | null
@@ -49,6 +52,7 @@ type JCDetailRow = ClosedJCRow & {
 
 const QUERY_PAGE_SIZE = 1000
 const UNKNOWN_BRANCH = 'Unknown location'
+const UNKNOWN_PORTAL = 'Unknown portal'
 const DEFAULT_SA_SHARE_PERCENT = 3
 const DEFAULT_EV_SHARE_PERCENT = 4
 
@@ -115,6 +119,12 @@ function getBranchLabel(v: string | null | undefined): string {
   return String(v ?? '').trim() || UNKNOWN_BRANCH
 }
 
+function getPortalLabel(v: string | null | undefined): string {
+  const normalized = String(v ?? '').trim().toUpperCase()
+  if (normalized === 'EV' || normalized === 'PV') return normalized
+  return UNKNOWN_PORTAL
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function SATrackerPage() {
@@ -127,6 +137,7 @@ export default function SATrackerPage() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
+  const [portalFilter, setPortalFilter] = useState('all')
 
   // Share % settings
   const [saSharePercent, setSaSharePercent] = useState(DEFAULT_SA_SHARE_PERCENT)
@@ -150,7 +161,7 @@ export default function SATrackerPage() {
       while (true) {
         const res = await supabase
           .from('job_card_closed_data')
-          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, vehicle_registration_number, sr_type, product_line')
+          .select('id, job_card_number, sr_assigned_to, final_labour_amount, final_spares_amount, total_invoice_amount, closed_date_time, invoice_date, branch, location, portal, branch_label, vehicle_registration_number, sr_type, product_line')
           .not('sr_assigned_to', 'is', null)
           .gte('closed_date_time', dateRange.from + 'T00:00:00+05:30')
           .lte('closed_date_time', dateRange.to + 'T23:59:59+05:30')
@@ -203,7 +214,7 @@ export default function SATrackerPage() {
   // ── Branch options + filter ───────────────────────────────────────────────
 
   const branches = useMemo(() => {
-    const s = new Set(dateScopedRows.map((r) => getBranchLabel(r.branch)))
+    const s = new Set(dateScopedRows.map((r) => getBranchLabel(r.location ?? r.branch)))
     return Array.from(s).sort((a, b) => {
       if (a === UNKNOWN_BRANCH) return 1
       if (b === UNKNOWN_BRANCH) return -1
@@ -215,9 +226,31 @@ export default function SATrackerPage() {
     if (branchFilter !== 'all' && !branches.includes(branchFilter)) setBranchFilter('all')
   }, [branchFilter, branches])
 
-  const filteredRows = useMemo(() =>
-    branchFilter === 'all' ? dateScopedRows : dateScopedRows.filter((r) => getBranchLabel(r.branch) === branchFilter),
+  const branchFilteredRows = useMemo(() =>
+    branchFilter === 'all'
+      ? dateScopedRows
+      : dateScopedRows.filter((r) => getBranchLabel(r.location ?? r.branch) === branchFilter),
   [dateScopedRows, branchFilter])
+
+  const portalOptions = useMemo(() => {
+    const values = new Set(branchFilteredRows.map((r) => getPortalLabel(r.portal)))
+    return Array.from(values).sort((a, b) => {
+      if (a === UNKNOWN_PORTAL) return 1
+      if (b === UNKNOWN_PORTAL) return -1
+      return a.localeCompare(b)
+    })
+  }, [branchFilteredRows])
+
+  useEffect(() => {
+    if (portalFilter === 'all') return
+    if (!portalOptions.includes(portalFilter)) setPortalFilter('all')
+  }, [portalFilter, portalOptions])
+
+  const filteredRows = useMemo(() =>
+    portalFilter === 'all'
+      ? branchFilteredRows
+      : branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portalFilter),
+  [branchFilteredRows, portalFilter])
 
   // ── SA summary cards ──────────────────────────────────────────────────────
 
@@ -352,7 +385,7 @@ export default function SATrackerPage() {
 
 
         <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Branch:</span>
+          <span className="toolbar__label">Location:</span>
           <button
             type="button"
             onClick={() => setBranchFilter('all')}
@@ -367,7 +400,28 @@ export default function SATrackerPage() {
               onClick={() => setBranchFilter(b)}
               className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
             >
-              {b} ({dateScopedRows.filter((r) => getBranchLabel(r.branch) === b).length})
+              {b} ({dateScopedRows.filter((r) => getBranchLabel(r.location ?? r.branch) === b).length})
+            </button>
+          ))}
+        </div>
+
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Portal:</span>
+          <button
+            type="button"
+            onClick={() => setPortalFilter('all')}
+            className={`btn btn--sm ${portalFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          >
+            All ({branchFilteredRows.length})
+          </button>
+          {portalOptions.map((portal) => (
+            <button
+              key={portal}
+              type="button"
+              onClick={() => setPortalFilter(portal)}
+              className={`btn btn--sm ${portalFilter === portal ? 'btn--primary' : 'btn--ghost'}`}
+            >
+              {portal} ({branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portal).length})
             </button>
           ))}
         </div>
