@@ -241,3 +241,31 @@ Phase 4.5 check outcome summary (user provided):
 Interpretation:
 - Location semantics are aligned and deterministic fallback behavior is working.
 - Portal is currently NULL/Unknown for existing rows because source branch values are unsuffixed; this is expected under compatibility mode and not a contract failure.
+
+## Execution Evidence (User-Executed in Supabase SQL Editor) - Portal Precedence Hardening
+
+Date: 2026-06-11
+Migration executed:
+- supabase/migrations/20260611224500_supabase_002_portal_backfill_employee_master_precedence.sql
+
+Check pack executed:
+- supabase/sql_checks/20260611224500_supabase_002_portal_backfill_employee_master_precedence_checks.sql
+
+Batch outcome summary (user provided):
+
+1. Coverage guards for mapped SA/dealer rows
+- unresolved_service_reception_portal_rows = 0
+- unresolved_bodyshop_repair_portal_rows = 0
+- unresolved_job_card_closed_portal_rows = 0
+
+2. Dealer mapping projection snapshot
+- service_reception_entries | portal=EV | row_count=201 (for 500A840-mapped cohort)
+- job_card_closed_data | portal=EV | row_count=2788 (for 500A840-mapped cohort)
+
+3. Future-row trigger guard
+- trigger_function_portal_logic = portal_assignment_present
+
+Conclusion:
+- The portal precedence hardening migration is successfully applied.
+- Deterministic mapping coverage for targeted dealer-code cohorts is complete (no unresolved portal rows).
+- Forward behavior is enforced through trigger logic, preventing recurrence on new reception inserts.

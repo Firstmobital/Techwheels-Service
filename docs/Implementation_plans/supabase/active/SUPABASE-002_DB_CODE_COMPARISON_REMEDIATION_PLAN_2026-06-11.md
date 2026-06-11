@@ -295,6 +295,19 @@ PENDING | 5.4 | Final sign-off and archive transition | Team | - | - | Move to c
   - supabase/sql_checks/20260611224500_supabase_002_portal_backfill_employee_master_precedence_checks.sql
 - This batch enforces the business rule that rows with mapped SA/dealer identifiers should not remain without portal where mapping is deterministically available.
 
+### 2026-06-11 - Execution Update (Batch 12)
+
+- User executed 20260611224500_supabase_002_portal_backfill_employee_master_precedence.sql in Supabase SQL Editor.
+- User executed 20260611224500_supabase_002_portal_backfill_employee_master_precedence_checks.sql and reported pass outcomes for critical guards:
+  - unresolved_service_reception_portal_rows = 0
+  - unresolved_bodyshop_repair_portal_rows = 0
+  - unresolved_job_card_closed_portal_rows = 0
+  - trigger_function_portal_logic = portal_assignment_present
+- Dealer mapping projection evidence captured for EV cohort:
+  - service_reception_entries portal=EV row_count=201
+  - job_card_closed_data portal=EV row_count=2788
+- Result: employee_master-precedence portal hardening is active for existing rows and future reception inserts.
+
 ---
 
 ## Related Documentation
