@@ -126,6 +126,13 @@ Supabase mapping (active):
 - **Latest Update:** 2026-05-31 - Created full screen inventory tracker with DB-authoritative field mapping from `local_folder/backups/full_database.sql` and Body & Paint-first execution lane (use `local_folder/backups/chunks/full_database.sql.part_*` for large-file reads).
 - **Next Step:** Start BP-01 implementation for `mobile/src/app/(tabs)/autodoc.tsx` using exact reference `bp` artboard parity.
 
+### SUPABASE-002: DB Code Comparison Remediation Plan (9 June vs Current)
+- **File:** [SUPABASE-002_DB_CODE_COMPARISON_REMEDIATION_PLAN_2026-06-11.md](supabase/active/SUPABASE-002_DB_CODE_COMPARISON_REMEDIATION_PLAN_2026-06-11.md)
+- **Risk Level:** 🔴 CRITICAL (migration truth drift + RBAC/grant overexposure + data semantics inconsistency)
+- **Status:** Pending kickoff
+- **Latest Update:** 2026-06-11 - Corrective implementation plan created from DB/code comparison audit with phased tasks for migration contract correction, policy hardening, anon grant reduction, and location/portal semantic normalization.
+- **Next Step:** Execute Phase 1 governance freeze and mismatch matrix sign-off, then start migration contract correction tasks.
+
 ---
 
 ## Completed Plans

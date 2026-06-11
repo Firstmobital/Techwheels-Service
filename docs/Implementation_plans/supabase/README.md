@@ -5,6 +5,7 @@ Purpose: Keep Supabase implementation docs grouped by role under a single catego
 ## Structure
 
 - `active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md`
+ - `active/SUPABASE-002_DB_CODE_COMPARISON_REMEDIATION_PLAN_2026-06-11.md`
   - Active master tracker
 - `evidence/`
   - Completed audits and analysis supporting tracker evidence
@@ -13,6 +14,7 @@ Purpose: Keep Supabase implementation docs grouped by role under a single catego
 
 ### active/
 - `SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md`
+- `SUPABASE-002_DB_CODE_COMPARISON_REMEDIATION_PLAN_2026-06-11.md`
 
 ## Current Files
 
