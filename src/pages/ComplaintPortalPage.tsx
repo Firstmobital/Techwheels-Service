@@ -91,9 +91,20 @@ function formatDateShort(iso?: string) {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function getSlaText(resolutionDueAt?: string) {
-  if (!resolutionDueAt) return { leftText: '--', pct: 0 }
-  const dueMs = new Date(resolutionDueAt).getTime()
+function getSlaText(resolutionDueAt?: string, priority?: string, createdAt?: string) {
+  let dueMs = resolutionDueAt ? new Date(resolutionDueAt).getTime() : NaN
+  if (Number.isNaN(dueMs) && createdAt) {
+    const baseMs = new Date(createdAt).getTime()
+    const fallbackMinsByPriority: Record<string, number> = {
+      urgent: 480,
+      high: 1440,
+      medium: 2880,
+      low: 5760,
+    }
+    const mins = fallbackMinsByPriority[String(priority || '').toLowerCase()] || 2880
+    dueMs = baseMs + mins * 60 * 1000
+  }
+  if (Number.isNaN(dueMs)) return { leftText: '--', pct: 0 }
   const now = Date.now()
   const diff = dueMs - now
   if (diff <= 0) return { leftText: 'breached', pct: 100 }
@@ -302,7 +313,7 @@ export const ComplaintPortalPage: React.FC = () => {
     return <div className="twcp-page"><div className="twcp-shell twcp-body">No complaint data found.</div></div>
   }
 
-  const sla = getSlaText(ticket?.resolution_due_at)
+  const sla = getSlaText(ticket?.resolution_due_at, ticket?.priority, ticket?.created_at)
   const isConsumedView = mode === 'submitted' || mode === 'view'
 
   return (
@@ -454,8 +465,8 @@ export const ComplaintPortalPage: React.FC = () => {
                   <path d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h1 className="twcp-title">Complaint received</h1>
-              <p className="twcp-lead" style={{ maxWidth: 300, margin: '0 auto' }}>
+              <h1 className="twcp-submitted-title">Complaint received</h1>
+              <p className="twcp-submitted-lead">
                 Thank you, {firstName(ticket.customer_name || entry?.customer_name)}. Your complaint is logged and assigned to your advisor.
               </p>
 
@@ -492,13 +503,16 @@ export const ComplaintPortalPage: React.FC = () => {
         {mode === 'view' && ticket && (
           <>
             <div className={`twcp-head ${isFullyResolvedView ? 'resolved' : ''}`}>
-              <div className="twcp-brand">
-                <span className="twcp-brand-mark">{isFullyResolvedView ? '✓' : iconShield()}</span>
-                {isFullyResolvedView ? 'Complaint resolved' : 'TechWheels Care'}
+              <div className="twcp-live-top">
+                <div className="twcp-brand">
+                  <span className="twcp-brand-mark">{isFullyResolvedView ? '✓' : iconShield()}</span>
+                  {isFullyResolvedView ? 'Complaint resolved' : 'TechWheels Care'}
+                </div>
+                {!isFullyResolvedView && <span className="twcp-live-pill">Live</span>}
               </div>
               <div className="twcp-bignum" style={{ color: '#fff', marginTop: 14 }}>{ticket.ticket_number}</div>
               <div className="twcp-veh-meta" style={{ marginTop: 6, fontSize: 14, opacity: 0.95 }}>
-                {ticket.reg_number} · {isFullyResolvedView ? 'resolved' : (ticket.model || 'In progress')}
+                {ticket.reg_number || entry?.reg_number || '--'} · {isFullyResolvedView ? 'resolved' : (ticket.model || entry?.model || '--')}
               </div>
             </div>
 
@@ -506,11 +520,9 @@ export const ComplaintPortalPage: React.FC = () => {
               <div className="twcp-card">
                 <div className="twcp-card-body">
                   {!isFullyResolvedView && (
-                    <div className="twcp-row" style={{ marginBottom: 14, justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 999, padding: '4px 10px', background: '#fbf1e0', color: '#b26a00' }}>
-                        {statusLabel[ticket.status]}
-                      </span>
-                      <span style={{ fontSize: 12.5, color: '#62708a' }}>{relativeTime(ticket.updated_at)}</span>
+                    <div className="twcp-live-top" style={{ marginBottom: 16 }}>
+                      <span className="twcp-status-pill">{statusLabel[ticket.status]}</span>
+                      <span className="twcp-updated">{relativeTime(ticket.updated_at)}</span>
                     </div>
                   )}
                   <div className="twcp-stepper">
@@ -609,7 +621,7 @@ export const ComplaintPortalPage: React.FC = () => {
                   </div>
 
                   <div style={{ marginTop: 24 }}>
-                    <div className="twcp-section-label" style={{ marginBottom: 10 }}>Conversation</div>
+                    <div className="twcp-track-convo-label">Conversation</div>
                     <div className="twcp-thread">
                       <div className="twcp-msg system"><div className="twcp-msg-body">- Complaint {ticket.ticket_number} raised via secure link -</div></div>
                       {(data.messages || []).map((msg) => (
@@ -625,16 +637,16 @@ export const ComplaintPortalPage: React.FC = () => {
                     </div>
 
                     {ticket.status !== 'closed' && (
-                      <form onSubmit={handleAddMessage} style={{ marginTop: 16 }}>
+                      <form onSubmit={handleAddMessage} className="twcp-composer" style={{ marginTop: 16 }}>
                         <textarea
                           className="twcp-inp"
-                          rows={2}
+                          rows={1}
                           maxLength={300}
                           placeholder="Reply to your advisor..."
                           value={newMessage}
                           onChange={(e) => setNewMessage(e.target.value)}
                         />
-                        <button className="twcp-btn primary" style={{ marginTop: 10 }} disabled={loading || !newMessage.trim()}>
+                        <button className="twcp-btn primary" disabled={loading || !newMessage.trim()}>
                           Send
                         </button>
                       </form>
