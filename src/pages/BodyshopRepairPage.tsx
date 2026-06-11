@@ -97,6 +97,7 @@ export default function BodyshopRepairPage() {
   const [search, setSearch]       = useState('')
   const [branchFilter, setBranchFilter]   = useState('all')
   const [statusFilter, setStatusFilter]   = useState('active')
+  const [stageFilter, setStageFilter] = useState<number | 'all'>('all')
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 
@@ -311,8 +312,13 @@ export default function BodyshopRepairPage() {
     setSelected((s) => s ? { ...s, [key]: val } : s)
   }
 
+  function getEffectiveStageForCard(card: RepairCard): number {
+    const intakePhotoCount = photoCountByReceptionId[Number(card.reception_entry_id)] ?? 0
+    return getEffectiveStageFlow(card, intakePhotoCount).effectiveCurrentStage
+  }
+
   // filtered
-  const filtered = useMemo(() => cards.filter((c) => {
+  const baseFiltered = useMemo(() => cards.filter((c) => {
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false
     if (statusFilter !== 'all' && c.overall_status !== statusFilter) return false
     if (search.trim()) {
@@ -325,6 +331,21 @@ export default function BodyshopRepairPage() {
     }
     return true
   }), [cards, branchFilter, statusFilter, search])
+
+  const filtered = useMemo(() => {
+    if (stageFilter === 'all') return baseFiltered
+    return baseFiltered.filter((card) => getEffectiveStageForCard(card) === stageFilter)
+  }, [baseFiltered, stageFilter, photoCountByReceptionId])
+
+  const stageCounts = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (let i = 1; i <= 18; i += 1) counts[i] = 0
+    baseFiltered.forEach((card) => {
+      const stage = getEffectiveStageForCard(card)
+      counts[stage] = (counts[stage] ?? 0) + 1
+    })
+    return counts
+  }, [baseFiltered, photoCountByReceptionId])
 
   // pipeline counts
   const pipeline = useMemo(() =>
@@ -392,6 +413,62 @@ export default function BodyshopRepairPage() {
 
       {/* ── Card Grid ─────────────────────────────────────────────────────── */}
       <div className="page__body">
+        <div style={{
+          marginBottom: 12,
+          background: '#fff',
+          border: '1px solid #e5e7eb',
+          borderRadius: 12,
+          padding: '10px 12px',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            Stage Queue
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setStageFilter('all')}
+              style={{
+                border: `1.5px solid ${stageFilter === 'all' ? '#2563eb' : '#d1d5db'}`,
+                background: stageFilter === 'all' ? '#eff6ff' : '#fff',
+                color: stageFilter === 'all' ? '#1d4ed8' : '#374151',
+                borderRadius: 10,
+                padding: '8px 10px',
+                textAlign: 'left',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700 }}>All Stages</div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{baseFiltered.length} vehicles</div>
+            </button>
+
+            {Object.entries(STAGE_LABELS).map(([stageStr, label]) => {
+              const stageNum = Number(stageStr)
+              const count = stageCounts[stageNum] ?? 0
+              const selectedStage = stageFilter === stageNum
+              return (
+                <button
+                  key={stageNum}
+                  type="button"
+                  onClick={() => setStageFilter(stageNum)}
+                  style={{
+                    border: `1.5px solid ${selectedStage ? '#2563eb' : '#d1d5db'}`,
+                    background: selectedStage ? '#eff6ff' : '#fff',
+                    color: selectedStage ? '#1d4ed8' : '#374151',
+                    borderRadius: 10,
+                    padding: '8px 10px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>Stage {stageNum}</div>
+                  <div style={{ fontSize: 11, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{count} vehicles</div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {loading ? (
           <div className="empty-state">Loading…</div>
         ) : filtered.length === 0 ? (

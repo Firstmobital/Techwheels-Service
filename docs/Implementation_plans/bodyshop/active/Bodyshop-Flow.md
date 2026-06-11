@@ -466,6 +466,26 @@ After migration apply:
 - Validation:
   - Local production build passes after all updates.
 
+### 2026-06-12 - RLS Permission Alignment for Service Advisor Save Path
+- Issue observed: Service Advisor users with module edit rights saw save failure:
+  - `new row violates row-level security policy for table "bodyshop_repair_cards"`
+- Root cause from authoritative schema snapshot:
+  - `bodyshop_repair_cards` had admin-only policy and no module-RBAC insert/update/select policy equivalent to Service Reception and intake-photo tables.
+- Added migration file:
+  - `supabase/migrations/20260612004500_bodyshop_repair_cards_rbac_for_sa_and_reception.sql`
+- Migration adds module-scoped RBAC policies for `authenticated` on `bodyshop_repair_cards`:
+  - SELECT: `service_advisor`, `reception`, `bodyshop_floor`, `bodyshop_repair`, `bodyshop_tracker`
+  - INSERT/UPDATE: `service_advisor`, `reception`, `bodyshop_repair`
+  - Dealer-scope checks via linked `service_reception_entries.dealer_code` (canonical `reception_entry_id`) with `sa_employee_code` dealer-code fallback.
+- Expected outcome:
+  - Service Advisor save can update bodyshop card sync without requiring admin role, while preserving dealer-scope isolation.
+
+### 2026-06-12 - RLS Migration Execution Confirmed
+- User confirmed execution in SQL Editor:
+  - `supabase/migrations/20260612004500_bodyshop_repair_cards_rbac_for_sa_and_reception.sql`
+- Next validation target:
+  - SA role should be able to save Accident rows in Service Advisor without `bodyshop_repair_cards` RLS violation.
+
 ---
 
 ## Related Documentation
