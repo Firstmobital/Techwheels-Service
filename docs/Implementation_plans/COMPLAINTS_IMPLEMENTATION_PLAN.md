@@ -1,7 +1,7 @@
 # COMPLAINTS MODULE — COMPREHENSIVE IMPLEMENTATION PLAN
 
 **Project Name:** Complaint Ticketing System  
-**Status:** 🔄 CORE IMPLEMENTED; POLISH/QA PENDING  
+**Status:** 🔄 CORE IMPLEMENTED; STAFF UI PARITY PASS 2 COMPLETE; POLISH/QA PENDING  
 **Created:** 2026-06-08  
 **Target Deployment:** 2–3 sprints  
 **Repository:** Firstmobital/Techwheels-Service (Vite + React + TS + Supabase)
@@ -1890,12 +1890,14 @@ export async function generateComplaintLink(receptionEntryId: number) {
 
 ### Phase 4: Staff Module (Week 3–4)
 
-- [ ] **ComplaintsPage:** Inbox table + Board kanban + SLA tab + detail view
+- [x] **ComplaintsPage:** Inbox table + Board kanban + SLA tab + detail view
 - [x] **Permissions:** Module gate via `useModulePermission('complaints')`
 - [x] **Actions:** Acknowledge, start, resolve, close, escalate, reassign buttons (hidden if `!can_modify`)
 - [x] **Advisors:** RLS enforces own sa_employee_code rows only
 - [x] **Nav:** Complaints item with open-count badge
 - [x] **Mobile & desktop:** Responsive layout
+- [x] **Strict parity pass 2 (staff):** spacing/typography row-height tuning + board/detail visual token alignment against `Complaint Module (Staff).html`
+- [x] **RBAC mode lock:** removed manual "View as" switch; advisor/manager mode now derived from role mapping and module assignment only
 
 ### Phase 5: Notifications & Polish (Week 4–5)
 
@@ -2033,8 +2035,10 @@ Evidence gathered:
 1. Testing hardening
    - pgTAP suite is still pending for: single-use raise, tenant isolation, internal-note hiding, SLA breach checks.
 2. Staff module completeness
-  - Inbox, Board, SLA tab, and detail modal are live.
+  - Inbox, Board, SLA tab, and in-flow detail view are live.
   - Action visibility is now explicitly gated by complaints modify permission at page level.
+  - Strict parity pass 2 completed for KPI density, filter/tab rhythm, board column accents, stepper/thread/composer, and detail panel proportions.
+  - Manual role switching is removed; complaints module visibility now requires assigned module permission and follows existing Service Advisor RBAC/RLS row-scope behavior.
 3. Customer portal finish
    - Mobile-first pass is still pending against design parity checklist.
    - Full scripted E2E workflow (mint link -> raise -> track -> reopen) is pending as a formal test artifact.

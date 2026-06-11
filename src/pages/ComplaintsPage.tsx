@@ -1,31 +1,21 @@
-// ============================================================================
-// COMPLAINTS — STAFF MODULE (AUTHENTICATED DASHBOARD)
-// ============================================================================
-// Path: /complaints
-// Staff view with inbox, filters, quick actions, detail modal
-// ============================================================================
-
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   acknowledge,
-  startProgress,
-  resolve,
+  addStaffMessage,
   close,
   escalate,
-  addStaffMessage,
   reassign,
+  resolve,
   setPriority,
+  startProgress,
 } from '../lib/api/complaints'
-import {
-  StatusBadge,
-  PriorityBadge,
-  TicketHeaderCard,
-  LoadingSpinner,
-  ErrorAlert,
-  SuccessAlert,
-} from '../components/complaints/UI'
-import type { ComplaintTicket, ComplaintMessage, ComplaintStatus, ComplaintPriority } from '../components/complaints/types'
+import { LoadingSpinner, ErrorAlert, SuccessAlert } from '../components/complaints/UI'
+import type { ComplaintMessage, ComplaintPriority, ComplaintStatus, ComplaintTicket } from '../components/complaints/types'
+import './ComplaintsPage.css'
+
+type TabKey = 'inbox' | 'board' | 'sla'
+type ViewRole = 'manager' | 'advisor' | 'viewer'
 
 interface FilterState {
   status: ComplaintStatus | 'all'
@@ -33,27 +23,98 @@ interface FilterState {
   search: string
 }
 
-interface DetailModalState {
-  open: boolean
-  ticketId: bigint | null
+const STATUS_ORDER: ComplaintStatus[] = ['new', 'acknowledged', 'in_progress', 'resolved', 'closed']
+
+const STATUS_LABELS: Record<ComplaintStatus, string> = {
+  new: 'New',
+  acknowledged: 'Acknowledged',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
+  reopened: 'Reopened',
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  service_quality: 'Service quality / rework',
+  billing: 'Billing / overcharge',
+  delivery_delay: 'Delivery delay',
+  staff_behaviour: 'Staff behaviour',
+  parts_spares: 'Parts / spares',
+  damage_during_service: 'Damage during service',
+  cleanliness: 'Cleanliness / wash',
+  other: 'Other',
+}
+
+const PRIORITY_ORDER: ComplaintPriority[] = ['urgent', 'high', 'medium', 'low']
+
+const priorityClass = (priority: ComplaintPriority): string => {
+  return `priority ${priority}`
+}
+
+const statusClass = (status: ComplaintStatus): string => {
+  return `status-pill ${status}`
+}
+
+const formatDate = (value?: string): string => {
+  if (!value) return '-'
+  return new Date(value).toLocaleString()
+}
+
+const calculateAgeHours = (ticket: ComplaintTicket): number => {
+  const start = new Date(ticket.created_at).getTime()
+  const end = (ticket.closed_at || ticket.resolved_at) ? new Date(ticket.closed_at || ticket.resolved_at || '').getTime() : Date.now()
+  return Math.max(1, Math.round((end - start) / (1000 * 60 * 60)))
+}
+
+const buildSlaMeta = (ticket: ComplaintTicket): { pct: number; text: string; color: string } => {
+  const due = ticket.resolution_due_at || ticket.response_due_at
+  if (!due) {
+    return { pct: 0, text: 'No SLA set', color: '#94a0b5' }
+  }
+
+  const created = new Date(ticket.created_at).getTime()
+  const deadline = new Date(due).getTime()
+  const now = Date.now()
+  const total = Math.max(1, deadline - created)
+  const elapsed = Math.max(0, now - created)
+  const pct = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)))
+
+  if (ticket.response_breached || ticket.resolution_breached || now > deadline) {
+    return { pct: 100, text: 'Breached', color: '#d23a4b' }
+  }
+
+  const leftMins = Math.max(0, Math.round((deadline - now) / (1000 * 60)))
+  const label = leftMins >= 60 ? `${Math.ceil(leftMins / 60)}h left` : `${leftMins}m left`
+  const color = pct >= 85 ? '#ea580c' : '#0e7c5a'
+  return { pct, text: label, color }
 }
 
 export const ComplaintsPage: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<'inbox' | 'board' | 'sla'>('inbox')
+  const [currentTab, setCurrentTab] = useState<TabKey>('inbox')
   const [tickets, setTickets] = useState<ComplaintTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
   const [filters, setFilters] = useState<FilterState>({ status: 'all', priority: 'all', search: '' })
-  const [detailModal, setDetailModal] = useState<DetailModalState>({ open: false, ticketId: null })
+
   const [selectedTicket, setSelectedTicket] = useState<ComplaintTicket | null>(null)
   const [ticketMessages, setTicketMessages] = useState<ComplaintMessage[]>([])
+
   const [newMessage, setNewMessage] = useState('')
   const [isInternal, setIsInternal] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+
   const [staffList, setStaffList] = useState<Array<{ id: string; full_name: string }>>([])
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
+
+  const [hasComplaintsView, setHasComplaintsView] = useState(false)
   const [canModifyComplaints, setCanModifyComplaints] = useState(false)
+  const [, setEffectiveViewRole] = useState<ViewRole>('viewer')
+  const [permissionsResolved, setPermissionsResolved] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  const canEdit = hasComplaintsView && canModifyComplaints
 
   const clearFeedback = () => {
     setError(null)
@@ -66,20 +127,30 @@ export const ComplaintsPage: React.FC = () => {
     return () => window.clearTimeout(timeout)
   }, [success])
 
-  // ── Resolve complaints modify permission ───────────────────────────────
   useEffect(() => {
     const resolvePermissions = async () => {
       try {
         const { data: sessionData } = await supabase.auth.getSession()
         const userId = sessionData.session?.user?.id
+        setCurrentUserId(userId ?? null)
+
         if (!userId) {
+          setHasComplaintsView(false)
           setCanModifyComplaints(false)
+          setEffectiveViewRole('viewer')
+          setPermissionsResolved(true)
           return
         }
 
-        const [{ data: profile }, { data: permissionRows }] = await Promise.all([
+        const [{ data: profile }, { data: permissionRows }, { data: links }] = await Promise.all([
           supabase.from('users').select('role, is_active').eq('id', userId).maybeSingle(),
           supabase.rpc('get_all_my_permissions'),
+          supabase
+            .from('user_employee_links')
+            .select('employee_code')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .is('deleted_at', null),
         ])
 
         const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
@@ -88,25 +159,71 @@ export const ComplaintsPage: React.FC = () => {
 
         type PermissionRow = {
           module_name?: string | null
+          can_view?: boolean | null
           can_modify?: boolean | null
         }
 
         const permissions = (permissionRows ?? []) as PermissionRow[]
+        const hasComplaintsViewPermission = permissions.some(
+          (row) =>
+            String(row.module_name ?? '').trim().toLowerCase() === 'complaints' &&
+            (row.can_view === true || row.can_modify === true),
+        )
         const hasComplaintsModify = permissions.some(
           (row) => String(row.module_name ?? '').trim().toLowerCase() === 'complaints' && row.can_modify === true,
         )
 
-        setCanModifyComplaints(isAdminLike || hasComplaintsModify)
+        const employeeCodes = ((links ?? []) as Array<{ employee_code?: string | null }>)
+          .map((row) => String(row.employee_code ?? '').trim())
+          .filter(Boolean)
+
+        let businessRoles: string[] = []
+        if (employeeCodes.length > 0) {
+          const { data: employeeRows } = await supabase
+            .from('employee_master')
+            .select('role')
+            .in('employee_code', employeeCodes)
+
+          businessRoles = ((employeeRows ?? []) as Array<{ role?: string | null }>)
+            .map((row) => String(row.role ?? '').trim().toUpperCase())
+            .filter(Boolean)
+        }
+
+        const hasManagerBusinessRole = businessRoles.some((value) => value === 'CRM' || value === 'GM' || value === 'SM')
+        const hasAdvisorBusinessRole = businessRoles.some((value) => value === 'SA' || value === 'SERVICE ADVISOR' || value === 'SERVICE_ADVISOR')
+
+        const canView = isAdminLike || hasComplaintsViewPermission
+        const editable = isAdminLike || hasComplaintsModify
+
+        let nextViewRole: ViewRole = 'viewer'
+        if (canView) {
+          if (isAdminLike || hasManagerBusinessRole) {
+            nextViewRole = 'manager'
+          } else if (hasAdvisorBusinessRole) {
+            nextViewRole = 'advisor'
+          } else {
+            nextViewRole = editable ? 'manager' : 'advisor'
+          }
+        }
+
+        setHasComplaintsView(canView)
+        setCanModifyComplaints(editable)
+        setEffectiveViewRole(nextViewRole)
+        setPermissionsResolved(true)
       } catch {
+        setHasComplaintsView(false)
         setCanModifyComplaints(false)
+        setEffectiveViewRole('viewer')
+        setPermissionsResolved(true)
       }
     }
 
     resolvePermissions()
   }, [])
 
-  // ── Load staff list ─────────────────────────────────────────────────────
   useEffect(() => {
+    if (!permissionsResolved || !hasComplaintsView) return
+
     const loadStaff = async () => {
       try {
         const { data, error: err } = await supabase
@@ -123,10 +240,19 @@ export const ComplaintsPage: React.FC = () => {
     }
 
     loadStaff()
-  }, [])
+  }, [hasComplaintsView, permissionsResolved])
 
-  // ── Load complaints ──────────────────────────────────────────────────────
   useEffect(() => {
+    if (!permissionsResolved) return
+
+    if (!hasComplaintsView) {
+      setTickets([])
+      setSelectedTicket(null)
+      setTicketMessages([])
+      setLoading(false)
+      return
+    }
+
     const loadComplaints = async () => {
       try {
         const { data, error: err } = await supabase
@@ -145,12 +271,10 @@ export const ComplaintsPage: React.FC = () => {
     }
 
     loadComplaints()
-  }, [])
+  }, [hasComplaintsView, permissionsResolved])
 
-  // ── Load ticket details & messages ───────────────────────────────────────
   const loadTicketDetails = async (ticketId: bigint) => {
     try {
-      // Fetch ticket
       const { data: ticketData, error: ticketErr } = await supabase
         .from('complaint_tickets')
         .select('*')
@@ -159,9 +283,10 @@ export const ComplaintsPage: React.FC = () => {
 
       if (ticketErr) throw ticketErr
 
-      setSelectedTicket(ticketData as ComplaintTicket)
+      const ticket = ticketData as ComplaintTicket
+      setSelectedTicket(ticket)
+      setSelectedStaffId(ticket.assigned_to ?? null)
 
-      // Fetch messages
       const { data: messagesData, error: messagesErr } = await supabase
         .from('complaint_messages')
         .select('*')
@@ -175,19 +300,25 @@ export const ComplaintsPage: React.FC = () => {
     }
   }
 
-  // ── Open detail modal ────────────────────────────────────────────────────
-  const openDetailModal = (ticketId: bigint) => {
+  const openDetail = (ticketId: bigint) => {
     loadTicketDetails(ticketId)
-    setDetailModal({ open: true, ticketId })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // ── Status update actions ────────────────────────────────────────────────
+  const closeDetail = () => {
+    setSelectedTicket(null)
+    setTicketMessages([])
+    setNewMessage('')
+    setIsInternal(false)
+  }
+
   const handleStatusChange = async (newStatus: ComplaintStatus) => {
     if (!selectedTicket) return
 
     try {
       clearFeedback()
       setActionLoading(true)
+
       switch (newStatus) {
         case 'acknowledged':
           await acknowledge(selectedTicket.id)
@@ -205,13 +336,10 @@ export const ComplaintsPage: React.FC = () => {
           return
       }
 
-      setSelectedTicket({ ...selectedTicket, status: newStatus })
-      setTickets(
-        tickets.map((t) =>
-          t.id === selectedTicket.id ? { ...t, status: newStatus } : t
-        )
-      )
-      setSuccess(`Status changed to ${newStatus}`)
+      const updated = { ...selectedTicket, status: newStatus }
+      setSelectedTicket(updated)
+      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
+      setSuccess(`Status changed to ${STATUS_LABELS[newStatus]}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update status')
     } finally {
@@ -226,12 +354,10 @@ export const ComplaintsPage: React.FC = () => {
       clearFeedback()
       setActionLoading(true)
       await escalate(selectedTicket.id, 'Manual escalation by staff')
-      setSelectedTicket({ ...selectedTicket, is_escalated: true })
-      setTickets(
-        tickets.map((t) =>
-          t.id === selectedTicket.id ? { ...t, is_escalated: true } : t,
-        ),
-      )
+
+      const updated = { ...selectedTicket, is_escalated: true }
+      setSelectedTicket(updated)
+      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
       setSuccess('Complaint escalated')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to escalate complaint')
@@ -247,15 +373,13 @@ export const ComplaintsPage: React.FC = () => {
       clearFeedback()
       setActionLoading(true)
       await reassign(selectedTicket.id, selectedStaffId)
-      const staffMember = staffList.find(s => s.id === selectedStaffId)
-      setSelectedTicket({ ...selectedTicket, assigned_to: selectedStaffId })
-      setTickets(
-        tickets.map((t) =>
-          t.id === selectedTicket.id ? { ...t, assigned_to: selectedStaffId } : t,
-        ),
-      )
+
+      const updated = { ...selectedTicket, assigned_to: selectedStaffId }
+      setSelectedTicket(updated)
+      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
+
+      const staffMember = staffList.find((s) => s.id === selectedStaffId)
       setSuccess(`Reassigned to ${staffMember?.full_name || 'staff member'}`)
-      setSelectedStaffId(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reassign complaint')
     } finally {
@@ -270,12 +394,10 @@ export const ComplaintsPage: React.FC = () => {
       clearFeedback()
       setActionLoading(true)
       await setPriority(selectedTicket.id, newPriority)
-      setSelectedTicket({ ...selectedTicket, priority: newPriority })
-      setTickets(
-        tickets.map((t) =>
-          t.id === selectedTicket.id ? { ...t, priority: newPriority } : t,
-        ),
-      )
+
+      const updated = { ...selectedTicket, priority: newPriority }
+      setSelectedTicket(updated)
+      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
       setSuccess(`Priority changed to ${newPriority}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change priority')
@@ -284,13 +406,12 @@ export const ComplaintsPage: React.FC = () => {
     }
   }
 
-  // ── Add staff message ────────────────────────────────────────────────────
   const handleAddMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    const trimmedMessage = newMessage.trim()
-    if (!selectedTicket || !trimmedMessage) return
+    const trimmed = newMessage.trim()
+    if (!selectedTicket || !trimmed) return
 
-    if (trimmedMessage.length < 2) {
+    if (trimmed.length < 2) {
       setError('Message should be at least 2 characters.')
       return
     }
@@ -298,11 +419,11 @@ export const ComplaintsPage: React.FC = () => {
     try {
       clearFeedback()
       setActionLoading(true)
-      await addStaffMessage(selectedTicket.id, trimmedMessage, isInternal)
+      await addStaffMessage(selectedTicket.id, trimmed, isInternal)
       setNewMessage('')
       setIsInternal(false)
       await loadTicketDetails(selectedTicket.id)
-      setSuccess('Message added!')
+      setSuccess('Message added')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add message')
     } finally {
@@ -310,497 +431,590 @@ export const ComplaintsPage: React.FC = () => {
     }
   }
 
-  // ── Filter tickets ───────────────────────────────────────────────────────
-  const filteredTickets = tickets.filter((ticket) => {
-    if (filters.status !== 'all' && ticket.status !== filters.status) return false
-    if (filters.priority !== 'all' && ticket.priority !== filters.priority) return false
-    if (filters.search && !ticket.ticket_number.toLowerCase().includes(filters.search.toLowerCase())) {
-      return false
-    }
-    return true
-  })
+  const filteredTickets = useMemo(() => {
+    return tickets.filter((ticket) => {
+      if (filters.status !== 'all' && ticket.status !== filters.status) return false
+      if (filters.priority !== 'all' && ticket.priority !== filters.priority) return false
 
-  // ── Render ───────────────────────────────────────────────────────────────
+      if (filters.search) {
+        const needle = filters.search.toLowerCase()
+        const haystack = [ticket.ticket_number, ticket.reg_number, ticket.customer_name, ticket.title]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
 
-  if (loading && tickets.length === 0) return <LoadingSpinner />
+        if (!haystack.includes(needle)) return false
+      }
+
+      return true
+    })
+  }, [filters, tickets])
+
+  const breachedTickets = useMemo(() => {
+    return filteredTickets.filter(
+      (t) => (t.response_breached || t.resolution_breached) && !['resolved', 'closed'].includes(t.status),
+    )
+  }, [filteredTickets])
+
+  const boardGroups = useMemo(() => {
+    return STATUS_ORDER.map((status) => ({
+      status,
+      label: STATUS_LABELS[status],
+      items: filteredTickets.filter((t) => t.status === status),
+    }))
+  }, [filteredTickets])
+
+  const inboxCount = filteredTickets.length
+  const newCount = filteredTickets.filter((t) => t.status === 'new').length
+  const openCount = filteredTickets.filter((t) => !['resolved', 'closed'].includes(t.status)).length
+  const escalatedCount = filteredTickets.filter((t) => t.is_escalated).length
+  const avgAgeHours =
+    filteredTickets.length > 0
+      ? Math.round(filteredTickets.reduce((acc, t) => acc + calculateAgeHours(t), 0) / filteredTickets.length)
+      : 0
+
+  const selectedSla = selectedTicket ? buildSlaMeta(selectedTicket) : null
+
+  const activeStepIndex = (status: ComplaintStatus): number => {
+    if (status === 'reopened') return 2
+    const idx = STATUS_ORDER.indexOf(status)
+    return idx >= 0 ? idx : 0
+  }
+
+  if (!permissionsResolved) {
+    return <LoadingSpinner />
+  }
+
+  if (!hasComplaintsView) {
+    return (
+      <div className="main complaints-staff">
+        <div className="page">
+          <div className="access-denied">
+            <div className="card access-denied__card">
+              <div className="card__head">
+                <div className="access-denied__head">
+                  <span className="access-denied__icon">🔒</span>
+                  <div>
+                    <h3>Complaints module is not assigned</h3>
+                    <p className="access-denied__copy">
+                      This page is visible only after the complaints module is granted in role permissions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="card__body">
+                <ul className="access-denied__list">
+                  <li>Grant complaints view or modify permission for the logged-in role.</li>
+                  <li>Row visibility will then follow the same RBAC/RLS behavior used by Service Advisor.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && tickets.length === 0) {
+    return <LoadingSpinner />
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Complaints</h1>
-          <p className="text-gray-600 mt-2">Manage customer complaints and tickets</p>
-        </div>
-
-        {/* Alerts */}
-        {success && (
-          <>
-            <SuccessAlert message={success} />
-            <button
-              onClick={() => setSuccess(null)}
-              className="mt-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              Dismiss
-            </button>
-          </>
-        )}
-        {error && (
-          <>
-            <ErrorAlert message={error} />
-            <button
-              onClick={() => setError(null)}
-              className="mt-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              Dismiss
-            </button>
-          </>
-        )}
-
-        {/* Tab Navigation */}
-        <div className="mb-6 border-b border-gray-200">
-          <div className="flex gap-4">
-            <button
-              onClick={() => setCurrentTab('inbox')}
-              className={`px-4 py-3 font-semibold border-b-2 transition ${
-                currentTab === 'inbox'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Inbox
-            </button>
-            <button
-              onClick={() => setCurrentTab('board')}
-              className={`px-4 py-3 font-semibold border-b-2 transition ${
-                currentTab === 'board'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Board
-            </button>
-            <button
-              onClick={() => setCurrentTab('sla')}
-              className={`px-4 py-3 font-semibold border-b-2 transition ${
-                currentTab === 'sla'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              SLA Breaches
-            </button>
+    <div className="main complaints-staff">
+      <div className="page">
+        <div className="pagehead">
+          <div>
+            <p className="greet">Service · Customer Care</p>
+            <h1>Complaints</h1>
+            <p>Resolve customer complaints raised against service visits and close the loop with SLA discipline.</p>
           </div>
         </div>
 
-        {/* INBOX TAB */}
-        {currentTab === 'inbox' && (
+        {success && <SuccessAlert message={success} />}
+        {error && <ErrorAlert message={error} />}
+
+        <div className="kpis" style={{ marginTop: 16 }}>
+          <div className="kpi">
+            <div className="kpi__top">
+              <span className="kpi__ic">📥</span>
+            </div>
+            <div className="kpi__val">{inboxCount}</div>
+            <div className="kpi__lab">Visible complaints</div>
+          </div>
+          <div className="kpi">
+            <div className="kpi__top">
+              <span className="kpi__ic">🆕</span>
+            </div>
+            <div className="kpi__val">{newCount}</div>
+            <div className="kpi__lab">New complaints</div>
+          </div>
+          <div className="kpi">
+            <div className="kpi__top">
+              <span className="kpi__ic">🛠️</span>
+            </div>
+            <div className="kpi__val">{openCount}</div>
+            <div className="kpi__lab">Open complaints</div>
+          </div>
+          <div className="kpi">
+            <div className="kpi__top">
+              <span className="kpi__ic">🚨</span>
+            </div>
+            <div className="kpi__val">{escalatedCount}</div>
+            <div className="kpi__lab">Escalated complaints</div>
+          </div>
+          <div className="kpi">
+            <div className="kpi__top">
+              <span className="kpi__ic">⏱️</span>
+            </div>
+            <div className="kpi__val">{avgAgeHours}h</div>
+            <div className="kpi__lab">Average age</div>
+          </div>
+        </div>
+
+        {!canModifyComplaints && (
+          <div className="access-note" style={{ marginBottom: 14 }}>
+            <span className="ic">ℹ️</span>
+            <div>
+              <b>View-only profile active</b>
+              <p>You can inspect tickets, conversation, and SLA context. Action controls are hidden until complaints modify access is granted.</p>
+            </div>
+          </div>
+        )}
+
+        {!selectedTicket && (
           <>
-            {/* Filters */}
-            <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={filters.status}
-                    onChange={(e) => setFilters({ ...filters, status: e.target.value as ComplaintStatus | 'all' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="new">New</option>
-                    <option value="acknowledged">Acknowledged</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                    <option value="reopened">Reopened</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Priority
-                  </label>
-                  <select
-                    value={filters.priority}
-                    onChange={(e) => setFilters({ ...filters, priority: e.target.value as ComplaintPriority | 'all' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Priorities</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Search
-                  </label>
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                    placeholder="Search by ticket number..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+            <div className="row" style={{ borderBottom: '1px solid var(--border)', gap: 22 }}>
+              <button type="button" className={`tabbtn ${currentTab === 'inbox' ? 'on' : ''}`} onClick={() => setCurrentTab('inbox')}>
+                Inbox
+              </button>
+              <button type="button" className={`tabbtn ${currentTab === 'board' ? 'on' : ''}`} onClick={() => setCurrentTab('board')}>
+                Board
+              </button>
+              <button type="button" className={`tabbtn ${currentTab === 'sla' ? 'on' : ''}`} onClick={() => setCurrentTab('sla')}>
+                SLA breaches
+              </button>
+              <span className="sp" />
+              <input
+                className="inp"
+                style={{ marginBottom: 8, width: 280, maxWidth: '100%' }}
+                type="text"
+                value={filters.search}
+                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                placeholder="Search reg, ticket, customer..."
+              />
             </div>
 
-            {/* Tickets List */}
-            <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-              {filteredTickets.length === 0 ? (
-                <div className="p-8 text-center">
-                  <p className="text-gray-600">No complaints match the current filters.</p>
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {filteredTickets.map((ticket) => (
-                    <div
-                      key={ticket.id.toString()}
-                      onClick={() => openDetailModal(ticket.id)}
-                      className="p-4 hover:bg-gray-50 cursor-pointer transition"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{ticket.ticket_number}</h3>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {ticket.reg_number} • {ticket.title}
-                          </p>
-                          <div className="flex gap-2 mt-2">
-                            <StatusBadge status={ticket.status as ComplaintStatus} />
-                            <PriorityBadge priority={ticket.priority as ComplaintPriority} />
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-gray-500">
-                            {new Date(ticket.created_at).toLocaleDateString()}
-                          </p>
-                          {ticket.is_escalated && (
-                            <p className="text-xs text-red-600 font-semibold mt-1">🚨 Escalated</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="filterbar">
+              <select
+                className="sel"
+                value={filters.status}
+                onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as ComplaintStatus | 'all' }))}
+              >
+                <option value="all">All statuses</option>
+                <option value="new">New</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="in_progress">In progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+                <option value="reopened">Reopened</option>
+              </select>
+
+              <select
+                className="sel"
+                value={filters.priority}
+                onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value as ComplaintPriority | 'all' }))}
+              >
+                <option value="all">All priorities</option>
+                {PRIORITY_ORDER.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priority[0].toUpperCase() + priority.slice(1)}
+                  </option>
+                ))}
+              </select>
+
+              <span className="sp" />
+              <span className="text-muted" style={{ fontSize: 12.5, fontWeight: 600 }}>
+                {filteredTickets.length} ticket(s)
+              </span>
             </div>
-          </>
-        )}
 
-        {/* BOARD TAB */}
-        {currentTab === 'board' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            {(['new', 'acknowledged', 'in_progress', 'resolved', 'closed'] as const).map((status) => {
-              const statusTickets = tickets.filter((t) => t.status === status)
-              const columnTitles: Record<string, string> = {
-                new: 'New',
-                acknowledged: 'Acknowledged',
-                in_progress: 'In Progress',
-                resolved: 'Resolved',
-                closed: 'Closed',
-              }
+            {currentTab === 'inbox' && (
+              <div className="card">
+                <div className="tbl-wrap">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 30 }} />
+                        <th>Ticket</th>
+                        <th>Vehicle</th>
+                        <th>Customer</th>
+                        <th>Category</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>SLA</th>
+                        <th>Assignee</th>
+                        <th>Age</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTickets.length === 0 && (
+                        <tr>
+                          <td colSpan={10} className="empty-state">No complaints match current filters.</td>
+                        </tr>
+                      )}
 
-              return (
-                <div key={status} className="bg-white border rounded-lg p-4 shadow-sm">
-                  <h3 className="font-semibold text-gray-900 mb-3">
-                    {columnTitles[status]}
-                  </h3>
-                  <p className="text-xs text-gray-500 mb-3">{statusTickets.length} tickets</p>
-                  <div className="space-y-2">
-                    {statusTickets.map((ticket) => (
-                      <div
-                        key={ticket.id.toString()}
-                        onClick={() => openDetailModal(ticket.id)}
-                        className="p-3 bg-gray-50 hover:bg-gray-100 border rounded cursor-pointer transition"
-                      >
-                        <p className="font-semibold text-sm text-gray-900">
-                          {ticket.ticket_number}
-                        </p>
-                        <p className="text-xs text-gray-600 mt-1">{ticket.reg_number}</p>
-                        <div className="flex gap-1 mt-2">
-                          <PriorityBadge priority={ticket.priority as ComplaintPriority} />
-                        </div>
-                        {ticket.is_escalated && (
-                          <p className="text-xs text-red-600 font-semibold mt-2">🚨 Escalated</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                      {filteredTickets.map((ticket) => {
+                        const sla = buildSlaMeta(ticket)
+                        return (
+                          <tr
+                            key={ticket.id.toString()}
+                            onClick={() => openDetail(ticket.id)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td>
+                              {ticket.status === 'new' && <span className="unread-dot" aria-label="Unread" />}
+                            </td>
+                            <td>
+                              <div className="mono">{ticket.ticket_number}</div>
+                              <div className="text-muted" style={{ fontSize: 12 }}>{ticket.title}</div>
+                            </td>
+                            <td>
+                              <div className="strong">{ticket.reg_number}</div>
+                              <div className="text-muted" style={{ fontSize: 12 }}>{ticket.model || '-'}</div>
+                            </td>
+                            <td>{ticket.customer_name || '-'}</td>
+                            <td>{CATEGORY_LABELS[ticket.category] || ticket.category}</td>
+                            <td><span className={priorityClass(ticket.priority)}>{ticket.priority}</span></td>
+                            <td><span className={statusClass(ticket.status)}>{STATUS_LABELS[ticket.status]}</span></td>
+                            <td>
+                              <div className="sla">
+                                <span className="sla-txt" style={{ color: sla.color }}>{sla.text}</span>
+                              </div>
+                            </td>
+                            <td>{staffList.find((s) => s.id === ticket.assigned_to)?.full_name || 'Unassigned'}</td>
+                            <td>{calculateAgeHours(ticket)}h</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* SLA BREACHES TAB */}
-        {currentTab === 'sla' && (
-          <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-            {(() => {
-              const slaBreaches = tickets.filter(
-                (t) =>
-                  (t.response_breached || t.resolution_breached) &&
-                  !['closed', 'resolved'].includes(t.status)
-              )
-
-              if (slaBreaches.length === 0) {
-                return (
-                  <div className="p-8 text-center">
-                    <p className="text-gray-600">✓ No SLA breaches! All tickets are on track.</p>
-                  </div>
-                )
-              }
-
-              return (
-                <div className="divide-y">
-                  {slaBreaches.map((ticket) => (
-                    <div
-                      key={ticket.id.toString()}
-                      onClick={() => openDetailModal(ticket.id)}
-                      className="p-4 hover:bg-red-50 cursor-pointer transition border-l-4 border-l-red-500"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{ticket.ticket_number}</h3>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {ticket.reg_number} • {ticket.title}
-                          </p>
-                          <div className="flex gap-2 mt-2">
-                            <StatusBadge status={ticket.status as ComplaintStatus} />
-                            <PriorityBadge priority={ticket.priority as ComplaintPriority} />
-                          </div>
-                          <div className="mt-2">
-                            {ticket.response_breached && (
-                              <p className="text-xs text-red-600 font-semibold">
-                                ⚠️ Response SLA breached
-                              </p>
-                            )}
-                            {ticket.resolution_breached && (
-                              <p className="text-xs text-red-600 font-semibold">
-                                ⚠️ Resolution SLA breached
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-gray-500">
-                            {new Date(ticket.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            })()}
-          </div>
-        )}
-
-        {/* Detail Modal */}
-        {detailModal.open && selectedTicket && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-900">{selectedTicket.ticket_number}</h2>
-                <button
-                  onClick={() => setDetailModal({ open: false, ticketId: null })}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 text-xl"
-                  aria-label="Close details"
-                >
-                  ✕
-                </button>
               </div>
+            )}
 
-              <div className="p-5 space-y-5">
-                {/* Ticket Header */}
-                <TicketHeaderCard
-                  ticketNumber={selectedTicket.ticket_number}
-                  status={selectedTicket.status as ComplaintStatus}
-                  priority={selectedTicket.priority as ComplaintPriority}
-                  category={selectedTicket.category}
-                  regNumber={selectedTicket.reg_number}
-                  model={selectedTicket.model}
-                />
-
-                {canModifyComplaints ? (
-                  <>
-                    {/* Quick Actions */}
-                    <div className="bg-gray-50 border rounded p-3">
-                      <p className="text-sm font-semibold text-gray-700 mb-2">Ticket Actions</p>
-                      <p className="text-xs text-gray-500 mb-2">Current status: {selectedTicket.status.replace('_', ' ')}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedTicket.status === 'new' && (
-                          <button
-                            onClick={() => handleStatusChange('acknowledged')}
-                            disabled={actionLoading}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Acknowledge
-                          </button>
-                        )}
-                        {selectedTicket.status === 'acknowledged' && (
-                          <button
-                            onClick={() => handleStatusChange('in_progress')}
-                            disabled={actionLoading}
-                            className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Mark In Progress
-                          </button>
-                        )}
-                        {selectedTicket.status === 'in_progress' && (
-                          <button
-                            onClick={() => handleStatusChange('resolved')}
-                            disabled={actionLoading}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Mark Resolved
-                          </button>
-                        )}
-                        {selectedTicket.status === 'resolved' && (
-                          <button
-                            onClick={() => handleStatusChange('closed')}
-                            disabled={actionLoading}
-                            className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Close Ticket
-                          </button>
-                        )}
-                        {!selectedTicket.is_escalated && (
-                          <button
-                            onClick={handleEscalate}
-                            disabled={actionLoading}
-                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            {actionLoading ? 'Escalating...' : 'Escalate Ticket'}
-                          </button>
-                        )}
-                      </div>
+            {currentTab === 'board' && (
+              <div className="board">
+                {boardGroups.map((group) => (
+                  <div className={`col col--${group.status.replace('_', '-')}`} key={group.status}>
+                    <div className="col-head">
+                      <h4>{group.label}</h4>
+                      <span className="col-count">{group.items.length}</span>
                     </div>
-
-                    {/* Priority & Reassignment */}
-                    <div className="bg-gray-50 border rounded p-3">
-                      <p className="text-sm font-semibold text-gray-700 mb-2">Settings</p>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">Priority</label>
-                          <select
-                            value={selectedTicket.priority}
-                            onChange={(e) => handleChangePriority(e.target.value as ComplaintPriority)}
-                            disabled={actionLoading}
-                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="urgent">Urgent</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">Assign to Staff</label>
-                          <div className="flex gap-2">
-                            <select
-                              value={selectedStaffId || ''}
-                              onChange={(e) => setSelectedStaffId(e.target.value)}
-                              disabled={actionLoading}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">Select staff member...</option>
-                              {staffList.map((staff) => (
-                                <option key={staff.id} value={staff.id}>
-                                  {staff.full_name}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={handleReassign}
-                              disabled={actionLoading || !selectedStaffId}
-                              className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-3 py-2 rounded text-sm font-semibold transition"
-                            >
-                              {actionLoading ? 'Assigning...' : 'Assign'}
-                            </button>
+                    <div className="col-body">
+                      {group.items.length === 0 && <div className="empty-state">No tickets</div>}
+                      {group.items.map((ticket) => (
+                        <div key={ticket.id.toString()} className="tcard" onClick={() => openDetail(ticket.id)}>
+                          <div className="tcard-num">{ticket.ticket_number}</div>
+                          <div className="tcard-title">{ticket.title}</div>
+                          <div className="tcard-veh">{ticket.reg_number} · {ticket.model || '-'}</div>
+                          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span className={priorityClass(ticket.priority)}>{ticket.priority}</span>
+                            {ticket.is_escalated && <span style={{ fontSize: 11.5, color: '#d23a4b', fontWeight: 700 }}>Escalated</span>}
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                    <p className="text-sm text-blue-800">
-                      You have view access only. Ticket actions are hidden because complaints modify permission is not granted.
-                    </p>
-                  </div>
-                )}
-
-                {/* Details */}
-                <div className="text-sm space-y-2">
-                  <p>
-                    <span className="text-gray-600">Complaint description:</span> {selectedTicket.description || 'No description provided'}
-                  </p>
-                  <p>
-                    <span className="text-gray-600">Assigned staff:</span> {selectedTicket.assigned_to ? staffList.find(s => s.id === selectedTicket.assigned_to)?.full_name || selectedTicket.assigned_to : 'Unassigned'}
-                  </p>
-                  {selectedTicket.is_escalated && (
-                    <p className="text-red-600">
-                      <span className="font-semibold">Escalation reason:</span> {selectedTicket.escalation_reason}
-                    </p>
-                  )}
-                </div>
-
-                {/* Messages */}
-                <div className="border-t pt-3">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Conversation (staff view)</p>
-                  {ticketMessages.length === 0 ? (
-                    <p className="text-xs text-gray-500">No messages yet.</p>
-                  ) : (
-                    <div className="max-h-40 overflow-y-auto space-y-2">
-                      {ticketMessages.map((msg) => (
-                        <div key={msg.id.toString()} className="text-xs bg-gray-50 p-2 rounded">
-                          <p className="font-semibold">{msg.author_name || 'Unknown'}</p>
-                          <p className="text-gray-600">{msg.body}</p>
                         </div>
                       ))}
                     </div>
-                  )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {currentTab === 'sla' && (
+              <div className="card">
+                <div className="tbl-wrap">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Ticket</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Breach</th>
+                        <th>Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {breachedTickets.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="empty-state">No active SLA breaches.</td>
+                        </tr>
+                      )}
+                      {breachedTickets.map((ticket) => (
+                        <tr key={ticket.id.toString()} onClick={() => openDetail(ticket.id)} style={{ cursor: 'pointer' }}>
+                          <td>
+                            <div className="mono">{ticket.ticket_number}</div>
+                            <div className="text-muted" style={{ fontSize: 12 }}>{ticket.title}</div>
+                          </td>
+                          <td>{ticket.reg_number}</td>
+                          <td><span className={statusClass(ticket.status)}>{STATUS_LABELS[ticket.status]}</span></td>
+                          <td><span className={priorityClass(ticket.priority)}>{ticket.priority}</span></td>
+                          <td style={{ color: '#d23a4b', fontWeight: 700, fontSize: 12.5 }}>
+                            {ticket.response_breached && ticket.resolution_breached
+                              ? 'Response + Resolution'
+                              : ticket.response_breached
+                                ? 'Response'
+                                : 'Resolution'}
+                          </td>
+                          <td>{formatDate(ticket.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {selectedTicket && (
+          <div>
+            <button type="button" className="btn btn--quiet btn--sm" style={{ marginBottom: 16 }} onClick={closeDetail}>
+              ← Back to inbox
+            </button>
+
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card__head" style={{ alignItems: 'flex-start' }}>
+                <div>
+                  <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                    <span className="mono" style={{ color: 'var(--muted)' }}>{selectedTicket.ticket_number}</span>
+                    <span className={statusClass(selectedTicket.status)}>{STATUS_LABELS[selectedTicket.status]}</span>
+                    {selectedTicket.is_escalated && <span className="status-pill reopened">Escalated</span>}
+                  </div>
+                  <div style={{ marginTop: 8, fontWeight: 700, fontSize: 18 }}>{selectedTicket.title}</div>
                 </div>
 
-                {/* Add Message */}
-                {selectedTicket.status !== 'closed' && canModifyComplaints && (
-                  <form onSubmit={handleAddMessage} className="border-t pt-3">
-                    <div className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={isInternal}
-                        onChange={(e) => setIsInternal(e.target.checked)}
-                        className="mt-2"
-                      />
-                      <label className="text-xs text-gray-600">Internal note (not visible to customer)</label>
-                    </div>
-                    <textarea
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      placeholder="Add staff reply or internal note..."
-                      rows={2}
-                      className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                    <button
-                      type="submit"
-                      disabled={actionLoading || !newMessage.trim()}
-                      className="mt-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-1 px-3 rounded text-sm transition"
-                    >
-                      {actionLoading ? 'Sending...' : 'Send'}
-                    </button>
-                  </form>
+                {canEdit && (
+                  <div className="tactions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {selectedTicket.status === 'new' && (
+                      <button type="button" className="tbtn tbtn--accent" disabled={actionLoading} onClick={() => handleStatusChange('acknowledged')}>
+                        Acknowledge
+                      </button>
+                    )}
+                    {selectedTicket.status === 'acknowledged' && (
+                      <button type="button" className="tbtn tbtn--warn" disabled={actionLoading} onClick={() => handleStatusChange('in_progress')}>
+                        In Progress
+                      </button>
+                    )}
+                    {selectedTicket.status === 'in_progress' && (
+                      <button type="button" className="tbtn tbtn--ok" disabled={actionLoading} onClick={() => handleStatusChange('resolved')}>
+                        Resolve
+                      </button>
+                    )}
+                    {selectedTicket.status === 'resolved' && (
+                      <button type="button" className="tbtn" disabled={actionLoading} onClick={() => handleStatusChange('closed')}>
+                        Close
+                      </button>
+                    )}
+                    {!selectedTicket.is_escalated && (
+                      <button type="button" className="tbtn tbtn--danger" disabled={actionLoading} onClick={handleEscalate}>
+                        Escalate
+                      </button>
+                    )}
+                  </div>
                 )}
+              </div>
+            </div>
 
-                {selectedTicket.status !== 'closed' && !canModifyComplaints && (
-                  <p className="border-t pt-3 text-xs text-gray-500">
-                    Reply composer is hidden for view-only users.
-                  </p>
-                )}
+            <div className="detail-grid">
+              <div>
+                <div className="card" style={{ marginBottom: 16 }}>
+                  <div className="card__body">
+                    <p className="sec-label">Status</p>
+                    <div className="stepper">
+                      {STATUS_ORDER.map((status, idx) => {
+                        const activeIdx = activeStepIndex(selectedTicket.status)
+                        const stateClass = idx < activeIdx ? 'done' : idx === activeIdx ? 'current' : ''
+                        return (
+                          <div className={`step-node ${stateClass}`} key={status}>
+                            <div className="step-dot">{idx + 1}</div>
+                            <div className="step-lab">{STATUS_LABELS[status]}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card__head">
+                    <h3>Conversation & activity</h3>
+                  </div>
+                  <div className="card__body">
+                    <div className="thread">
+                      {ticketMessages.length === 0 && (
+                        <div className="msg system">
+                          <div className="msg-b">No messages yet.</div>
+                        </div>
+                      )}
+
+                      {ticketMessages.map((message) => {
+                        const mine = Boolean(currentUserId) && message.author_id === currentUserId
+                        const kind = message.author_type === 'system' ? 'system' : mine ? 'me' : ''
+                        return (
+                          <div key={message.id.toString()} className={`msg ${kind}`}>
+                            {message.author_type !== 'system' && (
+                              <span className={`avatar-sm ${mine ? 'me' : ''}`}>
+                                {(message.author_name || 'U').slice(0, 2).toUpperCase()}
+                              </span>
+                            )}
+                            <div className="msg-b">
+                              {message.author_type !== 'system' && (
+                                <div className="msg-name">
+                                  {message.author_name || 'Unknown'}
+                                  {message.is_internal && ' · Internal'}
+                                </div>
+                              )}
+                              <div className="msg-body">{message.body}</div>
+                              <div className="msg-meta">{formatDate(message.created_at)}</div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {selectedTicket.status !== 'closed' && canEdit && (
+                      <form className="composer" style={{ marginTop: 20 }} onSubmit={handleAddMessage}>
+                        <textarea
+                          rows={1}
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          placeholder="Reply to customer, or add an internal note..."
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#62708a' }}>
+                            <input
+                              type="checkbox"
+                              checked={isInternal}
+                              onChange={(e) => setIsInternal(e.target.checked)}
+                            />
+                            Internal
+                          </label>
+                          <button type="submit" className="btn btn--primary btn--sm" disabled={actionLoading || !newMessage.trim()}>
+                            Send
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="card" style={{ marginBottom: 16 }}>
+                  <div className="card__body">
+                    <p className="sec-label">Vehicle & visit</p>
+                    <div className="vcard">
+                      <div className="vcard-row"><span className="k">Registration</span><span className="v">{selectedTicket.reg_number}</span></div>
+                      <div className="vcard-row"><span className="k">Model</span><span className="v">{selectedTicket.model || '-'}</span></div>
+                      <div className="vcard-row"><span className="k">JC Number</span><span className="v">{selectedTicket.jc_number || '-'}</span></div>
+                      <div className="vcard-row"><span className="k">Service Type</span><span className="v">{selectedTicket.service_type || '-'}</span></div>
+                      <div className="vcard-row"><span className="k">Branch</span><span className="v">{selectedTicket.branch || '-'}</span></div>
+                      <div className="vcard-row"><span className="k">Created</span><span className="v">{formatDate(selectedTicket.created_at)}</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card" style={{ marginBottom: 16 }}>
+                  <div className="card__body">
+                    <p className="sec-label">Properties</p>
+                    <div className="propgrid">
+                      <div className="prop">
+                        <span className="prop-k">Category</span>
+                        <span className="prop-v">{CATEGORY_LABELS[selectedTicket.category] || selectedTicket.category}</span>
+                      </div>
+                      <div className="prop">
+                        <span className="prop-k">Priority</span>
+                        <span className="prop-v">
+                          {canEdit ? (
+                            <select
+                              className="sel"
+                              style={{ height: 32, minWidth: 120 }}
+                              value={selectedTicket.priority}
+                              onChange={(e) => handleChangePriority(e.target.value as ComplaintPriority)}
+                              disabled={actionLoading}
+                            >
+                              {PRIORITY_ORDER.map((priority) => (
+                                <option key={priority} value={priority}>{priority}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className={priorityClass(selectedTicket.priority)}>{selectedTicket.priority}</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="prop">
+                        <span className="prop-k">Assigned To</span>
+                        <span className="prop-v">
+                          {canEdit ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <select
+                                className="sel"
+                                style={{ height: 32, minWidth: 170 }}
+                                value={selectedStaffId || ''}
+                                onChange={(e) => setSelectedStaffId(e.target.value || null)}
+                                disabled={actionLoading}
+                              >
+                                <option value="">Unassigned</option>
+                                {staffList.map((staff) => (
+                                  <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="tbtn"
+                                onClick={handleReassign}
+                                disabled={actionLoading || !selectedStaffId || selectedStaffId === selectedTicket.assigned_to}
+                              >
+                                Assign
+                              </button>
+                            </div>
+                          ) : (
+                            staffList.find((s) => s.id === selectedTicket.assigned_to)?.full_name || 'Unassigned'
+                          )}
+                        </span>
+                      </div>
+                      <div className="prop">
+                        <span className="prop-k">Customer</span>
+                        <span className="prop-v">{selectedTicket.customer_name || '-'}</span>
+                      </div>
+                      <div className="prop">
+                        <span className="prop-k">Phone</span>
+                        <span className="prop-v">{selectedTicket.customer_phone || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card__body">
+                    <p className="sec-label">SLA</p>
+                    {selectedSla && (
+                      <div className="sla">
+                        <span className="sla-ring" style={{ ['--p' as string]: selectedSla.pct, ['--c' as string]: selectedSla.color } as React.CSSProperties} />
+                        <span className="sla-txt" style={{ color: selectedSla.color }}>
+                          {selectedSla.text}
+                          <small>{selectedSla.pct}% elapsed</small>
+                        </span>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 12, fontSize: 12.5, color: '#62708a', lineHeight: 1.6 }}>
+                      <div>Response due: {formatDate(selectedTicket.response_due_at)}</div>
+                      <div>Resolution due: {formatDate(selectedTicket.resolution_due_at)}</div>
+                      <div>Escalated: {selectedTicket.is_escalated ? 'Yes' : 'No'}</div>
+                      <div style={{ marginTop: 8 }}>{selectedTicket.description || 'No description provided.'}</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

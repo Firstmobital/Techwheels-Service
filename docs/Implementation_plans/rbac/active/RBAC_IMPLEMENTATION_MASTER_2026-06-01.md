@@ -8,6 +8,15 @@
 
 ### Execution Update (2026-06-09)
 
+- Complaints module RBAC/UI contract hardened on web (`/complaints`):
+  - Removed manual "View as" role switch from UI to prevent client-side role simulation.
+  - Effective mode is now derived from RBAC/business role context only:
+    - SA -> advisor view
+    - CRM/GM/SM/admin -> manager view
+  - Module assignment is now a hard visibility gate:
+    - If `complaints` module is not granted (view/modify), the page shows access-denied guidance and no complaint data.
+  - Row scope remains server-enforced by existing RLS, aligned with the same role-governed visibility model used by `/service-advisor`.
+
 - Floor Incharge EV/PV scope policy corrected and executed in Supabase SQL Editor:
   - Executed migration: `supabase/migrations/20260609_fix_floor_incharge_scope_respect_employee_master_fuel.sql`
   - Root cause: policy drift had added `sa_code_in_scope(sa_employee_code)` to Floor Incharge visibility. This reintroduced dealer-prefix gating from SA code fragments (for example, `PS2_3000840`) and could block valid Floor Incharge users whose mapped dealer code differed but fuel scope matched.
