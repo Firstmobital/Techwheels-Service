@@ -19,6 +19,43 @@ function inr(v: number | null | undefined) {
 }
 const CT_LABELS: Record<string, string> = { individual: 'Individual', firm: 'Firm', foc: 'FOC', cash: 'Cash' }
 
+function isValidCustomerType(value: string | null | undefined): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === 'individual' || normalized === 'firm' || normalized === 'foc' || normalized === 'cash'
+}
+
+function getIntakeMilestones(card: RepairCard, intakePhotoCount: number) {
+  const stage1Done = isValidCustomerType(card.customer_type)
+  const stage2Done = intakePhotoCount > 0
+  const stage3Done = Boolean(String(card.job_card_no ?? '').trim())
+  const stage4Done = stage1Done && stage2Done && stage3Done
+
+  const activeStage = !stage1Done ? 1 : !stage2Done ? 2 : !stage3Done ? 3 : 4
+  return { stage1Done, stage2Done, stage3Done, stage4Done, activeStage }
+}
+
+function getEffectiveStageFlow(card: RepairCard, intakePhotoCount: number) {
+  const milestones = getIntakeMilestones(card, intakePhotoCount)
+  const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
+
+  let effectiveNextStage = Math.min(18, effectiveCurrentStage + 1)
+  if (effectiveCurrentStage <= 4) {
+    const done = {
+      1: milestones.stage1Done,
+      2: milestones.stage2Done,
+      3: milestones.stage3Done,
+      4: milestones.stage4Done,
+    }
+
+    // Simulate clicking "mark done" on current active stage and jump to first remaining incomplete.
+    done[effectiveCurrentStage as 1 | 2 | 3 | 4] = true
+    const pending = ([1, 2, 3, 4] as const).find((n) => !done[n])
+    effectiveNextStage = pending ?? 5
+  }
+
+  return { milestones, effectiveCurrentStage, effectiveNextStage }
+}
+
 function normalizeCardKey(card: { job_card_no: string | null | undefined; reg_number: string | null | undefined }) {
   const receptionId = Number((card as { reception_entry_id?: number | null }).reception_entry_id)
   if (Number.isFinite(receptionId) && receptionId > 0) return `reception:${receptionId}`
@@ -60,6 +97,7 @@ export default function BodyshopRepairPage() {
   const [search, setSearch]       = useState('')
   const [branchFilter, setBranchFilter]   = useState('all')
   const [statusFilter, setStatusFilter]   = useState('active')
+  const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 
   // modals
@@ -189,7 +227,28 @@ export default function BodyshopRepairPage() {
         ? await listRepairCards({ from: dateRange.from, to: dateRange.to })
         : data
 
-      setCards(dedupeCards(mergedData))
+      const nextCards = dedupeCards(mergedData)
+      setCards(nextCards)
+
+      const photoReceptionIds = nextCards
+        .map((card) => Number(card.reception_entry_id))
+        .filter((id) => Number.isFinite(id))
+
+      const nextPhotoCounts: Record<number, number> = {}
+      if (photoReceptionIds.length > 0) {
+        const { data: photoRows } = await supabase
+          .from('bodyshop_intake_vehicle_photos')
+          .select('reception_entry_id')
+          .in('reception_entry_id', photoReceptionIds)
+
+        ;((photoRows ?? []) as Array<{ reception_entry_id: number | null }>).forEach((row) => {
+          const receptionId = Number(row.reception_entry_id)
+          if (!Number.isFinite(receptionId)) return
+          nextPhotoCounts[receptionId] = (nextPhotoCounts[receptionId] ?? 0) + 1
+        })
+      }
+
+      setPhotoCountByReceptionId(nextPhotoCounts)
       setBranches((br.data ?? []).map((b: { name: string }) => b.name))
     } catch { /* ignore */ }
     setLoading(false)
@@ -217,7 +276,16 @@ export default function BodyshopRepairPage() {
     if (!selected) return
     setSaving(true)
     try {
-      const updated = await advanceStage(selected.id, selected)
+      const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+      const flow = getEffectiveStageFlow(selected, intakePhotoCount)
+
+      const updated = flow.effectiveCurrentStage <= 4
+        ? await updateRepairCard(selected.id, {
+            current_stage: flow.effectiveNextStage,
+            current_stage_name: STAGE_LABELS[flow.effectiveNextStage] ?? '',
+          })
+        : await advanceStage(selected.id, selected)
+
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(`Advanced to Stage ${updated.current_stage}`)
@@ -456,8 +524,11 @@ export default function BodyshopRepairPage() {
             {/* Stage group pills */}
             <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
               {STAGE_GROUPS.map((g) => {
-                const inGroup = g.stages.includes(selected.current_stage)
-                const done    = g.stages[g.stages.length - 1] < selected.current_stage
+                const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                const inGroup = g.stages.includes(effectiveCurrentStage)
+                const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
                 return (
                   <div key={g.label} style={{
                     padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 20,
@@ -490,15 +561,33 @@ export default function BodyshopRepairPage() {
             }}>
               <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Current Stage</div>
+                {(() => {
+                  const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                  const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                  const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                  return (
                 <div style={{ fontSize: 14, fontWeight: 800, color: getGroupForStage(selected.current_stage).color }}>
-                  Stage {selected.current_stage} — {STAGE_LABELS[selected.current_stage]}
+                  Stage {effectiveCurrentStage} — {STAGE_LABELS[effectiveCurrentStage]}
                 </div>
+                  )
+                })()}
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
                 {Object.entries(STAGE_LABELS).map(([numStr, label]) => {
+                  const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                  const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                  const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                   const num    = Number(numStr)
-                  const isDone = selected.current_stage > num
-                  const isCur  = selected.current_stage === num
+                  const isDone = num <= 4
+                    ? num === 1
+                      ? milestones.stage1Done
+                      : num === 2
+                        ? milestones.stage2Done
+                        : num === 3
+                          ? milestones.stage3Done
+                          : milestones.stage4Done
+                    : effectiveCurrentStage > num
+                  const isCur  = effectiveCurrentStage === num
                   const grp    = getGroupForStage(num)
                   return (
                     <div key={num} style={{
@@ -526,10 +615,16 @@ export default function BodyshopRepairPage() {
               {/* Advance button at bottom of stage panel */}
               {selected.overall_status === 'active' && selected.current_stage < 18 && (
                 <div style={{ padding: 12, borderTop: '1px solid #e5e7eb' }}>
+                  {(() => {
+                    const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                    const flow = getEffectiveStageFlow(selected, intakePhotoCount)
+                    return (
                   <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
                     style={{ width: '100%', fontSize: 13 }}>
-                    {saving ? 'Saving…' : `✓ Stage ${selected.current_stage} Done →`}
+                    {saving ? 'Saving…' : `✓ Stage ${flow.effectiveCurrentStage} Done → Stage ${flow.effectiveNextStage}`}
                   </button>
+                    )
+                  })()}
                 </div>
               )}
             </div>
@@ -582,17 +677,35 @@ export default function BodyshopRepairPage() {
                   {/* current stage */}
                   <div style={{ background: '#f8fafc', borderRadius: 10, padding: 14, marginBottom: 16 }}>
                     <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Current Stage</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: getGroupForStage(selected.current_stage).color }}>
-                      Stage {selected.current_stage} — {STAGE_LABELS[selected.current_stage]}
-                    </div>
+                      {(() => {
+                        const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                        const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                        const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                        return (
+                          <div style={{ fontSize: 15, fontWeight: 700, color: getGroupForStage(effectiveCurrentStage).color }}>
+                            Stage {effectiveCurrentStage} — {STAGE_LABELS[effectiveCurrentStage]}
+                          </div>
+                        )
+                      })()}
                   </div>
 
                   {/* stage stepper */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {Object.entries(STAGE_LABELS).map(([numStr, label]) => {
+                      const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                      const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                      const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                       const num     = Number(numStr)
-                      const isDone  = selected.current_stage > num
-                      const isCur   = selected.current_stage === num
+                      const isDone  = num <= 4
+                        ? num === 1
+                          ? milestones.stage1Done
+                          : num === 2
+                            ? milestones.stage2Done
+                            : num === 3
+                              ? milestones.stage3Done
+                              : milestones.stage4Done
+                        : effectiveCurrentStage > num
+                      const isCur   = effectiveCurrentStage === num
                       const grp     = getGroupForStage(num)
                       return (
                         <div key={num} style={{
@@ -617,10 +730,16 @@ export default function BodyshopRepairPage() {
 
                   {/* advance button */}
                   {selected.overall_status === 'active' && selected.current_stage < 18 && (
+                    (() => {
+                      const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                      const flow = getEffectiveStageFlow(selected, intakePhotoCount)
+                      return (
                     <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
                       style={{ marginTop: 16, width: '100%' }}>
-                      {saving ? 'Saving…' : `✓ Mark Stage ${selected.current_stage} Done → Move to Stage ${selected.current_stage + 1}`}
+                      {saving ? 'Saving…' : `✓ Mark Stage ${flow.effectiveCurrentStage} Done → Move to Stage ${flow.effectiveNextStage}`}
                     </button>
+                      )
+                    })()
                   )}
                 </div>
               )}

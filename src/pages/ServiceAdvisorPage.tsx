@@ -278,10 +278,14 @@ function getBodyshopAutoStage(params: {
   hasIntakePhoto: boolean
   jcNumber: string | null | undefined
 }): number {
-  if (String(params.jcNumber ?? '').trim()) return 4
-  if (params.hasIntakePhoto) return 3
-  if (isValidCustomerType(params.customerType)) return 2
-  return 1
+  const hasCustomerType = isValidCustomerType(params.customerType)
+  const hasPhoto = params.hasIntakePhoto
+  const hasJc = Boolean(String(params.jcNumber ?? '').trim())
+
+  if (!hasCustomerType) return 1
+  if (!hasPhoto) return 2
+  if (!hasJc) return 3
+  return 4
 }
 
 type BodyshopCardLite = {
@@ -883,7 +887,8 @@ export default function ServiceAdvisorPage() {
           })
 
           const currentStage = Number(matched.current_stage ?? 1)
-          const nextStage = Math.max(currentStage, desiredStage)
+          // Stages 1-4 are auto-managed from SA intake signals; stage >=5 is manual workflow and should not auto-regress.
+          const nextStage = currentStage > 4 ? currentStage : desiredStage
           if (nextStage === currentStage || nextStage > 4) return
 
           await supabase
@@ -1089,7 +1094,8 @@ export default function ServiceAdvisorPage() {
       existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number; current_stage: number | null }>)[0] ?? null
 
       const existingStage = Number(existingCard?.current_stage ?? 1)
-      const nextStage = Math.max(existingStage, desiredStage)
+      // Keep manual/progressed stages intact once card crosses stage 4.
+      const nextStage = existingStage > 4 ? existingStage : desiredStage
 
       const cardPayload = {
         job_card_no: jcNumber,
