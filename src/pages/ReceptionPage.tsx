@@ -749,7 +749,7 @@ export default function ReceptionPage() {
   }
 
   return (
-    <div>
+    <div className="recep-redesign">
       <input
         ref={fileInputRef}
         type="file"
@@ -779,16 +779,18 @@ export default function ReceptionPage() {
       {error && <div className="alert alert--err mb-gap">{error}</div>}
       {notice && <div className="alert alert--ok mb-gap">{notice}</div>}
 
-      <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
+      <div className="filterbar">
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
+      </div>
 
-      <div className="toolbar toolbar--tight">
-        <span className="toolbar__label">Filter by location:</span>
+      <div className="chipgroup">
+        <span className="chipgroup__label">Filter by location:</span>
         <button
           type="button"
           onClick={() => setSelectedLocation('all')}
-          className={`btn btn--sm ${selectedLocation === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          className={`fchip ${selectedLocation === 'all' ? 'on' : ''}`}
         >
-          All ({locationFilterBaseEntries.length})
+          All <span className="ct">{locationFilterBaseEntries.length}</span>
         </button>
         {locationOptions.map((location) => {
           const count = locationFilterBaseEntries.filter((entry) => getLocationLabel(entry.branch) === location).length
@@ -797,22 +799,22 @@ export default function ReceptionPage() {
               key={location}
               type="button"
               onClick={() => setSelectedLocation(location)}
-              className={`btn btn--sm ${selectedLocation === location ? 'btn--primary' : 'btn--ghost'}`}
+              className={`fchip ${selectedLocation === location ? 'on' : ''}`}
             >
-              {location} ({count})
+              {location} <span className="ct">{count}</span>
             </button>
           )
         })}
       </div>
 
-      <div className="toolbar toolbar--tight">
-        <span className="toolbar__label">Filter by fuel type:</span>
+      <div className="chipgroup">
+        <span className="chipgroup__label">Filter by fuel type:</span>
         <button
           type="button"
           onClick={() => setSelectedFuelType('all')}
-          className={`btn btn--sm ${selectedFuelType === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          className={`fchip ${selectedFuelType === 'all' ? 'on' : ''}`}
         >
-          All ({fuelFilterBaseEntries.length})
+          All <span className="ct">{fuelFilterBaseEntries.length}</span>
         </button>
         {fuelTypeOptions.map((fuelType) => {
           const count = fuelFilterBaseEntries.filter((entry) => getEntryFuelTypeLabel(entry) === fuelType).length
@@ -821,55 +823,57 @@ export default function ReceptionPage() {
               key={fuelType}
               type="button"
               onClick={() => setSelectedFuelType(fuelType)}
-              className={`btn btn--sm ${selectedFuelType === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+              className={`fchip ${selectedFuelType === fuelType ? 'on' : ''}`}
             >
-              {fuelType} ({count})
+              {fuelType} <span className="ct">{count}</span>
             </button>
           )
         })}
       </div>
 
-      <div className="summary">
+      <div className="statsrow">
         <button
           type="button"
-          onClick={() => setSelectedListFilter((prev) => (prev === 'today' ? 'default' : 'today'))}
+          onClick={() => setSelectedListFilter('today')}
           disabled={todayEntries.length === 0}
-          className={`schip schip--btn ${selectedListFilter === 'today' ? 'schip--active' : ''}`}
+          className={`stat stat--btn ${selectedListFilter === 'today' ? 'is-active' : ''}`}
         >
-          <span className="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 2v3m8-3v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
-          <div>
-            <div className="n">{todayEntries.length}</div>
-            <div className="l">Today</div>
-          </div>
+          <div className="stat__n">{todayEntries.length}</div>
+          <div className="stat__l">Today</div>
         </button>
 
         <button
           type="button"
-          onClick={() => setSelectedServiceType('all')}
-          className={`schip schip--btn ${selectedServiceType === 'all' ? 'schip--active' : ''}`}
+          onClick={() => {
+            setSelectedListFilter('default')
+            setSelectedServiceType('all')
+          }}
+          className={`stat stat--btn ${selectedListFilter === 'default' && selectedServiceType === 'all' ? 'is-active' : ''}`}
         >
-          <span className="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></span>
-          <div>
-            <div className="n">{serviceTypeBaseEntries.length}</div>
-            <div className="l">ALL SR</div>
-          </div>
+          <div className="stat__n">{serviceTypeBaseEntries.length}</div>
+          <div className="stat__l">All SR</div>
         </button>
 
-        {serviceTypeOptions.map((serviceType) => (
-          <button
-            key={serviceType}
-            type="button"
-            onClick={() => setSelectedServiceType(serviceType)}
-            className={`schip schip--btn ${selectedServiceType === serviceType ? 'schip--active' : ''}`}
-            title={serviceType}
-          >
-            <span className="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm3 4h8m-8 4h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
-            <div>
-              <div className="n">{serviceTypeCounts.get(serviceType) ?? 0}</div>
-              <div className="l">{getServiceTypeAbbreviation(serviceType)}</div>
-            </div>
-          </button>
-        ))}
+        <div className="svcard">
+          <div className="svcard__head">
+            <span className="t">By service type</span>
+            <button type="button" className="all" onClick={() => setSelectedServiceType('all')}>Show all</button>
+          </div>
+          <div className="svchips scroll">
+            {serviceTypeOptions.map((serviceType) => (
+              <button
+                key={serviceType}
+                type="button"
+                onClick={() => setSelectedServiceType(serviceType)}
+                className={`svchip ${selectedServiceType === serviceType ? 'on' : ''}`}
+                title={serviceType}
+              >
+                <span className="n">{serviceTypeCounts.get(serviceType) ?? 0}</span>
+                <span className="ab">{getServiceTypeAbbreviation(serviceType)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="recep-grid">

@@ -570,6 +570,197 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .recep-item.is-fresh { background: var(--accent-soft); animation: receptionPop .4s ease; }
 @keyframes receptionPop { from { background: color-mix(in srgb, var(--accent) 24%, #fff); } to { background: var(--accent-soft); } }
 
+/* Reception redesign (scoped) */
+.recep-redesign .filterbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--sh-1);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.recep-redesign .filterbar .toolbar {
+  margin-bottom: 0;
+}
+
+.recep-redesign .chipgroup {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.recep-redesign .chipgroup__label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+  margin-right: 2px;
+}
+
+.recep-redesign .fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.recep-redesign .fchip:hover {
+  border-color: var(--border-strong);
+  background: var(--raised);
+}
+
+.recep-redesign .fchip .ct {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--canvas);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.recep-redesign .fchip.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.recep-redesign .fchip.on .ct {
+  color: #fff;
+  background: rgba(255, 255, 255, .22);
+}
+
+.recep-redesign .statsrow {
+  display: grid;
+  grid-template-columns: minmax(130px, .62fr) minmax(130px, .62fr) minmax(0, 2.76fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.recep-redesign .stat {
+  text-align: left;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  padding: 16px 16px;
+}
+
+.recep-redesign .stat__n {
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -.03em;
+  font-family: var(--mono);
+  font-weight: 800;
+}
+
+.recep-redesign .stat__l {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.recep-redesign .stat.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.recep-redesign .svcard {
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  padding: 14px;
+  min-width: 0;
+}
+
+.recep-redesign .svcard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.recep-redesign .svcard__head .t {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.recep-redesign .svcard__head .all {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recep-redesign .svchips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.recep-redesign .svchip {
+  flex: none;
+  min-width: 84px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--raised);
+  text-align: left;
+  padding: 10px 11px;
+}
+
+.recep-redesign .svchip .n {
+  display: block;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+  font-family: var(--mono);
+}
+
+.recep-redesign .svchip .ab {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+.recep-redesign .svchip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.recep-redesign .svchip.on .n,
+.recep-redesign .svchip.on .ab {
+  color: #fff;
+}
+
+@media (max-width: 1080px) {
+  .recep-redesign .statsrow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .recep-redesign .statsrow .svcard {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Warranty dashboard */
 .wty-flow { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
 .wty-flow__arrow { color: var(--faint); align-self: center; flex: none; }
