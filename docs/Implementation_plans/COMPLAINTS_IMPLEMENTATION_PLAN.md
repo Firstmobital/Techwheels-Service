@@ -1892,7 +1892,7 @@ export async function generateComplaintLink(receptionEntryId: number) {
 
 - [ ] **ComplaintsPage:** Inbox table + Board kanban + SLA tab + detail view
 - [x] **Permissions:** Module gate via `useModulePermission('complaints')`
-- [ ] **Actions:** Acknowledge, start, resolve, close, escalate, reassign buttons (hidden if `!can_modify`)
+- [x] **Actions:** Acknowledge, start, resolve, close, escalate, reassign buttons (hidden if `!can_modify`)
 - [x] **Advisors:** RLS enforces own sa_employee_code rows only
 - [x] **Nav:** Complaints item with open-count badge
 - [x] **Mobile & desktop:** Responsive layout
@@ -2033,9 +2033,8 @@ Evidence gathered:
 1. Testing hardening
    - pgTAP suite is still pending for: single-use raise, tenant isolation, internal-note hiding, SLA breach checks.
 2. Staff module completeness
-   - Inbox and detail modal are live, but dedicated Board tab and SLA tab are still pending.
-   - Reassign and set-priority controls are not exposed in current UI actions yet.
-   - Action visibility is not yet explicitly gated by can_modify in the page-level controls.
+  - Inbox, Board, SLA tab, and detail modal are live.
+  - Action visibility is now explicitly gated by complaints modify permission at page level.
 3. Customer portal finish
    - Mobile-first pass is still pending against design parity checklist.
    - Full scripted E2E workflow (mint link -> raise -> track -> reopen) is pending as a formal test artifact.

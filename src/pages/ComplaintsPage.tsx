@@ -53,6 +53,7 @@ export const ComplaintsPage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false)
   const [staffList, setStaffList] = useState<Array<{ id: string; full_name: string }>>([])
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
+  const [canModifyComplaints, setCanModifyComplaints] = useState(false)
 
   const clearFeedback = () => {
     setError(null)
@@ -64,6 +65,45 @@ export const ComplaintsPage: React.FC = () => {
     const timeout = window.setTimeout(() => setSuccess(null), 3500)
     return () => window.clearTimeout(timeout)
   }, [success])
+
+  // ── Resolve complaints modify permission ───────────────────────────────
+  useEffect(() => {
+    const resolvePermissions = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const userId = sessionData.session?.user?.id
+        if (!userId) {
+          setCanModifyComplaints(false)
+          return
+        }
+
+        const [{ data: profile }, { data: permissionRows }] = await Promise.all([
+          supabase.from('users').select('role, is_active').eq('id', userId).maybeSingle(),
+          supabase.rpc('get_all_my_permissions'),
+        ])
+
+        const role = String((profile as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+        const isActive = (profile as { is_active?: boolean | null } | null)?.is_active === true
+        const isAdminLike = (role === 'admin' || role === 'super_admin') && isActive
+
+        type PermissionRow = {
+          module_name?: string | null
+          can_modify?: boolean | null
+        }
+
+        const permissions = (permissionRows ?? []) as PermissionRow[]
+        const hasComplaintsModify = permissions.some(
+          (row) => String(row.module_name ?? '').trim().toLowerCase() === 'complaints' && row.can_modify === true,
+        )
+
+        setCanModifyComplaints(isAdminLike || hasComplaintsModify)
+      } catch {
+        setCanModifyComplaints(false)
+      }
+    }
+
+    resolvePermissions()
+  }, [])
 
   // ── Load staff list ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -586,104 +626,114 @@ export const ComplaintsPage: React.FC = () => {
                   model={selectedTicket.model}
                 />
 
-                {/* Quick Actions */}
-                <div className="bg-gray-50 border rounded p-3">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Ticket Actions</p>
-                  <p className="text-xs text-gray-500 mb-2">Current status: {selectedTicket.status.replace('_', ' ')}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedTicket.status === 'new' && (
-                      <button
-                        onClick={() => handleStatusChange('acknowledged')}
-                        disabled={actionLoading}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Acknowledge
-                      </button>
-                    )}
-                    {selectedTicket.status === 'acknowledged' && (
-                      <button
-                        onClick={() => handleStatusChange('in_progress')}
-                        disabled={actionLoading}
-                        className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Mark In Progress
-                      </button>
-                    )}
-                    {selectedTicket.status === 'in_progress' && (
-                      <button
-                        onClick={() => handleStatusChange('resolved')}
-                        disabled={actionLoading}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Mark Resolved
-                      </button>
-                    )}
-                    {selectedTicket.status === 'resolved' && (
-                      <button
-                        onClick={() => handleStatusChange('closed')}
-                        disabled={actionLoading}
-                        className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Close Ticket
-                      </button>
-                    )}
-                    {!selectedTicket.is_escalated && (
-                      <button
-                        onClick={handleEscalate}
-                        disabled={actionLoading}
-                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        {actionLoading ? 'Escalating...' : 'Escalate Ticket'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Priority & Reassignment */}
-                <div className="bg-gray-50 border rounded p-3">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Settings</p>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Priority</label>
-                      <select
-                        value={selectedTicket.priority}
-                        onChange={(e) => handleChangePriority(e.target.value as ComplaintPriority)}
-                        disabled={actionLoading}
-                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="urgent">Urgent</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Assign to Staff</label>
-                      <div className="flex gap-2">
-                        <select
-                          value={selectedStaffId || ''}
-                          onChange={(e) => setSelectedStaffId(e.target.value)}
-                          disabled={actionLoading}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">Select staff member...</option>
-                          {staffList.map((staff) => (
-                            <option key={staff.id} value={staff.id}>
-                              {staff.full_name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={handleReassign}
-                          disabled={actionLoading || !selectedStaffId}
-                          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-3 py-2 rounded text-sm font-semibold transition"
-                        >
-                          {actionLoading ? 'Assigning...' : 'Assign'}
-                        </button>
+                {canModifyComplaints ? (
+                  <>
+                    {/* Quick Actions */}
+                    <div className="bg-gray-50 border rounded p-3">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Ticket Actions</p>
+                      <p className="text-xs text-gray-500 mb-2">Current status: {selectedTicket.status.replace('_', ' ')}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTicket.status === 'new' && (
+                          <button
+                            onClick={() => handleStatusChange('acknowledged')}
+                            disabled={actionLoading}
+                            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Acknowledge
+                          </button>
+                        )}
+                        {selectedTicket.status === 'acknowledged' && (
+                          <button
+                            onClick={() => handleStatusChange('in_progress')}
+                            disabled={actionLoading}
+                            className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Mark In Progress
+                          </button>
+                        )}
+                        {selectedTicket.status === 'in_progress' && (
+                          <button
+                            onClick={() => handleStatusChange('resolved')}
+                            disabled={actionLoading}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Mark Resolved
+                          </button>
+                        )}
+                        {selectedTicket.status === 'resolved' && (
+                          <button
+                            onClick={() => handleStatusChange('closed')}
+                            disabled={actionLoading}
+                            className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Close Ticket
+                          </button>
+                        )}
+                        {!selectedTicket.is_escalated && (
+                          <button
+                            onClick={handleEscalate}
+                            disabled={actionLoading}
+                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            {actionLoading ? 'Escalating...' : 'Escalate Ticket'}
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {/* Priority & Reassignment */}
+                    <div className="bg-gray-50 border rounded p-3">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Settings</p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">Priority</label>
+                          <select
+                            value={selectedTicket.priority}
+                            onChange={(e) => handleChangePriority(e.target.value as ComplaintPriority)}
+                            disabled={actionLoading}
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">Assign to Staff</label>
+                          <div className="flex gap-2">
+                            <select
+                              value={selectedStaffId || ''}
+                              onChange={(e) => setSelectedStaffId(e.target.value)}
+                              disabled={actionLoading}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">Select staff member...</option>
+                              {staffList.map((staff) => (
+                                <option key={staff.id} value={staff.id}>
+                                  {staff.full_name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={handleReassign}
+                              disabled={actionLoading || !selectedStaffId}
+                              className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-3 py-2 rounded text-sm font-semibold transition"
+                            >
+                              {actionLoading ? 'Assigning...' : 'Assign'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                    <p className="text-sm text-blue-800">
+                      You have view access only. Ticket actions are hidden because complaints modify permission is not granted.
+                    </p>
                   </div>
-                </div>
+                )}
 
                 {/* Details */}
                 <div className="text-sm space-y-2">
@@ -718,7 +768,7 @@ export const ComplaintsPage: React.FC = () => {
                 </div>
 
                 {/* Add Message */}
-                {selectedTicket.status !== 'closed' && (
+                {selectedTicket.status !== 'closed' && canModifyComplaints && (
                   <form onSubmit={handleAddMessage} className="border-t pt-3">
                     <div className="flex items-start gap-2">
                       <input
@@ -744,6 +794,12 @@ export const ComplaintsPage: React.FC = () => {
                       {actionLoading ? 'Sending...' : 'Send'}
                     </button>
                   </form>
+                )}
+
+                {selectedTicket.status !== 'closed' && !canModifyComplaints && (
+                  <p className="border-t pt-3 text-xs text-gray-500">
+                    Reply composer is hidden for view-only users.
+                  </p>
                 )}
               </div>
             </div>
