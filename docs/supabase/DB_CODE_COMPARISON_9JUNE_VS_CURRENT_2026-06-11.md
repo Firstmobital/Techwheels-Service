@@ -272,3 +272,96 @@ No page should guess this from one generic text value.
 ## 12) Final Conclusion
 
 The post-9 June work delivered substantial functionality and UI integration, and the project builds cleanly. However, there are major correctness gaps in migration integrity and RBAC hardening on newly introduced bodyshop data structures. The most urgent fixes are migration reconciliation and policy tightening so deployed behavior matches intended access governance.
+
+## 13) Additional Findings From Full Docs Audit
+
+This section captures issues found after auditing documentation across the full `docs/` tree and cross-checking against current code and current DB dump.
+
+### 13.1 Critical: Module-Route contract is stale and no longer authoritative
+
+Current document status:
+1. `docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md` is last updated on 2026-05-23.
+2. It lists older module coverage and misses currently deployed modules such as `complaints`, `service_advisor`, `floor_incharge`, `technician`, `sa_tracker`, `bodyshop_tracker`, `bodyshop_floor`, and `bodyshop_repair`.
+
+Why this matters:
+1. Operations and support teams cannot reliably use that document to answer "which permission opens which page?"
+2. New team members are likely to follow outdated access mapping and make wrong permission decisions.
+
+Business impact (non-technical):
+The access handbook currently describes an old map, while the app is using a newer map. This creates avoidable confusion and access mistakes.
+
+### 13.2 Critical: Bodyshop migration conflicts with canonical module/permission schema documented elsewhere
+
+Observed conflict:
+1. Bodyshop migration uses a non-canonical pattern (`module_name`, `display_name`, `can_access`).
+2. Existing handbook and prior successful migrations use canonical schema (`modules.name`, `modules.label`, `user_module_permissions.module_id`, `can_view`, `can_modify`, `can_delete`).
+
+Why this matters:
+1. Replaying migrations in a clean environment can fail.
+2. Disaster recovery and environment rebuild become unreliable.
+
+Business impact (non-technical):
+If you need to rebuild the system from migration files, this one may not run correctly. That puts recovery speed and confidence at risk.
+
+### 13.3 Critical: RBAC governance doc says one thing, current bodyshop policies do another
+
+Observed conflict:
+1. RBAC governance runbooks describe strict scoped access with admin bypass pattern.
+2. Current bodyshop assignments policies are permissive (`USING (true)` / `WITH CHECK (true)`), which bypasses expected module/dealer/role checks.
+
+Why this matters:
+1. Governance and real policy behavior are out of sync.
+2. Access can be broader than intended for non-admin users.
+
+Business impact (non-technical):
+The rulebook says "restricted access," but current DB rules can allow wider access for logged-in users than intended.
+
+### 13.4 High: Post-hardening "anon surface reduced" claim regressed for new bodyshop tables
+
+Observed conflict:
+1. Supabase hardening docs record strong anon-surface reduction outcomes.
+2. Current dump shows new anon grants on bodyshop tables/functions.
+
+Why this matters:
+1. Even with RLS enabled, governance posture is weakened by broad grants.
+2. It creates audit inconsistency: reported posture and actual grants diverge.
+
+Business impact (non-technical):
+Security cleanup was done earlier, but newer bodyshop changes reopened some exposure paths and documentation did not catch up.
+
+### 13.5 High: Onboarding policy (deny-by-default) conflicts with migration-style auto-grant behavior
+
+Observed conflict:
+1. Onboarding policy states users should not get module access by default.
+2. Bodyshop migration pattern includes automatic grant intent for all users.
+
+Why this matters:
+1. Violates explicit approval workflow.
+2. Increases access without individual admin review.
+
+Business impact (non-technical):
+Users may receive access automatically where the policy says they should wait for admin approval.
+
+## 14) Non-Developer Plain-Language Summary
+
+If you are not technical, this is the important takeaway:
+
+1. New features were added quickly and many things are working.
+2. But the written rules, the migration files, and the live database are not fully aligned.
+3. That mismatch causes three practical risks:
+  - Access risk: some users may get broader access than expected.
+  - Recovery risk: one migration may fail when rebuilding environments.
+  - Operations risk: documents used by admins are out of date, so permission decisions can be wrong.
+4. This is fixable. The immediate fix is to align one source of truth across:
+  - app route mapping,
+  - DB policies,
+  - migration files,
+  - RBAC/onboarding documentation.
+
+## 15) Documentation Correction Checklist
+
+1. Update `docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md` to include all currently deployed modules and routes.
+2. Add a change note in the contract documenting the bodyshop and tracker module additions.
+3. Add a governance note in RBAC docs that bodyshop policies are pending hardening and must not use permissive `true` predicates.
+4. Amend Supabase hardening tracker with a new entry documenting post-hardening regressions and closure plan.
+5. Add a "migration replay readiness" check to release checklist: every new migration must match current canonical schema contracts.
