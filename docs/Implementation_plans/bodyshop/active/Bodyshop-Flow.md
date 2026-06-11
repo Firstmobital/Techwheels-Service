@@ -252,8 +252,8 @@ Stage-governance note:
 ## Dependencies & Prerequisites
 
 - [ ] Product sign-off on category labels: Bodyshop and Others.
-- [ ] Final decision on bodyshop photo metadata table contract.
-- [ ] Storage bucket path convention approval.
+- [x] Final decision on bodyshop photo metadata table contract.
+- [x] Storage bucket path convention approval.
 - [ ] UAT sample entries covering Accident + non-Accident service types.
 
 ---

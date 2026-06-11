@@ -39,7 +39,6 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
 ]
 
-const UNKNOWN_FUEL_TYPE = 'Unknown'
 const UNKNOWN_LOCATION = 'Unknown location'
 const UNKNOWN_PORTAL = 'Unknown portal'
 
@@ -144,11 +143,6 @@ function normalizeStageValue(value: string | null | undefined): string {
 function normalizeStatusValue(value: string | null | undefined): string {
   const normalized = normalizeStageValue(value).toLowerCase()
   return normalized || 'work_inprocess'
-}
-
-function getFuelTypeLabel(value: string | null | undefined): string {
-  const trimmed = String(value ?? '').trim()
-  return trimmed || UNKNOWN_FUEL_TYPE
 }
 
 function getLocationLabel(value: string | null | undefined): string {
