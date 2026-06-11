@@ -121,7 +121,21 @@ type FormState = {
   owner_name: string
   owner_phone: string
   source: string
+  service_type: string
 }
+
+const RECEPTION_SERVICE_TYPE_OPTIONS = [
+  'Running Repairs',
+  'First Free Service',
+  'Second Free Service',
+  'Third Free Service',
+  'Paid Service',
+  'Accident',
+  'PDI',
+  'Campaign',
+  'E Breakdown',
+  'Updation',
+]
 
 const EMPTY_FORM: FormState = {
   reg_number: '',
@@ -130,6 +144,7 @@ const EMPTY_FORM: FormState = {
   owner_name: '',
   owner_phone: '',
   source: SOURCE_OPTIONS[0],
+  service_type: '',
 }
 
 type ReceptionListFilter = 'default' | 'today'
@@ -631,7 +646,7 @@ export default function ReceptionPage() {
     const payload: ReceptionEntryInput = {
       reg_number: form.reg_number,
       model: form.model,
-      service_type: null,
+      service_type: form.service_type || null,
       sa_employee_code: form.sa_employee_code,
       owner_name: form.owner_name,
       owner_phone: form.owner_phone,
@@ -648,6 +663,33 @@ export default function ReceptionPage() {
     if (result.error) {
       setError(result.error)
       return
+    }
+
+    // Auto-create bodyshop repair card for Accident service type
+    if (editingId === null && form.service_type === 'Accident' && result.data) {
+      const entry = result.data as { jc_number?: string | null; reg_number?: string; owner_name?: string | null; owner_phone?: string | null; branch?: string | null; sa_name?: string | null; sa_display_name?: string | null; created_at?: string }
+      const jcNo = entry.jc_number ?? form.reg_number
+      // Only create if no card exists yet for this JC
+      const { data: existing } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id')
+        .eq('job_card_no', jcNo)
+        .maybeSingle()
+      if (!existing) {
+        await supabase.from('bodyshop_repair_cards').insert({
+          job_card_no:         jcNo,
+          reg_number:          form.reg_number,
+          customer_name:       form.owner_name || null,
+          customer_phone:      form.owner_phone || null,
+          customer_type:       'individual',
+          branch:              entry.branch ?? null,
+          sa_name:             entry.sa_name ?? entry.sa_display_name ?? null,
+          current_stage:       1,
+          current_stage_name:  'Vehicle Receiving',
+          overall_status:      'active',
+          received_at:         new Date().toISOString(),
+        })
+      }
     }
 
     setNotice(editingId === null ? 'Reception entry created' : 'Reception entry updated')
@@ -678,6 +720,7 @@ export default function ReceptionPage() {
       owner_name: entry.owner_name ?? '',
       owner_phone: entry.owner_phone ?? '',
       source: entry.source,
+      service_type: entry.service_type ?? '',
     })
     setNotice(null)
     setError(null)
@@ -931,6 +974,26 @@ export default function ReceptionPage() {
                 </select>
               </label>
             </div>
+
+            <label className="field">
+              <span className="label">Service Type</span>
+              <select
+                value={form.service_type}
+                onChange={(event) => setForm((prev) => ({ ...prev, service_type: event.target.value }))}
+                className="sel"
+                style={{ borderColor: form.service_type === 'Accident' ? '#ef4444' : undefined }}
+              >
+                <option value="">- Select Service Type -</option>
+                {RECEPTION_SERVICE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              {form.service_type === 'Accident' && (
+                <span style={{ fontSize: 12, color: '#ef4444', marginTop: 4, display: 'block', fontWeight: 600 }}>
+                  ⚠️ Accident — will appear in Bodyshop Repair Tracker
+                </span>
+              )}
+            </label>
 
             <label className="field">
               <span className="label">SA Name <span className="req">*</span></span>
