@@ -925,8 +925,7 @@ export default function ServiceAdvisorPage() {
     await loadRows()
   }
 
-  async function handleInvoiceDone(id: number) {
-    const row = rows.find((item) => item.id === id)
+  async function handleInvoiceDone(row: ReceptionEntryRow) {
     if (row && !canUpdateRow(row)) {
       const deniedMessage = 'You do not have edit permission for Mark Done.'
       setError(deniedMessage)
@@ -934,11 +933,11 @@ export default function ServiceAdvisorPage() {
       return
     }
 
-    setUploadingInvoiceId(id)
+    setUploadingInvoiceId(row.id)
     setError(null)
 
     try {
-      const res = await markServiceAdvisorInvoiceDone(id)
+      const res = await markServiceAdvisorInvoiceDone(row.id)
 
       if (res.error) {
         setError(res.error)
@@ -947,6 +946,8 @@ export default function ServiceAdvisorPage() {
       }
 
       showToast('Invoice marked as done')
+      // Reuse the existing WA compose flow so Mark Done always triggers one WA send action.
+      await handleSendWhatsApp(row)
       await loadRows()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to mark invoice as done'
@@ -1499,7 +1500,7 @@ export default function ServiceAdvisorPage() {
                     const isDirty = dirtyRowIds.has(row.id)
                     const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
-                    const canMarkDone = canUpdateRow(row)
+                    const canMarkDone = canUpdateRow(row) && isCompleted
 
                     return (
                       <tr key={row.id} className={isCompleted ? 'row--completed' : ''}>
@@ -1626,10 +1627,10 @@ export default function ServiceAdvisorPage() {
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => void handleInvoiceDone(row.id)}
+                                onClick={() => void handleInvoiceDone(row)}
                                 disabled={uploadingInvoiceId === row.id || !canMarkDone}
                                 className="tbtn tbtn--accent"
-                                title={!canMarkDone ? 'Edit permission required' : undefined}
+                                title={!canUpdateRow(row) ? 'Edit permission required' : !isCompleted ? 'Work status must be completed in Floor Incharge first' : undefined}
                               >
                                 {uploadingInvoiceId === row.id ? 'Marking...' : 'Mark Done'}
                               </button>
@@ -1648,14 +1649,6 @@ export default function ServiceAdvisorPage() {
                               ].join(' ').trim()}
                             >
                               {savingId === row.id ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleSendWhatsApp(row)}
-                              className="tbtn tbtn--compact"
-                              title="Send WA to customer"
-                            >
-                              Send WA
                             </button>
                             {isCompleted && <button
                               type="button"
