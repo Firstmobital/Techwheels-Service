@@ -3,6 +3,7 @@ import PartsFastMovingReport from './PartsFastMovingReport'
 import PartsOrderStatusReport from './PartsOrderStatusReport'
 import BackOrderPartsReport from './BackOrderPartsReport'
 import PartsInStockReport from './PartsInStockReport'
+import PartsHighDemandReport from './PartsHighDemandReport'
 
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
@@ -52,5 +53,13 @@ export const PARTS_REPORTS: ReportDefinition[] = [
     description: 'Live stock visibility from service parts stock snapshot uploads.',
     cardHint: 'Best for current stock health and inventory value tracking.',
     Component: PartsInStockReport,
+  },
+  {
+    id: 'parts-high-demand',
+    categoryId: 'parts',
+    label: 'High Demand Part',
+    description: 'Parts with high demand identified using order and stock data analysis.',
+    cardHint: 'Best for identifying critical parts needing inventory attention.',
+    Component: PartsHighDemandReport,
   },
 ]

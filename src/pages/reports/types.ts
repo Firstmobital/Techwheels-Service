@@ -37,6 +37,7 @@ export type ReportId =
   | 'parts-slow-moving'
   | 'parts-fast-moving'
   | 'parts-in-stock'
+  | 'parts-high-demand'
   | 'parts-inventory-turnover'
   | 'parts-order-status'
   | 'parts-in-transit'
