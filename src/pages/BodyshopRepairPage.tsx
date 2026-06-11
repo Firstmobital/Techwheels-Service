@@ -403,43 +403,157 @@ export default function BodyshopRepairPage() {
               )}
 
               {/* ── Docs ── */}
-              {detailTab === 'docs' && (
-                <div>
-                  <h3 style={{ marginTop: 0 }}>Document Checklist</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {[
-                      { k: 'doc_claim_form',  label: 'Claim Form' },
-                      { k: 'doc_rc',          label: 'RC' },
-                      { k: 'doc_insurance',   label: 'Insurance Copy' },
-                      { k: 'doc_dl',          label: 'Driving Licence' },
-                      { k: 'doc_aadhaar',     label: 'Aadhaar Card' },
-                      { k: 'doc_pan',         label: 'PAN Card' },
-                      { k: 'doc_kyc',         label: 'KYC' },
-                      { k: 'doc_gst',         label: 'GST' },
-                      { k: 'doc_company_pan', label: 'Company PAN' },
-                      { k: 'doc_bank_detail', label: 'Bank Detail' },
-                    ].map(({ k, label }) => (
-                      <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: (selected as any)[k] ? '#f0fdf4' : '#fafafa', border: '1px solid #e5e7eb', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={(selected as any)[k] ?? false}
-                          onChange={(e) => patch(k as keyof RepairCard, e.target.checked)}
-                          style={{ width: 16, height: 16 }} />
-                        <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
-                        {(selected as any)[k] && <span style={{ marginLeft: 'auto', color: '#16a34a', fontSize: 12 }}>✓</span>}
-                      </label>
-                    ))}
+              {detailTab === 'docs' && (() => {
+                const ct = selected.customer_type ?? 'individual'
+                const noDocsRequired = ct === 'cash' || ct === 'foc'
+
+                // All possible docs with per-type mandatory flag
+                const ALL_DOCS: { k: keyof RepairCard; label: string; mandatoryFor: CustomerType[] }[] = [
+                  { k: 'doc_claim_form',  label: 'Claim Form',        mandatoryFor: ['individual', 'firm'] },
+                  { k: 'doc_rc',          label: 'RC',                mandatoryFor: ['individual', 'firm'] },
+                  { k: 'doc_insurance',   label: 'Insurance Copy',    mandatoryFor: ['individual', 'firm'] },
+                  { k: 'doc_dl',          label: 'Driving Licence',   mandatoryFor: ['individual', 'firm'] },
+                  { k: 'doc_aadhaar',     label: 'Aadhaar Card',      mandatoryFor: ['individual', 'firm'] },
+                  { k: 'doc_pan',         label: 'PAN Card',          mandatoryFor: ['individual', 'firm'] },
+                  { k: 'doc_kyc',         label: 'KYC',               mandatoryFor: ['individual'] },
+                  { k: 'doc_gst',         label: 'GST',               mandatoryFor: ['firm'] },
+                  { k: 'doc_company_pan', label: 'Company PAN Card',  mandatoryFor: ['firm'] },
+                  { k: 'doc_bank_detail', label: 'Bank Detail',       mandatoryFor: [] },
+                ]
+
+                const visibleDocs = noDocsRequired ? [] : ALL_DOCS
+                const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                const optionalDocs  = visibleDocs.filter(d => !d.mandatoryFor.includes(ct as CustomerType))
+                const collectedMandatory = mandatoryDocs.filter(d => (selected as any)[d.k]).length
+                const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+
+                return (
+                  <div>
+                    {/* Customer Type selector */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap' }}>Customer Type:</span>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {(['individual','firm','foc','cash'] as CustomerType[]).map(t => (
+                          <button key={t} onClick={() => patch('customer_type', t)} style={{
+                            padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                            border: '1.5px solid',
+                            borderColor: selected.customer_type === t ? '#2563eb' : '#e5e7eb',
+                            background: selected.customer_type === t ? '#2563eb' : '#fff',
+                            color: selected.customer_type === t ? '#fff' : '#6b7280',
+                            cursor: 'pointer',
+                            textTransform: 'capitalize',
+                          }}>
+                            {t.charAt(0).toUpperCase() + t.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {noDocsRequired ? (
+                      <div style={{ textAlign: 'center', padding: '32px 16px', background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0' }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+                        <div style={{ fontWeight: 700, fontSize: 15, color: '#15803d' }}>No Documents Required</div>
+                        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+                          {ct === 'cash' ? 'Cash customers' : 'FOC customers'} do not require any documentation.
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Progress bar */}
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                              Mandatory Documents
+                            </span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: allMandatoryDone ? '#16a34a' : '#dc2626' }}>
+                              {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? '✓ Complete' : '⚠ Pending'}
+                            </span>
+                          </div>
+                          <div style={{ height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%', borderRadius: 4, transition: 'width 0.3s',
+                              width: mandatoryDocs.length ? `${(collectedMandatory / mandatoryDocs.length) * 100}%` : '0%',
+                              background: allMandatoryDone ? '#16a34a' : '#f59e0b',
+                            }} />
+                          </div>
+                        </div>
+
+                        {/* Mandatory docs */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                          {mandatoryDocs.map(({ k, label }) => {
+                            const checked = (selected as any)[k] ?? false
+                            return (
+                              <label key={k} onClick={() => patch(k, !checked)} style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                                background: checked ? '#f0fdf4' : '#fff9f9',
+                                border: `1.5px solid ${checked ? '#86efac' : '#fca5a5'}`,
+                              }}>
+                                <div style={{
+                                  width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                                  border: `2px solid ${checked ? '#16a34a' : '#ef4444'}`,
+                                  background: checked ? '#16a34a' : '#fff',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{label}</div>
+                                  <div style={{ fontSize: 10, color: checked ? '#16a34a' : '#ef4444', fontWeight: 600 }}>
+                                    {checked ? 'Collected' : 'Required'}
+                                  </div>
+                                </div>
+                              </label>
+                            )
+                          })}
+                        </div>
+
+                        {/* Optional docs */}
+                        {optionalDocs.length > 0 && (
+                          <>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                              Optional
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                              {optionalDocs.map(({ k, label }) => {
+                                const checked = (selected as any)[k] ?? false
+                                return (
+                                  <label key={k} onClick={() => patch(k, !checked)} style={{
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                                    background: checked ? '#f0fdf4' : '#fafafa',
+                                    border: `1.5px solid ${checked ? '#86efac' : '#e5e7eb'}`,
+                                  }}>
+                                    <div style={{
+                                      width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                                      border: `2px solid ${checked ? '#16a34a' : '#d1d5db'}`,
+                                      background: checked ? '#16a34a' : '#fff',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}>
+                                      {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</div>
+                                      <div style={{ fontSize: 10, color: '#9ca3af' }}>Optional</div>
+                                    </div>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+
+                    {Object.keys(editPatch).length > 0 && (
+                      <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}
+                        style={{ marginTop: 16, width: '100%' }}>
+                        {saving ? 'Saving…' : 'Save Documents'}
+                      </button>
+                    )}
                   </div>
-                  <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280' }}>
-                    {[
-                      'doc_claim_form','doc_rc','doc_insurance','doc_dl','doc_aadhaar','doc_pan','doc_kyc'
-                    ].filter((k) => (selected as any)[k]).length} / 7 mandatory docs collected
-                  </div>
-                  {Object.keys(editPatch).length > 0 && (
-                    <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving} style={{ marginTop: 12 }}>
-                      {saving ? 'Saving…' : 'Save Docs'}
-                    </button>
-                  )}
-                </div>
-              )}
+                )
+              })()}
 
               {/* ── Survey ── */}
               {detailTab === 'survey' && (

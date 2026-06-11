@@ -336,35 +336,130 @@ export default function BodyshopRepairScreen() {
               )}
 
               {/* Docs */}
-              {tab==='docs' && (
-                <View>
-                  <Text style={{ fontSize:14, fontWeight:'700', marginBottom:12 }}>Document Checklist</Text>
-                  {[
-                    {k:'doc_claim_form',label:'Claim Form'}, {k:'doc_rc',label:'RC'},
-                    {k:'doc_insurance',label:'Insurance'}, {k:'doc_dl',label:'Driving Licence'},
-                    {k:'doc_aadhaar',label:'Aadhaar'}, {k:'doc_pan',label:'PAN'},
-                    {k:'doc_kyc',label:'KYC'}, {k:'doc_gst',label:'GST'},
-                    {k:'doc_company_pan',label:'Company PAN'}, {k:'doc_bank_detail',label:'Bank Detail'},
-                  ].map(({k,label}) => (
-                    <TouchableOpacity key={k} onPress={() => applyPatch(k as keyof RepairCard, !(selected as any)[k])}
-                      style={{ flexDirection:'row', alignItems:'center', padding:12, backgroundColor:'#fff', borderRadius:8, marginBottom:6, borderWidth:1, borderColor:'#e5e7eb' }}>
-                      <View style={{ width:20, height:20, borderRadius:4, borderWidth:2,
-                        borderColor: (selected as any)[k] ? '#16a34a' : '#d1d5db',
-                        backgroundColor: (selected as any)[k] ? '#16a34a' : '#fff',
-                        alignItems:'center', justifyContent:'center', marginRight:10 }}>
-                        {(selected as any)[k] && <Text style={{ color:'#fff', fontSize:12, fontWeight:'700' }}>✓</Text>}
+              {tab==='docs' && (() => {
+                const ct = selected.customer_type ?? 'individual'
+                const noDocsRequired = ct === 'cash' || ct === 'foc'
+                type DocEntry = { k: keyof RepairCard; label: string; mandatoryFor: string[] }
+                const ALL_DOCS: DocEntry[] = [
+                  { k:'doc_claim_form',  label:'Claim Form',       mandatoryFor:['individual','firm'] },
+                  { k:'doc_rc',          label:'RC',               mandatoryFor:['individual','firm'] },
+                  { k:'doc_insurance',   label:'Insurance Copy',   mandatoryFor:['individual','firm'] },
+                  { k:'doc_dl',          label:'Driving Licence',  mandatoryFor:['individual','firm'] },
+                  { k:'doc_aadhaar',     label:'Aadhaar Card',     mandatoryFor:['individual','firm'] },
+                  { k:'doc_pan',         label:'PAN Card',         mandatoryFor:['individual','firm'] },
+                  { k:'doc_kyc',         label:'KYC',              mandatoryFor:['individual'] },
+                  { k:'doc_gst',         label:'GST',              mandatoryFor:['firm'] },
+                  { k:'doc_company_pan', label:'Company PAN Card', mandatoryFor:['firm'] },
+                  { k:'doc_bank_detail', label:'Bank Detail',      mandatoryFor:[] },
+                ]
+                const visibleDocs = noDocsRequired ? [] : ALL_DOCS
+                const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct))
+                const optionalDocs  = visibleDocs.filter(d => !d.mandatoryFor.includes(ct))
+                const collectedMandatory = mandatoryDocs.filter(d => (selected as any)[d.k]).length
+                const allDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+
+                return (
+                  <View>
+                    {/* Customer Type buttons */}
+                    <View style={{ backgroundColor:'#f8fafc', borderRadius:10, padding:12, marginBottom:14 }}>
+                      <Text style={{ fontSize:13, fontWeight:'700', color:'#374151', marginBottom:8 }}>Customer Type</Text>
+                      <View style={{ flexDirection:'row', gap:8, flexWrap:'wrap' }}>
+                        {(['individual','firm','foc','cash'] as const).map(t => (
+                          <TouchableOpacity key={t} onPress={() => applyPatch('customer_type', t)}
+                            style={{ paddingHorizontal:14, paddingVertical:7, borderRadius:20, borderWidth:1.5,
+                              borderColor: ct===t ? '#2563eb' : '#e5e7eb',
+                              backgroundColor: ct===t ? '#2563eb' : '#fff' }}>
+                            <Text style={{ fontSize:13, fontWeight:'600', color: ct===t ? '#fff' : '#6b7280', textTransform:'capitalize' }}>
+                              {t.charAt(0).toUpperCase()+t.slice(1)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
                       </View>
-                      <Text style={{ fontSize:14, fontWeight:'500' }}>{label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                  {Object.keys(patch).length > 0 && (
-                    <TouchableOpacity onPress={savePatch} disabled={saving}
-                      style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center', marginTop:8 }}>
-                      <Text style={{ color:'#fff', fontWeight:'700' }}>{saving ? 'Saving…' : 'Save Docs'}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
+                    </View>
+
+                    {noDocsRequired ? (
+                      <View style={{ alignItems:'center', padding:32, backgroundColor:'#f0fdf4', borderRadius:12, borderWidth:1, borderColor:'#bbf7d0' }}>
+                        <Text style={{ fontSize:32, marginBottom:8 }}>✅</Text>
+                        <Text style={{ fontSize:15, fontWeight:'700', color:'#15803d' }}>No Documents Required</Text>
+                        <Text style={{ fontSize:13, color:'#6b7280', marginTop:4, textAlign:'center' }}>
+                          {ct === 'cash' ? 'Cash' : 'FOC'} customers do not require any documentation.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View>
+                        {/* Progress */}
+                        <View style={{ flexDirection:'row', justifyContent:'space-between', marginBottom:6 }}>
+                          <Text style={{ fontSize:13, fontWeight:'700', color:'#374151' }}>Mandatory Documents</Text>
+                          <Text style={{ fontSize:13, fontWeight:'700', color: allDone ? '#16a34a' : '#dc2626' }}>
+                            {collectedMandatory}/{mandatoryDocs.length} {allDone ? '✓' : '⚠'}
+                          </Text>
+                        </View>
+                        <View style={{ height:6, backgroundColor:'#e5e7eb', borderRadius:4, marginBottom:14, overflow:'hidden' }}>
+                          <View style={{ height:6, borderRadius:4,
+                            width: mandatoryDocs.length ? `${(collectedMandatory/mandatoryDocs.length)*100}%` : '0%',
+                            backgroundColor: allDone ? '#16a34a' : '#f59e0b' } as any} />
+                        </View>
+
+                        {mandatoryDocs.map(({ k, label }) => {
+                          const checked = (selected as any)[k] ?? false
+                          return (
+                            <TouchableOpacity key={k} onPress={() => applyPatch(k, !checked)}
+                              style={{ flexDirection:'row', alignItems:'center', padding:12, borderRadius:10, marginBottom:8,
+                                backgroundColor: checked ? '#f0fdf4' : '#fff9f9',
+                                borderWidth:1.5, borderColor: checked ? '#86efac' : '#fca5a5' }}>
+                              <View style={{ width:22, height:22, borderRadius:5, borderWidth:2, marginRight:12,
+                                borderColor: checked ? '#16a34a' : '#ef4444',
+                                backgroundColor: checked ? '#16a34a' : '#fff',
+                                alignItems:'center', justifyContent:'center' }}>
+                                {checked && <Text style={{ color:'#fff', fontSize:13, fontWeight:'800' }}>✓</Text>}
+                              </View>
+                              <View style={{ flex:1 }}>
+                                <Text style={{ fontSize:14, fontWeight:'600', color:'#111827' }}>{label}</Text>
+                                <Text style={{ fontSize:11, fontWeight:'600', color: checked ? '#16a34a' : '#ef4444' }}>
+                                  {checked ? 'Collected' : 'Required'}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          )
+                        })}
+
+                        {optionalDocs.length > 0 && (
+                          <View style={{ marginTop:8 }}>
+                            <Text style={{ fontSize:11, fontWeight:'700', color:'#9ca3af', marginBottom:8, textTransform:'uppercase', letterSpacing:1 }}>Optional</Text>
+                            {optionalDocs.map(({ k, label }) => {
+                              const checked = (selected as any)[k] ?? false
+                              return (
+                                <TouchableOpacity key={k} onPress={() => applyPatch(k, !checked)}
+                                  style={{ flexDirection:'row', alignItems:'center', padding:12, borderRadius:10, marginBottom:6,
+                                    backgroundColor: checked ? '#f0fdf4' : '#fafafa',
+                                    borderWidth:1, borderColor: checked ? '#86efac' : '#e5e7eb' }}>
+                                  <View style={{ width:22, height:22, borderRadius:5, borderWidth:2, marginRight:12,
+                                    borderColor: checked ? '#16a34a' : '#d1d5db',
+                                    backgroundColor: checked ? '#16a34a' : '#fff',
+                                    alignItems:'center', justifyContent:'center' }}>
+                                    {checked && <Text style={{ color:'#fff', fontSize:13, fontWeight:'800' }}>✓</Text>}
+                                  </View>
+                                  <View style={{ flex:1 }}>
+                                    <Text style={{ fontSize:14, fontWeight:'500', color:'#374151' }}>{label}</Text>
+                                    <Text style={{ fontSize:11, color:'#9ca3af' }}>Optional</Text>
+                                  </View>
+                                </TouchableOpacity>
+                              )
+                            })}
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {Object.keys(patch).length > 0 && (
+                      <TouchableOpacity onPress={savePatch} disabled={saving}
+                        style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center', marginTop:16 }}>
+                        <Text style={{ color:'#fff', fontWeight:'700' }}>{saving ? 'Saving…' : 'Save Documents'}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )
+              })()}
 
               {/* Survey */}
               {tab==='survey' && (
