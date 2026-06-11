@@ -288,7 +288,7 @@ export default function BodyshopRepairPage() {
       {/* ── Detail Full-Screen ────────────────────────────────────────────── */}
       {selected && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
+          position: 'fixed', inset: 0, zIndex: 9999,
           background: '#f1f5f9',
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
