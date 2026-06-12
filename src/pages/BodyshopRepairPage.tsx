@@ -198,7 +198,7 @@ const BODYSHOP_DOCS: { k: BodyshopDocKey; label: string; mandatoryFor: CustomerT
   { k: 'doc_dl', label: 'Driving Licence', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_aadhaar', label: 'Aadhaar Card', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_pan', label: 'PAN Card', mandatoryFor: ['individual', 'firm'] },
-  { k: 'doc_kyc', label: 'KYC', mandatoryFor: ['individual'] },
+  { k: 'doc_kyc', label: 'KYC', mandatoryFor: [] },
   { k: 'doc_gst', label: 'GST', mandatoryFor: ['firm'] },
   { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
   { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: ['firm'] },
@@ -231,6 +231,7 @@ export default function BodyshopRepairPage() {
   const [kmDraft, setKmDraft] = useState('')
   const [savingReceiving, setSavingReceiving] = useState(false)
   const [fetchingInsurance, setFetchingInsurance] = useState(false)
+  const [insuranceFetched, setInsuranceFetched] = useState(false)
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
@@ -283,6 +284,7 @@ export default function BodyshopRepairPage() {
   useEffect(() => {
     if (!selected?.id) {
       setBodyshopDocsByKey({})
+      setInsuranceFetched(false)
       return
     }
 
@@ -653,7 +655,6 @@ export default function BodyshopRepairPage() {
       .eq('repair_card_id', repairCardId)
 
     if (error) {
-      setBodyshopDocsByKey({})
       return
     }
 
@@ -730,6 +731,17 @@ export default function BodyshopRepairPage() {
       }
 
       const row = upsertedRows[0] as BodyshopRepairCardDocumentRow
+      // Optimistically reflect the uploaded doc so View/Replace appears without a hard refresh.
+      setBodyshopDocsByKey((prev) => ({
+        ...prev,
+        [docKey]: row,
+      }))
+      // Optimistically tick the doc checkbox immediately after upload.
+      setSelected((prev) => prev ? ({ ...prev, [docKey]: true } as RepairCard) : prev)
+      setCards((prev) => prev.map((card) => (
+        card.id === selected.id ? ({ ...card, [docKey]: true } as RepairCard) : card
+      )))
+
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
       const sessionRes = await supabase.auth.getSession()
       const token = sessionRes.data.session?.access_token
@@ -757,11 +769,10 @@ export default function BodyshopRepairPage() {
 
       const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
       if (!driveRes.ok || drivePayload?.error) {
-        toast_(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`, false)
-        return
+        toast_(`Document uploaded, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, false)
+      } else {
+        await loadBodyshopDocuments(selected.id)
       }
-
-      await loadBodyshopDocuments(selected.id)
 
       const updated = await updateRepairCard(selected.id, { [docKey]: true } as Partial<RepairCard>)
       setSelected(updated)
@@ -909,6 +920,7 @@ export default function BodyshopRepairPage() {
         return next
       })
 
+      setInsuranceFetched(true)
       toast_(usedFreshCache ? 'Insurance details fetched from cache ✅' : 'Insurance details refreshed from RC API ✅')
     } catch (e: any) {
       toast_(e.message ?? 'Unable to fetch insurance details', false)
@@ -1520,11 +1532,20 @@ export default function BodyshopRepairPage() {
                 const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                 const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
 
+                // Calculate docs completion status for stage 5
+                const ct = selected.customer_type ?? 'individual'
+                const noDocsRequired = ct === 'cash' || ct === 'foc'
+                const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
+                const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
+                const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+
                 const stageDone = (stage: number): boolean => {
                   if (stage === 1) return milestones.stage1Done
                   if (stage === 2) return milestones.stage2Done
                   if (stage === 3) return milestones.stage3Done
                   if (stage === 4) return milestones.stage4Done
+                  if (stage === 5) return allMandatoryDone || effectiveCurrentStage > stage
                   return effectiveCurrentStage > stage
                 }
 
@@ -1786,17 +1807,8 @@ export default function BodyshopRepairPage() {
                     )}
 
                     {saActiveCard === 'docs' && (() => {
-                      const ct = selected.customer_type ?? 'individual'
-                      const noDocsRequired = ct === 'cash' || ct === 'foc'
                       const insuranceRegNo = normalizeRegForLookup(selected.reg_number ?? selectedReception?.reg_number)
-
-                      const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
-                      const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
-                      const optionalDocs  = ct === 'firm'
-                        ? visibleDocs.filter(d => d.mandatoryFor.length === 0)
-                        : []
-                      const collectedMandatory = mandatoryDocs.filter(d => (selected as any)[d.k]).length
-                      const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+                      const optionalDocs  = visibleDocs.filter(d => d.mandatoryFor.length === 0)
 
                       return (
                         <div>
@@ -1816,10 +1828,15 @@ export default function BodyshopRepairPage() {
                                   className="btn btn--primary"
                                   type="button"
                                   onClick={() => void handleFetchInsuranceDetails()}
-                                  disabled={fetchingInsurance || !insuranceRegNo}
-                                  title={insuranceRegNo ? 'Fetch from RC cache/API' : 'Registration number required'}
+                                  disabled={fetchingInsurance || !insuranceRegNo || insuranceFetched}
+                                  title={insuranceFetched ? 'Insurance details already fetched' : (insuranceRegNo ? 'Fetch from RC cache/API' : 'Registration number required')}
+                                  style={{
+                                    opacity: (fetchingInsurance || !insuranceRegNo || insuranceFetched) ? 0.5 : 1,
+                                    cursor: (fetchingInsurance || !insuranceRegNo || insuranceFetched) ? 'not-allowed' : 'pointer',
+                                    backgroundColor: insuranceFetched ? '#d1d5db' : fetchingInsurance ? '#9ca3af' : undefined,
+                                  }}
                                 >
-                                  {fetchingInsurance ? 'Fetching...' : 'Fetch'}
+                                  {fetchingInsurance ? 'Fetching...' : insuranceFetched ? 'Fetched ✓' : 'Fetch'}
                                 </button>
                               </div>
                               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1872,8 +1889,8 @@ export default function BodyshopRepairPage() {
 
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 8, marginBottom: 16 }}>
                                 {mandatoryDocs.map(({ k, label }) => {
-                                  const checked = (selected as any)[k] ?? false
                                   const attachedDoc = bodyshopDocsByKey[k]
+                                  const checked = Boolean(attachedDoc)
                                   const busy = uploadingDocKey === k
                                   return (
                                     <div key={k} style={{
@@ -1934,12 +1951,12 @@ export default function BodyshopRepairPage() {
                               {optionalDocs.length > 0 && (
                                 <>
                                   <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                                    Applicable For Firm
+                                    Optional Documents
                                   </div>
                                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 8 }}>
                                     {optionalDocs.map(({ k, label }) => {
-                                      const checked = (selected as any)[k] ?? false
                                       const attachedDoc = bodyshopDocsByKey[k]
+                                      const checked = Boolean(attachedDoc)
                                       const busy = uploadingDocKey === k
                                       return (
                                         <div key={k} style={{

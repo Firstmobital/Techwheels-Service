@@ -218,6 +218,8 @@ interface SupportAssignment {
   updated_at?: string
 }
 
+type SupportRoleDb = 'DET' | 'ELECTRICIAN' | 'DENTER' | 'DENTOR' | 'TECHNICIAN'
+
 function normalizeSupportRole(value: string | null | undefined): SupportRole | null {
   const normalized = String(value ?? '').trim().toUpperCase()
   if (!normalized) return null
@@ -628,9 +630,8 @@ export default function FloorInchargePage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
-      const payload: Omit<SupportAssignment, 'id'> = {
+      const payloadBase = {
         job_card_number: jobCardNumber,
-        support_role: supportModalRole,
         employee_code: employee.employee_code,
         employee_name: employee.employee_name,
         assigned_at: new Date().toISOString(),
@@ -648,13 +649,37 @@ export default function FloorInchargePage() {
         return
       }
 
-      const result = await supabase
-        .from('job_card_support_assignments')
-        .insert(payload)
-        .select()
-        .single()
+      // Backward compatibility: some environments still enforce DENTER in DB check constraints.
+      const roleCandidates: SupportRoleDb[] = supportModalRole === 'DENTOR'
+        ? ['DENTER', 'DENTOR']
+        : [supportModalRole]
 
-      if (result.error) throw result.error
+      let result: { data: unknown; error: { message?: string } | null } | null = null
+
+      for (let index = 0; index < roleCandidates.length; index += 1) {
+        const candidateRole = roleCandidates[index]
+        const insertRes = await supabase
+          .from('job_card_support_assignments')
+          .insert({ ...payloadBase, support_role: candidateRole })
+          .select()
+          .single()
+
+        if (!insertRes.error) {
+          result = insertRes as { data: unknown; error: null }
+          break
+        }
+
+        const isLast = index === roleCandidates.length - 1
+        const errText = String(insertRes.error.message ?? '').toLowerCase()
+        const isRoleConstraintError = errText.includes('support_role') && errText.includes('check')
+
+        if (isLast || !isRoleConstraintError) {
+          result = insertRes as { data: unknown; error: { message?: string } }
+          break
+        }
+      }
+
+      if (!result || result.error) throw result?.error ?? new Error('Failed to save support assignment')
 
       setSupportAssignments((prev) => ({
         ...prev,
