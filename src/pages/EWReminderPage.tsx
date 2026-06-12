@@ -52,13 +52,6 @@ function getSaleMonth(raw: string | null): number | null {
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-const EW_STATUS_COLORS: Record<string, string> = {
-  'Order Placed': 'badge badge--green',
-  'Policy Issued': 'badge badge--blue',
-  'Cancelled': 'badge badge--red',
-  'Expired': 'badge badge--red',
-}
-
 export default function EWReminderPage() {
   const [records, setRecords] = useState<EWRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -175,10 +168,6 @@ export default function EWReminderPage() {
     const highPropensity = filtered.filter(r => r.extended_propensity_flag === 'Y' || r.extended_propensity_flag === '1' || r.extended_propensity_flag === 'Yes').length
     return { total, withEW, withoutEW, highPropensity }
   }, [filtered])
-
-  function handleFilterChange() {
-    setPage(1)
-  }
 
   return (
     <div className="page-container" style={{ padding: '1.5rem', maxWidth: '100%' }}>
