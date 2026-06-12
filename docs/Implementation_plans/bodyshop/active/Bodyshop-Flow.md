@@ -218,6 +218,12 @@ Stage-governance note:
 - [x] **Task 8.4:** Persist fetched values to `bodyshop_repair_cards` and surface success/failure toast states.
 - [ ] **Task 8.5:** Add QA checks for cache-hit, stale-refresh, and API-failure fallback behavior.
 
+### Phase 9: Insurance Type Parity (Authoritative Schema + UI)
+- [x] **Task 9.1:** Audit authoritative dump mirror and confirm `bodyshop_repair_cards` insurance columns currently include only `insurance_policy_no`, `insurance_company`, `insurance_valid_date`.
+- [x] **Task 9.2:** Add manual `Insurance Type` field in SA -> Docs -> Insurance Details with allowed values `TMI` and `Non-TMI` placed side-by-side with `Valid Until`.
+- [x] **Task 9.3:** Add additive migration script to persist `insurance_type` in `bodyshop_repair_cards` with value check constraint.
+- [ ] **Task 9.4:** Execute migration in DB environment and validate end-to-end persistence in authenticated `/bodyshop-repair` session.
+
 ---
 
 ## Activity Tracker
@@ -302,6 +308,14 @@ Stage-governance note:
 ⏳ 8.5 | QA matrix for hit/stale/failure paths | QA | - | - | include provider failure fallback and no-data path
 ```
 
+### Phase 9
+```
+✅ 9.1 | Authoritative schema parity audit for Insurance Type | Web Dev | 2026-06-12 | 2026-06-12 | chunk mirror confirms bodyshop_repair_cards lacks insurance_type in active dump
+✅ 9.2 | Add SA Docs Insurance Type field (TMI/Non-TMI) | Web Dev | 2026-06-12 | 2026-06-12 | UI field added beside Valid Until in bodyshop-repair docs card
+✅ 9.3 | Prepare additive insurance_type migration script | API/Web Dev | 2026-06-12 | 2026-06-12 | added scripts/18_add_insurance_type_to_bodyshop_repair_cards.sql
+⏳ 9.4 | Execute migration + authenticated UAT on /bodyshop-repair | API + QA | - | - | live URL is auth-gated in audit session; pending post-login validation
+```
+
 ---
 
 ## Dependencies & Prerequisites
@@ -312,6 +326,7 @@ Stage-governance note:
 - [ ] UAT sample entries covering Accident + non-Accident service types.
 - [x] DB-level canonical key hardening for bodyshop cards (`reception_entry_id` + uniqueness) executed and active.
 - [ ] Phase A deprecation validation sign-off: zero runtime dependency on `service_branches` in web/mobile.
+- [ ] Execute additive migration `scripts/18_add_insurance_type_to_bodyshop_repair_cards.sql` in target DB.
 
 ---
 
@@ -341,6 +356,7 @@ Stage-governance note:
 - ✅ Stage 10 (`Parts Status`) to Stage 11 (`Floor Assignment`) transitions are operationally and technically consistent.
 - ✅ Phase A complete: no runtime reads from `service_branches` in targeted web/mobile modules; Employee Master winner logic active.
 - ✅ Phase B complete: `public.service_branches` dropped via migration with no regressions in branch/fuel filters and assignments.
+- ✅ SA Docs includes manual Insurance Type capture (`TMI`/`Non-TMI`) and persists once additive migration is executed.
 
 ---
 
@@ -639,6 +655,23 @@ After migration apply:
 - Plan governance decision: keep `Bodyshop-Flow.md` as single active source of implementation truth.
 - V2 parent-child migration planning content has been consolidated into this active file.
 - Separate active plan file for V2 was removed to avoid split tracking.
+
+### 2026-06-12 - Audit Addendum (Live URL + Authoritative Dump)
+- Audit scope executed:
+  - Live page: `https://techwheels-service.vercel.app/bodyshop-repair`
+  - Schema authority: `local_folder/backups/full_database.sql` with chunk mirror `local_folder/backups/chunks/full_database.sql.part_*`
+- Live audit observation:
+  - URL is authentication-gated in current audit session; unauthenticated surface renders sign-in page only.
+  - Post-login stage interactions could not be directly validated in this run.
+- Authoritative schema finding (from chunk mirror):
+  - `public.bodyshop_repair_cards` contains `insurance_policy_no`, `insurance_company`, `insurance_valid_date`.
+  - `insurance_type` is present in other tables (example: open/cancel/closed job-card style tables), but not in `bodyshop_repair_cards` in active dump.
+- Implementation outcome aligned to finding:
+  - Added Insurance Type UI in Bodyshop SA Docs with fixed options: `TMI`, `Non-TMI`.
+  - Added additive migration script: `scripts/18_add_insurance_type_to_bodyshop_repair_cards.sql` with check constraint for allowed values.
+- Pending closure criteria:
+  - Manual migration execution in target DB.
+  - Authenticated UAT on `/bodyshop-repair` to validate fetch + manual override + save persistence behavior.
 
 ---
 
