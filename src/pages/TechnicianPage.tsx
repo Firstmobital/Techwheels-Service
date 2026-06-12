@@ -4,6 +4,7 @@ import DateRangeFilter, { currentMonthRange, type DateRange } from '../component
 import { supabase } from '../lib/supabase'
 import { listFloorInchargeEntries, listReceptionEntries, type ReceptionEntryRow } from '../lib/api'
 import { sendTechnicianDailyEarningsTestEmail } from '../lib/api/email'
+import * as XLSX from 'xlsx'
 
 type TechnicianAssignmentRow = {
   id: number
@@ -53,6 +54,19 @@ type VehicleOnDayCard = {
   rowCount: number
   completedCount: number
   totalIncome: number
+}
+
+type YesterdayRow = {
+  technician_name: string
+  technician_code: string
+  job_card_number: string
+  reg_number: string
+  branch: string
+  fuel_type: string
+  bay_no: string
+  gross_labour_amount: number
+  technician_income: number
+  work_status: string
 }
 
 const QUERY_PAGE_SIZE = 1000
@@ -214,12 +228,137 @@ function calculateTechnicianIncome(
   return netBeforeShare * (sharePercent / 100)
 }
 
+// ── Yesterday Report Generator ────────────────────────────────────────────────
+async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{ rows: YesterdayRow[]; date: string }> {
+  // Yesterday in IST
+  const now = new Date()
+  const istOffset = 5.5 * 60 * 60 * 1000
+  const istNow = new Date(now.getTime() + istOffset)
+  const yest = new Date(istNow)
+  yest.setUTCDate(yest.getUTCDate() - 1)
+  const dateStr = yest.toISOString().slice(0, 10)
+  const fromTs = dateStr + 'T00:00:00+05:30'
+  const toTs = dateStr + 'T23:59:59+05:30'
+
+  // Fetch assignments for yesterday
+  const assignRes = await supabase
+    .from('technician_assignments')
+    .select('*')
+    .gte('assigned_at', fromTs)
+    .lte('assigned_at', toTs)
+    .order('assigned_at', { ascending: true })
+
+  if (assignRes.error) throw new Error(assignRes.error.message)
+  const assignmentRows = (assignRes.data ?? []) as TechnicianAssignmentRow[]
+
+  const completedJcs = Array.from(new Set(
+    assignmentRows
+      .filter(r => normalizeStatus(r.work_status) === 'completed')
+      .map(r => String(r.job_card_number ?? '').trim().toUpperCase())
+      .filter(Boolean)
+  ))
+
+  // Fetch revenue for completed JCs
+  const revenueMap = new Map<string, number>()
+  if (completedJcs.length > 0) {
+    const revRes = await supabase
+      .from('job_card_closed_data')
+      .select('job_card_number, final_labour_amount')
+      .in('job_card_number', completedJcs)
+    if (!revRes.error && revRes.data) {
+      revRes.data.forEach((r: any) => {
+        const key = String(r.job_card_number ?? '').trim().toUpperCase()
+        const amt = parseRevenueAmount(r.final_labour_amount)
+        if (amt > 0 && !revenueMap.has(key)) revenueMap.set(key, amt)
+      })
+    }
+  }
+
+  // Fetch reg numbers from reception entries
+  const regMap = new Map<string, string>()
+  const branchMap = new Map<string, string>()
+  const fuelMap = new Map<string, string>()
+  const allJcs = new Set(assignmentRows.map(r => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean))
+
+  const floorRes = await listFloorInchargeEntries()
+  if (!floorRes.error && floorRes.data) {
+    floorRes.data.forEach((r: any) => {
+      const key = String(r.jc_number ?? '').trim().toUpperCase()
+      if (!allJcs.has(key)) return
+      if (r.reg_number && !regMap.has(key)) regMap.set(key, String(r.reg_number).trim())
+      if (r.branch && !branchMap.has(key)) branchMap.set(key, String(r.branch).trim())
+      if (r.fuel_type && !fuelMap.has(key)) fuelMap.set(key, String(r.fuel_type).trim().toUpperCase())
+    })
+  }
+
+  // Build rows
+  const rows: YesterdayRow[] = assignmentRows
+    .filter(r => normalizeStatus(r.work_status) === 'completed')
+    .map(r => {
+      const jc = String(r.job_card_number ?? '').trim().toUpperCase()
+      const gross = revenueMap.get(jc) ?? 0
+      const income = calculateTechnicianIncome(gross, r.bay_no, pvPct, evPct)
+      return {
+        technician_name: String(r.technician_name ?? '').trim() || r.technician_code,
+        technician_code: String(r.technician_code ?? '').trim(),
+        job_card_number: jc,
+        reg_number: regMap.get(jc) ?? '—',
+        branch: branchMap.get(jc) ?? inferBranchFromAssignment(r) ?? '—',
+        fuel_type: fuelMap.get(jc) ?? (extractFuelFromBay(r.bay_no) ?? '—'),
+        bay_no: String(r.bay_no ?? '').trim(),
+        gross_labour_amount: gross,
+        technician_income: income,
+        work_status: String(r.work_status ?? '').trim(),
+      }
+    })
+    .sort((a, b) => a.technician_name.localeCompare(b.technician_name) || b.technician_income - a.technician_income)
+
+  return { rows, date: dateStr }
+}
+
+function buildWAText(rows: YesterdayRow[], date: string, pvPct: number, evPct: number): string {
+  if (rows.length === 0) return `📊 *Technician Report — ${date}*\n\nNo completed jobs yesterday.`
+
+  // Group by technician
+  const byTech = new Map<string, YesterdayRow[]>()
+  rows.forEach(r => {
+    const key = r.technician_name
+    if (!byTech.has(key)) byTech.set(key, [])
+    byTech.get(key)!.push(r)
+  })
+
+  const totalLabour = rows.reduce((s, r) => s + r.gross_labour_amount, 0)
+  const totalPaid = rows.reduce((s, r) => s + r.technician_income, 0)
+
+  let msg = `📊 *Technician Report — ${date}*\n`
+  msg += `⚙️ PV: ${pvPct}% | EV: ${evPct}%\n`
+  msg += `━━━━━━━━━━━━━━━━━━━━\n\n`
+
+  byTech.forEach((techRows, name) => {
+    const techLabour = techRows.reduce((s, r) => s + r.gross_labour_amount, 0)
+    const techPaid = techRows.reduce((s, r) => s + r.technician_income, 0)
+    msg += `🔧 *${name}*\n`
+    techRows.forEach(r => {
+      msg += `  🚗 ${r.reg_number}  Labour: ₹${Math.round(r.gross_labour_amount).toLocaleString('en-IN')}  Paid: *₹${Math.round(r.technician_income).toLocaleString('en-IN')}*\n`
+    })
+    msg += `  Total Labour: ₹${Math.round(techLabour).toLocaleString('en-IN')} | *Paid: ₹${Math.round(techPaid).toLocaleString('en-IN')}*\n\n`
+  })
+
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`
+  msg += `🏆 Total Labour: ₹${Math.round(totalLabour).toLocaleString('en-IN')}\n`
+  msg += `💰 Total Paid: *₹${Math.round(totalPaid).toLocaleString('en-IN')}*`
+
+  return msg
+}
+
 export default function TechnicianPage() {
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [error, setError] = useState<string | null>(null)
   const [reportEmailState, setReportEmailState] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [sendingReportEmail, setSendingReportEmail] = useState(false)
+  const [generatingReport, setGeneratingReport] = useState(false)
+  const [yesterdayReport, setYesterdayReport] = useState<{ rows: YesterdayRow[]; date: string; waText: string } | null>(null)
   const [assignments, setAssignments] = useState<TechnicianAssignmentRow[]>([])
   const [canEditSharePercent, setCanEditSharePercent] = useState(false)
   const [pvSharePercent, setPvSharePercent] = useState(DEFAULT_PV_SHARE_PERCENT)
@@ -480,6 +619,42 @@ export default function TechnicianPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleGenerateYesterdayReport() {
+    setGeneratingReport(true)
+    try {
+      const { rows, date } = await fetchYesterdayReportData(pvSharePercent, evSharePercent)
+      const waText = buildWAText(rows, date, pvSharePercent, evSharePercent)
+      setYesterdayReport({ rows, date, waText })
+    } catch (e: any) {
+      alert('Failed to generate report: ' + (e.message ?? 'Unknown error'))
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
+
+  function downloadExcel(rows: YesterdayRow[], date: string) {
+    const sheetData = [
+      ['Technician Name', 'Technician Code', 'Job Card No', 'Reg No', 'Branch', 'Fuel Type', 'Bay No', 'Labour Amount (₹)', 'Amount Paid (₹)'],
+      ...rows.map(r => [
+        r.technician_name,
+        r.technician_code,
+        r.job_card_number,
+        r.reg_number,
+        r.branch,
+        r.fuel_type,
+        r.bay_no,
+        Math.round(r.gross_labour_amount),
+        Math.round(r.technician_income),
+      ])
+    ]
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(sheetData)
+    // Column widths
+    ws['!cols'] = [22,18,18,14,14,10,8,20,20].map(w => ({ wch: w }))
+    XLSX.utils.book_append_sheet(wb, ws, 'Technician Report')
+    XLSX.writeFile(wb, `Technician_Report_${date}.xlsx`)
   }
 
   useEffect(() => {
@@ -830,19 +1005,29 @@ export default function TechnicianPage() {
           })}
         </div>
 
-        {canEditSharePercent && (
-          <div className="toolbar toolbar--tight">
+        <div className="toolbar toolbar--tight">
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => void handleGenerateYesterdayReport()}
+            disabled={generatingReport}
+            style={{ background: '#16a34a', borderColor: '#16a34a' }}
+          >
+            <Icon name="download" size={14} className="icon-align-text" />
+            {generatingReport ? 'Generating…' : '📥 Yesterday Report'}
+          </button>
+          {canEditSharePercent && (
             <button
               type="button"
-              className="btn btn--primary btn--sm"
+              className="btn btn--ghost btn--sm"
               onClick={() => void handleSendYesterdayReportEmail()}
               disabled={sendingReportEmail}
             >
               <Icon name="mail" size={14} className="icon-align-text" />
-              {sendingReportEmail ? 'Sending test email…' : 'Send Yesterday Earnings Test Email'}
+              {sendingReportEmail ? 'Sending…' : 'Send Email Report'}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {error && (
@@ -856,6 +1041,105 @@ export default function TechnicianPage() {
         <div className={`toast ${reportEmailState.type === 'error' ? 'error' : ''}`} style={reportEmailState.type === 'success' ? { borderColor: 'rgba(34,197,94,.35)', color: '#166534', background: '#f0fdf4' } : undefined}>
           <Icon name={reportEmailState.type === 'error' ? 'alert' : 'checksm'} size={14} />
           {reportEmailState.message}
+        </div>
+      )}
+
+      {/* ── Yesterday Report Modal ─────────────────────────────── */}
+      {yesterdayReport && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) setYesterdayReport(null) }}>
+          <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '860px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1e293b' }}>📊 Yesterday&apos;s Report — {yesterdayReport.date}</div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>{yesterdayReport.rows.length} completed jobs</div>
+              </div>
+              <button onClick={() => setYesterdayReport(null)} style={{ border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '0.65rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => downloadExcel(yesterdayReport.rows, yesterdayReport.date)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.1rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 600, fontSize: '0.83rem', cursor: 'pointer' }}>
+                📥 Download Excel
+              </button>
+              <a
+                href={'https://wa.me/?text=' + encodeURIComponent(yesterdayReport.waText)}
+                target="_blank" rel="noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.1rem', background: '#25D366', color: '#fff', borderRadius: '7px', fontWeight: 600, fontSize: '0.83rem', textDecoration: 'none' }}>
+                📤 Share on WhatsApp
+              </a>
+              <button
+                onClick={() => { navigator.clipboard.writeText(yesterdayReport.waText); alert('Copied to clipboard!') }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.1rem', background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '7px', fontWeight: 600, fontSize: '0.83rem', cursor: 'pointer' }}>
+                📋 Copy Text
+              </button>
+            </div>
+
+            {/* Table */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.25rem' }}>
+              {yesterdayReport.rows.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>No completed jobs found for yesterday.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
+                      {['Technician', 'Job Card', 'Reg No', 'Branch', 'Fuel', 'Labour Amount', 'Amount Paid'].map(h => (
+                        <th key={h} style={{ padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '0.76rem', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      let lastTech = ''
+                      return yesterdayReport.rows.map((r, i) => {
+                        const isNewTech = r.technician_name !== lastTech
+                        lastTech = r.technician_name
+                        const techRows = yesterdayReport.rows.filter(x => x.technician_name === r.technician_name)
+                        const techTotal = techRows.reduce((s, x) => s + x.technician_income, 0)
+                        const techLabour = techRows.reduce((s, x) => s + x.gross_labour_amount, 0)
+                        return (
+                          <>
+                            {isNewTech && (
+                              <tr key={'hdr-' + i} style={{ background: '#f0f9ff' }}>
+                                <td colSpan={5} style={{ padding: '0.45rem 0.75rem', fontWeight: 700, color: '#0369a1', fontSize: '0.83rem' }}>
+                                  🔧 {r.technician_name} <span style={{ fontWeight: 400, color: '#64748b', fontSize: '0.75rem' }}>({r.technician_code})</span>
+                                </td>
+                                <td style={{ padding: '0.45rem 0.75rem', fontWeight: 700, color: '#0369a1', fontSize: '0.83rem' }}>₹{Math.round(techLabour).toLocaleString('en-IN')}</td>
+                                <td style={{ padding: '0.45rem 0.75rem', fontWeight: 800, color: '#16a34a', fontSize: '0.85rem' }}>₹{Math.round(techTotal).toLocaleString('en-IN')}</td>
+                              </tr>
+                            )}
+                            <tr key={r.job_card_number + '-' + i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                              <td style={{ padding: '0.5rem 0.75rem 0.5rem 1.5rem', color: '#64748b', fontSize: '0.78rem' }}>{r.technician_name}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', fontFamily: 'monospace', fontSize: '0.76rem', color: '#334155' }}>{r.job_card_number}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#1e293b' }}>{r.reg_number}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.branch}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.fuel_type}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#334155' }}>₹{Math.round(r.gross_labour_amount).toLocaleString('en-IN')}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: '#16a34a' }}>₹{Math.round(r.technician_income).toLocaleString('en-IN')}</td>
+                            </tr>
+                          </>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+                      <td colSpan={5} style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#1e293b' }}>TOTAL ({yesterdayReport.rows.length} jobs)</td>
+                      <td style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#1e293b' }}>
+                        ₹{Math.round(yesterdayReport.rows.reduce((s, r) => s + r.gross_labour_amount, 0)).toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.75rem', fontWeight: 800, color: '#16a34a', fontSize: '0.9rem' }}>
+                        ₹{Math.round(yesterdayReport.rows.reduce((s, r) => s + r.technician_income, 0)).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
