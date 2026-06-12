@@ -562,20 +562,15 @@ Deno.serve(async (req) => {
       evPercent: evSharePercent,
     })
 
-    const emailHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
+    // Always use internal dispatch secret to call send-transactional-email
+    // This avoids any user JWT forwarding issues
+    if (!internalDispatchSecret) {
+      return json(headers, { error: 'Missing INTERNAL_EMAIL_DISPATCH_SECRET env var' }, 500)
     }
 
-    if (runMode === 'scheduled') {
-      if (!internalDispatchSecret) {
-        return json(headers, { error: 'Missing INTERNAL_EMAIL_DISPATCH_SECRET for scheduled mode' }, 500)
-      }
-      emailHeaders['x-internal-email-secret'] = internalDispatchSecret
-    } else {
-      if (!hasValidBearerAuth(req)) {
-        return json(headers, { error: 'Missing Authorization header' }, 401)
-      }
-      emailHeaders.Authorization = req.headers.get('Authorization') ?? ''
+    const emailHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-internal-email-secret': internalDispatchSecret,
     }
 
     const emailRes = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/send-transactional-email`, {
