@@ -110,6 +110,48 @@ type ReceptionVehicleSnapshot = {
   created_at: string | null
 }
 
+type BodyshopDocKey =
+  | 'doc_claim_form'
+  | 'doc_rc'
+  | 'doc_insurance'
+  | 'doc_dl'
+  | 'doc_aadhaar'
+  | 'doc_pan'
+  | 'doc_kyc'
+  | 'doc_gst'
+  | 'doc_company_pan'
+  | 'doc_bank_detail'
+
+type BodyshopRepairCardDocumentRow = {
+  id: number
+  repair_card_id: number
+  reception_entry_id: number | null
+  doc_key: BodyshopDocKey
+  storage_bucket: string
+  storage_path: string
+  file_name: string | null
+  content_type: string | null
+  file_size_bytes: number | null
+  drive_url: string | null
+  drive_file_id: string | null
+  uploaded_at: string
+  created_at: string
+  updated_at: string
+}
+
+const BODYSHOP_DOCS: { k: BodyshopDocKey; label: string; mandatoryFor: CustomerType[] }[] = [
+  { k: 'doc_claim_form', label: 'Claim Form', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_rc', label: 'RC', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_insurance', label: 'Insurance Copy', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_dl', label: 'Driving Licence', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_aadhaar', label: 'Aadhaar Card', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_pan', label: 'PAN Card', mandatoryFor: ['individual', 'firm'] },
+  { k: 'doc_kyc', label: 'KYC', mandatoryFor: ['individual'] },
+  { k: 'doc_gst', label: 'GST', mandatoryFor: ['firm'] },
+  { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
+  { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: [] },
+]
+
 // ── component ──────────────────────────────────────────────────────────────────
 export default function BodyshopRepairPage() {
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
@@ -136,7 +178,11 @@ export default function BodyshopRepairPage() {
   const [uploadingIntakePhotos, setUploadingIntakePhotos] = useState(false)
   const [kmDraft, setKmDraft] = useState('')
   const [savingReceiving, setSavingReceiving] = useState(false)
+  const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
+  const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
+  const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
+  const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
 
   // new form
   const [nf, setNf] = useState({
@@ -180,6 +226,15 @@ export default function BodyshopRepairPage() {
       cancelled = true
     }
   }, [selected?.id, selected?.reception_entry_id])
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setBodyshopDocsByKey({})
+      return
+    }
+
+    void loadBodyshopDocuments(selected.id)
+  }, [selected?.id])
 
   type AccidentReceptionRow = {
     id: number
@@ -538,6 +593,163 @@ export default function BodyshopRepairPage() {
     }
   }
 
+  async function loadBodyshopDocuments(repairCardId: number) {
+    const { data, error } = await supabase
+      .from('bodyshop_repair_card_documents')
+      .select('id, repair_card_id, reception_entry_id, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_at, created_at, updated_at')
+      .eq('repair_card_id', repairCardId)
+
+    if (error) {
+      setBodyshopDocsByKey({})
+      return
+    }
+
+    const nextMap: Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>> = {}
+    ;((data ?? []) as BodyshopRepairCardDocumentRow[]).forEach((row) => {
+      nextMap[row.doc_key] = row
+    })
+    setBodyshopDocsByKey(nextMap)
+  }
+
+  function startBodyshopDocUpload(docKey: BodyshopDocKey, mode: 'upload' | 'replace') {
+    setPendingDocAction({ docKey, mode })
+    bodyshopDocInputRef.current?.click()
+  }
+
+  async function handleBodyshopDocFilePicked(files: FileList | null) {
+    const action = pendingDocAction
+    setPendingDocAction(null)
+
+    if (!action || !selected || !files || files.length === 0) return
+
+    const file = files[0]
+    const docKey = action.docKey
+    const existing = bodyshopDocsByKey[docKey]
+    setUploadingDocKey(docKey)
+
+    try {
+      const dealerCtx = await getDealerContext()
+      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
+      const regNo = String(selected.reg_number ?? selectedReception?.reg_number ?? '').trim().toUpperCase()
+      const folder = `${dealerCode}/service-advisor-bodyshop-docs/${selected.id}/${docKey}`
+      const safeName = sanitizeFileNamePart(file.name || `${docKey}.bin`)
+      const storagePath = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName}`
+
+      const uploadRes = await supabase.storage
+        .from(AUTODOC_BUCKET)
+        .upload(storagePath, file, {
+          upsert: false,
+          contentType: file.type || 'application/octet-stream',
+        })
+
+      if (uploadRes.error) {
+        toast_(uploadRes.error.message, false)
+        return
+      }
+
+      const authRes = await supabase.auth.getUser()
+      const uploadedBy = authRes.data.user?.email || authRes.data.user?.id || null
+      const receptionEntryId = Number(selected.reception_entry_id)
+
+      const { data: upsertedRows, error: upsertErr } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .upsert({
+          dealer_code: dealerCode,
+          repair_card_id: selected.id,
+          reception_entry_id: Number.isFinite(receptionEntryId) ? receptionEntryId : null,
+          reg_number: regNo || null,
+          doc_key: docKey,
+          storage_bucket: AUTODOC_BUCKET,
+          storage_path: storagePath,
+          file_name: file.name,
+          content_type: file.type || null,
+          file_size_bytes: file.size,
+          uploaded_by: uploadedBy,
+          uploaded_at: new Date().toISOString(),
+        }, {
+          onConflict: 'repair_card_id,doc_key',
+        })
+        .select('id, repair_card_id, reception_entry_id, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_at, created_at, updated_at')
+
+      if (upsertErr || !upsertedRows?.length) {
+        toast_(upsertErr?.message ?? 'Failed to save document metadata', false)
+        return
+      }
+
+      const row = upsertedRows[0] as BodyshopRepairCardDocumentRow
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+      const sessionRes = await supabase.auth.getSession()
+      const token = sessionRes.data.session?.access_token
+
+      if (!supabaseUrl || !token) {
+        toast_('No active session for Drive offload request', false)
+        return
+      }
+
+      const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          resource_type: 'bodyshop_document',
+          resource_id: row.id,
+          bucket_id: AUTODOC_BUCKET,
+          object_name: storagePath,
+          file_type: docKey,
+          file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
+        }),
+      })
+
+      const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+      if (!driveRes.ok || drivePayload?.error) {
+        toast_(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`, false)
+        return
+      }
+
+      await loadBodyshopDocuments(selected.id)
+
+      const updated = await updateRepairCard(selected.id, { [docKey]: true } as Partial<RepairCard>)
+      setSelected(updated)
+      setCards((prev) => prev.map((card) => card.id === updated.id ? updated : card))
+
+      if (existing?.storage_path && existing.storage_path !== storagePath) {
+        await supabase.storage.from(AUTODOC_BUCKET).remove([existing.storage_path])
+      }
+
+      toast_(action.mode === 'replace' ? 'Document replaced ✅' : 'Document uploaded ✅')
+    } catch (e: any) {
+      toast_(e.message ?? 'Upload failed', false)
+    } finally {
+      setUploadingDocKey(null)
+    }
+  }
+
+  async function handleViewBodyshopDoc(docKey: BodyshopDocKey) {
+    const row = bodyshopDocsByKey[docKey]
+    if (!row) {
+      toast_('No uploaded file found for this document', false)
+      return
+    }
+
+    if (row.drive_url) {
+      window.open(row.drive_url, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    const { data, error } = await supabase.storage
+      .from(row.storage_bucket || AUTODOC_BUCKET)
+      .createSignedUrl(row.storage_path, 300)
+
+    if (error || !data?.signedUrl) {
+      toast_(error?.message ?? 'Unable to open file', false)
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
   function parseKmDraftValue(raw: string): number | null | 'invalid' {
     const trimmed = String(raw ?? '').trim()
     if (!trimmed) return null
@@ -570,13 +782,14 @@ export default function BodyshopRepairPage() {
       toast_('KM Reading must be a non-negative number', false)
       return
     }
+    const kmValue: number | null = parsedKm === 'invalid' ? null : parsedKm
 
     setSavingReceiving(true)
     try {
       if (kmDirty && selectedReception?.id) {
         const { error: kmError } = await supabase
           .from('service_reception_entries')
-          .update({ km_reading: parsedKm })
+          .update({ km_reading: kmValue })
           .eq('id', selectedReception.id)
 
         if (kmError) {
@@ -584,10 +797,10 @@ export default function BodyshopRepairPage() {
           return
         }
 
-        setSelectedReception((prev) => prev ? { ...prev, km_reading: parsedKm } : prev)
+        setSelectedReception((prev) => prev ? { ...prev, km_reading: kmValue } : prev)
         setKmPresentByReceptionId((prev) => ({
           ...prev,
-          [selectedReception.id]: parsedKm != null,
+          [selectedReception.id]: kmValue != null,
         }))
       }
 
@@ -1409,20 +1622,7 @@ export default function BodyshopRepairPage() {
                       const ct = selected.customer_type ?? 'individual'
                       const noDocsRequired = ct === 'cash' || ct === 'foc'
 
-                      const ALL_DOCS: { k: keyof RepairCard; label: string; mandatoryFor: CustomerType[] }[] = [
-                        { k: 'doc_claim_form',  label: 'Claim Form',        mandatoryFor: ['individual', 'firm'] },
-                        { k: 'doc_rc',          label: 'RC',                mandatoryFor: ['individual', 'firm'] },
-                        { k: 'doc_insurance',   label: 'Insurance Copy',    mandatoryFor: ['individual', 'firm'] },
-                        { k: 'doc_dl',          label: 'Driving Licence',   mandatoryFor: ['individual', 'firm'] },
-                        { k: 'doc_aadhaar',     label: 'Aadhaar Card',      mandatoryFor: ['individual', 'firm'] },
-                        { k: 'doc_pan',         label: 'PAN Card',          mandatoryFor: ['individual', 'firm'] },
-                        { k: 'doc_kyc',         label: 'KYC',               mandatoryFor: ['individual'] },
-                        { k: 'doc_gst',         label: 'GST',               mandatoryFor: ['firm'] },
-                        { k: 'doc_company_pan', label: 'Company PAN Card',  mandatoryFor: ['firm'] },
-                        { k: 'doc_bank_detail', label: 'Bank Detail',       mandatoryFor: [] },
-                      ]
-
-                      const visibleDocs = noDocsRequired ? [] : ALL_DOCS
+                      const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
                       const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
                       const optionalDocs  = visibleDocs.filter(d => !d.mandatoryFor.includes(ct as CustomerType))
                       const collectedMandatory = mandatoryDocs.filter(d => (selected as any)[d.k]).length
@@ -1489,31 +1689,60 @@ export default function BodyshopRepairPage() {
                                 </div>
                               </div>
 
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, marginBottom: 16 }}>
                                 {mandatoryDocs.map(({ k, label }) => {
                                   const checked = (selected as any)[k] ?? false
+                                  const attachedDoc = bodyshopDocsByKey[k]
+                                  const busy = uploadingDocKey === k
                                   return (
-                                    <label key={k} onClick={() => patch(k, !checked)} style={{
+                                    <div key={k} style={{
                                       display: 'flex', alignItems: 'center', gap: 10,
                                       padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
                                       background: checked ? '#f0fdf4' : '#fff9f9',
                                       border: `1.5px solid ${checked ? '#86efac' : '#fca5a5'}`,
                                     }}>
-                                      <div style={{
+                                      <button onClick={() => patch(k, !checked)} style={{
                                         width: 20, height: 20, borderRadius: 4, flexShrink: 0,
                                         border: `2px solid ${checked ? '#16a34a' : '#ef4444'}`,
                                         background: checked ? '#16a34a' : '#fff',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer',
                                       }}>
                                         {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
-                                      </div>
+                                      </button>
                                       <div style={{ flex: 1 }}>
                                         <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{label}</div>
                                         <div style={{ fontSize: 10, color: checked ? '#16a34a' : '#ef4444', fontWeight: 600 }}>
                                           {checked ? 'Collected' : 'Required'}
                                         </div>
                                       </div>
-                                    </label>
+                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                                        <button
+                                          className="btn"
+                                          onClick={() => startBodyshopDocUpload(k, 'upload')}
+                                          disabled={busy}
+                                          style={{ padding: '6px 10px', fontSize: 11 }}
+                                        >
+                                          {busy ? 'Uploading…' : 'Upload'}
+                                        </button>
+                                        <button
+                                          className="btn"
+                                          onClick={() => void handleViewBodyshopDoc(k)}
+                                          disabled={!attachedDoc}
+                                          style={{ padding: '6px 10px', fontSize: 11 }}
+                                        >
+                                          View
+                                        </button>
+                                        <button
+                                          className="btn"
+                                          onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                          disabled={!attachedDoc || busy}
+                                          style={{ padding: '6px 10px', fontSize: 11 }}
+                                        >
+                                          Replace
+                                        </button>
+                                      </div>
+                                    </div>
                                   )
                                 })}
                               </div>
@@ -1523,29 +1752,58 @@ export default function BodyshopRepairPage() {
                                   <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
                                     Optional
                                   </div>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
                                     {optionalDocs.map(({ k, label }) => {
                                       const checked = (selected as any)[k] ?? false
+                                      const attachedDoc = bodyshopDocsByKey[k]
+                                      const busy = uploadingDocKey === k
                                       return (
-                                        <label key={k} onClick={() => patch(k, !checked)} style={{
+                                        <div key={k} style={{
                                           display: 'flex', alignItems: 'center', gap: 10,
                                           padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
                                           background: checked ? '#f0fdf4' : '#fafafa',
                                           border: `1.5px solid ${checked ? '#86efac' : '#e5e7eb'}`,
                                         }}>
-                                          <div style={{
+                                          <button onClick={() => patch(k, !checked)} style={{
                                             width: 20, height: 20, borderRadius: 4, flexShrink: 0,
                                             border: `2px solid ${checked ? '#16a34a' : '#d1d5db'}`,
                                             background: checked ? '#16a34a' : '#fff',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer',
                                           }}>
                                             {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
-                                          </div>
+                                          </button>
                                           <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</div>
                                             <div style={{ fontSize: 10, color: '#9ca3af' }}>Optional</div>
                                           </div>
-                                        </label>
+                                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                                            <button
+                                              className="btn"
+                                              onClick={() => startBodyshopDocUpload(k, 'upload')}
+                                              disabled={busy}
+                                              style={{ padding: '6px 10px', fontSize: 11 }}
+                                            >
+                                              {busy ? 'Uploading…' : 'Upload'}
+                                            </button>
+                                            <button
+                                              className="btn"
+                                              onClick={() => void handleViewBodyshopDoc(k)}
+                                              disabled={!attachedDoc}
+                                              style={{ padding: '6px 10px', fontSize: 11 }}
+                                            >
+                                              View
+                                            </button>
+                                            <button
+                                              className="btn"
+                                              onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                              disabled={!attachedDoc || busy}
+                                              style={{ padding: '6px 10px', fontSize: 11 }}
+                                            >
+                                              Replace
+                                            </button>
+                                          </div>
+                                        </div>
                                       )
                                     })}
                                   </div>
@@ -1553,6 +1811,16 @@ export default function BodyshopRepairPage() {
                               )}
                             </>
                           )}
+
+                          <input
+                            ref={bodyshopDocInputRef}
+                            type="file"
+                            className="hidden"
+                            onChange={(event) => {
+                              void handleBodyshopDocFilePicked(event.target.files)
+                              event.target.value = ''
+                            }}
+                          />
 
                           {Object.keys(editPatch).length > 0 && (
                             <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}

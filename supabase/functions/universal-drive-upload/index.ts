@@ -2,8 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SignJWT, importPKCS8 } from 'https://esm.sh/jose@5.9.6'
 
 type UploadBody = {
-  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo'
-  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo'
+  resource_type?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document'
+  resourceType?: 'document' | 'panel_photo' | 'reception_estimate' | 'reception_invoice' | 'bodyshop_intake_photo' | 'bodyshop_document'
   bucket_id?: string
   bucketId?: string
   object_name?: string
@@ -44,6 +44,19 @@ const PHOTO_TYPES = new Set([
   'paint',
 ])
 
+const BODYSHOP_DOC_KEYS = new Set([
+  'doc_claim_form',
+  'doc_rc',
+  'doc_insurance',
+  'doc_dl',
+  'doc_aadhaar',
+  'doc_pan',
+  'doc_kyc',
+  'doc_gst',
+  'doc_company_pan',
+  'doc_bank_detail',
+])
+
 // Techwheels canonical Drive root: all registration subfolders must be created only under this folder.
 const TECHWHEELS_ROOT_FOLDER_ID = '1qbNABzrPC1OdqAFtPhJ6HZHpEOT7hWCQ'
 
@@ -67,6 +80,8 @@ function normalizeBody(body: UploadBody) {
         ? 'reception_invoice'
         : rawResourceType === 'bodyshop_intake_photo'
           ? 'bodyshop_intake_photo'
+          : rawResourceType === 'bodyshop_document'
+            ? 'bodyshop_document'
       : 'document'
   const bucketId = String(body.bucket_id ?? body.bucketId ?? 'autodoc').trim()
   const objectName = String(body.object_name ?? body.objectName ?? '').trim().replace(/^\/+/, '')
@@ -376,14 +391,18 @@ Deno.serve(async (req) => {
     const body = normalizeBody(await req.json() as UploadBody)
     const isReceptionUpload = body.resourceType === 'reception_estimate' || body.resourceType === 'reception_invoice'
     const isBodyshopIntakeUpload = body.resourceType === 'bodyshop_intake_photo'
+    const isBodyshopDocumentUpload = body.resourceType === 'bodyshop_document'
 
-    if (!isReceptionUpload && !isBodyshopIntakeUpload && !body.jobCardId) {
+    if (!isReceptionUpload && !isBodyshopIntakeUpload && !isBodyshopDocumentUpload && !body.jobCardId) {
       return json(400, { ok: false, error: 'job_card_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isReceptionUpload && !body.receptionEntryId) {
       return json(400, { ok: false, error: 'reception_entry_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (isBodyshopIntakeUpload && !body.resourceId) {
+      return json(400, { ok: false, error: 'resource_id is required', error_code: 'VALIDATION_ERROR' })
+    }
+    if (isBodyshopDocumentUpload && !body.resourceId) {
       return json(400, { ok: false, error: 'resource_id is required', error_code: 'VALIDATION_ERROR' })
     }
     if (!body.objectName) {
@@ -409,6 +428,14 @@ Deno.serve(async (req) => {
       return json(400, {
         ok: false,
         error: 'file_type must be one of defect|primer|paint for panel_photo resource',
+        error_code: 'VALIDATION_ERROR',
+      })
+    }
+
+    if (body.resourceType === 'bodyshop_document' && !BODYSHOP_DOC_KEYS.has(body.fileType)) {
+      return json(400, {
+        ok: false,
+        error: 'file_type must be a valid bodyshop document key',
         error_code: 'VALIDATION_ERROR',
       })
     }
@@ -584,6 +611,48 @@ Deno.serve(async (req) => {
       rowCreatedAt = intakeRow.created_at
       existingDriveFileId = String(intakeRow.drive_file_id ?? '').trim()
       effectiveFileType = body.fileType || 'bodyshop_intake_photo'
+    } else if (body.resourceType === 'bodyshop_document') {
+      const bodyshopDocId = Number(body.resourceId)
+      if (!Number.isFinite(bodyshopDocId)) {
+        return json(400, {
+          ok: false,
+          error: 'Invalid resource_id for bodyshop_document',
+          error_code: 'VALIDATION_ERROR',
+        })
+      }
+
+      const { data: docRows, error: bodyshopDocErr } = await supabase
+        .from('bodyshop_repair_card_documents')
+        .select('id, created_at, reg_number, drive_file_id, doc_key')
+        .eq('id', bodyshopDocId)
+        .limit(1)
+
+      if (bodyshopDocErr) {
+        return json(500, { ok: false, error: bodyshopDocErr.message, error_code: 'DB_ERROR' })
+      }
+
+      const docRow = docRows?.[0]
+      if (!docRow?.id) {
+        return json(404, {
+          ok: false,
+          error: 'Bodyshop document row not found for upload payload',
+          error_code: 'BODYSHOP_DOCUMENT_NOT_FOUND',
+        })
+      }
+
+      registrationNo = String(docRow.reg_number ?? '').trim()
+      if (!registrationNo) {
+        return json(400, {
+          ok: false,
+          error: 'Registration number not found for bodyshop document row',
+          error_code: 'REGISTRATION_NOT_FOUND',
+        })
+      }
+
+      rowId = String(docRow.id)
+      rowCreatedAt = docRow.created_at
+      existingDriveFileId = String(docRow.drive_file_id ?? '').trim()
+      effectiveFileType = String(docRow.doc_key ?? body.fileType || 'bodyshop_document')
     } else {
       const receptionId = Number(body.receptionEntryId)
       if (!Number.isFinite(receptionId)) {
@@ -653,6 +722,8 @@ Deno.serve(async (req) => {
         ? `${normalizedReg}_PANEL_${normalizedFileType}_${datePart}_${rowId.slice(0, 8)}.${ext}`
         : body.resourceType === 'bodyshop_intake_photo'
           ? `${normalizedReg}_SA_BODYSHOP_PHOTO_${datePart}_${rowId}.${ext}`
+        : body.resourceType === 'bodyshop_document'
+          ? `${normalizedReg}_SA_BODYSHOP_DOC_${normalizedFileType}_${datePart}_${rowId}.${ext}`
         : body.resourceType === 'reception_invoice'
           ? `${normalizedReg}_SA_INVOICE_${datePart}_${rowId}.${ext}`
           : `${normalizedReg}_SA_ESTIMATE_${datePart}_${rowId}.${ext}`
@@ -735,6 +806,11 @@ Deno.serve(async (req) => {
               drive_url: driveUrl,
               drive_file_id: fileId,
             }
+        : body.resourceType === 'bodyshop_document'
+          ? {
+              drive_url: driveUrl,
+              drive_file_id: fileId,
+            }
         : {
             drive_url: driveUrl,
             drive_file_id: fileId,
@@ -745,6 +821,8 @@ Deno.serve(async (req) => {
         ? 'panel_photos'
         : body.resourceType === 'bodyshop_intake_photo'
           ? 'bodyshop_intake_vehicle_photos'
+        : body.resourceType === 'bodyshop_document'
+          ? 'bodyshop_repair_card_documents'
         : 'service_reception_entries'
     const { error: updateErr } = await supabase
       .from(targetTable)

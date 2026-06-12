@@ -170,13 +170,13 @@ Stage-governance note:
 - [x] **Task 2.2:** Map/save Customer Type to bodyshop repair card data contract.
 - [x] **Task 2.3:** Add Bodyshop-only vehicle photo uploader in Service Advisor row/detail.
 - [x] **Task 2.4:** Enforce client-side max 20 image cap per job card.
-- [ ] **Task 2.5:** Add backend-side safety validation for max photo count.
+- [x] **Task 2.5:** Add backend-side safety validation for max photo count.
 
 ### Phase 3: Storage, Validation, and Auditability
 - [x] **Task 3.1:** Define storage path convention for bodyshop intake photos.
-- [ ] **Task 3.2:** Persist uploaded file metadata (job card linkage, uploader, timestamp).
-- [ ] **Task 3.3:** Validate allowed MIME types and max file size.
-- [ ] **Task 3.4:** Add error states for duplicate/overflow/failed upload.
+- [x] **Task 3.2:** Persist uploaded file metadata (job card linkage, uploader, timestamp).
+- [x] **Task 3.3:** Validate allowed MIME types and max file size.
+- [x] **Task 3.4:** Add error states for duplicate/overflow/failed upload.
 
 ### Phase 4: QA, UAT, and Rollout
 - [ ] **Task 4.1:** Build test matrix for category split behavior.
@@ -200,6 +200,13 @@ Stage-governance note:
 - [x] **Task 6.3 (Phase A):** Remove unused `service_branches` API usage from web/mobile modules; keep behavior parity in filters.
 - [x] **Task 6.4 (Phase B):** Prepare migration file to drop `public.service_branches` (table, policies, and sequence) after Phase A validation sign-off.
 - [ ] **Task 6.5 (Phase B):** Execute drop migration only after QA confirms no runtime reads remain and no branch/fuel regressions exist.
+
+### Phase 7: Bodyshop V2 Parent-Child Convergence
+- [x] **Task 7.1:** Create dedicated docs child table with one-slot-per-doc contract (`repair_card_id`, `doc_key`) and Drive link fields.
+- [x] **Task 7.2:** Backfill/attach `repair_card_id` across bodyshop child tables and add FK constraints.
+- [x] **Task 7.3:** Enforce strict parent-child contract (`repair_card_id` mandatory where applicable) after fail-fast prechecks.
+- [x] **Task 7.4:** Ensure `reception_entry_id` index coverage across bodyshop child tables.
+- [x] **Task 7.5:** Standardize dealer-scoped RLS across bodyshop child tables (admin/service-role compatibility retained).
 
 ---
 
@@ -267,6 +274,15 @@ Stage-governance note:
 ⏳ 6.5 | Execute drop migration + post-checks | API + QA | - | - | run only after zero runtime usage verification
 ```
 
+### Phase 7
+```
+✅ 7.1 | Create bodyshop docs child-table contract | API | 2026-06-12 | 2026-06-12 | Executed `20260612170000_add_bodyshop_repair_card_documents.sql`
+✅ 7.2 | Backfill child->parent repair_card_id links + add FKs | API | 2026-06-12 | 2026-06-12 | Executed `20260612181000_bodyshop_v2_parent_child_backfill.sql`
+✅ 7.3 | Apply strict parent-child enforcement | API | 2026-06-12 | 2026-06-12 | Executed `20260612183000_bodyshop_v2_parent_child_strict_enforcement.sql`
+✅ 7.4 | Align child-table dealer-scoped RLS policies | API | 2026-06-12 | 2026-06-12 | Executed `20260612182000_bodyshop_v2_rls_alignment.sql`
+✅ 7.5 | Validate FK + parent-link contract readiness | API + QA | 2026-06-12 | 2026-06-12 | Migration pipeline completed end-to-end without strict-phase abort
+```
+
 ---
 
 ## Dependencies & Prerequisites
@@ -275,7 +291,7 @@ Stage-governance note:
 - [x] Final decision on bodyshop photo metadata table contract.
 - [x] Storage bucket path convention approval.
 - [ ] UAT sample entries covering Accident + non-Accident service types.
-- [x] DB-level canonical key hardening for bodyshop cards (`reception_entry_id` + uniqueness) prepared in migration file; pending user-run apply.
+- [x] DB-level canonical key hardening for bodyshop cards (`reception_entry_id` + uniqueness) executed and active.
 - [ ] Phase A deprecation validation sign-off: zero runtime dependency on `service_branches` in web/mobile.
 
 ---
@@ -562,6 +578,48 @@ After migration apply:
   - Added targeted reset script for one-card replay from Reception source:
     - `scripts/16_reset_bodyshop_progress_jc_mbtplt_jp2_2627_002479.sql`
   - Script now enforces existing linked reception row, re-syncs base reception fields, resets bodyshop progression fields, and clears intake photo metadata rows for the linked reception entry.
+
+### 2026-06-12 - Mandatory Docs Upload/View/Replace Schema + Wiring
+- New migration prepared for manual execution:
+  - `supabase/migrations/20260612170000_add_bodyshop_repair_card_documents.sql`
+- Migration adds authoritative persistence for SA docs rows:
+  - New table `public.bodyshop_repair_card_documents`
+  - Unique slot per repair card + document key (`repair_card_id`, `doc_key`)
+  - RLS + dealer-scoped policies + admin bypass policy
+  - Updated-at trigger via `public.set_updated_at()`
+- Universal uploader extended:
+  - `supabase/functions/universal-drive-upload/index.ts` now supports `resource_type = bodyshop_document`
+  - Resolves row by `resource_id`, uploads/replaces in Google Drive, writes `drive_url` + `drive_file_id` back to `bodyshop_repair_card_documents`
+- Bodyshop Repair UI wired:
+  - `src/pages/BodyshopRepairPage.tsx` now renders per-document actions for each mandatory/optional row:
+    - `Upload`
+    - `View`
+    - `Replace`
+  - Upload path persists metadata row + invokes universal uploader + marks corresponding doc boolean on `bodyshop_repair_cards`.
+
+### 2026-06-12 - Bodyshop V2 Parent-Child Convergence (Executed)
+- Requirement implemented: strict parent-child contract for bodyshop child tables with `bodyshop_repair_cards` as canonical parent.
+- Migrations executed in order:
+  - `supabase/migrations/20260612170000_add_bodyshop_repair_card_documents.sql`
+  - `supabase/migrations/20260612181000_bodyshop_v2_parent_child_backfill.sql`
+  - `supabase/migrations/20260612182000_bodyshop_v2_rls_alignment.sql`
+  - `supabase/migrations/20260612183000_bodyshop_v2_parent_child_strict_enforcement.sql`
+- Schema convergence delivered:
+  - Added/filled `repair_card_id` linkage on child tables that lacked parent linkage.
+  - Enforced strict parent-linking (`repair_card_id` not-null where applicable) after backfill checks.
+  - Ensured `reception_entry_id` indexing coverage across bodyshop child tables.
+  - Validated FK constraints after backfill and before strict mode completion.
+- RLS convergence delivered:
+  - Standardized dealer-scoped RBAC policy model on bodyshop child tables.
+  - Preserved admin bypass and service-role backend compatibility.
+- Data-safety posture:
+  - Backfill phase remained additive and non-destructive.
+  - Strict phase configured fail-fast to block silent corruption if orphan rows were present.
+
+### 2026-06-12 - Plan Documentation Consolidation
+- Plan governance decision: keep `Bodyshop-Flow.md` as single active source of implementation truth.
+- V2 parent-child migration planning content has been consolidated into this active file.
+- Separate active plan file for V2 was removed to avoid split tracking.
 
 ---
 
