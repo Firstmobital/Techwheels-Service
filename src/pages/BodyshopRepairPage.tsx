@@ -10,6 +10,7 @@ import {
   getGroupForStage, STAGE_LABELS, STAGE_GROUPS,
   type RepairCard, type CustomerType,
 } from '../lib/api/bodyshopRepair'
+import { listBodyshopSurveyors, type BodyshopSurveyor } from '../lib/api/settings'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function fmt(v: string | null | undefined) {
@@ -174,6 +175,7 @@ type BodyshopDocKey =
   | 'doc_company_pan'
   | 'doc_bank_detail'
   | 'doc_estimate'
+  | 'doc_survey_approval'
 
 type BodyshopRepairCardDocumentRow = {
   id: number
@@ -192,7 +194,12 @@ type BodyshopRepairCardDocumentRow = {
   updated_at: string
 }
 
-const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate'>; label: string; mandatoryFor: CustomerType[] }[] = [
+type DocUploadFeedback = {
+  tone: 'ok' | 'error' | 'info'
+  text: string
+}
+
+const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'>; label: string; mandatoryFor: CustomerType[] }[] = [
   { k: 'doc_claim_form', label: 'Claim Form', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc', label: 'RC', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_insurance', label: 'Insurance Copy', mandatoryFor: ['individual', 'firm'] },
@@ -205,8 +212,8 @@ const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate'>; label: string
   { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: ['firm'] },
 ]
 
-const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate'> => (
-  docKey !== 'doc_estimate'
+const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate' | 'doc_survey_approval'> => (
+  docKey !== 'doc_estimate' && docKey !== 'doc_survey_approval'
 )
 
 // ── component ──────────────────────────────────────────────────────────────────
@@ -241,6 +248,8 @@ export default function BodyshopRepairPage() {
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
+  const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
+  const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
   const autoAdvanceDocsLockRef = useRef(false)
@@ -252,6 +261,24 @@ export default function BodyshopRepairPage() {
   })
 
   useEffect(() => { void load() }, [dateRange])
+
+  useEffect(() => {
+    let cancelled = false
+
+    ;(async () => {
+      const result = await listBodyshopSurveyors()
+      if (cancelled) return
+      if (result.error || !result.data) {
+        setBodyshopSurveyors([])
+        return
+      }
+      setBodyshopSurveyors(result.data)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const receptionEntryId = Number(selected?.reception_entry_id)
@@ -572,6 +599,90 @@ export default function BodyshopRepairPage() {
       toast_('Saved ✅')
     } catch (e: any) { toast_(e.message, false) }
     setSaving(false)
+  }
+
+  async function handleSaveSurveyInfo() {
+    if (!selected || !Object.keys(editPatch).length) return
+
+    const surveyDate = String(selected.survey_date ?? '').trim()
+    if (!surveyDate) {
+      toast_('Survey Date is required', false)
+      return
+    }
+
+    const surveyStatus = String(selected.survey_status ?? '').trim().toLowerCase()
+    if (surveyStatus !== 'hold' && surveyStatus !== 'approved') {
+      toast_('Survey Status must be Hold or Approved', false)
+      return
+    }
+
+    if (surveyStatus === 'approved' && !bodyshopDocsByKey.doc_survey_approval) {
+      toast_('Upload Survey Approval photo before saving Approved status', false)
+      return
+    }
+
+    const holdReason = String(selected.survey_hold_reason ?? '').trim()
+    if (surveyStatus === 'hold' && !holdReason) {
+      toast_('Hold Remark is required when Survey Status is Hold', false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || null
+      const now = new Date().toISOString()
+
+      const patch: Partial<RepairCard> = {
+        ...editPatch,
+        survey_date: surveyDate,
+        survey_status: surveyStatus,
+        survey_hold_reason: surveyStatus === 'hold' ? holdReason : null,
+        survay_info_updated_by: actor,
+        survay_info_updated_at: now,
+      }
+
+      if (!selected.survay_info_by) patch.survay_info_by = actor
+      if (!selected.survay_info_at) patch.survay_info_at = now
+
+      const updated = await updateRepairCard(selected.id, patch)
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      setEditPatch({})
+      toast_('Survey info saved ✅')
+    } catch (e: any) {
+      toast_(e.message ?? 'Unable to save survey info', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleSendToBodyshopFloor(floorValue: 'Floor 2' | 'Floor 3') {
+    if (!selected) return
+    if (!bodyshopDocsByKey.doc_survey_approval) {
+      toast_('Upload Survey Approval Photo first', false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const patch: Partial<RepairCard> = { bodyshop_floor: floorValue }
+      if (selected.current_stage === 9) {
+        patch.current_stage = 10
+        patch.current_stage_name = STAGE_LABELS[10] ?? 'Parts Status'
+      }
+
+      const updated = await updateRepairCard(selected.id, patch)
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      toast_(selected.current_stage === 9
+        ? `Sent to ${floorValue}. Stage moved to Parts Status ✅`
+        : `Sent to ${floorValue} ✅`)
+    } catch (e: any) {
+      toast_(e.message ?? 'Unable to send to floor', false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleSaveEstimateStage() {
@@ -998,6 +1109,10 @@ export default function BodyshopRepairPage() {
     const docKey = action.docKey
     const existing = bodyshopDocsByKey[docKey]
     setUploadingDocKey(docKey)
+    setDocUploadFeedbackByKey((prev) => ({
+      ...prev,
+      [docKey]: { tone: 'info', text: action.mode === 'replace' ? 'Replacing file...' : 'Uploading file...' },
+    }))
 
     try {
       const dealerCtx = await getDealerContext()
@@ -1015,6 +1130,10 @@ export default function BodyshopRepairPage() {
         })
 
       if (uploadRes.error) {
+        setDocUploadFeedbackByKey((prev) => ({
+          ...prev,
+          [docKey]: { tone: 'error', text: `Upload failed: ${uploadRes.error.message}` },
+        }))
         toast_(uploadRes.error.message, false)
         return
       }
@@ -1044,7 +1163,15 @@ export default function BodyshopRepairPage() {
         .select('id, repair_card_id, reception_entry_id, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_at, created_at, updated_at')
 
       if (upsertErr || !upsertedRows?.length) {
-        toast_(upsertErr?.message ?? 'Failed to save document metadata', false)
+        const rawErr = upsertErr?.message ?? 'Failed to save document metadata'
+        const prettyErr = /doc_key|doc_survey_approval|bodyshop_repair_card_documents_doc_key_check/i.test(rawErr)
+          ? 'Upload reached storage, but DB metadata save failed for Survey Approval Photo. Apply latest migration and try again.'
+          : rawErr
+        setDocUploadFeedbackByKey((prev) => ({
+          ...prev,
+          [docKey]: { tone: 'error', text: prettyErr },
+        }))
+        toast_(prettyErr, false)
         return
       }
 
@@ -1067,6 +1194,10 @@ export default function BodyshopRepairPage() {
       const token = sessionRes.data.session?.access_token
 
       if (!supabaseUrl || !token) {
+        setDocUploadFeedbackByKey((prev) => ({
+          ...prev,
+          [docKey]: { tone: 'info', text: 'Uploaded. Drive sync skipped due missing session; View/Replace is available.' },
+        }))
         toast_('No active session for Drive offload request', false)
         return
       }
@@ -1089,6 +1220,10 @@ export default function BodyshopRepairPage() {
 
       const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
       if (!driveRes.ok || drivePayload?.error) {
+        setDocUploadFeedbackByKey((prev) => ({
+          ...prev,
+          [docKey]: { tone: 'info', text: `Uploaded. Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}` },
+        }))
         toast_(`Document uploaded, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, false)
       } else {
         await loadBodyshopDocuments(selected.id)
@@ -1104,8 +1239,17 @@ export default function BodyshopRepairPage() {
         await supabase.storage.from(AUTODOC_BUCKET).remove([existing.storage_path])
       }
 
+      setDocUploadFeedbackByKey((prev) => ({
+        ...prev,
+        [docKey]: { tone: 'ok', text: action.mode === 'replace' ? 'Photo replaced successfully.' : 'Photo uploaded successfully.' },
+      }))
+
       toast_(action.mode === 'replace' ? 'Document replaced ✅' : 'Document uploaded ✅')
     } catch (e: any) {
+      setDocUploadFeedbackByKey((prev) => ({
+        ...prev,
+        [docKey]: { tone: 'error', text: e.message ?? 'Upload failed' },
+      }))
       toast_(e.message ?? 'Upload failed', false)
     } finally {
       setUploadingDocKey(null)
@@ -1327,6 +1471,20 @@ export default function BodyshopRepairPage() {
   function patch(key: keyof RepairCard, val: any) {
     setEditPatch((p) => ({ ...p, [key]: val }))
     setSelected((s) => s ? { ...s, [key]: val } : s)
+  }
+
+  function handleSurveyorNameInputChange(nextSurveyorName: string) {
+    patch('surveyor_name', nextSurveyorName)
+
+    const normalized = nextSurveyorName.trim().toLowerCase()
+    if (!normalized) return
+
+    const picked = bodyshopSurveyors.find(
+      (surveyor) => surveyor.surveyor_name.trim().toLowerCase() === normalized,
+    )
+    if (!picked) return
+
+    patch('surveyor_contact', picked.surveyor_contact_number)
   }
 
   function getEffectiveStageForCard(card: RepairCard): number {
@@ -2621,46 +2779,194 @@ export default function BodyshopRepairPage() {
               })()}
 
               {/* ── Survey ── */}
-              {detailTab === 'survey' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Survey Status</span>
-                    <select className="sel" value={selected.survey_status ?? 'pending'}
-                      onChange={(e) => patch('survey_status', e.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="hold">Hold</option>
-                      <option value="approved">Approved</option>
-                    </select>
-                  </label>
-                  {[
-                    { k: 'claim_intimation_no',    label: 'Claim Intimation No.' },
-                    { k: 'surveyor_name',          label: 'Surveyor Name' },
-                    { k: 'surveyor_contact',       label: 'Surveyor Contact' },
-                    { k: 'approved_parts',         label: 'Approved Parts' },
-                    { k: 'estimation_by',          label: 'Estimation By' },
-                    { k: 'estimation_approved_by', label: 'Estimation Approved By' },
-                    { k: 'survey_hold_reason',     label: 'Hold Reason' },
-                  ].map(({ k, label }) => (
-                    <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
-                      <input className="inp" value={(selected as any)[k] ?? ''}
-                        onChange={(e) => patch(k as keyof RepairCard, e.target.value)} />
+              {detailTab === 'survey' && (() => {
+                const surveyStatus = String(selected.survey_status ?? '').trim().toLowerCase()
+                const isSurveyHold = surveyStatus === 'hold'
+                const isSurveyApproved = surveyStatus === 'approved'
+                const surveyApprovalDoc = bodyshopDocsByKey.doc_survey_approval
+                const surveyApprovalDocBusy = uploadingDocKey === 'doc_survey_approval'
+                const surveyApprovalFeedback = docUploadFeedbackByKey.doc_survey_approval
+
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>Claim Intimation No.</span>
+                      <input
+                        className="inp"
+                        value={selected.claim_intimation_no ?? ''}
+                        onChange={(e) => patch('claim_intimation_no', e.target.value)}
+                      />
                     </label>
-                  ))}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 10, background: '#fafafa', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-                    <input type="checkbox" checked={selected.customer_approved ?? false}
-                      onChange={(e) => patch('customer_approved', e.target.checked)} />
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>Customer Approved</span>
-                  </label>
-                  {Object.keys(editPatch).length > 0 && (
-                    <div style={{ gridColumn: '1/-1' }}>
-                      <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
-                        {saving ? 'Saving…' : 'Save Survey'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>Survey Date</span>
+                      <input
+                        className="inp"
+                        type="date"
+                        value={selected.survey_date ?? ''}
+                        onChange={(e) => patch('survey_date', e.target.value || null)}
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>Surveyor Name</span>
+                      <input
+                        className="inp"
+                        list="bodyshop-surveyor-options"
+                        value={String(selected.surveyor_name ?? '')}
+                        onChange={(e) => handleSurveyorNameInputChange(e.target.value)}
+                        placeholder="Type to search surveyor"
+                      />
+                      <datalist id="bodyshop-surveyor-options">
+                        {bodyshopSurveyors.map((surveyor) => (
+                          <option
+                            key={surveyor.id}
+                            value={surveyor.surveyor_name}
+                            label={surveyor.surveyor_contact_number}
+                          />
+                        ))}
+                      </datalist>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>Surveyor Contact</span>
+                      <input
+                        className="inp"
+                        value={selected.surveyor_contact ?? ''}
+                        onChange={(e) => patch('surveyor_contact', e.target.value)}
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>Survey Status</span>
+                      <select
+                        className="sel"
+                        value={isSurveyHold || isSurveyApproved ? surveyStatus : ''}
+                        onChange={(e) => patch('survey_status', e.target.value)}
+                      >
+                        <option value="">Select Survey Status</option>
+                        <option value="hold">Hold</option>
+                        <option value="approved">Approved</option>
+                      </select>
+                    </label>
+                    {[
+                      { k: 'approved_parts', label: 'Approved Parts' },
+                    ].map(({ k, label }) => (
+                      <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+                        <input
+                          className="inp"
+                          value={(selected as any)[k] ?? ''}
+                          onChange={(e) => patch(k as keyof RepairCard, e.target.value)}
+                        />
+                      </label>
+                    ))}
+
+                    {isSurveyHold && (
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>Hold Remark</span>
+                        <input
+                          className="inp"
+                          value={selected.survey_hold_reason ?? ''}
+                          onChange={(e) => patch('survey_hold_reason', e.target.value)}
+                          placeholder="Enter hold remark"
+                        />
+                      </label>
+                    )}
+
+                    {isSurveyApproved && (
+                      <div style={{ gridColumn: '1/-1', border: '1px solid #dbeafe', borderRadius: 12, background: '#f8fbff', padding: 12, display: 'grid', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#1e3a8a' }}>Survey Approval Photo</div>
+                            <div style={{ fontSize: 11, color: '#64748b' }}>
+                              {surveyApprovalDoc ? 'Uploaded' : 'Upload is required for Approved status'}
+                            </div>
+                            {surveyApprovalFeedback?.text && (
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  marginTop: 4,
+                                  color: surveyApprovalFeedback.tone === 'error'
+                                    ? '#b91c1c'
+                                    : surveyApprovalFeedback.tone === 'ok'
+                                      ? '#166534'
+                                      : '#1d4ed8',
+                                }}
+                              >
+                                {surveyApprovalFeedback.text}
+                              </div>
+                            )}
+                          </div>
+                          {!surveyApprovalDoc ? (
+                            <button
+                              type="button"
+                              className="btn btn--primary"
+                              disabled={surveyApprovalDocBusy}
+                              onClick={() => startBodyshopDocUpload('doc_survey_approval', 'upload')}
+                            >
+                              {surveyApprovalDocBusy ? 'Uploading…' : 'Upload Photo'}
+                            </button>
+                          ) : (
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_survey_approval')}>
+                                View
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                disabled={surveyApprovalDocBusy}
+                                onClick={() => startBodyshopDocUpload('doc_survey_approval', 'replace')}
+                              >
+                                {surveyApprovalDocBusy ? 'Uploading…' : 'Replace'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {surveyApprovalDoc && (
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn--primary"
+                              disabled={saving}
+                              onClick={() => void handleSendToBodyshopFloor('Floor 2')}
+                            >
+                              Send To Floor 2
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              disabled={saving}
+                              onClick={() => void handleSendToBodyshopFloor('Floor 3')}
+                            >
+                              Send To Floor 3
+                            </button>
+                            {String(selected.bodyshop_floor ?? '').trim() && (
+                              <span style={{ alignSelf: 'center', fontSize: 12, color: '#065f46', fontWeight: 600 }}>
+                                Current: {selected.bodyshop_floor}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {Object.keys(editPatch).length > 0 && (
+                      <div style={{ gridColumn: '1/-1' }}>
+                        <button className="btn btn--primary" onClick={() => void handleSaveSurveyInfo()} disabled={saving}>
+                          {saving ? 'Saving…' : 'Save Survey'}
+                        </button>
+                      </div>
+                    )}
+
+                    <input
+                      ref={bodyshopDocInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={(event) => {
+                        void handleBodyshopDocFilePicked(event.target.files)
+                        event.target.value = ''
+                      }}
+                    />
+                  </div>
+                )
+              })()}
 
               {/* ── Floor ── */}
               {detailTab === 'floor' && (

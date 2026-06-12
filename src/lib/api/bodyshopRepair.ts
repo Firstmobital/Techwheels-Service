@@ -70,8 +70,14 @@ export interface RepairCard {
   doc_company_pan: boolean
   doc_bank_detail: boolean
   // survey
+  survey_date: string | null
   survey_status: string | null
   survey_hold_reason: string | null
+  survay_info_by: string | null
+  survay_info_at: string | null
+  survay_info_updated_by: string | null
+  survay_info_updated_at: string | null
+  bodyshop_floor: string | null
   claim_intimation_no: string | null
   surveyor_name: string | null
   surveyor_contact: string | null

@@ -16,6 +16,7 @@ interface AccidentCar {
   sa_display_name: string | null
   branch: string | null
   created_at: string | null
+  bodyshop_floor: string | null
 }
 
 interface Employee {
@@ -92,6 +93,7 @@ export default function BodyshopFloorPage() {
   // Filters
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
   const [branchFilter, setBranchFilter]     = useState('all')
+  const [floorFilter, setFloorFilter]       = useState<'all' | 'Floor 2' | 'Floor 3'>('all')
   const [roleFilter, setRoleFilter]         = useState<BSRole | 'all'>('all')
   const [search, setSearch]                 = useState('')
 
@@ -112,19 +114,69 @@ export default function BodyshopFloorPage() {
   async function loadAll() {
     setLoading(true); setDataError(false)
     try {
-      // 1. Accident reception entries
-      const { data: recData, error: recErr } = await supabase
+      // 1. Vehicles explicitly sent to bodyshop floor from survey stage
+      const { data: sentCards, error: sentErr } = await supabase
+        .from('bodyshop_repair_cards')
+        .select('reception_entry_id, job_card_no, bodyshop_floor, current_stage')
+        .in('bodyshop_floor', ['Floor 2', 'Floor 3'])
+        .gte('current_stage', 10)
+
+      if (sentErr) throw sentErr
+
+      const sentReceptionIds = new Set<number>()
+      const sentByReceptionId = new Map<number, 'Floor 2' | 'Floor 3'>()
+      const sentByJc = new Map<string, 'Floor 2' | 'Floor 3'>()
+
+      ;((sentCards ?? []) as Array<{
+        reception_entry_id: number | null
+        job_card_no: string | null
+        bodyshop_floor: 'Floor 2' | 'Floor 3' | null
+      }>).forEach((row) => {
+        const floor = row.bodyshop_floor
+        if (floor !== 'Floor 2' && floor !== 'Floor 3') return
+
+        const receptionEntryId = Number(row.reception_entry_id)
+        if (Number.isFinite(receptionEntryId) && receptionEntryId > 0) {
+          sentReceptionIds.add(receptionEntryId)
+          sentByReceptionId.set(receptionEntryId, floor)
+        }
+
+        const jc = String(row.job_card_no ?? '').trim().toUpperCase()
+        if (jc) sentByJc.set(jc, floor)
+      })
+
+      if (sentReceptionIds.size === 0 && sentByJc.size === 0) {
+        setCars([])
+      } else {
+        // 2. Accident reception entries (restricted to sent vehicles only)
+        const { data: recData, error: recErr } = await supabase
         .from('service_reception_entries')
         .select('id, jc_number, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
         .eq('service_type', 'Accident')
         .gte('created_at', dateRange.from + 'T00:00:00+05:30')
         .lte('created_at', dateRange.to + 'T23:59:59+05:30')
         .order('created_at', { ascending: false })
-      if (recErr) throw recErr
-      const carList = (recData ?? []) as AccidentCar[]
-      setCars(carList)
+        if (recErr) throw recErr
 
-      // 2. Bodyshop employees
+        const carList = ((recData ?? []) as AccidentCar[])
+          .filter((car) => {
+            const recId = Number(car.id)
+            const byReception = Number.isFinite(recId) && sentReceptionIds.has(recId)
+            const jc = String(car.jc_number ?? '').trim().toUpperCase()
+            const byJc = jc ? sentByJc.has(jc) : false
+            return byReception || byJc
+          })
+          .map((car) => {
+            const recId = Number(car.id)
+            const jc = String(car.jc_number ?? '').trim().toUpperCase()
+            const floor = sentByReceptionId.get(recId) ?? (jc ? sentByJc.get(jc) : undefined) ?? null
+            return { ...car, bodyshop_floor: floor }
+          })
+
+        setCars(carList)
+      }
+
+      // 3. Bodyshop employees
       const { data: empData } = await supabase
         .from('employee_master')
         .select('employee_code, employee_name, department, role')
@@ -135,7 +187,7 @@ export default function BodyshopFloorPage() {
         )
       )
 
-      // 3. Bodyshop assignments
+      // 4. Bodyshop assignments
       const { data: assData, error: assErr } = await supabase
         .from('bodyshop_assignments')
         .select('*')
@@ -197,6 +249,12 @@ export default function BodyshopFloorPage() {
     Array.from(new Set(cars.map((c) => c.branch ?? 'Unknown'))).sort(),
   [cars])
 
+  const floors = useMemo(() =>
+    Array.from(new Set(cars
+      .map((c) => String(c.bodyshop_floor ?? '').trim())
+      .filter((v): v is 'Floor 2' | 'Floor 3' => v === 'Floor 2' || v === 'Floor 3'))).sort(),
+  [cars])
+
   // ── Counts ───────────────────────────────────────────────────────────────
 
   function hasAnyAssignment(c: AccidentCar) { return Boolean(assignments[jcKey(c)]) }
@@ -224,6 +282,9 @@ export default function BodyshopFloorPage() {
     if (branchFilter !== 'all')
       list = list.filter((c) => (c.branch ?? 'Unknown') === branchFilter)
 
+    if (floorFilter !== 'all')
+      list = list.filter((c) => c.bodyshop_floor === floorFilter)
+
     if (roleFilter !== 'all')
       list = list.filter((c) => assignments[jcKey(c)]?.[roleFilter])
 
@@ -245,7 +306,7 @@ export default function BodyshopFloorPage() {
     if (assignmentView === 'completed')      return list.filter((c) =>  hasStatus(c, 'completed'))
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, roleFilter, search, assignmentView, assignments])
+  }, [cars, branchFilter, floorFilter, roleFilter, search, assignmentView, assignments])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
@@ -470,6 +531,21 @@ export default function BodyshopFloorPage() {
           ))}
         </div>
 
+        {/* Floor filter */}
+        <div className="toolbar toolbar--tight">
+          <span className="toolbar__label">Filter by floor:</span>
+          <button type="button" onClick={() => setFloorFilter('all')}
+            className={`btn btn--sm ${floorFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}>
+            All ({cars.length})
+          </button>
+          {floors.map((floor) => (
+            <button key={floor} type="button" onClick={() => setFloorFilter(floor)}
+              className={`btn btn--sm ${floorFilter === floor ? 'btn--primary' : 'btn--ghost'}`}>
+              {floor} ({cars.filter((c) => c.bodyshop_floor === floor).length})
+            </button>
+          ))}
+        </div>
+
         {/* Role filter */}
         <div className="toolbar toolbar--tight">
           <span className="toolbar__label">Filter by role assigned:</span>
@@ -534,9 +610,9 @@ export default function BodyshopFloorPage() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="empty-state">
-              {search.trim() || branchFilter !== 'all' || assignmentView !== 'all'
+              {search.trim() || branchFilter !== 'all' || floorFilter !== 'all' || assignmentView !== 'all'
                 ? 'No cars match your filters.'
-                : 'No accident entries found in reception.'}
+                : 'No vehicles have been sent to Floor 2/Floor 3 yet.'}
             </div>
           ) : (
             <div className="tbl-wrap scroll">
