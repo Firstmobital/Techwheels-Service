@@ -1186,6 +1186,60 @@ export default function ServiceAdvisorPage() {
         return
       }
 
+      let repairCardId: number | null = null
+      const byReceptionRes = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id, current_stage')
+        .eq('reception_entry_id', row.id)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (byReceptionRes.error) {
+        setError(byReceptionRes.error.message)
+        return
+      }
+
+      const existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number; current_stage: number | null }>)[0] ?? null
+      if (existingCard?.id) {
+        repairCardId = existingCard.id
+      } else {
+        const draftKm = parseKmInput(draft.km_reading)
+        const nextStage = getBodyshopAutoStage({
+          customerType,
+          hasKmReading: draftKm != null,
+          hasIntakePhoto: false,
+          jcNumber,
+        })
+
+        const insertCardRes = await supabase
+          .from('bodyshop_repair_cards')
+          .insert({
+            job_card_no: jcNumber,
+            reg_number: row.reg_number,
+            customer_name: row.owner_name ?? null,
+            customer_phone: row.owner_phone ?? null,
+            customer_type: customerType,
+            reception_entry_id: row.id,
+            branch: row.branch ?? null,
+            sa_employee_code: row.sa_employee_code ?? null,
+            sa_name: row.sa_display_name ?? row.sa_name ?? null,
+            current_stage: nextStage,
+            current_stage_name: BODYSHOP_AUTO_STAGE_NAMES[nextStage] ?? BODYSHOP_AUTO_STAGE_NAMES[1],
+            overall_status: 'active',
+            received_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single()
+
+        if (insertCardRes.error || !insertCardRes.data?.id) {
+          setError(insertCardRes.error?.message ?? 'Unable to prepare bodyshop repair card before photo upload.')
+          return
+        }
+
+        repairCardId = insertCardRes.data.id
+      }
+
       const dealerCtx = await getDealerContext()
       const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
       const folder = `${dealerCode}/service-advisor-bodyshop-intake/${row.id}`
@@ -1236,6 +1290,7 @@ export default function ServiceAdvisorPage() {
           .from('bodyshop_intake_vehicle_photos')
           .insert({
             dealer_code: dealerCode,
+            repair_card_id: repairCardId,
             reception_entry_id: row.id,
             job_card_no: jcNumber,
             reg_number: row.reg_number,

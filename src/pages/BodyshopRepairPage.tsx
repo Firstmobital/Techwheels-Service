@@ -756,6 +756,12 @@ export default function BodyshopRepairPage() {
       return
     }
 
+    const repairCardId = Number(selected.id)
+    if (!Number.isFinite(repairCardId) || repairCardId <= 0) {
+      toast_('Invalid repair card context; reopen this job card and try again', false)
+      return
+    }
+
     const uploadDebugId = `intake-${receptionEntryId}-${Date.now()}`
     const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> => {
       return await new Promise<T>((resolve, reject) => {
@@ -776,6 +782,7 @@ export default function BodyshopRepairPage() {
 
     console.log('[BodyshopIntakeUpload] start', {
       uploadDebugId,
+      repairCardId,
       receptionEntryId,
       selectedFileCount: selectedFiles.length,
       existingCount,
@@ -856,6 +863,7 @@ export default function BodyshopRepairPage() {
             .from('bodyshop_intake_vehicle_photos')
             .insert({
               dealer_code: dealerCode,
+              repair_card_id: repairCardId,
               reception_entry_id: receptionEntryId,
               job_card_no: jobCardNo,
               reg_number: selected.reg_number ?? selectedReception?.reg_number ?? null,
