@@ -756,56 +756,146 @@ export default function BodyshopRepairPage() {
       return
     }
 
+    const uploadDebugId = `intake-${receptionEntryId}-${Date.now()}`
+    const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> => {
+      return await new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
+
+        promise
+          .then((value) => {
+            clearTimeout(timer)
+            resolve(value)
+          }, (error) => {
+            clearTimeout(timer)
+            reject(error)
+          })
+      })
+    }
+
+    console.log('[BodyshopIntakeUpload] start', {
+      uploadDebugId,
+      receptionEntryId,
+      selectedFileCount: selectedFiles.length,
+      existingCount,
+      remaining,
+      jobCardNo,
+      customerType,
+    })
+
     setUploadingIntakePhotos(true)
     try {
+      console.log('[BodyshopIntakeUpload] fetching dealer context', { uploadDebugId })
       const dealerCtx = await getDealerContext()
       const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
       const folder = `${dealerCode}/service-advisor-bodyshop-intake/${receptionEntryId}`
+      console.log('[BodyshopIntakeUpload] dealer context ready', { uploadDebugId, dealerCode, folder })
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+      console.log('[BodyshopIntakeUpload] fetching auth session', { uploadDebugId })
       const sessionRes = await supabase.auth.getSession()
       const token = sessionRes.data.session?.access_token
       if (!supabaseUrl || !token) {
+        console.warn('[BodyshopIntakeUpload] missing supabase url or token', { uploadDebugId, hasSupabaseUrl: Boolean(supabaseUrl), hasToken: Boolean(token) })
         toast_('No active session for Drive offload request', false)
         return
       }
 
-      for (const file of selectedFiles) {
+      console.log('[BodyshopIntakeUpload] session ready', { uploadDebugId, hasToken: Boolean(token) })
+
+      for (let index = 0; index < selectedFiles.length; index += 1) {
+        const file = selectedFiles[index]
         const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
         const safeName = sanitizeFileNamePart(file.name || `photo.${ext}`)
         const storagePath = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName}`
 
-        const uploadRes = await supabase.storage
-          .from(AUTODOC_BUCKET)
-          .upload(storagePath, file, { upsert: false, contentType: file.type || 'application/octet-stream' })
+        console.log('[BodyshopIntakeUpload] uploading file to storage', {
+          uploadDebugId,
+          index: index + 1,
+          total: selectedFiles.length,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          storagePath,
+        })
+
+        const uploadRes = await withTimeout(
+          supabase.storage
+            .from(AUTODOC_BUCKET)
+            .upload(storagePath, file, { upsert: false, contentType: file.type || 'application/octet-stream' }),
+          45000,
+          'Supabase storage upload',
+        )
 
         if (uploadRes.error) {
+          console.error('[BodyshopIntakeUpload] storage upload failed', {
+            uploadDebugId,
+            index: index + 1,
+            fileName: file.name,
+            message: uploadRes.error.message,
+          })
           toast_(uploadRes.error.message, false)
           return
         }
 
-        const { data: photoMeta, error: photoMetaErr } = await supabase
-          .from('bodyshop_intake_vehicle_photos')
-          .insert({
-            dealer_code: dealerCode,
-            reception_entry_id: receptionEntryId,
-            job_card_no: jobCardNo,
-            reg_number: selected.reg_number ?? selectedReception?.reg_number ?? null,
-            customer_type: customerType,
-            storage_bucket: AUTODOC_BUCKET,
-            storage_path: storagePath,
-            file_name: file.name,
-            content_type: file.type || null,
-            file_size_bytes: file.size,
-          })
-          .select('id')
-          .single()
+        console.log('[BodyshopIntakeUpload] storage upload success', {
+          uploadDebugId,
+          index: index + 1,
+          fileName: file.name,
+        })
+
+        console.log('[BodyshopIntakeUpload] saving metadata row', {
+          uploadDebugId,
+          index: index + 1,
+          fileName: file.name,
+        })
+
+        const { data: photoMeta, error: photoMetaErr } = await withTimeout(
+          supabase
+            .from('bodyshop_intake_vehicle_photos')
+            .insert({
+              dealer_code: dealerCode,
+              reception_entry_id: receptionEntryId,
+              job_card_no: jobCardNo,
+              reg_number: selected.reg_number ?? selectedReception?.reg_number ?? null,
+              customer_type: customerType,
+              storage_bucket: AUTODOC_BUCKET,
+              storage_path: storagePath,
+              file_name: file.name,
+              content_type: file.type || null,
+              file_size_bytes: file.size,
+            })
+            .select('id')
+            .single(),
+          20000,
+          'Metadata insert',
+        )
 
         if (photoMetaErr || !photoMeta?.id) {
+          console.error('[BodyshopIntakeUpload] metadata save failed', {
+            uploadDebugId,
+            index: index + 1,
+            fileName: file.name,
+            message: photoMetaErr?.message,
+          })
           toast_(photoMetaErr?.message ?? 'Failed to persist intake photo metadata', false)
           return
         }
 
+        console.log('[BodyshopIntakeUpload] metadata save success', {
+          uploadDebugId,
+          index: index + 1,
+          fileName: file.name,
+          photoMetaId: photoMeta.id,
+        })
+
+        console.log('[BodyshopIntakeUpload] syncing to drive', {
+          uploadDebugId,
+          index: index + 1,
+          fileName: file.name,
+          photoMetaId: photoMeta.id,
+        })
         const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
           method: 'POST',
           headers: {
@@ -825,16 +915,40 @@ export default function BodyshopRepairPage() {
 
         const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
         if (!driveRes.ok || drivePayload?.error) {
+          console.warn('[BodyshopIntakeUpload] drive sync failed (photo still uploaded)', {
+            uploadDebugId,
+            index: index + 1,
+            fileName: file.name,
+            status: driveRes.status,
+            error: drivePayload?.error,
+          })
           // Keep the photo upload successful even if Drive offload fails.
           toast_(drivePayload?.error || `Drive sync failed (${driveRes.status}); photo is still saved`, false)
+        } else {
+          console.log('[BodyshopIntakeUpload] drive sync success', {
+            uploadDebugId,
+            index: index + 1,
+            fileName: file.name,
+            status: driveRes.status,
+          })
         }
       }
 
       const uploadedCount = selectedFiles.length
       const nextCount = existingCount + uploadedCount
       setPhotoCountByReceptionId((prev) => ({ ...prev, [receptionEntryId]: nextCount }))
+      console.log('[BodyshopIntakeUpload] completed', {
+        uploadDebugId,
+        uploadedCount,
+        nextCount,
+      })
       toast_(`Uploaded ${uploadedCount} photo${uploadedCount === 1 ? '' : 's'} (${nextCount}/20)`)
     } catch (e: any) {
+      console.error('[BodyshopIntakeUpload] unexpected failure', {
+        uploadDebugId,
+        name: e?.name,
+        message: e?.message,
+      })
       const message = e?.name === 'TimeoutError'
         ? 'Upload timed out while syncing with Drive. Try again in a moment.'
         : (e?.message ?? 'Failed to upload intake photos')
