@@ -198,12 +198,10 @@ export default function SATrackerPage() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  async function loadData() {
-    setLoading(true)
-    setError(null)
-
+  // ── Load settings + role ONCE on mount ─────────────────────────────────
+  async function loadSettings() {
     try {
-      // ── Auth + role check ──────────────────────────────────────────────────
+      // Role check
       const authRes = await supabase.auth.getUser()
       const userId = authRes.data.user?.id
       if (userId) {
@@ -218,12 +216,16 @@ export default function SATrackerPage() {
         setCanEditSharePercent(roleCanEdit && isActive !== false)
       }
 
-      // ── Load earnings percentages from DB ──────────────────────────────────
-      const settingsRes = await supabase
+      // Fetch earnings % from DB
+      const { data, error: err } = await supabase
         .from('sa_earnings_settings')
         .select('key, value')
-      if (!settingsRes.error && settingsRes.data) {
-        for (const row of settingsRes.data as { key: string; value: string }[]) {
+      if (err) {
+        console.error('sa_earnings_settings fetch error:', err.message)
+        return
+      }
+      if (data) {
+        for (const row of data as { key: string; value: string }[]) {
           const parsed = parseFloat(row.value)
           if (!Number.isFinite(parsed) || parsed <= 0) continue
           if (row.key === 'sa_share_percent') {
@@ -236,8 +238,16 @@ export default function SATrackerPage() {
           }
         }
       }
-      // ──────────────────────────────────────────────────────────────────────
+    } catch (e) {
+      console.error('loadSettings error:', e)
+    }
+  }
 
+  async function loadData() {
+    setLoading(true)
+    setError(null)
+
+    try {
       const allRows: ClosedJCRow[] = []
       let from = 0
 
@@ -352,6 +362,8 @@ export default function SATrackerPage() {
     XLSX.writeFile(wb, `SA_Pivot_Report.xlsx`)
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadSettings() }, [])  // run once on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadData() }, [dateRange])
 
@@ -683,10 +695,11 @@ export default function SATrackerPage() {
               onClick={async () => {
                 setSaSharePercent(parsedDraftSaShare)
                 setEvSharePercent(parsedDraftEvShare)
-                await supabase.from('sa_earnings_settings').upsert([
+                const { error: saveErr } = await supabase.from('sa_earnings_settings').upsert([
                   { key: 'sa_share_percent', value: String(parsedDraftSaShare) },
                   { key: 'ev_share_percent', value: String(parsedDraftEvShare) },
                 ], { onConflict: 'key' })
+                if (saveErr) { alert('Save failed: ' + saveErr.message) }
               }}
               style={{ padding: '0.2rem 0.65rem', background: hasPendingShareChanges ? '#2563eb' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: '5px', fontWeight: 700, fontSize: '0.75rem', cursor: hasPendingShareChanges ? 'pointer' : 'not-allowed' }}>
               Apply
@@ -697,10 +710,11 @@ export default function SATrackerPage() {
                 setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
                 setDraftSaShare(String(DEFAULT_SA_SHARE_PERCENT))
                 setDraftEvShare(String(DEFAULT_EV_SHARE_PERCENT))
-                await supabase.from('sa_earnings_settings').upsert([
+                const { error: saveErr } = await supabase.from('sa_earnings_settings').upsert([
                   { key: 'sa_share_percent', value: String(DEFAULT_SA_SHARE_PERCENT) },
                   { key: 'ev_share_percent', value: String(DEFAULT_EV_SHARE_PERCENT) },
                 ], { onConflict: 'key' })
+                if (saveErr) { alert('Reset failed: ' + saveErr.message) }
               }}
               style={{ padding: '0.2rem 0.55rem', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '5px', fontSize: '0.72rem', cursor: 'pointer' }}>
               Reset
