@@ -55,6 +55,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 export default function EWReminderPage() {
   const [records, setRecords] = useState<EWRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   // Filters
@@ -73,11 +74,16 @@ export default function EWReminderPage() {
     setLoading(true)
     setError(null)
     try {
-      // Fetch all 2024+ records in batches
+      // Fetch all records in batches, filter to 3yr window in JS
       const allRecords: EWRecord[] = []
       let from = 0
       const batchSize = 1000
 
+      // 3-year window calculated once (OEM warranty = 3 years from sale date)
+      const today = new Date()
+      const threeYearsAgo = new Date(today.getFullYear() - 3, today.getMonth(), today.getDate())
+
+      let totalFetched = 0
       while (true) {
         const { data, error: err } = await supabase
           .from('all_service_data')
@@ -92,15 +98,15 @@ export default function EWReminderPage() {
         if (err) throw err
         if (!data || data.length === 0) break
 
-        // Filter: sale date within last 3 years from today (OEM warranty window)
-        const today = new Date()
-        const threeYearsAgo = new Date(today.getFullYear() - 3, today.getMonth(), today.getDate())
+        // Keep only vehicles still within OEM warranty (sale date within last 3 years)
         const filteredUnder3Yrs = data.filter(r => {
           const saleDate = parseSaleDate(r.vehicle_sale_date)
           if (!saleDate) return false
           return saleDate >= threeYearsAgo && saleDate <= today
         })
         allRecords.push(...filteredUnder3Yrs)
+        totalFetched += data.length
+        setLoadingProgress(totalFetched)
 
         if (data.length < batchSize) break
         from += batchSize
@@ -180,7 +186,11 @@ export default function EWReminderPage() {
           🛡️ Extended Warranty Reminder
         </h1>
         <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-          Vehicles within OEM warranty (sold in last 3 years) — eligible for Extended Warranty
+          Vehicles within OEM warranty — eligible for Extended Warranty
+          {' '}
+          <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.78rem', fontWeight: 500 }}>
+            {new Date(new Date().getFullYear()-3, new Date().getMonth(), new Date().getDate()).toLocaleDateString('en-IN')} → Today
+          </span>
         </p>
       </div>
 
@@ -270,7 +280,10 @@ export default function EWReminderPage() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>Loading vehicles...</div>
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+          <div>Loading vehicles... ({loadingProgress.toLocaleString()} scanned)</div>
+          <div style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#cbd5e1' }}>Applying 3-year warranty window filter</div>
+        </div>
       ) : error ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: '#ef4444' }}>{error}</div>
       ) : (
