@@ -92,10 +92,13 @@ export default function EWReminderPage() {
         if (err) throw err
         if (!data || data.length === 0) break
 
-        // Filter 2024+ in JS since date is text DD/MM/YY
+        // Filter: sale year 2024+ AND vehicle age < 3 years
         const filtered2024Plus = data.filter(r => {
           const yr = getSaleYear(r.vehicle_sale_date)
-          return yr !== null && yr >= 2024
+          if (!yr || yr < 2024) return false
+          const age = parseFloat(r.vehicle_age_in_years ?? '')
+          if (!isNaN(age) && age >= 3) return false
+          return true
         })
         allRecords.push(...filtered2024Plus)
 
@@ -177,7 +180,7 @@ export default function EWReminderPage() {
           🛡️ Extended Warranty Reminder
         </h1>
         <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-          Vehicles sold from 2024 onwards — EW sales opportunities
+          Vehicles sold from 2024 onwards with age under 3 years — EW sales opportunities
         </p>
       </div>
 
