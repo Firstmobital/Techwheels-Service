@@ -673,64 +673,81 @@ export default function SATrackerPage() {
           </div>
         ))}
 
-        {/* Earnings % settings — inline in stats bar (admin only) */}
-        {canEditSharePercent && (
-          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.4rem 0.65rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', gridColumn: 'span 2' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap' }}>⚙️ Earnings %</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#334155' }}>
-              SA%
-              <input className="inp" inputMode="decimal" value={draftSaShare}
-                onChange={(e) => setDraftSaShare(e.target.value)}
-                onBlur={() => setDraftSaShare(String(parsedDraftSaShare))}
-                style={{ width: '48px', padding: '0.2rem 0.35rem', fontSize: '0.78rem', textAlign: 'center' }} />
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#334155' }}>
-              EV%
-              <input className="inp" inputMode="decimal" value={draftEvShare}
-                onChange={(e) => setDraftEvShare(e.target.value)}
-                onBlur={() => setDraftEvShare(String(parsedDraftEvShare))}
-                style={{ width: '48px', padding: '0.2rem 0.35rem', fontSize: '0.78rem', textAlign: 'center' }} />
-            </label>
-            <button type="button" disabled={!hasPendingShareChanges}
-              onClick={async () => {
-                setSaSharePercent(parsedDraftSaShare)
-                setEvSharePercent(parsedDraftEvShare)
-                const { error: saveErr } = await supabase.from('sa_earnings_settings').upsert([
-                  { key: 'sa_share_percent', value: String(parsedDraftSaShare) },
-                  { key: 'ev_share_percent', value: String(parsedDraftEvShare) },
-                ], { onConflict: 'key' })
-                if (saveErr) { alert('Save failed: ' + saveErr.message) }
-              }}
-              style={{ padding: '0.2rem 0.65rem', background: hasPendingShareChanges ? '#2563eb' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: '5px', fontWeight: 700, fontSize: '0.75rem', cursor: hasPendingShareChanges ? 'pointer' : 'not-allowed' }}>
-              Apply
-            </button>
-            <button type="button"
-              onClick={async () => {
-                setSaSharePercent(DEFAULT_SA_SHARE_PERCENT)
-                setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
-                setDraftSaShare(String(DEFAULT_SA_SHARE_PERCENT))
-                setDraftEvShare(String(DEFAULT_EV_SHARE_PERCENT))
-                const { error: saveErr } = await supabase.from('sa_earnings_settings').upsert([
-                  { key: 'sa_share_percent', value: String(DEFAULT_SA_SHARE_PERCENT) },
-                  { key: 'ev_share_percent', value: String(DEFAULT_EV_SHARE_PERCENT) },
-                ], { onConflict: 'key' })
-                if (saveErr) { alert('Reset failed: ' + saveErr.message) }
-              }}
-              style={{ padding: '0.2rem 0.55rem', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '5px', fontSize: '0.72rem', cursor: 'pointer' }}>
-              Reset
-            </button>
-          </div>
-        )}
+
       </div>
 
       {/* ── SA Cards ── */}
       {!loading && saCards.length > 0 && (
         <div className="card mb-gap" style={{ marginBottom: '0.6rem' }}>
-          <div className="card__head" style={{ padding: '0.5rem 0.85rem', minHeight: 'unset' }}>
+          <div className="card__head">
             <div>
-              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>Revenue by Service Advisor</span>
-              <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: '0.5rem' }}>Income = Labour × {saSharePercent}% · click to drill down</span>
+              <h3>Earnings by Service Advisor</h3>
+              <div className="sub">Sorted by total invoice value. Income = Labour × {saSharePercent}%. Click an SA to drill down by day.</div>
             </div>
+            {canEditSharePercent && (
+              <div className="tech-share-corner">
+                <h3>Earnings percentage settings</h3>
+                <div className="tech-share-controls">
+                  <label className="field field--no-gap tech-share-field">
+                    <span className="label">SA %</span>
+                    <input
+                      className="inp"
+                      inputMode="decimal"
+                      value={draftSaShare}
+                      onChange={(e) => setDraftSaShare(e.target.value)}
+                      onBlur={() => setDraftSaShare(String(parsedDraftSaShare))}
+                      placeholder="3"
+                    />
+                  </label>
+                  <label className="field field--no-gap tech-share-field">
+                    <span className="label">EV %</span>
+                    <input
+                      className="inp"
+                      inputMode="decimal"
+                      value={draftEvShare}
+                      onChange={(e) => setDraftEvShare(e.target.value)}
+                      onBlur={() => setDraftEvShare(String(parsedDraftEvShare))}
+                      placeholder="3"
+                    />
+                  </label>
+                  <div className="tech-share-actions">
+                    <button
+                      type="button"
+                      className="btn btn--primary btn--sm"
+                      onClick={async () => {
+                        setSaSharePercent(parsedDraftSaShare)
+                        setEvSharePercent(parsedDraftEvShare)
+                        const { error: saveErr } = await supabase.from('sa_earnings_settings').upsert([
+                          { key: 'sa_share_percent', value: String(parsedDraftSaShare) },
+                          { key: 'ev_share_percent', value: String(parsedDraftEvShare) },
+                        ], { onConflict: 'key' })
+                        if (saveErr) alert('Save failed: ' + saveErr.message)
+                      }}
+                      disabled={!hasPendingShareChanges}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={async () => {
+                        setSaSharePercent(DEFAULT_SA_SHARE_PERCENT)
+                        setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
+                        setDraftSaShare(String(DEFAULT_SA_SHARE_PERCENT))
+                        setDraftEvShare(String(DEFAULT_EV_SHARE_PERCENT))
+                        const { error: saveErr } = await supabase.from('sa_earnings_settings').upsert([
+                          { key: 'sa_share_percent', value: String(DEFAULT_SA_SHARE_PERCENT) },
+                          { key: 'ev_share_percent', value: String(DEFAULT_EV_SHARE_PERCENT) },
+                        ], { onConflict: 'key' })
+                        if (saveErr) alert('Reset failed: ' + saveErr.message)
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="card__body dense">
             <div className="tech-drill-grid">
