@@ -237,72 +237,62 @@ export default function EWReminderPage() {
   }
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '100%' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>🛡️ Extended Warranty Reminder</h1>
-        <p style={{ color: '#64748b', fontSize: '0.82rem', marginTop: '0.25rem' }}>
-          OEM warranty window &nbsp;
-          <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+    <div style={{ padding: '0.75rem', maxWidth: '100%' }}>
+      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🛡️ EW Reminder</span>
+          <span style={{ fontSize: '0.72rem', background: '#e0f2fe', color: '#0369a1', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
             {windowStart.toLocaleDateString('en-IN')} → Today
           </span>
-          &nbsp;· Prices auto-calculated based on vehicle age
-        </p>
-      </div>
+        </div>
 
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
-        {[
-          { label: 'Total Vehicles', value: stats.total, color: '#6366f1', bg: '#eef2ff' },
-          { label: 'No EW (Opportunity)', value: stats.withoutEW, color: '#ef4444', bg: '#fef2f2' },
-          { label: 'EW Sold', value: stats.withEW, color: '#22c55e', bg: '#f0fdf4' },
-          { label: 'Showing (filtered)', value: stats.showing, color: '#f59e0b', bg: '#fffbeb' },
-        ].map(s => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: '10px', padding: '0.85rem 1rem', border: `1px solid ${s.color}22` }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.value.toLocaleString()}</div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
+        <input type="text" placeholder="Search name / reg / mobile / chassis…" value={searchQuery}
+          onChange={e => { setSearchQuery(e.target.value); setPage(1) }}
+          style={{ padding: '0.2rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.78rem', width: '200px' }} />
 
-      {/* Filters */}
-      <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '0.85rem 1rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.65rem', alignItems: 'flex-end' }}>
-        <div style={{ flex: '1 1 200px' }}>
-          <label style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Search</label>
-          <input type="text" placeholder="Name, Reg No, Mobile, Chassis..." value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setPage(1) }}
-            style={{ width: '100%', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.82rem' }} />
-        </div>
-        <div style={{ flex: '0 0 110px' }}>
-          <label style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Sale Year</label>
-          <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setPage(1) }}
-            style={{ width: '100%', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.82rem' }}>
-            <option value="all">All Years</option>
-            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-        <div style={{ flex: '0 0 120px' }}>
-          <label style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Sale Month</label>
-          <select value={monthFilter} onChange={e => { setMonthFilter(e.target.value); setPage(1) }}
-            style={{ width: '100%', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.82rem' }}>
-            <option value="all">All Months</option>
-            {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-          </select>
-        </div>
-        <div style={{ flex: '0 0 175px' }}>
-          <label style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>EW Status</label>
-          <select value={ewStatusFilter} onChange={e => { setEwStatusFilter(e.target.value); setPage(1) }}
-            style={{ width: '100%', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.82rem' }}>
-            <option value="all">All</option>
-            <option value="no_ew">🔴 No EW (Opportunity)</option>
-            <option value="has_ew">🟢 EW Sold</option>
-            <option value="propensity">⭐ High Propensity</option>
-          </select>
-        </div>
+        <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setPage(1) }}
+          style={{ padding: '0.2rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.78rem' }}>
+          <option value="all">All Years</option>
+          {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+
+        <select value={monthFilter} onChange={e => { setMonthFilter(e.target.value); setPage(1) }}
+          style={{ padding: '0.2rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.78rem' }}>
+          <option value="all">All Months</option>
+          {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+        </select>
+
+        <select value={ewStatusFilter} onChange={e => { setEwStatusFilter(e.target.value); setPage(1) }}
+          style={{ padding: '0.2rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.78rem' }}>
+          <option value="all">All EW Status</option>
+          <option value="no_ew">🔴 No EW (Opportunity)</option>
+          <option value="has_ew">🟢 EW Sold</option>
+          <option value="propensity">⭐ High Propensity</option>
+        </select>
+
+        <span style={{ flex: 1 }} />
+
         <button onClick={fetchData}
-          style={{ padding: '0.45rem 1rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.82rem', cursor: 'pointer', fontWeight: 600 }}>
+          style={{ padding: '0.3rem 0.75rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}>
           🔄 Refresh
         </button>
+      </div>
+      </div>
+
+      {/* ── STATS BAR ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.45rem', marginBottom: '0.6rem' }}>
+        {[
+          { label: 'Total Vehicles',        value: stats.total,     color: '#6366f1', bg: '#eef2ff' },
+          { label: 'No EW (Opportunity)',    value: stats.withoutEW, color: '#ef4444', bg: '#fef2f2', bold: true },
+          { label: 'EW Sold',               value: stats.withEW,    color: '#22c55e', bg: '#f0fdf4' },
+          { label: 'Showing (filtered)',     value: stats.showing,   color: '#f59e0b', bg: '#fffbeb' },
+        ].map(s => (
+          <div key={s.label} style={{ background: s.bg, borderRadius: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${s.color}22` }}>
+            <div style={{ fontSize: s.bold ? '1rem' : '0.92rem', fontWeight: s.bold ? 800 : 700, color: s.color }}>{s.value.toLocaleString()}</div>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.1rem' }}>{s.label}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.65rem' }}>

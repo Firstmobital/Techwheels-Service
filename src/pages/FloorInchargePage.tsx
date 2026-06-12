@@ -982,184 +982,79 @@ export default function FloorInchargePage() {
         </div>
       )}
 
-      {/* Page Head */}
-      <div className="pagehead">
-        <div>
-          <p className="greet">
-            <Icon name="floor" size={13} className="icon-align-text" />
-            Floor Incharge
-          </p>
-          <h1>Assign technicians</h1>
-          <p>Reception job cards with floor assignment controls — set bay, technician, work status, and remark.</p>
+      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🏭 Floor Incharge</span>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{searchScopedRows.length} JCs</span>
         </div>
 
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by location:</span>
-          <button
-            type="button"
-            onClick={() => setBranchFilter('all')}
-            className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          >
-            All ({searchScopedRows.length})
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Loc:</span>
+        <button type="button" onClick={() => setBranchFilter('all')}
+          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({searchScopedRows.length})
+        </button>
+        {branches.map((branch) => (
+          <button key={branch} type="button" onClick={() => setBranchFilter(branch)}
+            className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {branch} ({searchScopedRows.filter((jc) => getLocationLabel(jc.location ?? jc.branch) === branch).length})
           </button>
-          {branches.map((branch) => {
-            const count = searchScopedRows.filter((jc) => getLocationLabel(jc.location ?? jc.branch) === branch).length
-            return (
-              <button
-                key={branch}
-                type="button"
-                onClick={() => setBranchFilter(branch)}
-                className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
-              >
-                {branch} ({count})
-              </button>
-            )
-          })}
-        </div>
+        ))}
 
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by portal:</span>
-          <button
-            type="button"
-            onClick={() => setFuelTypeFilter('all')}
-            className={`btn btn--sm ${fuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          >
-            All ({statusScopedBranchRows.length})
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Portal:</span>
+        <button type="button" onClick={() => setFuelTypeFilter('all')}
+          className={`btn btn--sm ${fuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({statusScopedBranchRows.length})
+        </button>
+        {fuelTypeOptions.map((fuelType) => (
+          <button key={fuelType} type="button" onClick={() => setFuelTypeFilter(fuelType)}
+            className={`btn btn--sm ${fuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {fuelType} ({statusScopedBranchRows.filter((jc) => getPortalLabel(jc.portal ?? jc.fuel_type) === fuelType).length})
           </button>
-          {fuelTypeOptions.map((fuelType) => {
-            const count = statusScopedBranchRows.filter((jc) => getPortalLabel(jc.portal ?? jc.fuel_type) === fuelType).length
-            return (
-              <button
-                key={fuelType}
-                type="button"
-                onClick={() => setFuelTypeFilter(fuelType)}
-                className={`btn btn--sm ${fuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
-              >
-                {fuelType} ({count})
-              </button>
-            )
+        ))}
+
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Tech:</span>
+        <select value={technicianFilter} onChange={(event) => setTechnicianFilter(event.target.value)}
+          className="sel sel--advisor-filter" aria-label="Filter by technician"
+          style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', minWidth: '140px' }}>
+          <option value="all">All ({statusScopedFuelRows.length})</option>
+          {technicianOptions.map((option) => {
+            const count = statusScopedFuelRows.filter((jc) => {
+              const assignment = assignments[jc.assignment_key]
+              return getTechnicianFilterKey(assignment) === option.value
+            }).length
+            return <option key={option.value} value={option.value}>{option.label} ({count})</option>
           })}
-        </div>
-
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by technician:</span>
-          <select
-            value={technicianFilter}
-            onChange={(event) => setTechnicianFilter(event.target.value)}
-            className="sel sel--advisor-filter"
-            aria-label="Filter by technician"
-          >
-            <option value="all">All ({statusScopedFuelRows.length})</option>
-            {technicianOptions.map((option) => {
-              const count = statusScopedFuelRows.filter((jc) => {
-                const assignment = assignments[jc.assignment_key]
-                return getTechnicianFilterKey(assignment) === option.value
-              }).length
-
-              return (
-                <option key={option.value} value={option.value}>
-                  {option.label} ({count})
-                </option>
-              )
-            })}
-          </select>
-        </div>
+        </select>
       </div>
 
-      {/* Summary */}
-      <div className="summary">
-        <button
-          type="button"
-          className={`schip schip--btn${assignmentView === 'all' ? ' schip--active' : ''}`}
-          onClick={() => setAssignmentView('all')}
-          aria-pressed={assignmentView === 'all'}
-          disabled={scopedJobCards.length === 0}
-        >
-          <span className="ic">
-            <Icon name="floor" size={16} />
-          </span>
-          <div>
-            <div className="n">{scopedJobCards.length}</div>
-            <div className="l">Job cards</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          className={`schip schip--btn warn${assignmentView === 'unassigned' ? ' schip--active' : ''}`}
-          onClick={() => setAssignmentView('unassigned')}
-          aria-pressed={assignmentView === 'unassigned'}
-          disabled={unassignedCount === 0}
-        >
-          <span className="ic">
-            <Icon name="clock" size={16} />
-          </span>
-          <div>
-            <div className="n">{unassignedCount}</div>
-            <div className="l">Unassigned</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          className={`schip schip--btn${assignmentView === 'assigned' ? ' schip--active' : ''}`}
-          onClick={() => setAssignmentView('assigned')}
-          aria-pressed={assignmentView === 'assigned'}
-          disabled={assignedCount === 0}
-        >
-          <span className="ic">
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{assignedCount}</div>
-            <div className="l">Assigned</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          className={`schip schip--btn warn${assignmentView === 'hold' ? ' schip--active' : ''}`}
-          onClick={() => setAssignmentView('hold')}
-          aria-pressed={assignmentView === 'hold'}
-          disabled={holdCount === 0}
-        >
-          <span className="ic">
-            <Icon name="clock" size={16} />
-          </span>
-          <div>
-            <div className="n">{holdCount}</div>
-            <div className="l">Hold</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          className={`schip schip--btn${assignmentView === 'work_inprocess' ? ' schip--active' : ''}`}
-          onClick={() => setAssignmentView('work_inprocess')}
-          aria-pressed={assignmentView === 'work_inprocess'}
-          disabled={inProcessCount === 0}
-        >
-          <span className="ic">
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{inProcessCount}</div>
-            <div className="l">In-Process</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          className={`schip schip--btn${assignmentView === 'completed' ? ' schip--active' : ''}`}
-          onClick={() => setAssignmentView('completed')}
-          aria-pressed={assignmentView === 'completed'}
-          disabled={completedCount === 0}
-        >
-          <span className="ic">
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{completedCount}</div>
-            <div className="l">Completed</div>
-          </div>
-        </button>
+      {/* ── STATUS TABS ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+        {([
+          { key: 'all',            label: 'All',        count: scopedJobCards.length,  color: '#6366f1', bg: '#eef2ff' },
+          { key: 'unassigned',     label: 'Unassigned', count: unassignedCount,        color: '#ef4444', bg: '#fef2f2' },
+          { key: 'assigned',       label: 'Assigned',   count: assignedCount,          color: '#2563eb', bg: '#eff6ff' },
+          { key: 'hold',           label: 'Hold',       count: holdCount,              color: '#f59e0b', bg: '#fffbeb' },
+          { key: 'work_inprocess', label: 'In-Process', count: inProcessCount,         color: '#0ea5e9', bg: '#f0f9ff' },
+          { key: 'completed',      label: 'Completed',  count: completedCount,         color: '#16a34a', bg: '#f0fdf4' },
+        ] as { key: typeof assignmentView; label: string; count: number; color: string; bg: string }[]).map(({ key, label, count, color, bg }) => (
+          <button key={key} type="button" onClick={() => setAssignmentView(key)} disabled={count === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.75rem', background: assignmentView === key ? color : bg, color: assignmentView === key ? '#fff' : color, border: `1.5px solid ${color}44`, borderRadius: '20px', fontWeight: assignmentView === key ? 700 : 500, fontSize: '0.78rem', cursor: count === 0 ? 'not-allowed' : 'pointer', opacity: count === 0 ? 0.5 : 1, transition: 'all 0.15s' }}>
+            <span style={{ fontWeight: 800 }}>{count}</span> {label}
+          </button>
+        ))}
       </div>
 
       {/* Card */}

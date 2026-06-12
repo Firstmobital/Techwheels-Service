@@ -503,82 +503,72 @@ export default function BodyshopFloorPage() {
         </div>
       )}
 
-      {/* Page Head */}
-      <div className="pagehead">
-        <div>
-          <p className="greet">
-            <Icon name="floor" size={13} className="icon-align-text" />
-            Bodyshop Floor
-          </p>
-          <h1>Assign Bodyshop Team</h1>
-          <p>Accident vehicles received at reception — assign Dentor, Painter, and Technician per car.</p>
+      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🚗 Bodyshop Floor</span>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{cars.length} vehicles</span>
         </div>
 
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
-        {/* Branch filter */}
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by branch:</span>
-          <button type="button" onClick={() => setBranchFilter('all')}
-            className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}>
-            All ({cars.length})
-          </button>
-          {branches.map((b) => (
-            <button key={b} type="button" onClick={() => setBranchFilter(b)}
-              className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}>
-              {b} ({cars.filter((c) => (c.branch ?? 'Unknown') === b).length})
-            </button>
-          ))}
-        </div>
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        {/* Floor filter */}
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by floor:</span>
-          <button type="button" onClick={() => setFloorFilter('all')}
-            className={`btn btn--sm ${floorFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}>
-            All ({cars.length})
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Branch:</span>
+        <button type="button" onClick={() => setBranchFilter('all')}
+          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({cars.length})
+        </button>
+        {branches.map((b) => (
+          <button key={b} type="button" onClick={() => setBranchFilter(b)}
+            className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {b} ({cars.filter((c) => (c.branch ?? 'Unknown') === b).length})
           </button>
-          {floors.map((floor) => (
-            <button key={floor} type="button" onClick={() => setFloorFilter(floor)}
-              className={`btn btn--sm ${floorFilter === floor ? 'btn--primary' : 'btn--ghost'}`}>
-              {floor} ({cars.filter((c) => c.bodyshop_floor === floor).length})
-            </button>
-          ))}
-        </div>
+        ))}
 
-        {/* Role filter */}
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by role assigned:</span>
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as BSRole | 'all')}
-            className="sel sel--advisor-filter">
-            <option value="all">All roles</option>
-            {ALL_ROLES.map((r) => (
-              <option key={r} value={r}>{ROLE_META[r].icon} {ROLE_META[r].label}</option>
-            ))}
-          </select>
-        </div>
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Floor:</span>
+        <button type="button" onClick={() => setFloorFilter('all')}
+          className={`btn btn--sm ${floorFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({cars.length})
+        </button>
+        {floors.map((floor) => (
+          <button key={floor} type="button" onClick={() => setFloorFilter(floor)}
+            className={`btn btn--sm ${floorFilter === floor ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {floor} ({cars.filter((c) => c.bodyshop_floor === floor).length})
+          </button>
+        ))}
+
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Role:</span>
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as BSRole | 'all')}
+          className="sel sel--advisor-filter" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
+          <option value="all">All roles</option>
+          {ALL_ROLES.map((r) => (
+            <option key={r} value={r}>{ROLE_META[r].icon} {ROLE_META[r].label}</option>
+          ))}
+        </select>
       </div>
 
-      {/* Summary chips */}
-      <div className="summary">
+      {/* ── STATUS TABS ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
         {([
-          { key: 'all',            label: 'Job cards',   icon: 'floor',   count: counts.all            },
-          { key: 'unassigned',     label: 'Unassigned',  icon: 'clock',   count: counts.unassigned,  warn: true },
-          { key: 'assigned',       label: 'Assigned',    icon: 'checksm', count: counts.assigned       },
-          { key: 'hold',           label: 'Hold',        icon: 'clock',   count: counts.hold,        warn: true },
-          { key: 'work_inprocess', label: 'In-Process',  icon: 'checksm', count: counts.work_inprocess },
-          { key: 'completed',      label: 'Completed',   icon: 'checksm', count: counts.completed      },
-        ] as { key: AssignmentView; label: string; icon: string; count: number; warn?: boolean }[]).map((chip) => (
-          <button key={chip.key} type="button"
-            className={`schip schip--btn${chip.warn ? ' warn' : ''}${assignmentView === chip.key ? ' schip--active' : ''}`}
-            onClick={() => setAssignmentView(chip.key)}
-            aria-pressed={assignmentView === chip.key}
-            disabled={chip.count === 0}>
-            <span className="ic"><Icon name={chip.icon as 'floor'} size={16} /></span>
-            <div>
-              <div className="n">{chip.count}</div>
-              <div className="l">{chip.label}</div>
-            </div>
+          { key: 'all',            label: 'All',        count: counts.all,             color: '#6366f1' },
+          { key: 'unassigned',     label: 'Unassigned', count: counts.unassigned,      color: '#ef4444' },
+          { key: 'assigned',       label: 'Assigned',   count: counts.assigned,        color: '#2563eb' },
+          { key: 'hold',           label: 'Hold',       count: counts.hold,            color: '#f59e0b' },
+          { key: 'work_inprocess', label: 'In-Process', count: counts.work_inprocess,  color: '#0ea5e9' },
+          { key: 'completed',      label: 'Completed',  count: counts.completed,       color: '#16a34a' },
+        ] as { key: AssignmentView; label: string; count: number; color: string }[]).map(({ key, label, count, color }) => (
+          <button key={key} type="button" onClick={() => setAssignmentView(key)} disabled={count === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.75rem', background: assignmentView === key ? color : `${color}18`, color: assignmentView === key ? '#fff' : color, border: `1.5px solid ${color}44`, borderRadius: '20px', fontWeight: assignmentView === key ? 700 : 500, fontSize: '0.78rem', cursor: count === 0 ? 'not-allowed' : 'pointer', opacity: count === 0 ? 0.5 : 1 }}>
+            <span style={{ fontWeight: 800 }}>{count}</span> {label}
           </button>
         ))}
       </div>

@@ -846,78 +846,59 @@ export default function ReceptionPage() {
         onChange={handleImportChange}
       />
 
-      <div className="pagehead">
-        <div>
-          <p className="greet"><span className="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 6h14v12H5z" stroke="currentColor" strokeWidth="2"/></svg></span>Reception</p>
-          <h1>Front-desk intake</h1>
-          <p>Capture intake records and assign a service advisor.</p>
+      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🏢 Reception</span>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{locationFilterBaseEntries.length} records</span>
         </div>
+
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
+
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Loc:</span>
+        <button type="button" onClick={() => setSelectedLocation('all')}
+          className={`btn btn--sm ${selectedLocation === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({locationFilterBaseEntries.length})
+        </button>
+        {locationOptions.map((location) => (
+          <button key={location} type="button" onClick={() => setSelectedLocation(location)}
+            className={`btn btn--sm ${selectedLocation === location ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {location} ({locationFilterBaseEntries.filter((entry) => getLocationLabel(entry.branch) === location).length})
+          </button>
+        ))}
+
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Portal:</span>
+        <button type="button" onClick={() => setSelectedFuelType('all')}
+          className={`btn btn--sm ${selectedFuelType === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({fuelFilterBaseEntries.length})
+        </button>
+        {fuelTypeOptions.map((fuelType) => (
+          <button key={fuelType} type="button" onClick={() => setSelectedFuelType(fuelType)}
+            className={`btn btn--sm ${selectedFuelType === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {fuelType} ({fuelFilterBaseEntries.filter((entry) => getEntryFuelTypeLabel(entry) === fuelType).length})
+          </button>
+        ))}
+
+        <span style={{ flex: 1 }} />
+
         {canImport && (
-          <button
-            type="button"
-            className="btn btn--soft"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? 'Importing...' : 'Import XLSX/CSV'}
+          <button type="button" className="btn btn--soft" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+            style={{ padding: '0.3rem 0.75rem', fontSize: '0.78rem' }}>
+            {uploading ? '⏳ Importing…' : '📥 Import XLSX'}
           </button>
         )}
       </div>
 
-      {error && <div className="alert alert--err mb-gap">{error}</div>}
-      {notice && <div className="alert alert--ok mb-gap">{notice}</div>}
-
-      <div className="filterbar">
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
-      </div>
-
-      <div className="chipgroup">
-        <span className="chipgroup__label">Filter by location:</span>
-        <button
-          type="button"
-          onClick={() => setSelectedLocation('all')}
-          className={`fchip ${selectedLocation === 'all' ? 'on' : ''}`}
-        >
-          All <span className="ct">{locationFilterBaseEntries.length}</span>
-        </button>
-        {locationOptions.map((location) => {
-          const count = locationFilterBaseEntries.filter((entry) => getLocationLabel(entry.branch) === location).length
-          return (
-            <button
-              key={location}
-              type="button"
-              onClick={() => setSelectedLocation(location)}
-              className={`fchip ${selectedLocation === location ? 'on' : ''}`}
-            >
-              {location} <span className="ct">{count}</span>
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="chipgroup">
-        <span className="chipgroup__label">Filter by fuel type:</span>
-        <button
-          type="button"
-          onClick={() => setSelectedFuelType('all')}
-          className={`fchip ${selectedFuelType === 'all' ? 'on' : ''}`}
-        >
-          All <span className="ct">{fuelFilterBaseEntries.length}</span>
-        </button>
-        {fuelTypeOptions.map((fuelType) => {
-          const count = fuelFilterBaseEntries.filter((entry) => getEntryFuelTypeLabel(entry) === fuelType).length
-          return (
-            <button
-              key={fuelType}
-              type="button"
-              onClick={() => setSelectedFuelType(fuelType)}
-              className={`fchip ${selectedFuelType === fuelType ? 'on' : ''}`}
-            >
-              {fuelType} <span className="ct">{count}</span>
-            </button>
-          )
-        })}
-      </div>
+      {error && <div className="alert alert--err mb-gap" style={{ marginBottom: '0.5rem' }}>{error}</div>}
+      {notice && <div className="alert alert--ok mb-gap" style={{ marginBottom: '0.5rem' }}>{notice}</div>}
 
       <div className="statsrow">
         <button

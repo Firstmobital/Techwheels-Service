@@ -1545,47 +1545,54 @@ export default function BodyshopRepairPage() {
         }}>{toast.msg}</div>
       )}
 
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="page__header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>🔧 Bodyshop Repair Tracker</h1>
-          <button className="btn btn--primary" onClick={() => setShowNew(true)}>+ New Intake</button>
+      {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🔧 Repair Tracker</span>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{cards.length} records</span>
         </div>
 
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
-        {/* pipeline chips */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          {pipeline.map((g) => (
-            <div key={g.label} style={{
-              border: `1.5px solid ${g.color}`, borderRadius: 20,
-              padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              <span style={{ fontWeight: 700, color: g.color, fontSize: 16 }}>{g.count}</span>
-              <span style={{ fontSize: 12, color: g.color }}>{g.label}</span>
-            </div>
-          ))}
-          <div style={{ border: '1.5px solid #6b7280', borderRadius: 20, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 700, color: '#6b7280', fontSize: 16 }}>{cards.filter(c => c.overall_status === 'delivered').length}</span>
-            <span style={{ fontSize: 12, color: '#6b7280' }}>Delivered</span>
-          </div>
-        </div>
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        {/* filters */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <input className="inp" placeholder="Search job card / reg / customer…"
-            value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{ flex: 1, minWidth: 200 }} />
-          <select className="sel" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-            <option value="all">All Branches</option>
-            {branches.map((b) => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select className="sel" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="delivered">Delivered</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+        <input className="inp" placeholder="Search JC / reg / customer…"
+          value={search} onChange={(e) => setSearch(e.target.value)}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem', width: '200px' }} />
+
+        <select className="sel" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
+          style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}>
+          <option value="all">All Branches</option>
+          {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+
+        <select className="sel" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}>
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+
+        <span style={{ flex: 1 }} />
+
+        <button className="btn btn--primary" onClick={() => setShowNew(true)}
+          style={{ padding: '0.3rem 0.85rem', fontSize: '0.78rem', fontWeight: 700 }}>
+          + New Intake
+        </button>
+      </div>
+
+      {/* ── PIPELINE PILLS ──────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+        {pipeline.map((g) => (
+          <div key={g.label} style={{ border: `1.5px solid ${g.color}44`, borderRadius: '20px', padding: '0.25rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: `${g.color}10` }}>
+            <span style={{ fontWeight: 800, color: g.color, fontSize: '0.88rem' }}>{g.count}</span>
+            <span style={{ fontSize: '0.72rem', color: g.color }}>{g.label}</span>
+          </div>
+        ))}
+        <div style={{ border: '1.5px solid #6b728044', borderRadius: '20px', padding: '0.25rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#6b72800f' }}>
+          <span style={{ fontWeight: 800, color: '#6b7280', fontSize: '0.88rem' }}>{cards.filter(c => c.overall_status === 'delivered').length}</span>
+          <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>Delivered</span>
         </div>
       </div>
 

@@ -415,31 +415,30 @@ export default function BodyshopTrackerPage() {
   return (
     <div className="page">
 
-      {/* ── Header ── */}
-      <div className="page-head card mb-gap">
-        <div className="page-head__text">
-          <p className="page-head__label">
-            <Icon name="floor" size={14} className="icon-align-text" /> Bodyshop
-          </p>
-          <h1>Bodyshop Earnings Tracker</h1>
-          <p>SA: Accident JCs by SA name · Dentor/Painter/Technician: all assigned JCs by role</p>
+      {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🔨 Bodyshop Tracker</span>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{allDateScoped.length} records</span>
         </div>
+
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Branch:</span>
-          <button type="button" onClick={() => setBranchFilter('all')}
-            className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}>
-            All ({allDateScoped.length})
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Branch:</span>
+        <button type="button" onClick={() => setBranchFilter('all')}
+          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({allDateScoped.length})
+        </button>
+        {branches.map((b) => (
+          <button key={b} type="button" onClick={() => setBranchFilter(b)}
+            className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {b} ({allDateScoped.filter((r) => branchOf(r.branch) === b).length})
           </button>
-          {branches.map((b) => (
-            <button key={b} type="button" onClick={() => setBranchFilter(b)}
-              className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}>
-              {b} ({allDateScoped.filter((r) => branchOf(r.branch) === b).length})
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
 
       {error && (
@@ -472,52 +471,33 @@ export default function BodyshopTrackerPage() {
         </div>
       </div>
 
-      {/* ── Summary chips ── */}
-      <div className="summary">
-        <div className="schip">
-          <span className="ic"><Icon name="person" size={16} /></span>
-          <div><div className="n">{totals.memberCount}</div><div className="l">{tabMeta.label}s</div></div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}><Icon name="jc" size={16} /></span>
-          <div><div className="n">{totals.jcCount.toLocaleString('en-IN')}</div><div className="l">Job Cards</div></div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#f0fdf4', color: '#16a34a' }}><Icon name="checksm" size={16} /></span>
-          <div><div className="n">{fmt(totals.labour)}</div><div className="l">Total Labour</div></div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#fdf4ff', color: '#9333ea' }}><Icon name="parts" size={16} /></span>
-          <div><div className="n">{fmt(totals.spares)}</div><div className="l">Total Spares</div></div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#fff7ed', color: '#ea580c' }}><Icon name="invoice" size={16} /></span>
-          <div><div className="n">{fmt(totals.invoice)}</div><div className="l">Total Invoice</div></div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}><Icon name="checksm" size={16} /></span>
-          <div>
-            <div className="n">{fmt(totals.labour * curPct / 100)}</div>
-            <div className="l">{tabMeta.label} Income ({curPct}%)</div>
+      {/* ── STATS BAR ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.45rem', marginBottom: '0.6rem' }}>
+        {[
+          { label: `${tabMeta.label}s`,             value: String(totals.memberCount),                      color: '#6366f1', bg: '#eef2ff' },
+          { label: 'Job Cards',                      value: totals.jcCount.toLocaleString('en-IN'),           color: '#2563eb', bg: '#eff6ff' },
+          { label: 'Total Labour',                   value: fmt(totals.labour),                               color: '#16a34a', bg: '#f0fdf4' },
+          { label: 'Total Spares',                   value: fmt(totals.spares),                               color: '#9333ea', bg: '#fdf4ff' },
+          { label: 'Total Invoice',                  value: fmt(totals.invoice),                              color: '#ea580c', bg: '#fff7ed' },
+          { label: `${tabMeta.label} Income (${curPct}%)`, value: fmt(totals.labour * curPct / 100),          color: '#2563eb', bg: '#eff6ff', bold: true },
+        ].map(({ label, value, color, bg, bold }) => (
+          <div key={label} style={{ background: bg, borderRadius: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${color}22` }}>
+            <div style={{ fontSize: bold ? '1rem' : '0.92rem', fontWeight: bold ? 800 : 700, color }}>{value}</div>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.1rem' }}>{label}</div>
           </div>
-        </div>
-        {/* Date filter */}
-        <div className="schip schip--date-filter">
-          <div className="schip-date-filter__head"><div className="l">Date range</div></div>
-          <div className="schip-date-filter__controls">
-            <label className="schip-date-filter__field" htmlFor="bs-from">
-              <span>From</span>
-              <input id="bs-from" type="date" className="inp" value={fromDate}
-                onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v > toDate) setToDate(v) }} />
-            </label>
-            <label className="schip-date-filter__field" htmlFor="bs-to">
-              <span>To</span>
-              <input id="bs-to" type="date" className="inp" value={toDate}
-                onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v < fromDate) setFromDate(v) }} />
-            </label>
-            <button type="button" className="btn btn--ghost btn--sm schip-date-filter__clear"
-              onClick={() => { setFromDate(''); setToDate('') }} disabled={!fromDate && !toDate}>Clear</button>
-          </div>
+        ))}
+        {/* Date range fine-filter */}
+        <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', gridColumn: 'span 3' }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>📅 Range:</span>
+          <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+            value={fromDate} onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v > toDate) setToDate(v) }} />
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</span>
+          <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+            value={toDate} onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v < fromDate) setFromDate(v) }} />
+          {(fromDate || toDate) && (
+            <button type="button" className="btn btn--ghost btn--sm" style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
+              onClick={() => { setFromDate(''); setToDate('') }}>✕</button>
+          )}
         </div>
       </div>
 

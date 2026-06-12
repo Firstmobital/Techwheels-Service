@@ -967,100 +967,64 @@ export default function TechnicianPage() {
   }
 
   return (
-    <div>
-      <div className="pagehead">
-        <div>
-          <p className="greet">
-            <Icon name="tech" size={13} className="icon-align-text" />
-            Technician
-          </p>
-          <h1>Technician earnings tracker</h1>
-          <p>Drill down: technician → day → vehicle → job card details (JC #, Reg, Bay, Status, IN/OUT TS, Time Diff, Remark).</p>
+    <div style={{ padding: '0.75rem' }}>
+      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🔧 Technician Tracker</span>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{dateScopedAssignmentsWithIncome.length} JCs</span>
         </div>
 
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Loc:</span>
+        <button type="button" onClick={() => setBranchFilter('all')}
+          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({dateScopedAssignmentsWithIncome.length})
+        </button>
+        {branches.map((branch) => (
+          <button key={branch} type="button" onClick={() => setBranchFilter(branch)}
+            className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {branch} ({dateScopedAssignmentsWithIncome.filter((row) => getBranchLabel(row.branch) === branch).length})
+          </button>
+        ))}
 
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by location:</span>
-          <button
-            type="button"
-            onClick={() => setBranchFilter('all')}
-            className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          >
-            All ({dateScopedAssignmentsWithIncome.length})
-          </button>
-          {branches.map((branch) => {
-            const count = dateScopedAssignmentsWithIncome.filter((row) => getBranchLabel(row.branch) === branch).length
-            return (
-              <button
-                key={branch}
-                type="button"
-                onClick={() => setBranchFilter(branch)}
-                className={`btn btn--sm ${branchFilter === branch ? 'btn--primary' : 'btn--ghost'}`}
-              >
-                {branch} ({count})
-              </button>
-            )
-          })}
-        </div>
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Filter by fuel type:</span>
-          <button
-            type="button"
-            onClick={() => setFuelTypeFilter('all')}
-            className={`btn btn--sm ${fuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          >
-            All ({branchScopedAssignmentsWithIncome.length})
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Portal:</span>
+        <button type="button" onClick={() => setFuelTypeFilter('all')}
+          className={`btn btn--sm ${fuelTypeFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({branchScopedAssignmentsWithIncome.length})
+        </button>
+        {fuelTypeOptions.map((fuelType) => (
+          <button key={fuelType} type="button" onClick={() => setFuelTypeFilter(fuelType)}
+            className={`btn btn--sm ${fuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {fuelType} ({branchScopedAssignmentsWithIncome.filter((row) => getAssignmentFuelTypeLabel(row) === fuelType).length})
           </button>
-          {fuelTypeOptions.map((fuelType) => {
-            const count = branchScopedAssignmentsWithIncome.filter((row) => getAssignmentFuelTypeLabel(row) === fuelType).length
-            return (
-              <button
-                key={fuelType}
-                type="button"
-                onClick={() => setFuelTypeFilter(fuelType)}
-                className={`btn btn--sm ${fuelTypeFilter === fuelType ? 'btn--primary' : 'btn--ghost'}`}
-              >
-                {fuelType} ({count})
-              </button>
-            )
-          })}
-        </div>
+        ))}
 
-        <div className="toolbar toolbar--tight">
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => void handleGenerateYesterdayReport()}
-            disabled={generatingReport}
-            style={{ background: '#16a34a', borderColor: '#16a34a' }}
-          >
-            <Icon name="download" size={14} className="icon-align-text" />
-            {generatingReport ? 'Generating…' : '📥 Yesterday Report'}
+        <span style={{ flex: 1 }} />
+
+        <button type="button" onClick={() => void handleGenerateYesterdayReport()} disabled={generatingReport}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', opacity: generatingReport ? 0.7 : 1 }}>
+          📥 {generatingReport ? 'Loading…' : 'Yesterday'}
+        </button>
+        <button type="button" onClick={() => setShowPivotReport(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer' }}>
+          📊 Pivot
+        </button>
+        {canEditSharePercent && (
+          <button type="button" onClick={() => void handleSendYesterdayReportEmail()} disabled={sendingReportEmail}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', opacity: sendingReportEmail ? 0.7 : 1 }}>
+            ✉️ {sendingReportEmail ? 'Sending…' : 'Email Report'}
           </button>
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => setShowPivotReport(true)}
-            style={{ background: '#6366f1', borderColor: '#6366f1' }}
-          >
-            📊 Pivot Report
-          </button>
-          {canEditSharePercent && (
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => void handleSendYesterdayReportEmail()}
-              disabled={sendingReportEmail}
-            >
-              <Icon name="mail" size={14} className="icon-align-text" />
-              {sendingReportEmail ? 'Sending…' : 'Send Email Report'}
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {error && (
@@ -1298,75 +1262,31 @@ export default function TechnicianPage() {
         </div>
       )}
 
-      {/* Summary chips */}
-      <div className="summary">
-        <div className="schip">
-          <span className="ic">
-            <Icon name="tech" size={16} />
-          </span>
-          <div>
-            <div className="n">{technicianCards.length}</div>
-            <div className="l">Technicians</div>
-          </div>
+      {/* ── STATS + DATE RANGE BAR ──────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.45rem', marginBottom: '0.6rem' }}>
+        <div style={{ background: '#eef2ff', borderRadius: '8px', padding: '0.5rem 0.75rem', border: '1px solid #6366f122' }}>
+          <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#6366f1' }}>{technicianCards.length}</div>
+          <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.1rem' }}>Technicians</div>
         </div>
-        <div className="schip">
-          <span className="ic" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totalIncome)}</div>
-            <div className="l">Total earnings</div>
-          </div>
+        <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '0.5rem 0.75rem', border: '1px solid #16a34a22', gridColumn: 'span 2' }}>
+          <div style={{ fontSize: '1rem', fontWeight: 800, color: '#16a34a' }}>{formatCurrency(totalIncome)}</div>
+          <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.1rem' }}>Total Earnings</div>
         </div>
-        <div className="schip schip--date-filter">
-          <div className="schip-date-filter__head">
-            <div className="l">Date range filter</div>
-          </div>
-          <div className="schip-date-filter__controls">
-            <label className="schip-date-filter__field" htmlFor="tech-date-from">
-              <span>From</span>
-              <input
-                id="tech-date-from"
-                type="date"
-                className="inp"
-                value={fromDate}
-                onChange={(e) => {
-                  const next = e.target.value
-                  setFromDate(next)
-                  if (toDate && next && next > toDate) {
-                    setToDate(next)
-                  }
-                }}
-              />
-            </label>
-            <label className="schip-date-filter__field" htmlFor="tech-date-to">
-              <span>To</span>
-              <input
-                id="tech-date-to"
-                type="date"
-                className="inp"
-                value={toDate}
-                onChange={(e) => {
-                  const next = e.target.value
-                  setToDate(next)
-                  if (fromDate && next && next < fromDate) {
-                    setFromDate(next)
-                  }
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm schip-date-filter__clear"
-              onClick={() => {
-                setFromDate('')
-                setToDate('')
-              }}
-              disabled={!fromDate && !toDate}
-            >
-              Clear
-            </button>
-          </div>
+        {/* Date range fine-filter */}
+        <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.45rem 0.65rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', gridColumn: 'span 3' }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>📅 Range:</span>
+          <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+            value={fromDate}
+            onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v && v > toDate) setToDate(v) }} />
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</span>
+          <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+            value={toDate}
+            onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v && v < fromDate) setFromDate(v) }} />
+          {(fromDate || toDate) && (
+            <button type="button" className="btn btn--ghost btn--sm"
+              style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
+              onClick={() => { setFromDate(''); setToDate('') }}>✕</button>
+          )}
         </div>
       </div>
 
