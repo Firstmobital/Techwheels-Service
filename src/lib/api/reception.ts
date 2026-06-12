@@ -19,6 +19,7 @@ export interface ReceptionEntryRow {
   location: string | null
   portal: string | null
   branch_label: string | null
+  km_reading: number | null
   fuel_type: string | null
   source: string
   remark: string | null
@@ -51,6 +52,7 @@ export interface ReceptionEntryInput {
   jc_number?: string | null
   owner_name?: string | null
   owner_phone?: string | null
+  km_reading?: number | null
   source: string
   branch?: string | null
 }
@@ -64,6 +66,7 @@ export interface ReceptionEmployeeOption {
 export interface ServiceAdvisorEntryUpdateInput {
   service_type: string
   jc_number?: string | null
+  km_reading?: number | null
   remark?: string | null
 }
 
@@ -96,6 +99,7 @@ const RECEPTION_ENTRY_SELECT_COLUMNS = [
   'location',
   'portal',
   'branch_label',
+  'km_reading',
   'source',
   'remark',
   'estimate_storage_path',
@@ -125,6 +129,14 @@ function normalizePhone(value?: string | null): string | null {
   return digits.slice(0, 10)
 }
 
+function normalizeKmReading(value?: number | null): number | null {
+  if (value == null) return null
+  if (!Number.isFinite(value)) return null
+  const normalized = Math.trunc(value)
+  if (normalized < 0) return null
+  return normalized
+}
+
 function normalizePayload(input: ReceptionEntryInput) {
   return {
     reg_number: input.reg_number.trim().toUpperCase(),
@@ -134,6 +146,7 @@ function normalizePayload(input: ReceptionEntryInput) {
     jc_number: input.jc_number?.trim() || null,
     owner_name: input.owner_name?.trim() || null,
     owner_phone: normalizePhone(input.owner_phone),
+    km_reading: normalizeKmReading(input.km_reading),
     source: input.source.trim(),
     branch: input.branch?.trim() || null,
   }
@@ -196,8 +209,9 @@ async function enrichEntriesWithEmployeeBranch(entries: ReceptionEntryRow[]): Pr
     const meta = employeeMetaMap.get(entry.sa_employee_code.trim().toUpperCase())
     if (!meta) return entry
 
-    const nextBranch = entry.branch || meta.location || null
-    const nextFuelType = entry.fuel_type || meta.fuelType || null
+    // Employee Master mapping is the winning source when present.
+    const nextBranch = meta.location || entry.branch || null
+    const nextFuelType = meta.fuelType || entry.fuel_type || null
 
     if (nextBranch !== entry.branch || nextFuelType !== entry.fuel_type) {
       return {
@@ -209,38 +223,6 @@ async function enrichEntriesWithEmployeeBranch(entries: ReceptionEntryRow[]): Pr
 
     return entry
   })
-}
-
-export async function listServiceBranches(): Promise<ApiResult<string[]>> {
-  const { data, error } = await supabase
-    .from('service_branches')
-    .select('name')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-
-  if (error) return fail(error)
-  return ok((data ?? []).map((r: { name: string }) => r.name))
-}
-
-export async function createServiceBranch(name: string): Promise<ApiResult<{ id: number; name: string }>> {
-  const trimmed = name.trim()
-  if (!trimmed) return fail('Branch name is required')
-  const { data, error } = await supabase
-    .from('service_branches')
-    .insert({ name: trimmed, is_active: true })
-    .select('id, name')
-    .single()
-  if (error) return fail(error)
-  return ok(data as { id: number; name: string })
-}
-
-export async function deleteServiceBranch(id: number): Promise<ApiResult<null>> {
-  const { error } = await supabase
-    .from('service_branches')
-    .delete()
-    .eq('id', id)
-  if (error) return fail(error)
-  return ok(null)
 }
 
 async function fetchReceptionEntriesWithKeyset(
@@ -364,7 +346,10 @@ export async function createReceptionEntry(input: ReceptionEntryInput): Promise<
   const payload = normalizePayload(input)
 
   if (!payload.reg_number) return fail('Registration number is required')
+  if (!payload.model) return fail('Model is required')
   if (!payload.sa_employee_code) return fail('Employee code is required')
+  if (!payload.owner_name) return fail('Owner name is required')
+  if (!payload.owner_phone) return fail('Owner phone is required')
   if (!payload.source) return fail('Source is required')
 
   if (payload.owner_phone && payload.owner_phone.length !== 10) {
@@ -396,7 +381,10 @@ export async function updateReceptionEntry(id: number, input: ReceptionEntryInpu
   const payload = normalizePayload(input)
 
   if (!payload.reg_number) return fail('Registration number is required')
+  if (!payload.model) return fail('Model is required')
   if (!payload.sa_employee_code) return fail('Employee code is required')
+  if (!payload.owner_name) return fail('Owner name is required')
+  if (!payload.owner_phone) return fail('Owner phone is required')
   if (!payload.source) return fail('Source is required')
 
   if (payload.owner_phone && payload.owner_phone.length !== 10) {
@@ -438,7 +426,9 @@ export async function deleteReceptionEntry(id: number): Promise<ApiResult<null>>
 export async function bulkCreateReceptionEntries(rows: ReceptionEntryInput[]): Promise<ApiResult<number>> {
   if (rows.length === 0) return ok(0)
 
-  const payload = rows.map(normalizePayload).filter((row) => row.reg_number && row.sa_employee_code && row.source)
+  const payload = rows
+    .map(normalizePayload)
+    .filter((row) => row.reg_number && row.model && row.sa_employee_code && row.owner_name && row.owner_phone && row.source)
 
   if (payload.length === 0) return fail('No valid rows found to import')
 
@@ -514,6 +504,7 @@ export async function updateServiceAdvisorEntry(
   const payload = {
     service_type: input.service_type.trim(),
     jc_number: input.jc_number?.trim().toUpperCase() || null,
+    km_reading: normalizeKmReading(input.km_reading),
     remark: input.remark?.trim() || null,
   }
 

@@ -12,6 +12,7 @@ interface JobCard {
   created_by: string | null
   source: string | null
   reg_number: string | null
+  km_reading: number | null
   model: string | null
   service_type: string | null
   sa_name: string | null
@@ -169,6 +170,7 @@ function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
     created_by: row.created_by ?? null,
     source: row.source ?? null,
     reg_number: row.reg_number ?? null,
+    km_reading: row.km_reading ?? null,
     model: row.model ?? null,
     service_type: row.service_type ?? null,
     sa_name: row.sa_name ?? null,
@@ -802,6 +804,7 @@ export default function FloorInchargePage() {
       const searchText = [
         jc.jc_number ?? '',
         jc.reg_number ?? '',
+        String(jc.km_reading ?? ''),
         jc.model ?? '',
         jc.service_type ?? '',
         jc.sa_name ?? '',
@@ -1174,6 +1177,7 @@ export default function FloorInchargePage() {
                   <tr>
                     <th>Created</th>
                     <th>Reg No</th>
+                    <th>KM Reading</th>
                     <th>Model</th>
                     <th>Service Type</th>
                     <th>SA Name</th>
@@ -1215,6 +1219,7 @@ export default function FloorInchargePage() {
                         <td className="mono strong cell-accent">
                           {jc.reg_number || '—'}
                         </td>
+                        <td className="mono">{jc.km_reading ?? '—'}</td>
                         <td>{jc.model || '—'}</td>
                         <td className="type-cell">{jc.service_type || '—'}</td>
                         <td className="strong type-cell">

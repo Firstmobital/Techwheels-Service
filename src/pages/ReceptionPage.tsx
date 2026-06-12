@@ -116,6 +116,7 @@ const DEFAULT_MODEL_OPTIONS = [
 
 type FormState = {
   reg_number: string
+  km_reading: string
   model: string
   sa_employee_code: string
   owner_name: string
@@ -139,6 +140,7 @@ const RECEPTION_SERVICE_TYPE_OPTIONS = [
 
 const EMPTY_FORM: FormState = {
   reg_number: '',
+  km_reading: '',
   model: '',
   sa_employee_code: '',
   owner_name: '',
@@ -155,6 +157,7 @@ function normalizeHeader(value: string): string {
 
 const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   reg_number: ['reg_number', 'registration no', 'registration number', 'vehicle registration number', 'vrn'],
+  km_reading: ['km_reading', 'km reading', 'km', 'odometer', 'odometer reading', 'kms run', 'kms'],
   model: ['model', 'vehicle model'],
   sa_employee_code: ['sa_employee_code', 'employee_code', 'sa code', 'employee code', 'sa_code'],
   owner_name: ['owner_name', 'owner name'],
@@ -236,6 +239,12 @@ function parseImportFile(file: File): Promise<{ rows: ReceptionEntryInput[]; ski
 
           rows.push({
             reg_number: regNumber,
+            km_reading: (() => {
+              const raw = indexMap.km_reading >= 0 ? row[indexMap.km_reading]?.trim() ?? '' : ''
+              if (!raw) return null
+              const parsed = Number.parseInt(raw.replace(/[^0-9]/g, ''), 10)
+              return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+            })(),
             model: indexMap.model >= 0 ? row[indexMap.model]?.trim() ?? '' : '',
             service_type: serviceType,
             sa_employee_code: saEmployeeCode,
@@ -632,12 +641,12 @@ export default function ReceptionPage() {
     setNotice(null)
     setError(null)
 
-    if (!form.reg_number.trim() || !form.sa_employee_code.trim() || !form.source.trim()) {
-      setError('Please fill all required fields: Registration No, SA Name, Source')
+    if (!form.reg_number.trim() || !form.model.trim() || !form.sa_employee_code.trim() || !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
+      setError('Please fill all required fields: Registration No, Model, SA Name, Owner Name, Owner Phone, Source')
       return
     }
 
-    if (form.owner_phone.trim() && form.owner_phone.replace(/\D/g, '').length !== 10) {
+    if (form.owner_phone.replace(/\D/g, '').length !== 10) {
       setError('Owner phone must be exactly 10 digits')
       return
     }
@@ -646,6 +655,7 @@ export default function ReceptionPage() {
 
     const payload: ReceptionEntryInput = {
       reg_number: form.reg_number,
+      km_reading: form.km_reading.trim() ? Number.parseInt(form.km_reading, 10) : null,
       model: form.model,
       service_type: form.service_type || null,
       sa_employee_code: form.sa_employee_code,
@@ -749,6 +759,7 @@ export default function ReceptionPage() {
     setEditingId(entry.id)
     setForm({
       reg_number: entry.reg_number,
+      km_reading: entry.km_reading == null ? '' : String(entry.km_reading),
       model: entry.model ?? '',
       sa_employee_code: resolvedEmployeeCode,
       owner_name: entry.owner_name ?? '',
@@ -962,25 +973,43 @@ export default function ReceptionPage() {
             </div>
           </div>
           <div className="card__body">
-            <label className="field">
-              <span className="label">Registration No <span className="req">*</span></span>
-              <input
-                value={form.reg_number}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    reg_number: event.target.value.toUpperCase(),
-                  }))
-                }
-                autoCapitalize="characters"
-                placeholder="RJ14AB1234"
-                className="inp inp--uc"
-              />
-            </label>
+            <div className="form-grid-2">
+              <label className="field">
+                <span className="label">Registration No <span className="req">*</span></span>
+                <input
+                  value={form.reg_number}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      reg_number: event.target.value.toUpperCase(),
+                    }))
+                  }
+                  autoCapitalize="characters"
+                  placeholder="RJ14AB1234"
+                  className="inp inp--uc"
+                />
+              </label>
+
+              <label className="field">
+                <span className="label">KM Reading</span>
+                <input
+                  value={form.km_reading}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      km_reading: event.target.value.replace(/[^0-9]/g, ''),
+                    }))
+                  }
+                  inputMode="numeric"
+                  placeholder="e.g. 24560"
+                  className="inp"
+                />
+              </label>
+            </div>
 
             <div className="form-grid-2">
               <label className="field">
-                <span className="label">Model</span>
+                <span className="label">Model <span className="req">*</span></span>
                 <select
                   value={form.model}
                   onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
@@ -1052,7 +1081,7 @@ export default function ReceptionPage() {
 
             <div className="form-grid-2">
               <label className="field field--no-gap">
-                <span className="label">Owner Name</span>
+                <span className="label">Owner Name <span className="req">*</span></span>
                 <input
                   value={form.owner_name}
                   onChange={(event) => setForm((prev) => ({ ...prev, owner_name: event.target.value }))}
@@ -1061,7 +1090,7 @@ export default function ReceptionPage() {
               </label>
 
               <label className="field field--no-gap">
-                <span className="label">Owner Phone</span>
+                <span className="label">Owner Phone <span className="req">*</span></span>
                 <input
                   value={form.owner_phone}
                   onChange={(event) => {

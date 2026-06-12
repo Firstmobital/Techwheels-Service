@@ -7,9 +7,6 @@ import {
   createRateCardWithRows,
   exportActiveRateRowsByCityCategory,
   listRateCards,
-  listServiceBranches,
-  createServiceBranch,
-  deleteServiceBranch,
   type RateCardRow,
   type RateRowInput,
   listModelOptions,
@@ -411,11 +408,6 @@ export default function SettingsPage() {
   const [filterSrName, setFilterSrName] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
 
-  // Branch management
-  const [branches, setBranches] = useState<Array<{ id: number; name: string }>>([{ id: 0, name: '' }])
-  const [newBranchName, setNewBranchName] = useState('')
-  const [branchSaving, setBranchSaving] = useState(false)
-  const [branchDeleting, setBranchDeleting] = useState<number | null>(null)
   const [selectedIssueIds, setSelectedIssueIds] = useState<Record<number, boolean>>({})
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
@@ -450,6 +442,15 @@ export default function SettingsPage() {
     const branches = new Set(issues.map((issue) => issue.branch))
     return Array.from(branches).sort()
   }, [issues])
+
+  const derivedBranches = useMemo(() => {
+    const values = new Set(
+      employees
+        .map((employee) => String(employee.location ?? '').trim())
+        .filter(Boolean),
+    )
+    return Array.from(values).sort((a, b) => a.localeCompare(b))
+  }, [employees])
 
   // Calculate mapping statistics
   const mappingStats = useMemo(() => {
@@ -498,8 +499,8 @@ export default function SettingsPage() {
         id: 'branch-management',
         icon: 'building',
         title: 'Branch Management',
-        description: 'Add and remove branches used across modules.',
-        stat: `${branches.length} branches`,
+        description: 'Read-only branch list derived from Employee Master locations.',
+        stat: `${derivedBranches.length} branches`,
       },
       {
         id: 'employee-master',
@@ -530,7 +531,7 @@ export default function SettingsPage() {
         stat: `${issues.length} issues`,
       },
     ],
-    [branches.length, employees.length, issues.length, modelOptions.length, rateCards.length],
+    [derivedBranches.length, employees.length, issues.length, modelOptions.length, rateCards.length],
   )
 
   const openSettingReference = useCallback((sectionId: SettingsSectionId) => {
@@ -1353,44 +1354,6 @@ export default function SettingsPage() {
     setResolvingIssueId(null)
   }, [fetchIssues, issueCodeSelections, employees])
 
-
-  async function loadBranches() {
-    const res = await listServiceBranches()
-    if (!res.error && res.data) {
-      // We need full objects with id — fetch from supabase directly
-      const { data } = await supabase
-        .from('service_branches')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true })
-      setBranches(data ?? [])
-    }
-  }
-
-  async function handleAddBranch() {
-    if (!newBranchName.trim()) return
-    setBranchSaving(true)
-    const res = await createServiceBranch(newBranchName.trim())
-    setBranchSaving(false)
-    if (res.error) {
-      setError(res.error)
-      return
-    }
-    setNewBranchName('')
-    await loadBranches()
-    setMessage(`Branch "${newBranchName.trim()}" added`)
-  }
-
-  async function handleDeleteBranch(id: number, name: string) {
-    if (!window.confirm(`Delete branch "${name}"?`)) return
-    setBranchDeleting(id)
-    const res = await deleteServiceBranch(id)
-    setBranchDeleting(null)
-    if (res.error) { setError(res.error); return }
-    await loadBranches()
-    setMessage(`Branch "${name}" deleted`)
-  }
-
   function normalizeModelInput(value: string): string {
     return value.trim().replace(/\s+/g, ' ')
   }
@@ -1740,36 +1703,16 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">
-                Branch Management <span className="font-medium text-gray-500">({branches.length})</span>
+                Branch Management <span className="font-medium text-gray-500">({derivedBranches.length})</span>
               </h2>
               <p className="mt-0.5 text-xs text-gray-500">
-                Service branches used across modules. These appear as options in the Reception module.
+                Runtime source is Employee Master. This list is derived from Employee Master `location` values.
               </p>
             </div>
           </div>
           <div className="space-y-4 p-5">
-            <div className="flex flex-col gap-2 sm:max-w-xl sm:flex-row">
-              <input
-                type="text"
-                value={newBranchName}
-                onChange={(e) => setNewBranchName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddBranch() } }}
-                placeholder="e.g. Sitapura, Ajmer Road, Shahpura"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none ring-blue-100 focus:border-blue-500 focus:ring"
-              />
-              <button
-                type="button"
-                onClick={() => void handleAddBranch()}
-                disabled={branchSaving || !newBranchName.trim()}
-                className="inline-flex items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Icon name="plus" size={14} strokeWidth={2.2} />
-                {branchSaving ? 'Adding...' : 'Add Branch'}
-              </button>
-            </div>
-
-            {branches.length === 0 ? (
-              <p className="py-4 text-center text-sm text-gray-400">No branches yet. Add your first branch above.</p>
+            {derivedBranches.length === 0 ? (
+              <p className="py-4 text-center text-sm text-gray-400">No branch values found in Employee Master location.</p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gray-200">
                 <table className="min-w-full border-collapse text-xs">
@@ -1777,35 +1720,23 @@ export default function SettingsPage() {
                     <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
                       <th className="px-3 py-2 font-semibold">Sort</th>
                       <th className="px-3 py-2 font-semibold">Branch</th>
-                      <th className="px-3 py-2 font-semibold">Status</th>
-                      <th className="px-3 py-2 text-right font-semibold">Action</th>
+                      <th className="px-3 py-2 font-semibold">Source</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {branches.map((branch, index) => (
-                      <tr key={branch.id} className="border-b border-gray-100">
+                    {derivedBranches.map((branch, index) => (
+                      <tr key={branch} className="border-b border-gray-100">
                         <td className="px-3 py-2 font-mono text-gray-400">{index + 1}</td>
                         <td className="px-3 py-2">
                           <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-700">
                             <Icon name="building" size={13} strokeWidth={2.2} />
-                            <span className="font-medium">{branch.name}</span>
+                            <span className="font-medium">{branch}</span>
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                            Active
+                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                            Employee Master
                           </span>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteBranch(branch.id, branch.name)}
-                            disabled={branchDeleting === branch.id}
-                            className="inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-                          >
-                            <Icon name="trash" size={12} strokeWidth={2.2} />
-                            {branchDeleting === branch.id ? 'Deleting...' : 'Remove'}
-                          </button>
                         </td>
                       </tr>
                     ))}

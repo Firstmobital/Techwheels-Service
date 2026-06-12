@@ -19,6 +19,7 @@ import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 type RowDraft = {
   service_type: string
   jc_number: string
+  km_reading: string
   customer_type: '' | 'individual' | 'firm' | 'foc' | 'cash'
   remark: string
 }
@@ -53,6 +54,7 @@ type SummaryCardFilter = 'all' | 'job_card_pending' | 'sr_type_pending' | 'estim
 const EMPTY_DRAFT: RowDraft = {
   service_type: '',
   jc_number: '',
+  km_reading: '',
   customer_type: '',
   remark: '',
 }
@@ -275,14 +277,16 @@ function isValidCustomerType(value: string | null | undefined): value is RowDraf
 
 function getBodyshopAutoStage(params: {
   customerType: string | null | undefined
+  hasKmReading: boolean
   hasIntakePhoto: boolean
   jcNumber: string | null | undefined
 }): number {
   const hasCustomerType = isValidCustomerType(params.customerType)
+  const hasKmReading = params.hasKmReading
   const hasPhoto = params.hasIntakePhoto
   const hasJc = Boolean(String(params.jcNumber ?? '').trim())
 
-  if (!hasCustomerType) return 1
+  if (!hasCustomerType || !hasKmReading) return 1
   if (!hasPhoto) return 2
   if (!hasJc) return 3
   return 4
@@ -339,6 +343,14 @@ function isBodyshopServiceType(serviceType: string | null | undefined): boolean 
   return getCategoryForServiceType(serviceType) === 'bodyshop'
 }
 
+function parseKmInput(value: string): number | null {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return null
+  const parsed = Number.parseInt(trimmed, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return parsed
+}
+
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const bodyshopPhotoInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
@@ -385,6 +397,7 @@ export default function ServiceAdvisorPage() {
 
     const haystack = [
       row.reg_number,
+      String(row.km_reading ?? ''),
       row.model ?? '',
       row.sa_name ?? '',
       row.jc_number ?? '',
@@ -832,6 +845,7 @@ export default function ServiceAdvisorPage() {
       mappedDrafts[row.id] = {
         service_type: typeof row.service_type === 'string' ? row.service_type : '',
         jc_number: row.jc_number ?? '',
+        km_reading: row.km_reading == null ? '' : String(row.km_reading),
         customer_type: '',
         remark: row.remark ?? '',
       }
@@ -882,6 +896,7 @@ export default function ServiceAdvisorPage() {
 
           const desiredStage = getBodyshopAutoStage({
             customerType: mappedDrafts[row.id]?.customer_type,
+            hasKmReading: row.km_reading != null,
             hasIntakePhoto: (photoCountByReceptionId.get(row.id) ?? 0) > 0,
             jcNumber: row.jc_number,
           })
@@ -1051,6 +1066,7 @@ export default function ServiceAdvisorPage() {
     const res = await updateServiceAdvisorEntry(id, {
       service_type: draft.service_type,
       jc_number: draft.jc_number,
+      km_reading: parseKmInput(draft.km_reading),
       remark: draft.remark,
     })
 
@@ -1072,6 +1088,7 @@ export default function ServiceAdvisorPage() {
 
       const desiredStage = getBodyshopAutoStage({
         customerType,
+        hasKmReading: parseKmInput(draft.km_reading) != null,
         hasIntakePhoto: (intakePhotoCount ?? 0) > 0,
         jcNumber,
       })
@@ -1863,6 +1880,7 @@ export default function ServiceAdvisorPage() {
                     <th>Created</th>
                     <th>Source</th>
                     <th>Reg No</th>
+                    <th>KM Reading</th>
                     <th>Model</th>
                     <th>Service Type</th>
                     <th>JC Number</th>
@@ -1901,6 +1919,15 @@ export default function ServiceAdvisorPage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             {row.reg_number}
                           </div>
+                        </td>
+                        <td>
+                          <input
+                            value={draft.km_reading}
+                            onChange={(event) => patchDraft(row.id, { km_reading: event.target.value.replace(/[^0-9]/g, '') })}
+                            inputMode="numeric"
+                            placeholder="KM"
+                            className="inp mono"
+                          />
                         </td>
                         <td>{row.model || '-'}</td>
                         <td>

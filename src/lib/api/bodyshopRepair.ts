@@ -51,6 +51,8 @@ export interface RepairCard {
   sa_name: string | null
   current_stage: number
   current_stage_name: string
+  customer_group_wa_sent_at: string | null
+  customer_group_wa_sent_by: string | null
   overall_status: OverallStatus
   // insurance details
   insurance_policy_no: string | null

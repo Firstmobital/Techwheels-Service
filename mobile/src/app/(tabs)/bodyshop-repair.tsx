@@ -76,7 +76,6 @@ export default function BodyshopRepairScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
-  const [branches, setBranches]     = useState<string[]>([])
 
   // detail
   const [selected, setSelected]     = useState<RepairCard | null>(null)
@@ -92,12 +91,10 @@ export default function BodyshopRepairScreen() {
 
   async function load() {
     setLoading(true)
-    const [cardsRes, brRes] = await Promise.all([
+    const [cardsRes] = await Promise.all([
       supabase.from('bodyshop_repair_cards').select('*').order('created_at', { ascending: false }).limit(300),
-      supabase.from('service_branches').select('name').order('name'),
     ])
     if (cardsRes.data) setCards(cardsRes.data as RepairCard[])
-    if (brRes.data)    setBranches((brRes.data as any[]).map(b => b.name))
     setLoading(false)
   }
 

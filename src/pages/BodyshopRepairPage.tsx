@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
+import { getDealerContext } from '../lib/api'
+import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import {
   listRepairCards, createRepairCard, updateRepairCard, advanceStage,
@@ -24,18 +26,26 @@ function isValidCustomerType(value: string | null | undefined): boolean {
   return normalized === 'individual' || normalized === 'firm' || normalized === 'foc' || normalized === 'cash'
 }
 
-function getIntakeMilestones(card: RepairCard, intakePhotoCount: number) {
-  const stage1Done = isValidCustomerType(card.customer_type)
+function sanitizeFileNamePart(raw: string): string {
+  const cleaned = String(raw ?? '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return cleaned || 'upload'
+}
+
+function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
+  const stage1Done = isValidCustomerType(card.customer_type) && hasKmReading
   const stage2Done = intakePhotoCount > 0
   const stage3Done = Boolean(String(card.job_card_no ?? '').trim())
-  const stage4Done = stage1Done && stage2Done && stage3Done
+  const stage4Done = Boolean(card.customer_group_wa_sent_at) || card.current_stage > 4
 
-  const activeStage = !stage1Done ? 1 : !stage2Done ? 2 : !stage3Done ? 3 : 4
+  const activeStage = !stage1Done ? 1 : !stage2Done ? 2 : !stage3Done ? 3 : !stage4Done ? 4 : 5
   return { stage1Done, stage2Done, stage3Done, stage4Done, activeStage }
 }
 
-function getEffectiveStageFlow(card: RepairCard, intakePhotoCount: number) {
-  const milestones = getIntakeMilestones(card, intakePhotoCount)
+function getEffectiveStageFlow(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
+  const milestones = getIntakeMilestones(card, intakePhotoCount, hasKmReading)
   const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
 
   let effectiveNextStage = Math.min(18, effectiveCurrentStage + 1)
@@ -86,7 +96,19 @@ function dedupeCards(cards: RepairCard[]): RepairCard[] {
   return Array.from(byKey.values())
 }
 
-type DetailTab = 'overview' | 'docs' | 'survey' | 'floor' | 'qc' | 'billing'
+type DetailTab = 'overview' | 'sa' | 'survey' | 'floor' | 'qc' | 'billing'
+
+type ReceptionVehicleSnapshot = {
+  id: number
+  jc_number: string | null
+  reg_number: string | null
+  model: string | null
+  km_reading: number | null
+  owner_name: string | null
+  owner_phone: string | null
+  branch: string | null
+  created_at: string | null
+}
 
 // ── component ──────────────────────────────────────────────────────────────────
 export default function BodyshopRepairPage() {
@@ -99,14 +121,22 @@ export default function BodyshopRepairPage() {
   const [statusFilter, setStatusFilter]   = useState('active')
   const [stageFilter, setStageFilter] = useState<number | 'all'>('all')
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
+  const [kmPresentByReceptionId, setKmPresentByReceptionId] = useState<Record<number, boolean>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 
   // modals
   const [showNew, setShowNew]           = useState(false)
   const [selected, setSelected]         = useState<RepairCard | null>(null)
   const [detailTab, setDetailTab]       = useState<DetailTab>('overview')
+  const [saActiveCard, setSaActiveCard] = useState<'receiving' | 'docs' | null>(null)
   const [editPatch, setEditPatch]       = useState<Partial<RepairCard>>({})
   const [saving, setSaving]             = useState(false)
+  const [selectedReception, setSelectedReception] = useState<ReceptionVehicleSnapshot | null>(null)
+  const [loadingSelectedReception, setLoadingSelectedReception] = useState(false)
+  const [uploadingIntakePhotos, setUploadingIntakePhotos] = useState(false)
+  const [kmDraft, setKmDraft] = useState('')
+  const [savingReceiving, setSavingReceiving] = useState(false)
+  const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
 
   // new form
   const [nf, setNf] = useState({
@@ -115,6 +145,41 @@ export default function BodyshopRepairPage() {
   })
 
   useEffect(() => { void load() }, [dateRange])
+
+  useEffect(() => {
+    const receptionEntryId = Number(selected?.reception_entry_id)
+    if (!selected || !Number.isFinite(receptionEntryId) || receptionEntryId <= 0) {
+      setSelectedReception(null)
+      return
+    }
+
+    let cancelled = false
+
+    ;(async () => {
+      setLoadingSelectedReception(true)
+      const { data, error } = await supabase
+        .from('service_reception_entries')
+        .select('id, jc_number, reg_number, model, km_reading, owner_name, owner_phone, branch, created_at')
+        .eq('id', receptionEntryId)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (error || !data) {
+        setSelectedReception(null)
+        setLoadingSelectedReception(false)
+        return
+      }
+
+      setSelectedReception(data as ReceptionVehicleSnapshot)
+      setKmDraft(data.km_reading == null ? '' : String(data.km_reading))
+      setLoadingSelectedReception(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected?.id, selected?.reception_entry_id])
 
   type AccidentReceptionRow = {
     id: number
@@ -138,9 +203,8 @@ export default function BodyshopRepairPage() {
   async function load() {
     setLoading(true)
     try {
-      const [data, br, accidentRes] = await Promise.all([
+      const [data, accidentRes] = await Promise.all([
         listRepairCards({ from: dateRange.from, to: dateRange.to }),
-        supabase.from('service_branches').select('name').order('name'),
         supabase
           .from('service_reception_entries')
           .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
@@ -236,21 +300,45 @@ export default function BodyshopRepairPage() {
         .filter((id) => Number.isFinite(id))
 
       const nextPhotoCounts: Record<number, number> = {}
+      const nextKmPresence: Record<number, boolean> = {}
       if (photoReceptionIds.length > 0) {
-        const { data: photoRows } = await supabase
-          .from('bodyshop_intake_vehicle_photos')
-          .select('reception_entry_id')
-          .in('reception_entry_id', photoReceptionIds)
+        const [photoRes, kmRes] = await Promise.all([
+          supabase
+            .from('bodyshop_intake_vehicle_photos')
+            .select('reception_entry_id')
+            .in('reception_entry_id', photoReceptionIds),
+          supabase
+            .from('service_reception_entries')
+            .select('id, km_reading')
+            .in('id', photoReceptionIds),
+        ])
 
+        const photoRows = photoRes.data
         ;((photoRows ?? []) as Array<{ reception_entry_id: number | null }>).forEach((row) => {
           const receptionId = Number(row.reception_entry_id)
           if (!Number.isFinite(receptionId)) return
           nextPhotoCounts[receptionId] = (nextPhotoCounts[receptionId] ?? 0) + 1
         })
+
+        const kmRows = kmRes.data
+        ;((kmRows ?? []) as Array<{ id: number | null; km_reading: number | null }>).forEach((row) => {
+          const receptionId = Number(row.id)
+          if (!Number.isFinite(receptionId)) return
+          nextKmPresence[receptionId] = row.km_reading != null
+        })
       }
 
       setPhotoCountByReceptionId(nextPhotoCounts)
-      setBranches((br.data ?? []).map((b: { name: string }) => b.name))
+      setKmPresentByReceptionId(nextKmPresence)
+      setBranches(
+        Array.from(
+          new Set(
+            nextCards
+              .map((card) => String(card.branch ?? '').trim())
+              .filter(Boolean),
+          ),
+        ).sort((a, b) => a.localeCompare(b)),
+      )
     } catch { /* ignore */ }
     setLoading(false)
   }
@@ -278,7 +366,13 @@ export default function BodyshopRepairPage() {
     setSaving(true)
     try {
       const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-      const flow = getEffectiveStageFlow(selected, intakePhotoCount)
+      const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+      const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
+
+      if (flow.effectiveCurrentStage === 4 && !flow.milestones.stage4Done) {
+        toast_('Use Send WA to complete Customer Group stage', false)
+        return
+      }
 
       const updated = flow.effectiveCurrentStage <= 4
         ? await updateRepairCard(selected.id, {
@@ -291,6 +385,23 @@ export default function BodyshopRepairPage() {
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(`Advanced to Stage ${updated.current_stage}`)
     } catch (e: any) { toast_(e.message, false) }
+    setSaving(false)
+  }
+
+  async function handleSendWaForCustomerGroup() {
+    if (!selected) return
+    setSaving(true)
+    try {
+      const updated = await updateRepairCard(selected.id, {
+        current_stage: 5,
+        current_stage_name: STAGE_LABELS[5] ?? 'Documentation',
+      })
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      toast_('Customer Group completed via Send WA ✅')
+    } catch (e: any) {
+      toast_(e.message, false)
+    }
     setSaving(false)
   }
 
@@ -307,6 +418,198 @@ export default function BodyshopRepairPage() {
     setSaving(false)
   }
 
+  async function handleIntakePhotoUpload(files: FileList | null) {
+    if (!selected || !files || files.length === 0) return
+
+    const receptionEntryId = Number(selected.reception_entry_id)
+    if (!Number.isFinite(receptionEntryId) || receptionEntryId <= 0) {
+      toast_('Cannot upload photos without linked reception entry', false)
+      return
+    }
+
+    const selectedFiles = Array.from(files)
+    if (selectedFiles.some((file) => !String(file.type ?? '').startsWith('image/'))) {
+      toast_('Only image files are allowed for intake photos', false)
+      return
+    }
+
+    const customerType = String(selected.customer_type ?? '').trim().toLowerCase()
+    if (!isValidCustomerType(customerType)) {
+      toast_('Set Customer Type before attaching car photos', false)
+      return
+    }
+
+    const existingCount = photoCountByReceptionId[receptionEntryId] ?? 0
+    const remaining = 20 - existingCount
+    if (remaining <= 0) {
+      toast_('Maximum 20 car photos already uploaded for this intake', false)
+      return
+    }
+    if (selectedFiles.length > remaining) {
+      toast_(`You can upload only ${remaining} more photo${remaining === 1 ? '' : 's'} (max 20)`, false)
+      return
+    }
+
+    const jobCardNo = String(selected.job_card_no ?? selectedReception?.jc_number ?? '').trim().toUpperCase()
+    if (!jobCardNo) {
+      toast_('Job Card number is required before attaching car photos', false)
+      return
+    }
+
+    setUploadingIntakePhotos(true)
+    try {
+      const dealerCtx = await getDealerContext()
+      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
+      const folder = `${dealerCode}/service-advisor-bodyshop-intake/${receptionEntryId}`
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+      const sessionRes = await supabase.auth.getSession()
+      const token = sessionRes.data.session?.access_token
+      if (!supabaseUrl || !token) {
+        toast_('No active session for Drive offload request', false)
+        return
+      }
+
+      for (const file of selectedFiles) {
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
+        const safeName = sanitizeFileNamePart(file.name || `photo.${ext}`)
+        const storagePath = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName}`
+
+        const uploadRes = await supabase.storage
+          .from(AUTODOC_BUCKET)
+          .upload(storagePath, file, { upsert: false, contentType: file.type || 'application/octet-stream' })
+
+        if (uploadRes.error) {
+          toast_(uploadRes.error.message, false)
+          return
+        }
+
+        const { data: photoMeta, error: photoMetaErr } = await supabase
+          .from('bodyshop_intake_vehicle_photos')
+          .insert({
+            dealer_code: dealerCode,
+            reception_entry_id: receptionEntryId,
+            job_card_no: jobCardNo,
+            reg_number: selected.reg_number ?? selectedReception?.reg_number ?? null,
+            customer_type: customerType,
+            storage_bucket: AUTODOC_BUCKET,
+            storage_path: storagePath,
+            file_name: file.name,
+            content_type: file.type || null,
+            file_size_bytes: file.size,
+          })
+          .select('id')
+          .single()
+
+        if (photoMetaErr || !photoMeta?.id) {
+          toast_(photoMetaErr?.message ?? 'Failed to persist intake photo metadata', false)
+          return
+        }
+
+        const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            resource_type: 'bodyshop_intake_photo',
+            resource_id: photoMeta.id,
+            bucket_id: AUTODOC_BUCKET,
+            object_name: storagePath,
+            file_type: 'intake_photo',
+            file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
+          }),
+        })
+
+        const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+        if (!driveRes.ok || drivePayload?.error) {
+          toast_(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`, false)
+          return
+        }
+      }
+
+      const uploadedCount = selectedFiles.length
+      const nextCount = existingCount + uploadedCount
+      setPhotoCountByReceptionId((prev) => ({ ...prev, [receptionEntryId]: nextCount }))
+      toast_(`Uploaded ${uploadedCount} photo${uploadedCount === 1 ? '' : 's'} (${nextCount}/20)`)
+    } finally {
+      setUploadingIntakePhotos(false)
+    }
+  }
+
+  function parseKmDraftValue(raw: string): number | null | 'invalid' {
+    const trimmed = String(raw ?? '').trim()
+    if (!trimmed) return null
+    const parsed = Number.parseInt(trimmed, 10)
+    if (!Number.isFinite(parsed) || parsed < 0) return 'invalid'
+    return parsed
+  }
+
+  function isKmDirty(): boolean {
+    if (!selectedReception) return false
+    const parsedDraft = parseKmDraftValue(kmDraft)
+    if (parsedDraft === 'invalid') return true
+    return parsedDraft !== (selectedReception.km_reading ?? null)
+  }
+
+  async function handleSaveReceivingDraft() {
+    if (!selected) return
+
+    const patchDirty = Object.keys(editPatch).length > 0
+    const kmDirty = isKmDirty()
+    if (!patchDirty && !kmDirty) return
+
+    if (kmDirty && !selectedReception?.id) {
+      toast_('Reception entry not loaded', false)
+      return
+    }
+
+    const parsedKm = parseKmDraftValue(kmDraft)
+    if (kmDirty && parsedKm === 'invalid') {
+      toast_('KM Reading must be a non-negative number', false)
+      return
+    }
+
+    setSavingReceiving(true)
+    try {
+      if (kmDirty && selectedReception?.id) {
+        const { error: kmError } = await supabase
+          .from('service_reception_entries')
+          .update({ km_reading: parsedKm })
+          .eq('id', selectedReception.id)
+
+        if (kmError) {
+          toast_(kmError.message, false)
+          return
+        }
+
+        setSelectedReception((prev) => prev ? { ...prev, km_reading: parsedKm } : prev)
+        setKmPresentByReceptionId((prev) => ({
+          ...prev,
+          [selectedReception.id]: parsedKm != null,
+        }))
+      }
+
+      if (patchDirty) {
+        const updated = await updateRepairCard(selected.id, editPatch)
+        setSelected(updated)
+        setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+        setEditPatch({})
+      }
+
+      const saveParts = [
+        kmDirty ? 'KM Reading' : '',
+        patchDirty ? 'Receiving details' : '',
+      ].filter(Boolean)
+      toast_(`Saved ${saveParts.join(' + ')} ✅`)
+    } catch (e: any) {
+      toast_(e.message, false)
+    } finally {
+      setSavingReceiving(false)
+    }
+  }
+
   function patch(key: keyof RepairCard, val: any) {
     setEditPatch((p) => ({ ...p, [key]: val }))
     setSelected((s) => s ? { ...s, [key]: val } : s)
@@ -314,7 +617,8 @@ export default function BodyshopRepairPage() {
 
   function getEffectiveStageForCard(card: RepairCard): number {
     const intakePhotoCount = photoCountByReceptionId[Number(card.reception_entry_id)] ?? 0
-    return getEffectiveStageFlow(card, intakePhotoCount).effectiveCurrentStage
+    const hasKmReading = kmPresentByReceptionId[Number(card.reception_entry_id)] ?? false
+    return getEffectiveStageFlow(card, intakePhotoCount, hasKmReading).effectiveCurrentStage
   }
 
   // filtered
@@ -355,7 +659,7 @@ export default function BodyshopRepairPage() {
     })),
   [cards, photoCountByReceptionId])
 
-  const tabs: DetailTab[] = ['overview', 'docs', 'survey', 'floor', 'qc', 'billing']
+  const tabs: DetailTab[] = ['overview', 'sa', 'survey', 'floor', 'qc', 'billing']
 
   return (
     <div className="page">
@@ -479,7 +783,7 @@ export default function BodyshopRepairPage() {
               const effectiveStage = getEffectiveStageForCard(card)
               const grp = getGroupForStage(effectiveStage)
               return (
-                <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setEditPatch({}) }}
+                <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setSaActiveCard(null); setEditPatch({}) }}
                   style={{
                     background: '#fff', borderRadius: 12, padding: 14, cursor: 'pointer',
                     borderLeft: `4px solid ${grp.color}`,
@@ -582,7 +886,7 @@ export default function BodyshopRepairPage() {
             padding: '0 24px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16,
             height: 60,
           }}>
-            <button onClick={() => setSelected(null)} style={{
+            <button onClick={() => { setSelected(null); setSaActiveCard(null) }} style={{
               display: 'flex', alignItems: 'center', gap: 6,
               background: 'none', border: 'none', cursor: 'pointer',
               fontSize: 14, fontWeight: 600, color: '#6b7280',
@@ -603,7 +907,8 @@ export default function BodyshopRepairPage() {
             <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
               {STAGE_GROUPS.map((g) => {
                 const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                 const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                 const inGroup = g.stages.includes(effectiveCurrentStage)
                 const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
@@ -641,7 +946,8 @@ export default function BodyshopRepairPage() {
                 <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Current Stage</div>
                 {(() => {
                   const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                  const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                  const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                  const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                   return (
                 <div style={{ fontSize: 14, fontWeight: 800, color: getGroupForStage(selected.current_stage).color }}>
@@ -653,7 +959,8 @@ export default function BodyshopRepairPage() {
               <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
                 {Object.entries(STAGE_LABELS).map(([numStr, label]) => {
                   const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                  const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                  const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                  const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                   const num    = Number(numStr)
                   const isDone = num <= 4
@@ -695,7 +1002,8 @@ export default function BodyshopRepairPage() {
                 <div style={{ padding: 12, borderTop: '1px solid #e5e7eb' }}>
                   {(() => {
                     const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                    const flow = getEffectiveStageFlow(selected, intakePhotoCount)
+                    const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                    const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
                     return (
                   <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
                     style={{ width: '100%', fontSize: 13 }}>
@@ -723,7 +1031,7 @@ export default function BodyshopRepairPage() {
                     color: detailTab === t ? '#2563eb' : '#6b7280',
                     marginBottom: -2,
                   }}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                    {t === 'sa' ? 'SA' : t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
               </div>
@@ -757,7 +1065,8 @@ export default function BodyshopRepairPage() {
                     <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Current Stage</div>
                       {(() => {
                         const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                        const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                        const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                        const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                         const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                         return (
                           <div style={{ fontSize: 15, fontWeight: 700, color: getGroupForStage(effectiveCurrentStage).color }}>
@@ -771,7 +1080,8 @@ export default function BodyshopRepairPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {Object.entries(STAGE_LABELS).map(([numStr, label]) => {
                       const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                      const milestones = getIntakeMilestones(selected, intakePhotoCount)
+                      const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                      const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                       const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                       const num     = Number(numStr)
                       const isDone  = num <= 4
@@ -810,7 +1120,8 @@ export default function BodyshopRepairPage() {
                   {selected.overall_status === 'active' && selected.current_stage < 18 && (
                     (() => {
                       const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                      const flow = getEffectiveStageFlow(selected, intakePhotoCount)
+                      const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                      const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
                       return (
                     <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
                       style={{ marginTop: 16, width: '100%' }}>
@@ -822,181 +1133,436 @@ export default function BodyshopRepairPage() {
                 </div>
               )}
 
-              {/* ── Docs ── */}
-              {detailTab === 'docs' && (() => {
-                const ct = selected.customer_type ?? 'individual'
-                const noDocsRequired = ct === 'cash' || ct === 'foc'
+              {/* ── SA ── */}
+              {detailTab === 'sa' && (() => {
+                const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
+                const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
 
-                // All possible docs with per-type mandatory flag
-                const ALL_DOCS: { k: keyof RepairCard; label: string; mandatoryFor: CustomerType[] }[] = [
-                  { k: 'doc_claim_form',  label: 'Claim Form',        mandatoryFor: ['individual', 'firm'] },
-                  { k: 'doc_rc',          label: 'RC',                mandatoryFor: ['individual', 'firm'] },
-                  { k: 'doc_insurance',   label: 'Insurance Copy',    mandatoryFor: ['individual', 'firm'] },
-                  { k: 'doc_dl',          label: 'Driving Licence',   mandatoryFor: ['individual', 'firm'] },
-                  { k: 'doc_aadhaar',     label: 'Aadhaar Card',      mandatoryFor: ['individual', 'firm'] },
-                  { k: 'doc_pan',         label: 'PAN Card',          mandatoryFor: ['individual', 'firm'] },
-                  { k: 'doc_kyc',         label: 'KYC',               mandatoryFor: ['individual'] },
-                  { k: 'doc_gst',         label: 'GST',               mandatoryFor: ['firm'] },
-                  { k: 'doc_company_pan', label: 'Company PAN Card',  mandatoryFor: ['firm'] },
-                  { k: 'doc_bank_detail', label: 'Bank Detail',       mandatoryFor: [] },
-                ]
+                const stageDone = (stage: number): boolean => {
+                  if (stage === 1) return milestones.stage1Done
+                  if (stage === 2) return milestones.stage2Done
+                  if (stage === 3) return milestones.stage3Done
+                  if (stage === 4) return milestones.stage4Done
+                  return effectiveCurrentStage > stage
+                }
 
-                const visibleDocs = noDocsRequired ? [] : ALL_DOCS
-                const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
-                const optionalDocs  = visibleDocs.filter(d => !d.mandatoryFor.includes(ct as CustomerType))
-                const collectedMandatory = mandatoryDocs.filter(d => (selected as any)[d.k]).length
-                const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+                const groups = [
+                  {
+                    key: 'receiving' as const,
+                    name: 'Receiving',
+                    color: '#2563eb',
+                    stages: [1, 2, 3, 4],
+                  },
+                  {
+                    key: 'docs' as const,
+                    name: 'Docs',
+                    color: '#7c3aed',
+                    stages: [5],
+                  },
+                ] as const
+
+                const STAGE_ABBR: Record<number, string> = {
+                  1: 'VR',
+                  2: 'RP',
+                  3: 'JC',
+                  4: 'CG',
+                  5: 'DOC',
+                }
+
+                const vehicleSnapshot = selectedReception
+                const photoLimit = 20
 
                 return (
-                  <div>
-                    {/* Customer Type selector */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap' }}>Customer Type:</span>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {(['individual','firm','foc','cash'] as CustomerType[]).map(t => (
-                          <button key={t} onClick={() => patch('customer_type', t)} style={{
-                            padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-                            border: '1.5px solid',
-                            borderColor: selected.customer_type === t ? '#2563eb' : '#e5e7eb',
-                            background: selected.customer_type === t ? '#2563eb' : '#fff',
-                            color: selected.customer_type === t ? '#fff' : '#6b7280',
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      {groups.map((group) => {
+                        const selectedCard = saActiveCard === group.key
+                        return (
+                          <button key={group.name} onClick={() => setSaActiveCard((prev) => prev === group.key ? null : group.key)} style={{
+                            background: '#fff',
+                            border: `1.5px solid ${selectedCard ? group.color : `${group.color}33`}`,
+                            borderRadius: 12,
+                            padding: 10,
+                            boxShadow: selectedCard ? `0 0 0 2px ${group.color}22` : '0 1px 4px rgba(0,0,0,0.04)',
                             cursor: 'pointer',
-                            textTransform: 'capitalize',
+                            textAlign: 'left',
                           }}>
-                            {t.charAt(0).toUpperCase() + t.slice(1)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Insurance Details — always shown for individual & firm */}
-                    {!noDocsRequired && (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                        <div style={{ gridColumn: '1/-1', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 4 }}>
-                          🛡️ Insurance Details
-                        </div>
-                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Policy No.</span>
-                          <input className="inp" value={selected.insurance_policy_no ?? ''}
-                            onChange={(e) => patch('insurance_policy_no', e.target.value || null)}
-                            placeholder="e.g. POL-2024-001234" />
-                        </label>
-                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Insurance Company</span>
-                          <input className="inp" value={selected.insurance_company ?? ''}
-                            onChange={(e) => patch('insurance_company', e.target.value || null)}
-                            placeholder="e.g. New India Assurance" />
-                        </label>
-                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
-                          <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Valid Until</span>
-                          <input className="inp" type="date" value={selected.insurance_valid_date ?? ''}
-                            onChange={(e) => patch('insurance_valid_date', e.target.value || null)} />
-                        </label>
-                      </div>
-                    )}
-
-                    {noDocsRequired ? (
-                      <div style={{ textAlign: 'center', padding: '32px 16px', background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0' }}>
-                        <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: '#15803d' }}>No Documents Required</div>
-                        <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
-                          {ct === 'cash' ? 'Cash customers' : 'FOC customers'} do not require any documentation.
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Progress bar */}
-                        <div style={{ marginBottom: 16 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
-                              Mandatory Documents
-                            </span>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: allMandatoryDone ? '#16a34a' : '#dc2626' }}>
-                              {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? '✓ Complete' : '⚠ Pending'}
-                            </span>
-                          </div>
-                          <div style={{ height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
                             <div style={{
-                              height: '100%', borderRadius: 4, transition: 'width 0.3s',
-                              width: mandatoryDocs.length ? `${(collectedMandatory / mandatoryDocs.length) * 100}%` : '0%',
-                              background: allMandatoryDone ? '#16a34a' : '#f59e0b',
-                            }} />
-                          </div>
-                        </div>
-
-                        {/* Mandatory docs */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                          {mandatoryDocs.map(({ k, label }) => {
-                            const checked = (selected as any)[k] ?? false
-                            return (
-                              <label key={k} onClick={() => patch(k, !checked)} style={{
-                                display: 'flex', alignItems: 'center', gap: 10,
-                                padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                                background: checked ? '#f0fdf4' : '#fff9f9',
-                                border: `1.5px solid ${checked ? '#86efac' : '#fca5a5'}`,
-                              }}>
-                                <div style={{
-                                  width: 20, height: 20, borderRadius: 4, flexShrink: 0,
-                                  border: `2px solid ${checked ? '#16a34a' : '#ef4444'}`,
-                                  background: checked ? '#16a34a' : '#fff',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                }}>
-                                  {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{label}</div>
-                                  <div style={{ fontSize: 10, color: checked ? '#16a34a' : '#ef4444', fontWeight: 600 }}>
-                                    {checked ? 'Collected' : 'Required'}
-                                  </div>
-                                </div>
-                              </label>
-                            )
-                          })}
-                        </div>
-
-                        {/* Optional docs */}
-                        {optionalDocs.length > 0 && (
-                          <>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                              Optional
+                              fontSize: 12,
+                              fontWeight: 800,
+                              color: group.color,
+                              marginBottom: 8,
+                            }}>
+                              {group.name}
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                              {optionalDocs.map(({ k, label }) => {
-                                const checked = (selected as any)[k] ?? false
+
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              {group.stages.map((stage) => {
+                                const done = stageDone(stage)
+                                const current = effectiveCurrentStage === stage
+                                const notStarted = !done && !current
+
+                                const borderColor = done ? '#86efac' : current ? group.color : '#d1d5db'
+                                const bgColor = done ? '#f0fdf4' : current ? `${group.color}12` : '#f8fafc'
+                                const textColor = done ? '#166534' : current ? group.color : '#6b7280'
+
                                 return (
-                                  <label key={k} onClick={() => patch(k, !checked)} style={{
-                                    display: 'flex', alignItems: 'center', gap: 10,
-                                    padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                                    background: checked ? '#f0fdf4' : '#fafafa',
-                                    border: `1.5px solid ${checked ? '#86efac' : '#e5e7eb'}`,
+                                  <div key={stage} style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    borderRadius: 999,
+                                    border: `1px solid ${borderColor}`,
+                                    background: bgColor,
+                                    padding: '4px 8px',
                                   }}>
-                                    <div style={{
-                                      width: 20, height: 20, borderRadius: 4, flexShrink: 0,
-                                      border: `2px solid ${checked ? '#16a34a' : '#d1d5db'}`,
-                                      background: checked ? '#16a34a' : '#fff',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    <span style={{
+                                      minWidth: 24,
+                                      height: 18,
+                                      borderRadius: 9,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      background: done ? '#16a34a' : current ? group.color : '#d1d5db',
+                                      color: '#fff',
+                                      flexShrink: 0,
                                     }}>
-                                      {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                      <div style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</div>
-                                      <div style={{ fontSize: 10, color: '#9ca3af' }}>Optional</div>
-                                    </div>
-                                  </label>
+                                      {done ? '✓' : STAGE_ABBR[stage] ?? `S${stage}`}
+                                    </span>
+                                    <span style={{
+                                      fontSize: 10,
+                                      color: textColor,
+                                      fontWeight: 700,
+                                    }}>
+                                      {done ? 'Done' : current ? 'Pending' : notStarted ? 'Not Started' : ''}
+                                    </span>
+                                  </div>
                                 )
                               })}
                             </div>
-                          </>
-                        )}
-                      </>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {!saActiveCard && (
+                      <div style={{
+                        background: '#fff',
+                        border: '1px dashed #cbd5e1',
+                        borderRadius: 12,
+                        padding: 14,
+                        fontSize: 12,
+                        color: '#6b7280',
+                      }}>
+                        Select Receiving or Docs to view details.
+                      </div>
                     )}
 
-                    {Object.keys(editPatch).length > 0 && (
-                      <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}
-                        style={{ marginTop: 16, width: '100%' }}>
-                        {saving ? 'Saving…' : 'Save Documents'}
-                      </button>
+                    {saActiveCard === 'receiving' && (
+                      <div style={{
+                        background: '#fff',
+                        border: '1px solid #dbeafe',
+                        borderRadius: 12,
+                        padding: 14,
+                      }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#1d4ed8', marginBottom: 10 }}>
+                          Receiving Intake Form
+                        </div>
+
+                        {loadingSelectedReception ? (
+                          <div style={{ fontSize: 12, color: '#6b7280' }}>Loading reception details...</div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                              Initial Vehicle Details (from Reception)
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+                              {[
+                                ['Job Card', vehicleSnapshot?.jc_number ?? selected.job_card_no ?? '—'],
+                                ['Registration No', vehicleSnapshot?.reg_number ?? selected.reg_number ?? '—'],
+                                ['Model', vehicleSnapshot?.model ?? '—'],
+                                ['Owner Name', vehicleSnapshot?.owner_name ?? selected.customer_name ?? '—'],
+                                ['Owner Phone', vehicleSnapshot?.owner_phone ?? selected.customer_phone ?? '—'],
+                                ['Branch', vehicleSnapshot?.branch ?? selected.branch ?? '—'],
+                                ['Received At', fmt(vehicleSnapshot?.created_at ?? selected.received_at)],
+                              ].map(([label, value]) => (
+                                <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
+                                  <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>{label}</div>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{String(value)}</div>
+                                </div>
+                              ))}
+                              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
+                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>KM Reading</div>
+                                <input
+                                  className="inp"
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={kmDraft}
+                                  onChange={(event) => setKmDraft(event.target.value)}
+                                  placeholder="Enter KM"
+                                  style={{ height: 34, padding: '6px 10px', fontSize: 12 }}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                                Customer Type
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {(['individual', 'firm', 'foc', 'cash'] as CustomerType[]).map((t) => (
+                                  <button key={t} onClick={() => patch('customer_type', t)} style={{
+                                    padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                                    border: '1.5px solid',
+                                    borderColor: selected.customer_type === t ? '#2563eb' : '#e5e7eb',
+                                    background: selected.customer_type === t ? '#2563eb' : '#fff',
+                                    color: selected.customer_type === t ? '#fff' : '#6b7280',
+                                    cursor: 'pointer',
+                                    textTransform: 'capitalize',
+                                  }}>
+                                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Customer Group</div>
+                                  <div style={{ fontSize: 11, color: '#6b7280' }}>
+                                    {milestones.stage4Done
+                                      ? 'WhatsApp sent. Stage 4 completed.'
+                                      : milestones.stage1Done && milestones.stage2Done && milestones.stage3Done
+                                        ? 'Ready to send WhatsApp and complete Stage 4.'
+                                        : 'Complete Stage 1, 2 and 3 first to enable Send WA.'}
+                                  </div>
+                                  {milestones.stage4Done && (
+                                    <div style={{ fontSize: 11, color: '#374151', marginTop: 4 }}>
+                                      {selected.customer_group_wa_sent_at
+                                        ? `Sent at: ${fmt(selected.customer_group_wa_sent_at)}`
+                                        : 'Sent at: —'}
+                                      {' · '}
+                                      {selected.customer_group_wa_sent_by
+                                        ? `By: ${selected.customer_group_wa_sent_by}`
+                                        : 'By: —'}
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  className="btn btn--primary"
+                                  onClick={() => void handleSendWaForCustomerGroup()}
+                                  disabled={
+                                    saving ||
+                                    milestones.stage4Done ||
+                                    !(milestones.stage1Done && milestones.stage2Done && milestones.stage3Done)
+                                  }
+                                  style={{ whiteSpace: 'nowrap' }}
+                                >
+                                  {milestones.stage4Done ? 'WA Sent' : 'Send WA'}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Car Photos</div>
+                                  <div style={{ fontSize: 11, color: '#6b7280' }}>
+                                    {intakePhotoCount}/{photoLimit} uploaded (max {photoLimit})
+                                  </div>
+                                </div>
+                                <button className="btn btn--primary" onClick={() => intakePhotoInputRef.current?.click()} disabled={uploadingIntakePhotos}>
+                                  {uploadingIntakePhotos ? 'Uploading...' : 'Attach photos (max 20)'}
+                                </button>
+                                <input
+                                  ref={intakePhotoInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(event) => {
+                                    void handleIntakePhotoUpload(event.target.files)
+                                    event.target.value = ''
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {(Object.keys(editPatch).length > 0 || isKmDirty()) && (
+                              <button className="btn btn--primary" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}
+                                style={{ marginTop: 12 }}>
+                                {savingReceiving ? 'Saving…' : 'Save Receiving'}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     )}
+
+                    {saActiveCard === 'docs' && (() => {
+                      const ct = selected.customer_type ?? 'individual'
+                      const noDocsRequired = ct === 'cash' || ct === 'foc'
+
+                      const ALL_DOCS: { k: keyof RepairCard; label: string; mandatoryFor: CustomerType[] }[] = [
+                        { k: 'doc_claim_form',  label: 'Claim Form',        mandatoryFor: ['individual', 'firm'] },
+                        { k: 'doc_rc',          label: 'RC',                mandatoryFor: ['individual', 'firm'] },
+                        { k: 'doc_insurance',   label: 'Insurance Copy',    mandatoryFor: ['individual', 'firm'] },
+                        { k: 'doc_dl',          label: 'Driving Licence',   mandatoryFor: ['individual', 'firm'] },
+                        { k: 'doc_aadhaar',     label: 'Aadhaar Card',      mandatoryFor: ['individual', 'firm'] },
+                        { k: 'doc_pan',         label: 'PAN Card',          mandatoryFor: ['individual', 'firm'] },
+                        { k: 'doc_kyc',         label: 'KYC',               mandatoryFor: ['individual'] },
+                        { k: 'doc_gst',         label: 'GST',               mandatoryFor: ['firm'] },
+                        { k: 'doc_company_pan', label: 'Company PAN Card',  mandatoryFor: ['firm'] },
+                        { k: 'doc_bank_detail', label: 'Bank Detail',       mandatoryFor: [] },
+                      ]
+
+                      const visibleDocs = noDocsRequired ? [] : ALL_DOCS
+                      const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                      const optionalDocs  = visibleDocs.filter(d => !d.mandatoryFor.includes(ct as CustomerType))
+                      const collectedMandatory = mandatoryDocs.filter(d => (selected as any)[d.k]).length
+                      const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+
+                      return (
+                        <div>
+                          <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                              Customer Type: {CT_LABELS[selected.customer_type ?? ''] ?? 'Not set'}
+                            </span>
+                          </div>
+
+                          {!noDocsRequired && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                              <div style={{ gridColumn: '1/-1', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 4 }}>
+                                🛡️ Insurance Details
+                              </div>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Policy No.</span>
+                                <input className="inp" value={selected.insurance_policy_no ?? ''}
+                                  onChange={(e) => patch('insurance_policy_no', e.target.value || null)}
+                                  placeholder="e.g. POL-2024-001234" />
+                              </label>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Insurance Company</span>
+                                <input className="inp" value={selected.insurance_company ?? ''}
+                                  onChange={(e) => patch('insurance_company', e.target.value || null)}
+                                  placeholder="e.g. New India Assurance" />
+                              </label>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
+                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Valid Until</span>
+                                <input className="inp" type="date" value={selected.insurance_valid_date ?? ''}
+                                  onChange={(e) => patch('insurance_valid_date', e.target.value || null)} />
+                              </label>
+                            </div>
+                          )}
+
+                          {noDocsRequired ? (
+                            <div style={{ textAlign: 'center', padding: '32px 16px', background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0' }}>
+                              <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+                              <div style={{ fontWeight: 700, fontSize: 15, color: '#15803d' }}>No Documents Required</div>
+                              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+                                {ct === 'cash' ? 'Cash customers' : 'FOC customers'} do not require any documentation.
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ marginBottom: 16 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                                    Mandatory Documents
+                                  </span>
+                                  <span style={{ fontSize: 13, fontWeight: 700, color: allMandatoryDone ? '#16a34a' : '#dc2626' }}>
+                                    {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? '✓ Complete' : '⚠ Pending'}
+                                  </span>
+                                </div>
+                                <div style={{ height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                                  <div style={{
+                                    height: '100%', borderRadius: 4, transition: 'width 0.3s',
+                                    width: mandatoryDocs.length ? `${(collectedMandatory / mandatoryDocs.length) * 100}%` : '0%',
+                                    background: allMandatoryDone ? '#16a34a' : '#f59e0b',
+                                  }} />
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                                {mandatoryDocs.map(({ k, label }) => {
+                                  const checked = (selected as any)[k] ?? false
+                                  return (
+                                    <label key={k} onClick={() => patch(k, !checked)} style={{
+                                      display: 'flex', alignItems: 'center', gap: 10,
+                                      padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                                      background: checked ? '#f0fdf4' : '#fff9f9',
+                                      border: `1.5px solid ${checked ? '#86efac' : '#fca5a5'}`,
+                                    }}>
+                                      <div style={{
+                                        width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                                        border: `2px solid ${checked ? '#16a34a' : '#ef4444'}`,
+                                        background: checked ? '#16a34a' : '#fff',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      }}>
+                                        {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{label}</div>
+                                        <div style={{ fontSize: 10, color: checked ? '#16a34a' : '#ef4444', fontWeight: 600 }}>
+                                          {checked ? 'Collected' : 'Required'}
+                                        </div>
+                                      </div>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+
+                              {optionalDocs.length > 0 && (
+                                <>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                                    Optional
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                    {optionalDocs.map(({ k, label }) => {
+                                      const checked = (selected as any)[k] ?? false
+                                      return (
+                                        <label key={k} onClick={() => patch(k, !checked)} style={{
+                                          display: 'flex', alignItems: 'center', gap: 10,
+                                          padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                                          background: checked ? '#f0fdf4' : '#fafafa',
+                                          border: `1.5px solid ${checked ? '#86efac' : '#e5e7eb'}`,
+                                        }}>
+                                          <div style={{
+                                            width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                                            border: `2px solid ${checked ? '#16a34a' : '#d1d5db'}`,
+                                            background: checked ? '#16a34a' : '#fff',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          }}>
+                                            {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
+                                          </div>
+                                          <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</div>
+                                            <div style={{ fontSize: 10, color: '#9ca3af' }}>Optional</div>
+                                          </div>
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                            </>
+                          )}
+
+                          {Object.keys(editPatch).length > 0 && (
+                            <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}
+                              style={{ marginTop: 16, width: '100%' }}>
+                              {saving ? 'Saving…' : 'Save Documents'}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })()}

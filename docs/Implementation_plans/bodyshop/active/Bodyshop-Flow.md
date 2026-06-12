@@ -59,6 +59,7 @@ Formatting note:
 4. Capture Bodyshop Customer Type and vehicle photos (max 20) from Service Advisor workflow.
 5. Ensure Reception remains the existing vehicle receiving source of truth.
 6. Keep `bodyshop-floor` and `bodyshop-repair` flows as explicitly planned later-use integration phases.
+7. Deprecate `service_branches` by implementing Employee Master winner-logic as the canonical branch/fuel source, then drop `service_branches` safely.
 
 ---
 
@@ -127,6 +128,9 @@ Stage-governance note:
 - Later-phase wiring of Bodyshop intake outputs into:
   - `bodyshop-floor` assignment flow
   - `bodyshop-repair` repair-card lifecycle and stage progression
+- Service branch-source simplification:
+  - **Phase A (implement now):** remove runtime dependency on `service_branches` in web/mobile paths and enforce Employee Master precedence (forced Location/Fuel Type wins over SA-code derivation and legacy row values).
+  - **Phase B (prepare now, execute after validation):** additive drop migration plan for `public.service_branches`.
 
 ### Out of Scope
 - Any change to Reception receiving flow.
@@ -190,6 +194,13 @@ Stage-governance note:
 - [ ] **Task 5.6:** Validate stage continuity across all 18 bodyshop stages in `bodyshop-repair`.
 - [ ] **Task 5.7:** Validate Stage 10 (`Parts Status`) -> Stage 11 (`Floor Assignment`) handoff integrity for floor operations.
 
+### Phase 6: `service_branches` Deprecation (Branch/Fuel Winner Logic)
+- [x] **Task 6.1 (Phase A):** Implement runtime source-of-truth precedence in Reception/Service Advisor/Floor Incharge/Bodyshop Repair and mobile Bodyshop Repair so Employee Master forced `location` + `fuel_type` always win.
+- [x] **Task 6.2 (Phase A):** Replace branch option/filter data sources currently reading `service_branches` with Employee Master/location-derived datasets.
+- [x] **Task 6.3 (Phase A):** Remove unused `service_branches` API usage from web/mobile modules; keep behavior parity in filters.
+- [x] **Task 6.4 (Phase B):** Prepare migration file to drop `public.service_branches` (table, policies, and sequence) after Phase A validation sign-off.
+- [ ] **Task 6.5 (Phase B):** Execute drop migration only after QA confirms no runtime reads remain and no branch/fuel regressions exist.
+
 ---
 
 ## Activity Tracker
@@ -247,6 +258,15 @@ Stage-governance note:
 ⏳ 5.7 | Validate Stage10->Stage11 floor handoff | QA + Floor Team | - | - | parts status to floor assignment gate
 ```
 
+### Phase 6
+```
+✅ 6.1 | Enforce Employee Master winner precedence (web/mobile) | Web Dev | 2026-06-12 | 2026-06-12 | Reception enrichment precedence updated to Employee Master first, legacy row fallback last
+✅ 6.2 | Replace service_branches runtime option sources | Web Dev | 2026-06-12 | 2026-06-12 | Bodyshop web/mobile and Settings branch section moved off service_branches table reads
+✅ 6.3 | Remove residual service_branches API reads | Web Dev | 2026-06-12 | 2026-06-12 | Removed service_branches API methods/usages; runtime grep confirms zero refs in src/mobile
+✅ 6.4 | Prepare drop migration for service_branches | API | 2026-06-12 | 2026-06-12 | Added `supabase/migrations/20260612130500_drop_service_branches_after_phase_a.sql`
+⏳ 6.5 | Execute drop migration + post-checks | API + QA | - | - | run only after zero runtime usage verification
+```
+
 ---
 
 ## Dependencies & Prerequisites
@@ -256,6 +276,7 @@ Stage-governance note:
 - [x] Storage bucket path convention approval.
 - [ ] UAT sample entries covering Accident + non-Accident service types.
 - [x] DB-level canonical key hardening for bodyshop cards (`reception_entry_id` + uniqueness) prepared in migration file; pending user-run apply.
+- [ ] Phase A deprecation validation sign-off: zero runtime dependency on `service_branches` in web/mobile.
 
 ---
 
@@ -267,6 +288,8 @@ Stage-governance note:
 | Inconsistent service type casing/spelling | High | Medium | Normalize service_type for mapping (trim + lowercase) |
 | Photo over-upload or heavy files | Medium | Medium | Client + server cap, type/size validation |
 | Split source of truth for customer type | Medium | Medium | Persist to bodyshop card model as canonical store |
+| Branch/fuel precedence conflict across legacy rows vs Employee Master | High | High | Enforce winner logic in code: Employee Master forced values first, SA-code derive fallback, legacy row values last |
+| Premature `service_branches` drop causing runtime break | Medium | High | Two-phase plan: remove all code reads first, then drop table migration after QA sign-off |
 
 ---
 
@@ -281,6 +304,8 @@ Stage-governance note:
 - ✅ `bodyshop-repair` receives consistent customer-type and intake-photo context without duplicate card drift.
 - ✅ `bodyshop-repair` uses the locked 18-stage sequence exactly as defined in this plan.
 - ✅ Stage 10 (`Parts Status`) to Stage 11 (`Floor Assignment`) transitions are operationally and technically consistent.
+- ✅ Phase A complete: no runtime reads from `service_branches` in targeted web/mobile modules; Employee Master winner logic active.
+- ✅ Phase B complete: `public.service_branches` dropped via migration with no regressions in branch/fuel filters and assignments.
 
 ---
 
@@ -486,6 +511,58 @@ After migration apply:
 - Next validation target:
   - SA role should be able to save Accident rows in Service Advisor without `bodyshop_repair_cards` RLS violation.
 
+### 2026-06-12 - Bodyshop Repair UI Naming Clarification (Card vs Opened View)
+- Confirmed terminology for `/bodyshop-repair` tracker behavior:
+  - Outer clickable tile in the grid is the **Repair Card summary card** (list card).
+  - Opened view after click is the **Detail Full-Screen overlay** rendered via portal (not a separate per-card route).
+- Behavior lock:
+  - Clicking a list card sets `selected` and opens the full-screen detail experience.
+  - Back action clears `selected` and returns to the list.
+  - URL remains `/bodyshop-repair`; detail is in-page overlay state, not a new route.
+
+### 2026-06-12 - `service_branches` Deprecation Strategy Locked (Phase A + Phase B)
+- Decision locked:
+  - Implement **Phase A now**: remove runtime dependency on `service_branches` and enforce Employee Master winner precedence for branch/fuel (`forced Location/Fuel Type` wins).
+  - Prepare **Phase B now**: migration to drop `public.service_branches`, to be executed only after Phase A QA sign-off.
+- Rationale:
+  - `service_branches` is currently a legacy UI helper and adds maintenance burden.
+  - Authoritative schema scan shows no FK blocker; runtime code references remain and must be removed before drop.
+
+### 2026-06-12 - Phase A Implemented + Phase B Drop Migration Prepared
+- Phase A implementation completed in code:
+  - Removed runtime `service_branches` reads from web/mobile Bodyshop Repair paths.
+  - Removed `service_branches` CRUD API methods from reception API module.
+  - Converted Settings -> Branch Management to Employee Master derived read-only branch list.
+  - Updated Reception enrichment precedence so Employee Master location/fuel wins over legacy row values.
+- Phase B preparation completed:
+  - Added migration file `supabase/migrations/20260612130500_drop_service_branches_after_phase_a.sql`.
+- Pending:
+  - Execute Phase B migration only after QA validates branch/fuel behavior parity in Reception, Service Advisor, Floor Incharge, and Bodyshop Repair.
+
+### 2026-06-12 - SA/Bodyshop Intake UX + Stage Governance Consolidation
+- Bodyshop SA intake stage semantics tightened in app code:
+  - Stage 1 completion now requires both `Customer Type` and `KM Reading`.
+  - Stage 2 completion requires at least one intake photo.
+  - Stage 3 completion requires Job Card availability.
+  - Stage 4 completion is explicit via `Send WA` action (no generic auto-complete).
+- Receiving workflow UX consolidated:
+  - Unified `Save Receiving` flow now persists both receiving form fields and KM updates together.
+  - Duplicate save-path behavior removed for receiving intake.
+- WA click auditability completed (DB + app consumption):
+  - Added migration `supabase/migrations/20260612142000_capture_customer_group_wa_click_metadata.sql`.
+  - `bodyshop_repair_cards` now stores `customer_group_wa_sent_at` and `customer_group_wa_sent_by`.
+  - Trigger captures actor/time on first Stage 4 -> Stage 5 transition.
+  - SA/Bodyshop UI now reads and displays persisted WA metadata.
+- SA tab information architecture updated:
+  - Removed standalone top `Docs` tab from bodyshop detail view.
+  - Full documentation form is now rendered inside SA -> `Docs` card on click.
+  - Compact SA cards with stage abbreviations and status colors implemented (`Done`, `Pending`, `Not Started`).
+  - SA sub-card content now lazy-renders only after card selection; deselection hides content.
+- Data correction support added:
+  - Added targeted reset script for one-card replay from Reception source:
+    - `scripts/16_reset_bodyshop_progress_jc_mbtplt_jp2_2627_002479.sql`
+  - Script now enforces existing linked reception row, re-syncs base reception fields, resets bodyshop progression fields, and clears intake photo metadata rows for the linked reception entry.
+
 ---
 
 ## Related Documentation
@@ -496,5 +573,5 @@ After migration apply:
 
 ---
 
-**Last Updated:** 2026-06-11 by GitHub Copilot  
+**Last Updated:** 2026-06-12 by GitHub Copilot  
 **Status:** 🟡 IN PROGRESS
