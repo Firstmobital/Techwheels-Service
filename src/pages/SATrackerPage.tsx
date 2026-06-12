@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,16 @@ type JCDetailRow = ClosedJCRow & {
 const QUERY_PAGE_SIZE = 1000
 const UNKNOWN_BRANCH = 'Unknown location'
 const UNKNOWN_PORTAL = 'Unknown portal'
+type YesterdaySARow = {
+  sa_name: string
+  job_card_number: string
+  reg_number: string
+  branch: string
+  labour_amount: number
+  sa_income: number
+  date_key: string
+}
+
 const DEFAULT_SA_SHARE_PERCENT = 3
 const DEFAULT_EV_SHARE_PERCENT = 4
 
@@ -127,6 +138,39 @@ function getPortalLabel(v: string | null | undefined): string {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
+// ── SA Yesterday Report helpers ───────────────────────────────────────────────
+function buildSAWAText(rows: YesterdaySARow[], date: string, saSharePct: number): string {
+  if (rows.length === 0) return `📊 *SA Report — ${date}*\n\nNo closed jobs yesterday.`
+
+  const bySA = new Map<string, YesterdaySARow[]>()
+  rows.forEach(r => {
+    if (!bySA.has(r.sa_name)) bySA.set(r.sa_name, [])
+    bySA.get(r.sa_name)!.push(r)
+  })
+
+  const totalLabour = rows.reduce((s, r) => s + r.labour_amount, 0)
+  const totalPaid   = rows.reduce((s, r) => s + r.sa_income, 0)
+
+  let msg = `📊 *SA Earnings Report — ${date}*\n`
+  msg += `⚙️ SA Share: ${saSharePct}%\n`
+  msg += `━━━━━━━━━━━━━━━━━━━━\n\n`
+
+  bySA.forEach((saRows, name) => {
+    const techLabour = saRows.reduce((s, r) => s + r.labour_amount, 0)
+    const techPaid   = saRows.reduce((s, r) => s + r.sa_income, 0)
+    msg += `🧑‍💼 *${name}*\n`
+    saRows.forEach(r => {
+      msg += `  🚗 ${r.reg_number}  Labour: ₹${Math.round(r.labour_amount).toLocaleString('en-IN')}  Paid: *₹${Math.round(r.sa_income).toLocaleString('en-IN')}*\n`
+    })
+    msg += `  Total Labour: ₹${Math.round(techLabour).toLocaleString('en-IN')} | *Paid: ₹${Math.round(techPaid).toLocaleString('en-IN')}*\n\n`
+  })
+
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`
+  msg += `🏆 Total Labour: ₹${Math.round(totalLabour).toLocaleString('en-IN')}\n`
+  msg += `💰 Total Paid: *₹${Math.round(totalPaid).toLocaleString('en-IN')}*`
+  return msg
+}
+
 export default function SATrackerPage() {
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
@@ -146,6 +190,9 @@ export default function SATrackerPage() {
   const [draftEvShare, setDraftEvShare] = useState(String(DEFAULT_EV_SHARE_PERCENT))
   // Drill-down state
   const [selectedSA, setSelectedSA] = useState('')
+  const [generatingReport, setGeneratingReport] = useState(false)
+  const [yesterdaySAReport, setYesterdaySAReport] = useState<{ rows: YesterdaySARow[]; date: string; waText: string } | null>(null)
+  const [showPivotReport, setShowPivotReport] = useState(false)
   const [selectedDayKey, setSelectedDayKey] = useState('')
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -182,6 +229,91 @@ export default function SATrackerPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // ── Yesterday Report ──────────────────────────────────────────────────────
+  async function handleGenerateSAYesterdayReport() {
+    setGeneratingReport(true)
+    try {
+      const now = new Date()
+      const istOffset = 5.5 * 60 * 60 * 1000
+      const istNow = new Date(now.getTime() + istOffset)
+      const yest = new Date(istNow)
+      yest.setUTCDate(yest.getUTCDate() - 1)
+      const dateStr = yest.toISOString().slice(0, 10)
+      const fromTs = dateStr + 'T00:00:00+05:30'
+      const toTs   = dateStr + 'T23:59:59+05:30'
+
+      const { data, error: err } = await supabase
+        .from('job_card_closed_data')
+        .select('job_card_number, sr_assigned_to, final_labour_amount, vehicle_registration_number, branch_label, branch, closed_date_time, invoice_date')
+        .gte('closed_date_time', fromTs)
+        .lte('closed_date_time', toTs)
+        .order('sr_assigned_to', { ascending: true })
+
+      if (err) throw err
+
+      const saRows: YesterdaySARow[] = (data ?? [])
+        .filter((r: any) => r.sr_assigned_to)
+        .map((r: any) => {
+          const labour = parseAmount(r.final_labour_amount)
+          const income = calculateSAIncome(labour, saSharePercent)
+          return {
+            sa_name: String(r.sr_assigned_to ?? '').trim(),
+            job_card_number: String(r.job_card_number ?? '').trim(),
+            reg_number: String(r.vehicle_registration_number ?? '—').trim(),
+            branch: String(r.branch_label ?? r.branch ?? '—').trim(),
+            labour_amount: labour,
+            sa_income: income,
+            date_key: dateStr,
+          }
+        })
+        .sort((a: YesterdaySARow, b: YesterdaySARow) => a.sa_name.localeCompare(b.sa_name) || b.sa_income - a.sa_income)
+
+      const waText = buildSAWAText(saRows, dateStr, saSharePercent)
+      setYesterdaySAReport({ rows: saRows, date: dateStr, waText })
+    } catch (e: any) {
+      alert('Failed to generate SA report: ' + (e.message ?? 'Unknown error'))
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
+
+  function downloadSAYesterdayExcel(rows: YesterdaySARow[], date: string) {
+    const sheetData = [
+      ['SA Name', 'Job Card No', 'Reg No', 'Branch', 'Labour Amount (₹)', 'Amount Paid (₹)'],
+      ...rows.map(r => [
+        r.sa_name, r.job_card_number, r.reg_number, r.branch,
+        Math.round(r.labour_amount), Math.round(r.sa_income),
+      ])
+    ]
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(sheetData)
+    ws['!cols'] = [22, 18, 14, 16, 20, 20].map(w => ({ wch: w }))
+    XLSX.utils.book_append_sheet(wb, ws, 'SA Report')
+    XLSX.writeFile(wb, `SA_Report_${date}.xlsx`)
+  }
+
+  function downloadSAPivotExcel(
+    dates: string[], sas: string[],
+    pivot: Map<string, Map<string, number>>,
+    rowTotals: Map<string, number>,
+    colTotals: Map<string, number>,
+    grandTotal: number
+  ) {
+    const header = ['Date', ...sas, 'Day Total']
+    const dataRows = dates.map(d => {
+      const row: (string | number)[] = [d]
+      sas.forEach(s => row.push(Math.round(pivot.get(d)?.get(s) ?? 0)))
+      row.push(Math.round(rowTotals.get(d) ?? 0))
+      return row
+    })
+    const totalRow: (string | number)[] = ['TOTAL', ...sas.map(s => Math.round(colTotals.get(s) ?? 0)), Math.round(grandTotal)]
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows, totalRow])
+    ws['!cols'] = [12, ...sas.map(() => ({ wch: 18 })), { wch: 14 }].map((v, i) => i === 0 ? { wch: 12 } : v as { wch: number })
+    XLSX.utils.book_append_sheet(wb, ws, 'SA Pivot')
+    XLSX.writeFile(wb, `SA_Pivot_Report.xlsx`)
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -424,6 +556,28 @@ export default function SATrackerPage() {
               {portal} ({branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portal).length})
             </button>
           ))}
+        </div>
+
+        {/* ── Report buttons ─── */}
+        <div className="toolbar toolbar--tight" style={{ marginTop: '0.5rem' }}>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => void handleGenerateSAYesterdayReport()}
+            disabled={generatingReport}
+            style={{ background: '#16a34a', borderColor: '#16a34a' }}
+          >
+            <Icon name="download" size={14} className="icon-align-text" />
+            {generatingReport ? 'Generating…' : '📥 Yesterday Report'}
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => setShowPivotReport(true)}
+            style={{ background: '#6366f1', borderColor: '#6366f1' }}
+          >
+            📊 Pivot Report
+          </button>
         </div>
       </div>
 
@@ -741,6 +895,200 @@ export default function SATrackerPage() {
           </div>
         </div>
       )}
+
+      {/* ── SA Yesterday Report Modal ─────────────────────────── */}
+      {yesterdaySAReport && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) setYesterdaySAReport(null) }}>
+          <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '860px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1e293b' }}>📊 SA Report — {yesterdaySAReport.date}</div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>{yesterdaySAReport.rows.length} job cards · SA Share: {saSharePercent}%</div>
+              </div>
+              <button onClick={() => setYesterdaySAReport(null)} style={{ border: 'none', background: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.65rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+              <button onClick={() => downloadSAYesterdayExcel(yesterdaySAReport.rows, yesterdaySAReport.date)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.1rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 600, fontSize: '0.83rem', cursor: 'pointer' }}>
+                📥 Download Excel
+              </button>
+              <a href={'https://wa.me/?text=' + encodeURIComponent(yesterdaySAReport.waText)}
+                target="_blank" rel="noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.1rem', background: '#25D366', color: '#fff', borderRadius: '7px', fontWeight: 600, fontSize: '0.83rem', textDecoration: 'none' }}>
+                📤 Share on WhatsApp
+              </a>
+              <button onClick={() => { navigator.clipboard.writeText(yesterdaySAReport.waText); alert('Copied to clipboard!') }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.55rem 1.1rem', background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '7px', fontWeight: 600, fontSize: '0.83rem', cursor: 'pointer' }}>
+                📋 Copy Text
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.25rem' }}>
+              {yesterdaySAReport.rows.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>No closed jobs found for yesterday.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
+                      {['Service Advisor', 'Job Card', 'Reg No', 'Branch', 'Labour Amount', 'Amount Paid'].map(h => (
+                        <th key={h} style={{ padding: '0.55rem 0.75rem', textAlign: h === 'Labour Amount' || h === 'Amount Paid' ? 'right' : 'left', fontWeight: 600, color: '#475569', fontSize: '0.76rem', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      let lastSA = ''
+                      return yesterdaySAReport.rows.map((r, i) => {
+                        const isNewSA = r.sa_name !== lastSA
+                        lastSA = r.sa_name
+                        const saRows = yesterdaySAReport.rows.filter(x => x.sa_name === r.sa_name)
+                        const saTotal = saRows.reduce((s, x) => s + x.sa_income, 0)
+                        const saLabour = saRows.reduce((s, x) => s + x.labour_amount, 0)
+                        return (
+                          <>
+                            {isNewSA && (
+                              <tr key={'hdr-' + i} style={{ background: '#f0f9ff' }}>
+                                <td colSpan={4} style={{ padding: '0.45rem 0.75rem', fontWeight: 700, color: '#0369a1', fontSize: '0.83rem' }}>
+                                  🧑‍💼 {r.sa_name}
+                                </td>
+                                <td style={{ padding: '0.45rem 0.75rem', textAlign: 'right', fontWeight: 700, color: '#0369a1' }}>₹{Math.round(saLabour).toLocaleString('en-IN')}</td>
+                                <td style={{ padding: '0.45rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#16a34a', fontSize: '0.85rem' }}>₹{Math.round(saTotal).toLocaleString('en-IN')}</td>
+                              </tr>
+                            )}
+                            <tr key={r.job_card_number + i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                              <td style={{ padding: '0.5rem 0.75rem 0.5rem 1.5rem', color: '#64748b', fontSize: '0.78rem' }}>{r.sa_name}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', fontFamily: 'monospace', fontSize: '0.76rem', color: '#334155' }}>{r.job_card_number}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#1e293b' }}>{r.reg_number}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.branch}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#334155' }}>₹{Math.round(r.labour_amount).toLocaleString('en-IN')}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>₹{Math.round(r.sa_income).toLocaleString('en-IN')}</td>
+                            </tr>
+                          </>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+                      <td colSpan={4} style={{ padding: '0.65rem 0.75rem', fontWeight: 700, color: '#1e293b' }}>TOTAL ({yesterdaySAReport.rows.length} job cards)</td>
+                      <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 700, color: '#1e293b' }}>
+                        ₹{Math.round(yesterdaySAReport.rows.reduce((s, r) => s + r.labour_amount, 0)).toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#16a34a', fontSize: '0.9rem' }}>
+                        ₹{Math.round(yesterdaySAReport.rows.reduce((s, r) => s + r.sa_income, 0)).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SA Pivot Report Modal ─────────────────────────────── */}
+      {showPivotReport && (() => {
+        const pivot     = new Map<string, Map<string, number>>()
+        const colTotals = new Map<string, number>()
+        const rowTotals = new Map<string, number>()
+        let grandTotal  = 0
+
+        filteredRows.forEach(r => {
+          const dateKey = r.dateKey
+          if (!dateKey) return
+          const saName  = String(r.sr_assigned_to ?? '').trim()
+          if (!saName) return
+          const income  = calculateSAIncome(r.labourAmt, saSharePercent)
+          if (income <= 0) return
+
+          if (!pivot.has(dateKey)) pivot.set(dateKey, new Map())
+          pivot.get(dateKey)!.set(saName, (pivot.get(dateKey)!.get(saName) ?? 0) + income)
+          colTotals.set(saName, (colTotals.get(saName) ?? 0) + income)
+          rowTotals.set(dateKey, (rowTotals.get(dateKey) ?? 0) + income)
+          grandTotal += income
+        })
+
+        const dates = Array.from(pivot.keys()).sort()
+        const sas   = Array.from(colTotals.entries()).sort((a, b) => b[1] - a[1]).map(([s]) => s)
+        const fmt   = (n: number) => n > 0 ? '₹' + Math.round(n).toLocaleString('en-IN') : '—'
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+            onClick={e => { if (e.target === e.currentTarget) setShowPivotReport(false) }}>
+            <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '98vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1e293b' }}>📊 SA Pivot Report</div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>
+                    Dates (rows) × Service Advisors (columns) · Value = Earning Amount · {dates.length} days · {sas.length} SAs
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
+                  <button onClick={() => downloadSAPivotExcel(dates, sas, pivot, rowTotals, colTotals, grandTotal)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}>
+                    📥 Download Excel
+                  </button>
+                  <button onClick={() => setShowPivotReport(false)} style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                {dates.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>No earning data in the selected range.</div>
+                ) : (
+                  <table style={{ borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: '100%' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'left', fontWeight: 700, color: '#1e293b', borderBottom: '2px solid #e2e8f0', borderRight: '2px solid #e2e8f0', whiteSpace: 'nowrap', position: 'sticky', left: 0, background: '#f8fafc', zIndex: 2 }}>📅 Date</th>
+                        {sas.map(s => (
+                          <th key={s} style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontWeight: 600, color: '#475569', borderBottom: '2px solid #e2e8f0', borderRight: '1px solid #f1f5f9', whiteSpace: 'nowrap', fontSize: '0.75rem', minWidth: '130px' }}>
+                            🧑‍💼 {s}
+                          </th>
+                        ))}
+                        <th style={{ padding: '0.6rem 0.85rem', textAlign: 'right', fontWeight: 700, color: '#1e293b', borderBottom: '2px solid #e2e8f0', borderLeft: '2px solid #e2e8f0', whiteSpace: 'nowrap', background: '#f8fafc', position: 'sticky', right: 0, zIndex: 2 }}>Day Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dates.map((date, di) => {
+                        const dayMap   = pivot.get(date) ?? new Map()
+                        const rowTotal = rowTotals.get(date) ?? 0
+                        return (
+                          <tr key={date} style={{ background: di % 2 === 0 ? '#fff' : '#fafbfc', borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '0.55rem 0.9rem', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap', borderRight: '2px solid #e2e8f0', position: 'sticky', left: 0, background: di % 2 === 0 ? '#fff' : '#fafbfc', zIndex: 1 }}>{date}</td>
+                            {sas.map(s => {
+                              const val = dayMap.get(s) ?? 0
+                              return (
+                                <td key={s} style={{ padding: '0.55rem 0.75rem', textAlign: 'right', borderRight: '1px solid #f1f5f9', color: val > 0 ? '#0f172a' : '#cbd5e1', fontWeight: val > 0 ? 600 : 400 }}>
+                                  {fmt(val)}
+                                </td>
+                              )
+                            })}
+                            <td style={{ padding: '0.55rem 0.85rem', textAlign: 'right', fontWeight: 700, color: '#1e293b', borderLeft: '2px solid #e2e8f0', position: 'sticky', right: 0, background: di % 2 === 0 ? '#fff' : '#fafbfc', zIndex: 1 }}>{fmt(rowTotal)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#f0f9ff', borderTop: '2px solid #0369a1' }}>
+                        <td style={{ padding: '0.65rem 0.9rem', fontWeight: 800, color: '#0369a1', borderRight: '2px solid #e2e8f0', position: 'sticky', left: 0, background: '#f0f9ff', zIndex: 1, whiteSpace: 'nowrap' }}>🏆 TOTAL</td>
+                        {sas.map(s => (
+                          <td key={s} style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#16a34a', borderRight: '1px solid #e2e8f0', fontSize: '0.83rem' }}>{fmt(colTotals.get(s) ?? 0)}</td>
+                        ))}
+                        <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', fontWeight: 900, color: '#16a34a', fontSize: '0.9rem', borderLeft: '2px solid #0369a1', position: 'sticky', right: 0, background: '#f0f9ff', zIndex: 1 }}>{fmt(grandTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }
