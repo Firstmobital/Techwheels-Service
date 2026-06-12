@@ -536,252 +536,187 @@ export default function SATrackerPage() {
   }
 
   return (
-    <div className="page">
-      {/* Header */}
-      <div className="page-head card mb-gap">
-        <div className="page-head__text">
-          <p className="page-head__label">
-            <Icon name="person" size={14} className="icon-align-text" />
-            Service Advisor
-          </p>
-          <h1>SA Earnings Tracker</h1>
-          <p>Drill down: SA → day → job card details (Labour, Spares, Total Invoice, Reg No, SR Type).</p>
+    <div className="page" style={{ padding: '0.75rem' }}>
+
+      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
+      <div style={{
+        background: '#fff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '10px',
+        padding: '0.6rem 0.85rem',
+        marginBottom: '0.6rem',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: '0.5rem',
+      }}>
+        {/* Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🧑‍💼 SA Tracker</span>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 400 }}>
+            {totals.jcCount.toLocaleString('en-IN')} JCs
+          </span>
         </div>
 
-        {/* Branch filter */}
+        {/* Period filter */}
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
+        {/* Divider */}
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Location:</span>
-          <button
-            type="button"
-            onClick={() => setBranchFilter('all')}
-            className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          >
-            All ({dateScopedRows.length})
+        {/* Location filter */}
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Loc:</span>
+        <button type="button" onClick={() => setBranchFilter('all')}
+          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({dateScopedRows.length})
+        </button>
+        {branches.map((b) => (
+          <button key={b} type="button" onClick={() => setBranchFilter(b)}
+            className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {b} ({dateScopedRows.filter((r) => getBranchLabel(r.location ?? r.branch) === b).length})
           </button>
-          {branches.map((b) => (
-            <button
-              key={b}
-              type="button"
-              onClick={() => setBranchFilter(b)}
-              className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
-            >
-              {b} ({dateScopedRows.filter((r) => getBranchLabel(r.location ?? r.branch) === b).length})
-            </button>
-          ))}
-        </div>
+        ))}
 
-        <div className="toolbar toolbar--tight">
-          <span className="toolbar__label">Portal:</span>
-          <button
-            type="button"
-            onClick={() => setPortalFilter('all')}
-            className={`btn btn--sm ${portalFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          >
-            All ({branchFilteredRows.length})
-          </button>
-          {portalOptions.map((portal) => (
-            <button
-              key={portal}
-              type="button"
-              onClick={() => setPortalFilter(portal)}
-              className={`btn btn--sm ${portalFilter === portal ? 'btn--primary' : 'btn--ghost'}`}
-            >
-              {portal} ({branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portal).length})
-            </button>
-          ))}
-        </div>
+        {/* Divider */}
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        {/* ── Report buttons ─── */}
-        <div className="toolbar toolbar--tight" style={{ marginTop: '0.5rem' }}>
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => void handleGenerateSAYesterdayReport()}
-            disabled={generatingReport}
-            style={{ background: '#16a34a', borderColor: '#16a34a' }}
-          >
-            <Icon name="download" size={14} className="icon-align-text" />
-            {generatingReport ? 'Generating…' : '📥 Yesterday Report'}
+        {/* Portal filter */}
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Portal:</span>
+        <button type="button" onClick={() => setPortalFilter('all')}
+          className={`btn btn--sm ${portalFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({branchFilteredRows.length})
+        </button>
+        {portalOptions.map((portal) => (
+          <button key={portal} type="button" onClick={() => setPortalFilter(portal)}
+            className={`btn btn--sm ${portalFilter === portal ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {portal} ({branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portal).length})
           </button>
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => setShowPivotReport(true)}
-            style={{ background: '#6366f1', borderColor: '#6366f1' }}
-          >
-            📊 Pivot Report
+        ))}
+
+        {/* Divider */}
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        {/* Date range fine-filter */}
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Range:</span>
+        <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+          value={fromDate}
+          onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v && v > toDate) setToDate(v) }}
+        />
+        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</span>
+        <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+          value={toDate}
+          onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v && v < fromDate) setFromDate(v) }}
+        />
+        {(fromDate || toDate) && (
+          <button type="button" className="btn btn--ghost btn--sm"
+            style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
+            onClick={() => { setFromDate(''); setToDate('') }}>
+            ✕
           </button>
-        </div>
+        )}
+
+        {/* Spacer */}
+        <span style={{ flex: 1 }} />
+
+        {/* Report buttons */}
+        <button type="button" onClick={() => void handleGenerateSAYesterdayReport()} disabled={generatingReport}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', opacity: generatingReport ? 0.7 : 1 }}>
+          📥 {generatingReport ? 'Loading…' : 'Yesterday'}
+        </button>
+        <button type="button" onClick={() => setShowPivotReport(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer' }}>
+          📊 Pivot
+        </button>
       </div>
 
       {error && (
-        <div className="toast error">
+        <div className="toast error" style={{ marginBottom: '0.6rem' }}>
           <Icon name="alert" size={14} />
           {error}
         </div>
       )}
 
-      {/* Summary chips */}
-      <div className="summary">
-        <div className="schip">
-          <span className="ic"><Icon name="person" size={16} /></span>
-          <div>
-            <div className="n">{totals.saCount}</div>
-            <div className="l">Service Advisors</div>
+      {/* ── STATS BAR ────────────────────────────────────────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+        gap: '0.45rem',
+        marginBottom: '0.6rem',
+      }}>
+        {[
+          { label: 'SAs', value: String(totals.saCount), color: '#6366f1', bg: '#eef2ff' },
+          { label: 'Job Cards', value: totals.jcCount.toLocaleString('en-IN'), color: '#2563eb', bg: '#eff6ff' },
+          { label: 'Total Labour', value: formatCurrency(totals.labour), color: '#16a34a', bg: '#f0fdf4' },
+          { label: 'Total Spares', value: formatCurrency(totals.spares), color: '#9333ea', bg: '#fdf4ff' },
+          { label: 'Total Invoice', value: formatCurrency(totals.invoice), color: '#ea580c', bg: '#fff7ed' },
+          { label: `SA Income (${saSharePercent}%)`, value: formatCurrency(totals.labour * saSharePercent / 100), color: '#2563eb', bg: '#eff6ff', bold: true },
+        ].map(({ label, value, color, bg, bold }) => (
+          <div key={label} style={{ background: bg, borderRadius: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${color}22` }}>
+            <div style={{ fontSize: bold ? '1rem' : '0.92rem', fontWeight: bold ? 800 : 700, color }}>{value}</div>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.1rem' }}>{label}</div>
           </div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: 'var(--blue-bg, #eff6ff)', color: 'var(--blue, #2563eb)' }}>
-            <Icon name="jc" size={16} />
-          </span>
-          <div>
-            <div className="n">{totals.jcCount.toLocaleString('en-IN')}</div>
-            <div className="l">Job Cards</div>
-          </div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#f0fdf4', color: '#16a34a' }}>
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totals.labour)}</div>
-            <div className="l">Total Labour</div>
-          </div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#fdf4ff', color: '#9333ea' }}>
-            <Icon name="parts" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totals.spares)}</div>
-            <div className="l">Total Spares</div>
-          </div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#fff7ed', color: '#ea580c' }}>
-            <Icon name="invoice" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totals.invoice)}</div>
-            <div className="l">Total Invoice</div>
-          </div>
-        </div>
-        <div className="schip">
-          <span className="ic" style={{ background: '#eff6ff', color: '#2563eb' }}>
-            <Icon name="checksm" size={16} />
-          </span>
-          <div>
-            <div className="n">{formatCurrency(totals.labour * saSharePercent / 100)}</div>
-            <div className="l">SA Income ({saSharePercent}% of Labour)</div>
-          </div>
-        </div>
+        ))}
 
-        {/* Date range filter */}
-        <div className="schip schip--date-filter">
-          <div className="schip-date-filter__head"><div className="l">Date range</div></div>
-          <div className="schip-date-filter__controls">
-            <label className="schip-date-filter__field" htmlFor="sa-date-from">
-              <span>From</span>
-              <input
-                id="sa-date-from" type="date" className="inp"
-                value={fromDate}
-                onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v && v > toDate) setToDate(v) }}
-              />
+        {/* Earnings % settings — inline in stats bar (admin only) */}
+        {canEditSharePercent && (
+          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.4rem 0.65rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', gridColumn: 'span 2' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap' }}>⚙️ Earnings %</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#334155' }}>
+              SA%
+              <input className="inp" inputMode="decimal" value={draftSaShare}
+                onChange={(e) => setDraftSaShare(e.target.value)}
+                onBlur={() => setDraftSaShare(String(parsedDraftSaShare))}
+                style={{ width: '48px', padding: '0.2rem 0.35rem', fontSize: '0.78rem', textAlign: 'center' }} />
             </label>
-            <label className="schip-date-filter__field" htmlFor="sa-date-to">
-              <span>To</span>
-              <input
-                id="sa-date-to" type="date" className="inp"
-                value={toDate}
-                onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v && v < fromDate) setFromDate(v) }}
-              />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', color: '#334155' }}>
+              EV%
+              <input className="inp" inputMode="decimal" value={draftEvShare}
+                onChange={(e) => setDraftEvShare(e.target.value)}
+                onBlur={() => setDraftEvShare(String(parsedDraftEvShare))}
+                style={{ width: '48px', padding: '0.2rem 0.35rem', fontSize: '0.78rem', textAlign: 'center' }} />
             </label>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm schip-date-filter__clear"
-              onClick={() => { setFromDate(''); setToDate('') }}
-              disabled={!fromDate && !toDate}
-            >
-              Clear
+            <button type="button" disabled={!hasPendingShareChanges}
+              onClick={async () => {
+                setSaSharePercent(parsedDraftSaShare)
+                setEvSharePercent(parsedDraftEvShare)
+                await supabase.from('sa_earnings_settings').upsert([
+                  { key: 'sa_share_percent', value: String(parsedDraftSaShare) },
+                  { key: 'ev_share_percent', value: String(parsedDraftEvShare) },
+                ], { onConflict: 'key' })
+              }}
+              style={{ padding: '0.2rem 0.65rem', background: hasPendingShareChanges ? '#2563eb' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: '5px', fontWeight: 700, fontSize: '0.75rem', cursor: hasPendingShareChanges ? 'pointer' : 'not-allowed' }}>
+              Apply
+            </button>
+            <button type="button"
+              onClick={async () => {
+                setSaSharePercent(DEFAULT_SA_SHARE_PERCENT)
+                setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
+                setDraftSaShare(String(DEFAULT_SA_SHARE_PERCENT))
+                setDraftEvShare(String(DEFAULT_EV_SHARE_PERCENT))
+                await supabase.from('sa_earnings_settings').upsert([
+                  { key: 'sa_share_percent', value: String(DEFAULT_SA_SHARE_PERCENT) },
+                  { key: 'ev_share_percent', value: String(DEFAULT_EV_SHARE_PERCENT) },
+                ], { onConflict: 'key' })
+              }}
+              style={{ padding: '0.2rem 0.55rem', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '5px', fontSize: '0.72rem', cursor: 'pointer' }}>
+              Reset
             </button>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── SA Cards ── */}
       {!loading && saCards.length > 0 && (
-        <div className="card mb-gap">
-          <div className="card__head">
+        <div className="card mb-gap" style={{ marginBottom: '0.6rem' }}>
+          <div className="card__head" style={{ padding: '0.5rem 0.85rem', minHeight: 'unset' }}>
             <div>
-              <h3>Revenue by Service Advisor</h3>
-              <div className="sub">Sorted by total invoice value. Income = Labour × {saSharePercent}%. Click an SA to drill down by day.</div>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>Revenue by Service Advisor</span>
+              <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: '0.5rem' }}>Income = Labour × {saSharePercent}% · click to drill down</span>
             </div>
-            {canEditSharePercent && (
-            <div className="tech-share-corner">
-                <h3>Earnings percentage settings</h3>
-                <div className="tech-share-controls">
-                  <label className="field field--no-gap tech-share-field">
-                    <span className="label">SA %</span>
-                    <input
-                      className="inp"
-                      inputMode="decimal"
-                      value={draftSaShare}
-                      onChange={(e) => setDraftSaShare(e.target.value)}
-                      onBlur={() => setDraftSaShare(String(parsedDraftSaShare))}
-                      placeholder={String(DEFAULT_SA_SHARE_PERCENT)}
-                    />
-                  </label>
-                  <label className="field field--no-gap tech-share-field">
-                    <span className="label">EV %</span>
-                    <input
-                      className="inp"
-                      inputMode="decimal"
-                      value={draftEvShare}
-                      onChange={(e) => setDraftEvShare(e.target.value)}
-                      onBlur={() => setDraftEvShare(String(parsedDraftEvShare))}
-                      placeholder={String(DEFAULT_EV_SHARE_PERCENT)}
-                    />
-                  </label>
-                  <div className="tech-share-actions">
-                    <button
-                      type="button"
-                      className="btn btn--primary btn--sm"
-                      onClick={async () => {
-                        setSaSharePercent(parsedDraftSaShare)
-                        setEvSharePercent(parsedDraftEvShare)
-                        // Persist to DB
-                        await supabase.from('sa_earnings_settings').upsert([
-                          { key: 'sa_share_percent', value: String(parsedDraftSaShare) },
-                          { key: 'ev_share_percent', value: String(parsedDraftEvShare) },
-                        ], { onConflict: 'key' })
-                      }}
-                      disabled={!hasPendingShareChanges}
-                    >
-                      Apply
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={async () => {
-                        setSaSharePercent(DEFAULT_SA_SHARE_PERCENT)
-                        setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
-                        setDraftSaShare(String(DEFAULT_SA_SHARE_PERCENT))
-                        setDraftEvShare(String(DEFAULT_EV_SHARE_PERCENT))
-                        await supabase.from('sa_earnings_settings').upsert([
-                          { key: 'sa_share_percent', value: String(DEFAULT_SA_SHARE_PERCENT) },
-                          { key: 'ev_share_percent', value: String(DEFAULT_EV_SHARE_PERCENT) },
-                        ], { onConflict: 'key' })
-                      }}
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
           <div className="card__body dense">
             <div className="tech-drill-grid">
@@ -817,18 +752,16 @@ export default function SATrackerPage() {
 
       {/* ── Day cards for selected SA ── */}
       {selectedSA && dayCards.length > 0 && (
-        <div className="card mb-gap">
-          <div className="card__head">
-            <div>
-              <h3>{selectedSA} — by Day</h3>
-              <div className="sub">Click a day to see individual job cards.</div>
+        <div className="card mb-gap" style={{ marginBottom: '0.6rem' }}>
+          <div className="card__head" style={{ padding: '0.5rem 0.85rem', minHeight: 'unset' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>{selectedSA} — by Day</span>
+              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>click a day to see job cards</span>
             </div>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => { setSelectedSA(''); setSelectedDayKey('') }}
-            >
-              ✕ Close
+            <button type="button" className="btn btn--ghost btn--sm"
+              style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+              onClick={() => { setSelectedSA(''); setSelectedDayKey('') }}>
+              ✕
             </button>
           </div>
           <div className="card__body dense">
@@ -862,18 +795,16 @@ export default function SATrackerPage() {
 
       {/* ── JC detail table for selected day ── */}
       {selectedDayKey && dayDetailRows.length > 0 && (
-        <div className="card mb-gap">
-          <div className="card__head">
-            <div>
-              <h3>{selectedSA} — {dateLabel(selectedDayKey)}</h3>
-              <div className="sub">{dayDetailRows.length} job card{dayDetailRows.length !== 1 ? 's' : ''}</div>
+        <div className="card mb-gap" style={{ marginBottom: '0.6rem' }}>
+          <div className="card__head" style={{ padding: '0.5rem 0.85rem', minHeight: 'unset' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>{selectedSA} — {dateLabel(selectedDayKey)}</span>
+              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{dayDetailRows.length} JC{dayDetailRows.length !== 1 ? 's' : ''}</span>
             </div>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => setSelectedDayKey('')}
-            >
-              ✕ Close
+            <button type="button" className="btn btn--ghost btn--sm"
+              style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+              onClick={() => setSelectedDayKey('')}>
+              ✕
             </button>
           </div>
           <div className="card__body" style={{ overflowX: 'auto' }}>
