@@ -208,6 +208,16 @@ Stage-governance note:
 - [x] **Task 7.4:** Ensure `reception_entry_id` index coverage across bodyshop child tables.
 - [x] **Task 7.5:** Standardize dealer-scoped RLS across bodyshop child tables (admin/service-role compatibility retained).
 
+### Phase 8: Insurance Auto-Fetch in Bodyshop SA Docs
+- [x] **Task 8.1:** Add `Fetch` button in SA -> Docs -> Insurance Details section on `bodyshop-repair`.
+- [x] **Task 8.2:** Read insurance fields from `rto_cache` for current registration and map to card fields:
+  - `api_rc_vehicle_insurance_policy_number` -> `insurance_policy_no`
+  - `api_rc_vehicle_insurance_company_name` -> `insurance_company`
+  - `api_rc_vehicle_insurance_upto` -> `insurance_valid_date`
+- [x] **Task 8.3:** Apply freshness gate: if latest cache row is older than 30 days, call existing edge lookup path used by AutoDoc (`invoke-ocean025`) and then re-read mapped values.
+- [x] **Task 8.4:** Persist fetched values to `bodyshop_repair_cards` and surface success/failure toast states.
+- [ ] **Task 8.5:** Add QA checks for cache-hit, stale-refresh, and API-failure fallback behavior.
+
 ---
 
 ## Activity Tracker
@@ -281,6 +291,15 @@ Stage-governance note:
 ✅ 7.3 | Apply strict parent-child enforcement | API | 2026-06-12 | 2026-06-12 | Executed `20260612183000_bodyshop_v2_parent_child_strict_enforcement.sql`
 ✅ 7.4 | Align child-table dealer-scoped RLS policies | API | 2026-06-12 | 2026-06-12 | Executed `20260612182000_bodyshop_v2_rls_alignment.sql`
 ✅ 7.5 | Validate FK + parent-link contract readiness | API + QA | 2026-06-12 | 2026-06-12 | Migration pipeline completed end-to-end without strict-phase abort
+```
+
+### Phase 8
+```
+✅ 8.1 | Plan insurance fetch UX + data source contract | Web Dev + API | 2026-06-12 | 2026-06-12 | Fetch in SA Docs insurance block implemented using existing RC lookup path
+✅ 8.2 | Implement rto_cache mapped field hydration | Web Dev + API | 2026-06-12 | 2026-06-12 | policy/company/valid-until mapped from latest cache row
+✅ 8.3 | Implement 30-day stale refresh via invoke-ocean025 | API | 2026-06-12 | 2026-06-12 | edge lookup called only when cache row missing/stale, then cache re-read
+✅ 8.4 | Persist + toast state handling on card save | Web Dev | 2026-06-12 | 2026-06-12 | updates bodyshop_repair_cards insurance fields with success/failure toasts
+⏳ 8.5 | QA matrix for hit/stale/failure paths | QA | - | - | include provider failure fallback and no-data path
 ```
 
 ---

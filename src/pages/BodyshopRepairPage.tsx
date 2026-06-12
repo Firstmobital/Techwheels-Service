@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { getDealerContext } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
   listRepairCards, createRepairCard, updateRepairCard, advanceStage,
   getGroupForStage, STAGE_LABELS, STAGE_GROUPS,
@@ -32,6 +33,57 @@ function sanitizeFileNamePart(raw: string): string {
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
   return cleaned || 'upload'
+}
+
+function normalizeRegForLookup(value: string | null | undefined): string {
+  return String(value ?? '').replace(/\s+/g, '').trim().toUpperCase()
+}
+
+function parseInsuranceDateForInput(value: unknown): string | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+
+  const dmy = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/)
+  if (dmy) {
+    const [, dd, mm, yyyy] = dmy
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  const ymd = raw.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/)
+  if (ymd) {
+    const [, yyyy, mm, dd] = ymd
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString().slice(0, 10)
+}
+
+function extractInsurancePatchFromSource(source: unknown): Pick<RepairCard, 'insurance_policy_no' | 'insurance_company' | 'insurance_valid_date'> {
+  const row = (source && typeof source === 'object' && !Array.isArray(source))
+    ? source as Record<string, unknown>
+    : {}
+
+  const policy = String(row.api_rc_vehicle_insurance_policy_number ?? '').trim() || null
+  const company = String(row.api_rc_vehicle_insurance_company_name ?? '').trim() || null
+  const validDate = parseInsuranceDateForInput(row.api_rc_vehicle_insurance_upto)
+
+  return {
+    insurance_policy_no: policy,
+    insurance_company: company,
+    insurance_valid_date: validDate,
+  }
+}
+
+type RtoInsuranceCacheRow = {
+  registration_no: string | null
+  cached_at: string | null
+  api_rc_vehicle_insurance_policy_number: string | null
+  api_rc_vehicle_insurance_company_name: string | null
+  api_rc_vehicle_insurance_upto: string | null
 }
 
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
@@ -149,7 +201,7 @@ const BODYSHOP_DOCS: { k: BodyshopDocKey; label: string; mandatoryFor: CustomerT
   { k: 'doc_kyc', label: 'KYC', mandatoryFor: ['individual'] },
   { k: 'doc_gst', label: 'GST', mandatoryFor: ['firm'] },
   { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
-  { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: [] },
+  { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: ['firm'] },
 ]
 
 // ── component ──────────────────────────────────────────────────────────────────
@@ -178,6 +230,7 @@ export default function BodyshopRepairPage() {
   const [uploadingIntakePhotos, setUploadingIntakePhotos] = useState(false)
   const [kmDraft, setKmDraft] = useState('')
   const [savingReceiving, setSavingReceiving] = useState(false)
+  const [fetchingInsurance, setFetchingInsurance] = useState(false)
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
@@ -748,6 +801,120 @@ export default function BodyshopRepairPage() {
     }
 
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  async function getLatestRtoInsuranceRow(regNumber: string): Promise<RtoInsuranceCacheRow | null> {
+    const normalizedReg = normalizeRegForLookup(regNumber)
+    if (!normalizedReg) return null
+
+    const { data, error } = await supabase
+      .from('rto_cache')
+      .select('registration_no, cached_at, api_rc_vehicle_insurance_policy_number, api_rc_vehicle_insurance_company_name, api_rc_vehicle_insurance_upto')
+      .eq('registration_no', normalizedReg)
+      .order('cached_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) throw error
+    return (data as RtoInsuranceCacheRow | null) ?? null
+  }
+
+  async function handleFetchInsuranceDetails() {
+    if (!selected) return
+
+    const regNo = normalizeRegForLookup(selected.reg_number ?? selectedReception?.reg_number)
+    if (!regNo) {
+      toast_('Registration number is required to fetch insurance details', false)
+      return
+    }
+
+    setFetchingInsurance(true)
+    try {
+      const staleAfterMs = 30 * 24 * 60 * 60 * 1000
+      let cacheRow: RtoInsuranceCacheRow | null = null
+
+      try {
+        cacheRow = await getLatestRtoInsuranceRow(regNo)
+      } catch {
+        cacheRow = null
+      }
+
+      const cachedAtMs = cacheRow?.cached_at ? new Date(cacheRow.cached_at).getTime() : Number.NaN
+      const cacheIsFresh = Number.isFinite(cachedAtMs) && (Date.now() - cachedAtMs) <= staleAfterMs
+      let usedFreshCache = Boolean(cacheRow && cacheIsFresh)
+
+      if (!cacheRow || !cacheIsFresh) {
+        const rcLookupRes = await fetchVehicleFromRcLookup(regNo)
+        if (rcLookupRes.error && !cacheRow) {
+          toast_(rcLookupRes.error, false)
+          return
+        }
+
+        try {
+          const refreshed = await getLatestRtoInsuranceRow(regNo)
+          if (refreshed) {
+            cacheRow = refreshed
+            const refreshedMs = refreshed.cached_at ? new Date(refreshed.cached_at).getTime() : Number.NaN
+            usedFreshCache = Number.isFinite(refreshedMs) && (Date.now() - refreshedMs) <= staleAfterMs
+          }
+        } catch {
+          // If read-back fails, fall through to payload/stale cache fallback.
+        }
+
+        if (!cacheRow && rcLookupRes.data) {
+          cacheRow = {
+            registration_no: regNo,
+            cached_at: null,
+            api_rc_vehicle_insurance_policy_number: String((rcLookupRes.data as any).api_rc_vehicle_insurance_policy_number ?? '').trim() || null,
+            api_rc_vehicle_insurance_company_name: String((rcLookupRes.data as any).api_rc_vehicle_insurance_company_name ?? '').trim() || null,
+            api_rc_vehicle_insurance_upto: String((rcLookupRes.data as any).api_rc_vehicle_insurance_upto ?? '').trim() || null,
+          }
+        }
+      }
+
+      if (!cacheRow) {
+        toast_('No insurance data available in RC cache/API for this registration', false)
+        return
+      }
+
+      const insurancePatch = extractInsurancePatchFromSource(cacheRow)
+      const hasInsuranceData = Boolean(
+        insurancePatch.insurance_policy_no
+        || insurancePatch.insurance_company
+        || insurancePatch.insurance_valid_date,
+      )
+
+      if (!hasInsuranceData) {
+        toast_('Insurance data is not present in RC lookup response', false)
+        return
+      }
+
+      const { error: updateError } = await supabase
+        .from('bodyshop_repair_cards')
+        .update(insurancePatch)
+        .eq('id', selected.id)
+
+      if (updateError) {
+        toast_(updateError.message, false)
+        return
+      }
+
+      setSelected((prev) => prev ? { ...prev, ...insurancePatch } : prev)
+      setCards((prev) => prev.map((card) => card.id === selected.id ? { ...card, ...insurancePatch } : card))
+      setEditPatch((prev) => {
+        const next = { ...prev }
+        delete next.insurance_policy_no
+        delete next.insurance_company
+        delete next.insurance_valid_date
+        return next
+      })
+
+      toast_(usedFreshCache ? 'Insurance details fetched from cache ✅' : 'Insurance details refreshed from RC API ✅')
+    } catch (e: any) {
+      toast_(e.message ?? 'Unable to fetch insurance details', false)
+    } finally {
+      setFetchingInsurance(false)
+    }
   }
 
   function parseKmDraftValue(raw: string): number | null | 'invalid' {
@@ -1621,10 +1788,13 @@ export default function BodyshopRepairPage() {
                     {saActiveCard === 'docs' && (() => {
                       const ct = selected.customer_type ?? 'individual'
                       const noDocsRequired = ct === 'cash' || ct === 'foc'
+                      const insuranceRegNo = normalizeRegForLookup(selected.reg_number ?? selectedReception?.reg_number)
 
                       const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
                       const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
-                      const optionalDocs  = visibleDocs.filter(d => !d.mandatoryFor.includes(ct as CustomerType))
+                      const optionalDocs  = ct === 'firm'
+                        ? visibleDocs.filter(d => d.mandatoryFor.length === 0)
+                        : []
                       const collectedMandatory = mandatoryDocs.filter(d => (selected as any)[d.k]).length
                       const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
 
@@ -1638,8 +1808,19 @@ export default function BodyshopRepairPage() {
 
                           {!noDocsRequired && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                              <div style={{ gridColumn: '1/-1', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 4 }}>
-                                🛡️ Insurance Details
+                              <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                                  🛡️ Insurance Details
+                                </div>
+                                <button
+                                  className="btn btn--primary"
+                                  type="button"
+                                  onClick={() => void handleFetchInsuranceDetails()}
+                                  disabled={fetchingInsurance || !insuranceRegNo}
+                                  title={insuranceRegNo ? 'Fetch from RC cache/API' : 'Registration number required'}
+                                >
+                                  {fetchingInsurance ? 'Fetching...' : 'Fetch'}
+                                </button>
                               </div>
                               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                 <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Policy No.</span>
@@ -1689,7 +1870,7 @@ export default function BodyshopRepairPage() {
                                 </div>
                               </div>
 
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, marginBottom: 16 }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 8, marginBottom: 16 }}>
                                 {mandatoryDocs.map(({ k, label }) => {
                                   const checked = (selected as any)[k] ?? false
                                   const attachedDoc = bodyshopDocsByKey[k]
@@ -1697,7 +1878,7 @@ export default function BodyshopRepairPage() {
                                   return (
                                     <div key={k} style={{
                                       display: 'flex', alignItems: 'center', gap: 10,
-                                      padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                                      padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
                                       background: checked ? '#f0fdf4' : '#fff9f9',
                                       border: `1.5px solid ${checked ? '#86efac' : '#fca5a5'}`,
                                     }}>
@@ -1725,22 +1906,25 @@ export default function BodyshopRepairPage() {
                                         >
                                           {busy ? 'Uploading…' : 'Upload'}
                                         </button>
-                                        <button
-                                          className="btn"
-                                          onClick={() => void handleViewBodyshopDoc(k)}
-                                          disabled={!attachedDoc}
-                                          style={{ padding: '6px 10px', fontSize: 11 }}
-                                        >
-                                          View
-                                        </button>
-                                        <button
-                                          className="btn"
-                                          onClick={() => startBodyshopDocUpload(k, 'replace')}
-                                          disabled={!attachedDoc || busy}
-                                          style={{ padding: '6px 10px', fontSize: 11 }}
-                                        >
-                                          Replace
-                                        </button>
+                                        {attachedDoc && (
+                                          <>
+                                            <button
+                                              className="btn"
+                                              onClick={() => void handleViewBodyshopDoc(k)}
+                                              style={{ padding: '6px 10px', fontSize: 11 }}
+                                            >
+                                              View
+                                            </button>
+                                            <button
+                                              className="btn"
+                                              onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                              disabled={busy}
+                                              style={{ padding: '6px 10px', fontSize: 11 }}
+                                            >
+                                              Replace
+                                            </button>
+                                          </>
+                                        )}
                                       </div>
                                     </div>
                                   )
@@ -1750,9 +1934,9 @@ export default function BodyshopRepairPage() {
                               {optionalDocs.length > 0 && (
                                 <>
                                   <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                                    Optional
+                                    Applicable For Firm
                                   </div>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 8 }}>
                                     {optionalDocs.map(({ k, label }) => {
                                       const checked = (selected as any)[k] ?? false
                                       const attachedDoc = bodyshopDocsByKey[k]
@@ -1760,7 +1944,7 @@ export default function BodyshopRepairPage() {
                                       return (
                                         <div key={k} style={{
                                           display: 'flex', alignItems: 'center', gap: 10,
-                                          padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                                          padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
                                           background: checked ? '#f0fdf4' : '#fafafa',
                                           border: `1.5px solid ${checked ? '#86efac' : '#e5e7eb'}`,
                                         }}>
@@ -1775,7 +1959,7 @@ export default function BodyshopRepairPage() {
                                           </button>
                                           <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</div>
-                                            <div style={{ fontSize: 10, color: '#9ca3af' }}>Optional</div>
+                                            <div style={{ fontSize: 10, color: '#9ca3af' }}>Firm Applicable</div>
                                           </div>
                                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                                             <button
@@ -1786,22 +1970,25 @@ export default function BodyshopRepairPage() {
                                             >
                                               {busy ? 'Uploading…' : 'Upload'}
                                             </button>
-                                            <button
-                                              className="btn"
-                                              onClick={() => void handleViewBodyshopDoc(k)}
-                                              disabled={!attachedDoc}
-                                              style={{ padding: '6px 10px', fontSize: 11 }}
-                                            >
-                                              View
-                                            </button>
-                                            <button
-                                              className="btn"
-                                              onClick={() => startBodyshopDocUpload(k, 'replace')}
-                                              disabled={!attachedDoc || busy}
-                                              style={{ padding: '6px 10px', fontSize: 11 }}
-                                            >
-                                              Replace
-                                            </button>
+                                            {attachedDoc && (
+                                              <>
+                                                <button
+                                                  className="btn"
+                                                  onClick={() => void handleViewBodyshopDoc(k)}
+                                                  style={{ padding: '6px 10px', fontSize: 11 }}
+                                                >
+                                                  View
+                                                </button>
+                                                <button
+                                                  className="btn"
+                                                  onClick={() => startBodyshopDocUpload(k, 'replace')}
+                                                  disabled={busy}
+                                                  style={{ padding: '6px 10px', fontSize: 11 }}
+                                                >
+                                                  Replace
+                                                </button>
+                                              </>
+                                            )}
                                           </div>
                                         </div>
                                       )

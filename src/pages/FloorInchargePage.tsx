@@ -196,12 +196,12 @@ interface Employee {
   role?: string | null
 }
 
-type SupportRole = 'DET' | 'ELECTRICIAN' | 'DENTER' | 'TECHNICIAN'
+type SupportRole = 'DET' | 'ELECTRICIAN' | 'DENTOR' | 'TECHNICIAN'
 
 const SUPPORT_ROLE_OPTIONS: Array<{ value: SupportRole; label: string }> = [
   { value: 'DET', label: 'DET' },
   { value: 'ELECTRICIAN', label: 'Electrician' },
-  { value: 'DENTER', label: 'Denter' },
+  { value: 'DENTOR', label: 'Dentor' },
   { value: 'TECHNICIAN', label: 'Technician' },
 ]
 
@@ -224,7 +224,7 @@ function normalizeSupportRole(value: string | null | undefined): SupportRole | n
 
   if (normalized.includes('TECHNICIAN')) return 'TECHNICIAN'
   if (normalized.includes('ELECTRICIAN')) return 'ELECTRICIAN'
-  if (normalized.includes('DENTER')) return 'DENTER'
+  if (normalized.includes('DENTOR') || normalized.includes('DENTER')) return 'DENTOR'
   if (normalized.includes('DET')) return 'DET'
 
   return null
@@ -564,7 +564,7 @@ export default function FloorInchargePage() {
     const grouped: Record<SupportRole, Employee[]> = {
       DET: [],
       ELECTRICIAN: [],
-      DENTER: [],
+      DENTOR: [],
       TECHNICIAN: [],
     }
 
@@ -577,7 +577,7 @@ export default function FloorInchargePage() {
     return {
       DET: grouped.DET.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
       ELECTRICIAN: grouped.ELECTRICIAN.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
-      DENTER: grouped.DENTER.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
+      DENTOR: grouped.DENTOR.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
       TECHNICIAN: grouped.TECHNICIAN.sort((a, b) => a.employee_name.localeCompare(b.employee_name)),
     }
   }, [allEmployees])
