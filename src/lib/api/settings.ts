@@ -10,6 +10,15 @@ export interface ModelOption {
   updated_at: string
 }
 
+export interface BodyshopSurveyor {
+  id: number
+  surveyor_name: string
+  surveyor_contact_number: string
+  surveyor_email: string | null
+  created_at: string
+  updated_at: string
+}
+
 export async function listModelOptions(): Promise<ApiResult<ModelOption[]>> {
   const { data, error } = await supabase
     .from('settings_model_options')
@@ -104,4 +113,100 @@ export async function getModelNames(): Promise<ApiResult<string[]>> {
 
   if (error) return fail(error)
   return ok((data ?? []).map((row: { model_name: string }) => row.model_name))
+}
+
+export async function listBodyshopSurveyors(): Promise<ApiResult<BodyshopSurveyor[]>> {
+  const { data, error } = await supabase
+    .from('settings_bodyshop_surveyors')
+    .select('id, surveyor_name, surveyor_contact_number, surveyor_email, created_at, updated_at')
+    .order('surveyor_name', { ascending: true })
+
+  if (error) return fail(error)
+  return ok((data ?? []) as BodyshopSurveyor[])
+}
+
+export async function createBodyshopSurveyor(input: {
+  surveyorName: string
+  surveyorContactNumber: string
+  surveyorEmail?: string | null
+}): Promise<ApiResult<BodyshopSurveyor>> {
+  const surveyorName = input.surveyorName.trim()
+  const surveyorContactNumber = input.surveyorContactNumber.trim()
+  const surveyorEmail = input.surveyorEmail?.trim() || null
+
+  if (!surveyorName) return fail('Surveyor name is required')
+  if (!surveyorContactNumber) return fail('Surveyor contact number is required')
+
+  const { data, error } = await supabase
+    .from('settings_bodyshop_surveyors')
+    .insert({
+      surveyor_name: surveyorName,
+      surveyor_contact_number: surveyorContactNumber,
+      surveyor_email: surveyorEmail,
+    })
+    .select('id, surveyor_name, surveyor_contact_number, surveyor_email, created_at, updated_at')
+    .single()
+
+  if (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      return fail(`Surveyor '${surveyorName}' with contact '${surveyorContactNumber}' already exists`)
+    }
+    return fail(error)
+  }
+
+  return ok(data as BodyshopSurveyor)
+}
+
+export async function updateBodyshopSurveyor(
+  id: number,
+  updates: {
+    surveyorName?: string
+    surveyorContactNumber?: string
+    surveyorEmail?: string | null
+  },
+): Promise<ApiResult<BodyshopSurveyor>> {
+  const payload: Record<string, unknown> = {}
+
+  if (updates.surveyorName !== undefined) {
+    const surveyorName = updates.surveyorName.trim()
+    if (!surveyorName) return fail('Surveyor name is required')
+    payload.surveyor_name = surveyorName
+  }
+
+  if (updates.surveyorContactNumber !== undefined) {
+    const surveyorContactNumber = updates.surveyorContactNumber.trim()
+    if (!surveyorContactNumber) return fail('Surveyor contact number is required')
+    payload.surveyor_contact_number = surveyorContactNumber
+  }
+
+  if (updates.surveyorEmail !== undefined) {
+    payload.surveyor_email = updates.surveyorEmail?.trim() || null
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return fail('No updates provided')
+  }
+
+  const { data, error } = await supabase
+    .from('settings_bodyshop_surveyors')
+    .update(payload)
+    .eq('id', id)
+    .select('id, surveyor_name, surveyor_contact_number, surveyor_email, created_at, updated_at')
+    .single()
+
+  if (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      return fail('Surveyor with the same name and contact already exists')
+    }
+    return fail(error)
+  }
+
+  return ok(data as BodyshopSurveyor)
+}
+
+export async function deleteBodyshopSurveyor(id: number): Promise<ApiResult<null>> {
+  const { error } = await supabase.from('settings_bodyshop_surveyors').delete().eq('id', id)
+
+  if (error) return fail(error)
+  return ok(null)
 }

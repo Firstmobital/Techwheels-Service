@@ -227,7 +227,7 @@ export default function BodyshopRepairPage() {
   const [showNew, setShowNew]           = useState(false)
   const [selected, setSelected]         = useState<RepairCard | null>(null)
   const [detailTab, setDetailTab]       = useState<DetailTab>('overview')
-  const [saActiveCard, setSaActiveCard] = useState<'receiving' | 'docs' | 'estimate' | null>(null)
+  const [saActiveCard, setSaActiveCard] = useState<'receiving' | 'docs' | 'estimate' | 'claim_intimation' | null>(null)
   const [approvalActiveCard, setApprovalActiveCard] = useState<'estimation_approval' | null>(null)
   const [editPatch, setEditPatch]       = useState<Partial<RepairCard>>({})
   const [saving, setSaving]             = useState(false)
@@ -577,6 +577,11 @@ export default function BodyshopRepairPage() {
   async function handleSaveEstimateStage() {
     if (!selected) return
 
+    if (selected.current_stage < 6) {
+      toast_('Complete Documentation stage first before saving Estimate', false)
+      return
+    }
+
     const estimateAmount = Number(selected.estimated_amount ?? 0)
     const estimateDoc = bodyshopDocsByKey.doc_estimate
 
@@ -646,6 +651,68 @@ export default function BodyshopRepairPage() {
       toast_(selected.current_stage === 7 ? 'Estimation approved. Stage moved to Claim Intimation ✅' : 'Estimation approval saved ✅')
     } catch (e: any) {
       toast_(e.message ?? 'Unable to approve estimation', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleSaveClaimIntimationStage() {
+    if (!selected) return
+
+    if (selected.current_stage < 8) {
+      toast_('Complete Estimation Approval stage first before saving Claim Intimation', false)
+      return
+    }
+
+    const claimNo = String(selected.claim_intimation_no ?? '').trim()
+    if (!claimNo) {
+      toast_('Claim Intimation No is required', false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const authRes = await supabase.auth.getUser()
+      const actorId = authRes.data.user?.id ?? null
+      if (!actorId) {
+        throw new Error('No active user found for claim intimation capture')
+      }
+
+      const patch: Partial<RepairCard> = {
+        claim_intimation_no: claimNo,
+      }
+
+      if (selected.current_stage === 8) {
+        patch.current_stage = 9
+        patch.current_stage_name = STAGE_LABELS[9] ?? 'Survey'
+      }
+
+      const updated = await updateRepairCard(selected.id, patch)
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+
+      const stageTo = selected.current_stage === 8 ? 9 : updated.current_stage
+      await supabase.from('audit_logs').insert({
+        actor_id: actorId,
+        action: 'bodyshop_claim_intimation_saved',
+        resource_type: 'bodyshop_repair_card',
+        resource_id: String(updated.id),
+        details: {
+          claim_intimation_no: claimNo,
+          stage_from: selected.current_stage,
+          stage_to: stageTo,
+        },
+      })
+
+      setEditPatch((prev) => {
+        const next = { ...prev }
+        delete next.claim_intimation_no
+        return next
+      })
+
+      toast_(selected.current_stage === 8 ? 'Claim Intimation saved. Stage moved to Survey ✅' : 'Claim Intimation saved ✅')
+    } catch (e: any) {
+      toast_(e.message ?? 'Unable to save claim intimation', false)
     } finally {
       setSaving(false)
     }
@@ -753,12 +820,13 @@ export default function BodyshopRepairPage() {
             file_type: 'intake_photo',
             file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
           }),
+          signal: AbortSignal.timeout(25000),
         })
 
         const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
         if (!driveRes.ok || drivePayload?.error) {
-          toast_(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`, false)
-          return
+          // Keep the photo upload successful even if Drive offload fails.
+          toast_(drivePayload?.error || `Drive sync failed (${driveRes.status}); photo is still saved`, false)
         }
       }
 
@@ -766,6 +834,11 @@ export default function BodyshopRepairPage() {
       const nextCount = existingCount + uploadedCount
       setPhotoCountByReceptionId((prev) => ({ ...prev, [receptionEntryId]: nextCount }))
       toast_(`Uploaded ${uploadedCount} photo${uploadedCount === 1 ? '' : 's'} (${nextCount}/20)`)
+    } catch (e: any) {
+      const message = e?.name === 'TimeoutError'
+        ? 'Upload timed out while syncing with Drive. Try again in a moment.'
+        : (e?.message ?? 'Failed to upload intake photos')
+      toast_(message, false)
     } finally {
       setUploadingIntakePhotos(false)
     }
@@ -1688,6 +1761,7 @@ export default function BodyshopRepairPage() {
                   if (stage === 3) return milestones.stage3Done
                   if (stage === 4) return milestones.stage4Done
                   if (stage === 5) return allMandatoryDone || effectiveCurrentStage > stage
+                  if (stage === 8) return (effectiveCurrentStage >= 8 && Boolean(String(selected.claim_intimation_no ?? '').trim())) || effectiveCurrentStage > stage
                   return effectiveCurrentStage > stage
                 }
 
@@ -1710,6 +1784,12 @@ export default function BodyshopRepairPage() {
                     color: '#0ea5e9',
                     stages: [6],
                   },
+                  {
+                    key: 'claim_intimation' as const,
+                    name: 'Claim Intimation',
+                    color: '#f97316',
+                    stages: [8],
+                  },
                 ] as const
 
                 const STAGE_ABBR: Record<number, string> = {
@@ -1719,6 +1799,7 @@ export default function BodyshopRepairPage() {
                   4: 'CG',
                   5: 'DOC',
                   6: 'EST',
+                  8: 'CLM',
                 }
 
                 const vehicleSnapshot = selectedReception
@@ -1726,7 +1807,7 @@ export default function BodyshopRepairPage() {
 
                 return (
                   <div style={{ display: 'grid', gap: 14 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
                       {groups.map((group) => {
                         const selectedCard = saActiveCard === group.key
                         return (
@@ -1808,7 +1889,7 @@ export default function BodyshopRepairPage() {
                         fontSize: 12,
                         color: '#6b7280',
                       }}>
-                        Select Receiving, Docs or Estimate to view details.
+                        Select Receiving, Docs, Estimate or Claim Intimation to view details.
                       </div>
                     )}
 
@@ -2188,7 +2269,8 @@ export default function BodyshopRepairPage() {
                         {(() => {
                           const estimateDoc = bodyshopDocsByKey.doc_estimate
                           const estimateAmount = Number(selected.estimated_amount ?? 0)
-                          const canSaveEstimate = estimateAmount > 0 && Boolean(estimateDoc)
+                          const isEstimateLocked = effectiveCurrentStage < 6
+                          const canSaveEstimate = !isEstimateLocked && estimateAmount > 0 && Boolean(estimateDoc)
                           const estimateDocBusy = uploadingDocKey === 'doc_estimate'
 
                           return (
@@ -2206,6 +2288,7 @@ export default function BodyshopRepairPage() {
                               value={selected.estimated_amount ?? ''}
                               onChange={(e) => patch('estimated_amount', e.target.value ? Number(e.target.value) : null)}
                               placeholder="Enter estimate amount"
+                              disabled={isEstimateLocked}
                             />
                           </label>
                           <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
@@ -2217,7 +2300,7 @@ export default function BodyshopRepairPage() {
                                 type="button"
                                 className="btn btn--primary"
                                 onClick={() => startBodyshopDocUpload('doc_estimate', 'upload')}
-                                disabled={estimateDocBusy}
+                                disabled={estimateDocBusy || isEstimateLocked}
                                 style={{ width: '100%' }}
                               >
                                 {estimateDocBusy ? 'Uploading...' : 'Upload Estimate'}
@@ -2231,7 +2314,7 @@ export default function BodyshopRepairPage() {
                                   type="button"
                                   className="btn btn--primary"
                                   onClick={() => startBodyshopDocUpload('doc_estimate', 'replace')}
-                                  disabled={estimateDocBusy}
+                                  disabled={estimateDocBusy || isEstimateLocked}
                                 >
                                   {estimateDocBusy ? 'Uploading...' : 'Replace'}
                                 </button>
@@ -2246,7 +2329,13 @@ export default function BodyshopRepairPage() {
                               onClick={() => void handleSaveEstimateStage()}
                               disabled={saving || !canSaveEstimate}
                               style={{ width: '100%' }}
-                              title={!canSaveEstimate ? 'Estimate Amount and Estimate Upload are required' : undefined}
+                              title={
+                                isEstimateLocked
+                                  ? 'Complete Documentation stage first'
+                                  : !canSaveEstimate
+                                    ? 'Estimate Amount and Estimate Upload are required'
+                                    : undefined
+                              }
                             >
                               {saving ? 'Saving…' : effectiveCurrentStage === 6 ? 'Save Estimate & Complete Stage 6' : 'Update Estimate'}
                             </button>
@@ -2254,6 +2343,54 @@ export default function BodyshopRepairPage() {
                         </div>
                           )
                         })()}
+                      </div>
+                    )}
+
+                    {saActiveCard === 'claim_intimation' && (
+                      <div style={{
+                        background: '#fff',
+                        border: '1px solid #fed7aa',
+                        borderRadius: 12,
+                        padding: 14,
+                      }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#c2410c', marginBottom: 10 }}>
+                          Claim Intimation Stage
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+                          {(() => {
+                            const isClaimLocked = effectiveCurrentStage < 8
+                            return (
+                              <>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Claim Intimation No (required)</span>
+                            <input
+                              className="inp"
+                              value={selected.claim_intimation_no ?? ''}
+                              onChange={(e) => patch('claim_intimation_no', e.target.value)}
+                              placeholder="Enter claim intimation no"
+                              disabled={isClaimLocked}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="btn btn--primary"
+                            onClick={() => void handleSaveClaimIntimationStage()}
+                            disabled={saving || isClaimLocked || !String(selected.claim_intimation_no ?? '').trim()}
+                            style={{ width: '100%' }}
+                            title={
+                              isClaimLocked
+                                ? 'Complete Estimation Approval stage first'
+                                : !String(selected.claim_intimation_no ?? '').trim()
+                                  ? 'Claim Intimation No is required'
+                                  : undefined
+                            }
+                          >
+                            {saving ? 'Saving…' : effectiveCurrentStage === 8 ? 'Save Claim Intimation & Complete Stage 8' : 'Update Claim Intimation'}
+                          </button>
+                              </>
+                            )
+                          })()}
+                        </div>
                       </div>
                     )}
 
@@ -2277,6 +2414,8 @@ export default function BodyshopRepairPage() {
                 const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                 const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                 const isApprovedStageDone = effectiveCurrentStage > 7
+                const estimateDoc = bodyshopDocsByKey.doc_estimate
+                const hasEstimateAmount = Number(selected.estimated_amount ?? 0) > 0
 
                 return (
                   <div style={{ display: 'grid', gap: 14 }}>
@@ -2313,6 +2452,36 @@ export default function BodyshopRepairPage() {
                         borderRadius: 12,
                         padding: 14,
                       }}>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: 10,
+                          marginBottom: 12,
+                        }}>
+                          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
+                            <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Estimate Amount</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                              {hasEstimateAmount ? inr(selected.estimated_amount ?? null) : 'Not entered'}
+                            </div>
+                          </div>
+                          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Estimate Document</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                                {estimateDoc ? 'Uploaded' : 'Not uploaded'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() => void handleViewBodyshopDoc('doc_estimate')}
+                              disabled={!estimateDoc}
+                              style={{ padding: '6px 10px', fontSize: 11 }}
+                            >
+                              View Estimate
+                            </button>
+                          </div>
+                        </div>
                         <button
                           type="button"
                           className="btn btn--primary"

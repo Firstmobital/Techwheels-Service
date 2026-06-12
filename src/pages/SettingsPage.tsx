@@ -4,9 +4,14 @@ import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import {
   activateRateCard,
+  createBodyshopSurveyor,
   createRateCardWithRows,
+  deleteBodyshopSurveyor,
   exportActiveRateRowsByCityCategory,
+  listBodyshopSurveyors,
   listRateCards,
+  updateBodyshopSurveyor,
+  type BodyshopSurveyor,
   type RateCardRow,
   type RateRowInput,
   listModelOptions,
@@ -40,6 +45,12 @@ interface MappingIssueRow {
   status: 'open' | 'resolved'
   resolved_employee_code: string | null
   created_at: string
+}
+
+interface BodyshopSurveyorDraft {
+  surveyor_name: string
+  surveyor_contact_number: string
+  surveyor_email: string
 }
 
 interface EmployeeUploadRow {
@@ -77,6 +88,7 @@ const DEALER_CODE_RULES = [
 const SETTINGS_SECTION_IDS = [
   'branch-management',
   'employee-master',
+  'bodyshop-surveyor',
   'models',
   'autodoc-rate-cards',
   'unmapped-sr-entries',
@@ -106,6 +118,12 @@ function deriveLocationAndFuelType(employeeCode: string): { location: string; fu
   const match = DEALER_CODE_RULES.find((rule) => normalizedCode.includes(rule.key))
   if (!match) return null
   return { location: match.location, fuel_type: match.fuel_type }
+}
+
+function isMissingBodyshopSurveyorTableError(message: string | null | undefined): boolean {
+  if (!message) return false
+  const normalized = message.toLowerCase()
+  return normalized.includes('code: 42p01') || normalized.includes('settings_bodyshop_surveyors')
 }
 
 function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
@@ -419,6 +437,22 @@ export default function SettingsPage() {
   const [editingModelValue, setEditingModelValue] = useState('')
   const [savingModel, setSavingModel] = useState(false)
   const [deletingModelId, setDeletingModelId] = useState<number | null>(null)
+  const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
+  const [loadingBodyshopSurveyors, setLoadingBodyshopSurveyors] = useState(false)
+  const [bodyshopSurveyorTableReady, setBodyshopSurveyorTableReady] = useState(true)
+  const [newBodyshopSurveyor, setNewBodyshopSurveyor] = useState<BodyshopSurveyorDraft>({
+    surveyor_name: '',
+    surveyor_contact_number: '',
+    surveyor_email: '',
+  })
+  const [savingBodyshopSurveyor, setSavingBodyshopSurveyor] = useState(false)
+  const [deletingBodyshopSurveyorId, setDeletingBodyshopSurveyorId] = useState<number | null>(null)
+  const [editingBodyshopSurveyorId, setEditingBodyshopSurveyorId] = useState<number | null>(null)
+  const [editingBodyshopSurveyorDraft, setEditingBodyshopSurveyorDraft] = useState<BodyshopSurveyorDraft>({
+    surveyor_name: '',
+    surveyor_contact_number: '',
+    surveyor_email: '',
+  })
 
   const employeeOptions = useMemo(
     () => employees.map((employee) => ({ code: employee.employee_code, name: employee.employee_name })),
@@ -487,8 +521,28 @@ export default function SettingsPage() {
     setModelOptions(result.data ?? [])
   }
 
+  async function loadBodyshopSurveyors() {
+    setLoadingBodyshopSurveyors(true)
+    const result = await listBodyshopSurveyors()
+    setLoadingBodyshopSurveyors(false)
+
+    if (result.error) {
+      if (isMissingBodyshopSurveyorTableError(result.error)) {
+        setBodyshopSurveyorTableReady(false)
+        setBodyshopSurveyors([])
+        return
+      }
+      setError(result.error)
+      return
+    }
+
+    setBodyshopSurveyorTableReady(true)
+    setBodyshopSurveyors(result.data ?? [])
+  }
+
   useEffect(() => {
     void loadModelOptions()
+    void loadBodyshopSurveyors()
   }, [])
 
   const settingsCards = useMemo<
@@ -508,6 +562,13 @@ export default function SettingsPage() {
         title: 'Employee Master',
         description: 'Upload, edit, and maintain employee mapping data.',
         stat: `${employees.length} employees`,
+      },
+      {
+        id: 'bodyshop-surveyor',
+        icon: 'user',
+        title: 'Bodyshop Surveyor',
+        description: 'Maintain surveyor contacts for downstream bodyshop workflows.',
+        stat: `${bodyshopSurveyors.length} surveyors`,
       },
       {
         id: 'models',
@@ -531,7 +592,7 @@ export default function SettingsPage() {
         stat: `${issues.length} issues`,
       },
     ],
-    [derivedBranches.length, employees.length, issues.length, modelOptions.length, rateCards.length],
+    [bodyshopSurveyors.length, derivedBranches.length, employees.length, issues.length, modelOptions.length, rateCards.length],
   )
 
   const openSettingReference = useCallback((sectionId: SettingsSectionId) => {
@@ -1454,6 +1515,106 @@ export default function SettingsPage() {
     setMessage(`Model "${value}" deleted.`)
   }
 
+  async function handleAddBodyshopSurveyor() {
+    setError(null)
+    setMessage(null)
+
+    if (!bodyshopSurveyorTableReady) {
+      setError('Bodyshop Surveyor table is not available yet. Run the migration first.')
+      return
+    }
+
+    setSavingBodyshopSurveyor(true)
+    const result = await createBodyshopSurveyor({
+      surveyorName: newBodyshopSurveyor.surveyor_name,
+      surveyorContactNumber: newBodyshopSurveyor.surveyor_contact_number,
+      surveyorEmail: newBodyshopSurveyor.surveyor_email,
+    })
+    setSavingBodyshopSurveyor(false)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    setNewBodyshopSurveyor({
+      surveyor_name: '',
+      surveyor_contact_number: '',
+      surveyor_email: '',
+    })
+    setMessage('Bodyshop surveyor added.')
+    await loadBodyshopSurveyors()
+  }
+
+  function handleStartEditBodyshopSurveyor(surveyor: BodyshopSurveyor) {
+    setEditingBodyshopSurveyorId(surveyor.id)
+    setEditingBodyshopSurveyorDraft({
+      surveyor_name: surveyor.surveyor_name,
+      surveyor_contact_number: surveyor.surveyor_contact_number,
+      surveyor_email: surveyor.surveyor_email ?? '',
+    })
+    setError(null)
+    setMessage(null)
+  }
+
+  async function handleSaveBodyshopSurveyorEdit() {
+    if (editingBodyshopSurveyorId == null) return
+
+    setError(null)
+    setMessage(null)
+    setSavingBodyshopSurveyor(true)
+
+    const result = await updateBodyshopSurveyor(editingBodyshopSurveyorId, {
+      surveyorName: editingBodyshopSurveyorDraft.surveyor_name,
+      surveyorContactNumber: editingBodyshopSurveyorDraft.surveyor_contact_number,
+      surveyorEmail: editingBodyshopSurveyorDraft.surveyor_email,
+    })
+
+    setSavingBodyshopSurveyor(false)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    setEditingBodyshopSurveyorId(null)
+    setEditingBodyshopSurveyorDraft({
+      surveyor_name: '',
+      surveyor_contact_number: '',
+      surveyor_email: '',
+    })
+    setMessage('Bodyshop surveyor updated.')
+    await loadBodyshopSurveyors()
+  }
+
+  async function handleDeleteBodyshopSurveyor(surveyor: BodyshopSurveyor) {
+    if (!window.confirm(`Delete surveyor "${surveyor.surveyor_name}"?`)) return
+
+    setDeletingBodyshopSurveyorId(surveyor.id)
+    setError(null)
+    setMessage(null)
+
+    const result = await deleteBodyshopSurveyor(surveyor.id)
+    setDeletingBodyshopSurveyorId(null)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    if (editingBodyshopSurveyorId === surveyor.id) {
+      setEditingBodyshopSurveyorId(null)
+      setEditingBodyshopSurveyorDraft({
+        surveyor_name: '',
+        surveyor_contact_number: '',
+        surveyor_email: '',
+      })
+    }
+
+    setMessage('Bodyshop surveyor deleted.')
+    await loadBodyshopSurveyors()
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -1482,7 +1643,7 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-gray-900">Settings Sections</h2>
             <p className="mt-1 text-xs text-gray-600">Open any card to jump directly to that setting.</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-6">
             {settingsCards.map((card) => (
               <button
                 key={card.id}
@@ -2130,6 +2291,200 @@ export default function SettingsPage() {
                             </button>
                           </div>
                         </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        )}
+
+        {selectedSectionId === 'bodyshop-surveyor' && (
+        <section id="bodyshop-surveyor" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">
+                Bodyshop Surveyor <span className="font-medium text-gray-500">({bodyshopSurveyors.length})</span>
+              </h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Recommended keys: surveyor_name, surveyor_contact_number, surveyor_email.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4 px-5 py-4">
+            {!bodyshopSurveyorTableReady && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Bodyshop Surveyor table not found. Run migration file from supabase/migrations to enable this section.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 md:grid-cols-10">
+              <input
+                value={newBodyshopSurveyor.surveyor_name}
+                onChange={(event) =>
+                  setNewBodyshopSurveyor((prev) => ({
+                    ...prev,
+                    surveyor_name: event.target.value,
+                  }))
+                }
+                placeholder="SURVEYOR NAME"
+                className="rounded border border-gray-300 px-2 py-1 text-xs md:col-span-3"
+              />
+              <input
+                value={newBodyshopSurveyor.surveyor_contact_number}
+                onChange={(event) =>
+                  setNewBodyshopSurveyor((prev) => ({
+                    ...prev,
+                    surveyor_contact_number: event.target.value,
+                  }))
+                }
+                placeholder="SURVEYOR CONTACT NO"
+                className="rounded border border-gray-300 px-2 py-1 text-xs md:col-span-3"
+              />
+              <input
+                value={newBodyshopSurveyor.surveyor_email}
+                onChange={(event) =>
+                  setNewBodyshopSurveyor((prev) => ({
+                    ...prev,
+                    surveyor_email: event.target.value,
+                  }))
+                }
+                placeholder="SURVEYOR MAIL ID"
+                className="rounded border border-gray-300 px-2 py-1 text-xs md:col-span-3"
+              />
+              <div className="flex items-center md:justify-end md:col-span-1">
+                <button
+                  type="button"
+                  onClick={() => void handleAddBodyshopSurveyor()}
+                  disabled={!bodyshopSurveyorTableReady || savingBodyshopSurveyor}
+                  className="inline-flex items-center gap-1 rounded bg-gray-800 px-3 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Icon name="plus" size={12} strokeWidth={2.3} />
+                  {savingBodyshopSurveyor ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                    <th className="px-3 py-2 font-semibold">SURVEYOR NAME</th>
+                    <th className="px-3 py-2 font-semibold">SURVEYOR CONTACT NO</th>
+                    <th className="px-3 py-2 font-semibold">SURVEYOR MAIL ID</th>
+                    <th className="px-3 py-2 font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingBodyshopSurveyors ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={4}>Loading surveyors...</td>
+                    </tr>
+                  ) : bodyshopSurveyors.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={4}>No surveyors configured.</td>
+                    </tr>
+                  ) : (
+                    bodyshopSurveyors.map((surveyor) => (
+                      <tr key={surveyor.id} className="border-b border-gray-100">
+                        {editingBodyshopSurveyorId === surveyor.id ? (
+                          <>
+                            <td className="px-3 py-2">
+                              <input
+                                value={editingBodyshopSurveyorDraft.surveyor_name}
+                                onChange={(event) =>
+                                  setEditingBodyshopSurveyorDraft((prev) => ({
+                                    ...prev,
+                                    surveyor_name: event.target.value,
+                                  }))
+                                }
+                                className="w-full rounded border border-gray-300 px-2 py-1"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                value={editingBodyshopSurveyorDraft.surveyor_contact_number}
+                                onChange={(event) =>
+                                  setEditingBodyshopSurveyorDraft((prev) => ({
+                                    ...prev,
+                                    surveyor_contact_number: event.target.value,
+                                  }))
+                                }
+                                className="w-full rounded border border-gray-300 px-2 py-1"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                value={editingBodyshopSurveyorDraft.surveyor_email}
+                                onChange={(event) =>
+                                  setEditingBodyshopSurveyorDraft((prev) => ({
+                                    ...prev,
+                                    surveyor_email: event.target.value,
+                                  }))
+                                }
+                                className="w-full rounded border border-gray-300 px-2 py-1"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleSaveBodyshopSurveyorEdit()}
+                                  disabled={savingBodyshopSurveyor}
+                                  className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {savingBodyshopSurveyor ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingBodyshopSurveyorId(null)
+                                    setEditingBodyshopSurveyorDraft({
+                                      surveyor_name: '',
+                                      surveyor_contact_number: '',
+                                      surveyor_email: '',
+                                    })
+                                  }}
+                                  disabled={savingBodyshopSurveyor}
+                                  className="rounded bg-gray-500 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-3 py-2 font-medium text-gray-800">{surveyor.surveyor_name}</td>
+                            <td className="px-3 py-2">{surveyor.surveyor_contact_number}</td>
+                            <td className="px-3 py-2">{surveyor.surveyor_email ?? '-'}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditBodyshopSurveyor(surveyor)}
+                                  className="rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleDeleteBodyshopSurveyor(surveyor)
+                                  }}
+                                  disabled={deletingBodyshopSurveyorId === surveyor.id}
+                                  className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Icon name="trash" size={11} strokeWidth={2.2} />
+                                  {deletingBodyshopSurveyorId === surveyor.id ? 'Deleting...' : 'Delete'}
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))
                   )}
