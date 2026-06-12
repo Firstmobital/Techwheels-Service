@@ -359,6 +359,7 @@ export default function TechnicianPage() {
   const [sendingReportEmail, setSendingReportEmail] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
   const [yesterdayReport, setYesterdayReport] = useState<{ rows: YesterdayRow[]; date: string; waText: string } | null>(null)
+  const [showPivotReport, setShowPivotReport] = useState(false)
   const [assignments, setAssignments] = useState<TechnicianAssignmentRow[]>([])
   const [canEditSharePercent, setCanEditSharePercent] = useState(false)
   const [pvSharePercent, setPvSharePercent] = useState(DEFAULT_PV_SHARE_PERCENT)
@@ -655,6 +656,30 @@ export default function TechnicianPage() {
     ws['!cols'] = [22,18,18,14,14,10,8,20,20].map(w => ({ wch: w }))
     XLSX.utils.book_append_sheet(wb, ws, 'Technician Report')
     XLSX.writeFile(wb, `Technician_Report_${date}.xlsx`)
+  }
+
+  function downloadPivotExcel(
+    dates: string[],
+    techs: string[],
+    pivot: Map<string, Map<string, number>>,
+    rowTotals: Map<string, number>,
+    colTotals: Map<string, number>,
+    grandTotal: number
+  ) {
+    const header = ['Date', ...techs, 'Day Total']
+    const rows2: (string | number)[][] = dates.map(d => {
+      const row: (string | number)[] = [d]
+      techs.forEach(t => row.push(Math.round(pivot.get(d)?.get(t) ?? 0)))
+      row.push(Math.round(rowTotals.get(d) ?? 0))
+      return row
+    })
+    const totalRow: (string | number)[] = ['TOTAL', ...techs.map(t => Math.round(colTotals.get(t) ?? 0)), Math.round(grandTotal)]
+    const sheetData = [header, ...rows2, totalRow]
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(sheetData)
+    ws['!cols'] = [12, ...techs.map(() => ({ wch: 18 })), { wch: 14 }].map((v, i) => i === 0 ? { wch: 12 } : v as {wch:number})
+    XLSX.utils.book_append_sheet(wb, ws, 'Pivot Report')
+    XLSX.writeFile(wb, `Technician_Pivot_Report.xlsx`)
   }
 
   useEffect(() => {
@@ -1016,6 +1041,14 @@ export default function TechnicianPage() {
             <Icon name="download" size={14} className="icon-align-text" />
             {generatingReport ? 'Generating…' : '📥 Yesterday Report'}
           </button>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => setShowPivotReport(true)}
+            style={{ background: '#6366f1', borderColor: '#6366f1' }}
+          >
+            📊 Pivot Report
+          </button>
           {canEditSharePercent && (
             <button
               type="button"
@@ -1043,6 +1076,128 @@ export default function TechnicianPage() {
           {reportEmailState.message}
         </div>
       )}
+
+      {/* ── Pivot Report Modal ───────────────────────────────────── */}
+      {showPivotReport && (() => {
+        // Build pivot: date → techName → totalIncome
+        const pivot = new Map<string, Map<string, number>>()
+        const colTotals = new Map<string, number>()
+        const rowTotals = new Map<string, number>()
+        let grandTotal = 0
+
+        filteredAssignmentsWithIncome.forEach(row => {
+          const dateKey = getAssignmentDateKey(row)
+          if (!dateKey) return
+          const techName = String(row.technician_name ?? '').trim() || String(row.technician_code ?? '').trim()
+          const income = Number(row.technician_income ?? 0)
+          if (income <= 0) return
+
+          if (!pivot.has(dateKey)) pivot.set(dateKey, new Map())
+          pivot.get(dateKey)!.set(techName, (pivot.get(dateKey)!.get(techName) ?? 0) + income)
+          colTotals.set(techName, (colTotals.get(techName) ?? 0) + income)
+          rowTotals.set(dateKey, (rowTotals.get(dateKey) ?? 0) + income)
+          grandTotal += income
+        })
+
+        const dates = Array.from(pivot.keys()).sort()
+        const techs = Array.from(colTotals.entries())
+          .sort((a, b) => b[1] - a[1])  // sort by highest earning first
+          .map(([t]) => t)
+
+        const fmtAmt = (n: number) => n > 0 ? '₹' + Math.round(n).toLocaleString('en-IN') : '—'
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+            onClick={e => { if (e.target === e.currentTarget) setShowPivotReport(false) }}>
+            <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '98vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1e293b' }}>📊 Technician Pivot Report</div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>
+                    Dates (rows) × Technicians (columns) · Value = Earning Amount · {dates.length} days · {techs.length} technicians
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
+                  <button
+                    onClick={() => downloadPivotExcel(dates, techs, pivot, rowTotals, colTotals, grandTotal)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}>
+                    📥 Download Excel
+                  </button>
+                  <button onClick={() => setShowPivotReport(false)} style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div style={{ flex: 1, overflow: 'auto', padding: '0' }}>
+                {dates.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>No earning data in the selected range.</div>
+                ) : (
+                  <table style={{ borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: '100%' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        {/* Date col header */}
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'left', fontWeight: 700, color: '#1e293b', borderBottom: '2px solid #e2e8f0', borderRight: '2px solid #e2e8f0', whiteSpace: 'nowrap', position: 'sticky', left: 0, background: '#f8fafc', zIndex: 2 }}>
+                          📅 Date
+                        </th>
+                        {techs.map(t => (
+                          <th key={t} style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontWeight: 600, color: '#475569', borderBottom: '2px solid #e2e8f0', borderRight: '1px solid #f1f5f9', whiteSpace: 'nowrap', fontSize: '0.75rem', minWidth: '120px' }}>
+                            🔧 {t}
+                          </th>
+                        ))}
+                        {/* Day Total */}
+                        <th style={{ padding: '0.6rem 0.85rem', textAlign: 'right', fontWeight: 700, color: '#1e293b', borderBottom: '2px solid #e2e8f0', borderLeft: '2px solid #e2e8f0', whiteSpace: 'nowrap', background: '#f8fafc', position: 'sticky', right: 0, zIndex: 2 }}>
+                          Day Total
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dates.map((date, di) => {
+                        const dayMap = pivot.get(date) ?? new Map()
+                        const rowTotal = rowTotals.get(date) ?? 0
+                        return (
+                          <tr key={date} style={{ background: di % 2 === 0 ? '#fff' : '#fafbfc', borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '0.55rem 0.9rem', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap', borderRight: '2px solid #e2e8f0', position: 'sticky', left: 0, background: di % 2 === 0 ? '#fff' : '#fafbfc', zIndex: 1 }}>
+                              {date}
+                            </td>
+                            {techs.map(t => {
+                              const val = dayMap.get(t) ?? 0
+                              return (
+                                <td key={t} style={{ padding: '0.55rem 0.75rem', textAlign: 'right', borderRight: '1px solid #f1f5f9', color: val > 0 ? '#0f172a' : '#cbd5e1', fontWeight: val > 0 ? 600 : 400 }}>
+                                  {fmtAmt(val)}
+                                </td>
+                              )
+                            })}
+                            <td style={{ padding: '0.55rem 0.85rem', textAlign: 'right', fontWeight: 700, color: '#1e293b', borderLeft: '2px solid #e2e8f0', position: 'sticky', right: 0, background: di % 2 === 0 ? '#fff' : '#fafbfc', zIndex: 1 }}>
+                              {fmtAmt(rowTotal)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#f0f9ff', borderTop: '2px solid #0369a1' }}>
+                        <td style={{ padding: '0.65rem 0.9rem', fontWeight: 800, color: '#0369a1', borderRight: '2px solid #e2e8f0', position: 'sticky', left: 0, background: '#f0f9ff', zIndex: 1, whiteSpace: 'nowrap' }}>
+                          🏆 TOTAL
+                        </td>
+                        {techs.map(t => (
+                          <td key={t} style={{ padding: '0.65rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#16a34a', borderRight: '1px solid #e2e8f0', fontSize: '0.83rem' }}>
+                            {fmtAmt(colTotals.get(t) ?? 0)}
+                          </td>
+                        ))}
+                        <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right', fontWeight: 900, color: '#16a34a', fontSize: '0.9rem', borderLeft: '2px solid #0369a1', position: 'sticky', right: 0, background: '#f0f9ff', zIndex: 1 }}>
+                          {fmtAmt(grandTotal)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Yesterday Report Modal ─────────────────────────────── */}
       {yesterdayReport && (
