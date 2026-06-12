@@ -77,6 +77,7 @@ export interface RepairCard {
   surveyor_contact: string | null
   approved_parts: string | null
   customer_approved: boolean
+  estimated_amount: number | null
   estimation_by: string | null
   estimation_at: string | null
   estimation_approved_by: string | null

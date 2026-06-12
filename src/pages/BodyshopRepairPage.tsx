@@ -148,7 +148,7 @@ function dedupeCards(cards: RepairCard[]): RepairCard[] {
   return Array.from(byKey.values())
 }
 
-type DetailTab = 'overview' | 'sa' | 'survey' | 'floor' | 'qc' | 'billing'
+type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
 
 type ReceptionVehicleSnapshot = {
   id: number
@@ -173,6 +173,7 @@ type BodyshopDocKey =
   | 'doc_gst'
   | 'doc_company_pan'
   | 'doc_bank_detail'
+  | 'doc_estimate'
 
 type BodyshopRepairCardDocumentRow = {
   id: number
@@ -191,7 +192,7 @@ type BodyshopRepairCardDocumentRow = {
   updated_at: string
 }
 
-const BODYSHOP_DOCS: { k: BodyshopDocKey; label: string; mandatoryFor: CustomerType[] }[] = [
+const BODYSHOP_DOCS: { k: Exclude<BodyshopDocKey, 'doc_estimate'>; label: string; mandatoryFor: CustomerType[] }[] = [
   { k: 'doc_claim_form', label: 'Claim Form', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_rc', label: 'RC', mandatoryFor: ['individual', 'firm'] },
   { k: 'doc_insurance', label: 'Insurance Copy', mandatoryFor: ['individual', 'firm'] },
@@ -203,6 +204,10 @@ const BODYSHOP_DOCS: { k: BodyshopDocKey; label: string; mandatoryFor: CustomerT
   { k: 'doc_company_pan', label: 'Company PAN Card', mandatoryFor: ['firm'] },
   { k: 'doc_bank_detail', label: 'Bank Detail', mandatoryFor: ['firm'] },
 ]
+
+const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<BodyshopDocKey, 'doc_estimate'> => (
+  docKey !== 'doc_estimate'
+)
 
 // ── component ──────────────────────────────────────────────────────────────────
 export default function BodyshopRepairPage() {
@@ -222,7 +227,8 @@ export default function BodyshopRepairPage() {
   const [showNew, setShowNew]           = useState(false)
   const [selected, setSelected]         = useState<RepairCard | null>(null)
   const [detailTab, setDetailTab]       = useState<DetailTab>('overview')
-  const [saActiveCard, setSaActiveCard] = useState<'receiving' | 'docs' | null>(null)
+  const [saActiveCard, setSaActiveCard] = useState<'receiving' | 'docs' | 'estimate' | null>(null)
+  const [approvalActiveCard, setApprovalActiveCard] = useState<'estimation_approval' | null>(null)
   const [editPatch, setEditPatch]       = useState<Partial<RepairCard>>({})
   const [saving, setSaving]             = useState(false)
   const [selectedReception, setSelectedReception] = useState<ReceptionVehicleSnapshot | null>(null)
@@ -237,6 +243,7 @@ export default function BodyshopRepairPage() {
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
+  const autoAdvanceDocsLockRef = useRef(false)
 
   // new form
   const [nf, setNf] = useState({
@@ -290,6 +297,36 @@ export default function BodyshopRepairPage() {
 
     void loadBodyshopDocuments(selected.id)
   }, [selected?.id])
+
+  useEffect(() => {
+    if (!selected?.id || selected.current_stage !== 5 || autoAdvanceDocsLockRef.current) return
+
+    const ct = selected.customer_type ?? 'individual'
+    const noDocsRequired = ct === 'cash' || ct === 'foc'
+    if (noDocsRequired) return
+
+    const mandatoryDocs = BODYSHOP_DOCS.filter((d) => d.mandatoryFor.includes(ct as CustomerType))
+    if (mandatoryDocs.length === 0) return
+
+    const collectedMandatory = mandatoryDocs.filter((d) => Boolean(bodyshopDocsByKey[d.k])).length
+    const allMandatoryDone = collectedMandatory === mandatoryDocs.length
+    if (!allMandatoryDone) return
+
+    autoAdvanceDocsLockRef.current = true
+
+    void advanceStage(selected.id, selected)
+      .then((updated) => {
+        setSelected(updated)
+        setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+        toast_('Documentation complete. Stage moved to Estimation ✅')
+      })
+      .catch((e: any) => {
+        toast_(e?.message ?? 'Failed to auto-move to Estimation', false)
+      })
+      .finally(() => {
+        autoAdvanceDocsLockRef.current = false
+      })
+  }, [bodyshopDocsByKey, selected])
 
   type AccidentReceptionRow = {
     id: number
@@ -484,6 +521,15 @@ export default function BodyshopRepairPage() {
         return
       }
 
+      if (flow.effectiveCurrentStage === 6) {
+        const estimateAmount = Number(selected.estimated_amount ?? 0)
+        const hasEstimateDoc = Boolean(bodyshopDocsByKey.doc_estimate)
+        if (!(estimateAmount > 0) || !hasEstimateDoc) {
+          toast_('Enter Estimate Amount and upload Estimate document to complete Stage 6', false)
+          return
+        }
+      }
+
       const updated = flow.effectiveCurrentStage <= 4
         ? await updateRepairCard(selected.id, {
             current_stage: flow.effectiveNextStage,
@@ -526,6 +572,83 @@ export default function BodyshopRepairPage() {
       toast_('Saved ✅')
     } catch (e: any) { toast_(e.message, false) }
     setSaving(false)
+  }
+
+  async function handleSaveEstimateStage() {
+    if (!selected) return
+
+    const estimateAmount = Number(selected.estimated_amount ?? 0)
+    const estimateDoc = bodyshopDocsByKey.doc_estimate
+
+    if (!(estimateAmount > 0)) {
+      toast_('Estimate Amount is required', false)
+      return
+    }
+    if (!estimateDoc) {
+      toast_('Estimate document upload is required', false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || selected.estimation_by || null
+      const now = new Date().toISOString()
+
+      const patch: Partial<RepairCard> = {
+        estimated_amount: estimateAmount,
+        estimation_at: now,
+        estimation_by: actor,
+      }
+
+      if (selected.current_stage === 6) {
+        patch.current_stage = 7
+        patch.current_stage_name = STAGE_LABELS[7] ?? 'Estimation Approval'
+      }
+
+      const updated = await updateRepairCard(selected.id, patch)
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      setEditPatch((prev) => {
+        const next = { ...prev }
+        delete (next as Partial<Record<keyof RepairCard, unknown>>).estimated_amount
+        return next
+      })
+
+      toast_(selected.current_stage === 6 ? 'Estimate saved. Stage moved to Estimation Approval ✅' : 'Estimate saved ✅')
+    } catch (e: any) {
+      toast_(e.message ?? 'Unable to save estimate', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleApproveEstimationStage() {
+    if (!selected) return
+
+    setSaving(true)
+    try {
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || selected.estimation_approved_by || null
+
+      const patch: Partial<RepairCard> = {
+        estimation_approved_by: actor,
+      }
+
+      if (selected.current_stage === 7) {
+        patch.current_stage = 8
+        patch.current_stage_name = STAGE_LABELS[8] ?? 'Claim Intimation'
+      }
+
+      const updated = await updateRepairCard(selected.id, patch)
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      toast_(selected.current_stage === 7 ? 'Estimation approved. Stage moved to Claim Intimation ✅' : 'Estimation approval saved ✅')
+    } catch (e: any) {
+      toast_(e.message ?? 'Unable to approve estimation', false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleIntakePhotoUpload(files: FileList | null) {
@@ -736,11 +859,13 @@ export default function BodyshopRepairPage() {
         ...prev,
         [docKey]: row,
       }))
-      // Optimistically tick the doc checkbox immediately after upload.
-      setSelected((prev) => prev ? ({ ...prev, [docKey]: true } as RepairCard) : prev)
-      setCards((prev) => prev.map((card) => (
-        card.id === selected.id ? ({ ...card, [docKey]: true } as RepairCard) : card
-      )))
+      if (isLegacyBooleanDocKey(docKey)) {
+        // Optimistically tick only legacy boolean docs immediately after upload.
+        setSelected((prev) => prev ? ({ ...prev, [docKey]: true } as RepairCard) : prev)
+        setCards((prev) => prev.map((card) => (
+          card.id === selected.id ? ({ ...card, [docKey]: true } as RepairCard) : card
+        )))
+      }
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
       const sessionRes = await supabase.auth.getSession()
@@ -774,9 +899,11 @@ export default function BodyshopRepairPage() {
         await loadBodyshopDocuments(selected.id)
       }
 
-      const updated = await updateRepairCard(selected.id, { [docKey]: true } as Partial<RepairCard>)
-      setSelected(updated)
-      setCards((prev) => prev.map((card) => card.id === updated.id ? updated : card))
+      if (isLegacyBooleanDocKey(docKey)) {
+        const updated = await updateRepairCard(selected.id, { [docKey]: true } as Partial<RepairCard>)
+        setSelected(updated)
+        setCards((prev) => prev.map((card) => card.id === updated.id ? updated : card))
+      }
 
       if (existing?.storage_path && existing.storage_path !== storagePath) {
         await supabase.storage.from(AUTODOC_BUCKET).remove([existing.storage_path])
@@ -1051,7 +1178,7 @@ export default function BodyshopRepairPage() {
     })),
   [cards, photoCountByReceptionId])
 
-  const tabs: DetailTab[] = ['overview', 'sa', 'survey', 'floor', 'qc', 'billing']
+  const tabs: DetailTab[] = ['overview', 'sa', 'approval', 'survey', 'floor', 'qc', 'billing']
 
   return (
     <div className="page">
@@ -1175,7 +1302,7 @@ export default function BodyshopRepairPage() {
               const effectiveStage = getEffectiveStageForCard(card)
               const grp = getGroupForStage(effectiveStage)
               return (
-                <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setSaActiveCard(null); setEditPatch({}) }}
+                <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setSaActiveCard(null); setApprovalActiveCard(null); setEditPatch({}) }}
                   style={{
                     background: '#fff', borderRadius: 12, padding: 14, cursor: 'pointer',
                     borderLeft: `4px solid ${grp.color}`,
@@ -1278,7 +1405,7 @@ export default function BodyshopRepairPage() {
             padding: '0 24px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16,
             height: 60,
           }}>
-            <button onClick={() => { setSelected(null); setSaActiveCard(null) }} style={{
+            <button onClick={() => { setSelected(null); setSaActiveCard(null); setApprovalActiveCard(null) }} style={{
               display: 'flex', alignItems: 'center', gap: 6,
               background: 'none', border: 'none', cursor: 'pointer',
               fontSize: 14, fontWeight: 600, color: '#6b7280',
@@ -1302,8 +1429,15 @@ export default function BodyshopRepairPage() {
                 const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                 const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                 const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                const ct = selected.customer_type ?? 'individual'
+                const noDocsRequired = ct === 'cash' || ct === 'foc'
+                const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
+                const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
+                const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                 const inGroup = g.stages.includes(effectiveCurrentStage)
                 const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
+                  || (g.stages.includes(5) && docsDone)
                 return (
                   <div key={g.label} style={{
                     padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 20,
@@ -1354,6 +1488,12 @@ export default function BodyshopRepairPage() {
                   const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                   const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                  const ct = selected.customer_type ?? 'individual'
+                  const noDocsRequired = ct === 'cash' || ct === 'foc'
+                  const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
+                  const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                  const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
+                  const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                   const num    = Number(numStr)
                   const isDone = num <= 4
                     ? num === 1
@@ -1363,7 +1503,9 @@ export default function BodyshopRepairPage() {
                         : num === 3
                           ? milestones.stage3Done
                           : milestones.stage4Done
-                    : effectiveCurrentStage > num
+                    : num === 5
+                      ? docsDone || effectiveCurrentStage > num
+                      : effectiveCurrentStage > num
                   const isCur  = effectiveCurrentStage === num
                   const grp    = getGroupForStage(num)
                   return (
@@ -1562,6 +1704,12 @@ export default function BodyshopRepairPage() {
                     color: '#7c3aed',
                     stages: [5],
                   },
+                  {
+                    key: 'estimate' as const,
+                    name: 'Estimate',
+                    color: '#0ea5e9',
+                    stages: [6],
+                  },
                 ] as const
 
                 const STAGE_ABBR: Record<number, string> = {
@@ -1570,6 +1718,7 @@ export default function BodyshopRepairPage() {
                   3: 'JC',
                   4: 'CG',
                   5: 'DOC',
+                  6: 'EST',
                 }
 
                 const vehicleSnapshot = selectedReception
@@ -1577,7 +1726,7 @@ export default function BodyshopRepairPage() {
 
                 return (
                   <div style={{ display: 'grid', gap: 14 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
                       {groups.map((group) => {
                         const selectedCard = saActiveCard === group.key
                         return (
@@ -1659,7 +1808,7 @@ export default function BodyshopRepairPage() {
                         fontSize: 12,
                         color: '#6b7280',
                       }}>
-                        Select Receiving or Docs to view details.
+                        Select Receiving, Docs or Estimate to view details.
                       </div>
                     )}
 
@@ -2016,16 +2165,6 @@ export default function BodyshopRepairPage() {
                             </>
                           )}
 
-                          <input
-                            ref={bodyshopDocInputRef}
-                            type="file"
-                            className="hidden"
-                            onChange={(event) => {
-                              void handleBodyshopDocFilePicked(event.target.files)
-                              event.target.value = ''
-                            }}
-                          />
-
                           {Object.keys(editPatch).length > 0 && (
                             <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}
                               style={{ marginTop: 16, width: '100%' }}>
@@ -2035,6 +2174,157 @@ export default function BodyshopRepairPage() {
                         </div>
                       )
                     })()}
+
+                    {saActiveCard === 'estimate' && (
+                      <div style={{
+                        background: '#fff',
+                        border: '1px solid #bae6fd',
+                        borderRadius: 12,
+                        padding: 14,
+                      }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0369a1', marginBottom: 10 }}>
+                          Estimation Stage
+                        </div>
+                        {(() => {
+                          const estimateDoc = bodyshopDocsByKey.doc_estimate
+                          const estimateAmount = Number(selected.estimated_amount ?? 0)
+                          const canSaveEstimate = estimateAmount > 0 && Boolean(estimateDoc)
+                          const estimateDocBusy = uploadingDocKey === 'doc_estimate'
+
+                          return (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: 10,
+                        }}>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1 / span 1' }}>
+                            <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Estimate Amount (required)</span>
+                            <input
+                              className="inp"
+                              type="number"
+                              min={0}
+                              value={selected.estimated_amount ?? ''}
+                              onChange={(e) => patch('estimated_amount', e.target.value ? Number(e.target.value) : null)}
+                              placeholder="Enter estimate amount"
+                            />
+                          </label>
+                          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
+                            <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, marginBottom: 8 }}>
+                              Estimate Upload (required)
+                            </div>
+                            {!estimateDoc ? (
+                              <button
+                                type="button"
+                                className="btn btn--primary"
+                                onClick={() => startBodyshopDocUpload('doc_estimate', 'upload')}
+                                disabled={estimateDocBusy}
+                                style={{ width: '100%' }}
+                              >
+                                {estimateDocBusy ? 'Uploading...' : 'Upload Estimate'}
+                              </button>
+                            ) : (
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_estimate')}>
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--primary"
+                                  onClick={() => startBodyshopDocUpload('doc_estimate', 'replace')}
+                                  disabled={estimateDocBusy}
+                                >
+                                  {estimateDocBusy ? 'Uploading...' : 'Replace'}
+                                </button>
+                                <span style={{ fontSize: 11, color: '#059669', fontWeight: 700 }}>Uploaded</span>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ gridColumn: '1 / -1' }}>
+                            <button
+                              type="button"
+                              className="btn btn--primary"
+                              onClick={() => void handleSaveEstimateStage()}
+                              disabled={saving || !canSaveEstimate}
+                              style={{ width: '100%' }}
+                              title={!canSaveEstimate ? 'Estimate Amount and Estimate Upload are required' : undefined}
+                            >
+                              {saving ? 'Saving…' : effectiveCurrentStage === 6 ? 'Save Estimate & Complete Stage 6' : 'Update Estimate'}
+                            </button>
+                          </div>
+                        </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+
+                    <input
+                      ref={bodyshopDocInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={(event) => {
+                        void handleBodyshopDocFilePicked(event.target.files)
+                        event.target.value = ''
+                      }}
+                    />
+                  </div>
+                )
+              })()}
+
+              {/* ── Approval ── */}
+              {detailTab === 'approval' && (() => {
+                const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
+                const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
+                const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
+                const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                const isApprovedStageDone = effectiveCurrentStage > 7
+
+                return (
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    <button
+                      type="button"
+                      onClick={() => setApprovalActiveCard((prev) => prev === 'estimation_approval' ? null : 'estimation_approval')}
+                      style={{
+                        background: '#fff',
+                        border: `1.5px solid ${approvalActiveCard === 'estimation_approval' ? '#0ea5e9' : '#bae6fd'}`,
+                        borderRadius: 12,
+                        padding: 10,
+                        boxShadow: approvalActiveCard === 'estimation_approval' ? '0 0 0 2px #0ea5e922' : '0 1px 4px rgba(0,0,0,0.04)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0369a1', marginBottom: 8 }}>
+                        Estimation Approval
+                      </div>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, border: `1px solid ${isApprovedStageDone ? '#86efac' : '#0ea5e9'}`, background: isApprovedStageDone ? '#f0fdf4' : '#e0f2fe', padding: '4px 8px' }}>
+                        <span style={{ minWidth: 24, height: 18, borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: isApprovedStageDone ? '#16a34a' : '#0ea5e9', color: '#fff' }}>
+                          {isApprovedStageDone ? '✓' : 'APV'}
+                        </span>
+                        <span style={{ fontSize: 10, color: isApprovedStageDone ? '#166534' : '#0369a1', fontWeight: 700 }}>
+                          {isApprovedStageDone ? 'Done' : 'Pending'}
+                        </span>
+                      </div>
+                    </button>
+
+                    {approvalActiveCard === 'estimation_approval' && (
+                      <div style={{
+                        background: '#fff',
+                        border: '1px solid #bae6fd',
+                        borderRadius: 12,
+                        padding: 14,
+                      }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          onClick={() => void handleApproveEstimationStage()}
+                          disabled={saving || effectiveCurrentStage < 7 || isApprovedStageDone}
+                          style={{ width: '100%' }}
+                          title={effectiveCurrentStage < 7 ? 'Move to Estimation Approval stage first' : undefined}
+                        >
+                          {saving ? 'Saving…' : 'Approved'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })()}
