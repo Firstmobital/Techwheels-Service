@@ -92,15 +92,15 @@ export default function EWReminderPage() {
         if (err) throw err
         if (!data || data.length === 0) break
 
-        // Filter: sale year 2024+ AND vehicle age < 3 years
-        const filtered2024Plus = data.filter(r => {
-          const yr = getSaleYear(r.vehicle_sale_date)
-          if (!yr || yr < 2024) return false
-          const age = parseFloat(r.vehicle_age_in_years ?? '')
-          if (!isNaN(age) && age >= 3) return false
-          return true
+        // Filter: sale date within last 3 years from today (OEM warranty window)
+        const today = new Date()
+        const threeYearsAgo = new Date(today.getFullYear() - 3, today.getMonth(), today.getDate())
+        const filteredUnder3Yrs = data.filter(r => {
+          const saleDate = parseSaleDate(r.vehicle_sale_date)
+          if (!saleDate) return false
+          return saleDate >= threeYearsAgo && saleDate <= today
         })
-        allRecords.push(...filtered2024Plus)
+        allRecords.push(...filteredUnder3Yrs)
 
         if (data.length < batchSize) break
         from += batchSize
@@ -180,7 +180,7 @@ export default function EWReminderPage() {
           🛡️ Extended Warranty Reminder
         </h1>
         <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-          Vehicles sold from 2024 onwards with age under 3 years — EW sales opportunities
+          Vehicles within OEM warranty (sold in last 3 years) — eligible for Extended Warranty
         </p>
       </div>
 
