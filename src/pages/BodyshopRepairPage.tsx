@@ -351,9 +351,9 @@ export default function BodyshopRepairPage() {
   const pipeline = useMemo(() =>
     STAGE_GROUPS.map((g) => ({
       ...g,
-      count: cards.filter((c) => g.stages.includes(c.current_stage) && c.overall_status === 'active').length,
+      count: cards.filter((c) => g.stages.includes(getEffectiveStageForCard(c)) && c.overall_status === 'active').length,
     })),
-  [cards])
+  [cards, photoCountByReceptionId])
 
   const tabs: DetailTab[] = ['overview', 'docs', 'survey', 'floor', 'qc', 'billing']
 
@@ -476,7 +476,8 @@ export default function BodyshopRepairPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: 12 }}>
             {filtered.map((card) => {
-              const grp = getGroupForStage(card.current_stage)
+              const effectiveStage = getEffectiveStageForCard(card)
+              const grp = getGroupForStage(effectiveStage)
               return (
                 <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setEditPatch({}) }}
                   style={{
@@ -503,7 +504,7 @@ export default function BodyshopRepairPage() {
                     background: `${grp.color}18`, color: grp.color,
                     padding: '3px 8px', borderRadius: 6,
                   }}>
-                    Stage {card.current_stage} — {STAGE_LABELS[card.current_stage]}
+                    Stage {effectiveStage} — {STAGE_LABELS[effectiveStage]}
                   </div>
                   <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>In: {fmt(card.received_at)}</div>
                 </div>
