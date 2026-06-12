@@ -278,7 +278,6 @@ export default function EWReminderPage() {
           🔄 Refresh
         </button>
       </div>
-      </div>
 
       {/* ── STATS BAR ──────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.45rem', marginBottom: '0.6rem' }}>
