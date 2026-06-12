@@ -34,8 +34,8 @@ type RequestBody = {
 
 const IST_ZONE = 'Asia/Kolkata'
 const QUERY_PAGE_SIZE = 1000
-const DEFAULT_PV_SHARE_PERCENT = 20
-const DEFAULT_EV_SHARE_PERCENT = 25
+const DEFAULT_PV_SHARE_PERCENT = 20 // fallback if DB setting missing
+const DEFAULT_EV_SHARE_PERCENT = 25 // fallback if DB setting missing
 const AUTODOC_BUCKET = 'autodoc'
 const TEST_RECIPIENTS = [
   'shruti@indiraswitch.com',
@@ -104,10 +104,10 @@ function parseRevenueAmount(value: unknown): number {
   return isParenthesizedNegative ? -parsed : parsed
 }
 
-function calculateTechnicianIncome(grossLabourAmount: number, bayNo: string | null | undefined): number {
+function calculateTechnicianIncome(grossLabourAmount: number, bayNo: string | null | undefined, pvPct: number, evPct: number): number {
   if (!Number.isFinite(grossLabourAmount) || grossLabourAmount <= 0) return 0
   const fuel = extractFuelFromBay(bayNo)
-  const sharePercent = fuel === 'EV' ? DEFAULT_EV_SHARE_PERCENT : DEFAULT_PV_SHARE_PERCENT
+  const sharePercent = fuel === 'EV' ? evPct : pvPct
   const netBeforeShare = grossLabourAmount / 1.18
   return netBeforeShare * (sharePercent / 100)
 }
@@ -221,6 +221,22 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+    // ── Load earnings percentages from DB ─────────────────────────────────────
+    let pvSharePercent = DEFAULT_PV_SHARE_PERCENT
+    let evSharePercent = DEFAULT_EV_SHARE_PERCENT
+    const settingsRes = await supabase
+      .from('technician_earnings_settings')
+      .select('key, value')
+    if (!settingsRes.error && settingsRes.data) {
+      for (const row of settingsRes.data as { key: string; value: string }[]) {
+        const parsed = parseFloat(row.value)
+        if (!Number.isFinite(parsed) || parsed <= 0) continue
+        if (row.key === 'pv_share_percent') pvSharePercent = parsed
+        if (row.key === 'ev_share_percent') evSharePercent = parsed
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const assignmentRows: TechnicianAssignmentRow[] = []
     let from = 0
 
@@ -332,7 +348,7 @@ Deno.serve(async (req) => {
 
       const jc = normalizeCode(assignment.job_card_number)
       const gross = jc ? grossByJc.get(jc) ?? 0 : 0
-      const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no)
+      const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no, pvSharePercent, evSharePercent)
 
       const existing = aggregatedMap.get(code) ?? {
         technicianCode: code,

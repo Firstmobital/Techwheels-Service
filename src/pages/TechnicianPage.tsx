@@ -262,6 +262,26 @@ export default function TechnicianPage() {
       const roleCanEdit = role === 'super_admin' || role === 'super admin' || role === 'admin'
       setCanEditSharePercent(roleCanEdit && isActive !== false)
 
+      // ── Load earnings percentages from DB ───────────────────────────────────
+      const settingsRes = await supabase
+        .from('technician_earnings_settings')
+        .select('key, value')
+      if (!settingsRes.error && settingsRes.data) {
+        for (const row of settingsRes.data as { key: string; value: string }[]) {
+          const parsed = parseFloat(row.value)
+          if (!Number.isFinite(parsed) || parsed <= 0) continue
+          if (row.key === 'pv_share_percent') {
+            setPvSharePercent(parsed)
+            setDraftPvSharePercent(String(parsed))
+          }
+          if (row.key === 'ev_share_percent') {
+            setEvSharePercent(parsed)
+            setDraftEvSharePercent(String(parsed))
+          }
+        }
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
       const assignmentRows: TechnicianAssignmentRow[] = []
       let from = 0
 
@@ -951,9 +971,14 @@ export default function TechnicianPage() {
                     <button
                       type="button"
                       className="btn btn--primary btn--sm"
-                      onClick={() => {
+                      onClick={async () => {
                         setPvSharePercent(parsedDraftPvSharePercent)
                         setEvSharePercent(parsedDraftEvSharePercent)
+                        // Persist to DB
+                        await supabase.from('technician_earnings_settings').upsert([
+                          { key: 'pv_share_percent', value: String(parsedDraftPvSharePercent) },
+                          { key: 'ev_share_percent', value: String(parsedDraftEvSharePercent) },
+                        ], { onConflict: 'key' })
                       }}
                       disabled={!hasPendingShareChanges}
                     >
