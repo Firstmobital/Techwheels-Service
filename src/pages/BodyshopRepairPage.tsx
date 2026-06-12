@@ -87,6 +87,8 @@ type RtoInsuranceCacheRow = {
   api_rc_vehicle_insurance_upto: string | null
 }
 
+const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
+
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
   const stage1Done = isValidCustomerType(card.customer_type) && hasKmReading
   const stage2Done = intakePhotoCount > 0
@@ -2361,10 +2363,23 @@ export default function BodyshopRepairPage() {
                                   onChange={(e) => patch('insurance_company', e.target.value || null)}
                                   placeholder="e.g. New India Assurance" />
                               </label>
-                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                 <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Valid Until</span>
                                 <input className="inp" type="date" value={selected.insurance_valid_date ?? ''}
                                   onChange={(e) => patch('insurance_valid_date', e.target.value || null)} />
+                              </label>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Insurance Type</span>
+                                <select
+                                  className="inp"
+                                  value={selected.insurance_type ?? ''}
+                                  onChange={(e) => patch('insurance_type', e.target.value || null)}
+                                >
+                                  <option value="">Select Insurance Type</option>
+                                  {INSURANCE_TYPE_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>{option}</option>
+                                  ))}
+                                </select>
                               </label>
                             </div>
                           )}

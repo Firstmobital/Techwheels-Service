@@ -57,6 +57,7 @@ export interface RepairCard {
   // insurance details
   insurance_policy_no: string | null
   insurance_company: string | null
+  insurance_type: 'TMI' | 'Non-TMI' | null
   insurance_valid_date: string | null
   // docs
   doc_claim_form: boolean
