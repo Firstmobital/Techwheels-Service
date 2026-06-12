@@ -184,6 +184,7 @@ export default function SATrackerPage() {
   const [portalFilter, setPortalFilter] = useState('all')
 
   // Share % settings
+  const [canEditSharePercent, setCanEditSharePercent] = useState(false)
   const [saSharePercent, setSaSharePercent] = useState(DEFAULT_SA_SHARE_PERCENT)
   const [evSharePercent, setEvSharePercent] = useState(DEFAULT_EV_SHARE_PERCENT)
   const [draftSaShare, setDraftSaShare] = useState(String(DEFAULT_SA_SHARE_PERCENT))
@@ -202,6 +203,41 @@ export default function SATrackerPage() {
     setError(null)
 
     try {
+      // ── Auth + role check ──────────────────────────────────────────────────
+      const authRes = await supabase.auth.getUser()
+      const userId = authRes.data.user?.id
+      if (userId) {
+        const profileRes = await supabase
+          .from('users')
+          .select('role, is_active')
+          .eq('id', userId)
+          .maybeSingle()
+        const role = String((profileRes.data as { role?: string | null } | null)?.role ?? '').trim().toLowerCase()
+        const isActive = (profileRes.data as { is_active?: boolean | null } | null)?.is_active
+        const roleCanEdit = role === 'super_admin' || role === 'super admin' || role === 'admin'
+        setCanEditSharePercent(roleCanEdit && isActive !== false)
+      }
+
+      // ── Load earnings percentages from DB ──────────────────────────────────
+      const settingsRes = await supabase
+        .from('sa_earnings_settings')
+        .select('key, value')
+      if (!settingsRes.error && settingsRes.data) {
+        for (const row of settingsRes.data as { key: string; value: string }[]) {
+          const parsed = parseFloat(row.value)
+          if (!Number.isFinite(parsed) || parsed <= 0) continue
+          if (row.key === 'sa_share_percent') {
+            setSaSharePercent(parsed)
+            setDraftSaShare(String(parsed))
+          }
+          if (row.key === 'ev_share_percent') {
+            setEvSharePercent(parsed)
+            setDraftEvShare(String(parsed))
+          }
+        }
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       const allRows: ClosedJCRow[] = []
       let from = 0
 
@@ -683,6 +719,7 @@ export default function SATrackerPage() {
               <h3>Revenue by Service Advisor</h3>
               <div className="sub">Sorted by total invoice value. Income = Labour × {saSharePercent}%. Click an SA to drill down by day.</div>
             </div>
+            {canEditSharePercent && (
             <div className="tech-share-corner">
                 <h3>Earnings percentage settings</h3>
                 <div className="tech-share-controls">
@@ -712,9 +749,14 @@ export default function SATrackerPage() {
                     <button
                       type="button"
                       className="btn btn--primary btn--sm"
-                      onClick={() => {
+                      onClick={async () => {
                         setSaSharePercent(parsedDraftSaShare)
                         setEvSharePercent(parsedDraftEvShare)
+                        // Persist to DB
+                        await supabase.from('sa_earnings_settings').upsert([
+                          { key: 'sa_share_percent', value: String(parsedDraftSaShare) },
+                          { key: 'ev_share_percent', value: String(parsedDraftEvShare) },
+                        ], { onConflict: 'key' })
                       }}
                       disabled={!hasPendingShareChanges}
                     >
@@ -723,11 +765,15 @@ export default function SATrackerPage() {
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
-                      onClick={() => {
+                      onClick={async () => {
                         setSaSharePercent(DEFAULT_SA_SHARE_PERCENT)
                         setEvSharePercent(DEFAULT_EV_SHARE_PERCENT)
                         setDraftSaShare(String(DEFAULT_SA_SHARE_PERCENT))
                         setDraftEvShare(String(DEFAULT_EV_SHARE_PERCENT))
+                        await supabase.from('sa_earnings_settings').upsert([
+                          { key: 'sa_share_percent', value: String(DEFAULT_SA_SHARE_PERCENT) },
+                          { key: 'ev_share_percent', value: String(DEFAULT_EV_SHARE_PERCENT) },
+                        ], { onConflict: 'key' })
                       }}
                     >
                       Reset
@@ -735,6 +781,7 @@ export default function SATrackerPage() {
                   </div>
                 </div>
               </div>
+            )}
           </div>
           <div className="card__body dense">
             <div className="tech-drill-grid">
