@@ -77,7 +77,7 @@ interface ServiceDataRow {
   last_service_date: string | null
 }
 
-type Tab = 'dashboard' | 'campaigns' | 'conversations' | 'settings'
+type Tab = 'dashboard' | 'campaigns' | 'conversations' | 'settings' | 'test'
 
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   Open:       { bg: '#eff6ff', color: '#2563eb' },
@@ -136,6 +136,12 @@ export default function WAAgentPage() {
   const [manualMsg, setManualMsg] = useState('')
   const [sendingManual, setSendingManual] = useState(false)
   const [convFilter, setConvFilter] = useState('all')
+  // Test simulator state
+  const [testPhone, setTestPhone] = useState('9999999999')
+  const [testMessage, setTestMessage] = useState('')
+  const [testChat, setTestChat] = useState<Array<{role:'user'|'agent'; text:string; ts:string}>>([])
+  const [testLoading, setTestLoading] = useState(false)
+  const [testConvId, setTestConvId] = useState<number|null>(null)
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => { void loadAll() }, [])
@@ -303,6 +309,73 @@ export default function WAAgentPage() {
     setSendingManual(false)
   }
 
+  // ── Test simulator ─────────────────────────────────────────────────────────
+  async function sendTestMessage() {
+    if (!testMessage.trim() || !config) return
+    setTestLoading(true)
+    const userMsg = testMessage.trim()
+    const ts = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    setTestChat(p => [...p, { role: 'user', text: userMsg, ts }])
+    setTestMessage('')
+
+    // Simulate inbound message by directly calling the webhook
+    try {
+      // Save message to DB manually (simulating webhook)
+      let convId = testConvId
+      if (!convId) {
+        // Create/get conv for test phone
+        const { data: existingConv } = await supabase.from('wa_conversations').select('id,stage,model,reg_number,customer_name,preferred_date,preferred_branch,ai_turns,status').eq('phone', testPhone).limit(1)
+        if (existingConv?.[0]) {
+          convId = existingConv[0].id as number
+        } else {
+          const { data: newConv } = await supabase.from('wa_conversations').insert([{
+            phone: testPhone, customer_name: 'Test Customer', model: 'Nexon', reg_number: 'RJ14XX9999',
+            status: 'Open', stage: 'intro', ai_turns: 0,
+          }]).select('id')
+          convId = newConv?.[0]?.id as number
+        }
+        setTestConvId(convId)
+      }
+
+      if (!convId) { setTestLoading(false); return }
+
+      // Save inbound
+      await supabase.from('wa_messages').insert([{
+        conversation_id: convId, direction: 'inbound', sender: 'customer', body: userMsg, ai_generated: false, status: 'delivered',
+      }])
+      await supabase.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+
+      // Call edge function to get AI reply
+      const { data: fnData, error: fnErr } = await supabase.functions.invoke('wa-test-reply', {
+        body: { conversation_id: convId, message: userMsg },
+      })
+
+      // Fallback: read latest outbound message from DB (written by edge fn or test fn)
+      await new Promise(r => setTimeout(r, 1200))
+      const { data: latestMsgs } = await supabase.from('wa_messages')
+        .select('body,direction,created_at').eq('conversation_id', convId)
+        .eq('direction', 'outbound').order('created_at', { ascending: false }).limit(1)
+
+      const reply = latestMsgs?.[0]?.body || fnData?.reply || "Processing..."
+      const replyTs = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      setTestChat(p => [...p, { role: 'agent', text: reply, ts: replyTs }])
+
+      // Refresh conversations
+      await loadAll()
+    } catch (e) {
+      setTestChat(p => [...p, { role: 'agent', text: '⚠️ Error: ' + String(e), ts: new Date().toLocaleTimeString() }])
+    }
+    setTestLoading(false)
+  }
+
+  async function resetTestConv() {
+    if (!testConvId) return
+    await supabase.from('wa_messages').delete().eq('conversation_id', testConvId)
+    await supabase.from('wa_conversations').update({ status: 'Open', stage: 'intro', ai_turns: 0, booking_id: null, preferred_date: null, preferred_branch: null, preferred_time: null }).eq('id', testConvId)
+    setTestChat([])
+    showToast('🔄 Test conversation reset')
+  }
+
   // ── Stats ────────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
     total: conversations.length,
@@ -343,9 +416,9 @@ export default function WAAgentPage() {
         <span style={{ fontSize: '1.2rem' }}>🤖</span>
         <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b' }}>WA AI Agent</span>
         <div style={{ display: 'flex', gap: '0.2rem', background: '#f1f5f9', borderRadius: '8px', padding: '0.25rem', marginLeft: '0.5rem' }}>
-          {(['dashboard', 'campaigns', 'conversations', 'settings'] as Tab[]).map(t => (
+          {(['dashboard', 'campaigns', 'conversations', 'settings', 'test'] as Tab[]).map(t => (
             <button key={t} style={TAB_STYLE(t)} onClick={() => setTab(t)}>
-              {t === 'dashboard' ? '📊 Dashboard' : t === 'campaigns' ? '📣 Campaigns' : t === 'conversations' ? '💬 Inbox' : '⚙️ Settings'}
+              {t === 'dashboard' ? '📊 Dashboard' : t === 'campaigns' ? '📣 Campaigns' : t === 'conversations' ? '💬 Inbox' : t === 'test' ? '🧪 Test AI' : '⚙️ Settings'}
             </button>
           ))}
         </div>
@@ -811,6 +884,111 @@ export default function WAAgentPage() {
             </div>
           </div>
         )}
+      </div>
+
+        {/* ══ TEST SIMULATOR ══ */}
+        {tab === 'test' && (
+          <div style={{ maxWidth: '600px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.85rem', gap: '0.75rem' }}>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>🧪 Test AI Agent</span>
+              <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#f1f5f9', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>Simulates real WhatsApp conversation</span>
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.65rem 0.85rem', marginBottom: '1rem', fontSize: '0.78rem', color: '#92400e' }}>
+              ⚡ This uses the real AI + DB — enter any test phone number. Set your OpenAI key in Settings first. Messages here also appear in the Inbox.
+            </div>
+
+            {/* Config */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.85rem', display: 'flex', gap: '0.65rem', alignItems: 'flex-end' }}>
+              <label className="field" style={{ flex: 1, margin: 0 }}>
+                <span className="label">Test Phone Number</span>
+                <input className="inp" value={testPhone} onChange={e => setTestPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile" maxLength={10} />
+              </label>
+              <button className="btn btn--ghost btn--sm" onClick={resetTestConv} disabled={!testConvId} style={{ marginBottom: '1px' }}>🔄 Reset</button>
+            </div>
+
+            {/* Chat window */}
+            <div style={{ background: '#e5ddd5', borderRadius: '10px', overflow: 'hidden', border: '1px solid #d1d5db', marginBottom: '0.75rem' }}>
+              {/* WA-style header */}
+              <div style={{ background: '#075e54', color: '#fff', padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>🤖</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{config?.agent_name || 'Riya'} — WA AI Agent</div>
+                  <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>{testLoading ? 'typing...' : 'online'}</div>
+                </div>
+              </div>
+              {/* Messages */}
+              <div style={{ height: '350px', overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', background: '#e5ddd5' }}>
+                {testChat.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#666', fontSize: '0.78rem', padding: '2rem' }}>
+                    Start typing to test the AI agent conversation flow
+                  </div>
+                )}
+                {testChat.map((m, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                    <div style={{
+                      maxWidth: '78%', background: m.role === 'user' ? '#dcf8c6' : '#fff',
+                      borderRadius: m.role === 'user' ? '10px 10px 2px 10px' : '10px 10px 10px 2px',
+                      padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                    }}>
+                      {m.role === 'agent' && <div style={{ fontSize: '0.65rem', color: '#075e54', fontWeight: 700, marginBottom: '0.15rem' }}>🤖 {config?.agent_name || 'Riya'}</div>}
+                      <div style={{ fontSize: '0.83rem', color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>{m.text}</div>
+                      <div style={{ fontSize: '0.6rem', color: '#94a3b8', textAlign: 'right', marginTop: '0.2rem' }}>{m.ts}</div>
+                    </div>
+                  </div>
+                ))}
+                {testLoading && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                    <div style={{ background: '#fff', borderRadius: '10px 10px 10px 2px', padding: '0.5rem 0.9rem', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', height: '16px' }}>
+                        {[0,1,2].map(i => <div key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#94a3b8', animation: `bounce 1s ${i*0.2}s infinite` }} />)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Input */}
+              <div style={{ background: '#f0f0f0', padding: '0.55rem 0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                <textarea
+                  value={testMessage}
+                  onChange={e => setTestMessage(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendTestMessage() } }}
+                  placeholder="Type a message as customer… (Enter to send)"
+                  className="inp"
+                  rows={2}
+                  style={{ flex: 1, resize: 'none', fontSize: '0.85rem', borderRadius: '20px', padding: '0.45rem 0.85rem' }}
+                />
+                <button
+                  onClick={sendTestMessage}
+                  disabled={testLoading || !testMessage.trim()}
+                  style={{ width: '40px', height: '40px', borderRadius: '50%', background: testLoading || !testMessage.trim() ? '#94a3b8' : '#25D366', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  ➤
+                </button>
+              </div>
+            </div>
+
+            {/* Quick test prompts */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.75rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>💡 Quick test messages (click to use):</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                {[
+                  'Hi',
+                  'Yes, I want to book a service',
+                  'Next Monday works for me',
+                  'Morning slot please, Sitapura branch',
+                  'YES, confirm the booking',
+                  'Mujhe service book karni hai',
+                  'Kal subah 10 baje Ajmer Road pe',
+                ].map(msg => (
+                  <button key={msg} onClick={() => setTestMessage(msg)}
+                    style={{ padding: '0.2rem 0.55rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '0.72rem', color: '#475569', cursor: 'pointer' }}>
+                    {msg}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )
