@@ -137,6 +137,10 @@ function normalizeKmReading(value?: number | null): number | null {
   return normalized
 }
 
+function hasNonEmptyJcNumber(value: string | null | undefined): boolean {
+  return String(value ?? '').trim().length > 0
+}
+
 function normalizePayload(input: ReceptionEntryInput) {
   return {
     reg_number: input.reg_number.trim().toUpperCase(),
@@ -229,6 +233,7 @@ async function fetchReceptionEntriesWithKeyset(
   serviceTypes?: string[],
   createdAtFrom?: string,
   createdAtTo?: string,
+  requireNonEmptyJcNumber = false,
 ): Promise<{ data: ReceptionEntryRow[] | null; error: unknown | null }> {
   let cursorCreatedAt: string | null = null
   let cursorId: number | null = null
@@ -244,6 +249,10 @@ async function fetchReceptionEntriesWithKeyset(
 
     if (serviceTypes && serviceTypes.length > 0) {
       query = query.in('service_type', serviceTypes)
+    }
+
+    if (requireNonEmptyJcNumber) {
+      query = query.not('jc_number', 'is', null).neq('jc_number', '')
     }
 
     if (createdAtFrom) {
@@ -263,14 +272,17 @@ async function fetchReceptionEntriesWithKeyset(
       return { data: null, error }
     }
 
-    const batch = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
+    const rawBatch = (Array.isArray(data) ? data : []) as unknown as ReceptionEntryRow[]
+    const batch = requireNonEmptyJcNumber
+      ? rawBatch.filter((row) => hasNonEmptyJcNumber(row.jc_number))
+      : rawBatch
     rows.push(...batch)
 
-    if (batch.length < RECEPTION_LIST_PAGE_SIZE) {
+    if (rawBatch.length < RECEPTION_LIST_PAGE_SIZE) {
       break
     }
 
-    const lastRow = batch[batch.length - 1]
+    const lastRow = rawBatch[rawBatch.length - 1]
     cursorCreatedAt = typeof lastRow.created_at === 'string' ? lastRow.created_at : null
     cursorId = Number.isFinite(lastRow.id) ? Number(lastRow.id) : null
 
@@ -303,7 +315,12 @@ export async function listServiceAdvisorEntries(): Promise<ApiResult<ReceptionEn
 }
 
 export async function listFloorInchargeEntries(): Promise<ApiResult<ReceptionEntryRow[]>> {
-  const { data, error } = await fetchReceptionEntriesWithKeyset(FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES)
+  const { data, error } = await fetchReceptionEntriesWithKeyset(
+    FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES,
+    undefined,
+    undefined,
+    true,
+  )
 
   if (error) {
     const message = typeof error === 'string'

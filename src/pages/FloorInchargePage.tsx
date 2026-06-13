@@ -366,7 +366,9 @@ export default function FloorInchargePage() {
 
       const baseRows = receptionRes.error || !receptionRes.data
         ? []
-        : receptionRes.data.map(mapReceptionRowToJobCard)
+        : receptionRes.data
+            .filter((row) => Boolean(row.jc_number?.trim()))
+            .map(mapReceptionRowToJobCard)
 
       const saCodes = Array.from(new Set(
         baseRows
