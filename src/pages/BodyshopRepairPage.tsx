@@ -133,6 +133,21 @@ function getCurrentStageDisplay(effectiveCurrentStage: number, floorWorkStarted:
   return `Stage ${effectiveCurrentStage} - ${STAGE_LABELS[effectiveCurrentStage]}`
 }
 
+function hasFloorWorkStartedInPrimaryRow(row: Partial<BodyshopFloorPrimaryRow> | null | undefined): boolean {
+  if (!row) return false
+  return FLOOR_ROLES.some((role) => {
+    const cols = FLOOR_ROLE_COLUMNS[role]
+    const employeeCode = (row[cols.employeeCode] as string | null) ?? null
+    const employeeName = (row[cols.employeeName] as string | null) ?? null
+    if (!(employeeCode && employeeName)) return false
+
+    const status = String((row[cols.workStatus] as string | null) ?? '').trim().toLowerCase()
+    const inTs = (row[cols.inTs] as string | null) ?? null
+    const outTs = (row[cols.outTs] as string | null) ?? null
+    return Boolean(inTs || outTs || status)
+  })
+}
+
 function normalizeCardKey(card: { job_card_no: string | null | undefined; reg_number: string | null | undefined }) {
   const receptionId = Number((card as { reception_entry_id?: number | null }).reception_entry_id)
   if (Number.isFinite(receptionId) && receptionId > 0) return `reception:${receptionId}`
@@ -376,11 +391,22 @@ export default function BodyshopRepairPage() {
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
+  const [floorWorkStartedLookup, setFloorWorkStartedLookup] = useState<Record<string, boolean>>({})
   const [floorPrimaryRow, setFloorPrimaryRow] = useState<BodyshopFloorPrimaryRow | null>(null)
   const [loadingFloorPrimary, setLoadingFloorPrimary] = useState(false)
+  const [pendingFloorScrollRole, setPendingFloorScrollRole] = useState<FloorRole | null>(null)
+  const [highlightedFloorRole, setHighlightedFloorRole] = useState<FloorRole | null>(null)
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
   const autoAdvanceDocsLockRef = useRef(false)
+  const floorRoleRowRefs = useRef<Record<FloorRole, HTMLTableRowElement | null>>({
+    DENTOR: null,
+    PAINTER: null,
+    TECHNICIAN: null,
+    ELECTRICIAN: null,
+    DET: null,
+  })
+  const floorRoleHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // new form
   const [nf, setNf] = useState({
@@ -604,19 +630,33 @@ export default function BodyshopRepairPage() {
   }, [floorRoleSnapshots])
 
   const floorWorkStarted = useMemo(() => {
-    if (!floorPrimaryRow) return false
-    return FLOOR_ROLES.some((role) => {
-      const cols = FLOOR_ROLE_COLUMNS[role]
-      const employeeCode = (floorPrimaryRow[cols.employeeCode] as string | null) ?? null
-      const employeeName = (floorPrimaryRow[cols.employeeName] as string | null) ?? null
-      if (!(employeeCode && employeeName)) return false
-
-      const status = String((floorPrimaryRow[cols.workStatus] as string | null) ?? '').trim().toLowerCase()
-      const inTs = (floorPrimaryRow[cols.inTs] as string | null) ?? null
-      const outTs = (floorPrimaryRow[cols.outTs] as string | null) ?? null
-      return Boolean(inTs || outTs || status)
-    })
+    return hasFloorWorkStartedInPrimaryRow(floorPrimaryRow)
   }, [floorPrimaryRow])
+
+  useEffect(() => {
+    if (detailTab !== 'floor' || !pendingFloorScrollRole || loadingFloorPrimary) return
+    const target = floorRoleRowRefs.current[pendingFloorScrollRole]
+    if (!target) return
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightedFloorRole(pendingFloorScrollRole)
+    setPendingFloorScrollRole(null)
+
+    if (floorRoleHighlightTimerRef.current) {
+      clearTimeout(floorRoleHighlightTimerRef.current)
+    }
+    floorRoleHighlightTimerRef.current = setTimeout(() => {
+      setHighlightedFloorRole(null)
+    }, 1800)
+  }, [detailTab, pendingFloorScrollRole, loadingFloorPrimary, floorRoleSnapshots])
+
+  useEffect(() => {
+    return () => {
+      if (floorRoleHighlightTimerRef.current) {
+        clearTimeout(floorRoleHighlightTimerRef.current)
+      }
+    }
+  }, [])
 
   type AccidentReceptionRow = {
     id: number
@@ -731,6 +771,45 @@ export default function BodyshopRepairPage() {
 
       const nextCards = dedupeCards(mergedData)
       setCards(nextCards)
+
+      const jcNumbers = Array.from(new Set(
+        nextCards
+          .map((card) => String(card.job_card_no ?? '').trim().toUpperCase())
+          .filter(Boolean),
+      ))
+
+      const floorLookup: Record<string, boolean> = {}
+      if (jcNumbers.length > 0) {
+        const { data: floorRows } = await supabase
+          .from('bodyshop_assignments')
+          .select([
+            'repair_card_id',
+            'job_card_number',
+            'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
+            'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
+            'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
+            'electrician_employee_code', 'electrician_employee_name', 'electrician_work_status', 'electrician_in_ts', 'electrician_out_ts',
+            'det_employee_code', 'det_employee_name', 'det_work_status', 'det_in_ts', 'det_out_ts',
+          ].join(', '))
+          .eq('is_active', true)
+          .in('job_card_number', jcNumbers)
+
+        ;((floorRows ?? []) as unknown as BodyshopFloorPrimaryRow[]).forEach((row) => {
+          if (!hasFloorWorkStartedInPrimaryRow(row)) return
+
+          const rid = Number((row as { repair_card_id?: number | null }).repair_card_id)
+          if (Number.isFinite(rid) && rid > 0) {
+            floorLookup[`id:${rid}`] = true
+          }
+
+          const jc = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim().toUpperCase()
+          if (jc) {
+            floorLookup[`jc:${jc}`] = true
+          }
+        })
+      }
+
+      setFloorWorkStartedLookup(floorLookup)
 
       const photoReceptionIds = nextCards
         .map((card) => Number(card.reception_entry_id))
@@ -927,9 +1006,49 @@ export default function BodyshopRepairPage() {
       return
     }
 
+    const surveyDate = String(selected.survey_date ?? '').trim()
+    if (!surveyDate) {
+      toast_('Survey Date is required before sending to floor', false)
+      return
+    }
+
+    const surveyStatus = String(selected.survey_status ?? '').trim().toLowerCase()
+    if (surveyStatus !== 'hold' && surveyStatus !== 'approved') {
+      toast_('Survey Status must be Hold or Approved before sending to floor', false)
+      return
+    }
+
+    const holdReason = String(selected.survey_hold_reason ?? '').trim()
+    if (surveyStatus === 'hold' && !holdReason) {
+      toast_('Hold Remark is required when Survey Status is Hold', false)
+      return
+    }
+
     setSaving(true)
     try {
-      const patch: Partial<RepairCard> = { bodyshop_floor: floorValue }
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || null
+      const now = new Date().toISOString()
+
+      const patch: Partial<RepairCard> = {
+        bodyshop_floor: floorValue,
+        survey_date: surveyDate,
+        survey_status: surveyStatus,
+        survey_hold_reason: surveyStatus === 'hold' ? holdReason : null,
+        surveyor_name: String(selected.surveyor_name ?? '').trim() || null,
+        surveyor_contact: String(selected.surveyor_contact ?? '').trim() || null,
+        approved_parts: String(selected.approved_parts ?? '').trim() || null,
+        survay_info_updated_by: actor,
+        survay_info_updated_at: now,
+      }
+
+      if (!selected.survay_info_by) patch.survay_info_by = actor
+      if (!selected.survay_info_at) patch.survay_info_at = now
+
+      if (Object.keys(editPatch).length > 0) {
+        Object.assign(patch, editPatch)
+      }
+
       if (selected.current_stage === 9) {
         patch.current_stage = 10
         patch.current_stage_name = STAGE_LABELS[10] ?? 'Parts Status'
@@ -938,6 +1057,7 @@ export default function BodyshopRepairPage() {
       const updated = await updateRepairCard(selected.id, patch)
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      setEditPatch({})
       toast_(selected.current_stage === 9
         ? `Sent to ${floorValue}. Stage moved to Parts Status ✅`
         : `Sent to ${floorValue} ✅`)
@@ -1444,6 +1564,55 @@ export default function BodyshopRepairPage() {
         ...prev,
         [docKey]: row,
       }))
+
+      // Auto-save survey details once Survey Approval photo is uploaded.
+      if (docKey === 'doc_survey_approval') {
+        const surveyDate = String(selected.survey_date ?? '').trim()
+        const surveyStatus = String(selected.survey_status ?? '').trim().toLowerCase()
+        const holdReason = String(selected.survey_hold_reason ?? '').trim()
+
+        const missing: string[] = []
+        if (!surveyDate) missing.push('Survey Date')
+        if (surveyStatus !== 'hold' && surveyStatus !== 'approved') missing.push('Survey Status (Hold/Approved)')
+        if (surveyStatus === 'hold' && !holdReason) missing.push('Hold Remark')
+
+        if (missing.length === 0) {
+          const surveyAuth = await supabase.auth.getUser()
+          const surveyActor = surveyAuth.data.user?.email || surveyAuth.data.user?.id || null
+          const surveyNow = new Date().toISOString()
+
+          const hasDraftChanges = Object.keys(editPatch).length > 0
+          const surveyPatch: Partial<RepairCard> = {
+            ...(hasDraftChanges ? editPatch : {}),
+            survey_date: surveyDate,
+            survey_status: surveyStatus,
+            survey_hold_reason: surveyStatus === 'hold' ? holdReason : null,
+            surveyor_name: String(selected.surveyor_name ?? '').trim() || null,
+            surveyor_contact: String(selected.surveyor_contact ?? '').trim() || null,
+            approved_parts: String(selected.approved_parts ?? '').trim() || null,
+            survay_info_updated_by: surveyActor,
+            survay_info_updated_at: surveyNow,
+          }
+          if (!selected.survay_info_by) surveyPatch.survay_info_by = surveyActor
+          if (!selected.survay_info_at) surveyPatch.survay_info_at = surveyNow
+
+          const updatedSurvey = await updateRepairCard(selected.id, surveyPatch)
+          setSelected(updatedSurvey)
+          setCards((prev) => prev.map((card) => card.id === updatedSurvey.id ? updatedSurvey : card))
+          if (hasDraftChanges) setEditPatch({})
+
+          setDocUploadFeedbackByKey((prev) => ({
+            ...prev,
+            [docKey]: { tone: 'ok', text: action.mode === 'replace' ? 'Photo replaced and survey auto-saved.' : 'Photo uploaded and survey auto-saved.' },
+          }))
+        } else {
+          setDocUploadFeedbackByKey((prev) => ({
+            ...prev,
+            [docKey]: { tone: 'info', text: `Photo uploaded. Survey auto-save skipped: ${missing.join(', ')}` },
+          }))
+        }
+      }
+
       if (isLegacyBooleanDocKey(docKey)) {
         // Optimistically tick only legacy boolean docs immediately after upload.
         setSelected((prev) => prev ? ({ ...prev, [docKey]: true } as RepairCard) : prev)
@@ -1493,9 +1662,16 @@ export default function BodyshopRepairPage() {
       }
 
       if (isLegacyBooleanDocKey(docKey)) {
-        const updated = await updateRepairCard(selected.id, { [docKey]: true } as Partial<RepairCard>)
+        const hasDraftChanges = Object.keys(editPatch).length > 0
+        const updated = await updateRepairCard(selected.id, {
+          [docKey]: true,
+          ...(hasDraftChanges ? editPatch : {}),
+        } as Partial<RepairCard>)
         setSelected(updated)
         setCards((prev) => prev.map((card) => card.id === updated.id ? updated : card))
+        if (hasDraftChanges) {
+          setEditPatch({})
+        }
       }
 
       if (existing?.storage_path && existing.storage_path !== storagePath) {
@@ -1756,6 +1932,69 @@ export default function BodyshopRepairPage() {
     return getEffectiveStageFlow(card, intakePhotoCount, hasKmReading).effectiveCurrentStage
   }
 
+  function getFloorWorkStartedForCard(card: RepairCard): boolean {
+    const rid = Number(card.id)
+    if (Number.isFinite(rid) && rid > 0 && floorWorkStartedLookup[`id:${rid}`]) return true
+
+    const jc = String(card.job_card_no ?? '').trim().toUpperCase()
+    if (jc && floorWorkStartedLookup[`jc:${jc}`]) return true
+
+    return false
+  }
+
+  function isCardInStageWorklist(card: RepairCard, stage: number): boolean {
+    if (card.overall_status !== 'active') return false
+
+    const receptionId = Number(card.reception_entry_id)
+    const intakePhotoCount = photoCountByReceptionId[receptionId] ?? 0
+    const hasKmReading = kmPresentByReceptionId[receptionId] ?? false
+    const milestones = getIntakeMilestones(card, intakePhotoCount, hasKmReading)
+    const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
+    const floorStarted = getFloorWorkStartedForCard(card)
+
+    const customerType = card.customer_type ?? 'individual'
+    const noDocsRequired = customerType === 'cash' || customerType === 'foc'
+    const mandatoryDocs = noDocsRequired
+      ? []
+      : BODYSHOP_DOCS.filter((d) => d.mandatoryFor.includes(customerType)).map((d) => d.k)
+
+    const stage1Done = milestones.stage1Done
+    const stage2Done = milestones.stage2Done
+    const stage3Done = milestones.stage3Done
+    const stage4Done = milestones.stage4Done
+    const stage5Done = noDocsRequired
+      || mandatoryDocs.every((docKey) => Boolean((card as unknown as Record<string, unknown>)[docKey]))
+      || effectiveCurrentStage > 5
+    const stage6Done = Number(card.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
+    const stage7Done = Boolean(String(card.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
+    const stage8Done = Boolean(String(card.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
+
+    const surveyDate = String(card.survey_date ?? '').trim()
+    const surveyStatus = String(card.survey_status ?? '').trim().toLowerCase()
+    const surveyHoldReason = String(card.survey_hold_reason ?? '').trim()
+    const stage9Done = (Boolean(surveyDate)
+      && (surveyStatus === 'hold' || surveyStatus === 'approved')
+      && (surveyStatus !== 'hold' || Boolean(surveyHoldReason)))
+      || effectiveCurrentStage > 9
+    const stage10Done = effectiveCurrentStage > 10
+
+    // Stage queue is an operational worklist: each stage card counts cards that
+    // still need that specific stage's work, independent of earlier pending stages.
+    if (stage === 1) return !stage1Done
+    if (stage === 2) return !stage2Done
+    if (stage === 3) return !stage3Done
+    if (stage === 4) return !stage4Done
+    if (stage === 5) return stage1Done && stage2Done && stage3Done && stage4Done && !stage5Done
+    if (stage === 6) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && !stage6Done
+    if (stage === 7) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && !stage7Done
+    if (stage === 8) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && !stage8Done
+    if (stage === 9) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && !stage9Done
+    if (stage === 10) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && stage9Done && !stage10Done
+    if (stage === 11) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && stage9Done && floorStarted
+
+    return effectiveCurrentStage === stage
+  }
+
   // filtered
   const baseFiltered = useMemo(() => cards.filter((c) => {
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false
@@ -1773,18 +2012,21 @@ export default function BodyshopRepairPage() {
 
   const filtered = useMemo(() => {
     if (stageFilter === 'all') return baseFiltered
-    return baseFiltered.filter((card) => getEffectiveStageForCard(card) === stageFilter)
-  }, [baseFiltered, stageFilter, photoCountByReceptionId])
+    return baseFiltered.filter((card) => isCardInStageWorklist(card, stageFilter))
+  }, [baseFiltered, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup])
 
   const stageCounts = useMemo(() => {
     const counts: Record<number, number> = {}
     for (let i = 1; i <= 18; i += 1) counts[i] = 0
     baseFiltered.forEach((card) => {
-      const stage = getEffectiveStageForCard(card)
-      counts[stage] = (counts[stage] ?? 0) + 1
+      for (let stage = 1; stage <= 18; stage += 1) {
+        if (isCardInStageWorklist(card, stage)) {
+          counts[stage] = (counts[stage] ?? 0) + 1
+        }
+      }
     })
     return counts
-  }, [baseFiltered, photoCountByReceptionId])
+  }, [baseFiltered, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup])
 
   // pipeline counts
   const pipeline = useMemo(() =>
@@ -2177,7 +2419,14 @@ export default function BodyshopRepairPage() {
                         const subNotRequired = sub.displayStatus === 'Not Required'
 
                         rows.push(
-                          <div key={`stage-11-sub-${sub.role}`} style={{
+                          <button
+                            key={`stage-11-sub-${sub.role}`}
+                            type="button"
+                            onClick={() => {
+                              setDetailTab('floor')
+                              setPendingFloorScrollRole(sub.role)
+                            }}
+                            style={{
                             margin: '0 0 5px 30px',
                             padding: '6px 8px',
                             borderRadius: 8,
@@ -2186,6 +2435,9 @@ export default function BodyshopRepairPage() {
                             display: 'flex',
                             alignItems: 'center',
                             gap: 6,
+                            width: 'calc(100% - 30px)',
+                            textAlign: 'left',
+                            cursor: 'pointer',
                           }}>
                             <span style={{
                               width: 6,
@@ -2209,7 +2461,7 @@ export default function BodyshopRepairPage() {
                             }}>
                               {subNotRequired ? 'Not Required' : subDone ? 'Done' : subHold ? 'Hold' : 'In Process'}
                             </span>
-                          </div>,
+                          </button>,
                         )
                       })
                     }
@@ -3354,7 +3606,16 @@ export default function BodyshopRepairPage() {
                         </thead>
                         <tbody>
                           {floorRoleSnapshots.map((role) => (
-                            <tr key={role.role}>
+                            <tr
+                              key={role.role}
+                              ref={(node) => {
+                                floorRoleRowRefs.current[role.role] = node
+                              }}
+                              style={{
+                                background: highlightedFloorRole === role.role ? '#fef3c7' : undefined,
+                                transition: 'background 220ms ease',
+                              }}
+                            >
                               <td style={{ fontWeight: 700 }}>{role.roleLabel}</td>
                               <td>
                                 {role.assigned
