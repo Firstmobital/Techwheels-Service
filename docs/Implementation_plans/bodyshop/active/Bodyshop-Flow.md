@@ -875,6 +875,79 @@ After migration apply:
 - **Execution Status:** ✅ COMPLETED
 - **Next Action:** None for schema conversion. Only UAT verification and monitoring remain.
 
+### 2026-06-13 - Sub Plan: Stage 11 Substages in Bodyshop Repair (Interconnected with Bodyshop Floor)
+- **Objective:** Implement Stage 11 (`Floor Assignment`) in `bodyshop-repair` as role-wise substages sourced from `bodyshop-floor` data for the same job card.
+
+- **Authority Lock (Mandatory):**
+  - Treat `local_folder/backups/full_database.sql` as authoritative; if access-limited, use `local_folder/backups/chunks/full_database.sql.part_*` mirror.
+  - Never invent schema objects not aligned to active authoritative source.
+  - If conflict appears, prefer local dump.
+
+- **Authoritative Current Schema (Verified):**
+  - `public.bodyshop_assignments` now stores one active row per job card with role-wise fields:
+    - Assignee: `<role>_employee_code`, `<role>_employee_name`
+    - Status: `<role>_work_status`
+    - Timestamps: `<role>_in_ts`, `<role>_out_ts`
+    - Note: only shared `assigned_by` exists; no role-specific `completed_by` columns in active dump.
+  - `public.bodyshop_floor_support_assignments` stores additional support staff rows and remains non-stage-trackable.
+
+- **Stage 11 Substage UI Contract (Bodyshop Repair):**
+  - Show one substage card/row per role: Dentor, Painter, Technician, Electrician, DET.
+  - Role state rules:
+    - No primary assignee in role slot: `Not Required`
+    - Primary assignee exists: role workflow active with `In Process` / `Hold` / `Completed`
+  - Per-role fields to display:
+    - `Assigned To` = `<role>_employee_name` (+ code optional)
+    - `Status` = `<role>_work_status`
+    - `IN TS` = `<role>_in_ts`
+    - `OUT TS` = `<role>_out_ts`
+    - `Done At` = `<role>_out_ts` when completed
+    - `Done By` = role-specific completion actor (see limitation fix below)
+
+- **Parent Stage 11 Status Derivation (from assigned roles only):**
+  - If zero roles assigned: `Unassigned`
+  - Else if any assigned role is `hold`: `Hold`
+  - Else if all assigned roles are `completed`: `Completed`
+  - Else: `In Process`
+
+- **Known Limitation in Active Schema:**
+  - There is no per-role `completed_by` in `public.bodyshop_assignments`.
+  - Current `assigned_by` cannot reliably represent completion actor.
+
+- **Required DB Change to Remove Limitation (Additive):**
+  - Add role-specific completion actor columns to `public.bodyshop_assignments`:
+    - `dentor_completed_by`, `painter_completed_by`, `technician_completed_by`, `electrician_completed_by`, `det_completed_by`
+  - Backfill strategy:
+    - For rows where `<role>_work_status = 'completed'` and `<role>_completed_by` is null, seed from `assigned_by`.
+  - Migration file:
+    - `supabase/migrations/20260613020700_bodyshop_assignments_add_role_completed_by.sql`
+
+- **Frontend Implementation Patch Scope (single patch target):**
+  - `src/pages/BodyshopRepairPage.tsx`
+    - Add Stage 11 reader for `bodyshop_assignments` role-wise fields by job card.
+    - Render role substages with `Not Required` vs active workflow states.
+    - Compute and display Stage 11 parent status from role substages.
+    - Show `Done By` from `<role>_completed_by` once migration is applied.
+  - `src/pages/BodyshopFloorPage.tsx`
+    - On stage save to `completed`, write `<role>_completed_by` with current user.
+    - Keep existing `out_ts` behavior unchanged.
+
+- **Execution Steps:**
+1. Run additive migration for role `completed_by` columns.
+2. Deploy frontend Stage 11 substage patch in Bodyshop Repair + completion writer in Bodyshop Floor.
+3. Validate with one shared job card across both pages.
+
+- **Validation Checklist:**
+  - [ ] New role `completed_by` columns exist in DB.
+  - [ ] Stage 11 in Bodyshop Repair shows 5 role substages.
+  - [ ] Unassigned roles show `Not Required`.
+  - [ ] Assigned roles show status lifecycle and IN/OUT timestamps.
+  - [ ] `Done By` shows real completion actor per role after completion.
+  - [ ] Parent Stage 11 status follows derivation rules exactly.
+
+- **Execution Status:** ⏳ PENDING implementation patch
+- **Next Action:** Apply migration `20260613020700...`, then implement Stage 11 substage UI patch.
+
 ---
 
 ## Related Documentation

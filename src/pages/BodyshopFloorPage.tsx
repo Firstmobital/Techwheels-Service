@@ -69,6 +69,11 @@ interface DBPrimaryAssignmentRow {
   det_in_ts: string | null
   det_remark: string | null
   det_out_ts: string | null
+  dentor_completed_by: string | null
+  painter_completed_by: string | null
+  technician_completed_by: string | null
+  electrician_completed_by: string | null
+  det_completed_by: string | null
 }
 
 interface BSAssignment {
@@ -82,6 +87,7 @@ interface BSAssignment {
   assigned_at: string
   assigned_by: string | null
   out_ts: string | null
+  completed_by: string | null
 }
 
 interface SupportAssignment {
@@ -116,6 +122,7 @@ const ROLE_COLUMNS: Record<BSRole, {
   inTs: keyof DBPrimaryAssignmentRow
   remark: keyof DBPrimaryAssignmentRow
   outTs: keyof DBPrimaryAssignmentRow
+  completedBy: keyof DBPrimaryAssignmentRow
 }> = {
   DENTOR: {
     employeeCode: 'dentor_employee_code',
@@ -124,6 +131,7 @@ const ROLE_COLUMNS: Record<BSRole, {
     inTs: 'dentor_in_ts',
     remark: 'dentor_remark',
     outTs: 'dentor_out_ts',
+    completedBy: 'dentor_completed_by',
   },
   PAINTER: {
     employeeCode: 'painter_employee_code',
@@ -132,6 +140,7 @@ const ROLE_COLUMNS: Record<BSRole, {
     inTs: 'painter_in_ts',
     remark: 'painter_remark',
     outTs: 'painter_out_ts',
+    completedBy: 'painter_completed_by',
   },
   TECHNICIAN: {
     employeeCode: 'technician_employee_code',
@@ -140,6 +149,7 @@ const ROLE_COLUMNS: Record<BSRole, {
     inTs: 'technician_in_ts',
     remark: 'technician_remark',
     outTs: 'technician_out_ts',
+    completedBy: 'technician_completed_by',
   },
   ELECTRICIAN: {
     employeeCode: 'electrician_employee_code',
@@ -148,6 +158,7 @@ const ROLE_COLUMNS: Record<BSRole, {
     inTs: 'electrician_in_ts',
     remark: 'electrician_remark',
     outTs: 'electrician_out_ts',
+    completedBy: 'electrician_completed_by',
   },
   DET: {
     employeeCode: 'det_employee_code',
@@ -156,6 +167,7 @@ const ROLE_COLUMNS: Record<BSRole, {
     inTs: 'det_in_ts',
     remark: 'det_remark',
     outTs: 'det_out_ts',
+    completedBy: 'det_completed_by',
   },
 }
 
@@ -222,6 +234,7 @@ function mapRowToRoleMap(row: DBPrimaryAssignmentRow): Record<BSRole, BSAssignme
       assigned_at: ((row[cols.inTs] as string | null) ?? row.assigned_at),
       assigned_by: row.assigned_by,
       out_ts: (row[cols.outTs] as string | null) ?? null,
+      completed_by: (row[cols.completedBy] as string | null) ?? null,
     }
   }
   return m
@@ -702,12 +715,16 @@ export default function BodyshopFloorPage() {
     setSaving(`${k}-${role}-stage`)
     try {
       const cols = ROLE_COLUMNS[role]
+      const { data: { user } } = await supabase.auth.getUser()
       const update: Record<string, unknown> = {
         [cols.workStatus]: draft.work_status,
         [cols.remark]: draft.remark.trim() || null,
       }
       if (draft.work_status === 'completed' && !assignment.out_ts) {
         update[cols.outTs] = new Date().toISOString()
+      }
+      if (draft.work_status === 'completed') {
+        update[cols.completedBy] = user?.email ?? null
       }
       const result = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id).select().single()
       if (result.error) throw result.error

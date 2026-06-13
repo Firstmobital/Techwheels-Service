@@ -121,6 +121,18 @@ function getEffectiveStageFlow(card: RepairCard, intakePhotoCount: number, hasKm
   return { milestones, effectiveCurrentStage, effectiveNextStage }
 }
 
+function isStageConcurrentActive(stage: number, effectiveCurrentStage: number, floorWorkStarted: boolean) {
+  if (stage === effectiveCurrentStage) return true
+  return effectiveCurrentStage === 10 && floorWorkStarted && stage === 11
+}
+
+function getCurrentStageDisplay(effectiveCurrentStage: number, floorWorkStarted: boolean) {
+  if (effectiveCurrentStage === 10 && floorWorkStarted) {
+    return 'Stage 10 + 11 - Parts Status + Floor Assignment'
+  }
+  return `Stage ${effectiveCurrentStage} - ${STAGE_LABELS[effectiveCurrentStage]}`
+}
+
 function normalizeCardKey(card: { job_card_no: string | null | undefined; reg_number: string | null | undefined }) {
   const receptionId = Number((card as { reception_entry_id?: number | null }).reception_entry_id)
   if (Number.isFinite(receptionId) && receptionId > 0) return `reception:${receptionId}`
@@ -152,6 +164,118 @@ function dedupeCards(cards: RepairCard[]): RepairCard[] {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
+
+type FloorRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
+
+type BodyshopFloorPrimaryRow = {
+  id: number
+  job_card_number: string
+  repair_card_id: number
+  dentor_employee_code: string | null
+  dentor_employee_name: string | null
+  painter_employee_code: string | null
+  painter_employee_name: string | null
+  technician_employee_code: string | null
+  technician_employee_name: string | null
+  electrician_employee_code: string | null
+  electrician_employee_name: string | null
+  det_employee_code: string | null
+  det_employee_name: string | null
+  dentor_work_status: string | null
+  painter_work_status: string | null
+  technician_work_status: string | null
+  electrician_work_status: string | null
+  det_work_status: string | null
+  dentor_in_ts: string | null
+  painter_in_ts: string | null
+  technician_in_ts: string | null
+  electrician_in_ts: string | null
+  det_in_ts: string | null
+  dentor_out_ts: string | null
+  painter_out_ts: string | null
+  technician_out_ts: string | null
+  electrician_out_ts: string | null
+  det_out_ts: string | null
+  dentor_completed_by: string | null
+  painter_completed_by: string | null
+  technician_completed_by: string | null
+  electrician_completed_by: string | null
+  det_completed_by: string | null
+}
+
+type FloorRoleSnapshot = {
+  role: FloorRole
+  roleLabel: string
+  assigned: boolean
+  employeeCode: string | null
+  employeeName: string | null
+  normalizedStatus: 'work_inprocess' | 'hold' | 'completed' | null
+  displayStatus: 'Not Required' | 'Work In Process' | 'Hold' | 'Completed'
+  inTs: string | null
+  outTs: string | null
+  doneAt: string | null
+  doneBy: string | null
+}
+
+const FLOOR_ROLES: FloorRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
+
+const FLOOR_ROLE_META: Record<FloorRole, { label: string }> = {
+  DENTOR: { label: 'Dentor' },
+  PAINTER: { label: 'Painter' },
+  TECHNICIAN: { label: 'Technician' },
+  ELECTRICIAN: { label: 'Electrician' },
+  DET: { label: 'DET' },
+}
+
+const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
+  employeeCode: keyof BodyshopFloorPrimaryRow
+  employeeName: keyof BodyshopFloorPrimaryRow
+  workStatus: keyof BodyshopFloorPrimaryRow
+  inTs: keyof BodyshopFloorPrimaryRow
+  outTs: keyof BodyshopFloorPrimaryRow
+  completedBy: keyof BodyshopFloorPrimaryRow
+}> = {
+  DENTOR: {
+    employeeCode: 'dentor_employee_code',
+    employeeName: 'dentor_employee_name',
+    workStatus: 'dentor_work_status',
+    inTs: 'dentor_in_ts',
+    outTs: 'dentor_out_ts',
+    completedBy: 'dentor_completed_by',
+  },
+  PAINTER: {
+    employeeCode: 'painter_employee_code',
+    employeeName: 'painter_employee_name',
+    workStatus: 'painter_work_status',
+    inTs: 'painter_in_ts',
+    outTs: 'painter_out_ts',
+    completedBy: 'painter_completed_by',
+  },
+  TECHNICIAN: {
+    employeeCode: 'technician_employee_code',
+    employeeName: 'technician_employee_name',
+    workStatus: 'technician_work_status',
+    inTs: 'technician_in_ts',
+    outTs: 'technician_out_ts',
+    completedBy: 'technician_completed_by',
+  },
+  ELECTRICIAN: {
+    employeeCode: 'electrician_employee_code',
+    employeeName: 'electrician_employee_name',
+    workStatus: 'electrician_work_status',
+    inTs: 'electrician_in_ts',
+    outTs: 'electrician_out_ts',
+    completedBy: 'electrician_completed_by',
+  },
+  DET: {
+    employeeCode: 'det_employee_code',
+    employeeName: 'det_employee_name',
+    workStatus: 'det_work_status',
+    inTs: 'det_in_ts',
+    outTs: 'det_out_ts',
+    completedBy: 'det_completed_by',
+  },
+}
 
 type ReceptionVehicleSnapshot = {
   id: number
@@ -252,6 +376,8 @@ export default function BodyshopRepairPage() {
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
+  const [floorPrimaryRow, setFloorPrimaryRow] = useState<BodyshopFloorPrimaryRow | null>(null)
+  const [loadingFloorPrimary, setLoadingFloorPrimary] = useState(false)
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
   const autoAdvanceDocsLockRef = useRef(false)
@@ -356,6 +482,141 @@ export default function BodyshopRepairPage() {
         autoAdvanceDocsLockRef.current = false
       })
   }, [bodyshopDocsByKey, selected])
+
+  useEffect(() => {
+    if (!selected) {
+      setFloorPrimaryRow(null)
+      return
+    }
+
+    const jcNumber = String(selected.job_card_no ?? '').trim().toUpperCase()
+    if (!jcNumber) {
+      setFloorPrimaryRow(null)
+      return
+    }
+
+    let cancelled = false
+
+    ;(async () => {
+      setLoadingFloorPrimary(true)
+
+      const selectColumns = [
+        'id',
+        'job_card_number',
+        'repair_card_id',
+        'dentor_employee_code', 'dentor_employee_name',
+        'painter_employee_code', 'painter_employee_name',
+        'technician_employee_code', 'technician_employee_name',
+        'electrician_employee_code', 'electrician_employee_name',
+        'det_employee_code', 'det_employee_name',
+        'dentor_work_status', 'painter_work_status', 'technician_work_status', 'electrician_work_status', 'det_work_status',
+        'dentor_in_ts', 'painter_in_ts', 'technician_in_ts', 'electrician_in_ts', 'det_in_ts',
+        'dentor_out_ts', 'painter_out_ts', 'technician_out_ts', 'electrician_out_ts', 'det_out_ts',
+        'dentor_completed_by', 'painter_completed_by', 'technician_completed_by', 'electrician_completed_by', 'det_completed_by',
+      ].join(', ')
+
+      const byJcRes = await supabase
+        .from('bodyshop_assignments')
+        .select(selectColumns)
+        .eq('is_active', true)
+        .eq('job_card_number', jcNumber)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+
+      const byJcRows = (byJcRes.data ?? []) as unknown as BodyshopFloorPrimaryRow[]
+      let row = byJcRows[0] ?? null
+
+      if (!row && selected.id) {
+        const byRepairIdRes = await supabase
+          .from('bodyshop_assignments')
+          .select(selectColumns)
+          .eq('is_active', true)
+          .eq('repair_card_id', selected.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+
+        const byRepairRows = (byRepairIdRes.data ?? []) as unknown as BodyshopFloorPrimaryRow[]
+        row = byRepairRows[0] ?? null
+      }
+
+      if (cancelled) return
+
+      setFloorPrimaryRow(row)
+      setLoadingFloorPrimary(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
+  const floorRoleSnapshots = useMemo<FloorRoleSnapshot[]>(() => {
+    return FLOOR_ROLES.map((role) => {
+      const cols = FLOOR_ROLE_COLUMNS[role]
+      const row = floorPrimaryRow
+      const employeeCode = (row?.[cols.employeeCode] as string | null) ?? null
+      const employeeName = (row?.[cols.employeeName] as string | null) ?? null
+      const assigned = Boolean(employeeCode && employeeName)
+
+      if (!assigned) {
+        return {
+          role,
+          roleLabel: FLOOR_ROLE_META[role].label,
+          assigned: false,
+          employeeCode: null,
+          employeeName: null,
+          normalizedStatus: null,
+          displayStatus: 'Not Required',
+          inTs: null,
+          outTs: null,
+          doneAt: null,
+          doneBy: null,
+        }
+      }
+
+      const rawStatus = String((row?.[cols.workStatus] as string | null) ?? '').trim().toLowerCase()
+      const normalizedStatus: FloorRoleSnapshot['normalizedStatus'] =
+        rawStatus === 'hold' || rawStatus === 'completed' ? rawStatus : 'work_inprocess'
+      const outTs = (row?.[cols.outTs] as string | null) ?? null
+
+      return {
+        role,
+        roleLabel: FLOOR_ROLE_META[role].label,
+        assigned: true,
+        employeeCode,
+        employeeName,
+        normalizedStatus,
+        displayStatus: normalizedStatus === 'hold' ? 'Hold' : normalizedStatus === 'completed' ? 'Completed' : 'Work In Process',
+        inTs: (row?.[cols.inTs] as string | null) ?? null,
+        outTs,
+        doneAt: normalizedStatus === 'completed' ? outTs : null,
+        doneBy: normalizedStatus === 'completed' ? ((row?.[cols.completedBy] as string | null) ?? null) : null,
+      }
+    })
+  }, [floorPrimaryRow])
+
+  const floorParentStatus = useMemo<'Unassigned' | 'In Process' | 'Hold' | 'Completed'>(() => {
+    const assigned = floorRoleSnapshots.filter((r) => r.assigned)
+    if (assigned.length === 0) return 'Unassigned'
+    if (assigned.some((r) => r.normalizedStatus === 'hold')) return 'Hold'
+    if (assigned.every((r) => r.normalizedStatus === 'completed')) return 'Completed'
+    return 'In Process'
+  }, [floorRoleSnapshots])
+
+  const floorWorkStarted = useMemo(() => {
+    if (!floorPrimaryRow) return false
+    return FLOOR_ROLES.some((role) => {
+      const cols = FLOOR_ROLE_COLUMNS[role]
+      const employeeCode = (floorPrimaryRow[cols.employeeCode] as string | null) ?? null
+      const employeeName = (floorPrimaryRow[cols.employeeName] as string | null) ?? null
+      if (!(employeeCode && employeeName)) return false
+
+      const status = String((floorPrimaryRow[cols.workStatus] as string | null) ?? '').trim().toLowerCase()
+      const inTs = (floorPrimaryRow[cols.inTs] as string | null) ?? null
+      const outTs = (floorPrimaryRow[cols.outTs] as string | null) ?? null
+      return Boolean(inTs || outTs || status)
+    })
+  }, [floorPrimaryRow])
 
   type AccidentReceptionRow = {
     id: number
@@ -1798,6 +2059,7 @@ export default function BodyshopRepairPage() {
                 const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
                 const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                 const inGroup = g.stages.includes(effectiveCurrentStage)
+                  || (effectiveCurrentStage === 10 && floorWorkStarted && g.stages.includes(11))
                 const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
                   || (g.stages.includes(5) && docsDone)
                 return (
@@ -1839,13 +2101,13 @@ export default function BodyshopRepairPage() {
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                   return (
                 <div style={{ fontSize: 14, fontWeight: 800, color: getGroupForStage(selected.current_stage).color }}>
-                  Stage {effectiveCurrentStage} — {STAGE_LABELS[effectiveCurrentStage]}
+                  {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted)}
                 </div>
                   )
                 })()}
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
-                {Object.entries(STAGE_LABELS).map(([numStr, label]) => {
+                {Object.entries(STAGE_LABELS).flatMap(([numStr, label]) => {
                   const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                   const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                   const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
@@ -1868,10 +2130,10 @@ export default function BodyshopRepairPage() {
                     : num === 5
                       ? docsDone || effectiveCurrentStage > num
                       : effectiveCurrentStage > num
-                  const isCur  = effectiveCurrentStage === num
+                  const isCur  = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted)
                   const grp    = getGroupForStage(num)
-                  return (
-                    <div key={num} style={{
+                  const rows = [
+                    <div key={`stage-${num}`} style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '7px 10px', borderRadius: 8, marginBottom: 3,
                       background: isCur ? `${grp.color}15` : isDone ? '#f0fdf4' : '#fafafa',
@@ -1890,7 +2152,70 @@ export default function BodyshopRepairPage() {
                       </span>
                       {isCur && <span style={{ fontSize: 10, color: grp.color }}>●</span>}
                     </div>
-                  )
+                  ]
+
+                  if (num === 11) {
+                    if (loadingFloorPrimary) {
+                      rows.push(
+                        <div key="stage-11-sub-loading" style={{
+                          margin: '0 0 6px 30px',
+                          padding: '6px 8px',
+                          borderRadius: 8,
+                          border: '1px solid #e2e8f0',
+                          background: '#f8fafc',
+                          fontSize: 11,
+                          color: '#64748b',
+                        }}>
+                          Loading floor substages...
+                        </div>,
+                      )
+                    } else {
+                      floorRoleSnapshots.forEach((sub) => {
+                        const subDone = sub.displayStatus === 'Completed'
+                        const subHold = sub.displayStatus === 'Hold'
+                        const subWip = sub.displayStatus === 'Work In Process'
+                        const subNotRequired = sub.displayStatus === 'Not Required'
+
+                        rows.push(
+                          <div key={`stage-11-sub-${sub.role}`} style={{
+                            margin: '0 0 5px 30px',
+                            padding: '6px 8px',
+                            borderRadius: 8,
+                            border: `1px solid ${subDone ? '#86efac' : subHold ? '#fcd34d' : subWip ? '#93c5fd' : '#cbd5e1'}`,
+                            background: subDone ? '#f0fdf4' : subHold ? '#fffbeb' : subWip ? '#eff6ff' : '#f8fafc',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}>
+                            <span style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: 3,
+                              background: subDone ? '#16a34a' : subHold ? '#d97706' : subWip ? '#2563eb' : '#94a3b8',
+                              flexShrink: 0,
+                            }} />
+                            <span style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: subDone ? '#166534' : subHold ? '#92400e' : subWip ? '#1d4ed8' : '#475569',
+                              flex: 1,
+                            }}>
+                              {sub.roleLabel}
+                            </span>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: subDone ? '#166534' : subHold ? '#92400e' : subWip ? '#1d4ed8' : '#64748b',
+                            }}>
+                              {subNotRequired ? 'Not Required' : subDone ? 'Done' : subHold ? 'Hold' : 'In Process'}
+                            </span>
+                          </div>,
+                        )
+                      })
+                    }
+                  }
+
+                  return rows
                 })}
               </div>
               {/* Advance button at bottom of stage panel */}
@@ -1903,7 +2228,11 @@ export default function BodyshopRepairPage() {
                     return (
                   <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
                     style={{ width: '100%', fontSize: 13 }}>
-                    {saving ? 'Saving…' : `✓ Stage ${flow.effectiveCurrentStage} Done → Stage ${flow.effectiveNextStage}`}
+                      {saving
+                        ? 'Saving…'
+                        : flow.effectiveCurrentStage === 10 && floorWorkStarted
+                          ? '✓ Mark Stage 10 Done (Floor already active)'
+                          : `✓ Stage ${flow.effectiveCurrentStage} Done → Stage ${flow.effectiveNextStage}`}
                   </button>
                     )
                   })()}
@@ -1966,7 +2295,7 @@ export default function BodyshopRepairPage() {
                         const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                         return (
                           <div style={{ fontSize: 15, fontWeight: 700, color: getGroupForStage(effectiveCurrentStage).color }}>
-                            Stage {effectiveCurrentStage} — {STAGE_LABELS[effectiveCurrentStage]}
+                            {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted)}
                           </div>
                         )
                       })()}
@@ -1989,7 +2318,7 @@ export default function BodyshopRepairPage() {
                               ? milestones.stage3Done
                               : milestones.stage4Done
                         : effectiveCurrentStage > num
-                      const isCur   = effectiveCurrentStage === num
+                      const isCur   = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted)
                       const grp     = getGroupForStage(num)
                       return (
                         <div key={num} style={{
@@ -2021,7 +2350,11 @@ export default function BodyshopRepairPage() {
                       return (
                     <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
                       style={{ marginTop: 16, width: '100%' }}>
-                      {saving ? 'Saving…' : `✓ Mark Stage ${flow.effectiveCurrentStage} Done → Move to Stage ${flow.effectiveNextStage}`}
+                      {saving
+                        ? 'Saving…'
+                        : flow.effectiveCurrentStage === 10 && floorWorkStarted
+                          ? '✓ Mark Stage 10 Done (Floor already active)'
+                          : `✓ Mark Stage ${flow.effectiveCurrentStage} Done → Move to Stage ${flow.effectiveNextStage}`}
                     </button>
                       )
                     })()
@@ -2992,39 +3325,122 @@ export default function BodyshopRepairPage() {
 
               {/* ── Floor ── */}
               {detailTab === 'floor' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {[
-                    { k: 'denter_name',   label: 'Denter Name' },
-                    { k: 'denter_code',   label: 'Denter Code' },
-                    { k: 'painter_name',  label: 'Painter Name' },
-                    { k: 'painter_code',  label: 'Painter Code' },
-                    { k: 'technician_name', label: 'Technician Name' },
-                    { k: 'technician_code', label: 'Technician Code' },
-                    { k: 'additional_approval', label: 'Additional Approval' },
-                    { k: 'floor_hold_reason',   label: 'Hold Reason' },
-                  ].map(({ k, label }) => (
-                    <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
-                      <input className="inp" value={(selected as any)[k] ?? ''}
-                        onChange={(e) => patch(k as keyof RepairCard, e.target.value)} />
-                    </label>
-                  ))}
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Floor Status</span>
-                    <select className="sel" value={selected.floor_status ?? 'work_inprocess'}
-                      onChange={(e) => patch('floor_status', e.target.value)}>
-                      <option value="work_inprocess">Work In Process</option>
-                      <option value="hold">Hold</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                  </label>
-                  {Object.keys(editPatch).length > 0 && (
-                    <div style={{ gridColumn: '1/-1' }}>
-                      <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
-                        {saving ? 'Saving…' : 'Save Floor'}
-                      </button>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, background: '#f8fafc' }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 2 }}>Stage 11 Parent Status</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{floorParentStatus}</div>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569' }}>
+                      Assigned roles: {floorRoleSnapshots.filter((r) => r.assigned).length} / {FLOOR_ROLES.length}
+                    </div>
+                  </div>
+
+                  {loadingFloorPrimary ? (
+                    <div className="empty-state">Loading Floor Assignment substages…</div>
+                  ) : (
+                    <div className="tbl-wrap scroll">
+                      <table className="tbl">
+                        <thead>
+                          <tr>
+                            <th>Role</th>
+                            <th>Assigned To</th>
+                            <th>Status</th>
+                            <th>IN TS</th>
+                            <th>OUT TS</th>
+                            <th>Done At</th>
+                            <th>Done By</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {floorRoleSnapshots.map((role) => (
+                            <tr key={role.role}>
+                              <td style={{ fontWeight: 700 }}>{role.roleLabel}</td>
+                              <td>
+                                {role.assigned
+                                  ? `${role.employeeName ?? '—'}${role.employeeCode ? ` (${role.employeeCode})` : ''}`
+                                  : '—'}
+                              </td>
+                              <td>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    padding: '2px 8px',
+                                    borderRadius: 999,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    border: role.displayStatus === 'Completed'
+                                      ? '1px solid #86efac'
+                                      : role.displayStatus === 'Hold'
+                                        ? '1px solid #fcd34d'
+                                        : role.displayStatus === 'Work In Process'
+                                          ? '1px solid #93c5fd'
+                                          : '1px solid #cbd5e1',
+                                    background: role.displayStatus === 'Completed'
+                                      ? '#f0fdf4'
+                                      : role.displayStatus === 'Hold'
+                                        ? '#fffbeb'
+                                        : role.displayStatus === 'Work In Process'
+                                          ? '#eff6ff'
+                                          : '#f8fafc',
+                                    color: role.displayStatus === 'Completed'
+                                      ? '#166534'
+                                      : role.displayStatus === 'Hold'
+                                        ? '#92400e'
+                                        : role.displayStatus === 'Work In Process'
+                                          ? '#1d4ed8'
+                                          : '#475569',
+                                  }}
+                                >
+                                  {role.displayStatus}
+                                </span>
+                              </td>
+                              <td>{fmt(role.inTs)}</td>
+                              <td>{fmt(role.outTs)}</td>
+                              <td>{fmt(role.doneAt)}</td>
+                              <td>{role.doneBy ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    {[
+                      { k: 'additional_approval', label: 'Additional Approval' },
+                      { k: 'floor_hold_reason', label: 'Hold Reason' },
+                    ].map(({ k, label }) => (
+                      <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+                        <input
+                          className="inp"
+                          value={(selected as any)[k] ?? ''}
+                          onChange={(e) => patch(k as keyof RepairCard, e.target.value)}
+                        />
+                      </label>
+                    ))}
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>Floor Status</span>
+                      <select
+                        className="sel"
+                        value={selected.floor_status ?? 'work_inprocess'}
+                        onChange={(e) => patch('floor_status', e.target.value)}
+                      >
+                        <option value="work_inprocess">Work In Process</option>
+                        <option value="hold">Hold</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </label>
+                    {Object.keys(editPatch).length > 0 && (
+                      <div style={{ gridColumn: '1/-1' }}>
+                        <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
+                          {saving ? 'Saving…' : 'Save Floor'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
