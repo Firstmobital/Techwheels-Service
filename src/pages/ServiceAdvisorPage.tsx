@@ -5,14 +5,12 @@ import {
   updateServiceAdvisorEntry,
   uploadServiceAdvisorEstimate,
   markServiceAdvisorInvoiceDone,
-  getDealerContext,
   getDealerScopeContext,
   generateComplaintLink,
   type ReceptionEntryRow,
 } from '../lib/api'
 import DateRangeFilter, { currentMonthRange, type DateRange, type DateRangePreset } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
-import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import Icon from '../components/Icon'
 import { buildSaFloorCompletedWaTemplate } from '../lib/waTemplates'
 
@@ -20,7 +18,6 @@ type RowDraft = {
   service_type: string
   jc_number: string
   km_reading: string
-  customer_type: '' | 'individual' | 'firm' | 'foc' | 'cash'
   remark: string
 }
 
@@ -55,7 +52,6 @@ const EMPTY_DRAFT: RowDraft = {
   service_type: '',
   jc_number: '',
   km_reading: '',
-  customer_type: '',
   remark: '',
 }
 
@@ -70,13 +66,6 @@ const SOURCE_TONE_MAP: Record<string, string> = {
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const QUERY_PAGE_SIZE = 1000
 const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
-const BODYSHOP_AUTO_STAGE_NAMES: Record<number, string> = {
-  1: 'Vehicle Receiving',
-  2: 'Receiving Photos',
-  3: 'Job Card',
-  4: 'Customer Group',
-}
-
 function toISTDate(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
@@ -270,75 +259,6 @@ function getServiceTypeForMessage(rowServiceType: string | null | undefined, dra
   return rowValue || 'Service'
 }
 
-function isValidCustomerType(value: string | null | undefined): value is RowDraft['customer_type'] {
-  const normalized = String(value ?? '').trim().toLowerCase()
-  return normalized === 'individual' || normalized === 'firm' || normalized === 'foc' || normalized === 'cash'
-}
-
-function getBodyshopAutoStage(params: {
-  customerType: string | null | undefined
-  hasKmReading: boolean
-  hasIntakePhoto: boolean
-  jcNumber: string | null | undefined
-}): number {
-  const hasCustomerType = isValidCustomerType(params.customerType)
-  const hasKmReading = params.hasKmReading
-  const hasPhoto = params.hasIntakePhoto
-  const hasJc = Boolean(String(params.jcNumber ?? '').trim())
-
-  if (!hasCustomerType || !hasKmReading) return 1
-  if (!hasPhoto) return 2
-  if (!hasJc) return 3
-  return 4
-}
-
-type BodyshopCardLite = {
-  id: number
-  reception_entry_id: number | null
-  job_card_no: string | null
-  reg_number: string | null
-  customer_type: string | null
-  current_stage: number | null
-  updated_at?: string | null
-  created_at?: string | null
-}
-
-function findMatchingBodyshopCard(row: ReceptionEntryRow, cards: BodyshopCardLite[]): BodyshopCardLite | undefined {
-  const rowJc = String(row.jc_number ?? '').trim().toUpperCase()
-  const rowReg = String(row.reg_number ?? '').trim().toUpperCase()
-  const candidates = cards.filter((card) => {
-    const cardJc = String(card.job_card_no ?? '').trim().toUpperCase()
-    const cardReg = String(card.reg_number ?? '').trim().toUpperCase()
-    if (rowJc && cardJc) return rowJc === cardJc
-    return rowReg && cardReg && rowReg === cardReg
-  })
-
-  const score = (card: BodyshopCardLite): number => {
-    const cardJc = String(card.job_card_no ?? '').trim().toUpperCase()
-    const cardReg = String(card.reg_number ?? '').trim().toUpperCase()
-    const exactJc = rowJc && cardJc && rowJc === cardJc ? 1000000000000 : 0
-    const exactReg = rowReg && cardReg && rowReg === cardReg ? 1000000000 : 0
-    const hasCustomerType = isValidCustomerType(card.customer_type) ? 1000000 : 0
-    const updatedTs = Number.isFinite(new Date(String(card.updated_at ?? '')).getTime())
-      ? new Date(String(card.updated_at ?? '')).getTime()
-      : 0
-    const createdTs = Number.isFinite(new Date(String(card.created_at ?? '')).getTime())
-      ? new Date(String(card.created_at ?? '')).getTime()
-      : 0
-    return exactJc + exactReg + hasCustomerType + updatedTs + createdTs
-  }
-
-  return candidates.sort((a, b) => score(b) - score(a))[0]
-}
-
-function sanitizeFileNamePart(raw: string): string {
-  const cleaned = String(raw ?? '')
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-  return cleaned || 'upload'
-}
-
 function isBodyshopServiceType(serviceType: string | null | undefined): boolean {
   return getCategoryForServiceType(serviceType) === 'bodyshop'
 }
@@ -353,7 +273,6 @@ function parseKmInput(value: string): number | null {
 
 export default function ServiceAdvisorPage() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
-  const bodyshopPhotoInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   const [rows, setRows] = useState<ReceptionEntryRow[]>([])
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
@@ -378,7 +297,6 @@ export default function ServiceAdvisorPage() {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [uploadingInvoiceId, setUploadingInvoiceId] = useState<number | null>(null)
-  const [uploadingBodyshopPhotosId, setUploadingBodyshopPhotosId] = useState<number | null>(null)
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>(DEFAULT_SERVICE_TYPE_OPTIONS)
   const [fuelTypeOptions, setFuelTypeOptions] = useState<string[]>([])
   const [completedJobCardNumbers, setCompletedJobCardNumbers] = useState<Set<string>>(new Set())
@@ -846,76 +764,9 @@ export default function ServiceAdvisorPage() {
         service_type: typeof row.service_type === 'string' ? row.service_type : '',
         jc_number: row.jc_number ?? '',
         km_reading: row.km_reading == null ? '' : String(row.km_reading),
-        customer_type: '',
         remark: row.remark ?? '',
       }
     })
-
-    const bodyshopRows = data.filter((row) => isBodyshopServiceType(row.service_type))
-    const receptionIds = bodyshopRows.map((row) => row.id)
-    if (bodyshopRows.length > 0 && receptionIds.length > 0) {
-      const cardsById = new Map<number, BodyshopCardLite>()
-
-      const { data: cardsByReception } = await supabase
-        .from('bodyshop_repair_cards')
-        .select('id, reception_entry_id, job_card_no, reg_number, customer_type, current_stage, updated_at, created_at')
-        .in('reception_entry_id', receptionIds)
-
-      ;((cardsByReception ?? []) as BodyshopCardLite[]).forEach((card) => {
-        cardsById.set(card.id, card)
-      })
-
-      const cards = Array.from(cardsById.values())
-      bodyshopRows.forEach((row) => {
-        const matched = findMatchingBodyshopCard(row, cards)
-        const customerType = String(matched?.customer_type ?? '').trim().toLowerCase()
-        if (isValidCustomerType(customerType)) {
-          mappedDrafts[row.id].customer_type = customerType
-        }
-      })
-
-      const photoCountByReceptionId = new Map<number, number>()
-      if (receptionIds.length > 0) {
-        const { data: photoRows } = await supabase
-          .from('bodyshop_intake_vehicle_photos')
-          .select('reception_entry_id')
-          .in('reception_entry_id', receptionIds)
-
-        ;((photoRows ?? []) as Array<{ reception_entry_id: number | null }>).forEach((item) => {
-          const receptionId = Number(item.reception_entry_id)
-          if (!Number.isFinite(receptionId)) return
-          const nextCount = (photoCountByReceptionId.get(receptionId) ?? 0) + 1
-          photoCountByReceptionId.set(receptionId, nextCount)
-        })
-      }
-
-      await Promise.all(
-        bodyshopRows.map(async (row) => {
-          const matched = findMatchingBodyshopCard(row, cards)
-          if (!matched?.id) return
-
-          const desiredStage = getBodyshopAutoStage({
-            customerType: mappedDrafts[row.id]?.customer_type,
-            hasKmReading: row.km_reading != null,
-            hasIntakePhoto: (photoCountByReceptionId.get(row.id) ?? 0) > 0,
-            jcNumber: row.jc_number,
-          })
-
-          const currentStage = Number(matched.current_stage ?? 1)
-          // Stages 1-4 are auto-managed from SA intake signals; stage >=5 is manual workflow and should not auto-regress.
-          const nextStage = currentStage > 4 ? currentStage : desiredStage
-          if (nextStage === currentStage || nextStage > 4) return
-
-          await supabase
-            .from('bodyshop_repair_cards')
-            .update({
-              current_stage: nextStage,
-              current_stage_name: BODYSHOP_AUTO_STAGE_NAMES[nextStage] ?? BODYSHOP_AUTO_STAGE_NAMES[1],
-            })
-            .eq('id', matched.id)
-        }),
-      )
-    }
 
     setServiceTypeOptions((prev) => mergeServiceTypes(prev, data.map((row) => row.service_type ?? '')))
 
@@ -1049,14 +900,9 @@ export default function ServiceAdvisorPage() {
 
     if (isBodyshopRow) {
       const jcNumber = String(draft.jc_number ?? '').trim().toUpperCase()
-      const customerType = String(draft.customer_type ?? '').trim().toLowerCase()
 
       if (!jcNumber) {
         setError('JC Number is required for Accident entries.')
-        return
-      }
-      if (!customerType) {
-        setError('Customer Type is required for Accident entries.')
         return
       }
     }
@@ -1079,25 +925,10 @@ export default function ServiceAdvisorPage() {
 
     if (isBodyshopRow && row) {
       const jcNumber = String(draft.jc_number ?? '').trim().toUpperCase()
-      const customerType = String(draft.customer_type ?? '').trim().toLowerCase()
-
-      const { count: intakePhotoCount } = await supabase
-        .from('bodyshop_intake_vehicle_photos')
-        .select('id', { count: 'exact', head: true })
-        .eq('reception_entry_id', row.id)
-
-      const desiredStage = getBodyshopAutoStage({
-        customerType,
-        hasKmReading: parseKmInput(draft.km_reading) != null,
-        hasIntakePhoto: (intakePhotoCount ?? 0) > 0,
-        jcNumber,
-      })
-
-      let existingCard: { id: number; current_stage: number | null } | null = null
 
       const byReceptionRes = await supabase
         .from('bodyshop_repair_cards')
-        .select('id, current_stage')
+        .select('id')
         .eq('reception_entry_id', row.id)
         .order('updated_at', { ascending: false })
         .order('created_at', { ascending: false })
@@ -1108,24 +939,17 @@ export default function ServiceAdvisorPage() {
         return
       }
 
-      existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number; current_stage: number | null }>)[0] ?? null
-
-      const existingStage = Number(existingCard?.current_stage ?? 1)
-      // Keep manual/progressed stages intact once card crosses stage 4.
-      const nextStage = existingStage > 4 ? existingStage : desiredStage
+      const existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number }>)[0] ?? null
 
       const cardPayload = {
         job_card_no: jcNumber,
         reg_number: row.reg_number,
         customer_name: row.owner_name ?? null,
         customer_phone: row.owner_phone ?? null,
-        customer_type: customerType,
         reception_entry_id: row.id,
         branch: row.branch ?? null,
         sa_employee_code: row.sa_employee_code ?? null,
         sa_name: row.sa_display_name ?? row.sa_name ?? null,
-        current_stage: nextStage,
-        current_stage_name: BODYSHOP_AUTO_STAGE_NAMES[nextStage] ?? BODYSHOP_AUTO_STAGE_NAMES[1],
       }
 
       if (existingCard?.id) {
@@ -1159,186 +983,6 @@ export default function ServiceAdvisorPage() {
     })
     showToast(`Saved ${rows.find((r) => r.id === id)?.reg_number || 'entry'}`)
     await loadRows()
-  }
-
-  async function handleBodyshopPhotoUpload(row: ReceptionEntryRow, files: FileList | null) {
-    if (!files || files.length === 0) return
-
-    const selected = Array.from(files)
-    if (selected.some((file) => !String(file.type ?? '').startsWith('image/'))) {
-      setError('Only image files are allowed for vehicle photos.')
-      return
-    }
-
-    setUploadingBodyshopPhotosId(row.id)
-    setError(null)
-
-    try {
-      const draft = drafts[row.id] ?? EMPTY_DRAFT
-      const jcNumber = String(draft.jc_number ?? row.jc_number ?? '').trim().toUpperCase()
-      const customerType = String(draft.customer_type ?? '').trim().toLowerCase()
-      if (!jcNumber) {
-        setError('JC Number is required before attaching Accident vehicle photos.')
-        return
-      }
-      if (!customerType) {
-        setError('Customer Type is required before attaching Accident vehicle photos.')
-        return
-      }
-
-      let repairCardId: number | null = null
-      const byReceptionRes = await supabase
-        .from('bodyshop_repair_cards')
-        .select('id, current_stage')
-        .eq('reception_entry_id', row.id)
-        .order('updated_at', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (byReceptionRes.error) {
-        setError(byReceptionRes.error.message)
-        return
-      }
-
-      const existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number; current_stage: number | null }>)[0] ?? null
-      if (existingCard?.id) {
-        repairCardId = existingCard.id
-      } else {
-        const draftKm = parseKmInput(draft.km_reading)
-        const nextStage = getBodyshopAutoStage({
-          customerType,
-          hasKmReading: draftKm != null,
-          hasIntakePhoto: false,
-          jcNumber,
-        })
-
-        const insertCardRes = await supabase
-          .from('bodyshop_repair_cards')
-          .insert({
-            job_card_no: jcNumber,
-            reg_number: row.reg_number,
-            customer_name: row.owner_name ?? null,
-            customer_phone: row.owner_phone ?? null,
-            customer_type: customerType,
-            reception_entry_id: row.id,
-            branch: row.branch ?? null,
-            sa_employee_code: row.sa_employee_code ?? null,
-            sa_name: row.sa_display_name ?? row.sa_name ?? null,
-            current_stage: nextStage,
-            current_stage_name: BODYSHOP_AUTO_STAGE_NAMES[nextStage] ?? BODYSHOP_AUTO_STAGE_NAMES[1],
-            overall_status: 'active',
-            received_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single()
-
-        if (insertCardRes.error || !insertCardRes.data?.id) {
-          setError(insertCardRes.error?.message ?? 'Unable to prepare bodyshop repair card before photo upload.')
-          return
-        }
-
-        repairCardId = insertCardRes.data.id
-      }
-
-      const dealerCtx = await getDealerContext()
-      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
-      const folder = `${dealerCode}/service-advisor-bodyshop-intake/${row.id}`
-
-      const { data: existingFiles, error: listError } = await supabase.storage
-        .from(AUTODOC_BUCKET)
-        .list(folder, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
-
-      if (listError) {
-        setError(listError.message)
-        return
-      }
-
-      const existingCount = (existingFiles ?? []).length
-      const remaining = 20 - existingCount
-      if (remaining <= 0) {
-        setError('Maximum 20 vehicle photos already uploaded for this Accident entry.')
-        return
-      }
-      if (selected.length > remaining) {
-        setError(`You can upload only ${remaining} more photo${remaining === 1 ? '' : 's'} (max 20).`)
-        return
-      }
-
-      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
-      const sessionRes = await supabase.auth.getSession()
-      const token = sessionRes.data.session?.access_token
-      if (!supabaseUrl || !token) {
-        setError('No active session for Drive offload request.')
-        return
-      }
-
-      for (const file of selected) {
-        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
-        const safeName = sanitizeFileNamePart(file.name || `photo.${ext}`)
-        const storagePath = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${safeName}`
-
-        const uploadRes = await supabase.storage
-          .from(AUTODOC_BUCKET)
-          .upload(storagePath, file, { upsert: false, contentType: file.type || 'application/octet-stream' })
-
-        if (uploadRes.error) {
-          setError(uploadRes.error.message)
-          return
-        }
-
-        const { data: photoMeta, error: photoMetaErr } = await supabase
-          .from('bodyshop_intake_vehicle_photos')
-          .insert({
-            dealer_code: dealerCode,
-            repair_card_id: repairCardId,
-            reception_entry_id: row.id,
-            job_card_no: jcNumber,
-            reg_number: row.reg_number,
-            customer_type: customerType,
-            storage_bucket: AUTODOC_BUCKET,
-            storage_path: storagePath,
-            file_name: file.name,
-            content_type: file.type || null,
-            file_size_bytes: file.size,
-          })
-          .select('id')
-          .single()
-
-        if (photoMetaErr || !photoMeta?.id) {
-          setError(photoMetaErr?.message ?? 'Failed to persist bodyshop intake photo metadata.')
-          return
-        }
-
-        const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            resource_type: 'bodyshop_intake_photo',
-            resource_id: photoMeta.id,
-            bucket_id: AUTODOC_BUCKET,
-            object_name: storagePath,
-            file_type: 'intake_photo',
-            file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
-          }),
-        })
-
-        const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
-        if (!driveRes.ok || drivePayload?.error) {
-          setError(drivePayload?.error || `Universal drive upload failed (${driveRes.status})`)
-          return
-        }
-      }
-
-      const nextCount = existingCount + selected.length
-      showToast(`Uploaded ${selected.length} photo${selected.length === 1 ? '' : 's'} (${nextCount}/20)`)
-      setDirtyRowIds((prev) => new Set([...prev, row.id]))
-      await loadRows()
-    } finally {
-      setUploadingBodyshopPhotosId(null)
-    }
   }
 
   async function handleEstimateUpload(id: number, file: File) {
@@ -1939,7 +1583,6 @@ export default function ServiceAdvisorPage() {
                     <th>Model</th>
                     <th>Service Type</th>
                     <th>JC Number</th>
-                    <th>Customer Type</th>
                     <th>Owner</th>
                     <th>Remark</th>
                     <th>Estimate</th>
@@ -1955,9 +1598,8 @@ export default function ServiceAdvisorPage() {
                     const effectiveServiceType = String(draft.service_type || row.service_type || '')
                     const isBodyshopRow = isBodyshopServiceType(effectiveServiceType)
                     const isDirty = dirtyRowIds.has(row.id)
-                    const hasCustomerType = isValidCustomerType(draft.customer_type)
                     const hasJcNumber = Boolean(String(draft.jc_number ?? '').trim())
-                    const isBodyshopPending = isBodyshopRow && (!hasCustomerType || !hasJcNumber)
+                    const isBodyshopPending = isBodyshopRow && !hasJcNumber
                     const toneColor = getSourceToneColor(row.source)
                     const isCompleted = completedJobCardNumbers.has((row.jc_number ?? '').toUpperCase())
                     const canMarkDone = canUpdateRow(row) && isCompleted
@@ -2018,23 +1660,6 @@ export default function ServiceAdvisorPage() {
                             )
                           })()}
                         </td>
-                        <td>
-                          {isBodyshopRow ? (
-                            <select
-                              value={draft.customer_type}
-                              onChange={(event) => patchDraft(row.id, { customer_type: event.target.value as RowDraft['customer_type'] })}
-                              className="sel sel--service-type"
-                            >
-                              <option value="">Select customer type</option>
-                              <option value="individual">Individual</option>
-                              <option value="firm">Firm</option>
-                              <option value="foc">FOC</option>
-                              <option value="cash">Cash</option>
-                            </select>
-                          ) : (
-                            <span className="td-muted-nowrap">-</span>
-                          )}
-                        </td>
                         <td className="td-owner">
                           <div className="strong owner-name">{row.owner_name || '-'}</div>
                           <div className="mono owner-phone">{row.owner_phone || '-'}</div>
@@ -2050,30 +1675,7 @@ export default function ServiceAdvisorPage() {
                         </td>
                         <td className="td-estimate">
                           {isBodyshopRow ? (
-                            <div className="estimate-col">
-                              <button
-                                type="button"
-                                onClick={() => bodyshopPhotoInputRefs.current[row.id]?.click()}
-                                disabled={uploadingBodyshopPhotosId === row.id}
-                                className="tbtn tbtn--accent"
-                              >
-                                <Icon name="upload" size={13} strokeWidth={2} />
-                                {uploadingBodyshopPhotosId === row.id ? 'Uploading...' : 'Attach photos (max 20)'}
-                              </button>
-                              <input
-                                ref={(el) => {
-                                  bodyshopPhotoInputRefs.current[row.id] = el
-                                }}
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                className="hidden"
-                                onChange={(event) => {
-                                  void handleBodyshopPhotoUpload(row, event.target.files)
-                                  event.target.value = ''
-                                }}
-                              />
-                            </div>
+                            <span className="td-muted-nowrap">Managed in Bodyshop Repair</span>
                           ) : (
                             <div className="estimate-col">
                               {row.estimate_storage_path ? (
