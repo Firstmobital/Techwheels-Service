@@ -25,6 +25,7 @@ import { Icon } from './components/Icon'
 import ComplaintsPage from './pages/ComplaintsPage'
 import ComplaintPortalPage from './pages/ComplaintPortalPage'
 import EWReminderPage from './pages/EWReminderPage'
+import ServiceBookingPage from './pages/ServiceBookingPage'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
@@ -51,6 +52,7 @@ const NAV_ITEMS = [
   { to: '/complaints', label: 'Complaints', icon: 'complaints' },
   { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
   { to: '/ew-reminder', label: 'EW Reminder', icon: 'shield' },
+  { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
 ]
 type ModuleName =
   | 'job_cards'
@@ -73,7 +75,7 @@ type ModuleName =
   | 'bodyshop_repair'
   | 'ew_reminder'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking'
 
 interface PermissionRow {
   module_name: string
@@ -95,6 +97,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/complaints': ['complaints'],
   '/bodyshop-repair': ['bodyshop_repair'],
   '/ew-reminder': ['ew_reminder'],
+  '/service-booking': ['service_booking'],
 }
 
 type NavItem = {
@@ -431,6 +434,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/complaints')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/complaints'])
   if (pathname.startsWith('/bodyshop-repair')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/bodyshop-repair'])
   if (pathname.startsWith('/ew-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/ew-reminder'])
+  if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
   if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
   return false
@@ -930,6 +934,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/ew-reminder']}>
                       <EWReminderPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/service-booking"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/service-booking']}>
+                      <ServiceBookingPage />
                     </RequireAccess>
                   )}
                 />
