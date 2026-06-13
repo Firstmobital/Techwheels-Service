@@ -173,7 +173,8 @@ Deno.serve(async (req) => {
     const mode      = url.searchParams.get('hub.mode')
     const token     = url.searchParams.get('hub.verify_token')
     const challenge = url.searchParams.get('hub.challenge')
-    const verifyToken = (config?.wa_verify_token as string) || 'techwheels_wa_2026'
+    const verifyToken = config?.wa_verify_token as string
+    if (!verifyToken) return new Response('Verify token not configured', { status: 403 })
     if (mode === 'subscribe' && token === verifyToken) {
       return new Response(challenge, { status: 200 })
     }
