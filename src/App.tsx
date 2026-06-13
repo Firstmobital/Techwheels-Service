@@ -38,7 +38,7 @@ const NAV_ITEMS = [
   { to: '/reception', label: 'Reception', icon: 'reception' },
   { to: '/service-advisor', label: 'Service Advisor', icon: 'admin' },
   { to: '/floor-incharge', label: 'Floor Incharge', icon: 'floor' },
-  { to: '/sa-tracker', label: 'SA Tracker', icon: 'person' },
+  { to: '/sa-tracker', label: 'SA Tracker', icon: 'user' },
   { to: '/bodyshop-tracker', label: 'Bodyshop', icon: 'floor' },
   { to: '/bodyshop-floor', label: 'Bodyshop Floor', icon: 'floor' },
   { to: '/technician', label: 'Technician', icon: 'tech' },
@@ -50,7 +50,7 @@ const NAV_ITEMS = [
 
   { to: '/complaints', label: 'Complaints', icon: 'complaints' },
   { to: '/bodyshop-repair', label: 'Repair Tracker', icon: 'floor' },
-  { to: '/ew-reminder', label: 'EW Reminder', icon: '🛡️' },
+  { to: '/ew-reminder', label: 'EW Reminder', icon: 'shield' },
 ]
 type ModuleName =
   | 'job_cards'
