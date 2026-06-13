@@ -77,7 +77,7 @@ interface ServiceDataRow {
   last_service_date: string | null
 }
 
-type Tab = 'dashboard' | 'campaigns' | 'conversations' | 'settings' | 'test'
+type Tab = 'dashboard' | 'campaigns' | 'conversations' | 'followups' | 'settings' | 'test'
 
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   Open:       { bg: '#eff6ff', color: '#2563eb' },
@@ -142,20 +142,32 @@ export default function WAAgentPage() {
   const [testChat, setTestChat] = useState<Array<{role:'user'|'agent'; text:string; ts:string}>>([])
   const [testLoading, setTestLoading] = useState(false)
   const [testConvId, setTestConvId] = useState<number|null>(null)
+  // Follow-up state
+  const [followupSteps, setFollowupSteps] = useState<Array<{id:number;day_offset:number;message_template:string;sort_order:number;is_active:boolean}>>([])
+  const [followupQueue, setFollowupQueue] = useState<Array<{id:number;phone:string;customer_name:string;model:string;scheduled_at:string;status:string;skip_reason:string;wa_followup_steps:{message_template:string;day_offset:number}}>>([])
+  const [enrollingCamp, setEnrollingCamp] = useState<number|null>(null)
+  const [followupFilter, setFollowupFilter] = useState('pending')
+  const [editingStep, setEditingStep] = useState<number|null>(null)
+  const [stepDraft, setStepDraft] = useState('')
+  const [savingStep, setSavingStep] = useState(false)
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => { void loadAll() }, [])
   useEffect(() => { if (selectedConv) void loadMessages(selectedConv.id) }, [selectedConv])
 
   async function loadAll() {
-    const [cfgRes, campRes, convRes] = await Promise.all([
+    const [cfgRes, campRes, convRes, stepsRes, queueRes] = await Promise.all([
       supabase.from('wa_agent_config').select('*').eq('id', 1).single(),
       supabase.from('wa_campaigns').select('*').order('created_at', { ascending: false }),
       supabase.from('wa_conversations').select('*').order('last_message_at', { ascending: false }).limit(100),
+      supabase.from('wa_followup_steps').select('*').eq('sequence_id', 1).order('sort_order'),
+      supabase.from('wa_followup_queue').select('*, wa_followup_steps!step_id(message_template,day_offset)').order('scheduled_at', { ascending: false }).limit(200),
     ])
     if (cfgRes.data)  setConfig(cfgRes.data as AgentConfig)
     if (campRes.data) setCampaigns(campRes.data as Campaign[])
     if (convRes.data) setConversations(convRes.data as Conversation[])
+    if (stepsRes.data) setFollowupSteps(stepsRes.data as typeof followupSteps)
+    if (queueRes.data) setFollowupQueue(queueRes.data as typeof followupQueue)
   }
 
   async function loadMessages(convId: number) {
@@ -416,9 +428,9 @@ export default function WAAgentPage() {
         <span style={{ fontSize: '1.2rem' }}>🤖</span>
         <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b' }}>WA AI Agent</span>
         <div style={{ display: 'flex', gap: '0.2rem', background: '#f1f5f9', borderRadius: '8px', padding: '0.25rem', marginLeft: '0.5rem' }}>
-          {(['dashboard', 'campaigns', 'conversations', 'settings', 'test'] as Tab[]).map(t => (
+          {(['dashboard', 'campaigns', 'conversations', 'followups', 'settings', 'test'] as Tab[]).map(t => (
             <button key={t} style={TAB_STYLE(t)} onClick={() => setTab(t)}>
-              {t === 'dashboard' ? '📊 Dashboard' : t === 'campaigns' ? '📣 Campaigns' : t === 'conversations' ? '💬 Inbox' : t === 'test' ? '🧪 Test AI' : '⚙️ Settings'}
+              {t === 'dashboard' ? '📊 Dashboard' : t === 'campaigns' ? '📣 Campaigns' : t === 'conversations' ? '💬 Inbox' : t === 'followups' ? '🔁 Follow-ups' : t === 'test' ? '🧪 Test AI' : '⚙️ Settings'}
             </button>
           ))}
         </div>
@@ -764,6 +776,202 @@ export default function WAAgentPage() {
                 <div style={{ fontWeight: 600 }}>Select a conversation</div>
               </div>
             )}
+          </div>
+        )}
+
+
+        {/* ══ FOLLOW-UPS ══ */}
+        {tab === 'followups' && (
+          <div>
+            {/* ── Header ──────────────────────────────────────────────── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>🔁 Automated Follow-up & Reminders</span>
+              <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#16a34a', padding: '0.2rem 0.6rem', borderRadius: '12px', fontWeight: 600 }}>Generates 20–40% more bookings</span>
+            </div>
+
+            {/* ── How it works banner ──────────────────────────────────── */}
+            <div style={{ background: 'linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%)', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '0.85rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: '#1e40af' }}>
+              <strong>How it works:</strong> When you run a campaign, click <em>Enroll in Follow-up</em> — the AI automatically sends Day 1 → Day 3 → Day 7 reminders to customers who haven't booked yet. Once a customer books, all pending messages are skipped.
+            </div>
+
+            {/* ── Message Sequence Config ──────────────────────────────── */}
+            <Section title="📝 Message Sequence (Edit Templates)">
+              {followupSteps.map(step => (
+                <div key={step.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem', marginBottom: '0.65rem', background: step.is_active ? '#fff' : '#f8fafc' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+                    <span style={{ background: '#2563eb', color: '#fff', borderRadius: '20px', padding: '0.15rem 0.55rem', fontSize: '0.72rem', fontWeight: 700 }}>Day {step.day_offset}</span>
+                    {!step.is_active && <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>DISABLED</span>}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem' }}>
+                      <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.72rem' }}
+                        onClick={() => { setEditingStep(step.id); setStepDraft(step.message_template) }}>
+                        ✏️ Edit
+                      </button>
+                      <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.72rem', color: step.is_active ? '#ef4444' : '#16a34a' }}
+                        onClick={async () => {
+                          await supabase.from('wa_followup_steps').update({ is_active: !step.is_active }).eq('id', step.id)
+                          await loadAll()
+                        }}>
+                        {step.is_active ? '⏸ Disable' : '▶ Enable'}
+                      </button>
+                    </div>
+                  </div>
+                  {editingStep === step.id ? (
+                    <div>
+                      <textarea className="inp" rows={4} style={{ fontSize: '0.78rem', fontFamily: 'monospace', width: '100%', resize: 'vertical' }}
+                        value={stepDraft} onChange={e => setStepDraft(e.target.value)} />
+                      <div style={{ fontSize: '0.7rem', color: '#64748b', margin: '0.3rem 0 0.5rem' }}>
+                        Variables: <code>{'{{name}}'}</code> <code>{'{{model}}'}</code> <code>{'{{reg_no}}'}</code> <code>{'{{branches}}'}</code> <code>{'{{agent}}'}</code>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button className="btn btn--primary btn--sm" style={{ fontSize: '0.75rem' }} disabled={savingStep}
+                          onClick={async () => {
+                            setSavingStep(true)
+                            await supabase.from('wa_followup_steps').update({ message_template: stepDraft }).eq('id', step.id)
+                            setEditingStep(null); setSavingStep(false); await loadAll()
+                          }}>
+                          {savingStep ? 'Saving…' : '💾 Save'}
+                        </button>
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.75rem' }} onClick={() => setEditingStep(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.77rem', color: '#374151', whiteSpace: 'pre-wrap', background: '#f8fafc', padding: '0.5rem 0.65rem', borderRadius: '6px', lineHeight: 1.5 }}>
+                      {step.message_template}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </Section>
+
+            {/* ── Enroll Campaign ─────────────────────────────────────── */}
+            <Section title="🚀 Enroll Campaign in Follow-up Sequence">
+              {campaigns.filter(c => ['Completed','Running'].includes(c.status)).length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No completed campaigns yet. Run a campaign first, then enroll here.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {campaigns.filter(c => ['Completed','Running'].includes(c.status)).map(camp => (
+                    <div key={camp.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>{camp.name}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                          {camp.sent_count || 0} sent · {camp.booked_count || 0} booked · {camp.status}
+                        </div>
+                      </div>
+                      <button className="btn btn--primary btn--sm" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                        disabled={enrollingCamp === camp.id}
+                        onClick={async () => {
+                          setEnrollingCamp(camp.id)
+                          const { data } = await supabase.auth.getSession()
+                          const token = data.session?.access_token
+                          const res = await fetch(`https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-followup-cron`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ enroll_campaign_id: camp.id, sequence_id: 1 }),
+                          })
+                          const result = await res.json()
+                          setEnrollingCamp(null)
+                          setToast(result.error ? `❌ ${result.error}` : `✅ Enrolled ${result.enrolled || 0} contacts — Day 1/3/7 follow-ups scheduled!`)
+                          await loadAll()
+                        }}>
+                        {enrollingCamp === camp.id ? '⏳ Enrolling…' : '🔁 Enroll Follow-ups'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            {/* ── Queue Stats ──────────────────────────────────────────── */}
+            <Section title="📊 Follow-up Queue">
+              {(() => {
+                const pending  = followupQueue.filter(q => q.status === 'pending').length
+                const sent     = followupQueue.filter(q => q.status === 'sent').length
+                const skipped  = followupQueue.filter(q => q.status === 'skipped').length
+                const failed   = followupQueue.filter(q => q.status === 'failed').length
+                return (
+                  <div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                      {[
+                        { label: 'Pending', val: pending, color: '#f59e0b', bg: '#fffbeb' },
+                        { label: 'Sent', val: sent, color: '#16a34a', bg: '#dcfce7' },
+                        { label: 'Skipped (Booked)', val: skipped, color: '#64748b', bg: '#f1f5f9' },
+                        { label: 'Failed', val: failed, color: '#dc2626', bg: '#fee2e2' },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.color}33`, borderRadius: '8px', padding: '0.5rem 0.85rem', textAlign: 'center', minWidth: '80px' }}>
+                          <div style={{ fontWeight: 800, fontSize: '1.3rem', color: s.color }}>{s.val}</div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b' }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Filter bar */}
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                      {['all','pending','sent','skipped','failed'].map(f => (
+                        <button key={f} onClick={() => setFollowupFilter(f)}
+                          style={{ padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid #e2e8f0', cursor: 'pointer', fontSize: '0.72rem',
+                            background: followupFilter === f ? '#2563eb' : '#f8fafc', color: followupFilter === f ? '#fff' : '#475569' }}>
+                          {f.charAt(0).toUpperCase()+f.slice(1)}
+                        </button>
+                      ))}
+                      <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto', fontSize: '0.72rem' }} onClick={() => loadAll()}>🔄 Refresh</button>
+                    </div>
+                    {/* Queue table */}
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc' }}>
+                            {['Customer','Phone','Vehicle','Day','Scheduled At','Status',''].map(h => (
+                              <th key={h} style={{ padding: '0.4rem 0.6rem', textAlign: 'left', color: '#64748b', fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {followupQueue
+                            .filter(q => followupFilter === 'all' || q.status === followupFilter)
+                            .slice(0, 50)
+                            .map(q => {
+                              const statusColor = q.status === 'pending' ? '#f59e0b' : q.status === 'sent' ? '#16a34a' : q.status === 'skipped' ? '#94a3b8' : '#dc2626'
+                              const scheduledDate = new Date(q.scheduled_at)
+                              const isPast = scheduledDate < new Date()
+                              return (
+                                <tr key={q.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '0.4rem 0.6rem' }}>{q.customer_name || '—'}</td>
+                                  <td style={{ padding: '0.4rem 0.6rem', color: '#475569' }}>{q.phone}</td>
+                                  <td style={{ padding: '0.4rem 0.6rem' }}>{q.model || '—'}</td>
+                                  <td style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>
+                                    <span style={{ background: '#dbeafe', color: '#1d4ed8', borderRadius: '20px', padding: '0.1rem 0.45rem', fontWeight: 700 }}>
+                                      D{q.wa_followup_steps?.day_offset ?? '?'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.6rem', color: isPast && q.status === 'pending' ? '#dc2626' : '#475569' }}>
+                                    {scheduledDate.toLocaleDateString('en-IN', { day:'numeric', month:'short' })} {scheduledDate.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
+                                    {isPast && q.status === 'pending' && <span style={{ fontSize: '0.65rem', color: '#dc2626' }}> (overdue)</span>}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.6rem' }}>
+                                    <span style={{ color: statusColor, fontWeight: 600, textTransform: 'capitalize' }}>{q.status}</span>
+                                    {q.skip_reason && <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{q.skip_reason}</div>}
+                                  </td>
+                                  <td style={{ padding: '0.4rem 0.6rem' }}>
+                                    {q.status === 'pending' && (
+                                      <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.68rem', color: '#dc2626' }}
+                                        onClick={async () => {
+                                          await supabase.from('wa_followup_queue').update({ status: 'skipped', skip_reason: 'manual_cancel' }).eq('id', q.id)
+                                          await loadAll()
+                                        }}>Cancel</button>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                        </tbody>
+                      </table>
+                      {followupQueue.filter(q => followupFilter === 'all' || q.status === followupFilter).length === 0 && (
+                        <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem', margin: '1.5rem 0' }}>No follow-ups in this view. Enroll a campaign above to get started.</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+            </Section>
           </div>
         )}
 
