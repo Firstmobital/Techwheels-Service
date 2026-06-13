@@ -31,39 +31,44 @@ async function getAIReply(
 
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const branches = (config.available_branches as string[])?.join(', ') || 'Sitapura, Ajmer Road, Shahpura'
+  const stage = conv.stage as string || 'intro'
+  const custName = (conv.customer_name as string) || 'Valued Customer'
 
-  // Strong, structured system prompt that drives toward booking
-  const systemPrompt = `You are ${config.agent_name}, a service booking agent for ${config.business_name} (Tata Motors authorised dealer in Jaipur).
+  // Use admin-configurable system prompt from DB as the base
+  const basePrompt = (config.system_prompt as string) || `You are ${config.agent_name || 'Riya'}, a service booking agent for ${config.business_name || 'Techwheels'} (Tata Motors authorised dealer in Jaipur).`
+
+  const systemPrompt = `${basePrompt}
 
 TODAY: ${today}
-WORKING HOURS: ${config.working_hours}
+WORKING HOURS: ${config.working_hours || 'Mon-Sat 9AM-6PM'}
 BRANCHES: ${branches}
 
 CUSTOMER DETAILS:
-- Name: ${conv.customer_name || 'Customer'}
+- Name: ${custName}
 - Vehicle: ${conv.model || 'their vehicle'} | Reg: ${conv.reg_number || 'not provided'}
-- Current stage: ${conv.stage}
-- Preferred date so far: ${conv.preferred_date || 'not set'}
+- Current stage: ${stage}
+- Preferred date so far: ${conv.preferred_date ? String(conv.preferred_date).split('T')[0] : 'not set'}
 - Preferred branch: ${conv.preferred_branch || 'not set'}
 
 YOUR GOAL: Get the customer to confirm a service appointment. Follow this flow:
-STAGE intro → Ask which service they need (free/paid/accidental) + preferred date
-STAGE collecting → Confirm date, time slot (morning 9-12 / afternoon 12-3 / evening 3-6), and branch
-STAGE confirming → Repeat back all details and ask customer to reply YES to confirm
+STAGE intro → Greet warmly, mention their vehicle, ask what type of service they need + preferred date
+STAGE collecting → You have a service need. Now confirm: exact date (suggest specific day), time slot (morning 9-12 / afternoon 12-3 / evening 3-6), and which branch (${branches})
+STAGE confirming → Summarise ALL details (date, time, branch, vehicle) and ask customer to reply *YES* to confirm
 
 STRICT RULES:
 1. Keep every reply under 80 words. Use WhatsApp formatting (*bold* for key info).
-2. Always suggest specific dates (e.g. "How about *Monday June 16*?") — never be vague.
-3. If customer says YES/confirm/haan/theek hai → immediately say booking is being confirmed.
-4. If customer says NO/stop/band karo/not interested → politely close.
-5. Speak in Hinglish (mix of Hindi + English) — friendly and warm.
-6. Never make up prices or availability beyond what you know.
-7. ALWAYS move the conversation forward — never just ask open-ended questions.
+2. Always suggest specific dates — never say "any time". E.g. "How about *Monday, 16 June*?"
+3. If customer says YES/confirm/haan/theek hai/book karo → say booking is being confirmed RIGHT NOW.
+4. If customer says NO/stop/band karo → politely close the conversation.
+5. Speak in Hinglish (friendly mix of Hindi + English) — warm and professional.
+6. NEVER make up prices or services not in our menu.
+7. ALWAYS move forward — never just ask open-ended questions.
+8. Do NOT repeat yourself — check conversation history before asking for info already given.
 
-${(conv.stage as string) === 'intro' ? 'START by warmly greeting them and mentioning their vehicle is due for service, then ask about their preferred date.' : ''}
-${(conv.stage as string) === 'collecting' ? 'You have a date preference. Now confirm the time slot and branch.' : ''}
-${(conv.stage as string) === 'confirming' ? 'Repeat the full booking summary and ask customer to reply YES to confirm.' : ''}
-${(conv.stage as string) === 'booked' ? 'Booking is done. Just warmly remind them of the appointment details.' : ''}`
+${stage === 'intro' ? 'You are at STAGE INTRO: Warmly greet them by name, mention their vehicle is due for service, and ask what brings them in (free/paid/accidental).' : ''}
+${stage === 'collecting' ? 'You are at STAGE COLLECTING: You have some info already — DO NOT ask for what you already have. Collect any missing: date, time slot, or branch.' : ''}
+${stage === 'confirming' ? 'You are at STAGE CONFIRMING: Repeat the FULL booking summary clearly and ask customer to reply YES to confirm. Be specific about date, time, branch, and vehicle.' : ''}
+${stage === 'booked' ? 'Booking is DONE. Warmly remind them of their appointment. Wish them well.' : ''}`
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -78,12 +83,12 @@ ${(conv.stage as string) === 'booked' ? 'Booking is done. Just warmly remind the
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: 200, temperature: 0.75 }),
+      body: JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: 200, temperature: 0.7 }),
     })
     const data = await res.json()
     if (data.error) {
       console.error('OpenAI error:', JSON.stringify(data.error))
-      return "Ek second, hamare service advisor aapko jaldi call karenge! 🙏"
+      return "Ek second ruko — hamare service advisor aapko jaldi call karenge! 🙏"
     }
     return data.choices?.[0]?.message?.content?.trim() || "Thank you! We'll be in touch soon. 🙏"
   } catch (e) {
@@ -99,7 +104,8 @@ async function extractBookingDetails(
 ): Promise<{ date: string | null; time: string | null; branch: string | null; confirmed: boolean; stage: string } | null> {
   if (!apiKey) return null
 
-  const transcript = history.slice(-10).map(m =>
+  const todayStr = new Date().toISOString().split('T')[0]
+  const transcript = history.slice(-12).map(m =>
     `${m.direction === 'inbound' ? 'Customer' : 'Agent'}: ${m.body}`
   ).join('\n')
 
@@ -112,23 +118,25 @@ async function extractBookingDetails(
         messages: [
           {
             role: 'system',
-            content: `Analyze this WhatsApp service booking conversation. Extract booking details and determine the stage.
-Return JSON ONLY with these fields:
+            content: `Analyze this WhatsApp service booking conversation. Extract booking details.
+Return ONLY valid JSON with these fields:
 {
   "date": "YYYY-MM-DD or null",
-  "time": "HH:MM or null (24h format)",
-  "branch": "branch name or null",
+  "time": "HH:MM or null (24h, e.g. '09:00' for morning, '13:00' for afternoon, '15:00' for evening)",
+  "branch": "exact branch name or null",
   "confirmed": true or false,
   "stage": "intro" | "collecting" | "confirming" | "booked"
 }
 
-Rules:
-- confirmed=true ONLY if customer explicitly said YES/confirm/haan/theek hai/book it to a specific date
-- stage=booked ONLY if customer has confirmed AND agent has acknowledged the booking
-- stage=confirming if agent has asked for YES confirmation and customer hasn't replied yet
-- stage=collecting if date/time/branch are being discussed
-- stage=intro if conversation just started or no specifics yet
-- For date: interpret "Monday", "kal", "parso" relative to today ${new Date().toISOString().split('T')[0]}`,
+RULES:
+- confirmed=true ONLY if customer explicitly replied YES/confirm/haan/theek hai/bilkul/book karo to a specific proposed appointment
+- stage=booked ONLY if confirmed=true AND agent has sent a booking confirmation message
+- stage=confirming if agent has stated full details and asked for YES, customer hasn't replied YES yet
+- stage=collecting if date/time/branch are still being discussed
+- stage=intro if just started or no booking specifics yet
+- For relative dates: interpret "Monday" "kal" "parso" relative to today ${todayStr}
+- For time: "morning/subah" = "09:00", "afternoon/dopahar" = "13:00", "evening/shaam" = "15:00"
+- For branch: look for "Sitapura", "Ajmer Road"/"Ajmer", "Shahpura" mentions`,
           },
           { role: 'user', content: transcript },
         ],
@@ -138,6 +146,10 @@ Rules:
       }),
     })
     const data = await res.json()
+    if (data.error) {
+      console.error('extractBookingDetails OpenAI error:', JSON.stringify(data.error))
+      return null
+    }
     const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}')
     return parsed
   } catch (e) {
@@ -149,14 +161,23 @@ Rules:
 // ─── Normalize phone: strip country code for DB lookup ───────────────────────
 function normalizePhone(rawPhone: string): { e164: string; local10: string } {
   const digits = rawPhone.replace(/\D/g, '')
-  // Meta sends 91XXXXXXXXXX (12 digits with India code) or just 10 digits
   const local10 = digits.length === 12 && digits.startsWith('91')
     ? digits.slice(2)
     : digits.length === 10
       ? digits
       : digits
-  const e164 = digits.length === 12 && digits.startsWith('91') ? digits : `91${digits}`
+  const e164 = digits.length >= 11 && digits.startsWith('91') ? digits : `91${digits}`
   return { e164, local10 }
+}
+
+// ─── Safe time parser: ensures HH:MM:SS format for PostgreSQL time column ────
+function safeBookingTime(rawTime: string | null): string | null {
+  if (!rawTime) return null
+  const match = rawTime.match(/^(\d{1,2}):?(\d{2})?/)
+  if (!match) return null
+  const hh = match[1].padStart(2, '0')
+  const mm = (match[2] || '00').padStart(2, '0')
+  return `${hh}:${mm}:00`
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -183,8 +204,7 @@ Deno.serve(async (req) => {
 
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
 
-  // Always return 200 to Meta immediately to prevent retries
-  // Parse payload
+  // Parse payload first — always return 200 to Meta to prevent retries
   let payload: Record<string, unknown>
   try { payload = await req.json() } catch {
     return new Response('OK', { status: 200 })
@@ -198,7 +218,7 @@ Deno.serve(async (req) => {
   const openaiKey   = config.openai_api_key as string
 
   if (!metaPhoneId || !metaToken) {
-    console.error('Meta credentials not set in wa_agent_config — configure in WA Agent Settings')
+    console.error('Meta credentials not set — configure in WA Agent Settings')
     return new Response('OK', { status: 200 })
   }
 
@@ -208,7 +228,7 @@ Deno.serve(async (req) => {
   const value   = changes?.value as Record<string, unknown>
   const msgs    = value?.messages as unknown[]
 
-  // Not a message event (could be status/delivery update) — ignore
+  // Not a message event (status/delivery update) — ignore
   if (!msgs?.length) return new Response('OK', { status: 200 })
 
   const msg = msgs[0] as Record<string, unknown>
@@ -221,8 +241,15 @@ Deno.serve(async (req) => {
 
   if (!messageText) return new Response('OK', { status: 200 })
 
+  // ── DEDUPLICATION: Check if this Meta message was already processed ────────
+  const { data: dupCheck } = await sb.from('wa_messages')
+    .select('id').eq('wa_message_id', waMessageId).limit(1)
+  if (dupCheck && dupCheck.length > 0) {
+    console.log(`Duplicate webhook for wa_message_id=${waMessageId} — skipping`)
+    return new Response('OK', { status: 200 })
+  }
+
   // ── Get or create conversation ────────────────────────────────────────────
-  // Try both 10-digit and E164 (12-digit) formats in DB
   const { data: convArr } = await sb.from('wa_conversations')
     .select('*')
     .or(`phone.eq.${fromPhone10},phone.eq.${fromPhoneE164}`)
@@ -232,7 +259,7 @@ Deno.serve(async (req) => {
   let conv = convArr?.[0] as Record<string, unknown> | undefined
 
   if (!conv) {
-    // Look up customer in all_service_data — try both formats
+    // Look up customer in all_service_data by phone
     const { data: custArr } = await sb.from('all_service_data')
       .select('id,cust_first_name,cust_last_name,registration_no,ppl,scheduled_next_service_date,last_service_date')
       .or(`cust_mobile_no.eq.${fromPhone10},cust_mobile_no.eq.${fromPhoneE164}`)
@@ -240,11 +267,11 @@ Deno.serve(async (req) => {
     const cust = custArr?.[0] as Record<string, unknown> | undefined
 
     const custName = cust
-      ? `${cust.cust_first_name || ''} ${cust.cust_last_name || ''}`.trim()
-      : null
+      ? `${cust.cust_first_name || ''} ${cust.cust_last_name || ''}`.trim() || 'Valued Customer'
+      : 'Valued Customer'   // FIX: never store null name
 
     const { data: newConvArr, error: convErr } = await sb.from('wa_conversations').insert([{
-      phone: fromPhone10,   // store normalized 10-digit
+      phone: fromPhone10,
       customer_name: custName,
       reg_number: cust?.registration_no || null,
       model: cust?.ppl || null,
@@ -287,17 +314,16 @@ Deno.serve(async (req) => {
     return new Response('OK', { status: 200 })
   }
 
-  // ── Max turns / already booked check ─────────────────────────────────────
+  // ── Max turns / already booked / closed checks ────────────────────────────
   const convStatus = conv!.status as string
   const aiTurns    = (conv!.ai_turns as number) || 0
-  const maxTurns   = (config.max_ai_turns as number) || 10
+  const maxTurns   = (config.max_ai_turns as number) || 15
 
   if (convStatus === 'Booked') {
-    // Just confirm the existing booking, don't create another
-    const bkgDate   = conv!.preferred_date as string || ''
-    const bkgBranch = conv!.preferred_branch as string || ''
+    const bkgDate   = conv!.preferred_date ? String(conv!.preferred_date).split('T')[0] : 'soon'
+    const bkgBranch = (conv!.preferred_branch as string) || 'our branch'
     await sendWhatsApp(metaPhoneId, metaToken, fromPhoneE164,
-      `Aapki service already booked hai! ✅\n📅 ${bkgDate}\n📍 ${bkgBranch}\nKoi aur sawal ho toh humein call karein. See you! 🚗`)
+      `Aapki service already book ho chuki hai! ✅\n📅 *${bkgDate}*\n📍 *${bkgBranch}*\n\nKoi aur sawal ho toh humein call karein. See you! 🚗`)
     return new Response('OK', { status: 200 })
   }
 
@@ -308,24 +334,40 @@ Deno.serve(async (req) => {
   if (aiTurns >= maxTurns) {
     await sb.from('wa_conversations').update({ status: 'Escalated', stage: 'escalated' }).eq('id', convId)
     await sendWhatsApp(metaPhoneId, metaToken, fromPhoneE164,
-      "Hamara ek service advisor aapko call karega booking complete karne ke liye. Thoda wait karein! 🙏")
+      "Hamara ek service advisor aapko jaldi call karega booking complete karne ke liye. Thoda wait karein! 🙏")
+    // Alert staff via email
+    try {
+      const resendKey = Deno.env.get('RESEND_API_KEY')
+      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'noreply@techwheels.in'
+      if (resendKey) {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendKey}` },
+          body: JSON.stringify({
+            from: fromEmail,
+            to: ['service@techwheels.in'],
+            subject: `⚠️ WA Agent Escalation — ${conv!.customer_name || fromPhone10}`,
+            html: `<p>Customer <b>${conv!.customer_name || 'Unknown'}</b> (${fromPhone10}) needs human follow-up.</p>
+                   <p>Vehicle: ${conv!.model || 'Unknown'} | Reg: ${conv!.reg_number || 'Unknown'}</p>
+                   <p>Stage when escalated: ${conv!.stage} | Turns: ${aiTurns}</p>
+                   <p>Please call them to complete the service booking.</p>`,
+          }),
+        })
+      }
+    } catch (e) { console.error('Escalation email failed:', e) }
     return new Response('OK', { status: 200 })
   }
 
-  // ── Load conversation history ─────────────────────────────────────────────
+  // ── Load conversation history (saved inbound is included since we saved it above) ──
   const { data: historyRows } = await sb.from('wa_messages')
     .select('direction,body')
     .eq('conversation_id', convId)
     .order('created_at', { ascending: true })
-    .limit(12)
+    .limit(14)
   const history = (historyRows || []) as Array<{ direction: string; body: string }>
 
-  // ── Extract booking details from conversation ─────────────────────────────
-  const allMsgsForExtract = [
-    ...history,
-    { direction: 'inbound', body: messageText },
-  ]
-  const extracted = await extractBookingDetails(openaiKey, allMsgsForExtract)
+  // ── Extract booking details from full conversation ─────────────────────────
+  const extracted = await extractBookingDetails(openaiKey, history)
   console.log('Extracted booking details:', JSON.stringify(extracted))
 
   // Update stage in conversation if it changed
@@ -335,8 +377,9 @@ Deno.serve(async (req) => {
     conv = { ...conv!, stage: newStage }
   }
 
-  // Update preferred date/branch if extracted
-  if (extracted?.date && extracted.date !== conv!.preferred_date) {
+  // Update preferred date/branch if newly extracted (normalize date string)
+  const convDateStr = conv!.preferred_date ? String(conv!.preferred_date).split('T')[0] : null
+  if (extracted?.date && extracted.date !== convDateStr) {
     await sb.from('wa_conversations').update({ preferred_date: extracted.date }).eq('id', convId)
     conv = { ...conv!, preferred_date: extracted.date }
   }
@@ -346,63 +389,55 @@ Deno.serve(async (req) => {
   }
 
   // ── BOOKING CONFIRMED — create service_bookings record ───────────────────
-  if (extracted?.confirmed === true && extracted?.date && newStage !== 'booked') {
+  // FIX: Use BOTH conv DB status AND extracted stage as guards against double-booking
+  const alreadyBooked = convStatus === 'Booked' || conv!.stage === 'booked'
+  if (extracted?.confirmed === true && extracted?.date && !alreadyBooked) {
     console.log('Booking confirmed! Creating service_bookings record...')
 
-    // Parse time safely — booking_time column is `time` type
-    let bookingTime: string | null = null
-    if (extracted.time) {
-      // Ensure HH:MM format
-      const timeParts = extracted.time.match(/^(\d{1,2}):?(\d{2})?/)
-      if (timeParts) {
-        const hh = timeParts[1].padStart(2, '0')
-        const mm = (timeParts[2] || '00').padStart(2, '0')
-        bookingTime = `${hh}:${mm}:00`
-      }
-    }
+    const bookingTime = safeBookingTime(extracted.time || null)
+    const branchToUse = (extracted.branch as string) || (conv!.preferred_branch as string) || (config.available_branches as string[])?.[0] || null
 
     const { data: newBkgArr, error: bkgErr } = await sb.from('service_bookings').insert([{
       booking_source: 'WhatsApp AI Agent',
       booking_date: new Date().toISOString().split('T')[0],
       appointment_date: extracted.date,
       booking_time: bookingTime,
-      branch: extracted.branch || (config.available_branches as string[])?.[0] || null,
+      branch: branchToUse,
       reg_number: (conv!.reg_number as string) || 'UNKNOWN',
       model: (conv!.model as string) || null,
-      customer_name: (conv!.customer_name as string) || 'Customer',
+      customer_name: (conv!.customer_name as string) || 'Valued Customer',
       customer_phone: fromPhone10,
       service_type: 'Paid Service',
       status: 'Confirmed',
       wa_opt_in: true,
       wa_conversation_id: String(convId),
-      // created_by is intentionally omitted — service role insert, no user context
     }]).select()
 
     if (bkgErr) {
       console.error('Failed to create booking:', bkgErr.message)
-      // Still reply but don't mark as booked
+      // Still reply with AI but don't mark booked — will retry on next message
     } else {
       const newBkg = newBkgArr?.[0] as Record<string, unknown>
       const bkgId  = (newBkg?.lead_number as string) || `#${newBkg?.id}`
 
-      // Update conversation to Booked
+      // Mark conversation as Booked
       await sb.from('wa_conversations').update({
         status: 'Booked',
         stage: 'booked',
         booking_id: newBkg?.id || null,
         preferred_date: extracted.date,
         preferred_time: extracted.time || null,
-        preferred_branch: extracted.branch || null,
+        preferred_branch: branchToUse,
       }).eq('id', convId)
 
-      // Update campaign contact if applicable
+      // Update campaign stats if applicable
       if (conv!.campaign_id) {
         await sb.from('wa_campaign_contacts')
           .update({ status: 'Booked', replied_at: new Date().toISOString() })
           .eq('campaign_id', conv!.campaign_id as number)
           .eq('phone', fromPhone10)
-        // Increment campaign booked count
-        const { data: campArr } = await sb.from('wa_campaigns').select('booked_count,replied_count').eq('id', conv!.campaign_id as number).limit(1)
+        const { data: campArr } = await sb.from('wa_campaigns')
+          .select('booked_count,replied_count').eq('id', conv!.campaign_id as number).limit(1)
         if (campArr?.[0]) {
           await sb.from('wa_campaigns').update({
             booked_count: ((campArr[0].booked_count as number) || 0) + 1,
@@ -411,24 +446,35 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Send booking confirmation
+      // Build and send confirmation message
       const confirmTemplate = (config.booking_confirm_msg as string) ||
-        '✅ *Booking Confirmed!*\n📋 ID: {{booking_id}}\n🚗 {{model}} | {{reg_no}}\n📅 {{date}} at {{time}}\n📍 {{branch}}\n\nSee you then! Dhanyawad 🙏'
+        '✅ *Booking Confirmed!*\n📋 ID: {{booking_id}}\n🚗 {{model}} ({{reg_no}})\n📅 {{date}} at {{time}}\n📍 {{branch}}\n\nSee you then! Dhanyawad 🙏'
 
+      const dateStr = new Date(extracted.date + 'T00:00:00').toLocaleDateString('en-IN', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      })
       const confirmMsg = confirmTemplate
         .replace(/\{\{booking_id\}\}/g, bkgId)
         .replace(/\{\{reg_no\}\}/g, (conv!.reg_number as string) || '')
         .replace(/\{\{model\}\}/g, (conv!.model as string) || '')
-        .replace(/\{\{date\}\}/g, new Date(extracted.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
+        .replace(/\{\{date\}\}/g, dateStr)
         .replace(/\{\{time\}\}/g, extracted.time || 'Morning slot')
-        .replace(/\{\{branch\}\}/g, extracted.branch || (config.available_branches as string[])?.[0] || '')
+        .replace(/\{\{branch\}\}/g, branchToUse || '')
         .replace(/\{\{sa_name\}\}/g, 'Our team')
 
+      // Save outbound confirmation to DB
+      await sb.from('wa_messages').insert([{
+        conversation_id: convId,
+        direction: 'outbound',
+        sender: 'ai',
+        body: confirmMsg,
+        ai_generated: true,
+        status: 'sent',
+      }])
+
+      await sb.from('wa_conversations').update({ ai_turns: aiTurns + 1 }).eq('id', convId)
       await sendWhatsApp(metaPhoneId, metaToken, fromPhoneE164, confirmMsg)
       console.log(`Booking ${bkgId} created for ${fromPhone10}`)
-
-      // Update ai_turns
-      await sb.from('wa_conversations').update({ ai_turns: aiTurns + 1 }).eq('id', convId)
       return new Response('OK', { status: 200 })
     }
   }
