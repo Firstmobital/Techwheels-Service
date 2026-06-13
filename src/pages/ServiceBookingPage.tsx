@@ -131,6 +131,9 @@ export default function ServiceBookingPage() {
   const [followupForm, setFollowupForm] = useState({ channel: 'Call', note: '', outcome: '', next_follow_up: '', done_by: '' })
   const [showFollowupForm, setShowFollowupForm] = useState(false)
 
+  // WA message editor modal
+  const [waModal, setWaModal] = useState<{ booking: ServiceBooking; message: string } | null>(null)
+
   // ── Load data ───────────────────────────────────────────────────────────────
   useEffect(() => {
     void loadBranchesAndSAs()
@@ -299,9 +302,7 @@ export default function ServiceBookingPage() {
 
 
   // ── WhatsApp send ───────────────────────────────────────────────────────────
-  function openWhatsApp(booking: ServiceBooking) {
-    const phone = '91' + booking.customer_phone.replace(/\D/g, '').slice(-10)
-
+  function buildWAMessage(booking: ServiceBooking): string {
     const lines: string[] = []
     lines.push(`Hello ${booking.customer_name},`)
     lines.push('')
@@ -333,14 +334,16 @@ export default function ServiceBookingPage() {
     lines.push('')
     lines.push('Thank you,')
     lines.push('*Techwheels Service* 🚘')
+    return lines.join('\n')
+  }
 
-    const message = lines.join('\n')
+  function sendWAMessage(booking: ServiceBooking, message: string) {
+    const phone = '91' + booking.customer_phone.replace(/\D/g, '').slice(-10)
     const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
     const appUrl      = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`
     const fallbackUrl = isMobile
       ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
       : `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`
-
     const opened = window.open('', '_blank', 'noopener,noreferrer')
     if (opened) {
       opened.location.href = appUrl
@@ -351,6 +354,10 @@ export default function ServiceBookingPage() {
     } else {
       window.location.href = appUrl
     }
+  }
+
+  function openWhatsApp(booking: ServiceBooking) {
+    setWaModal({ booking, message: buildWAMessage(booking) })
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -1023,6 +1030,117 @@ export default function ServiceBookingPage() {
           </div>
         )}
       </div>
+    </div>
+
+      {/* ── WhatsApp Message Editor Modal ── */}
+      {waModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(15,23,42,0.55)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', padding: '1rem',
+          }}
+          onClick={() => setWaModal(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '540px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column',
+              maxHeight: '90vh', overflow: 'hidden',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.9rem 1.1rem', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+              <span style={{ fontSize: '1.3rem' }}>💬</span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b' }}>WhatsApp Message</div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                  To: <strong>{waModal.booking.customer_name}</strong> · {waModal.booking.customer_phone}
+                </div>
+              </div>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => setWaModal(null)}
+                style={{ background: 'none', border: 'none', fontSize: '1.1rem', cursor: 'pointer', color: '#94a3b8', padding: '0.2rem 0.4rem', borderRadius: '6px' }}>✕</button>
+            </div>
+
+            {/* Toolbar — quick insert variables */}
+            <div style={{ padding: '0.5rem 1.1rem', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', flexShrink: 0 }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Insert variable</div>
+              <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Name', val: waModal.booking.customer_name },
+                  { label: 'Reg No.', val: waModal.booking.reg_number },
+                  { label: 'Model', val: [waModal.booking.model, waModal.booking.variant].filter(Boolean).join(' ') },
+                  { label: 'Appointment', val: waModal.booking.appointment_date ? new Date(waModal.booking.appointment_date).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : '' },
+                  { label: 'Time', val: waModal.booking.booking_time?.slice(0,5) ?? '' },
+                  { label: 'Branch', val: waModal.booking.branch ?? '' },
+                  { label: 'SA', val: waModal.booking.assigned_sa_name || waModal.booking.assigned_sa || '' },
+                  { label: 'Service', val: waModal.booking.service_type ?? '' },
+                  { label: 'Lead ID', val: waModal.booking.lead_number || '#' + waModal.booking.id },
+                ].filter(v => v.val).map(({ label, val }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    title={val}
+                    onClick={() => setWaModal(prev => prev ? { ...prev, message: prev.message + val } : prev)}
+                    style={{
+                      padding: '0.18rem 0.5rem', borderRadius: '6px', border: '1px solid #e2e8f0',
+                      fontSize: '0.69rem', background: '#fff', color: '#475569', cursor: 'pointer',
+                      fontWeight: 600,
+                    }}>
+                    + {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Textarea */}
+            <div style={{ padding: '0.75rem 1.1rem', flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Message (editable)</span>
+                <button
+                  type="button"
+                  onClick={() => setWaModal(prev => prev ? { ...prev, message: buildWAMessage(prev.booking) } : prev)}
+                  style={{ fontSize: '0.69rem', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+                  ↺ Reset to default
+                </button>
+              </div>
+              <textarea
+                value={waModal.message}
+                onChange={e => setWaModal(prev => prev ? { ...prev, message: e.target.value } : prev)}
+                style={{
+                  width: '100%', minHeight: '260px', padding: '0.7rem', borderRadius: '8px',
+                  border: '1px solid #e2e8f0', fontSize: '0.82rem', lineHeight: '1.55',
+                  fontFamily: 'monospace', resize: 'vertical', outline: 'none',
+                  background: '#fafafa', color: '#1e293b', boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                {waModal.message.length} chars · Use *text* for bold in WhatsApp
+              </div>
+            </div>
+
+            {/* Footer actions */}
+            <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1.1rem', borderTop: '1px solid #e2e8f0', flexShrink: 0, justifyContent: 'flex-end', background: '#f8fafc' }}>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => setWaModal(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn--sm"
+                style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 1rem' }}
+                onClick={() => { sendWAMessage(waModal.booking, waModal.message); setWaModal(null) }}>
+                💬 Send on WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
