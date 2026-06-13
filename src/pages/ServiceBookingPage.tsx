@@ -364,6 +364,7 @@ export default function ServiceBookingPage() {
   const hasPanel = selectedBooking || showForm
 
   return (
+    <>
     <div className="page" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Top bar ── */}
@@ -1141,7 +1142,7 @@ export default function ServiceBookingPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
 
