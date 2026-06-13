@@ -17,6 +17,7 @@ interface AgentConfig {
   openai_api_key: string
   auto_reply_enabled: boolean
   max_ai_turns: number
+  wa_verify_token: string
 }
 
 interface Campaign {
@@ -708,26 +709,53 @@ export default function WAAgentPage() {
 
             {/* Meta API */}
             <Section title="📱 Meta WhatsApp API">
-              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.65rem 0.85rem', marginBottom: '0.85rem', fontSize: '0.78rem', color: '#92400e' }}>
-                ⚡ Get these from <strong>Meta Business Suite → WhatsApp → API Setup</strong>. Your webhook URL is: <code style={{ background: '#fef3c7', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>/api/functions/waWebhook</code>. Verify token: <code style={{ background: '#fef3c7', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>techwheels_wa_2026</code>
+              {/* Webhook URL info box */}
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.75rem 0.9rem', marginBottom: '0.85rem', fontSize: '0.78rem', color: '#1e40af' }}>
+                <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>📋 How to connect Meta WhatsApp</div>
+                <div style={{ marginBottom: '0.25rem' }}>1. Go to <strong>Meta Business Suite → WhatsApp → Configuration</strong></div>
+                <div style={{ marginBottom: '0.25rem' }}>2. Set Webhook URL to:</div>
+                <div style={{ background: '#fff', border: '1px solid #93c5fd', borderRadius: '5px', padding: '0.3rem 0.55rem', fontFamily: 'monospace', fontSize: '0.75rem', marginBottom: '0.35rem', wordBreak: 'break-all', color: '#1e3a8a' }}>
+                  https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-webhook
+                </div>
+                <div style={{ marginBottom: '0.25rem' }}>3. Set Verify Token to the value below (must match exactly)</div>
+                <div style={{ marginBottom: '0.25rem' }}>4. Subscribe to: <strong>messages</strong></div>
               </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
                 <label className="field">
                   <span className="label">Phone Number ID</span>
-                  <input className="inp" placeholder="From Meta API Setup" value={config.meta_phone_number_id || ''} onChange={e => setConfig(p => p ? { ...p, meta_phone_number_id: e.target.value } : p)} />
+                  <input className="inp" placeholder="From Meta → API Setup" value={config.meta_phone_number_id || ''} onChange={e => setConfig(p => p ? { ...p, meta_phone_number_id: e.target.value } : p)} />
                 </label>
                 <label className="field">
-                  <span className="label">Access Token</span>
+                  <span className="label">Permanent Access Token</span>
                   <input className="inp" type="password" placeholder="EAA…" value={config.meta_access_token || ''} onChange={e => setConfig(p => p ? { ...p, meta_access_token: e.target.value } : p)} />
+                </label>
+                <label className="field" style={{ gridColumn: 'span 2' }}>
+                  <span className="label">Webhook Verify Token <span style={{ color: '#94a3b8', fontWeight: 400 }}>(paste this exact value in Meta Dashboard)</span></span>
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <input className="inp" style={{ flex: 1 }} placeholder="e.g. techwheels_wa_2026" value={config.wa_verify_token || ''} onChange={e => setConfig(p => p ? { ...p, wa_verify_token: e.target.value } : p)} />
+                    <button type="button" className="btn btn--ghost btn--sm"
+                      onClick={() => {
+                        const token = Math.random().toString(36).slice(2) + '_tw_' + Date.now().toString(36)
+                        setConfig(p => p ? { ...p, wa_verify_token: token } : p)
+                      }}
+                      title="Generate a random token">🔀 Generate</button>
+                    <button type="button" className="btn btn--ghost btn--sm"
+                      onClick={() => { navigator.clipboard.writeText(config.wa_verify_token || ''); showToast('✅ Copied!') }}
+                      title="Copy token">📋 Copy</button>
+                  </div>
                 </label>
               </div>
             </Section>
 
             {/* OpenAI */}
             <Section title="🧠 OpenAI API (AI Replies)">
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.55rem 0.85rem', marginBottom: '0.65rem', fontSize: '0.75rem', color: '#14532d' }}>
+                Get your API key from <strong>platform.openai.com → API Keys</strong>. The agent uses <strong>gpt-4o-mini</strong> (very cost-effective — ~₹0.05 per conversation).
+              </div>
               <label className="field">
                 <span className="label">OpenAI API Key</span>
-                <input className="inp" type="password" placeholder="sk-…" value={config.openai_api_key || ''} onChange={e => setConfig(p => p ? { ...p, openai_api_key: e.target.value } : p)} />
+                <input className="inp" type="password" placeholder="sk-proj-…" value={config.openai_api_key || ''} onChange={e => setConfig(p => p ? { ...p, openai_api_key: e.target.value } : p)} />
               </label>
             </Section>
 
