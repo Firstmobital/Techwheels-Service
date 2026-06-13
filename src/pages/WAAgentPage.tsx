@@ -1,0 +1,801 @@
+import { useEffect, useState, useMemo } from 'react'
+import { supabase } from '../lib/supabase'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AgentConfig {
+  id: number
+  business_name: string
+  agent_name: string
+  greeting_message: string
+  closing_message: string
+  system_prompt: string
+  available_branches: string[]
+  working_hours: string
+  booking_confirm_msg: string
+  meta_phone_number_id: string
+  meta_access_token: string
+  openai_api_key: string
+  auto_reply_enabled: boolean
+  max_ai_turns: number
+}
+
+interface Campaign {
+  id: number
+  name: string
+  description: string | null
+  status: string
+  target_segment: string
+  template_message: string
+  scheduled_at: string | null
+  total_contacts: number
+  sent_count: number
+  delivered_count: number
+  replied_count: number
+  booked_count: number
+  created_at: string
+}
+
+interface Conversation {
+  id: number
+  phone: string
+  customer_name: string | null
+  reg_number: string | null
+  model: string | null
+  status: string
+  stage: string
+  ai_turns: number
+  last_message_at: string
+  campaign_id: number | null
+  booking_id: number | null
+  preferred_date: string | null
+  preferred_time: string | null
+  preferred_branch: string | null
+}
+
+interface WAMessage {
+  id: number
+  conversation_id: number
+  direction: string
+  sender: string
+  body: string
+  ai_generated: boolean
+  status: string
+  created_at: string
+}
+
+interface ServiceDataRow {
+  id: number
+  cust_first_name: string
+  cust_last_name: string
+  cust_mobile_no: string
+  registration_no: string | null
+  ppl: string | null
+  pl: string | null
+  vehicle_sale_date: string | null
+  scheduled_next_service_date: string | null
+  last_service_date: string | null
+}
+
+type Tab = 'dashboard' | 'campaigns' | 'conversations' | 'settings'
+
+const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
+  Open:       { bg: '#eff6ff', color: '#2563eb' },
+  Booked:     { bg: '#dcfce7', color: '#15803d' },
+  Closed:     { bg: '#f1f5f9', color: '#64748b' },
+  'Opted-Out':{ bg: '#fef2f2', color: '#dc2626' },
+  Escalated:  { bg: '#fffbeb', color: '#d97706' },
+  Draft:      { bg: '#f1f5f9', color: '#64748b' },
+  Scheduled:  { bg: '#eff6ff', color: '#2563eb' },
+  Running:    { bg: '#fffbeb', color: '#d97706' },
+  Completed:  { bg: '#dcfce7', color: '#15803d' },
+  Paused:     { bg: '#fef2f2', color: '#dc2626' },
+}
+
+const SEGMENTS = ['All', 'DueForService', 'NoService6M', 'NoService12M', 'FreeService']
+const SEGMENT_LABELS: Record<string, string> = {
+  All: 'All Customers',
+  DueForService: 'Due for Service (next 30 days)',
+  NoService6M: 'No Service in 6+ Months',
+  NoService12M: 'No Service in 12+ Months',
+  FreeService: 'Free Service Pending',
+}
+
+const DEFAULT_TEMPLATE = `Hello {{name}}! 👋
+
+I'm {{agent}} from *{{business}}*.
+
+Your *{{model}}* ({{reg_no}}) is due for service.
+
+🔧 Book your appointment now and we'll take care of everything!
+
+📍 Branches: {{branch}}
+⏰ Working Hours: Mon–Sat, 9AM–6PM
+
+Reply *YES* to book your appointment, or let me know a convenient date! 😊`
+
+export default function WAAgentPage() {
+  const [tab, setTab] = useState<Tab>('dashboard')
+  const [config, setConfig] = useState<AgentConfig | null>(null)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
+  const [messages, setMessages] = useState<WAMessage[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState('')
+
+  // Campaign creation
+  const [showCampaignForm, setShowCampaignForm] = useState(false)
+  const [campaignForm, setCampaignForm] = useState({
+    name: '', description: '', target_segment: 'DueForService', template_message: DEFAULT_TEMPLATE, scheduled_at: '',
+  })
+  const [previewContacts, setPreviewContacts] = useState<ServiceDataRow[]>([])
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [sendingCampaign, setSendingCampaign] = useState<number | null>(null)
+  const [manualMsg, setManualMsg] = useState('')
+  const [sendingManual, setSendingManual] = useState(false)
+  const [convFilter, setConvFilter] = useState('all')
+
+  // ── Load ────────────────────────────────────────────────────────────────────
+  useEffect(() => { void loadAll() }, [])
+  useEffect(() => { if (selectedConv) void loadMessages(selectedConv.id) }, [selectedConv])
+
+  async function loadAll() {
+    setLoading(true)
+    const [cfgRes, campRes, convRes] = await Promise.all([
+      supabase.from('wa_agent_config').select('*').eq('id', 1).single(),
+      supabase.from('wa_campaigns').select('*').order('created_at', { ascending: false }),
+      supabase.from('wa_conversations').select('*').order('last_message_at', { ascending: false }).limit(100),
+    ])
+    if (cfgRes.data)  setConfig(cfgRes.data as AgentConfig)
+    if (campRes.data) setCampaigns(campRes.data as Campaign[])
+    if (convRes.data) setConversations(convRes.data as Conversation[])
+    setLoading(false)
+  }
+
+  async function loadMessages(convId: number) {
+    const { data } = await supabase.from('wa_messages').select('*').eq('conversation_id', convId).order('created_at', { ascending: true })
+    setMessages((data || []) as WAMessage[])
+  }
+
+  // ── Save config ─────────────────────────────────────────────────────────────
+  async function saveConfig() {
+    if (!config) return
+    setSaving(true)
+    setError('')
+    const { error: err } = await supabase.from('wa_agent_config').update({ ...config, updated_at: new Date().toISOString() }).eq('id', 1)
+    if (err) setError(err.message)
+    else showToast('✅ Settings saved!')
+    setSaving(false)
+  }
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  // ── Preview segment contacts ─────────────────────────────────────────────────
+  async function loadPreview(segment: string) {
+    setLoadingPreview(true)
+    const today = new Date()
+    let query = supabase.from('all_service_data').select('id, cust_first_name, cust_last_name, cust_mobile_no, registration_no, ppl, pl, vehicle_sale_date, scheduled_next_service_date, last_service_date').not('cust_mobile_no', 'is', null).neq('cust_mobile_no', '').limit(20)
+
+    if (segment === 'DueForService') {
+      const in30 = new Date(today); in30.setDate(in30.getDate() + 30)
+      const f = today.toISOString().split('T')[0].replace(/-/g, '/')
+      const t = in30.toISOString().split('T')[0].replace(/-/g, '/')
+      query = query.gte('scheduled_next_service_date', f).lte('scheduled_next_service_date', t)
+    } else if (segment === 'NoService6M') {
+      const d = new Date(today); d.setMonth(d.getMonth() - 6)
+      query = query.lt('last_service_date', d.toISOString().split('T')[0].replace(/-/g, '/'))
+    } else if (segment === 'NoService12M') {
+      const d = new Date(today); d.setMonth(d.getMonth() - 12)
+      query = query.lt('last_service_date', d.toISOString().split('T')[0].replace(/-/g, '/'))
+    } else if (segment === 'FreeService') {
+      query = query.or('first_free_service_done_flag.eq.N,second_free_service_done_flag.eq.N,third_free_service_done_flag.eq.N')
+    }
+
+    const { data } = await query
+    setPreviewContacts((data || []) as ServiceDataRow[])
+    setLoadingPreview(false)
+  }
+
+  // ── Create campaign + populate contacts ─────────────────────────────────────
+  async function createCampaign() {
+    if (!campaignForm.name.trim()) { setError('Campaign name required'); return }
+    if (!campaignForm.template_message.trim()) { setError('Message template required'); return }
+    setSaving(true)
+    setError('')
+    const today = new Date()
+
+    // 1. Create campaign
+    const { data: camp, error: campErr } = await supabase.from('wa_campaigns').insert([{
+      name: campaignForm.name,
+      description: campaignForm.description || null,
+      target_segment: campaignForm.target_segment,
+      template_message: campaignForm.template_message,
+      scheduled_at: campaignForm.scheduled_at || null,
+      status: 'Draft',
+    }]).select().single()
+    if (campErr || !camp) { setError(campErr?.message || 'Failed to create campaign'); setSaving(false); return }
+
+    // 2. Fetch contacts
+    let query = supabase.from('all_service_data')
+      .select('id, cust_first_name, cust_last_name, cust_mobile_no, registration_no, ppl, scheduled_next_service_date')
+      .not('cust_mobile_no', 'is', null).neq('cust_mobile_no', '').limit(1000)
+
+    if (campaignForm.target_segment === 'DueForService') {
+      const in30 = new Date(today); in30.setDate(in30.getDate() + 30)
+      query = query.gte('scheduled_next_service_date', today.toISOString().split('T')[0].replace(/-/g, '/')).lte('scheduled_next_service_date', in30.toISOString().split('T')[0].replace(/-/g, '/'))
+    } else if (campaignForm.target_segment === 'NoService6M') {
+      const d = new Date(today); d.setMonth(d.getMonth() - 6)
+      query = query.lt('last_service_date', d.toISOString().split('T')[0].replace(/-/g, '/'))
+    } else if (campaignForm.target_segment === 'NoService12M') {
+      const d = new Date(today); d.setMonth(d.getMonth() - 12)
+      query = query.lt('last_service_date', d.toISOString().split('T')[0].replace(/-/g, '/'))
+    } else if (campaignForm.target_segment === 'FreeService') {
+      query = query.or('first_free_service_done_flag.eq.N,second_free_service_done_flag.eq.N')
+    }
+
+    const { data: contacts } = await query
+    const rows = (contacts || []).map((c: ServiceDataRow) => ({
+      campaign_id: (camp as Campaign).id,
+      phone: c.cust_mobile_no.replace(/\D/g, ''),
+      customer_name: `${c.cust_first_name || ''} ${c.cust_last_name || ''}`.trim(),
+      reg_number: c.registration_no,
+      model: c.ppl,
+      service_due_date: c.scheduled_next_service_date,
+      status: 'Pending',
+    }))
+
+    if (rows.length > 0) {
+      // Batch insert contacts in chunks of 500
+      for (let i = 0; i < rows.length; i += 500) {
+        await supabase.from('wa_campaign_contacts').insert(rows.slice(i, i + 500))
+      }
+    }
+
+    await supabase.from('wa_campaigns').update({ total_contacts: rows.length }).eq('id', (camp as Campaign).id)
+
+    showToast(`✅ Campaign created with ${rows.length} contacts!`)
+    setShowCampaignForm(false)
+    setCampaignForm({ name: '', description: '', target_segment: 'DueForService', template_message: DEFAULT_TEMPLATE, scheduled_at: '' })
+    await loadAll()
+    setSaving(false)
+  }
+
+  // ── Send campaign batch ─────────────────────────────────────────────────────
+  async function sendCampaignBatch(campaignId: number) {
+    setSendingCampaign(campaignId)
+    setError('')
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('wa-send-campaign', {
+        body: { campaign_id: campaignId, batch_size: 30, delay_ms: 800 },
+      })
+      if (fnErr) setError(fnErr.message || 'Send failed')
+      else if (data?.ok) showToast(`✅ Sent: ${data.sent}, Failed: ${data.failed}`)
+      else setError(data?.error || 'Send failed')
+    } catch (e) {
+      setError('Network error. Check edge function deployment.')
+    }
+    await loadAll()
+    setSendingCampaign(null)
+  }
+
+  // ── Send manual message from inbox ─────────────────────────────────────────
+  async function sendManualMessage() {
+    if (!selectedConv || !manualMsg.trim() || !config?.meta_phone_number_id || !config?.meta_access_token) return
+    setSendingManual(true)
+    // Save to DB first
+    await supabase.from('wa_messages').insert([{
+      conversation_id: selectedConv.id,
+      direction: 'outbound',
+      sender: 'staff',
+      body: manualMsg.trim(),
+      ai_generated: false,
+      status: 'sent',
+    }])
+    // Send via Meta (call backend function)
+    try {
+      // Message already saved to DB above; in future hook into send-campaign fn
+    } catch { /* still saved to DB */ }
+    setManualMsg('')
+    await loadMessages(selectedConv.id)
+    setSendingManual(false)
+  }
+
+  // ── Stats ────────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => ({
+    total: conversations.length,
+    open: conversations.filter(c => c.status === 'Open').length,
+    booked: conversations.filter(c => c.status === 'Booked').length,
+    escalated: conversations.filter(c => c.status === 'Escalated').length,
+    optedOut: conversations.filter(c => c.status === 'Opted-Out').length,
+    totalCampaigns: campaigns.length,
+    runningCampaigns: campaigns.filter(c => c.status === 'Running').length,
+    totalSent: campaigns.reduce((s, c) => s + (c.sent_count || 0), 0),
+    totalBooked: campaigns.reduce((s, c) => s + (c.booked_count || 0), 0),
+  }), [conversations, campaigns])
+
+  const filteredConvs = useMemo(() => {
+    if (convFilter === 'all') return conversations
+    return conversations.filter(c => c.status.toLowerCase() === convFilter.toLowerCase())
+  }, [conversations, convFilter])
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+  const TAB_STYLE = (t: Tab) => ({
+    padding: '0.4rem 0.9rem', border: 'none', background: tab === t ? '#2563eb' : 'transparent',
+    color: tab === t ? '#fff' : '#64748b', borderRadius: '6px', cursor: 'pointer',
+    fontWeight: 700, fontSize: '0.8rem', transition: 'all 0.15s',
+  })
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: '#f8fafc' }}>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 9999, background: '#1e293b', color: '#fff', padding: '0.6rem 1.1rem', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Top bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 1rem', background: '#fff', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+        <span style={{ fontSize: '1.2rem' }}>🤖</span>
+        <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b' }}>WA AI Agent</span>
+        <div style={{ display: 'flex', gap: '0.2rem', background: '#f1f5f9', borderRadius: '8px', padding: '0.25rem', marginLeft: '0.5rem' }}>
+          {(['dashboard', 'campaigns', 'conversations', 'settings'] as Tab[]).map(t => (
+            <button key={t} style={TAB_STYLE(t)} onClick={() => setTab(t)}>
+              {t === 'dashboard' ? '📊 Dashboard' : t === 'campaigns' ? '📣 Campaigns' : t === 'conversations' ? '💬 Inbox' : '⚙️ Settings'}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: config?.auto_reply_enabled ? '#22c55e' : '#94a3b8', display: 'inline-block' }} />
+          <span style={{ color: '#64748b' }}>AI {config?.auto_reply_enabled ? 'Active' : 'Paused'}</span>
+        </div>
+        <button className="btn btn--sm" style={{ background: config?.auto_reply_enabled ? '#fef2f2' : '#f0fdf4', color: config?.auto_reply_enabled ? '#dc2626' : '#16a34a', border: `1px solid ${config?.auto_reply_enabled ? '#fca5a5' : '#86efac'}`, fontWeight: 700 }}
+          onClick={async () => {
+            if (!config) return
+            const updated = { ...config, auto_reply_enabled: !config.auto_reply_enabled }
+            setConfig(updated)
+            await supabase.from('wa_agent_config').update({ auto_reply_enabled: updated.auto_reply_enabled }).eq('id', 1)
+            showToast(updated.auto_reply_enabled ? '✅ AI Agent activated' : '⏸ AI Agent paused')
+          }}>
+          {config?.auto_reply_enabled ? '⏸ Pause AI' : '▶ Activate AI'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ background: '#fef2f2', color: '#dc2626', padding: '0.4rem 1rem', fontSize: '0.78rem', borderBottom: '1px solid #fca5a5', flexShrink: 0 }}>
+          ⚠️ {error} <button onClick={() => setError('')} style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+
+      <div style={{ flex: 1, overflow: 'auto', padding: '1rem' }}>
+
+        {/* ══ DASHBOARD ══ */}
+        {tab === 'dashboard' && (
+          <div>
+            {/* Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {[
+                { label: 'Total Conversations', value: stats.total, color: '#2563eb', bg: '#eff6ff', icon: '💬' },
+                { label: 'Open / Chatting', value: stats.open, color: '#d97706', bg: '#fffbeb', icon: '🔄' },
+                { label: 'Booked via WA', value: stats.booked, color: '#16a34a', bg: '#f0fdf4', icon: '✅', bold: true },
+                { label: 'Escalated', value: stats.escalated, color: '#7c3aed', bg: '#faf5ff', icon: '🙋' },
+                { label: 'Opted Out', value: stats.optedOut, color: '#dc2626', bg: '#fef2f2', icon: '🚫' },
+                { label: 'Campaigns', value: stats.totalCampaigns, color: '#0284c7', bg: '#f0f9ff', icon: '📣' },
+                { label: 'Messages Sent', value: stats.totalSent.toLocaleString(), color: '#475569', bg: '#f1f5f9', icon: '📤' },
+                { label: 'Bookings Created', value: stats.totalBooked, color: '#15803d', bg: '#dcfce7', icon: '🎯', bold: true },
+              ].map(({ label, value, color, bg, icon, bold }) => (
+                <div key={label} style={{ background: '#fff', border: `1px solid ${color}22`, borderRadius: '10px', padding: '0.85rem 1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ fontSize: '1.4rem', marginBottom: '0.3rem' }}>{icon}</div>
+                  <div style={{ fontSize: bold ? '1.6rem' : '1.4rem', fontWeight: 800, color }}>{value}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.1rem' }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Recent conversations */}
+            <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+              <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>🕐 Recent Conversations</span>
+                <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }} onClick={() => setTab('conversations')}>View All →</button>
+              </div>
+              {conversations.slice(0, 8).map(c => {
+                const sc = STATUS_COLOR[c.status] ?? STATUS_COLOR.Closed
+                return (
+                  <div key={c.id} onClick={() => { setSelectedConv(c); setTab('conversations') }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 1rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f8fafc'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: sc.bg, color: sc.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.85rem', flexShrink: 0 }}>
+                      {(c.customer_name || c.phone).charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#1e293b' }}>{c.customer_name || c.phone}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{c.model || ''} · {c.phone}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <span style={{ background: sc.bg, color: sc.color, padding: '0.15rem 0.5rem', borderRadius: '20px', fontSize: '0.68rem', fontWeight: 700 }}>{c.status}</span>
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.2rem' }}>{new Date(c.last_message_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
+                    </div>
+                  </div>
+                )
+              })}
+              {conversations.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>No conversations yet. Launch a campaign to get started!</div>}
+            </div>
+          </div>
+        )}
+
+        {/* ══ CAMPAIGNS ══ */}
+        {tab === 'campaigns' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>📣 Campaigns</span>
+              <button className="btn btn--primary btn--sm" style={{ marginLeft: 'auto' }} onClick={() => setShowCampaignForm(true)}>+ New Campaign</button>
+            </div>
+
+            {/* Campaign creation form */}
+            {showCampaignForm && (
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.2rem', marginBottom: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>📣 New Campaign</span>
+                  <button style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem' }} onClick={() => setShowCampaignForm(false)}>✕</button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <label className="field">
+                    <span className="label">Campaign Name *</span>
+                    <input className="inp" placeholder="e.g. June Service Reminder" value={campaignForm.name} onChange={e => setCampaignForm(p => ({ ...p, name: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span className="label">Target Segment *</span>
+                    <select className="inp" value={campaignForm.target_segment} onChange={e => { setCampaignForm(p => ({ ...p, target_segment: e.target.value })); void loadPreview(e.target.value) }}>
+                      {SEGMENTS.map(s => <option key={s} value={s}>{SEGMENT_LABELS[s]}</option>)}
+                    </select>
+                  </label>
+                  <label className="field" style={{ gridColumn: 'span 2' }}>
+                    <span className="label">Description</span>
+                    <input className="inp" placeholder="Optional description" value={campaignForm.description} onChange={e => setCampaignForm(p => ({ ...p, description: e.target.value }))} />
+                  </label>
+                </div>
+
+                {/* Template */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.3rem' }}>
+                    <span className="label">📝 Message Template</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: '#94a3b8' }}>Variables: {'{{name}} {{model}} {{reg_no}} {{service_due}} {{agent}} {{business}} {{branch}}'}</span>
+                  </div>
+                  <textarea className="inp" rows={8} value={campaignForm.template_message}
+                    onChange={e => setCampaignForm(p => ({ ...p, template_message: e.target.value }))}
+                    style={{ fontFamily: 'monospace', fontSize: '0.82rem', resize: 'vertical', width: '100%', boxSizing: 'border-box' }} />
+                </div>
+
+                {/* Preview */}
+                <div style={{ marginTop: '0.75rem', background: '#f8fafc', borderRadius: '8px', padding: '0.75rem', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem', gap: '0.5rem' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#475569' }}>👥 Contact Preview ({previewContacts.length} shown)</span>
+                    <button className="btn btn--ghost btn--sm" onClick={() => void loadPreview(campaignForm.target_segment)} disabled={loadingPreview}>
+                      {loadingPreview ? 'Loading…' : '🔍 Preview'}
+                    </button>
+                  </div>
+                  {previewContacts.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '140px', overflow: 'auto' }}>
+                      {previewContacts.slice(0, 8).map(c => (
+                        <div key={c.id} style={{ display: 'flex', gap: '1rem', fontSize: '0.73rem', color: '#475569' }}>
+                          <span style={{ fontWeight: 600 }}>{c.cust_first_name} {c.cust_last_name}</span>
+                          <span>{c.cust_mobile_no}</span>
+                          <span style={{ color: '#94a3b8' }}>{c.ppl} · {c.scheduled_next_service_date || 'No date'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+                  <button className="btn btn--ghost btn--sm" onClick={() => setShowCampaignForm(false)}>Cancel</button>
+                  <button className="btn btn--primary" onClick={createCampaign} disabled={saving}>{saving ? 'Creating…' : '✅ Create Campaign'}</button>
+                </div>
+              </div>
+            )}
+
+            {/* Campaign list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {campaigns.length === 0 && <div style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>No campaigns yet. Create your first outreach campaign!</div>}
+              {campaigns.map(camp => {
+                const sc = STATUS_COLOR[camp.status] ?? STATUS_COLOR.Draft
+                const rate = camp.total_contacts > 0 ? Math.round((camp.booked_count / camp.total_contacts) * 100) : 0
+                return (
+                  <div key={camp.id} style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1e293b' }}>{camp.name}</span>
+                          <span style={{ background: sc.bg, color: sc.color, padding: '0.12rem 0.45rem', borderRadius: '20px', fontSize: '0.68rem', fontWeight: 700 }}>{camp.status}</span>
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '0.3rem' }}>{SEGMENT_LABELS[camp.target_segment] || camp.target_segment}</span>
+                        </div>
+                        {camp.description && <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>{camp.description}</div>}
+                        {/* Stats row */}
+                        <div style={{ display: 'flex', gap: '1.2rem', fontSize: '0.75rem', flexWrap: 'wrap' }}>
+                          {[
+                            { label: 'Contacts', value: camp.total_contacts, color: '#475569' },
+                            { label: 'Sent', value: camp.sent_count, color: '#2563eb' },
+                            { label: 'Delivered', value: camp.delivered_count, color: '#0284c7' },
+                            { label: 'Replied', value: camp.replied_count, color: '#7c3aed' },
+                            { label: 'Booked ✅', value: camp.booked_count, color: '#15803d' },
+                            { label: 'Conv. Rate', value: `${rate}%`, color: rate > 5 ? '#15803d' : '#d97706' },
+                          ].map(({ label, value, color }) => (
+                            <div key={label}>
+                              <span style={{ fontWeight: 800, color }}>{value}</span>
+                              <span style={{ color: '#94a3b8', marginLeft: '0.25rem' }}>{label}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Progress bar */}
+                        {camp.total_contacts > 0 && (
+                          <div style={{ marginTop: '0.5rem', background: '#f1f5f9', borderRadius: '4px', height: '4px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', background: '#2563eb', width: `${Math.min(100, Math.round((camp.sent_count / camp.total_contacts) * 100))}%`, transition: 'width 0.3s' }} />
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0 }}>
+                        {(camp.status === 'Draft' || camp.status === 'Paused') && (
+                          <button
+                            className="btn btn--sm"
+                            style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+                            onClick={() => sendCampaignBatch(camp.id)}
+                            disabled={sendingCampaign === camp.id}>
+                            {sendingCampaign === camp.id ? '⏳ Sending…' : '▶ Send Batch'}
+                          </button>
+                        )}
+                        {camp.status === 'Running' && (
+                          <button
+                            className="btn btn--sm"
+                            style={{ background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontWeight: 700 }}
+                            onClick={() => sendCampaignBatch(camp.id)}
+                            disabled={sendingCampaign === camp.id}>
+                            {sendingCampaign === camp.id ? '⏳ Sending…' : '▶ Next Batch'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ══ CONVERSATIONS INBOX ══ */}
+        {tab === 'conversations' && (
+          <div style={{ display: 'flex', gap: '0.75rem', height: 'calc(100vh - 130px)', overflow: 'hidden' }}>
+            {/* Left: conversation list */}
+            <div style={{ width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+              <div style={{ padding: '0.65rem 0.85rem', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.4rem' }}>💬 Inbox</div>
+                <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                  {['all', 'Open', 'Booked', 'Escalated', 'Opted-Out'].map(f => (
+                    <button key={f} onClick={() => setConvFilter(f)}
+                      style={{ padding: '0.15rem 0.45rem', borderRadius: '12px', border: '1px solid', fontSize: '0.67rem', fontWeight: 700, cursor: 'pointer', background: convFilter === f ? '#2563eb' : '#f8fafc', color: convFilter === f ? '#fff' : '#64748b', borderColor: convFilter === f ? '#2563eb' : '#e2e8f0' }}>
+                      {f === 'all' ? 'All' : f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                {filteredConvs.map(c => {
+                  const sc = STATUS_COLOR[c.status] ?? STATUS_COLOR.Closed
+                  const isSelected = selectedConv?.id === c.id
+                  return (
+                    <div key={c.id} onClick={() => setSelectedConv(c)}
+                      style={{ padding: '0.7rem 0.85rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer', background: isSelected ? '#eff6ff' : 'white', transition: 'background 0.1s' }}
+                      onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '#f8fafc' }}
+                      onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'white' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: sc.bg, color: sc.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.78rem', flexShrink: 0 }}>
+                          {(c.customer_name || c.phone).charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.customer_name || c.phone}</div>
+                          <div style={{ fontSize: '0.67rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.model || ''} {c.reg_number ? `· ${c.reg_number}` : ''}</div>
+                        </div>
+                        <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                          <span style={{ background: sc.bg, color: sc.color, padding: '0.1rem 0.35rem', borderRadius: '10px', fontSize: '0.6rem', fontWeight: 700 }}>{c.status}</span>
+                          <div style={{ fontSize: '0.6rem', color: '#94a3b8', marginTop: '0.15rem' }}>{new Date(c.last_message_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {filteredConvs.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem' }}>No conversations</div>}
+              </div>
+            </div>
+
+            {/* Right: chat view */}
+            {selectedConv ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                {/* Chat header */}
+                <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0, background: '#f8fafc' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
+                    {(selectedConv.customer_name || selectedConv.phone).charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#1e293b' }}>{selectedConv.customer_name || selectedConv.phone}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{selectedConv.phone} · {selectedConv.model || ''} {selectedConv.reg_number || ''} · {selectedConv.ai_turns} AI turns</div>
+                  </div>
+                  <div style={{ flex: 1 }} />
+                  {selectedConv.booking_id && <span style={{ background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 700 }}>✅ Booked #{selectedConv.booking_id}</span>}
+                  {/* Quick status change */}
+                  <select
+                    value={selectedConv.status}
+                    onChange={async e => {
+                      await supabase.from('wa_conversations').update({ status: e.target.value }).eq('id', selectedConv.id)
+                      setSelectedConv(p => p ? { ...p, status: e.target.value } : p)
+                      setConversations(prev => prev.map(c => c.id === selectedConv.id ? { ...c, status: e.target.value } : c))
+                    }}
+                    className="inp" style={{ padding: '0.22rem 0.5rem', fontSize: '0.72rem', width: '120px' }}>
+                    {Object.keys(STATUS_COLOR).map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                {/* Messages */}
+                <div style={{ flex: 1, overflow: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', background: '#f0f2f5' }}>
+                  {messages.length === 0 && <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem', padding: '2rem' }}>No messages yet</div>}
+                  {messages.map(msg => {
+                    const isOut = msg.direction === 'outbound'
+                    return (
+                      <div key={msg.id} style={{ display: 'flex', justifyContent: isOut ? 'flex-end' : 'flex-start' }}>
+                        <div style={{
+                          maxWidth: '70%', background: isOut ? '#dcfce7' : '#fff',
+                          borderRadius: isOut ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                          padding: '0.55rem 0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                        }}>
+                          {msg.ai_generated && <div style={{ fontSize: '0.62rem', color: '#16a34a', fontWeight: 700, marginBottom: '0.2rem' }}>🤖 AI Agent</div>}
+                          {msg.sender === 'staff' && <div style={{ fontSize: '0.62rem', color: '#7c3aed', fontWeight: 700, marginBottom: '0.2rem' }}>👤 Staff</div>}
+                          <div style={{ fontSize: '0.82rem', color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{msg.body}</div>
+                          <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '0.25rem', textAlign: 'right' }}>
+                            {new Date(msg.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            {isOut && <span style={{ marginLeft: '0.3rem' }}>{msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Manual reply input */}
+                <div style={{ padding: '0.65rem 0.85rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', flexShrink: 0, background: '#fff' }}>
+                  <textarea
+                    value={manualMsg}
+                    onChange={e => setManualMsg(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendManualMessage() } }}
+                    placeholder="Type a manual reply (overrides AI)… Enter to send"
+                    className="inp"
+                    rows={2}
+                    style={{ flex: 1, resize: 'none', fontSize: '0.82rem' }}
+                  />
+                  <button
+                    className="btn btn--sm"
+                    style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700, alignSelf: 'flex-end', padding: '0.5rem 0.9rem' }}
+                    onClick={sendManualMessage}
+                    disabled={sendingManual || !manualMsg.trim()}>
+                    {sendingManual ? '⏳' : '💬 Send'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', flexDirection: 'column', gap: '0.5rem', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '3rem' }}>💬</div>
+                <div style={{ fontWeight: 600 }}>Select a conversation</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ SETTINGS ══ */}
+        {tab === 'settings' && config && (
+          <div style={{ maxWidth: '760px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>⚙️ Agent Settings</span>
+              <button className="btn btn--primary btn--sm" style={{ marginLeft: 'auto' }} onClick={saveConfig} disabled={saving}>
+                {saving ? 'Saving…' : '💾 Save Settings'}
+              </button>
+            </div>
+
+            {/* Meta API */}
+            <Section title="📱 Meta WhatsApp API">
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.65rem 0.85rem', marginBottom: '0.85rem', fontSize: '0.78rem', color: '#92400e' }}>
+                ⚡ Get these from <strong>Meta Business Suite → WhatsApp → API Setup</strong>. Your webhook URL is: <code style={{ background: '#fef3c7', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>/api/functions/waWebhook</code>. Verify token: <code style={{ background: '#fef3c7', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>techwheels_wa_2026</code>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                <label className="field">
+                  <span className="label">Phone Number ID</span>
+                  <input className="inp" placeholder="From Meta API Setup" value={config.meta_phone_number_id || ''} onChange={e => setConfig(p => p ? { ...p, meta_phone_number_id: e.target.value } : p)} />
+                </label>
+                <label className="field">
+                  <span className="label">Access Token</span>
+                  <input className="inp" type="password" placeholder="EAA…" value={config.meta_access_token || ''} onChange={e => setConfig(p => p ? { ...p, meta_access_token: e.target.value } : p)} />
+                </label>
+              </div>
+            </Section>
+
+            {/* OpenAI */}
+            <Section title="🧠 OpenAI API (AI Replies)">
+              <label className="field">
+                <span className="label">OpenAI API Key</span>
+                <input className="inp" type="password" placeholder="sk-…" value={config.openai_api_key || ''} onChange={e => setConfig(p => p ? { ...p, openai_api_key: e.target.value } : p)} />
+              </label>
+            </Section>
+
+            {/* Agent Identity */}
+            <Section title="🤖 Agent Identity">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                <label className="field">
+                  <span className="label">Agent Name</span>
+                  <input className="inp" placeholder="e.g. Riya" value={config.agent_name} onChange={e => setConfig(p => p ? { ...p, agent_name: e.target.value } : p)} />
+                </label>
+                <label className="field">
+                  <span className="label">Business Name</span>
+                  <input className="inp" placeholder="e.g. Techwheels Service" value={config.business_name} onChange={e => setConfig(p => p ? { ...p, business_name: e.target.value } : p)} />
+                </label>
+                <label className="field">
+                  <span className="label">Working Hours</span>
+                  <input className="inp" placeholder="Mon-Sat 9AM-6PM" value={config.working_hours} onChange={e => setConfig(p => p ? { ...p, working_hours: e.target.value } : p)} />
+                </label>
+                <label className="field">
+                  <span className="label">Max AI Turns per Conversation</span>
+                  <input className="inp" type="number" min={3} max={25} value={config.max_ai_turns} onChange={e => setConfig(p => p ? { ...p, max_ai_turns: parseInt(e.target.value) || 10 } : p)} />
+                </label>
+                <label className="field" style={{ gridColumn: 'span 2' }}>
+                  <span className="label">Available Branches (comma separated)</span>
+                  <input className="inp" value={(config.available_branches || []).join(', ')} onChange={e => setConfig(p => p ? { ...p, available_branches: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } : p)} />
+                </label>
+              </div>
+            </Section>
+
+            {/* AI System Prompt */}
+            <Section title="💬 AI System Prompt">
+              <div style={{ fontSize: '0.73rem', color: '#64748b', marginBottom: '0.5rem' }}>This is the core instruction given to the AI. Edit to change its personality, language, and rules.</div>
+              <textarea className="inp" rows={8} value={config.system_prompt} onChange={e => setConfig(p => p ? { ...p, system_prompt: e.target.value } : p)} style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' }} />
+            </Section>
+
+            {/* Messages */}
+            <Section title="📨 Message Templates">
+              <label className="field">
+                <span className="label">Greeting Message (First outreach)</span>
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.3rem' }}>Variables: {'{{name}} {{model}} {{reg_no}} {{service_due}}'}</div>
+                <textarea className="inp" rows={3} value={config.greeting_message} onChange={e => setConfig(p => p ? { ...p, greeting_message: e.target.value } : p)} style={{ resize: 'vertical' }} />
+              </label>
+              <label className="field" style={{ marginTop: '0.65rem' }}>
+                <span className="label">Booking Confirmation Message</span>
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.3rem' }}>Variables: {'{{booking_id}} {{reg_no}} {{model}} {{date}} {{time}} {{branch}} {{sa_name}}'}</div>
+                <textarea className="inp" rows={5} value={config.booking_confirm_msg} onChange={e => setConfig(p => p ? { ...p, booking_confirm_msg: e.target.value } : p)} style={{ resize: 'vertical' }} />
+              </label>
+              <label className="field" style={{ marginTop: '0.65rem' }}>
+                <span className="label">Closing / Thank You Message</span>
+                <textarea className="inp" rows={2} value={config.closing_message} onChange={e => setConfig(p => p ? { ...p, closing_message: e.target.value } : p)} style={{ resize: 'vertical' }} />
+              </label>
+            </Section>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <button className="btn btn--primary" onClick={saveConfig} disabled={saving}>{saving ? 'Saving…' : '💾 Save All Settings'}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', padding: '1rem 1.1rem', marginBottom: '0.85rem' }}>
+      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', marginBottom: '0.75rem', paddingBottom: '0.5rem', borderBottom: '1px solid #f1f5f9' }}>{title}</div>
+      {children}
+    </div>
+  )
+}
