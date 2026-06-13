@@ -26,7 +26,8 @@ interface Employee {
   department: string | null
 }
 
-type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN'
+type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
+type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
 
 interface BSAssignment {
   id: number
@@ -41,15 +42,30 @@ interface BSAssignment {
   out_ts: string | null
 }
 
+interface SupportAssignment {
+  id: number
+  job_card_number: string
+  support_role: SupportRole
+  employee_code: string
+  employee_name: string
+  assigned_at: string
+  assigned_by: string | null
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
 type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed'
 
 const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
-  DENTOR:     { label: 'Dentor',     icon: '🔨' },
-  PAINTER:    { label: 'Painter',    icon: '🎨' },
-  TECHNICIAN: { label: 'Technician', icon: '🔧' },
+  DENTOR:      { label: 'Dentor',      icon: '🔨' },
+  PAINTER:     { label: 'Painter',     icon: '🎨' },
+  TECHNICIAN:  { label: 'Technician',  icon: '🔧' },
+  ELECTRICIAN: { label: 'Electrician', icon: '⚡' },
+  DET:         { label: 'DET',         icon: '🧰' },
 }
 
-const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN']
+const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
 
 const STATUS_OPTIONS = [
   { value: 'work_inprocess', label: 'Work Inprocess' },
@@ -67,8 +83,10 @@ function fmtDate(v: string | null | undefined) {
 function normRole(r: string | null): BSRole | null {
   const v = String(r ?? '').trim().toUpperCase()
   if (v === 'DENTOR')     return 'DENTOR'
-  if (v === 'PAINTER' || v === 'DET') return 'PAINTER'
+  if (v === 'PAINTER')    return 'PAINTER'
   if (v === 'TECHNICIAN') return 'TECHNICIAN'
+  if (v === 'ELECTRICIAN') return 'ELECTRICIAN'
+  if (v === 'DET')        return 'DET'
   return null
 }
 
@@ -89,6 +107,11 @@ export default function BodyshopFloorPage() {
   const [employees, setEmployees]     = useState<Employee[]>([])
   // assignments keyed by JC_NUMBER (uppercase)  →  per-role map
   const [assignments, setAssignments] = useState<Record<string, Record<BSRole, BSAssignment | undefined>>>({})
+  // supportAssignments keyed by JC_NUMBER (uppercase) → per-role array
+  const [supportAssignments, setSupportAssignments] = useState<Record<string, Record<SupportRole, SupportAssignment[]>>>({})
+  // Inline picker state
+  const [inlinePickerOpen, setInlinePickerOpen] = useState<Record<string, boolean>>({})
+  const [inlinePickerValue, setInlinePickerValue] = useState<Record<string, string>>({})
 
   // Filters
   const [assignmentView, setAssignmentView] = useState<AssignmentView>('all')
@@ -202,7 +225,7 @@ export default function BodyshopFloorPage() {
         const map: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
         for (const a of (assData ?? []) as BSAssignment[]) {
           const k = a.job_card_number.toUpperCase()
-          if (!map[k]) map[k] = { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }
+          if (!map[k]) map[k] = { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
           // Keep latest per role
           const existing = map[k][a.role]
           if (!existing || new Date(a.assigned_at) > new Date(existing.assigned_at)) {
@@ -225,6 +248,33 @@ export default function BodyshopFloorPage() {
         }
         setStageDrafts(drafts)
       }
+
+      // 5. Bodyshop floor support assignments
+      const { data: supportData, error: supportErr } = await supabase
+        .from('bodyshop_floor_support_assignments')
+        .select('*')
+        .eq('is_active', true)
+        .order('assigned_at', { ascending: false })
+
+      if (supportErr) {
+        console.warn('bodyshop_floor_support_assignments:', supportErr.message)
+        setSupportAssignments({})
+      } else {
+        const supportMap: Record<string, Record<SupportRole, SupportAssignment[]>> = {}
+        for (const s of (supportData ?? []) as SupportAssignment[]) {
+          const k = s.job_card_number.toUpperCase()
+          const role = s.support_role as SupportRole
+          if (!supportMap[k]) supportMap[k] = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+          supportMap[k][role].push(s)
+        }
+        // Sort each role array by assigned_at DESC
+        for (const roleMap of Object.values(supportMap)) {
+          for (const supportList of Object.values(roleMap)) {
+            supportList.sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime())
+          }
+        }
+        setSupportAssignments(supportMap)
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load', 'error')
     } finally {
@@ -237,7 +287,14 @@ export default function BodyshopFloorPage() {
   // ── Employees by role ────────────────────────────────────────────────────
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
-    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [] }
+    const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+    employees.forEach((e) => { const r = normRole(e.role); if (r) m[r].push(e) })
+    ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
+    return m
+  }, [employees])
+
+  const empBySupportRole = useMemo<Record<SupportRole, Employee[]>>(() => {
+    const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
     employees.forEach((e) => { const r = normRole(e.role); if (r) m[r].push(e) })
     ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m
@@ -407,7 +464,7 @@ export default function BodyshopFloorPage() {
       const newA = result.data as BSAssignment
       setAssignments((prev) => ({
         ...prev,
-        [k]: { ...(prev[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }), [role]: newA },
+        [k]: { ...(prev[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }), [role]: newA },
       }))
       setStageDrafts((prev) => ({
         ...prev,
@@ -416,6 +473,62 @@ export default function BodyshopFloorPage() {
       showToast(`${ROLE_META[role].label} assigned: ${emp.employee_name}`, 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to assign', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  // ── Add support person (inline picker) ────────────────────────────────────
+
+  async function addSupportAssignment(car: AccidentCar, role: SupportRole) {
+    const pickerKey = `${jcKey(car)}-${role}-support`
+    const empCode = inlinePickerValue[pickerKey] ?? ''
+    if (!empCode) return
+
+    const emp = empBySupportRole[role].find((e) => e.employee_code === empCode)
+    if (!emp) return
+
+    const k = jcKey(car)
+    setSaving(`${k}-${role}-support`)
+    try {
+      // Check if already assigned
+      const existing = supportAssignments[k]?.[role] ?? []
+      if (existing.some((s) => s.employee_code === empCode)) {
+        showToast(`${emp.employee_name} already assigned as ${ROLE_META[role].label}`, 'error')
+        setSaving(null)
+        return
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      const payload = {
+        job_card_number: k,
+        support_role: role,
+        employee_code: emp.employee_code,
+        employee_name: emp.employee_name,
+        assigned_at: new Date().toISOString(),
+        assigned_by: user?.email ?? null,
+        is_active: true,
+      }
+
+      const result = await supabase.from('bodyshop_floor_support_assignments').insert(payload).select().single()
+      if (result.error) throw result.error
+
+      const newSupport = result.data as SupportAssignment
+      setSupportAssignments((prev) => ({
+        ...prev,
+        [k]: {
+          ...(prev[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }),
+          [role]: [...(prev[k]?.[role] ?? []), newSupport],
+        },
+      }))
+
+      // Clear picker
+      setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: false }))
+      setInlinePickerValue((prev) => ({ ...prev, [pickerKey]: '' }))
+
+      showToast(`${ROLE_META[role].label} support added: ${emp.employee_name}`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add support', 'error')
     } finally {
       setSaving(null)
     }
@@ -619,6 +732,8 @@ export default function BodyshopFloorPage() {
                     <th>🔨 Dentor</th>
                     <th>🎨 Painter</th>
                     <th>🔧 Technician</th>
+                    <th>⚡ Electrician</th>
+                    <th>🧰 DET</th>
                     <th>IN TS</th>
                     <th>OUT TS</th>
                   </tr>
@@ -626,7 +741,8 @@ export default function BodyshopFloorPage() {
                 <tbody>
                   {filtered.map((car) => {
                     const k = jcKey(car)
-                    const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }
+                    const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
+                    const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
 
                     return (
                       <tr key={car.id}>
@@ -648,20 +764,26 @@ export default function BodyshopFloorPage() {
                         {/* Role columns */}
                         {ALL_ROLES.map((role) => {
                           const ass = carMap[role]
+                          const supportList = supportMap[role] ?? []
                           const draft = stageDrafts[k]?.[role] ?? { work_status: ass?.work_status ?? 'work_inprocess', remark: '' }
                           const isSavingThis = saving === `${k}-${role}` || saving === `${k}-${role}-stage`
+                          const isSavingSupport = saving === `${k}-${role}-support`
                           const changed = hasDraftChanges(k, role)
+                          const pickerKey = `${k}-${role}-support`
+                          const showPicker = inlinePickerOpen[pickerKey]
+                          const pickerValue = inlinePickerValue[pickerKey] ?? ''
 
                           return (
-                            <td key={role} style={{ minWidth: 220, verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 }}>
-                              {/* Assign select */}
+                            <td key={role} style={{ minWidth: 240, verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 }}>
                               <div className="fi-assignment-cell">
-                                <div className="fi-assignment-row">
+                                {/* Primary assignment select + add support button */}
+                                <div className="fi-assignment-row" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                   <select
                                     className="sel sel-md"
                                     value={ass?.employee_code ?? ''}
                                     disabled={isSavingThis}
                                     onChange={(e) => void assignRole(car, role, e.target.value)}
+                                    style={{ flex: 1 }}
                                   >
                                     <option value="">— Select {ROLE_META[role].label} —</option>
                                     {empByRole[role].map((emp) => (
@@ -670,9 +792,70 @@ export default function BodyshopFloorPage() {
                                       </option>
                                     ))}
                                   </select>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      width: 20,
+                                      height: 20,
+                                      borderRadius: '50%',
+                                      border: '1px solid #cbd5e1',
+                                      background: '#f8fafc',
+                                      color: '#475569',
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      padding: 0,
+                                      flexShrink: 0,
+                                    }}
+                                    onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
+                                    disabled={isSavingSupport}
+                                  >
+                                    +
+                                  </button>
                                 </div>
 
-                                {/* Status + remark + save (only when assigned) */}
+                                {/* Support people pills */}
+                                {supportList.length > 0 && (
+                                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+                                    {supportList.map((sp) => (
+                                      <div key={sp.id} className="fi-support-pill" style={{ fontSize: 11, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 12, padding: '3px 8px', whiteSpace: 'nowrap' }}>
+                                        {sp.employee_name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Inline picker (when + clicked) */}
+                                {showPicker && (
+                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <select
+                                      className="sel sel-sm"
+                                      value={pickerValue}
+                                      onChange={(e) => setInlinePickerValue((prev) => ({ ...prev, [pickerKey]: e.target.value }))}
+                                      disabled={isSavingSupport}
+                                    >
+                                      <option value="">— Select {ROLE_META[role].label} —</option>
+                                      {empBySupportRole[role].map((emp) => (
+                                        <option key={emp.employee_code} value={emp.employee_code}>
+                                          {emp.employee_name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      className="btn btn--primary btn--xs"
+                                      disabled={!pickerValue || isSavingSupport}
+                                      style={{ opacity: pickerValue && !isSavingSupport ? 1 : 0.5 }}
+                                      onClick={() => void addSupportAssignment(car, role)}
+                                    >
+                                      {isSavingSupport ? 'Adding…' : 'Add'}
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Status + remark + save (only when primary assigned) */}
                                 {ass && (
                                   <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
                                     <select

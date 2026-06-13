@@ -673,6 +673,122 @@ After migration apply:
   - Manual migration execution in target DB.
   - Authenticated UAT on `/bodyshop-repair` to validate fetch + manual override + save persistence behavior.
 
+### 2026-06-13 - Bodyshop Floor Multi-Role Assignment Phase
+- **Requirement:** Extend Bodyshop Floor page assignment UI from 3 roles to 5 roles with inline multi-assignment support per role.
+  - Add 2 new primary roles: **Electrician ⚡** and **DET 🧰** (primary allocation, same as existing 3)
+  - Each role supports inline `+` button to add multiple support people (no popup/modal)
+  - All roles (Dentor, Painter, Technician, Electrician, DET) support stage tracking when assigned as primary
+  - Support people can be assigned for any role (all 5 roles accept additional support)
+
+- **Schema Authority Verified (from authoritative dump):**
+  - **Primary roles table:** `public.bodyshop_assignments` (to be expanded via migration)
+    - Current role constraint: `DENTOR | PAINTER | TECHNICIAN` (3 roles, locked by CHECK)
+    - **Required change:** Expand to `DENTOR | PAINTER | TECHNICIAN | ELECTRICIAN | DET` (5 roles via ALTER TABLE migration)
+    - Supports: work_status, remark, out_ts (stage tracking for all primary roles)
+    - No unique constraint on (job_card_number, role) → allows multiple rows per role per JC
+  - **Support roles table:** `public.bodyshop_floor_support_assignments` (new, module-isolated)
+    - Support role constraint: `DENTOR | PAINTER | TECHNICIAN | ELECTRICIAN | DET` (all 5 roles for support staff)
+    - Does NOT support: work_status, remark, out_ts (support people are non-stage-trackable)
+    - Designed for multi-person support assignments per job card in Bodyshop Floor only
+    - **Separation rationale:** `job_card_support_assignments` is explicitly for Floor Incharge module (comment: "floor incharge workflow"); new dedicated table isolates Bodyshop Floor concerns
+
+- **Architecture Decision (Hybrid Model):**
+  - **Primary assignments** use `bodyshop_assignments` (expanded to 5 roles) + stage controls (select, status, remark, save)
+    - One primary person per role per job card (update existing or insert new)
+    - All 5 roles (DENTOR, PAINTER, TECHNICIAN, ELECTRICIAN, DET) support stage tracking
+  - **Support assignments** use `bodyshop_floor_support_assignments` (accepts all 5 roles) + inline `+` picker (no stage controls)
+    - Multiple support people per role per job card
+    - Any role can have additional support staff beyond the primary assignee
+  - **Layout per role cell:** Primary person name + support pills below + inline picker when `+` clicked
+  - **Data loading:** Merge both tables on load; group by jcKey, role; maintain order by assigned_at DESC
+  - **Module isolation:** Dedicated table keeps Bodyshop Floor separate from Floor Incharge (`job_card_support_assignments`)
+
+- **Implementation Scope (src/pages/BodyshopFloorPage.tsx):**
+  - Add `SupportRole` type: `'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'` (all 5 roles for support)
+  - Add `SupportAssignment` interface mirroring `public.bodyshop_floor_support_assignments` schema
+  - Add `supportAssignments` state: `Record<string, Record<SupportRole, SupportAssignment[]>>`
+  - Add `inlinePickerOpen`, `inlinePickerValue` state for role-scoped pickers
+  - Add `empByRole` memo to filter employees by primary role capability (5 roles)
+  - Add `empBySupportRole` memo to filter employees by support role capability (5 roles, all roles can be support)
+  - Add `loadAll()` integration: fetch both `bodyshop_assignments` (primary) + `bodyshop_floor_support_assignments` (support)
+  - Add `addSupportAssignment()` function: validate, insert, update local state
+  - **Remove modal UI:** existing "Assign Bodyshop Team" modal no longer needed; all UI inline
+  - **Table columns:** All 5 role columns with same layout: `🔨 Dentor | 🎨 Painter | 🔧 Technician | ⚡ Electrician | 🧰 DET`
+  - **Inline picker pattern:** Click `+` → dropdown appears → select employee → "Add" button → pill appears, picker closes
+
+- **Schema Modifications Required:**
+  - **Migration 1:** `20260613000000_expand_bodyshop_assignments_roles.sql` — ALTER TABLE bodyshop_assignments to expand role CHECK from 3 to 5 roles
+  - **Migration 2:** `20260613000001_create_bodyshop_floor_support_assignments.sql` — CREATE TABLE with 5-role support_role constraint
+  - Both tables ready after migrations; no RLS changes (migration includes proper policies)
+  - Backward compatible; existing primary assignments untouched
+  - Separate from Floor Incharge module
+
+- **Status:** ✅ IMPLEMENTATION COMPLETE (schema + frontend)
+
+---
+
+### 2026-06-13 - Bodyshop Floor Multi-Role Schema Migrations Applied
+- **Executed migrations (successful, no errors):**
+  1. `20260613000000_expand_bodyshop_assignments_roles.sql` ✅ 
+     - Expanded `bodyshop_assignments.role` CHECK from 3 roles → 5 roles
+     - Added ELECTRICIAN and DET to primary allocation options
+  2. `20260613000001_create_bodyshop_floor_support_assignments.sql` ✅ 
+     - Created new table with all 5 roles for support staff
+     - RLS policies and triggers configured
+  3. `20260613000000_verify_bodyshop_floor_multi_role_schema.sql` ✅ 
+     - Verification passed; all constraints and columns verified
+
+- **Schema Status:** 🟢 READY FOR FRONTEND IMPLEMENTATION
+  - `bodyshop_assignments`: 5 primary roles, stage tracking, all constraints verified
+  - `bodyshop_floor_support_assignments`: 5 support roles, no stage tracking, module-isolated
+  - No data migration needed; backward compatible with existing assignments
+  - RLS policies active; authenticated and service_role grants configured
+
+- **Next Phase:** Implement BodyshopFloorPage.tsx changes (5-role UI with inline `+` pickers)
+
+### 2026-06-13 - Bodyshop Floor Multi-Role Frontend Implementation Complete
+- **BodyshopFloorPage.tsx Updated:**
+  - ✅ Expanded BSRole type from 3 to 5 roles (added ELECTRICIAN, DET)
+  - ✅ Added SupportRole type and SupportAssignment interface
+  - ✅ Added supportAssignments state (grouped by jcKey + role, multiple per role)
+  - ✅ Added inlinePickerOpen/inlinePickerValue state for role-scoped inline pickers
+  - ✅ Updated normRole() to handle all 5 roles (no mapping of DET to PAINTER)
+  - ✅ Updated ROLE_META with icons for new roles (⚡ ELECTRICIAN, 🧰 DET)
+  - ✅ Updated empByRole memo to include 5 roles
+  - ✅ Added empBySupportRole memo for filtering support employees
+  - ✅ Updated loadAll() to fetch bodyshop_floor_support_assignments (new table)
+  - ✅ Added addSupportAssignment() function for inline support assignment flow
+  - ✅ Updated table headers: added ⚡ Electrician and 🧰 DET columns
+  - ✅ Rewrote role column rendering to include:
+    - Primary assignment select (existing)
+    - Support pills + inline `+` button (new)
+    - Inline picker on `+` click with employee select + Add button (new)
+    - Status/remark/save controls (only when primary assigned, existing)
+  - ✅ Updated carMap initialization to include all 5 roles
+  - ✅ Removed modal usage from inline workflow (modal still available if needed later)
+
+- **Features Implemented:**
+  - **5-role UI:** All roles visible in table header and columns
+  - **Primary assignment:** Select dropdown per role (with stage tracking: status, remark, out_ts)
+  - **Support assignment:** Inline `+` button → picker → select employee → "Add" button (no stage tracking)
+  - **Multi-person support:** Any role can have multiple support people (pills display + add button)
+  - **Module isolation:** Uses dedicated `bodyshop_floor_support_assignments` table (separate from Floor Incharge)
+  - **Duplicate prevention:** Checks if employee already assigned before adding
+
+- **Build Status:** ✅ TypeScript compiled, no errors, production build successful
+
+- **Testing Checklist (Ready for UAT):**
+  - [ ] Primary role assignment works for all 5 roles
+  - [ ] Primary roles with stage controls show correctly (status, remark, out_ts)
+  - [ ] Support assignment inline picker appears on `+` click
+  - [ ] Support pills display existing support people per role
+  - [ ] Duplicate detection prevents same person being added twice
+  - [ ] Inline picker closes after successful add
+  - [ ] Support people list persists after page refresh
+  - [ ] IN TS / OUT TS computed from primary assignments only
+  - [ ] Role filter dropdown works with all 5 roles
+  - [ ] No data loss on existing cars/assignments during upgrade
+
 ---
 
 ## Related Documentation
