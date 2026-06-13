@@ -1061,39 +1061,59 @@ export default function ServiceAdvisorPage() {
       ? formatDate(row.invoice_done_at)
       : formatDate(new Date().toISOString())
 
-    let complaintUrl = ''
+    let message = ''
 
     try {
       const link = await generateComplaintLink(BigInt(row.id))
-      complaintUrl = `${window.location.origin}/c/${link.token}`
-    } catch {
-      setError('Unable to generate complaint link for this row. Please retry.')
-      showToast('Unable to generate complaint link')
-      return
+      const complaintUrl = `${window.location.origin}/c/${link.token}`
+      message = buildSaFloorCompletedWaTemplate({
+        customerName: String(row.owner_name ?? '').trim() || 'Customer',
+        regNumber: regNo,
+        vehicleDetails,
+        completedOn,
+        complaintUrl,
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error ?? 'Unknown error')
+      console.error('[service-advisor][mark-done][generate-complaint-link] failed', {
+        rowId: row.id,
+        regNumber: row.reg_number,
+        ownerPhoneRaw: row.owner_phone,
+        reason,
+      })
+      // Keep WA flow reliable even if complaints module permission/link generation is unavailable.
+      message = [
+        `Hello ${String(row.owner_name ?? '').trim() || 'Customer'},`,
+        '',
+        `Your vehicle ${regNo} (${vehicleDetails}) work is completed on ${completedOn}.`,
+        '',
+        'If you face any issue, please contact your service advisor to raise a complaint.',
+        '',
+        'Thank you,',
+        'Techwheels Service',
+      ].join('\n')
+      showToast(`Complaint link unavailable (${reason}). Opening WhatsApp without complaint link.`)
     }
-
-    const message = buildSaFloorCompletedWaTemplate({
-      customerName: String(row.owner_name ?? '').trim() || 'Customer',
-      regNumber: regNo,
-      vehicleDetails,
-      completedOn,
-      complaintUrl,
-    })
 
     const isMobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
     const waUrl = isMobileDevice
       ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(message)}`
       : `https://web.whatsapp.com/send?phone=${ownerPhone}&text=${encodeURIComponent(message)}`
 
-    const opened = window.open(waUrl, '_blank', 'noopener,noreferrer')
+    // Open a tab synchronously to reduce popup-blocker failures after awaited calls.
+    const opened = window.open('', '_blank', 'noopener,noreferrer')
+
+    if (opened) {
+      opened.location.href = waUrl
+      showToast('WhatsApp opened with prefilled message. Please click Send manually.')
+      return
+    }
 
     if (!opened) {
       // Popup blockers may block window.open; fallback to same-tab navigation.
       window.location.href = waUrl
       return
     }
-
-    showToast('WhatsApp opened with prefilled message. Please click Send manually.')
   }
 
   async function handleGenerateComplaintLink(row: ReceptionEntryRow) {
