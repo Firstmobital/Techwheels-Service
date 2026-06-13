@@ -74,6 +74,7 @@ type ModuleName =
   | 'complaints'
   | 'bodyshop_repair'
   | 'ew_reminder'
+  | 'service_booking'
 
 type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking'
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { Icon } from '../components/Icon'
 import DateRangeFilter from '../components/DateRangeFilter'
@@ -130,7 +130,6 @@ export default function ServiceBookingPage() {
   const [savingFollowup, setSavingFollowup] = useState(false)
   const [followupForm, setFollowupForm] = useState({ channel: 'Call', note: '', outcome: '', next_follow_up: '', done_by: '' })
   const [showFollowupForm, setShowFollowupForm] = useState(false)
-  const portalRef = useRef<HTMLDivElement | null>(null)
 
   // ── Load data ───────────────────────────────────────────────────────────────
   useEffect(() => {
