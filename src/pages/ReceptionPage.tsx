@@ -303,6 +303,34 @@ function normalizeServiceType(value: string | null | undefined): string {
   return String(value ?? '').trim().replace(/\s+/g, ' ')
 }
 
+function normalizeDepartment(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+  if (normalized === 'BODYSHOP') return 'BODY SHOP'
+  return normalized
+}
+
+function getRequiredDepartmentForServiceType(serviceType: string | null | undefined): 'SERVICE' | 'BODY SHOP' | 'PDI' {
+  const normalized = normalizeServiceType(serviceType).toLowerCase()
+  if (normalized === 'accident') return 'BODY SHOP'
+  if (normalized === 'pdi') return 'PDI'
+  return 'SERVICE'
+}
+
+function normalizeFuelBucket(value: string | null | undefined): 'EV' | 'PV' | '' {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (!normalized) return ''
+  return normalized.includes('EV') ? 'EV' : 'PV'
+}
+
+function inferRequiredFuelTypeFromModel(model: string | null | undefined): 'EV' | 'PV' {
+  const normalized = String(model ?? '').trim().toUpperCase()
+  return normalized.includes('EV') ? 'EV' : 'PV'
+}
+
+function shouldApplyFuelFilter(serviceType: string | null | undefined): boolean {
+  return normalizeServiceType(serviceType).toLowerCase() !== 'accident'
+}
+
 function getServiceTypeLabel(value: string | null | undefined): string {
   const normalized = normalizeServiceType(value)
   if (normalized.toLowerCase() === 'null') return UNKNOWN_SERVICE_TYPE
@@ -463,10 +491,31 @@ export default function ReceptionPage() {
   }, [serviceTypeCounts])
 
   const sortedEmployeeOptions = useMemo(() => {
-    const values = [...employeeOptions]
+    // Business rule (source of truth):
+    // 1) Service Type -> Department mapping:
+    //    Accident => BODY SHOP, PDI => PDI, all others => SERVICE.
+    // 2) Model -> Fuel Type mapping:
+    //    model contains "EV" => EV, otherwise => PV.
+    // 3) Accident is exempt from fuel filtering: show all BODY SHOP advisors.
+    // 4) For non-Accident, SA dropdown shows employee_master rows matching BOTH department and fuel_type.
+    // Keep this rule in sync with Settings > Employee Master to avoid behavior drift.
+    const requiredDepartment = getRequiredDepartmentForServiceType(form.service_type)
+    const useFuelFilter = shouldApplyFuelFilter(form.service_type)
+    const requiredFuelType = inferRequiredFuelTypeFromModel(form.model)
+
+    const values = employeeOptions.filter((employee) => {
+      const employeeDepartment = normalizeDepartment(employee.department)
+      if (employeeDepartment !== requiredDepartment) return false
+
+      if (!useFuelFilter) return true
+
+      const employeeFuelType = normalizeFuelBucket(employee.fuel_type)
+      return employeeFuelType === requiredFuelType
+    })
+
     values.sort((a, b) => a.employee_name.localeCompare(b.employee_name))
     return values
-  }, [employeeOptions])
+  }, [employeeOptions, form.model, form.service_type])
 
   const entryLookupById = useMemo(() => {
     return new Map(entries.map((entry) => [entry.id, entry]))
@@ -479,6 +528,13 @@ export default function ReceptionPage() {
       (employee) => String(employee.employee_code ?? '').trim().toUpperCase() === selectedCode,
     )
   }, [form.sa_employee_code, sortedEmployeeOptions])
+
+  useEffect(() => {
+    if (editingId !== null) return
+    if (!form.sa_employee_code) return
+    if (hasSelectedSaInOptions) return
+    setForm((prev) => ({ ...prev, sa_employee_code: '' }))
+  }, [editingId, form.sa_employee_code, hasSelectedSaInOptions])
 
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -1058,6 +1114,9 @@ export default function ReceptionPage() {
                   </option>
                 ))}
               </select>
+              <span style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'block' }}>
+                Showing {sortedEmployeeOptions.length} SA(s): {getRequiredDepartmentForServiceType(form.service_type)}{shouldApplyFuelFilter(form.service_type) ? ` + ${inferRequiredFuelTypeFromModel(form.model)}` : ' (all fuel types)'}
+              </span>
             </label>
 
             <div className="form-grid-2">
