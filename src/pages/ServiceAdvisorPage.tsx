@@ -1096,7 +1096,8 @@ export default function ServiceAdvisorPage() {
     }
 
     const isMobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
-    const waUrl = isMobileDevice
+    const appUrl = `whatsapp://send?phone=${ownerPhone}&text=${encodeURIComponent(message)}`
+    const fallbackUrl = isMobileDevice
       ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(message)}`
       : `https://web.whatsapp.com/send?phone=${ownerPhone}&text=${encodeURIComponent(message)}`
 
@@ -1104,14 +1105,24 @@ export default function ServiceAdvisorPage() {
     const opened = window.open('', '_blank', 'noopener,noreferrer')
 
     if (opened) {
-      opened.location.href = waUrl
-      showToast('WhatsApp opened with prefilled message. Please click Send manually.')
+      opened.location.href = appUrl
+      window.setTimeout(() => {
+        try {
+          if (!opened.closed) opened.location.href = fallbackUrl
+        } catch {
+          opened.location.href = fallbackUrl
+        }
+      }, 1400)
+      showToast('Opening WhatsApp app. Falling back to web if app is unavailable.')
       return
     }
 
     if (!opened) {
       // Popup blockers may block window.open; fallback to same-tab navigation.
-      window.location.href = waUrl
+      window.location.href = appUrl
+      window.setTimeout(() => {
+        window.location.href = fallbackUrl
+      }, 1400)
       return
     }
   }
