@@ -18,6 +18,11 @@ interface AgentConfig {
   auto_reply_enabled: boolean
   max_ai_turns: number
   wa_verify_token: string
+  daily_slot_capacity: number
+  escalation_email: string
+  escalation_phone: string
+  sa_whatsapp_number: string
+  staff_notify_on_escalation: boolean
 }
 
 interface Campaign {
@@ -1084,6 +1089,40 @@ export default function WAAgentPage() {
               <label className="field" style={{ marginTop: '0.65rem' }}>
                 <span className="label">Closing / Thank You Message</span>
                 <textarea className="inp" rows={2} value={config.closing_message} onChange={e => setConfig(p => p ? { ...p, closing_message: e.target.value } : p)} style={{ resize: 'vertical' }} />
+              </label>
+            </Section>
+
+
+            <Section title="🚨 Escalation & Slot Settings">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <label className="field">
+                  <span className="label">Daily Slot Capacity (per branch)</span>
+                  <input className="inp" type="number" min={1} max={200}
+                    value={config.daily_slot_capacity ?? 40}
+                    onChange={e => setConfig(p => p ? { ...p, daily_slot_capacity: Number(e.target.value) } : p)} />
+                  <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>AI will suggest next day if this many bookings exist for that date</div>
+                </label>
+                <label className="field">
+                  <span className="label">SA WhatsApp Number (for alerts)</span>
+                  <input className="inp" placeholder="919876543210 (with country code)" value={config.sa_whatsapp_number ?? ''}
+                    onChange={e => setConfig(p => p ? { ...p, sa_whatsapp_number: e.target.value } : p)} />
+                  <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>AI will forward escalations to this WA number</div>
+                </label>
+                <label className="field">
+                  <span className="label">Escalation Email</span>
+                  <input className="inp" type="email" placeholder="service@techwheels.in" value={config.escalation_email ?? ''}
+                    onChange={e => setConfig(p => p ? { ...p, escalation_email: e.target.value } : p)} />
+                </label>
+                <label className="field">
+                  <span className="label">Escalation Contact Phone</span>
+                  <input className="inp" placeholder="9876543210" value={config.escalation_phone ?? ''}
+                    onChange={e => setConfig(p => p ? { ...p, escalation_phone: e.target.value } : p)} />
+                </label>
+              </div>
+              <label className="field" style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={config.staff_notify_on_escalation ?? true}
+                  onChange={e => setConfig(p => p ? { ...p, staff_notify_on_escalation: e.target.checked } : p)} />
+                <span style={{ fontSize: '0.82rem' }}>Notify staff (WA + email) when AI escalates a customer</span>
               </label>
             </Section>
 
