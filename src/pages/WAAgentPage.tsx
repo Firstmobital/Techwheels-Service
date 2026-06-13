@@ -346,7 +346,7 @@ export default function WAAgentPage() {
       await supabase.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
 
       // Call edge function to get AI reply
-      const { data: fnData, error: fnErr } = await supabase.functions.invoke('wa-test-reply', {
+      const { data: fnData } = await supabase.functions.invoke('wa-test-reply', {
         body: { conversation_id: convId, message: userMsg },
       })
 
@@ -884,7 +884,6 @@ export default function WAAgentPage() {
             </div>
           </div>
         )}
-      </div>
 
         {/* ══ TEST SIMULATOR ══ */}
         {tab === 'test' && (
