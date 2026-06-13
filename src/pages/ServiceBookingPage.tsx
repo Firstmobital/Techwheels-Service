@@ -297,6 +297,62 @@ export default function ServiceBookingPage() {
     setShowForm(true)
   }
 
+
+  // ── WhatsApp send ───────────────────────────────────────────────────────────
+  function openWhatsApp(booking: ServiceBooking) {
+    const phone = '91' + booking.customer_phone.replace(/\D/g, '').slice(-10)
+
+    const lines: string[] = []
+    lines.push(`Hello ${booking.customer_name},`)
+    lines.push('')
+    lines.push(`📅 *Service Booking Confirmation*`)
+    lines.push(`🔖 Booking ID: ${booking.lead_number || '#' + booking.id}`)
+    lines.push('')
+    lines.push(`🚗 *Vehicle Details*`)
+    lines.push(`Reg. No.: *${booking.reg_number}*`)
+    if (booking.model)      lines.push(`Model: ${booking.model}${booking.variant ? ' ' + booking.variant : ''}`)
+    if (booking.fuel_type)  lines.push(`Fuel: ${booking.fuel_type}`)
+    if (booking.km_reading) lines.push(`KM Reading: ${booking.km_reading.toLocaleString('en-IN')} km`)
+    lines.push('')
+    lines.push(`🔧 *Service Details*`)
+    if (booking.service_type)          lines.push(`Service Type: ${booking.service_type}`)
+    if (booking.appointment_date) {
+      const d = new Date(booking.appointment_date).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+      lines.push(`📆 Appointment: *${d}*`)
+    }
+    if (booking.booking_time)          lines.push(`⏰ Time: ${booking.booking_time.slice(0, 5)}`)
+    if (booking.branch)                lines.push(`📍 Branch: ${booking.branch}`)
+    if (booking.assigned_sa_name || booking.assigned_sa)
+      lines.push(`👤 Service Advisor: ${booking.assigned_sa_name || booking.assigned_sa}`)
+    if (booking.pickup_required)       lines.push(`🚐 Pickup: Arranged${booking.pickup_address ? ' from ' + booking.pickup_address : ''}`)
+    if (booking.drop_required)         lines.push(`🏠 Drop: Arranged`)
+    if (booking.complaint_description) lines.push(`\n📝 Concerns noted: ${booking.complaint_description}`)
+    lines.push('')
+    lines.push('Please arrive 10 minutes before your scheduled time.')
+    lines.push('For any queries, contact us directly.')
+    lines.push('')
+    lines.push('Thank you,')
+    lines.push('*Techwheels Service* 🚘')
+
+    const message = lines.join('\n')
+    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent)
+    const appUrl      = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`
+    const fallbackUrl = isMobile
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+      : `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`
+
+    const opened = window.open('', '_blank', 'noopener,noreferrer')
+    if (opened) {
+      opened.location.href = appUrl
+      window.setTimeout(() => {
+        try { if (!opened.closed) opened.location.href = fallbackUrl }
+        catch { opened.location.href = fallbackUrl }
+      }, 1400)
+    } else {
+      window.location.href = appUrl
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
   const hasPanel = selectedBooking || showForm
 
@@ -480,6 +536,11 @@ export default function ServiceBookingPage() {
                           onClick={e => { e.stopPropagation(); openEdit(b) }}
                           style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem' }}
                           title="Edit">✏️</button>
+                      <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); openWhatsApp(b) }}
+                          style={{ background: 'none', border: 'none', color: '#16a34a', cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem' }}
+                          title="Send WhatsApp Confirmation">💬</button>
                       </td>
                     </tr>
                   )
@@ -779,6 +840,12 @@ export default function ServiceBookingPage() {
                   </div>
                   <div style={{ flex: 1 }} />
                   <button className="btn btn--ghost btn--sm" onClick={() => openEdit(selectedBooking)}>✏️ Edit</button>
+                  <button
+                    className="btn btn--sm"
+                    onClick={() => openWhatsApp(selectedBooking)}
+                    style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    💬 Send WhatsApp
+                  </button>
                   <button className="btn btn--ghost btn--sm" onClick={() => setSelectedBooking(null)}>✕</button>
                 </div>
 
