@@ -135,16 +135,20 @@ function getCurrentStageDisplay(effectiveCurrentStage: number, floorWorkStarted:
 
 function hasFloorWorkStartedInPrimaryRow(row: Partial<BodyshopFloorPrimaryRow> | null | undefined): boolean {
   if (!row) return false
+
+  const rid = Number((row as { repair_card_id?: number | null }).repair_card_id)
+  const jc = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim()
+  // A row in bodyshop_assignments means the vehicle was sent to floor.
+  if ((Number.isFinite(rid) && rid > 0) || Boolean(jc)) return true
+
   return FLOOR_ROLES.some((role) => {
     const cols = FLOOR_ROLE_COLUMNS[role]
-    const employeeCode = (row[cols.employeeCode] as string | null) ?? null
-    const employeeName = (row[cols.employeeName] as string | null) ?? null
-    if (!(employeeCode && employeeName)) return false
-
+    const employeeCode = String((row[cols.employeeCode] as string | null) ?? '').trim()
+    const employeeName = String((row[cols.employeeName] as string | null) ?? '').trim()
     const status = String((row[cols.workStatus] as string | null) ?? '').trim().toLowerCase()
     const inTs = (row[cols.inTs] as string | null) ?? null
     const outTs = (row[cols.outTs] as string | null) ?? null
-    return Boolean(inTs || outTs || status)
+    return Boolean(employeeCode || employeeName || inTs || outTs || status)
   })
 }
 
@@ -777,24 +781,64 @@ export default function BodyshopRepairPage() {
           .map((card) => String(card.job_card_no ?? '').trim().toUpperCase())
           .filter(Boolean),
       ))
+      const cardIds = Array.from(new Set(
+        nextCards
+          .map((card) => Number(card.id))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      ))
 
       const floorLookup: Record<string, boolean> = {}
-      if (jcNumbers.length > 0) {
-        const { data: floorRows } = await supabase
-          .from('bodyshop_assignments')
-          .select([
-            'repair_card_id',
-            'job_card_number',
-            'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
-            'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
-            'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
-            'electrician_employee_code', 'electrician_employee_name', 'electrician_work_status', 'electrician_in_ts', 'electrician_out_ts',
-            'det_employee_code', 'det_employee_name', 'det_work_status', 'det_in_ts', 'det_out_ts',
-          ].join(', '))
-          .eq('is_active', true)
-          .in('job_card_number', jcNumbers)
+      if (jcNumbers.length > 0 || cardIds.length > 0) {
+        const floorRowsByJc: BodyshopFloorPrimaryRow[] = []
+        const floorRowsById: BodyshopFloorPrimaryRow[] = []
 
-        ;((floorRows ?? []) as unknown as BodyshopFloorPrimaryRow[]).forEach((row) => {
+        if (jcNumbers.length > 0) {
+          const { data: floorRows } = await supabase
+            .from('bodyshop_assignments')
+            .select([
+              'repair_card_id',
+              'job_card_number',
+              'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
+              'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
+              'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
+              'electrician_employee_code', 'electrician_employee_name', 'electrician_work_status', 'electrician_in_ts', 'electrician_out_ts',
+              'det_employee_code', 'det_employee_name', 'det_work_status', 'det_in_ts', 'det_out_ts',
+            ].join(', '))
+            .eq('is_active', true)
+            .in('job_card_number', jcNumbers)
+
+          floorRowsByJc.push(...(((floorRows ?? []) as unknown) as BodyshopFloorPrimaryRow[]))
+        }
+
+        if (cardIds.length > 0) {
+          const { data: floorRows } = await supabase
+            .from('bodyshop_assignments')
+            .select([
+              'repair_card_id',
+              'job_card_number',
+              'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
+              'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
+              'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
+              'electrician_employee_code', 'electrician_employee_name', 'electrician_work_status', 'electrician_in_ts', 'electrician_out_ts',
+              'det_employee_code', 'det_employee_name', 'det_work_status', 'det_in_ts', 'det_out_ts',
+            ].join(', '))
+            .eq('is_active', true)
+            .in('repair_card_id', cardIds)
+
+          floorRowsById.push(...(((floorRows ?? []) as unknown) as BodyshopFloorPrimaryRow[]))
+        }
+
+        const seenFloorRows = new Set<string>()
+        const floorRows = [...floorRowsByJc, ...floorRowsById].filter((row) => {
+          const rid = Number((row as { repair_card_id?: number | null }).repair_card_id)
+          const jc = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim().toUpperCase()
+          const key = `${Number.isFinite(rid) && rid > 0 ? `id:${rid}` : ''}|${jc}`
+          if (seenFloorRows.has(key)) return false
+          seenFloorRows.add(key)
+          return true
+        })
+
+        ;(floorRows as BodyshopFloorPrimaryRow[]).forEach((row) => {
           if (!hasFloorWorkStartedInPrimaryRow(row)) return
 
           const rid = Number((row as { repair_card_id?: number | null }).repair_card_id)
@@ -1951,6 +1995,8 @@ export default function BodyshopRepairPage() {
     const milestones = getIntakeMilestones(card, intakePhotoCount, hasKmReading)
     const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
     const floorStarted = getFloorWorkStartedForCard(card)
+    const floorValue = String((card as { bodyshop_floor?: string | null }).bodyshop_floor ?? '').trim()
+    const floorSent = (floorValue === 'Floor 2' || floorValue === 'Floor 3') && effectiveCurrentStage >= 10
 
     const customerType = card.customer_type ?? 'individual'
     const noDocsRequired = customerType === 'cash' || customerType === 'foc'
@@ -1990,7 +2036,18 @@ export default function BodyshopRepairPage() {
     if (stage === 8) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && !stage8Done
     if (stage === 9) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && !stage9Done
     if (stage === 10) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && stage9Done && !stage10Done
-    if (stage === 11) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && stage9Done && floorStarted
+    if (stage === 11) {
+      return stage1Done
+        && stage2Done
+        && stage3Done
+        && stage4Done
+        && stage5Done
+        && stage6Done
+        && stage7Done
+        && stage8Done
+        && stage9Done
+        && (floorSent || floorStarted)
+    }
 
     return effectiveCurrentStage === stage
   }
