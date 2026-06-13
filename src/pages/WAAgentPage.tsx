@@ -121,7 +121,6 @@ export default function WAAgentPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<WAMessage[]>([])
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -143,7 +142,6 @@ export default function WAAgentPage() {
   useEffect(() => { if (selectedConv) void loadMessages(selectedConv.id) }, [selectedConv])
 
   async function loadAll() {
-    setLoading(true)
     const [cfgRes, campRes, convRes] = await Promise.all([
       supabase.from('wa_agent_config').select('*').eq('id', 1).single(),
       supabase.from('wa_campaigns').select('*').order('created_at', { ascending: false }),
@@ -152,7 +150,6 @@ export default function WAAgentPage() {
     if (cfgRes.data)  setConfig(cfgRes.data as AgentConfig)
     if (campRes.data) setCampaigns(campRes.data as Campaign[])
     if (convRes.data) setConversations(convRes.data as Conversation[])
-    setLoading(false)
   }
 
   async function loadMessages(convId: number) {
@@ -223,7 +220,7 @@ export default function WAAgentPage() {
 
     // 2. Fetch contacts
     let query = supabase.from('all_service_data')
-      .select('id, cust_first_name, cust_last_name, cust_mobile_no, registration_no, ppl, scheduled_next_service_date')
+      .select('id, cust_first_name, cust_last_name, cust_mobile_no, registration_no, ppl, pl, vehicle_sale_date, last_service_date, scheduled_next_service_date')
       .not('cust_mobile_no', 'is', null).neq('cust_mobile_no', '').limit(1000)
 
     if (campaignForm.target_segment === 'DueForService') {
@@ -383,15 +380,15 @@ export default function WAAgentPage() {
             {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
               {[
-                { label: 'Total Conversations', value: stats.total, color: '#2563eb', bg: '#eff6ff', icon: '💬' },
-                { label: 'Open / Chatting', value: stats.open, color: '#d97706', bg: '#fffbeb', icon: '🔄' },
-                { label: 'Booked via WA', value: stats.booked, color: '#16a34a', bg: '#f0fdf4', icon: '✅', bold: true },
-                { label: 'Escalated', value: stats.escalated, color: '#7c3aed', bg: '#faf5ff', icon: '🙋' },
-                { label: 'Opted Out', value: stats.optedOut, color: '#dc2626', bg: '#fef2f2', icon: '🚫' },
-                { label: 'Campaigns', value: stats.totalCampaigns, color: '#0284c7', bg: '#f0f9ff', icon: '📣' },
-                { label: 'Messages Sent', value: stats.totalSent.toLocaleString(), color: '#475569', bg: '#f1f5f9', icon: '📤' },
-                { label: 'Bookings Created', value: stats.totalBooked, color: '#15803d', bg: '#dcfce7', icon: '🎯', bold: true },
-              ].map(({ label, value, color, bg, icon, bold }) => (
+                { label: 'Total Conversations', value: stats.total, color: '#2563eb', icon: '💬' },
+                { label: 'Open / Chatting', value: stats.open, color: '#d97706', icon: '🔄' },
+                { label: 'Booked via WA', value: stats.booked, color: '#16a34a', icon: '✅', bold: true },
+                { label: 'Escalated', value: stats.escalated, color: '#7c3aed', icon: '🙋' },
+                { label: 'Opted Out', value: stats.optedOut, color: '#dc2626', icon: '🚫' },
+                { label: 'Campaigns', value: stats.totalCampaigns, color: '#0284c7', icon: '📣' },
+                { label: 'Messages Sent', value: stats.totalSent.toLocaleString(), color: '#475569', icon: '📤' },
+                { label: 'Bookings Created', value: stats.totalBooked, color: '#15803d', icon: '🎯', bold: true },
+              ].map(({ label, value, color, icon, bold }) => (
                 <div key={label} style={{ background: '#fff', border: `1px solid ${color}22`, borderRadius: '10px', padding: '0.85rem 1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                   <div style={{ fontSize: '1.4rem', marginBottom: '0.3rem' }}>{icon}</div>
                   <div style={{ fontSize: bold ? '1.6rem' : '1.4rem', fontWeight: 800, color }}>{value}</div>
