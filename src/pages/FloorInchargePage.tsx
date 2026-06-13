@@ -1278,7 +1278,7 @@ export default function FloorInchargePage() {
       {supportModalJobCard && (
         <div className="modal-back" role="presentation" onClick={closeSupportModal}>
           <div
-            className="modal fi-support-modal"
+            className="modal fi-floor-support-modal"
             role="dialog"
             aria-modal="true"
             aria-label="Assign support person"
@@ -1290,14 +1290,14 @@ export default function FloorInchargePage() {
                 <Icon name="x" size={16} />
               </button>
             </div>
-            <div className="modal__body fi-support-modal__body">
-              <div className="fi-support-meta">
-                <span className="fi-support-meta__jc">{supportModalJobCard.assignment_key}</span>
+            <div className="modal__body fi-floor-support-modal__body">
+              <div className="fi-floor-support-meta">
+                <span className="fi-floor-support-meta__jc">{supportModalJobCard.assignment_key}</span>
                 <span>{supportModalJobCard.reg_number || '—'}</span>
                 <span>{supportModalJobCard.location || supportModalJobCard.branch || '—'}</span>
               </div>
 
-              <label className="fi-support-field">
+              <label className="fi-floor-support-field">
                 <span>Role</span>
                 <select
                   className="sel"
@@ -1318,7 +1318,7 @@ export default function FloorInchargePage() {
                 </select>
               </label>
 
-              <label className="fi-support-field">
+              <label className="fi-floor-support-field">
                 <span>Employee</span>
                 <select
                   className="sel"
@@ -1336,20 +1336,20 @@ export default function FloorInchargePage() {
               </label>
 
               {supportModalRole && supportModalEmployees.length === 0 && (
-                <p className="fi-support-hint">No employees found for the selected role in Employee Master.</p>
+                <p className="fi-floor-support-hint">No employees found for the selected role in Employee Master.</p>
               )}
 
               {(supportAssignments[supportModalJobCard.assignment_key] ?? []).length > 0 && (
-                <div className="fi-support-existing">
+                <div className="fi-floor-support-existing">
                   <p>Added support people</p>
                   {(supportAssignments[supportModalJobCard.assignment_key] ?? []).map((person) => (
-                    <div key={person.id ?? `${person.employee_code}-${person.assigned_at}`} className="fi-support-existing__row">
-                      <span className="fi-support-existing__label">
+                    <div key={person.id ?? `${person.employee_code}-${person.assigned_at}`} className="fi-floor-support-existing__row">
+                      <span className="fi-floor-support-existing__label">
                         {person.employee_name} ({person.employee_code}) • {supportRoleLabel(person.support_role)}
                       </span>
                       <button
                         type="button"
-                        className="btn btn--ghost btn--sm fi-remove-btn"
+                        className="btn btn--ghost btn--sm fi-floor-remove-btn"
                         onClick={() => {
                           if (person.id) {
                             removeSupportAssignment(supportModalJobCard.assignment_key, person.id)

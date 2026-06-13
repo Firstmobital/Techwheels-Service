@@ -681,11 +681,18 @@ After migration apply:
   - Support people can be assigned for any role (all 5 roles accept additional support)
 
 - **Schema Authority Verified (from authoritative dump):**
-  - **Primary roles table:** `public.bodyshop_assignments` (to be expanded via migration)
-    - Current role constraint: `DENTOR | PAINTER | TECHNICIAN` (3 roles, locked by CHECK)
-    - **Required change:** Expand to `DENTOR | PAINTER | TECHNICIAN | ELECTRICIAN | DET` (5 roles via ALTER TABLE migration)
-    - Supports: work_status, remark, out_ts (stage tracking for all primary roles)
-    - No unique constraint on (job_card_number, role) → allows multiple rows per role per JC
+  - **Primary roles table:** `public.bodyshop_assignments` (final model: one-row-per-job-card)
+    - One active row per `job_card_number` enforced by index `uq_bodyshop_assignments_active_job_card`
+    - Primary assignee columns for all 5 roles in same row:
+      - `dentor_employee_code`, `dentor_employee_name`
+      - `painter_employee_code`, `painter_employee_name`
+      - `technician_employee_code`, `technician_employee_name`
+      - `electrician_employee_code`, `electrician_employee_name`
+      - `det_employee_code`, `det_employee_name`
+    - Role-wise stage columns in same row:
+      - `<role>_work_status`, `<role>_remark`, `<role>_out_ts`
+    - Role-wise IN timestamp columns in same row:
+      - `<role>_in_ts`
   - **Support roles table:** `public.bodyshop_floor_support_assignments` (new, module-isolated)
     - Support role constraint: `DENTOR | PAINTER | TECHNICIAN | ELECTRICIAN | DET` (all 5 roles for support staff)
     - Does NOT support: work_status, remark, out_ts (support people are non-stage-trackable)
@@ -693,9 +700,10 @@ After migration apply:
     - **Separation rationale:** `job_card_support_assignments` is explicitly for Floor Incharge module (comment: "floor incharge workflow"); new dedicated table isolates Bodyshop Floor concerns
 
 - **Architecture Decision (Hybrid Model):**
-  - **Primary assignments** use `bodyshop_assignments` (expanded to 5 roles) + stage controls (select, status, remark, save)
-    - One primary person per role per job card (update existing or insert new)
-    - All 5 roles (DENTOR, PAINTER, TECHNICIAN, ELECTRICIAN, DET) support stage tracking
+  - **Primary assignments** use `bodyshop_assignments` one-row record + stage controls (select, status, remark, save)
+    - One active row per job card
+    - Up to one primary person per role in that row
+    - All 5 roles support role-wise stage tracking and role-wise IN/OUT timestamps
   - **Support assignments** use `bodyshop_floor_support_assignments` (accepts all 5 roles) + inline `+` picker (no stage controls)
     - Multiple support people per role per job card
     - Any role can have additional support staff beyond the primary assignee
@@ -716,12 +724,15 @@ After migration apply:
   - **Table columns:** All 5 role columns with same layout: `🔨 Dentor | 🎨 Painter | 🔧 Technician | ⚡ Electrician | 🧰 DET`
   - **Inline picker pattern:** Click `+` → dropdown appears → select employee → "Add" button → pill appears, picker closes
 
-- **Schema Modifications Required:**
-  - **Migration 1:** `20260613000000_expand_bodyshop_assignments_roles.sql` — ALTER TABLE bodyshop_assignments to expand role CHECK from 3 to 5 roles
-  - **Migration 2:** `20260613000001_create_bodyshop_floor_support_assignments.sql` — CREATE TABLE with 5-role support_role constraint
-  - Both tables ready after migrations; no RLS changes (migration includes proper policies)
-  - Backward compatible; existing primary assignments untouched
-  - Separate from Floor Incharge module
+- **Schema Modifications Applied (Final):**
+  - `20260613010000_bodyshop_assignments_phase_a_additive_columns.sql`
+  - `20260613020100_bodyshop_assignments_phase_b_backfill_and_canonicalize.sql`
+  - `20260613020200_bodyshop_assignments_phase_c_enforce_one_active_row_per_jc.sql`
+  - `20260613020300_bodyshop_support_phase_d_duplicate_guard.sql`
+  - `20260613020400_bodyshop_assignments_phase_e_legacy_insert_bridge.sql`
+  - `20260613020500_bodyshop_assignments_phase_f_cleanup_legacy_columns.sql`
+  - `20260613020600_bodyshop_assignments_add_role_in_ts.sql`
+  - Final state is now authoritative in fresh `full_database.sql` dump.
 
 - **Status:** ✅ IMPLEMENTATION COMPLETE (schema + frontend)
 
@@ -729,22 +740,24 @@ After migration apply:
 
 ### 2026-06-13 - Bodyshop Floor Multi-Role Schema Migrations Applied
 - **Executed migrations (successful, no errors):**
-  1. `20260613000000_expand_bodyshop_assignments_roles.sql` ✅ 
-     - Expanded `bodyshop_assignments.role` CHECK from 3 roles → 5 roles
-     - Added ELECTRICIAN and DET to primary allocation options
-  2. `20260613000001_create_bodyshop_floor_support_assignments.sql` ✅ 
-     - Created new table with all 5 roles for support staff
-     - RLS policies and triggers configured
-  3. `20260613000000_verify_bodyshop_floor_multi_role_schema.sql` ✅ 
-     - Verification passed; all constraints and columns verified
+  1. `20260613000000_expand_bodyshop_assignments_roles.sql` ✅ (historical step, superseded by one-row model)
+  2. `20260613000001_create_bodyshop_floor_support_assignments.sql` ✅
+  3. `20260613000000_verify_bodyshop_floor_multi_role_schema.sql` ✅
+  4. `20260613010000_bodyshop_assignments_phase_a_additive_columns.sql` ✅
+  5. `20260613020100_bodyshop_assignments_phase_b_backfill_and_canonicalize.sql` ✅
+  6. `20260613020200_bodyshop_assignments_phase_c_enforce_one_active_row_per_jc.sql` ✅
+  7. `20260613020300_bodyshop_support_phase_d_duplicate_guard.sql` ✅
+  8. `20260613020400_bodyshop_assignments_phase_e_legacy_insert_bridge.sql` ✅
+  9. `20260613020500_bodyshop_assignments_phase_f_cleanup_legacy_columns.sql` ✅
+  10. `20260613020600_bodyshop_assignments_add_role_in_ts.sql` ✅
 
-- **Schema Status:** 🟢 READY FOR FRONTEND IMPLEMENTATION
-  - `bodyshop_assignments`: 5 primary roles, stage tracking, all constraints verified
+- **Schema Status:** 🟢 IMPLEMENTED AND LIVE (Post-Cutover)
+  - `bodyshop_assignments`: one active row per job card, 5 role assignee slots, role-wise stage + IN/OUT timestamps
   - `bodyshop_floor_support_assignments`: 5 support roles, no stage tracking, module-isolated
-  - No data migration needed; backward compatible with existing assignments
+  - Active uniqueness guards present on primary and support tables
   - RLS policies active; authenticated and service_role grants configured
 
-- **Next Phase:** Implement BodyshopFloorPage.tsx changes (5-role UI with inline `+` pickers)
+- **Next Phase:** UAT and production hardening only (no pending schema redesign)
 
 ### 2026-06-13 - Bodyshop Floor Multi-Role Frontend Implementation Complete
 - **BodyshopFloorPage.tsx Updated:**
@@ -789,6 +802,79 @@ After migration apply:
   - [ ] Role filter dropdown works with all 5 roles
   - [ ] No data loss on existing cars/assignments during upgrade
 
+### 2026-06-13 - Sub Plan: Convert bodyshop_assignments to One Row Per Job Card (Current Tables Only)
+- **Objective:** Keep existing table names and migrate `public.bodyshop_assignments` in-place from row-per-role to row-per-job-card, while retaining `public.bodyshop_floor_support_assignments` as multi-row support table.
+- **Result:** Completed. Final schema is active and reflected in authoritative `full_database.sql`.
+
+- **Target Architecture (Locked):**
+  - `public.bodyshop_assignments`:
+    - Exactly one active row per `job_card_number`
+    - Primary assignee columns for all 5 roles in the same row:
+      - `dentor_employee_code`, `dentor_employee_name`
+      - `painter_employee_code`, `painter_employee_name`
+      - `technician_employee_code`, `technician_employee_name`
+      - `electrician_employee_code`, `electrician_employee_name`
+      - `det_employee_code`, `det_employee_name`
+  - Optional role-wise stage columns (if stage remains role-level in one row):
+    - `<role>_work_status`, `<role>_remark`, `<role>_out_ts` for each of 5 roles
+  - `public.bodyshop_floor_support_assignments`:
+    - Continues as multi-row table for additional staff
+    - Support can exist for any of 5 roles
+
+- **Important Clarification:**
+  - `unique(job_card_number, role)` is **not** sufficient for this requirement.
+  - It still allows multiple rows per job card (one row per role).
+  - Required enforcement for primary table is one-row-per-job-card, i.e. `unique(job_card_number)` (or partial unique on active rows).
+
+- **Exact Migration Sequence (Safe In-Place Conversion):**
+
+1. **Phase A - Additive schema (no behavior break)**
+   - Add new role-specific primary columns to `public.bodyshop_assignments` (nullable initially).
+   - Add role-wise stage columns (nullable initially) only if role-level status is required in one row.
+   - Do **not** drop legacy row-per-role columns yet (`role`, `employee_code`, `employee_name`, `work_status`, `remark`, `out_ts`).
+
+2. **Phase B - Backfill canonical one-row records**
+   - For each `job_card_number`, choose one canonical row (latest `updated_at`/`assigned_at` active row).
+   - For each role in legacy rows, write latest active assignee into matching new role-specific columns on canonical row.
+   - If stage columns are added, backfill per-role status/remark/out_ts similarly from latest role row.
+   - Mark non-canonical duplicate rows for same `job_card_number` as inactive (`is_active=false`) instead of deleting.
+
+3. **Phase C - Enforce uniqueness for primary table**
+   - Add one-row-per-job-card guard:
+     - Preferred: partial unique index on `job_card_number` where `is_active = true`
+     - Alternative: unique constraint on `job_card_number` if inactive history rows are not needed.
+   - Validate no active duplicates remain before creating unique index/constraint.
+
+4. **Phase D - Support table duplicate protection**
+   - Keep support table multi-row by design.
+   - Add active duplicate guard on support table:
+     - Unique active tuple on (`job_card_number`, `support_role`, `employee_code`) where `is_active = true`
+   - This allows multiple support rows per role but blocks same person repeated in same role for same job card.
+
+5. **Phase E - App switch and compatibility window**
+   - Update app writes to new one-row primary columns only.
+   - Keep read fallback to legacy columns for a short compatibility window.
+   - After validation period, stop writing legacy columns.
+
+6. **Phase F - Cleanup (final hardening)**
+   - Remove/deprecate legacy row-per-role columns from `public.bodyshop_assignments`:
+     - `role`, `employee_code`, `employee_name`, `work_status`, `remark`, `out_ts`
+   - Keep migration rollback notes and verification queries in the same release pack.
+
+- **Pre-Checks Before Running SQL (Executed):**
+  - Count active duplicate rows per `job_card_number` in `public.bodyshop_assignments`.
+  - Confirm no required production flow depends on multiple active primary rows per job card.
+  - Confirm support table is already live for additional workforce.
+
+- **Post-Checks After Each Phase (Completed):**
+  - Phase B: each job card has one canonical active row with populated role columns.
+  - Phase C: unique enforcement succeeds without violations.
+  - Phase D: duplicate support insert for same person+role+job card is blocked.
+  - Phase E: Bodyshop Floor page reads/writes correctly with one-row primary model.
+
+- **Execution Status:** ✅ COMPLETED
+- **Next Action:** None for schema conversion. Only UAT verification and monitoring remain.
+
 ---
 
 ## Related Documentation
@@ -799,5 +885,5 @@ After migration apply:
 
 ---
 
-**Last Updated:** 2026-06-12 by GitHub Copilot  
-**Status:** 🟡 IN PROGRESS
+**Last Updated:** 2026-06-13 by GitHub Copilot  
+**Status:** 🟡 SCHEMA CONVERSION COMPLETED; UAT IN PROGRESS

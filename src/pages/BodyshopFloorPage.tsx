@@ -29,6 +29,48 @@ interface Employee {
 type BSRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
 type SupportRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
 
+interface DBPrimaryAssignmentRow {
+  id: number
+  job_card_number: string
+  repair_card_id: number
+  dealer_code: string
+  assigned_at: string
+  assigned_by: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  dentor_employee_code: string | null
+  dentor_employee_name: string | null
+  painter_employee_code: string | null
+  painter_employee_name: string | null
+  technician_employee_code: string | null
+  technician_employee_name: string | null
+  electrician_employee_code: string | null
+  electrician_employee_name: string | null
+  det_employee_code: string | null
+  det_employee_name: string | null
+  dentor_work_status: string | null
+  dentor_in_ts: string | null
+  dentor_remark: string | null
+  dentor_out_ts: string | null
+  painter_work_status: string | null
+  painter_in_ts: string | null
+  painter_remark: string | null
+  painter_out_ts: string | null
+  technician_work_status: string | null
+  technician_in_ts: string | null
+  technician_remark: string | null
+  technician_out_ts: string | null
+  electrician_work_status: string | null
+  electrician_in_ts: string | null
+  electrician_remark: string | null
+  electrician_out_ts: string | null
+  det_work_status: string | null
+  det_in_ts: string | null
+  det_remark: string | null
+  det_out_ts: string | null
+}
+
 interface BSAssignment {
   id: number
   job_card_number: string
@@ -67,6 +109,56 @@ const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
 
 const ALL_ROLES: BSRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
 
+const ROLE_COLUMNS: Record<BSRole, {
+  employeeCode: keyof DBPrimaryAssignmentRow
+  employeeName: keyof DBPrimaryAssignmentRow
+  workStatus: keyof DBPrimaryAssignmentRow
+  inTs: keyof DBPrimaryAssignmentRow
+  remark: keyof DBPrimaryAssignmentRow
+  outTs: keyof DBPrimaryAssignmentRow
+}> = {
+  DENTOR: {
+    employeeCode: 'dentor_employee_code',
+    employeeName: 'dentor_employee_name',
+    workStatus: 'dentor_work_status',
+    inTs: 'dentor_in_ts',
+    remark: 'dentor_remark',
+    outTs: 'dentor_out_ts',
+  },
+  PAINTER: {
+    employeeCode: 'painter_employee_code',
+    employeeName: 'painter_employee_name',
+    workStatus: 'painter_work_status',
+    inTs: 'painter_in_ts',
+    remark: 'painter_remark',
+    outTs: 'painter_out_ts',
+  },
+  TECHNICIAN: {
+    employeeCode: 'technician_employee_code',
+    employeeName: 'technician_employee_name',
+    workStatus: 'technician_work_status',
+    inTs: 'technician_in_ts',
+    remark: 'technician_remark',
+    outTs: 'technician_out_ts',
+  },
+  ELECTRICIAN: {
+    employeeCode: 'electrician_employee_code',
+    employeeName: 'electrician_employee_name',
+    workStatus: 'electrician_work_status',
+    inTs: 'electrician_in_ts',
+    remark: 'electrician_remark',
+    outTs: 'electrician_out_ts',
+  },
+  DET: {
+    employeeCode: 'det_employee_code',
+    employeeName: 'det_employee_name',
+    workStatus: 'det_work_status',
+    inTs: 'det_in_ts',
+    remark: 'det_remark',
+    outTs: 'det_out_ts',
+  },
+}
+
 const STATUS_OPTIONS = [
   { value: 'work_inprocess', label: 'Work Inprocess' },
   { value: 'hold',           label: 'Hold'           },
@@ -74,6 +166,7 @@ const STATUS_OPTIONS = [
 ]
 
 const BS_DEPTS = new Set(['BODY SHOP', 'BODYSHOP'])
+const SERVICE_DEPTS = new Set(['SERVICE'])
 
 function fmtDate(v: string | null | undefined) {
   if (!v) return '—'
@@ -92,6 +185,54 @@ function normRole(r: string | null): BSRole | null {
 
 function jcKey(car: AccidentCar): string {
   return (car.jc_number ?? '').trim().toUpperCase()
+}
+
+function deptKey(v: string | null | undefined): string {
+  return String(v ?? '').trim().toUpperCase()
+}
+
+function isEmployeeEligibleForRole(role: BSRole, department: string | null): boolean {
+  const d = deptKey(department)
+  if (role === 'ELECTRICIAN' || role === 'DET') {
+    return SERVICE_DEPTS.has(d)
+  }
+  return BS_DEPTS.has(d)
+}
+
+function emptyRoleMap() {
+  return { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined } as Record<BSRole, BSAssignment | undefined>
+}
+
+function mapRowToRoleMap(row: DBPrimaryAssignmentRow): Record<BSRole, BSAssignment | undefined> {
+  const m = emptyRoleMap()
+  for (const role of ALL_ROLES) {
+    const cols = ROLE_COLUMNS[role]
+    const employeeCode = row[cols.employeeCode] as string | null
+    const employeeName = row[cols.employeeName] as string | null
+    if (!employeeCode || !employeeName) continue
+
+    m[role] = {
+      id: row.id,
+      job_card_number: row.job_card_number,
+      role,
+      employee_code: employeeCode,
+      employee_name: employeeName,
+      work_status: (row[cols.workStatus] as string | null) ?? 'work_inprocess',
+      remark: (row[cols.remark] as string | null) ?? null,
+      assigned_at: ((row[cols.inTs] as string | null) ?? row.assigned_at),
+      assigned_by: row.assigned_by,
+      out_ts: (row[cols.outTs] as string | null) ?? null,
+    }
+  }
+  return m
+}
+
+function getRoleMapRowId(roleMap: Record<BSRole, BSAssignment | undefined> | undefined): number | null {
+  if (!roleMap) return null
+  for (const role of ALL_ROLES) {
+    if (roleMap[role]?.id) return roleMap[role]!.id
+  }
+  return null
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -125,12 +266,6 @@ export default function BodyshopFloorPage() {
     Record<string, Record<BSRole, { work_status: string; remark: string }>>
   >({})
   const [saving, setSaving]   = useState<string | null>(null) // jcKey being saved
-
-  // Modal state
-  const [modalCar, setModalCar]         = useState<AccidentCar | null>(null)
-  const [modalRole, setModalRole]       = useState<BSRole>('DENTOR')
-  const [modalEmpCode, setModalEmpCode] = useState('')
-  const [modalSaving, setModalSaving]   = useState(false)
 
   // ── Load ─────────────────────────────────────────────────────────────────
 
@@ -204,18 +339,14 @@ export default function BodyshopFloorPage() {
         .from('employee_master')
         .select('employee_code, employee_name, department, role')
         .limit(500)
-      setEmployees(
-        ((empData ?? []) as Employee[]).filter((e) =>
-          BS_DEPTS.has(String(e.department ?? '').trim().toUpperCase())
-        )
-      )
+      setEmployees((empData ?? []) as Employee[])
 
       // 4. Bodyshop assignments
       const { data: assData, error: assErr } = await supabase
         .from('bodyshop_assignments')
         .select('*')
         .eq('is_active', true)
-        .order('assigned_at', { ascending: false })
+        .order('updated_at', { ascending: false })
 
       if (assErr) {
         console.warn('bodyshop_assignments:', assErr.message)
@@ -223,13 +354,10 @@ export default function BodyshopFloorPage() {
         setAssignments({})
       } else {
         const map: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
-        for (const a of (assData ?? []) as BSAssignment[]) {
-          const k = a.job_card_number.toUpperCase()
-          if (!map[k]) map[k] = { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
-          // Keep latest per role
-          const existing = map[k][a.role]
-          if (!existing || new Date(a.assigned_at) > new Date(existing.assigned_at)) {
-            map[k][a.role] = a
+        for (const row of (assData ?? []) as DBPrimaryAssignmentRow[]) {
+          const k = row.job_card_number.toUpperCase()
+          if (!map[k]) {
+            map[k] = mapRowToRoleMap(row)
           }
         }
         setAssignments(map)
@@ -288,14 +416,24 @@ export default function BodyshopFloorPage() {
 
   const empByRole = useMemo<Record<BSRole, Employee[]>>(() => {
     const m: Record<BSRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
-    employees.forEach((e) => { const r = normRole(e.role); if (r) m[r].push(e) })
+    employees.forEach((e) => {
+      const r = normRole(e.role)
+      if (!r) return
+      if (!isEmployeeEligibleForRole(r, e.department)) return
+      m[r].push(e)
+    })
     ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m
   }, [employees])
 
   const empBySupportRole = useMemo<Record<SupportRole, Employee[]>>(() => {
     const m: Record<SupportRole, Employee[]> = { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
-    employees.forEach((e) => { const r = normRole(e.role); if (r) m[r].push(e) })
+    employees.forEach((e) => {
+      const r = normRole(e.role)
+      if (!r) return
+      if (!isEmployeeEligibleForRole(r, e.department)) return
+      m[r].push(e)
+    })
     ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m
   }, [employees])
@@ -314,7 +452,11 @@ export default function BodyshopFloorPage() {
 
   // ── Counts ───────────────────────────────────────────────────────────────
 
-  function hasAnyAssignment(c: AccidentCar) { return Boolean(assignments[jcKey(c)]) }
+  function hasAnyAssignment(c: AccidentCar) {
+    const m = assignments[jcKey(c)]
+    if (!m) return false
+    return ALL_ROLES.some((r) => Boolean(m[r]))
+  }
   function hasStatus(c: AccidentCar, status: string) {
     const m = assignments[jcKey(c)]
     if (!m) return false
@@ -367,6 +509,75 @@ export default function BodyshopFloorPage() {
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
+  async function findOrCreateRepairCard(car: AccidentCar, userEmail: string | null): Promise<number | null> {
+    const k = jcKey(car)
+    const receptionEntryId = Number(car.id)
+    let existingCard: { id: number } | null = null
+
+    if (Number.isFinite(receptionEntryId)) {
+      const byReceptionRes = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id')
+        .eq('reception_entry_id', receptionEntryId)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+    }
+
+    if (!existingCard) {
+      const byJcRes = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id')
+        .eq('job_card_no', k)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      existingCard = ((byJcRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+    }
+
+    if (!existingCard && car.reg_number) {
+      const byRegRes = await supabase
+        .from('bodyshop_repair_cards')
+        .select('id')
+        .eq('reg_number', car.reg_number)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      existingCard = ((byRegRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+    }
+
+    if (!existingCard) {
+      const insertRes = await supabase
+        .from('bodyshop_repair_cards')
+        .insert({
+          reception_entry_id: Number.isFinite(receptionEntryId) ? receptionEntryId : null,
+          job_card_no: k,
+          reg_number: car.reg_number,
+          customer_name: car.owner_name,
+          customer_phone: car.owner_phone,
+          customer_type: 'individual',
+          branch: car.branch,
+          sa_name: car.sa_name ?? car.sa_display_name,
+          current_stage: 11,
+          current_stage_name: 'Floor Assignment',
+          overall_status: 'active',
+          received_at: car.created_at ?? new Date().toISOString(),
+          created_by: userEmail,
+        })
+        .select('id')
+        .single()
+
+      if (insertRes.error) throw insertRes.error
+      existingCard = (insertRes.data as { id: number }) ?? null
+    }
+
+    return existingCard?.id ?? null
+  }
+
   async function assignRole(car: AccidentCar, role: BSRole, empCode: string) {
     if (!empCode) return
     const emp = empByRole[role].find((e) => e.employee_code === empCode)
@@ -374,97 +585,44 @@ export default function BodyshopFloorPage() {
     const k = jcKey(car)
     setSaving(`${k}-${role}`)
     try {
-      const existing = assignments[k]?.[role]
+      const roleMap = assignments[k]
+      const existingRoleAssignment = roleMap?.[role]
+      const existingRowId = getRoleMapRowId(roleMap)
+      const cols = ROLE_COLUMNS[role]
       const { data: { user } } = await supabase.auth.getUser()
-      const payload = {
-        job_card_number: k,
-        role,
-        employee_code: emp.employee_code,
-        employee_name: emp.employee_name,
-        work_status: stageDrafts[k]?.[role]?.work_status ?? 'work_inprocess',
-        remark: stageDrafts[k]?.[role]?.remark ?? null,
+      const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
+      const payload: Record<string, unknown> = {
+        [cols.employeeCode]: emp.employee_code,
+        [cols.employeeName]: emp.employee_name,
+        [cols.workStatus]: draft.work_status,
+        [cols.inTs]: existingRoleAssignment?.assigned_at ?? new Date().toISOString(),
+        [cols.remark]: draft.remark.trim() || null,
         assigned_at: new Date().toISOString(),
         assigned_by: user?.email ?? null,
         is_active: true,
       }
 
       let result
-      if (existing?.id) {
-        result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existing.id).select().single()
+      if (existingRowId) {
+        result = await supabase.from('bodyshop_assignments').update(payload).eq('id', existingRowId).select().single()
       } else {
-        result = await supabase.from('bodyshop_assignments').insert(payload).select().single()
+        const repairCardId = await findOrCreateRepairCard(car, user?.email ?? null)
+        const insertPayload: Record<string, unknown> = {
+          ...payload,
+          job_card_number: k,
+          repair_card_id: repairCardId,
+          reception_entry_id: Number.isFinite(Number(car.id)) ? Number(car.id) : null,
+          dealer_code: car.branch ?? 'UNKNOWN',
+        }
+        result = await supabase.from('bodyshop_assignments').insert(insertPayload).select().single()
       }
       if (result.error) throw result.error
 
-      // ── Auto-create repair card on first assignment ──────────────────────
-      if (!existing?.id) {
-        const hasAny = Object.values(assignments[k] ?? {}).some(Boolean)
-        if (!hasAny) {
-          // First role assigned for this car — create the repair card if absent
-          const receptionEntryId = Number(car.id)
-          let existingCard: { id: number } | null = null
-
-          if (Number.isFinite(receptionEntryId)) {
-            const byReceptionRes = await supabase
-              .from('bodyshop_repair_cards')
-              .select('id')
-              .eq('reception_entry_id', receptionEntryId)
-              .order('updated_at', { ascending: false })
-              .order('created_at', { ascending: false })
-              .limit(1)
-
-            existingCard = ((byReceptionRes.data ?? []) as Array<{ id: number }>)[0] ?? null
-          }
-
-          const byJcRes = await supabase
-            .from('bodyshop_repair_cards')
-            .select('id')
-            .eq('job_card_no', k)
-            .order('updated_at', { ascending: false })
-            .order('created_at', { ascending: false })
-            .limit(1)
-
-          if (!existingCard) {
-            existingCard = ((byJcRes.data ?? []) as Array<{ id: number }>)[0] ?? null
-          }
-
-          if (!existingCard && car.reg_number) {
-            const byRegRes = await supabase
-              .from('bodyshop_repair_cards')
-              .select('id')
-              .eq('reg_number', car.reg_number)
-              .order('updated_at', { ascending: false })
-              .order('created_at', { ascending: false })
-              .limit(1)
-
-            existingCard = ((byRegRes.data ?? []) as Array<{ id: number }>)[0] ?? null
-          }
-
-          if (!existingCard) {
-            await supabase.from('bodyshop_repair_cards').insert({
-              reception_entry_id: Number.isFinite(receptionEntryId) ? receptionEntryId : null,
-              job_card_no:    k,
-              reg_number:     car.reg_number,
-              customer_name:  car.owner_name,
-              customer_phone: car.owner_phone,
-              customer_type:  'individual',
-              branch:         car.branch,
-              sa_name:        car.sa_name ?? car.sa_display_name,
-              current_stage:       11,
-              current_stage_name:  'Floor Assignment',
-              overall_status:      'active',
-              received_at:         car.created_at ?? new Date().toISOString(),
-              created_by:          user?.email ?? null,
-            })
-          }
-        }
-      }
-      // ─────────────────────────────────────────────────────────────────────
-
-      const newA = result.data as BSAssignment
+      const newA = mapRowToRoleMap(result.data as DBPrimaryAssignmentRow)[role]
+      if (!newA) throw new Error('Failed to map updated primary assignment row')
       setAssignments((prev) => ({
         ...prev,
-        [k]: { ...(prev[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }), [role]: newA },
+        [k]: { ...(prev[k] ?? emptyRoleMap()), [role]: newA },
       }))
       setStageDrafts((prev) => ({
         ...prev,
@@ -543,21 +701,26 @@ export default function BodyshopFloorPage() {
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
     setSaving(`${k}-${role}-stage`)
     try {
+      const cols = ROLE_COLUMNS[role]
       const update: Record<string, unknown> = {
-        work_status: draft.work_status,
-        remark: draft.remark.trim() || null,
+        [cols.workStatus]: draft.work_status,
+        [cols.remark]: draft.remark.trim() || null,
       }
       if (draft.work_status === 'completed' && !assignment.out_ts) {
-        update.out_ts = new Date().toISOString()
+        update[cols.outTs] = new Date().toISOString()
       }
-      const { error } = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id)
-      if (error) throw error
+      const result = await supabase.from('bodyshop_assignments').update(update).eq('id', assignment.id).select().single()
+      if (result.error) throw result.error
+
+      const updatedRoleMap = mapRowToRoleMap(result.data as DBPrimaryAssignmentRow)
+      const updatedRole = updatedRoleMap[role]
+      if (!updatedRole) throw new Error('Failed to map saved stage data')
 
       setAssignments((prev) => ({
         ...prev,
         [k]: {
-          ...(prev[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined }),
-          [role]: { ...assignment, ...update },
+          ...(prev[k] ?? emptyRoleMap()),
+          [role]: updatedRole,
         },
       }))
       showToast('Stage saved', 'success')
@@ -584,18 +747,6 @@ export default function BodyshopFloorPage() {
     const draft = stageDrafts[k]?.[role]
     if (!draft) return false
     return draft.work_status !== assignment.work_status || draft.remark !== (assignment.remark ?? '')
-  }
-
-  // ── Modal ────────────────────────────────────────────────────────────────
-
-  function closeModal() { if (!modalSaving) { setModalCar(null); setModalEmpCode('') } }
-
-  async function saveModal() {
-    if (!modalCar || !modalEmpCode) { showToast('Select an employee', 'error'); return }
-    setModalSaving(true)
-    await assignRole(modalCar, modalRole, modalEmpCode)
-    setModalSaving(false)
-    closeModal()
   }
 
   function showToast(msg: string, type: 'success' | 'error') {
@@ -914,87 +1065,6 @@ export default function BodyshopFloorPage() {
           )}
         </div>
       </div>
-
-      {/* ─── Assign Modal (quick-add from outside table) ─────────────────────── */}
-      {modalCar && (
-        <div className="modal-back" role="presentation" onClick={closeModal}>
-          <div className="modal fi-support-modal" role="dialog" aria-modal="true"
-            aria-label="Assign bodyshop team member"
-            onClick={(e) => e.stopPropagation()}>
-            <div className="modal__head">
-              <h3>Assign Bodyshop Team</h3>
-              <button type="button" className="modal__x" onClick={closeModal} aria-label="Close">
-                <Icon name="x" size={16} />
-              </button>
-            </div>
-            <div className="modal__body fi-support-modal__body">
-              <div className="fi-support-meta">
-                <span className="fi-support-meta__jc">{modalCar.jc_number ?? '—'}</span>
-                <span>{modalCar.reg_number ?? '—'}</span>
-                <span>{modalCar.branch ?? '—'}</span>
-              </div>
-
-              <label className="fi-support-field">
-                <span>Role</span>
-                <select className="sel" value={modalRole}
-                  onChange={(e) => { setModalRole(e.target.value as BSRole); setModalEmpCode('') }}
-                  disabled={modalSaving}>
-                  {ALL_ROLES.map((r) => (
-                    <option key={r} value={r}>{ROLE_META[r].icon} {ROLE_META[r].label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="fi-support-field">
-                <span>Employee</span>
-                <select className="sel" value={modalEmpCode}
-                  onChange={(e) => setModalEmpCode(e.target.value)}
-                  disabled={modalSaving}>
-                  <option value="">— Select Employee —</option>
-                  {empByRole[modalRole].map((emp) => (
-                    <option key={emp.employee_code} value={emp.employee_code}>
-                      {emp.employee_name} ({emp.employee_code})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {empByRole[modalRole].length === 0 && (
-                <p className="fi-support-hint">
-                  No {ROLE_META[modalRole].label} employees found in BODY SHOP department.
-                </p>
-              )}
-
-              {/* Current assignments summary */}
-              {ALL_ROLES.some((r) => assignments[jcKey(modalCar)]?.[r]) && (
-                <div className="fi-support-existing">
-                  <p>Current assignments</p>
-                  {ALL_ROLES.filter((r) => assignments[jcKey(modalCar)]?.[r]).map((r) => {
-                    const a = assignments[jcKey(modalCar)]![r]!
-                    return (
-                      <div key={r} className="fi-support-existing__row">
-                        <span className="fi-support-existing__label">
-                          {ROLE_META[r].icon} {a.employee_name} • {ROLE_META[r].label} • {a.work_status.replace('_', ' ')}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button type="button" className="btn btn--primary" style={{ flex: 1 }}
-                  disabled={modalSaving || !modalEmpCode} onClick={() => void saveModal()}>
-                  {modalSaving ? 'Saving…' : `Assign ${ROLE_META[modalRole].label}`}
-                </button>
-                <button type="button" className="btn btn--ghost" onClick={closeModal} disabled={modalSaving}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   )
