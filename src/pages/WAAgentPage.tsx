@@ -23,6 +23,30 @@ interface AgentConfig {
   escalation_phone: string
   sa_whatsapp_number: string
   staff_notify_on_escalation: boolean
+  waba_id?: string
+  meta_app_id?: string
+}
+
+
+interface WATemplate {
+  id: number
+  name: string
+  display_name: string
+  category: string
+  language: string
+  status: string
+  meta_template_id: string | null
+  rejection_reason: string | null
+  header_type: string | null
+  header_text: string | null
+  body_text: string
+  footer_text: string | null
+  buttons: Array<{type:string;text:string;url?:string;phone?:string}> | null
+  variable_examples: Array<{name:string;example_value:string}> | null
+  campaign_type: string
+  submitted_at: string | null
+  approved_at: string | null
+  created_at: string
 }
 
 interface Campaign {
@@ -82,7 +106,7 @@ interface ServiceDataRow {
   last_service_date: string | null
 }
 
-type Tab = 'dashboard' | 'campaigns' | 'conversations' | 'followups' | 'settings' | 'test'
+type Tab = 'dashboard' | 'campaigns' | 'conversations' | 'followups' | 'templates' | 'settings' | 'test'
 
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
   Open:       { bg: '#eff6ff', color: '#2563eb' },
@@ -155,24 +179,41 @@ export default function WAAgentPage() {
   const [editingStep, setEditingStep] = useState<number|null>(null)
   const [stepDraft, setStepDraft] = useState('')
   const [savingStep, setSavingStep] = useState(false)
+  // Template state
+  const [templates, setTemplates] = useState<WATemplate[]>([])
+  const [showTemplateForm, setShowTemplateForm] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<WATemplate | null>(null)
+  const [submittingTemplate, setSubmittingTemplate] = useState<number | null>(null)
+  const [syncingTemplates, setSyncingTemplates] = useState(false)
+  const [templateFilter, setTemplateFilter] = useState('all')
+  const [templateForm, setTemplateForm] = useState({
+    display_name: '', name: '', category: 'UTILITY', language: 'en',
+    header_type: 'NONE', header_text: '',
+    body_text: '', footer_text: '',
+    buttons: '[{"type":"QUICK_REPLY","text":"Book Now"},{"type":"QUICK_REPLY","text":"Call Me"}]',
+    variable_examples: '[{"name":"customer_name","example_value":"Rahul Sharma"},{"name":"model","example_value":"Nexon"}]',
+    campaign_type: 'service_reminder',
+  })
 
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => { void loadAll() }, [])
   useEffect(() => { if (selectedConv) void loadMessages(selectedConv.id) }, [selectedConv])
 
   async function loadAll() {
-    const [cfgRes, campRes, convRes, stepsRes, queueRes] = await Promise.all([
+    const [cfgRes, campRes, convRes, stepsRes, queueRes, tplRes] = await Promise.all([
       supabase.from('wa_agent_config').select('*').eq('id', 1).single(),
       supabase.from('wa_campaigns').select('*').order('created_at', { ascending: false }),
       supabase.from('wa_conversations').select('*').order('last_message_at', { ascending: false }).limit(100),
       supabase.from('wa_followup_steps').select('*').eq('sequence_id', 1).order('sort_order'),
       supabase.from('wa_followup_queue').select('*, wa_followup_steps!step_id(message_template,day_offset)').order('scheduled_at', { ascending: false }).limit(200),
+      supabase.from('wa_templates').select('*').order('created_at', { ascending: false }),
     ])
     if (cfgRes.data)  setConfig(cfgRes.data as AgentConfig)
     if (campRes.data) setCampaigns(campRes.data as Campaign[])
     if (convRes.data) setConversations(convRes.data as Conversation[])
     if (stepsRes.data) setFollowupSteps(stepsRes.data as typeof followupSteps)
     if (queueRes.data) setFollowupQueue(queueRes.data as typeof followupQueue)
+    if (tplRes.data) setTemplates(tplRes.data as WATemplate[])
   }
 
   async function loadMessages(convId: number) {
@@ -433,9 +474,9 @@ export default function WAAgentPage() {
         <span style={{ fontSize: '1.2rem' }}>🤖</span>
         <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1e293b' }}>WA AI Agent</span>
         <div style={{ display: 'flex', gap: '0.2rem', background: '#f1f5f9', borderRadius: '8px', padding: '0.25rem', marginLeft: '0.5rem' }}>
-          {(['dashboard', 'campaigns', 'conversations', 'followups', 'settings', 'test'] as Tab[]).map(t => (
+          {(['dashboard', 'campaigns', 'conversations', 'followups', 'templates', 'settings', 'test'] as Tab[]).map(t => (
             <button key={t} style={TAB_STYLE(t)} onClick={() => setTab(t)}>
-              {t === 'dashboard' ? '📊 Dashboard' : t === 'campaigns' ? '📣 Campaigns' : t === 'conversations' ? '💬 Inbox' : t === 'followups' ? '🔁 Follow-ups' : t === 'test' ? '🧪 Test AI' : '⚙️ Settings'}
+              {t === 'dashboard' ? '📊 Dashboard' : t === 'campaigns' ? '📣 Campaigns' : t === 'conversations' ? '💬 Inbox' : t === 'followups' ? '🔁 Follow-ups' : t === 'templates' ? '📋 Templates' : t === 'test' ? '🧪 Test AI' : '⚙️ Settings'}
             </button>
           ))}
         </div>
@@ -786,6 +827,342 @@ export default function WAAgentPage() {
 
 
         {/* ══ FOLLOW-UPS ══ */}
+
+        {/* ══ TEMPLATES ══ */}
+        {tab === 'templates' && (
+          <div>
+            {/* ─── Header ───────────────────────────────────────────────── */}
+            <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap' }}>
+              <span style={{ fontWeight:800, fontSize:'1rem' }}>📋 WhatsApp Message Templates</span>
+              <button className="btn btn--primary btn--sm" style={{ marginLeft:'auto', fontSize:'0.75rem' }}
+                onClick={() => { setShowTemplateForm(true); setEditingTemplate(null); setTemplateForm({ display_name:'', name:'', category:'UTILITY', language:'en', header_type:'NONE', header_text:'', body_text:'', footer_text:'', buttons:'[{"type":"QUICK_REPLY","text":"Book Now"},{"type":"QUICK_REPLY","text":"Call Me"}]', variable_examples:'[{"name":"customer_name","example_value":"Rahul Sharma"},{"name":"model","example_value":"Nexon"}]', campaign_type:'service_reminder' }) }}>
+                + Create Template
+              </button>
+              <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.75rem' }} disabled={syncingTemplates}
+                onClick={async () => {
+                  setSyncingTemplates(true)
+                  const { data } = await supabase.auth.getSession()
+                  const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
+                    method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
+                    body: JSON.stringify({ action:'sync_all' })
+                  })
+                  const r = await res.json()
+                  setSyncingTemplates(false)
+                  if (r.error) setToast(`❌ ${r.error}`)
+                  else { setToast(`✅ Synced ${r.synced} templates from Meta`); await loadAll() }
+                }}>
+                {syncingTemplates ? '⏳ Syncing…' : '🔄 Sync from Meta'}
+              </button>
+            </div>
+
+            {/* ─── How Meta approval works ──────────────────────────────── */}
+            <div style={{ background:'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)', border:'1px solid #fcd34d', borderRadius:'10px', padding:'0.85rem 1rem', marginBottom:'1rem', fontSize:'0.78rem', color:'#92400e' }}>
+              <strong>📌 How Meta approval works:</strong>
+              <ol style={{ margin:'0.4rem 0 0 1rem', padding:0, lineHeight:1.8 }}>
+                <li>Create template below → click <em>Submit for Approval</em></li>
+                <li>Meta reviews within <strong>24–48 hours</strong></li>
+                <li>Status turns <span style={{ color:'#16a34a', fontWeight:700 }}>Approved</span> → you can use it in campaigns</li>
+                <li>Marketing templates can only be sent to customers who have opted in</li>
+              </ol>
+              <div style={{ marginTop:'0.5rem', paddingTop:'0.5rem', borderTop:'1px solid #fcd34d' }}>
+                ⚠️ <strong>WABA ID required:</strong> Add your WhatsApp Business Account ID in Settings before submitting.
+              </div>
+            </div>
+
+            {/* ─── Status filter ────────────────────────────────────────── */}
+            <div style={{ display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'0.85rem' }}>
+              {['all','draft','pending','approved','rejected'].map(f => {
+                const cnt = f === 'all' ? templates.length : templates.filter(t => t.status === f).length
+                const colors: Record<string,string> = { approved:'#16a34a', pending:'#f59e0b', rejected:'#dc2626', draft:'#94a3b8', all:'#2563eb' }
+                return (
+                  <button key={f} onClick={() => setTemplateFilter(f)}
+                    style={{ padding:'0.2rem 0.65rem', borderRadius:'12px', border:`1px solid ${templateFilter===f ? colors[f] : '#e2e8f0'}`, cursor:'pointer', fontSize:'0.72rem',
+                      background: templateFilter===f ? colors[f] : '#f8fafc', color: templateFilter===f ? '#fff' : '#475569', fontWeight: templateFilter===f ? 700 : 400 }}>
+                    {f.charAt(0).toUpperCase()+f.slice(1)} {cnt > 0 && <span style={{ opacity:0.8 }}>({cnt})</span>}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* ─── Template cards ───────────────────────────────────────── */}
+            <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+              {templates.filter(t => templateFilter === 'all' || t.status === templateFilter).map(tpl => {
+                const statusColor = tpl.status==='approved' ? '#16a34a' : tpl.status==='pending' ? '#f59e0b' : tpl.status==='rejected' ? '#dc2626' : '#94a3b8'
+                const statusBg    = tpl.status==='approved' ? '#dcfce7' : tpl.status==='pending' ? '#fffbeb' : tpl.status==='rejected' ? '#fee2e2' : '#f1f5f9'
+                const categoryBg  = tpl.category==='MARKETING' ? '#ede9fe' : tpl.category==='UTILITY' ? '#dbeafe' : '#f0fdf4'
+                const categoryColor = tpl.category==='MARKETING' ? '#7c3aed' : tpl.category==='UTILITY' ? '#1d4ed8' : '#16a34a'
+                return (
+                  <div key={tpl.id} style={{ border:'1px solid #e2e8f0', borderRadius:'10px', padding:'0.85rem 1rem', background:'#fff' }}>
+                    {/* Card header */}
+                    <div style={{ display:'flex', alignItems:'flex-start', gap:'0.6rem', marginBottom:'0.5rem', flexWrap:'wrap' }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:700, fontSize:'0.88rem' }}>{tpl.display_name}</div>
+                        <div style={{ fontSize:'0.7rem', color:'#64748b', fontFamily:'monospace' }}>{tpl.name}</div>
+                      </div>
+                      <div style={{ display:'flex', gap:'0.35rem', flexWrap:'wrap', alignItems:'center' }}>
+                        <span style={{ background:categoryBg, color:categoryColor, borderRadius:'20px', padding:'0.15rem 0.5rem', fontSize:'0.68rem', fontWeight:700 }}>{tpl.category}</span>
+                        <span style={{ background:statusBg, color:statusColor, borderRadius:'20px', padding:'0.15rem 0.5rem', fontSize:'0.68rem', fontWeight:700, textTransform:'capitalize' }}>{tpl.status}</span>
+                        {tpl.language && tpl.language !== 'en' && <span style={{ background:'#f1f5f9', color:'#475569', borderRadius:'20px', padding:'0.15rem 0.45rem', fontSize:'0.65rem' }}>{tpl.language.toUpperCase()}</span>}
+                      </div>
+                    </div>
+                    {/* Body preview */}
+                    <div style={{ fontSize:'0.78rem', color:'#374151', background:'#f8fafc', padding:'0.55rem 0.7rem', borderRadius:'7px', whiteSpace:'pre-wrap', lineHeight:1.55, marginBottom:'0.5rem', borderLeft:'3px solid #e2e8f0' }}>
+                      {tpl.body_text}
+                    </div>
+                    {/* Buttons preview */}
+                    {tpl.buttons && tpl.buttons.length > 0 && (
+                      <div style={{ display:'flex', gap:'0.35rem', flexWrap:'wrap', marginBottom:'0.5rem' }}>
+                        {tpl.buttons.map((b,i) => (
+                          <span key={i} style={{ padding:'0.15rem 0.6rem', border:'1px solid #bfdbfe', borderRadius:'5px', fontSize:'0.68rem', color:'#1d4ed8', background:'#eff6ff' }}>{b.text}</span>
+                        ))}
+                      </div>
+                    )}
+                    {/* Rejection reason */}
+                    {tpl.rejection_reason && (
+                      <div style={{ fontSize:'0.72rem', color:'#dc2626', background:'#fff1f2', padding:'0.35rem 0.55rem', borderRadius:'6px', marginBottom:'0.45rem' }}>
+                        ❌ <strong>Rejected:</strong> {tpl.rejection_reason}
+                      </div>
+                    )}
+                    {/* Approval dates */}
+                    {tpl.submitted_at && <div style={{ fontSize:'0.68rem', color:'#94a3b8' }}>Submitted: {new Date(tpl.submitted_at).toLocaleDateString('en-IN')}{tpl.approved_at ? ` · Approved: ${new Date(tpl.approved_at).toLocaleDateString('en-IN')}` : ''}</div>}
+                    {/* Meta template ID */}
+                    {tpl.meta_template_id && <div style={{ fontSize:'0.65rem', color:'#94a3b8', fontFamily:'monospace' }}>Meta ID: {tpl.meta_template_id}</div>}
+                    {/* Actions */}
+                    <div style={{ display:'flex', gap:'0.4rem', marginTop:'0.6rem', flexWrap:'wrap' }}>
+                      {/* Edit */}
+                      {['draft','rejected'].includes(tpl.status) && (
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.72rem' }}
+                          onClick={() => {
+                            setEditingTemplate(tpl)
+                            setTemplateForm({
+                              display_name: tpl.display_name, name: tpl.name,
+                              category: tpl.category, language: tpl.language,
+                              header_type: tpl.header_type || 'NONE', header_text: tpl.header_text || '',
+                              body_text: tpl.body_text, footer_text: tpl.footer_text || '',
+                              buttons: JSON.stringify(tpl.buttons || [], null, 2),
+                              variable_examples: JSON.stringify(tpl.variable_examples || [], null, 2),
+                              campaign_type: tpl.campaign_type || 'service_reminder',
+                            })
+                            setShowTemplateForm(true)
+                          }}>✏️ Edit</button>
+                      )}
+                      {/* Submit for approval */}
+                      {['draft','rejected'].includes(tpl.status) && (
+                        <button className="btn btn--primary btn--sm" style={{ fontSize:'0.72rem' }}
+                          disabled={submittingTemplate === tpl.id}
+                          onClick={async () => {
+                            setSubmittingTemplate(tpl.id)
+                            const { data } = await supabase.auth.getSession()
+                            const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
+                              method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
+                              body: JSON.stringify({ action:'submit', template_id:tpl.id })
+                            })
+                            const r = await res.json()
+                            setSubmittingTemplate(null)
+                            if (r.error) setToast(`❌ ${r.error}`)
+                            else { setToast(`✅ ${r.message}`); await loadAll() }
+                          }}>
+                          {submittingTemplate === tpl.id ? '⏳ Submitting…' : '🚀 Submit for Approval'}
+                        </button>
+                      )}
+                      {/* Sync status */}
+                      {['pending'].includes(tpl.status) && (
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.72rem' }}
+                          onClick={async () => {
+                            const { data } = await supabase.auth.getSession()
+                            const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
+                              method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
+                              body: JSON.stringify({ action:'sync_status', template_id:tpl.id })
+                            })
+                            const r = await res.json()
+                            if (r.error) setToast(`❌ ${r.error}`)
+                            else { setToast(`Status: ${r.status}`); await loadAll() }
+                          }}>🔄 Check Status</button>
+                      )}
+                      {/* Use in Campaign */}
+                      {tpl.status === 'approved' && (
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.72rem', color:'#16a34a', borderColor:'#86efac' }}
+                          onClick={() => { setTab('campaigns'); setToast(`✅ Template "${tpl.display_name}" ready — create campaign and select it`) }}>
+                          📣 Use in Campaign
+                        </button>
+                      )}
+                      {/* Delete */}
+                      {!['pending'].includes(tpl.status) && (
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.72rem', color:'#dc2626', marginLeft:'auto' }}
+                          onClick={async () => {
+                            if (!confirm(`Delete template "${tpl.display_name}"?`)) return
+                            const { data } = await supabase.auth.getSession()
+                            const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
+                              method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
+                              body: JSON.stringify({ action:'delete', template_id:tpl.id })
+                            })
+                            const r = await res.json()
+                            if (r.error) setToast(`❌ ${r.error}`)
+                            else { setToast('🗑 Template deleted'); await loadAll() }
+                          }}>🗑 Delete</button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {templates.filter(t => templateFilter === 'all' || t.status === templateFilter).length === 0 && (
+                <div style={{ textAlign:'center', color:'#94a3b8', padding:'2rem', fontSize:'0.85rem' }}>
+                  No templates in this view. Click <em>+ Create Template</em> to get started.
+                </div>
+              )}
+            </div>
+
+            {/* ─── Create / Edit Template Modal ────────────────────────── */}
+            {showTemplateForm && (
+              <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'1.5rem' }}>
+                <div style={{ background:'#fff', borderRadius:'12px', padding:'1.5rem', width:'100%', maxWidth:'680px', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', marginTop:'1rem' }}>
+                  <div style={{ display:'flex', alignItems:'center', marginBottom:'1rem' }}>
+                    <span style={{ fontWeight:800, fontSize:'1rem' }}>{editingTemplate ? '✏️ Edit Template' : '➕ New Template'}</span>
+                    <button style={{ marginLeft:'auto', background:'none', border:'none', fontSize:'1.3rem', cursor:'pointer', color:'#94a3b8' }} onClick={() => { setShowTemplateForm(false); setEditingTemplate(null) }}>✕</button>
+                  </div>
+
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem', marginBottom:'0.75rem' }}>
+                    <label className="field">
+                      <span className="label">Display Name *</span>
+                      <input className="inp" placeholder="e.g. Service Reminder" value={templateForm.display_name}
+                        onChange={e => setTemplateForm(p => ({ ...p, display_name: e.target.value, name: p.name || e.target.value.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'') }))} />
+                    </label>
+                    <label className="field">
+                      <span className="label">Template Name (snake_case) *</span>
+                      <input className="inp" placeholder="service_reminder_v1" value={templateForm.name}
+                        onChange={e => setTemplateForm(p => ({ ...p, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,'') }))} />
+                      <div style={{ fontSize:'0.65rem', color:'#94a3b8' }}>Auto-filled. Lowercase, no spaces. Cannot change after approval.</div>
+                    </label>
+                    <label className="field">
+                      <span className="label">Category *</span>
+                      <select className="inp" value={templateForm.category} onChange={e => setTemplateForm(p => ({ ...p, category: e.target.value }))}>
+                        <option value="UTILITY">UTILITY (transactional — higher approval rate)</option>
+                        <option value="MARKETING">MARKETING (promotional campaigns)</option>
+                        <option value="AUTHENTICATION">AUTHENTICATION (OTPs)</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span className="label">Language *</span>
+                      <select className="inp" value={templateForm.language} onChange={e => setTemplateForm(p => ({ ...p, language: e.target.value }))}>
+                        <option value="en">English</option>
+                        <option value="hi">Hindi</option>
+                        <option value="en_IN">English (India)</option>
+                        <option value="mr">Marathi</option>
+                        <option value="gu">Gujarati</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span className="label">Campaign Type</span>
+                      <select className="inp" value={templateForm.campaign_type} onChange={e => setTemplateForm(p => ({ ...p, campaign_type: e.target.value }))}>
+                        <option value="service_reminder">Service Reminder</option>
+                        <option value="ew_reminder">Extended Warranty Reminder</option>
+                        <option value="feedback">Post-Service Feedback</option>
+                        <option value="amc_renewal">AMC Renewal</option>
+                        <option value="offer">Seasonal Offer</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span className="label">Header</span>
+                      <select className="inp" value={templateForm.header_type} onChange={e => setTemplateForm(p => ({ ...p, header_type: e.target.value }))}>
+                        <option value="NONE">No Header</option>
+                        <option value="TEXT">Text Header</option>
+                        <option value="IMAGE">Image (URL)</option>
+                        <option value="VIDEO">Video</option>
+                        <option value="DOCUMENT">Document</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {templateForm.header_type === 'TEXT' && (
+                    <label className="field" style={{ marginBottom:'0.75rem' }}>
+                      <span className="label">Header Text</span>
+                      <input className="inp" placeholder="e.g. Service Reminder 🚗" value={templateForm.header_text}
+                        onChange={e => setTemplateForm(p => ({ ...p, header_text: e.target.value }))} />
+                    </label>
+                  )}
+
+                  <label className="field" style={{ marginBottom:'0.75rem' }}>
+                    <span className="label">Body Text * (use {'{{1}}'} {'{{2}}'} for variables)</span>
+                    <textarea className="inp" rows={5} placeholder="Namaste {{1}}! Your {{2}} is due for service..." value={templateForm.body_text}
+                      onChange={e => setTemplateForm(p => ({ ...p, body_text: e.target.value }))}
+                      style={{ resize:'vertical', fontFamily:'monospace', fontSize:'0.82rem' }} />
+                    <div style={{ fontSize:'0.65rem', color:'#94a3b8' }}>
+                      Use {'{{1}}'} {'{{2}}'} {'{{3}}'} etc. for variables. Keep under 1024 chars. Avoid promotional words for UTILITY templates.
+                    </div>
+                  </label>
+
+                  <label className="field" style={{ marginBottom:'0.75rem' }}>
+                    <span className="label">Footer Text (optional)</span>
+                    <input className="inp" placeholder="Reply STOP to opt out." value={templateForm.footer_text}
+                      onChange={e => setTemplateForm(p => ({ ...p, footer_text: e.target.value }))} />
+                  </label>
+
+                  <label className="field" style={{ marginBottom:'0.75rem' }}>
+                    <span className="label">Buttons (JSON array)</span>
+                    <textarea className="inp" rows={4} value={templateForm.buttons}
+                      onChange={e => setTemplateForm(p => ({ ...p, buttons: e.target.value }))}
+                      style={{ fontFamily:'monospace', fontSize:'0.75rem', resize:'vertical' }} />
+                    <div style={{ fontSize:'0.65rem', color:'#94a3b8' }}>
+                      Types: QUICK_REPLY · URL (needs url field) · PHONE_NUMBER (needs phone field). Max 3 buttons.
+                    </div>
+                  </label>
+
+                  <label className="field" style={{ marginBottom:'1rem' }}>
+                    <span className="label">Variable Examples (JSON — required by Meta)</span>
+                    <textarea className="inp" rows={4} value={templateForm.variable_examples}
+                      onChange={e => setTemplateForm(p => ({ ...p, variable_examples: e.target.value }))}
+                      style={{ fontFamily:'monospace', fontSize:'0.75rem', resize:'vertical' }} />
+                    <div style={{ fontSize:'0.65rem', color:'#94a3b8' }}>
+                      Provide realistic example values for each {'{{variable}}'}. Meta uses these to review your template.
+                    </div>
+                  </label>
+
+                  <div style={{ display:'flex', gap:'0.5rem', justifyContent:'flex-end' }}>
+                    <button className="btn btn--ghost" onClick={() => { setShowTemplateForm(false); setEditingTemplate(null) }}>Cancel</button>
+                    <button className="btn btn--primary"
+                      disabled={!templateForm.body_text || !templateForm.name || !templateForm.display_name}
+                      onClick={async () => {
+                        let parsedButtons = null, parsedExamples = null
+                        try { parsedButtons = JSON.parse(templateForm.buttons) } catch { setToast('❌ Buttons JSON is invalid'); return }
+                        try { parsedExamples = JSON.parse(templateForm.variable_examples) } catch { setToast('❌ Variable Examples JSON is invalid'); return }
+
+                        const payload = {
+                          display_name: templateForm.display_name,
+                          name: templateForm.name,
+                          category: templateForm.category,
+                          language: templateForm.language,
+                          status: 'draft',
+                          header_type: templateForm.header_type === 'NONE' ? null : templateForm.header_type,
+                          header_text: templateForm.header_text || null,
+                          body_text: templateForm.body_text,
+                          footer_text: templateForm.footer_text || null,
+                          buttons: parsedButtons,
+                          variable_examples: parsedExamples,
+                          campaign_type: templateForm.campaign_type,
+                          updated_at: new Date().toISOString(),
+                        }
+
+                        if (editingTemplate) {
+                          const { error } = await supabase.from('wa_templates').update(payload).eq('id', editingTemplate.id)
+                          if (error) { setToast(`❌ ${error.message}`); return }
+                          setToast('✅ Template updated!')
+                        } else {
+                          const { error } = await supabase.from('wa_templates').insert([{ ...payload, created_at: new Date().toISOString() }])
+                          if (error) { setToast(`❌ ${error.message}`); return }
+                          setToast('✅ Template created! Now submit for Meta approval.')
+                        }
+                        setShowTemplateForm(false); setEditingTemplate(null); await loadAll()
+                      }}>
+                      💾 {editingTemplate ? 'Save Changes' : 'Save Template'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === 'followups' && (
           <div>
             {/* ── Header ──────────────────────────────────────────────── */}
