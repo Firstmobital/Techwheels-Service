@@ -1537,7 +1537,7 @@ export default function TechnicianPage() {
             <div>
               <h3>Job card details</h3>
               <div className="sub">
-                JC #, Reg #, Bay, Status, IN TS, OUT TS, Time Diff, Remark
+                JC #, Reg #, Bay, Status, IN TS, OUT TS, Time Diff, Labour ÷ 1.18, Remark
                 {selectedDayKey && ` — ${dayCards.find((d) => d.dateKey === selectedDayKey)?.label || 'selected day'}`}
                 {selectedVehicleOnDayKey && ` — ${vehicleOnDayCards.find((v) => v.regKey === selectedVehicleOnDayKey)?.label || 'selected vehicle'}`}
               </div>
@@ -1560,6 +1560,7 @@ export default function TechnicianPage() {
                       <th className="ts-cell">IN TS</th>
                       <th className="ts-cell">OUT TS</th>
                       <th className="ctr">Time Diff</th>
+                      <th className="ctr">Labour ÷ 1.18</th>
                       <th>Remark</th>
                     </tr>
                   </thead>
@@ -1577,6 +1578,7 @@ export default function TechnicianPage() {
                         <td className="ts-cell">{formatDateTime(row.assigned_at)}</td>
                         <td className="ts-cell">{formatDateTime(row.out_ts)}</td>
                         <td className="ctr ts-cell">{row.time_diff ?? '—'}</td>
+                        <td className="ctr ts-cell">{formatCurrency(Number(row.gross_labour_amount ?? 0) / 1.18)}</td>
                         <td className="remark-cell">{row.remark ?? '—'}</td>
                       </tr>
                     ))}

@@ -266,6 +266,7 @@ interface TechnicianAssignment {
 
 function getTechnicianFilterKey(assignment: TechnicianAssignment | undefined): string {
   const code = String(assignment?.technician_code ?? '').trim().toUpperCase()
+  if (code === NOT_REQUIRED_TECHNICIAN_CODE) return 'not_required'
   if (code) return `code:${code}`
   return 'unassigned'
 }
@@ -273,6 +274,10 @@ function getTechnicianFilterKey(assignment: TechnicianAssignment | undefined): s
 function getTechnicianFilterLabel(assignment: TechnicianAssignment | undefined): string {
   const name = String(assignment?.technician_name ?? '').trim()
   const code = String(assignment?.technician_code ?? '').trim().toUpperCase()
+
+  if (code === NOT_REQUIRED_TECHNICIAN_CODE || name.toLowerCase() === NOT_REQUIRED_TECHNICIAN_NAME.toLowerCase()) {
+    return NOT_REQUIRED_TECHNICIAN_NAME
+  }
 
   if (name && code) return `${name} (${code})`
   if (name) return name
@@ -283,6 +288,8 @@ function getTechnicianFilterLabel(assignment: TechnicianAssignment | undefined):
 type AssignmentView = 'all' | 'assigned' | 'unassigned' | 'hold' | 'work_inprocess' | 'completed'
 
 const QUERY_PAGE_SIZE = 1000
+const NOT_REQUIRED_TECHNICIAN_CODE = '__NOT_REQUIRED__'
+const NOT_REQUIRED_TECHNICIAN_NAME = 'Not Required'
 
 function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message
@@ -535,8 +542,18 @@ export default function FloorInchargePage() {
 
     setSaving(normalizedJobCardNumber)
     try {
-      const emp = employees.find((e) => e.employee_code === employeeCode)
-      if (!emp) return
+      const isNotRequired = employeeCode === NOT_REQUIRED_TECHNICIAN_CODE
+      const emp = isNotRequired
+        ? {
+            employee_code: NOT_REQUIRED_TECHNICIAN_CODE,
+            employee_name: NOT_REQUIRED_TECHNICIAN_NAME,
+          }
+        : employees.find((e) => e.employee_code === employeeCode)
+
+      if (!emp) {
+        showToast('Please select a technician', 'error')
+        return
+      }
 
       const { data: { user } } = await supabase.auth.getUser()
       const payload: Omit<TechnicianAssignment, 'id'> = {
@@ -1207,6 +1224,7 @@ export default function FloorInchargePage() {
                                 disabled={isSaving}
                               >
                                 <option value="">— Select Technician —</option>
+                                <option value={NOT_REQUIRED_TECHNICIAN_CODE}>{NOT_REQUIRED_TECHNICIAN_NAME}</option>
                                 {employees.map((emp) => (
                                   <option key={emp.employee_code} value={emp.employee_code}>
                                     {emp.employee_name}
