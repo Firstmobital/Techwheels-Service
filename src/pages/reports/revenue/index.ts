@@ -5,7 +5,6 @@ import LabourSparesMixReport from './LabourSparesMixReport'
 import ProductLinePerformanceReport from './ProductLinePerformanceReport'
 import ModelWiseRevenueReport from './ModelWiseRevenueReport'
 import VehicleWiseRevenueReport from './VehicleWiseRevenueReport'
-import RevenueExecutiveDashboardReport from './RevenueExecutiveDashboardReport'
 import type { ReportCategoryDefinition, ReportDefinition } from '../types'
 
 export const REVENUE_CATEGORY: ReportCategoryDefinition = {
@@ -15,14 +14,6 @@ export const REVENUE_CATEGORY: ReportCategoryDefinition = {
 }
 
 export const REVENUE_REPORTS: ReportDefinition[] = [
-  {
-    id: 'revenue-executive-dashboard',
-    categoryId: 'revenue',
-    label: 'Revenue Dashboard',
-    description: 'Unified dashboard combining all revenue report perspectives in one view.',
-    cardHint: 'Best for management snapshot across trend, category, service mix and model performance.',
-    Component: RevenueExecutiveDashboardReport,
-  },
   {
     id: 'daily-revenue',
     categoryId: 'revenue',

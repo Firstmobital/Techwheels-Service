@@ -1,3 +1,4 @@
+import { DASHBOARD_CATEGORY, DASHBOARD_REPORTS } from './dashboard'
 import { LABOUR_REVENUE_CATEGORY, LABOUR_REVENUE_REPORTS } from './labour-revenue'
 import { PARTS_CATEGORY, PARTS_REPORTS } from './parts'
 import { REVENUE_CATEGORY, REVENUE_REPORTS } from './revenue'
@@ -5,6 +6,7 @@ import { WARRANTY_CATEGORY, WARRANTY_REPORTS } from './warranty'
 import type { ReportCategoryDefinition, ReportCategoryId, ReportDefinition, ReportId } from './types'
 
 export const REPORT_CATEGORIES: ReportCategoryDefinition[] = [
+  DASHBOARD_CATEGORY,
   LABOUR_REVENUE_CATEGORY,
   REVENUE_CATEGORY,
   PARTS_CATEGORY,
@@ -12,6 +14,7 @@ export const REPORT_CATEGORIES: ReportCategoryDefinition[] = [
 ]
 
 export const REPORT_DEFINITIONS: ReportDefinition[] = [
+  ...DASHBOARD_REPORTS,
   ...LABOUR_REVENUE_REPORTS,
   ...REVENUE_REPORTS,
   ...PARTS_REPORTS,

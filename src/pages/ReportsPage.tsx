@@ -94,15 +94,15 @@ export default function ReportsPage() {
   const isServiceTypeWiseReportSelected = activeReport?.id === 'service-type-labour-revenue'
   const isBranchLabourRevenueReportSelected = activeReport?.id === 'branch-labour-revenue'
   const isVasRevenueReportSelected = activeReport?.id === 'vas-revenue-report'
-  const isLabourExecutiveSummarySelected = activeReport?.id === 'labour-revenue-executive-summary'
+  const isDashboardCategorySelected = resolvedCategoryId === 'dashboard'
   const isRevenueCategorySelected = resolvedCategoryId === 'revenue'
   const shouldShowServiceTypeFilter =
+    isDashboardCategorySelected ||
     isRevenueCategorySelected ||
     isManpowerReportSelected ||
     isServiceTypeWiseReportSelected ||
     isBranchLabourRevenueReportSelected ||
-    isVasRevenueReportSelected ||
-    isLabourExecutiveSummarySelected
+    isVasRevenueReportSelected
   const shouldShowManpowerWiseFilter = isManpowerReportSelected
   const shouldShowServiceAdvisorFilter = isRevenueCategorySelected
 
@@ -134,7 +134,7 @@ export default function ReportsPage() {
   }, [branch, fuelType, resolvedCategoryId])
 
   const forceInvoiceDateFilter =
-    resolvedCategoryId === 'labour-revenue' || resolvedCategoryId === 'revenue'
+    resolvedCategoryId === 'dashboard' || resolvedCategoryId === 'labour-revenue' || resolvedCategoryId === 'revenue'
 
   const effectiveDateFieldType = useMemo<DateFieldType>(() => {
     if (forceInvoiceDateFilter) {
