@@ -3,6 +3,7 @@ import type { BranchFilter, DateRangeFilter } from '../../lib/reportQueries'
 
 export type ReportCategoryId = 'labour-revenue' | 'performance' | 'revenue' | 'parts' | 'warranty'
 export type ReportId =
+  | 'labour-revenue-executive-summary'
   | 'job-card-details'
   | 'service-type-labour-revenue'
   | 'branch-labour-revenue'
@@ -19,6 +20,7 @@ export type ReportId =
   | 'net-price-final-revenue-variance'
   | 'end-to-end-job-lifecycle'
   | 'daily-revenue'
+  | 'revenue-executive-dashboard'
   | 'category-wise-revenue'
   | 'monthly-trend-revenue'
   | 'labour-spares-mix'

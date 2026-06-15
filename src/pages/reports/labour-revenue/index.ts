@@ -1,5 +1,6 @@
 import BranchLabourRevenueReport from './BranchLabourRevenueReport'
 import JobCardDetailsReport from './JobCardDetailsReport'
+import LabourRevenueExecutiveSummaryReport from './LabourRevenueExecutiveSummaryReport'
 import ManpowerWiseLabourRevenueReport from './ManpowerWiseLabourRevenueReport'
 import ServiceTypeLabourRevenueReport from './ServiceTypeLabourRevenueReport'
 import VasRevenueReport from './VasRevenueReport'
@@ -12,6 +13,14 @@ export const LABOUR_REVENUE_CATEGORY: ReportCategoryDefinition = {
 }
 
 export const LABOUR_REVENUE_REPORTS: ReportDefinition[] = [
+  {
+    id: 'labour-revenue-executive-summary',
+    categoryId: 'labour-revenue',
+    label: 'Labour Dashboard',
+    description: 'Single dashboard combining service type, branch, manpower, VAS and job-card KPIs.',
+    cardHint: 'Best for leadership snapshot with charts and actionable insights.',
+    Component: LabourRevenueExecutiveSummaryReport,
+  },
   {
     id: 'service-type-labour-revenue',
     categoryId: 'labour-revenue',

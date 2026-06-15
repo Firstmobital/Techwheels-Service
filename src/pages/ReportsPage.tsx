@@ -94,13 +94,15 @@ export default function ReportsPage() {
   const isServiceTypeWiseReportSelected = activeReport?.id === 'service-type-labour-revenue'
   const isBranchLabourRevenueReportSelected = activeReport?.id === 'branch-labour-revenue'
   const isVasRevenueReportSelected = activeReport?.id === 'vas-revenue-report'
+  const isLabourExecutiveSummarySelected = activeReport?.id === 'labour-revenue-executive-summary'
   const isRevenueCategorySelected = resolvedCategoryId === 'revenue'
   const shouldShowServiceTypeFilter =
     isRevenueCategorySelected ||
     isManpowerReportSelected ||
     isServiceTypeWiseReportSelected ||
     isBranchLabourRevenueReportSelected ||
-    isVasRevenueReportSelected
+    isVasRevenueReportSelected ||
+    isLabourExecutiveSummarySelected
   const shouldShowManpowerWiseFilter = isManpowerReportSelected
   const shouldShowServiceAdvisorFilter = isRevenueCategorySelected
 

@@ -126,9 +126,20 @@ export default function ServiceTypeLabourRevenueReport({
     () => totals.totalLabourRevenue / GST_DIVISOR,
     [totals.totalLabourRevenue],
   )
+
+  const totalSparesRevenueExcludingGst = useMemo(
+    () => totals.totalSparesRevenue / GST_DIVISOR,
+    [totals.totalSparesRevenue],
+  )
+
+  const totalVasRevenueExcludingGst = useMemo(
+    () => totalVasRevenue / GST_DIVISOR,
+    [totalVasRevenue],
+  )
+
   const totalRevenueFromLabourAndSpares = useMemo(
-    () => totalLabourRevenueExcludingGst + totals.totalSparesRevenue,
-    [totalLabourRevenueExcludingGst, totals.totalSparesRevenue],
+    () => totalLabourRevenueExcludingGst + totalSparesRevenueExcludingGst,
+    [totalLabourRevenueExcludingGst, totalSparesRevenueExcludingGst],
   )
 
   const topServiceType = useMemo(() => {
@@ -152,8 +163,8 @@ export default function ServiceTypeLabourRevenueReport({
 
   const overallAvgLabourPerJob = useMemo(() => {
     if (totals.totalJobs <= 0) return 0
-    return totals.totalLabourRevenue / totals.totalJobs
-  }, [totals.totalJobs, totals.totalLabourRevenue])
+    return totalLabourRevenueExcludingGst / totals.totalJobs
+  }, [totals.totalJobs, totalLabourRevenueExcludingGst])
 
   const sparesToLabourRatio = useMemo(() => {
     if (totals.totalLabourRevenue <= 0) return 0
@@ -252,7 +263,7 @@ export default function ServiceTypeLabourRevenueReport({
           <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-violet-600">Total Spares Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-violet-900">
-              Rs. {totals.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              Rs. {totalSparesRevenueExcludingGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
@@ -272,7 +283,7 @@ export default function ServiceTypeLabourRevenueReport({
           <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
             <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Total Labour + VAS Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-900">
-              Rs. {(totalLabourRevenueExcludingGst + totalVasRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              Rs. {(totalLabourRevenueExcludingGst + totalVasRevenueExcludingGst).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 sm:col-span-2 lg:col-span-2">
@@ -281,7 +292,7 @@ export default function ServiceTypeLabourRevenueReport({
               {topServiceType?.serviceType ?? 'N/A'}
             </p>
             <p className="mt-1 text-sm text-rose-700">
-              Rs. {Math.round(topServiceType?.totalLabourRevenue ?? 0).toLocaleString('en-IN')}
+              Rs. {Math.round((topServiceType?.totalLabourRevenue ?? 0) / GST_DIVISOR).toLocaleString('en-IN')}
             </p>
           </div>
           <div className="rounded-lg border border-fuchsia-100 bg-fuchsia-50 px-4 py-3 sm:col-span-2 lg:col-span-2">
