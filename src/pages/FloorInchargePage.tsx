@@ -161,6 +161,17 @@ function normalizeEmployeeCode(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
 
+function normalizeJobCardNumber(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function getAssignmentRecencyMs(assignment: TechnicianAssignment): number {
+  const source = assignment.updated_at ?? assignment.out_ts ?? assignment.assigned_at ?? assignment.created_at ?? null
+  const parsed = source ? new Date(source).getTime() : Number.NaN
+  if (Number.isFinite(parsed)) return parsed
+  return Number(assignment.id ?? 0)
+}
+
 function mapReceptionRowToJobCard(row: ReceptionEntryRow): JobCard {
   const assignmentKey = (row.jc_number?.trim() || `RECEPTION-${row.id}`).toUpperCase()
 
@@ -421,6 +432,8 @@ export default function FloorInchargePage() {
           .select('*')
           .gte('assigned_at', dateRange.from + 'T00:00:00+05:30')
           .lte('assigned_at', dateRange.to + 'T23:59:59+05:30')
+          .order('updated_at', { ascending: false })
+          .order('assigned_at', { ascending: false })
           .range(from, from + QUERY_PAGE_SIZE - 1)
 
         if (assignRes.error) break
@@ -436,7 +449,14 @@ export default function FloorInchargePage() {
         const assignMap: Record<string, TechnicianAssignment> = {}
         const nextDrafts: Record<string, StageDraft> = {}
         for (const a of assignmentRows) {
-          const normalizedJc = String(a.job_card_number ?? '').trim().toUpperCase()
+          const normalizedJc = normalizeJobCardNumber(a.job_card_number)
+          if (!normalizedJc) continue
+
+          const existing = assignMap[normalizedJc]
+          if (existing && getAssignmentRecencyMs(existing) >= getAssignmentRecencyMs(a)) {
+            continue
+          }
+
           assignMap[normalizedJc] = a
           nextDrafts[normalizedJc] = {
             bay_no: a.bay_no ?? '',
@@ -507,21 +527,27 @@ export default function FloorInchargePage() {
   }
 
   async function assignTechnician(jobCardNumber: string, employeeCode: string) {
-    setSaving(jobCardNumber)
+    const normalizedJobCardNumber = normalizeJobCardNumber(jobCardNumber)
+    if (!normalizedJobCardNumber) {
+      showToast('Job card number is required', 'error')
+      return
+    }
+
+    setSaving(normalizedJobCardNumber)
     try {
       const emp = employees.find((e) => e.employee_code === employeeCode)
       if (!emp) return
 
       const { data: { user } } = await supabase.auth.getUser()
       const payload: Omit<TechnicianAssignment, 'id'> = {
-        job_card_number: jobCardNumber,
+        job_card_number: normalizedJobCardNumber,
         technician_code: emp.employee_code,
         technician_name: emp.employee_name,
         assigned_at: new Date().toISOString(),
         assigned_by: user?.email ?? null,
       }
 
-      const existing = assignments[jobCardNumber]
+      const existing = assignments[normalizedJobCardNumber]
       let result
       if (existing?.id) {
         result = await supabase
@@ -531,31 +557,51 @@ export default function FloorInchargePage() {
           .select()
           .single()
       } else {
-        result = await supabase
+        const latestRes = await supabase
           .from('technician_assignments')
-          .insert(payload)
-          .select()
-          .single()
+          .select('*')
+          .eq('job_card_number', normalizedJobCardNumber)
+          .order('updated_at', { ascending: false })
+          .order('assigned_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (latestRes.error) throw latestRes.error
+
+        if (latestRes.data?.id) {
+          result = await supabase
+            .from('technician_assignments')
+            .update(payload)
+            .eq('id', latestRes.data.id)
+            .select()
+            .single()
+        } else {
+          result = await supabase
+            .from('technician_assignments')
+            .insert(payload)
+            .select()
+            .single()
+        }
       }
 
       if (result.error) throw result.error
 
       setAssignments((prev) => ({
         ...prev,
-        [jobCardNumber]: result.data as TechnicianAssignment,
+        [normalizedJobCardNumber]: result.data as TechnicianAssignment,
       }))
 
       const updated = result.data as TechnicianAssignment
       setStageDrafts((prev) => ({
         ...prev,
-        [jobCardNumber]: {
-          bay_no: updated.bay_no ?? prev[jobCardNumber]?.bay_no ?? '',
-          work_status: updated.work_status ?? prev[jobCardNumber]?.work_status ?? 'work_inprocess',
-          remark: updated.remark ?? prev[jobCardNumber]?.remark ?? '',
+        [normalizedJobCardNumber]: {
+          bay_no: updated.bay_no ?? prev[normalizedJobCardNumber]?.bay_no ?? '',
+          work_status: updated.work_status ?? prev[normalizedJobCardNumber]?.work_status ?? 'work_inprocess',
+          remark: updated.remark ?? prev[normalizedJobCardNumber]?.remark ?? '',
         },
       }))
 
-      showToast(`Technician assigned to ${jobCardNumber}`, 'success')
+      showToast(`Technician assigned to ${normalizedJobCardNumber}`, 'success')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to assign technician'
       showToast(msg, 'error')

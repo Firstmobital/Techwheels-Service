@@ -35,9 +35,22 @@ interface Assignment {
   technician_name: string
   assigned_at: string
   assigned_by: string | null
+  updated_at?: string | null
+  created_at?: string | null
 }
 
 const QUERY_PAGE_SIZE = 1000
+
+function normalizeJobCardNumber(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function getAssignmentRecencyMs(assignment: Assignment): number {
+  const source = assignment.updated_at ?? assignment.assigned_at ?? assignment.created_at ?? null
+  const parsed = source ? new Date(source).getTime() : Number.NaN
+  if (Number.isFinite(parsed)) return parsed
+  return Number(assignment.id ?? 0)
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +100,8 @@ export default function FloorInchargeScreen() {
         const assignRes = await supabase
           .from('technician_assignments')
           .select('*')
+          .order('updated_at', { ascending: false })
+          .order('assigned_at', { ascending: false })
           .range(from, from + QUERY_PAGE_SIZE - 1)
 
         if (assignRes.error) break
@@ -107,7 +122,15 @@ export default function FloorInchargeScreen() {
 
       const map: Record<string, Assignment> = {}
       for (const a of assignmentRows) {
-        map[a.job_card_number] = a
+        const jc = normalizeJobCardNumber(a.job_card_number)
+        if (!jc) continue
+
+        const existing = map[jc]
+        if (existing && getAssignmentRecencyMs(existing) >= getAssignmentRecencyMs(a)) {
+          continue
+        }
+
+        map[jc] = a
       }
       setAssignments(map)
     } catch (e) {
@@ -123,10 +146,16 @@ export default function FloorInchargeScreen() {
   async function assignTechnician(jobCardNumber: string, emp: Employee) {
     setPickerVisible(false)
     setPickerJobCard(null)
-    setSaving(jobCardNumber)
+    const normalizedJobCardNumber = normalizeJobCardNumber(jobCardNumber)
+    if (!normalizedJobCardNumber) {
+      Alert.alert('Error', 'Job card number is required')
+      return
+    }
+
+    setSaving(normalizedJobCardNumber)
 
     const payload: Omit<Assignment, 'id'> = {
-      job_card_number: jobCardNumber,
+      job_card_number: normalizedJobCardNumber,
       technician_code: emp.employee_code,
       technician_name: emp.employee_name,
       assigned_at: new Date().toISOString(),
@@ -134,7 +163,7 @@ export default function FloorInchargeScreen() {
     }
 
     try {
-      const existing = assignments[jobCardNumber]
+      const existing = assignments[normalizedJobCardNumber]
       let result
       if (existing?.id) {
         result = await supabase
@@ -144,15 +173,35 @@ export default function FloorInchargeScreen() {
           .select()
           .single()
       } else {
-        result = await supabase
+        const latestRes = await supabase
           .from('technician_assignments')
-          .insert(payload)
-          .select()
-          .single()
+          .select('*')
+          .eq('job_card_number', normalizedJobCardNumber)
+          .order('updated_at', { ascending: false })
+          .order('assigned_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (latestRes.error) throw latestRes.error
+
+        if (latestRes.data?.id) {
+          result = await supabase
+            .from('technician_assignments')
+            .update(payload)
+            .eq('id', latestRes.data.id)
+            .select()
+            .single()
+        } else {
+          result = await supabase
+            .from('technician_assignments')
+            .insert(payload)
+            .select()
+            .single()
+        }
       }
 
       if (result.error) throw result.error
-      setAssignments(prev => ({ ...prev, [jobCardNumber]: result.data as Assignment }))
+      setAssignments(prev => ({ ...prev, [normalizedJobCardNumber]: result.data as Assignment }))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to assign'
       Alert.alert('Error', msg)
@@ -189,7 +238,7 @@ export default function FloorInchargeScreen() {
     )
   }, [employees, empSearch])
 
-  const assignedCount = filtered.filter(jc => !!assignments[jc.job_card_number]).length
+  const assignedCount = filtered.filter(jc => !!assignments[normalizeJobCardNumber(jc.job_card_number)]).length
 
   // ── Open Days badge ──────────────────────────────────────────────────────────
 
@@ -283,8 +332,9 @@ export default function FloorInchargeScreen() {
           </View>
         }
         renderItem={({ item: jc }) => {
-          const assignment = assignments[jc.job_card_number]
-          const isSaving = saving === jc.job_card_number
+          const normalizedJobCardNumber = normalizeJobCardNumber(jc.job_card_number)
+          const assignment = assignments[normalizedJobCardNumber]
+          const isSaving = saving === normalizedJobCardNumber
 
           return (
             <View style={{

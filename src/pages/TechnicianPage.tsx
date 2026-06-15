@@ -18,6 +18,8 @@ type TechnicianAssignmentRow = {
   out_ts: string | null
   time_diff: string | null
   remark: string | null
+  created_at?: string | null
+  updated_at?: string | null
   reg_number?: string | null
   branch?: string | null
   fuel_type?: string | null
@@ -174,6 +176,40 @@ function parseRevenueAmount(value: unknown): number {
   return isParenthesizedNegative ? -parsed : parsed
 }
 
+function normalizeJobCardNumber(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function getAssignmentRecencyMs(row: TechnicianAssignmentRow): number {
+  const source = row.updated_at ?? row.out_ts ?? row.assigned_at ?? row.created_at ?? null
+  const parsed = source ? new Date(source).getTime() : Number.NaN
+  if (Number.isFinite(parsed)) return parsed
+  return Number(row.id ?? 0)
+}
+
+function dedupeLatestAssignments(rows: TechnicianAssignmentRow[]): TechnicianAssignmentRow[] {
+  const latestByJc = new Map<string, TechnicianAssignmentRow>()
+
+  rows.forEach((row) => {
+    const jc = normalizeJobCardNumber(row.job_card_number)
+    if (!jc) return
+
+    const existing = latestByJc.get(jc)
+    if (!existing) {
+      latestByJc.set(jc, row)
+      return
+    }
+
+    const existingTs = getAssignmentRecencyMs(existing)
+    const candidateTs = getAssignmentRecencyMs(row)
+    if (candidateTs > existingTs || (candidateTs === existingTs && row.id > existing.id)) {
+      latestByJc.set(jc, row)
+    }
+  })
+
+  return Array.from(latestByJc.values())
+}
+
 function getIncomeDateKey(assignment: TechnicianAssignmentRow, revenue: RevenueRow): string | null {
   const source =
     revenue.closed_date_time ??
@@ -249,12 +285,12 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
     .order('assigned_at', { ascending: true })
 
   if (assignRes.error) throw new Error(assignRes.error.message)
-  const assignmentRows = (assignRes.data ?? []) as TechnicianAssignmentRow[]
+  const assignmentRows = dedupeLatestAssignments((assignRes.data ?? []) as TechnicianAssignmentRow[])
 
   const completedJcs = Array.from(new Set(
     assignmentRows
       .filter(r => normalizeStatus(r.work_status) === 'completed')
-      .map(r => String(r.job_card_number ?? '').trim().toUpperCase())
+      .map(r => normalizeJobCardNumber(r.job_card_number))
       .filter(Boolean)
   ))
 
@@ -267,7 +303,7 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
       .in('job_card_number', completedJcs)
     if (!revRes.error && revRes.data) {
       revRes.data.forEach((r: any) => {
-        const key = String(r.job_card_number ?? '').trim().toUpperCase()
+        const key = normalizeJobCardNumber(r.job_card_number)
         const amt = parseRevenueAmount(r.final_labour_amount)
         if (amt > 0 && !revenueMap.has(key)) revenueMap.set(key, amt)
       })
@@ -278,7 +314,7 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
   const regMap = new Map<string, string>()
   const branchMap = new Map<string, string>()
   const fuelMap = new Map<string, string>()
-  const allJcs = new Set(assignmentRows.map(r => String(r.job_card_number ?? '').trim().toUpperCase()).filter(Boolean))
+  const allJcs = new Set(assignmentRows.map(r => normalizeJobCardNumber(r.job_card_number)).filter(Boolean))
 
   const floorRes = await listFloorInchargeEntries()
   if (!floorRes.error && floorRes.data) {
@@ -295,7 +331,7 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
   const rows: YesterdayRow[] = assignmentRows
     .filter(r => normalizeStatus(r.work_status) === 'completed')
     .map(r => {
-      const jc = String(r.job_card_number ?? '').trim().toUpperCase()
+      const jc = normalizeJobCardNumber(r.job_card_number)
       const gross = revenueMap.get(jc) ?? 0
       const income = calculateTechnicianIncome(gross, r.bay_no, pvPct, evPct)
       return {
@@ -422,7 +458,7 @@ export default function TechnicianPage() {
       }
       // ───────────────────────────────────────────────────────────────────────
 
-      const assignmentRows: TechnicianAssignmentRow[] = []
+      const assignmentRowsRaw: TechnicianAssignmentRow[] = []
       let from = 0
 
       while (true) {
@@ -444,7 +480,7 @@ export default function TechnicianPage() {
         }
 
         const batch = (assignRes.data ?? []) as TechnicianAssignmentRow[]
-        assignmentRows.push(...batch)
+        assignmentRowsRaw.push(...batch)
 
         if (batch.length < QUERY_PAGE_SIZE) {
           break
@@ -453,9 +489,11 @@ export default function TechnicianPage() {
         from += QUERY_PAGE_SIZE
       }
 
+      const assignmentRows = dedupeLatestAssignments(assignmentRowsRaw)
+
       const assignmentJcNumbers = Array.from(new Set(
         assignmentRows
-          .map((row) => String(row.job_card_number ?? '').trim().toUpperCase())
+          .map((row) => normalizeJobCardNumber(row.job_card_number))
           .filter(Boolean),
       ))
 
@@ -464,7 +502,7 @@ export default function TechnicianPage() {
       assignmentRows
         .filter((row) => normalizeStatus(row.work_status) === 'completed')
         .forEach((row) => {
-          const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+          const jc = normalizeJobCardNumber(row.job_card_number)
           if (!jc) return
 
           const existing = completedMap.get(jc)
@@ -483,7 +521,7 @@ export default function TechnicianPage() {
       const completed = Array.from(completedMap.values())
       const completedJcNumbers = Array.from(new Set(
         completed
-          .map((row) => String(row.job_card_number ?? '').trim().toUpperCase())
+          .map((row) => normalizeJobCardNumber(row.job_card_number))
           .filter(Boolean),
       ))
 
@@ -562,7 +600,7 @@ export default function TechnicianPage() {
         }
 
         ;(revenueRes.data ?? []).forEach((row: any) => {
-          const key = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim().toUpperCase()
+          const key = normalizeJobCardNumber((row as { job_card_number?: string | null }).job_card_number)
           if (!key) return
 
           const existing = revenueMap.get(key)
@@ -584,7 +622,7 @@ export default function TechnicianPage() {
       const grossByJc = new Map<string, number>()
 
       completed.forEach((assignment) => {
-        const jc = String(assignment.job_card_number ?? '').trim().toUpperCase()
+        const jc = normalizeJobCardNumber(assignment.job_card_number)
         if (!jc) return
         const revenue = revenueMap.get(jc)
         if (!revenue) return
@@ -599,7 +637,7 @@ export default function TechnicianPage() {
       })
 
       const enrichedAssignmentRows = assignmentRows.map((row) => {
-        const jc = String(row.job_card_number ?? '').trim().toUpperCase()
+        const jc = normalizeJobCardNumber(row.job_card_number)
         const inferredBranch = inferBranchFromAssignment(row)
         return {
           ...row,
