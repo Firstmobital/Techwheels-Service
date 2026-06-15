@@ -2008,10 +2008,16 @@ export default function BodyshopRepairPage() {
       const cachedAtMs = cacheRow?.cached_at ? new Date(cacheRow.cached_at).getTime() : Number.NaN
       const cacheIsFresh = Number.isFinite(cachedAtMs) && (Date.now() - cachedAtMs) <= staleAfterMs
       let usedFreshCache = Boolean(cacheRow && cacheIsFresh)
+      const cacheInsurancePatch = cacheRow ? extractInsurancePatchFromSource(cacheRow) : null
+      const cacheHasInsuranceData = Boolean(
+        cacheInsurancePatch?.insurance_policy_no
+        || cacheInsurancePatch?.insurance_company
+        || cacheInsurancePatch?.insurance_valid_date,
+      )
 
-      if (!cacheRow || !cacheIsFresh) {
+      if (!cacheRow || !cacheIsFresh || !cacheHasInsuranceData) {
         const rcLookupRes = await fetchVehicleFromRcLookup(regNo)
-        if (rcLookupRes.error && !cacheRow) {
+        if (rcLookupRes.error && !cacheHasInsuranceData) {
           toast_(rcLookupRes.error, false)
           return
         }
@@ -3617,6 +3623,7 @@ export default function BodyshopRepairPage() {
                                   ))}
                                 </select>
                               </label>
+
                             </div>
                           )}
 

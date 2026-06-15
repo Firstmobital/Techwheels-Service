@@ -336,6 +336,9 @@ type AdditionalApprovalDraftPart = {
   partDescription: string
   reason: string
   imageFile: File | null
+  existingImageBucket: string | null
+  existingImagePath: string | null
+  existingImageFileName: string | null
 }
 
 function emptyAdditionalApprovalDraftPart(): AdditionalApprovalDraftPart {
@@ -344,6 +347,9 @@ function emptyAdditionalApprovalDraftPart(): AdditionalApprovalDraftPart {
     partDescription: '',
     reason: '',
     imageFile: null,
+    existingImageBucket: null,
+    existingImagePath: null,
+    existingImageFileName: null,
   }
 }
 
@@ -1043,6 +1049,9 @@ export default function BodyshopFloorPage() {
           partDescription: part.part_description ?? '',
           reason: part.reason ?? '',
           imageFile: null,
+          existingImageBucket: part.part_image_bucket ?? null,
+          existingImagePath: part.part_image_path ?? null,
+          existingImageFileName: part.part_image_file_name ?? null,
         }))
       : [emptyAdditionalApprovalDraftPart()]
     setAdditionalApprovalModal({
@@ -1112,17 +1121,20 @@ export default function BodyshopFloorPage() {
       partDescription: part.partDescription.trim(),
       reason: part.reason.trim(),
       imageFile: part.imageFile,
+      existingImageBucket: part.existingImageBucket,
+      existingImagePath: part.existingImagePath,
+      existingImageFileName: part.existingImageFileName,
     }))
 
     const invalidIndex = draftParts.findIndex((part) => (
-      !part.partNo || !part.partDescription || !part.reason || !part.imageFile
+      !part.partNo || !part.partDescription || !part.reason || (!part.imageFile && !part.existingImagePath)
     ))
     if (invalidIndex >= 0) {
       showToast(`Fill all fields and image for Part ${invalidIndex + 1}`, 'error')
       return
     }
 
-    const nonImageIndex = draftParts.findIndex((part) => !String(part.imageFile?.type ?? '').startsWith('image/'))
+    const nonImageIndex = draftParts.findIndex((part) => Boolean(part.imageFile) && !String(part.imageFile?.type ?? '').startsWith('image/'))
     if (nonImageIndex >= 0) {
       showToast(`Part ${nonImageIndex + 1} image must be an image file`, 'error')
       return
@@ -1171,69 +1183,80 @@ export default function BodyshopFloorPage() {
       const uploadedParts: AdditionalApprovalRequestPart[] = []
       for (let index = 0; index < draftParts.length; index += 1) {
         const draft = draftParts[index]
-        if (!draft.imageFile) throw new Error(`Missing image for Part ${index + 1}`)
+        if (draft.imageFile) {
+          const imagePath = `bodyshop-additional-approval/${repairCardId}/${Date.now()}_${index + 1}_${safeFileName(draft.imageFile.name)}`
+          const uploadRes = await supabase.storage
+            .from(AUTODOC_BUCKET)
+            .upload(imagePath, draft.imageFile, {
+              upsert: false,
+              contentType: draft.imageFile.type || 'application/octet-stream',
+            })
+          if (uploadRes.error) throw uploadRes.error
 
-        const imagePath = `bodyshop-additional-approval/${repairCardId}/${Date.now()}_${index + 1}_${safeFileName(draft.imageFile.name)}`
-        const uploadRes = await supabase.storage
-          .from(AUTODOC_BUCKET)
-          .upload(imagePath, draft.imageFile, {
-            upsert: false,
-            contentType: draft.imageFile.type || 'application/octet-stream',
-          })
-        if (uploadRes.error) throw uploadRes.error
-
-        const photoMetaRes = await supabase
-          .from('bodyshop_intake_vehicle_photos')
-          .insert({
-            dealer_code: dealerCode,
-            reception_entry_id: receptionEntryId,
-            job_card_no: jobCardNo,
-            reg_number: regNo,
-            customer_type: customerType,
-            storage_bucket: AUTODOC_BUCKET,
-            storage_path: imagePath,
-            file_name: draft.imageFile.name,
-            content_type: draft.imageFile.type || null,
-            file_size_bytes: draft.imageFile.size,
-            uploaded_by: typeof actor === 'string' ? actor : 'system',
-            uploaded_at: new Date().toISOString(),
-            repair_card_id: repairCardId,
-          })
-          .select('id')
-          .single()
-        if (photoMetaRes.error || !photoMetaRes.data?.id) {
-          throw new Error(photoMetaRes.error?.message ?? 'Failed to save upload metadata for Drive sync')
-        }
-
-        if (supabaseUrl && token) {
-          const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              resource_type: 'bodyshop_intake_photo',
-              resource_id: photoMetaRes.data.id,
-              bucket_id: AUTODOC_BUCKET,
-              object_name: imagePath,
-              file_type: 'additional_approval_request',
-              file_size_mb: Number((draft.imageFile.size / (1024 * 1024)).toFixed(3)),
-            }),
-          })
-          const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
-          if (!driveRes.ok || drivePayload?.error) {
-            showToast(`Part ${index + 1} saved, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, 'error')
+          const photoMetaRes = await supabase
+            .from('bodyshop_intake_vehicle_photos')
+            .insert({
+              dealer_code: dealerCode,
+              reception_entry_id: receptionEntryId,
+              job_card_no: jobCardNo,
+              reg_number: regNo,
+              customer_type: customerType,
+              storage_bucket: AUTODOC_BUCKET,
+              storage_path: imagePath,
+              file_name: draft.imageFile.name,
+              content_type: draft.imageFile.type || null,
+              file_size_bytes: draft.imageFile.size,
+              uploaded_by: typeof actor === 'string' ? actor : 'system',
+              uploaded_at: new Date().toISOString(),
+              repair_card_id: repairCardId,
+            })
+            .select('id')
+            .single()
+          if (photoMetaRes.error || !photoMetaRes.data?.id) {
+            throw new Error(photoMetaRes.error?.message ?? 'Failed to save upload metadata for Drive sync')
           }
+
+          if (supabaseUrl && token) {
+            const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                resource_type: 'bodyshop_intake_photo',
+                resource_id: photoMetaRes.data.id,
+                bucket_id: AUTODOC_BUCKET,
+                object_name: imagePath,
+                file_type: 'additional_approval_request',
+                file_size_mb: Number((draft.imageFile.size / (1024 * 1024)).toFixed(3)),
+              }),
+            })
+            const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+            if (!driveRes.ok || drivePayload?.error) {
+              showToast(`Part ${index + 1} saved, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, 'error')
+            }
+          }
+
+          uploadedParts.push({
+            part_no: draft.partNo,
+            part_description: draft.partDescription,
+            reason: draft.reason,
+            part_image_bucket: AUTODOC_BUCKET,
+            part_image_path: imagePath,
+            part_image_file_name: draft.imageFile.name,
+          })
+          continue
         }
 
+        if (!draft.existingImagePath) throw new Error(`Missing image for Part ${index + 1}`)
         uploadedParts.push({
           part_no: draft.partNo,
           part_description: draft.partDescription,
           reason: draft.reason,
-          part_image_bucket: AUTODOC_BUCKET,
-          part_image_path: imagePath,
-          part_image_file_name: draft.imageFile.name,
+          part_image_bucket: draft.existingImageBucket || AUTODOC_BUCKET,
+          part_image_path: draft.existingImagePath,
+          part_image_file_name: draft.existingImageFileName,
         })
       }
 
@@ -1706,10 +1729,17 @@ export default function BodyshopFloorPage() {
                         <input
                           type="file"
                           accept="image/*"
-                          onChange={(e) => patchAdditionalApprovalPart(idx, { imageFile: e.target.files?.[0] ?? null })}
+                          onChange={(e) => patchAdditionalApprovalPart(idx, {
+                            imageFile: e.target.files?.[0] ?? null,
+                            existingImageBucket: e.target.files?.[0] ? null : part.existingImageBucket,
+                            existingImagePath: e.target.files?.[0] ? null : part.existingImagePath,
+                            existingImageFileName: e.target.files?.[0] ? null : part.existingImageFileName,
+                          })}
                         />
                         <span style={{ fontSize: 11, color: '#64748b' }}>
-                          {part.imageFile ? part.imageFile.name : 'No file chosen'}
+                          {part.imageFile
+                            ? part.imageFile.name
+                            : (part.existingImageFileName || part.existingImagePath || 'No file chosen')}
                         </span>
                       </label>
                     </div>
