@@ -361,7 +361,14 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(
+      scoped,
+      selectedSummaryCard,
+      completedJobCardNumbers,
+      holdJobCardNumbers,
+      inProcessJobCardNumbers,
+      allAssignedJobCardNumbers,
+    )
     return summaryScoped.filter((row) => matchesSearch(row))
   }, [rows, selectedFuelType, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
@@ -378,7 +385,14 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(
+      scoped,
+      selectedSummaryCard,
+      completedJobCardNumbers,
+      holdJobCardNumbers,
+      inProcessJobCardNumbers,
+      allAssignedJobCardNumbers,
+    )
     return summaryScoped.filter((row) => matchesSearch(row))
   }, [rows, selectedBranch, selectedCategory, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
@@ -395,7 +409,14 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getAdvisorFilterKey(row) === selectedAdvisor)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(
+      scoped,
+      selectedSummaryCard,
+      completedJobCardNumbers,
+      holdJobCardNumbers,
+      inProcessJobCardNumbers,
+      allAssignedJobCardNumbers,
+    )
     return summaryScoped.filter((row) => matchesSearch(row))
   }, [rows, selectedBranch, selectedFuelType, selectedAdvisor, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
@@ -412,7 +433,14 @@ export default function ServiceAdvisorPage() {
       scoped = scoped.filter((row) => getCategoryForServiceType(row.service_type) === selectedCategory)
     }
 
-    const summaryScoped = applySummaryCardFilter(scoped, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers)
+    const summaryScoped = applySummaryCardFilter(
+      scoped,
+      selectedSummaryCard,
+      completedJobCardNumbers,
+      holdJobCardNumbers,
+      inProcessJobCardNumbers,
+      allAssignedJobCardNumbers,
+    )
     return summaryScoped.filter((row) => matchesSearch(row))
   }, [rows, selectedBranch, selectedFuelType, selectedCategory, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers, searchQuery])
 
@@ -480,29 +508,14 @@ export default function ServiceAdvisorPage() {
   }
 
   const cardFilteredRows = useMemo(() => {
-    if (selectedSummaryCard === 'all') return displayedRows
-    if (selectedSummaryCard === 'job_card_pending') {
-      return displayedRows.filter((row) => isJobCardPending(row.jc_number))
-    }
-    if (selectedSummaryCard === 'sr_type_pending') {
-      return displayedRows.filter((row) => isServiceTypeMissing(row.service_type))
-    }
-    if (selectedSummaryCard === 'estimate_pending') {
-      return displayedRows.filter((row) => !row.estimate_storage_path)
-    }
-    if (selectedSummaryCard === 'no_technician') {
-      return displayedRows.filter((row) => isFloorApplicable(row) && !isTechnicianAssigned(row))
-    }
-    if (selectedSummaryCard === 'floor_hold') {
-      return displayedRows.filter((row) => isWorkHold(row))
-    }
-    if (selectedSummaryCard === 'in_process') {
-      return displayedRows.filter((row) => isWorkInProcess(row))
-    }
-    if (selectedSummaryCard === 'completed') {
-      return displayedRows.filter((row) => isWorkCompleted(row) && Boolean(row.invoice_done_at))
-    }
-    return displayedRows.filter((row) => isWorkCompleted(row) && !row.invoice_done_at)
+    return applySummaryCardFilter(
+      displayedRows,
+      selectedSummaryCard,
+      completedJobCardNumbers,
+      holdJobCardNumbers,
+      inProcessJobCardNumbers,
+      allAssignedJobCardNumbers,
+    )
   }, [displayedRows, selectedSummaryCard, completedJobCardNumbers, holdJobCardNumbers, inProcessJobCardNumbers, allAssignedJobCardNumbers])
 
   const availableBranches = useMemo(() => {
@@ -628,7 +641,6 @@ export default function ServiceAdvisorPage() {
     () => displayedRows.filter((r) => isWorkCompleted(r) && Boolean(r.invoice_done_at)).length,
     [displayedRows, completedJobCardNumbers],
   )
-
   // Detect admin/super_admin and get dealer scope
   async function checkIfAdmin() {
     try {

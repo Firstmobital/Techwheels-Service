@@ -25,6 +25,7 @@ type TechnicianAssignmentRow = {
   fuel_type?: string | null
   gross_labour_amount?: number
   technician_income?: number
+  invoice_date?: string | null
 }
 
 type RevenueRow = {
@@ -86,6 +87,17 @@ function formatDateTime(value: string | null | undefined): string {
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+  })
+}
+
+function formatDateOnly(value: string | null | undefined): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   })
 }
 
@@ -180,6 +192,25 @@ function normalizeJobCardNumber(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
 
+function toIstDateKey(value: string | null | undefined): string | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return null
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(parsed)
+}
+
+function normalizeInvoiceDate(value: string | null | undefined): string | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  return raw.slice(0, 10)
+}
+
 function getAssignmentRecencyMs(row: TechnicianAssignmentRow): number {
   const source = row.updated_at ?? row.out_ts ?? row.assigned_at ?? row.created_at ?? null
   const parsed = source ? new Date(source).getTime() : Number.NaN
@@ -211,11 +242,11 @@ function dedupeLatestAssignments(rows: TechnicianAssignmentRow[]): TechnicianAss
 }
 
 function getIncomeDateKey(assignment: TechnicianAssignmentRow, revenue: RevenueRow): string | null {
+  // Prefer invoice_date from both sources (authoritative). Falls back only for backward compatibility.
   const source =
-    revenue.closed_date_time ??
     revenue.invoice_date ??
-    assignment.out_ts ??
-    assignment.assigned_at
+    assignment.invoice_date ??
+    revenue.closed_date_time
 
   if (!source) return null
 
@@ -238,7 +269,8 @@ function normalizeSharePercentInput(value: string, fallback: number): number {
 }
 
 function getAssignmentDateKey(row: TechnicianAssignmentRow): string | null {
-  const dateSource = row.out_ts ?? row.assigned_at
+  // Use ONLY invoice_date from job_card_closed_data (no fallback to assigned_at or out_ts)
+  const dateSource = row.invoice_date
   if (!dateSource) return null
 
   const parsed = new Date(dateSource)
@@ -458,15 +490,15 @@ export default function TechnicianPage() {
       }
       // ───────────────────────────────────────────────────────────────────────
 
+      // Fetch all technician assignments for the date range
       const assignmentRowsRaw: TechnicianAssignmentRow[] = []
       let from = 0
 
       while (true) {
+        // Fetch technician assignments (no join - will map invoice_date separately)
         let assignQuery = supabase
           .from('technician_assignments')
           .select('*')
-          .gte('assigned_at', dateRange.from + 'T00:00:00+05:30')
-          .lte('assigned_at', dateRange.to + 'T23:59:59+05:30')
           .order('assigned_at', { ascending: false })
           .range(from, from + QUERY_PAGE_SIZE - 1)
 
@@ -489,7 +521,43 @@ export default function TechnicianPage() {
         from += QUERY_PAGE_SIZE
       }
 
-      const assignmentRows = dedupeLatestAssignments(assignmentRowsRaw)
+      // Build map of invoice_date by job_card_number
+      const jcNumbers = Array.from(new Set(
+        assignmentRowsRaw
+          .map((row) => normalizeJobCardNumber(row.job_card_number))
+          .filter(Boolean),
+      ))
+
+      const invoiceDateMap = new Map<string, string | null>()
+      if (jcNumbers.length > 0) {
+        const invoiceRes = await supabase
+          .from('job_card_closed_data')
+          .select('job_card_number, invoice_date')
+          .in('job_card_number', jcNumbers)
+
+        if (!invoiceRes.error && invoiceRes.data) {
+          ;(invoiceRes.data ?? []).forEach((row: any) => {
+            const key = normalizeJobCardNumber((row as { job_card_number?: string | null }).job_card_number)
+            if (!key) return
+            invoiceDateMap.set(key, row.invoice_date ?? null)
+          })
+        }
+      }
+
+      // Map invoice_date to assignments and filter by date range
+      const assignmentRows = dedupeLatestAssignments(
+        assignmentRowsRaw
+          .map((row) => ({
+            ...row,
+            invoice_date: invoiceDateMap.get(normalizeJobCardNumber(row.job_card_number)) ?? null,
+          }))
+          .filter((row) => {
+            if (!row.invoice_date) return false
+            if (row.invoice_date < dateRange.from) return false
+            if (row.invoice_date > dateRange.to) return false
+            return true
+          }),
+      )
 
       const assignmentJcNumbers = Array.from(new Set(
         assignmentRows
@@ -670,6 +738,172 @@ export default function TechnicianPage() {
       alert('Failed to generate report: ' + (e.message ?? 'Unknown error'))
     } finally {
       setGeneratingReport(false)
+    }
+  }
+
+  async function handleExportIssues() {
+    if (!fromDate || !toDate) {
+      alert('Select both start and end dates')
+      return
+    }
+
+    try {
+      // Primary filter: Fetch job_card_closed_data where invoice_date is in the range
+      const jccRes = await supabase
+        .from('job_card_closed_data')
+        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time')
+        .gte('invoice_date', fromDate)
+        .lte('invoice_date', toDate)
+
+      if (jccRes.error) {
+        alert('Failed to fetch closed data: ' + jccRes.error.message)
+        return
+      }
+
+      const excludedSrTypes = new Set(['ACCIDENT', 'PDI'])
+      const jccRecords = (jccRes.data ?? []).filter((row: any) => {
+        const srType = String(row?.sr_type ?? '').trim().toUpperCase()
+        return !excludedSrTypes.has(srType)
+      })
+      if (jccRecords.length === 0) {
+        alert('No records found after excluding Accident and PDI in the selected invoice date range.')
+        return
+      }
+
+      // Get unique job card numbers from source records for a reliable DB lookup.
+      const sourceJcNumbers = Array.from(new Set(
+        jccRecords
+          .map((row: any) => String(row.job_card_number ?? '').trim())
+          .filter(Boolean),
+      ))
+
+      // Fetch assignment timestamps and status for those job cards.
+      const taRes = await supabase
+        .from('technician_assignments')
+        .select('id, job_card_number, out_ts, work_status, assigned_at, created_at, updated_at')
+        .in('job_card_number', sourceJcNumbers)
+
+      if (taRes.error) {
+        alert('Failed to fetch assignment data: ' + taRes.error.message)
+        return
+      }
+
+      // Keep all assignment rows per JC so export can include every status state.
+      const assignmentsByJc = new Map<string, TechnicianAssignmentRow[]>()
+      ;(taRes.data ?? []).forEach((row: any) => {
+        const key = normalizeJobCardNumber(row.job_card_number)
+        if (!key) return
+        const candidate = row as TechnicianAssignmentRow
+        const list = assignmentsByJc.get(key) ?? []
+        list.push(candidate)
+        assignmentsByJc.set(key, list)
+      })
+
+      // Sort latest-first so exported rows are stable and easy to review.
+      assignmentsByJc.forEach((list, key) => {
+        list.sort((a, b) => {
+          const aTs = getAssignmentRecencyMs(a)
+          const bTs = getAssignmentRecencyMs(b)
+          if (bTs !== aTs) return bTs - aTs
+          return Number(b.id ?? 0) - Number(a.id ?? 0)
+        })
+        assignmentsByJc.set(key, list)
+      })
+
+      // Build SA name map (Service Advisor page source) by JC number.
+      const saNameMap = new Map<string, string>()
+      const receptionRes = await listReceptionEntries()
+      if (!receptionRes.error && receptionRes.data) {
+        const sourceJcSet = new Set(sourceJcNumbers.map((jc) => normalizeJobCardNumber(jc)))
+        ;(receptionRes.data ?? []).forEach((row) => {
+          const key = normalizeJobCardNumber(row.jc_number)
+          if (!key || !sourceJcSet.has(key)) return
+
+          const saName = String(row.sa_display_name ?? row.sa_name ?? '').trim()
+          if (saName && !saNameMap.has(key)) {
+            saNameMap.set(key, saName)
+          }
+        })
+      }
+
+      // Combine data and include all assignment statuses; export only non-match issues.
+      const issues = jccRecords
+        .flatMap((row: any) => {
+          const jc = normalizeJobCardNumber(row.job_card_number)
+          const assignments = assignmentsByJc.get(jc) ?? []
+
+          if (assignments.length === 0) {
+            return [{
+              job_card_number: row.job_card_number ?? '',
+              service_type: row.sr_type ?? '',
+              branch: row.branch ?? '',
+              out_ts: null,
+              invoice_date: row.invoice_date ?? '',
+              closed_date_time: row.closed_date_time ?? '',
+              sa_name: saNameMap.get(jc) ?? '',
+              status: 'Unassigned',
+              match_status: 'NO ASSIGNMENT',
+            }]
+          }
+
+          return assignments.map((assignment) => {
+            const outTs = assignment.out_ts ?? null
+            const workStatus = assignment.work_status ?? null
+
+            const invDate = normalizeInvoiceDate(row.invoice_date ?? '')
+            const outDate = toIstDateKey(outTs)
+
+            let matchStatus = '❌ MISMATCH'
+            if (!invDate) {
+              matchStatus = 'NO INVOICE DATE'
+            } else if (!outTs) {
+              matchStatus = 'NO OUT TS'
+            } else if (outDate && outDate === invDate) {
+              matchStatus = 'MATCH'
+            }
+
+            return {
+              job_card_number: row.job_card_number ?? '',
+              service_type: row.sr_type ?? '',
+              branch: row.branch ?? '',
+              out_ts: outTs,
+              invoice_date: row.invoice_date ?? '',
+              closed_date_time: row.closed_date_time ?? '',
+              sa_name: saNameMap.get(jc) ?? '',
+              status: workStatus ? statusLabel(workStatus) : 'Unassigned',
+              match_status: matchStatus,
+            }
+          })
+        })
+        .filter((row: any) => row.match_status !== 'MATCH')
+
+      if (issues.length === 0) {
+        alert('No issues found. All assignment rows match invoice dates in the selected range.')
+        return
+      }
+
+      // Export to Excel
+      const sheetData = [
+        ['Job Card Number', 'Service Type', 'Branch', 'SA Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Match Status'],
+        ...issues.map((r: any) => [
+          r.job_card_number,
+          r.service_type,
+          r.branch,
+          r.sa_name,
+          r.status,
+          r.out_ts ? new Date(r.out_ts).toLocaleString('en-IN') : '',
+          r.invoice_date,
+          r.closed_date_time ? new Date(r.closed_date_time).toLocaleString('en-IN') : '',
+          r.match_status,
+        ]),
+      ]
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(sheetData)
+      ws['!cols'] = [18, 20, 16, 26, 15, 25, 15, 25, 15].map(w => ({ wch: w }))
+      XLSX.utils.book_append_sheet(wb, ws, 'Date Issues')
+      XLSX.writeFile(wb, `JC_Date_Issues_${fromDate}_to_${toDate}.xlsx`)
+    } catch (e: any) {
+      alert('Export failed: ' + (e.message ?? 'Unknown error'))
     }
   }
 
@@ -1355,6 +1589,26 @@ export default function TechnicianPage() {
               style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
               onClick={() => { setFromDate(''); setToDate('') }}>✕</button>
           )}
+          <button type="button"
+            onClick={() => void handleExportIssues()}
+            disabled={!fromDate || !toDate}
+            title={fromDate && toDate ? 'Export date mismatch issues' : 'Select both start and end dates'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.3rem 0.7rem',
+              background: fromDate && toDate ? '#ef4444' : '#fca5a5',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '5px',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              cursor: fromDate && toDate ? 'pointer' : 'not-allowed',
+              opacity: fromDate && toDate ? 1 : 0.6,
+            }}>
+            📥 Export Issues
+          </button>
         </div>
       </div>
 
@@ -1537,7 +1791,7 @@ export default function TechnicianPage() {
             <div>
               <h3>Job card details</h3>
               <div className="sub">
-                JC #, Reg #, Bay, Status, IN TS, OUT TS, Time Diff, Labour ÷ 1.18, Remark
+                JC #, Reg #, Bay, Status, IN TS, OUT TS, Invoice Date, Time Diff, Labour ÷ 1.18, Remark
                 {selectedDayKey && ` — ${dayCards.find((d) => d.dateKey === selectedDayKey)?.label || 'selected day'}`}
                 {selectedVehicleOnDayKey && ` — ${vehicleOnDayCards.find((v) => v.regKey === selectedVehicleOnDayKey)?.label || 'selected vehicle'}`}
               </div>
@@ -1559,6 +1813,7 @@ export default function TechnicianPage() {
                       <th className="ctr">Status</th>
                       <th className="ts-cell">IN TS</th>
                       <th className="ts-cell">OUT TS</th>
+                      <th className="ts-cell">Invoice Date</th>
                       <th className="ctr">Time Diff</th>
                       <th className="ctr">Labour ÷ 1.18</th>
                       <th>Remark</th>
@@ -1577,6 +1832,7 @@ export default function TechnicianPage() {
                         </td>
                         <td className="ts-cell">{formatDateTime(row.assigned_at)}</td>
                         <td className="ts-cell">{formatDateTime(row.out_ts)}</td>
+                        <td className="ts-cell">{formatDateOnly(row.invoice_date)}</td>
                         <td className="ctr ts-cell">{row.time_diff ?? '—'}</td>
                         <td className="ctr ts-cell">{formatCurrency(Number(row.gross_labour_amount ?? 0) / 1.18)}</td>
                         <td className="remark-cell">{row.remark ?? '—'}</td>
