@@ -277,6 +277,26 @@ function dedupeCards(cards: RepairCard[]): RepairCard[] {
   return Array.from(byKey.values())
 }
 
+function getAdvisorFilterKey(card: RepairCard): string {
+  const code = String(card.sa_employee_code ?? '').trim().toUpperCase()
+  if (code) return `code:${code}`
+
+  const name = String(card.sa_name ?? '').trim()
+  if (name) return `name:${name.toLowerCase()}`
+
+  return 'unknown'
+}
+
+function getAdvisorFilterLabel(card: RepairCard): string {
+  const code = String(card.sa_employee_code ?? '').trim().toUpperCase()
+  const name = String(card.sa_name ?? '').trim()
+
+  if (name && code) return `${name} (${code})`
+  if (name) return name
+  if (code) return code
+  return 'Unknown advisor'
+}
+
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
@@ -518,6 +538,7 @@ export default function BodyshopRepairPage() {
   const [branches, setBranches]   = useState<string[]>([])
   const [search, setSearch]       = useState('')
   const [branchFilter, setBranchFilter]   = useState('all')
+  const [advisorFilter, setAdvisorFilter] = useState('all')
   const [statusFilter, setStatusFilter]   = useState('active')
   const [stageFilter, setStageFilter] = useState<number | 'all'>('all')
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
@@ -2498,8 +2519,7 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  // filtered
-  const baseFiltered = useMemo(() => cards.filter((c) => {
+  const scopeFilteredCards = useMemo(() => cards.filter((c) => {
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false
     if (statusFilter !== 'all' && c.overall_status !== statusFilter) return false
     if (search.trim()) {
@@ -2513,15 +2533,55 @@ export default function BodyshopRepairPage() {
     return true
   }), [cards, branchFilter, statusFilter, search])
 
-  const filtered = useMemo(() => {
-    if (stageFilter === 'all') return baseFiltered
-    return baseFiltered.filter((card) => isCardInStageWorklist(card, stageFilter))
-  }, [baseFiltered, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+  const stageScopedCards = useMemo(() => {
+    if (stageFilter === 'all') return scopeFilteredCards
+    return scopeFilteredCards.filter((card) => isCardInStageWorklist(card, stageFilter))
+  }, [scopeFilteredCards, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+
+  const advisorScopedCards = useMemo(() => {
+    if (advisorFilter === 'all') return scopeFilteredCards
+    return scopeFilteredCards.filter((card) => getAdvisorFilterKey(card) === advisorFilter)
+  }, [scopeFilteredCards, advisorFilter])
+
+  const advisorOptions = useMemo(() => {
+    const optionMap = new Map<string, { label: string; count: number }>()
+
+    stageScopedCards.forEach((card) => {
+      const key = getAdvisorFilterKey(card)
+      const existing = optionMap.get(key)
+
+      if (existing) {
+        existing.count += 1
+      } else {
+        optionMap.set(key, {
+          label: getAdvisorFilterLabel(card),
+          count: 1,
+        })
+      }
+    })
+
+    return Array.from(optionMap.entries())
+      .map(([value, meta]) => ({ value, label: meta.label, count: meta.count }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [stageScopedCards])
+
+  const baseFiltered = useMemo(() => {
+    if (stageFilter === 'all') return advisorScopedCards
+    return advisorScopedCards.filter((card) => isCardInStageWorklist(card, stageFilter))
+  }, [advisorScopedCards, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+
+  useEffect(() => {
+    if (advisorFilter === 'all') return
+    if (advisorOptions.some((option) => option.value === advisorFilter)) return
+    setAdvisorFilter('all')
+  }, [advisorFilter, advisorOptions])
+
+  const filtered = useMemo(() => baseFiltered, [baseFiltered])
 
   const stageCounts = useMemo(() => {
     const counts: Record<number, number> = {}
     for (let i = 1; i <= 18; i += 1) counts[i] = 0
-    baseFiltered.forEach((card) => {
+    advisorScopedCards.forEach((card) => {
       for (let stage = 1; stage <= 18; stage += 1) {
         if (isCardInStageWorklist(card, stage)) {
           counts[stage] = (counts[stage] ?? 0) + 1
@@ -2529,7 +2589,7 @@ export default function BodyshopRepairPage() {
       }
     })
     return counts
-  }, [baseFiltered, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+  }, [advisorScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   // pipeline counts
   const pipeline = useMemo(() =>
@@ -2570,6 +2630,17 @@ export default function BodyshopRepairPage() {
           style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}>
           <option value="all">All Branches</option>
           {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+
+        <span style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 600 }}>Filter by advisor:</span>
+        <select className="sel" value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)}
+          style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }} aria-label="Filter by advisor">
+          <option value="all">All Advisors ({stageScopedCards.length})</option>
+          {advisorOptions.map((advisor) => (
+            <option key={advisor.value} value={advisor.value}>
+              {advisor.label} ({advisor.count})
+            </option>
+          ))}
         </select>
 
         <select className="sel" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
@@ -2629,7 +2700,7 @@ export default function BodyshopRepairPage() {
               }}
             >
               <div style={{ fontSize: 12, fontWeight: 700 }}>All Stages</div>
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{baseFiltered.length} vehicles</div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{advisorScopedCards.length} vehicles</div>
             </button>
 
             {Object.entries(STAGE_LABELS).map(([stageStr, label]) => {
