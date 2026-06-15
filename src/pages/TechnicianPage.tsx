@@ -751,7 +751,7 @@ export default function TechnicianPage() {
       // Primary filter: Fetch job_card_closed_data where invoice_date is in the range
       const jccRes = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time')
+        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time, vehicle_registration_number')
         .gte('invoice_date', fromDate)
         .lte('invoice_date', toDate)
 
@@ -843,6 +843,7 @@ export default function TechnicianPage() {
               sa_name: saNameMap.get(jc) ?? '',
               status: 'Unassigned',
               match_status: 'NO ASSIGNMENT',
+              vehicle_registration_number: row.vehicle_registration_number ?? '',
             }]
           }
 
@@ -872,6 +873,7 @@ export default function TechnicianPage() {
               sa_name: saNameMap.get(jc) ?? '',
               status: workStatus ? statusLabel(workStatus) : 'Unassigned',
               match_status: matchStatus,
+              vehicle_registration_number: row.vehicle_registration_number ?? '',
             }
           })
         })
@@ -884,10 +886,11 @@ export default function TechnicianPage() {
 
       // Export to Excel
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Branch', 'SA Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Match Status'],
+        ['Job Card Number', 'Service Type', 'Reg No', 'Branch', 'SA Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Match Status'],
         ...issues.map((r: any) => [
           r.job_card_number,
           r.service_type,
+          r.vehicle_registration_number,
           r.branch,
           r.sa_name,
           r.status,
@@ -899,7 +902,7 @@ export default function TechnicianPage() {
       ]
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(sheetData)
-      ws['!cols'] = [18, 20, 16, 26, 15, 25, 15, 25, 15].map(w => ({ wch: w }))
+      ws['!cols'] = [18, 20, 14, 16, 26, 15, 25, 15, 25, 15].map(w => ({ wch: w }))
       XLSX.utils.book_append_sheet(wb, ws, 'Date Issues')
       XLSX.writeFile(wb, `JC_Date_Issues_${fromDate}_to_${toDate}.xlsx`)
     } catch (e: any) {

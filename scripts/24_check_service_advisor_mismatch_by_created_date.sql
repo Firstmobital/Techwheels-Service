@@ -19,6 +19,8 @@ sa_scope AS (
   SELECT
     s.id,
     s.created_at,
+    UPPER(TRIM(COALESCE(s.branch, ''))) AS sa_branch,
+    TRIM(COALESCE(s.service_type, '')) AS sa_service_type,
     UPPER(TRIM(COALESCE(s.reg_number, ''))) AS sa_reg_no,
     UPPER(TRIM(COALESCE(s.jc_number, ''))) AS sa_jc_no
   FROM service_reception_entries s
@@ -29,6 +31,8 @@ latest_sa_per_reg AS (
   SELECT DISTINCT ON (ss.sa_reg_no)
     ss.id,
     ss.created_at,
+    ss.sa_branch,
+    ss.sa_service_type,
     ss.sa_reg_no,
     ss.sa_jc_no
   FROM sa_scope ss
@@ -38,6 +42,8 @@ latest_sa_per_reg AS (
 source_rows AS (
   SELECT
     'job_card_closed_data' AS source_table,
+    UPPER(TRIM(COALESCE(j.branch, ''))) AS src_branch,
+    TRIM(COALESCE(j.sr_type, '')) AS src_sr_type,
     UPPER(TRIM(COALESCE(j.vehicle_registration_number, ''))) AS src_reg_no,
     UPPER(TRIM(COALESCE(j.job_card_number, ''))) AS src_jc_no,
     COALESCE(j.closed_date_time::text, j."Invoice_date"::text, j.created_date_time::text) AS source_event_ts
@@ -49,6 +55,8 @@ source_rows AS (
 
   SELECT
     'open_job_cards' AS source_table,
+    UPPER(TRIM(COALESCE(o.branch, ''))) AS src_branch,
+    TRIM(COALESCE(o.sr_type, '')) AS src_sr_type,
     UPPER(TRIM(COALESCE(o.vehicle_registration_number, ''))) AS src_reg_no,
     UPPER(TRIM(COALESCE(o.job_card_number, ''))) AS src_jc_no,
     COALESCE(o.closed_date_time::text, o.completed_date_time::text, o.created_date_time::text) AS source_event_ts
@@ -59,6 +67,8 @@ source_rows AS (
 latest_source_per_reg AS (
   SELECT DISTINCT ON (sr.src_reg_no)
     sr.source_table,
+    sr.src_branch,
+    sr.src_sr_type,
     sr.src_reg_no,
     sr.src_jc_no,
     sr.source_event_ts
@@ -69,9 +79,13 @@ latest_source_per_reg AS (
 SELECT
   sa.id AS sa_entry_id,
   sa.created_at AS sa_created_at,
+  sa.sa_branch,
+  sa.sa_service_type,
   sa.sa_reg_no,
   sa.sa_jc_no,
   ls.source_table,
+  ls.src_branch,
+  ls.src_sr_type,
   ls.source_event_ts,
   ls.src_reg_no,
   ls.src_jc_no,
