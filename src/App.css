@@ -514,14 +514,34 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 
 /* Modal */
 .modal-back { position: fixed; inset: 0; z-index: 80; background: rgba(10,17,28,.5); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 24px; animation: fade .14s ease; }
+.modal-overlay { position: fixed; inset: 0; z-index: 90; background: rgba(10,17,28,.5); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 24px; animation: fade .14s ease; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .modal { width: 100%; max-width: 460px; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--sh-3); animation: pop .16s ease; max-height: 90vh; display: flex; flex-direction: column; }
+.modal--md { max-width: 560px; }
 .modal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
+.modal__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); }
 .modal__head h3 { margin: 0; font-size: 16.5px; font-weight: 700; letter-spacing: -.01em; }
+.modal__title { margin: 0; font-size: 16.5px; font-weight: 700; letter-spacing: -.01em; }
 .modal__x { width: 32px; height: 32px; border-radius: 8px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; }
+.modal__close { width: 32px; height: 32px; border-radius: 8px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
 .modal__x:hover { background: var(--canvas); color: var(--ink); }
+.modal__close:hover { background: var(--canvas); color: var(--ink); }
 .modal__body { padding: 20px; overflow-y: auto; }
 .modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+.modal__footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+
+@media (max-width: 640px) {
+  .modal-overlay,
+  .modal-back {
+    padding: 12px;
+  }
+
+  .modal,
+  .modal--md {
+    max-width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+}
 
 /* Note / callout */
 .note { display: flex; gap: 11px; align-items: flex-start; border-radius: var(--r-sm); padding: 12px 14px; font-size: 13px; line-height: 1.5; }

@@ -983,11 +983,24 @@ export default function TechnicianPage() {
     [technicianCards],
   )
 
-  async function handleSendYesterdayReportEmail() {
+  const hasEmailRange = Boolean(fromDate) && Boolean(toDate)
+
+  async function handleSendRangeReportEmail() {
+    if (!hasEmailRange) {
+      setReportEmailState({
+        type: 'error',
+        message: 'Select both start and end dates in \'Range\' before sending email report.',
+      })
+      return
+    }
+
     setSendingReportEmail(true)
     setReportEmailState(null)
 
-    const res = await sendTechnicianDailyEarningsTestEmail()
+    const res = await sendTechnicianDailyEarningsTestEmail({
+      runFromIst: fromDate,
+      runToIst: toDate,
+    })
     if (res.error || !res.data) {
       setReportEmailState({
         type: 'error',
@@ -999,7 +1012,7 @@ export default function TechnicianPage() {
 
     setReportEmailState({
       type: 'success',
-      message: `Email sent for ${res.data.reportDateIst}. Rows: ${res.data.rowCount}, Total: ${formatCurrency(res.data.totalEarnings)}.`,
+      message: `Email sent for ${res.data.reportLabel ?? `${fromDate} to ${toDate}`}. Rows: ${res.data.rowCount}, Total: ${formatCurrency(res.data.totalEarnings)}.`,
     })
     setSendingReportEmail(false)
   }
@@ -1058,8 +1071,25 @@ export default function TechnicianPage() {
           📊 Pivot
         </button>
         {canEditSharePercent && (
-          <button type="button" onClick={() => void handleSendYesterdayReportEmail()} disabled={sendingReportEmail}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', opacity: sendingReportEmail ? 0.7 : 1 }}>
+          <button
+            type="button"
+            onClick={() => void handleSendRangeReportEmail()}
+            disabled={sendingReportEmail || !hasEmailRange}
+            title={hasEmailRange ? 'Send report for selected range' : 'Select both start and end date in Range to enable'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.3rem 0.75rem',
+              background: '#0ea5e9',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              cursor: sendingReportEmail || !hasEmailRange ? 'not-allowed' : 'pointer',
+              opacity: sendingReportEmail || !hasEmailRange ? 0.45 : 1,
+            }}>
             ✉️ {sendingReportEmail ? 'Sending…' : 'Email Report'}
           </button>
         )}

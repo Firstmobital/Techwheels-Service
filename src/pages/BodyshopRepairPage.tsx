@@ -92,7 +92,9 @@ const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
   const stage1Done = isValidCustomerType(card.customer_type) && hasKmReading
   const stage2Done = intakePhotoCount > 0
-  const stage3Done = Boolean(String(card.job_card_no ?? '').trim())
+  const jc = String(card.job_card_no ?? '').trim().toUpperCase()
+  const reg = String(card.reg_number ?? '').trim().toUpperCase()
+  const stage3Done = Boolean(jc) && (!reg || jc !== reg)
   const stage4Done = Boolean(card.customer_group_wa_sent_at) || card.current_stage > 4
 
   const activeStage = !stage1Done ? 1 : !stage2Done ? 2 : !stage3Done ? 3 : !stage4Done ? 4 : 5
@@ -126,11 +128,98 @@ function isStageConcurrentActive(stage: number, effectiveCurrentStage: number, f
   return effectiveCurrentStage === 10 && floorWorkStarted && stage === 11
 }
 
-function getCurrentStageDisplay(effectiveCurrentStage: number, floorWorkStarted: boolean) {
+function getCurrentStageDisplay(effectiveCurrentStage: number, floorWorkStarted: boolean, additionalApprovalPending = false) {
+  if (effectiveCurrentStage === 10 && floorWorkStarted && additionalApprovalPending) {
+    return 'Stage 10 + 11 + 12 - Parts Status + Floor Assignment + Additional Approval'
+  }
   if (effectiveCurrentStage === 10 && floorWorkStarted) {
     return 'Stage 10 + 11 - Parts Status + Floor Assignment'
   }
   return `Stage ${effectiveCurrentStage} - ${STAGE_LABELS[effectiveCurrentStage]}`
+}
+
+function parseAdditionalApprovalState(raw: string | null | undefined): AdditionalApprovalState {
+  const base: AdditionalApprovalState = {
+    status: 'none',
+    requestParts: [],
+    requestPartNo: null,
+    requestPartDescription: null,
+    requestReason: null,
+    requestImageBucket: null,
+    requestImagePath: null,
+    requestImageFileName: null,
+    requestedAt: null,
+    requestedBy: null,
+    approvalPhotoBucket: null,
+    approvalPhotoPath: null,
+    approvalPhotoFileName: null,
+    decidedAt: null,
+    decidedBy: null,
+  }
+
+  const text = String(raw ?? '').trim()
+  if (!text) return base
+
+  try {
+    const parsed = JSON.parse(text) as AdditionalApprovalPayload
+    const status = parsed?.decision?.status
+    const parsedParts = Array.isArray(parsed?.request?.parts)
+      ? parsed.request.parts
+          .map((part) => ({
+            part_no: part?.part_no ?? null,
+            part_description: part?.part_description ?? null,
+            reason: part?.reason ?? null,
+            part_image_bucket: part?.part_image_bucket ?? null,
+            part_image_path: part?.part_image_path ?? null,
+            part_image_file_name: part?.part_image_file_name ?? null,
+          }))
+          .filter((part) => Boolean(part.part_no || part.part_description || part.reason || part.part_image_path))
+      : []
+    const fallbackPart: AdditionalApprovalRequestPart | null = parsedParts.length > 0
+      ? null
+      : (
+        parsed?.request?.part_no
+        || parsed?.request?.part_description
+        || parsed?.request?.reason
+        || parsed?.request?.part_image_path
+      )
+        ? {
+            part_no: parsed?.request?.part_no ?? null,
+            part_description: parsed?.request?.part_description ?? null,
+            reason: parsed?.request?.reason ?? null,
+            part_image_bucket: parsed?.request?.part_image_bucket ?? null,
+            part_image_path: parsed?.request?.part_image_path ?? null,
+            part_image_file_name: parsed?.request?.part_image_file_name ?? null,
+          }
+        : null
+    const allParts = fallbackPart ? [fallbackPart] : parsedParts
+    const first = allParts[0] ?? null
+
+    return {
+      ...base,
+      status: status === 'pending' || status === 'approved' || status === 'rejected' ? status : 'pending',
+      requestParts: allParts,
+      requestPartNo: first?.part_no ?? null,
+      requestPartDescription: first?.part_description ?? null,
+      requestReason: first?.reason ?? null,
+      requestImageBucket: first?.part_image_bucket ?? null,
+      requestImagePath: first?.part_image_path ?? null,
+      requestImageFileName: first?.part_image_file_name ?? null,
+      requestedAt: parsed?.request?.requested_at ?? null,
+      requestedBy: parsed?.request?.requested_by ?? null,
+      approvalPhotoBucket: parsed?.decision?.approval_photo_bucket ?? null,
+      approvalPhotoPath: parsed?.decision?.approval_photo_path ?? null,
+      approvalPhotoFileName: parsed?.decision?.approval_photo_file_name ?? null,
+      decidedAt: parsed?.decision?.decided_at ?? null,
+      decidedBy: parsed?.decision?.decided_by ?? null,
+    }
+  } catch {
+    return {
+      ...base,
+      status: 'pending',
+      requestReason: text,
+    }
+  }
 }
 
 function hasFloorWorkStartedInPrimaryRow(row: Partial<BodyshopFloorPrimaryRow> | null | undefined): boolean {
@@ -189,6 +278,58 @@ function dedupeCards(cards: RepairCard[]): RepairCard[] {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
+
+type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
+
+type AdditionalApprovalRequestPart = {
+  part_no: string | null
+  part_description: string | null
+  reason: string | null
+  part_image_bucket: string | null
+  part_image_path: string | null
+  part_image_file_name: string | null
+}
+
+type AdditionalApprovalPayload = {
+  version: 1
+  request?: {
+    parts?: AdditionalApprovalRequestPart[]
+    part_no: string | null
+    part_description: string | null
+    reason: string | null
+    part_image_bucket: string | null
+    part_image_path: string | null
+    part_image_file_name: string | null
+    requested_at: string | null
+    requested_by: string | null
+  }
+  decision?: {
+    status: AdditionalApprovalDecisionStatus
+    decided_at: string | null
+    decided_by: string | null
+    approval_photo_bucket: string | null
+    approval_photo_path: string | null
+    approval_photo_file_name: string | null
+  }
+}
+
+type AdditionalApprovalState = {
+  status: AdditionalApprovalDecisionStatus | 'none'
+  requestParts: AdditionalApprovalRequestPart[]
+  requestPartNo: string | null
+  requestPartDescription: string | null
+  requestReason: string | null
+  requestImageBucket: string | null
+  requestImagePath: string | null
+  requestImageFileName: string | null
+  requestedAt: string | null
+  requestedBy: string | null
+  approvalPhotoBucket: string | null
+  approvalPhotoPath: string | null
+  approvalPhotoFileName: string | null
+  decidedAt: string | null
+  decidedBy: string | null
+}
 
 type FloorRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
 
@@ -395,6 +536,7 @@ export default function BodyshopRepairPage() {
   const [loadingSelectedReception, setLoadingSelectedReception] = useState(false)
   const [uploadingIntakePhotos, setUploadingIntakePhotos] = useState(false)
   const [kmDraft, setKmDraft] = useState('')
+  const [jcDraft, setJcDraft] = useState('')
   const [savingReceiving, setSavingReceiving] = useState(false)
   const [fetchingInsurance, setFetchingInsurance] = useState(false)
   const [insuranceFetched, setInsuranceFetched] = useState(false)
@@ -409,8 +551,10 @@ export default function BodyshopRepairPage() {
   const [loadingFloorPrimary, setLoadingFloorPrimary] = useState(false)
   const [pendingFloorScrollRole, setPendingFloorScrollRole] = useState<FloorRole | null>(null)
   const [highlightedFloorRole, setHighlightedFloorRole] = useState<FloorRole | null>(null)
+  const [uploadingAdditionalApprovalPhoto, setUploadingAdditionalApprovalPhoto] = useState(false)
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
+  const additionalApprovalPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const autoAdvanceDocsLockRef = useRef(false)
   const floorRoleRowRefs = useRef<Record<FloorRole, HTMLTableRowElement | null>>({
     DENTOR: null,
@@ -474,6 +618,7 @@ export default function BodyshopRepairPage() {
 
       setSelectedReception(data as ReceptionVehicleSnapshot)
       setKmDraft(data.km_reading == null ? '' : String(data.km_reading))
+      setJcDraft(String(data.jc_number ?? '').trim().toUpperCase())
       setLoadingSelectedReception(false)
     })()
 
@@ -652,6 +797,13 @@ export default function BodyshopRepairPage() {
     return hasFloorStageCompletedInPrimaryRow(floorPrimaryRow)
   }, [floorPrimaryRow])
 
+  const selectedAdditionalApproval = useMemo(() => {
+    return parseAdditionalApprovalState(selected?.additional_approval)
+  }, [selected?.additional_approval])
+
+  const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
+  const additionalApprovalPending = selectedAdditionalApproval.status === 'pending'
+
   useEffect(() => {
     if (detailTab !== 'floor' || !pendingFloorScrollRole || loadingFloorPrimary) return
     const target = floorRoleRowRefs.current[pendingFloorScrollRole]
@@ -692,8 +844,7 @@ export default function BodyshopRepairPage() {
 
   function intakeKey(row: { jc_number: string | null; reg_number: string | null }) {
     const jc = String(row.jc_number ?? '').trim().toUpperCase()
-    if (jc) return jc
-    return String(row.reg_number ?? '').trim().toUpperCase()
+    return jc
   }
 
   async function load() {
@@ -710,7 +861,11 @@ export default function BodyshopRepairPage() {
           .order('created_at', { ascending: false }),
       ])
 
-      const accidentRows = (accidentRes.data ?? []) as AccidentReceptionRow[]
+      const accidentRows = ((accidentRes.data ?? []) as AccidentReceptionRow[])
+        .filter((row) => {
+          // Bodyshop Repair cards must be keyed by JC only.
+          return Boolean(String(row.jc_number ?? '').trim())
+        })
       const receptionIds = accidentRows.map((row) => row.id)
       const accidentKeys = Array.from(
         new Set(accidentRows.map((row) => intakeKey(row)).filter(Boolean)),
@@ -719,7 +874,7 @@ export default function BodyshopRepairPage() {
       const existingKeys = new Set<string>()
       const existingReceptionIds = new Set<number>()
       if (receptionIds.length > 0 || accidentKeys.length > 0) {
-        const [existingByReceptionRes, existingByJcRes, existingByRegRes] = await Promise.all([
+        const [existingByReceptionRes, existingByJcRes] = await Promise.all([
           receptionIds.length > 0
             ? supabase
                 .from('bodyshop_repair_cards')
@@ -730,10 +885,6 @@ export default function BodyshopRepairPage() {
             .from('bodyshop_repair_cards')
             .select('job_card_no, reg_number')
             .in('job_card_no', accidentKeys),
-          supabase
-            .from('bodyshop_repair_cards')
-            .select('job_card_no, reg_number')
-            .in('reg_number', accidentKeys),
         ])
 
         ;((existingByReceptionRes.data ?? []) as Array<{ reception_entry_id?: number | null }>).forEach((row) => {
@@ -741,10 +892,8 @@ export default function BodyshopRepairPage() {
           if (Number.isFinite(receptionId)) existingReceptionIds.add(receptionId)
         })
 
-        const existingCards = [
-          ...((existingByJcRes.data ?? []) as Array<{ job_card_no?: string | null; reg_number?: string | null }>),
-          ...((existingByRegRes.data ?? []) as Array<{ job_card_no?: string | null; reg_number?: string | null }>),
-        ]
+        const existingCards =
+          ((existingByJcRes.data ?? []) as Array<{ job_card_no?: string | null; reg_number?: string | null }>)
 
         existingCards.forEach((row) => {
           const jcKey = String(row.job_card_no ?? '').trim().toUpperCase()
@@ -759,10 +908,8 @@ export default function BodyshopRepairPage() {
         .map((row) => {
           if (existingReceptionIds.has(row.id)) return null
           const key = intakeKey(row)
-          const regKey = String(row.reg_number ?? '').trim().toUpperCase()
-          if (!key || existingKeys.has(key) || (regKey && existingKeys.has(regKey)) || seenInsert.has(key)) return null
+          if (!key || existingKeys.has(key) || seenInsert.has(key)) return null
           seenInsert.add(key)
-          if (regKey) seenInsert.add(regKey)
           return {
             reception_entry_id: row.id,
             job_card_no: key,
@@ -1909,6 +2056,14 @@ export default function BodyshopRepairPage() {
     return parsed
   }
 
+  function parseJcDraftValue(raw: string): string | null | 'invalid' {
+    const value = String(raw ?? '').trim().toUpperCase()
+    if (!value) return null
+    // Mirrors DB check on service_reception_entries.jc_number minimum length.
+    if (value.length < 25) return 'invalid'
+    return value
+  }
+
   function isKmDirty(): boolean {
     if (!selectedReception) return false
     const parsedDraft = parseKmDraftValue(kmDraft)
@@ -1916,14 +2071,23 @@ export default function BodyshopRepairPage() {
     return parsedDraft !== (selectedReception.km_reading ?? null)
   }
 
+  function isJcDirty(): boolean {
+    if (!selectedReception) return false
+    const parsedDraft = parseJcDraftValue(jcDraft)
+    if (parsedDraft === 'invalid') return true
+    const current = String(selectedReception.jc_number ?? '').trim().toUpperCase()
+    return (parsedDraft ?? '') !== current
+  }
+
   async function handleSaveReceivingDraft() {
     if (!selected) return
 
     const patchDirty = Object.keys(editPatch).length > 0
     const kmDirty = isKmDirty()
-    if (!patchDirty && !kmDirty) return
+    const jcDirty = isJcDirty()
+    if (!patchDirty && !kmDirty && !jcDirty) return
 
-    if (kmDirty && !selectedReception?.id) {
+    if ((kmDirty || jcDirty) && !selectedReception?.id) {
       toast_('Reception entry not loaded', false)
       return
     }
@@ -1935,12 +2099,27 @@ export default function BodyshopRepairPage() {
     }
     const kmValue: number | null = parsedKm === 'invalid' ? null : parsedKm
 
+    const parsedJc = parseJcDraftValue(jcDraft)
+    if (jcDirty && parsedJc === 'invalid') {
+      toast_('Job Card must be at least 25 characters', false)
+      return
+    }
+    const jcValue: string | null = parsedJc === 'invalid' ? null : parsedJc
+    if (jcDirty && !jcValue) {
+      toast_('Job Card is required', false)
+      return
+    }
+
     setSavingReceiving(true)
     try {
-      if (kmDirty && selectedReception?.id) {
+      if ((kmDirty || jcDirty) && selectedReception?.id) {
+        const receptionPatch: { km_reading?: number | null; jc_number?: string | null } = {}
+        if (kmDirty) receptionPatch.km_reading = kmValue
+        if (jcDirty) receptionPatch.jc_number = jcValue
+
         const { error: kmError } = await supabase
           .from('service_reception_entries')
-          .update({ km_reading: kmValue })
+          .update(receptionPatch)
           .eq('id', selectedReception.id)
 
         if (kmError) {
@@ -1948,11 +2127,26 @@ export default function BodyshopRepairPage() {
           return
         }
 
-        setSelectedReception((prev) => prev ? { ...prev, km_reading: kmValue } : prev)
-        setKmPresentByReceptionId((prev) => ({
-          ...prev,
-          [selectedReception.id]: kmValue != null,
-        }))
+        setSelectedReception((prev) => prev
+          ? {
+              ...prev,
+              km_reading: kmDirty ? kmValue : prev.km_reading,
+              jc_number: jcDirty ? jcValue : prev.jc_number,
+            }
+          : prev)
+
+        if (kmDirty) {
+          setKmPresentByReceptionId((prev) => ({
+            ...prev,
+            [selectedReception.id]: kmValue != null,
+          }))
+        }
+
+        if (jcDirty && jcValue) {
+          const updated = await updateRepairCard(selected.id, { job_card_no: jcValue })
+          setSelected(updated)
+          setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+        }
       }
 
       if (patchDirty) {
@@ -1964,6 +2158,7 @@ export default function BodyshopRepairPage() {
 
       const saveParts = [
         kmDirty ? 'KM Reading' : '',
+        jcDirty ? 'Job Card' : '',
         patchDirty ? 'Receiving details' : '',
       ].filter(Boolean)
       toast_(`Saved ${saveParts.join(' + ')} ✅`)
@@ -2058,6 +2253,8 @@ export default function BodyshopRepairPage() {
       || effectiveCurrentStage > 9
     const stage10Done = effectiveCurrentStage > 10
     const stage11Done = floorCompleted || effectiveCurrentStage > 11
+    const additionalApproval = parseAdditionalApprovalState(card.additional_approval)
+    const stage12Done = additionalApproval.status === 'approved' || additionalApproval.status === 'rejected' || effectiveCurrentStage > 12
 
     // Stage queue is an operational worklist: each stage card counts cards that
     // still need that specific stage's work, independent of earlier pending stages.
@@ -2085,7 +2282,220 @@ export default function BodyshopRepairPage() {
         && !stage11Done
     }
 
+    if (stage === 12) {
+      return stage1Done
+        && stage2Done
+        && stage3Done
+        && stage4Done
+        && stage5Done
+        && stage6Done
+        && stage7Done
+        && stage8Done
+        && stage9Done
+        && (floorSent || floorStarted)
+        && additionalApproval.status !== 'none'
+        && !stage12Done
+    }
+
     return effectiveCurrentStage === stage
+  }
+
+  async function openAdditionalApprovalImage(path: string | null, bucket?: string | null) {
+    if (!path) {
+      toast_('No image found for additional approval', false)
+      return
+    }
+    const { data, error } = await supabase.storage
+      .from((bucket && String(bucket).trim()) || AUTODOC_BUCKET)
+      .createSignedUrl(path, 300)
+    if (error || !data?.signedUrl) {
+      toast_(error?.message ?? 'Unable to open file', false)
+      return
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  async function handleAdditionalApprovalPhotoPicked(files: FileList | null) {
+    if (!selected || !files || files.length === 0) return
+    const file = files[0]
+    if (!String(file.type ?? '').startsWith('image/')) {
+      toast_('Approval photo must be an image', false)
+      return
+    }
+
+    const parsed = parseAdditionalApprovalState(selected.additional_approval)
+    if (parsed.status === 'none') {
+      toast_('Additional approval request not found', false)
+      return
+    }
+
+    setUploadingAdditionalApprovalPhoto(true)
+    try {
+      const objectPath = `bodyshop-additional-approval/${selected.id}/decision/${Date.now()}_${sanitizeFileNamePart(file.name)}`
+      const uploadRes = await supabase.storage
+        .from(AUTODOC_BUCKET)
+        .upload(objectPath, file, {
+          upsert: false,
+          contentType: file.type || 'application/octet-stream',
+        })
+      if (uploadRes.error) throw uploadRes.error
+
+      const receptionEntryId = Number(selected.reception_entry_id)
+      if (!Number.isFinite(receptionEntryId) || receptionEntryId <= 0) {
+        throw new Error('Missing reception entry id required for Drive sync metadata')
+      }
+      const jobCardNo = String(selected.job_card_no ?? '').trim()
+      const regNo = String(selected.reg_number ?? '').trim().toUpperCase()
+      const rawCustomerType = String(selected.customer_type ?? '').trim().toLowerCase()
+      const customerType = (rawCustomerType === 'individual' || rawCustomerType === 'firm' || rawCustomerType === 'foc' || rawCustomerType === 'cash')
+        ? rawCustomerType
+        : 'individual'
+      if (!jobCardNo || !regNo) {
+        throw new Error('Missing job card/reg number required for Drive sync metadata')
+      }
+
+      const dealerCtx = await getDealerContext()
+      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
+
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || null
+
+      const photoMetaRes = await supabase
+        .from('bodyshop_intake_vehicle_photos')
+        .insert({
+          dealer_code: dealerCode,
+          reception_entry_id: receptionEntryId,
+          job_card_no: jobCardNo,
+          reg_number: regNo,
+          customer_type: customerType,
+          storage_bucket: AUTODOC_BUCKET,
+          storage_path: objectPath,
+          file_name: file.name,
+          content_type: file.type || null,
+          file_size_bytes: file.size,
+          uploaded_by: actor || 'system',
+          uploaded_at: new Date().toISOString(),
+          repair_card_id: selected.id,
+        })
+        .select('id')
+        .single()
+      if (photoMetaRes.error || !photoMetaRes.data?.id) {
+        throw new Error(photoMetaRes.error?.message ?? 'Failed to save upload metadata for Drive sync')
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
+      const sessionRes = await supabase.auth.getSession()
+      const token = sessionRes.data.session?.access_token
+      if (supabaseUrl && token) {
+        const driveRes = await fetch(`${supabaseUrl}/functions/v1/universal-drive-upload`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            resource_type: 'bodyshop_intake_photo',
+            resource_id: photoMetaRes.data.id,
+            bucket_id: AUTODOC_BUCKET,
+            object_name: objectPath,
+            file_type: 'additional_approval_approval_photo',
+            file_size_mb: Number((file.size / (1024 * 1024)).toFixed(3)),
+          }),
+        })
+        const drivePayload = await driveRes.json().catch(() => ({} as { error?: string }))
+        if (!driveRes.ok || drivePayload?.error) {
+          toast_(`Upload saved, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, false)
+        }
+      }
+
+      const nextPayload: AdditionalApprovalPayload = {
+        version: 1,
+        request: {
+          parts: parsed.requestParts,
+          part_no: parsed.requestPartNo,
+          part_description: parsed.requestPartDescription,
+          reason: parsed.requestReason,
+          part_image_bucket: parsed.requestImageBucket,
+          part_image_path: parsed.requestImagePath,
+          part_image_file_name: parsed.requestImageFileName,
+          requested_at: parsed.requestedAt,
+          requested_by: parsed.requestedBy,
+        },
+        decision: {
+          status: parsed.status === 'approved' || parsed.status === 'rejected' ? parsed.status : 'pending',
+          decided_at: parsed.decidedAt,
+          decided_by: parsed.decidedBy,
+          approval_photo_bucket: AUTODOC_BUCKET,
+          approval_photo_path: objectPath,
+          approval_photo_file_name: file.name,
+        },
+      }
+
+      const updated = await updateRepairCard(selected.id, {
+        additional_approval: JSON.stringify(nextPayload),
+      })
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      toast_('Approval photo uploaded ✅')
+    } catch (e: any) {
+      toast_(e?.message ?? 'Failed to upload approval photo', false)
+    } finally {
+      setUploadingAdditionalApprovalPhoto(false)
+    }
+  }
+
+  async function handleAdditionalApprovalDecision(nextStatus: 'approved' | 'rejected') {
+    if (!selected) return
+    const parsed = parseAdditionalApprovalState(selected.additional_approval)
+    if (parsed.status === 'none') {
+      toast_('Additional approval request not found', false)
+      return
+    }
+    if (nextStatus === 'approved' && !parsed.approvalPhotoPath) {
+      toast_('Approval photo is required before approving', false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || null
+      const now = new Date().toISOString()
+
+      const nextPayload: AdditionalApprovalPayload = {
+        version: 1,
+        request: {
+          parts: parsed.requestParts,
+          part_no: parsed.requestPartNo,
+          part_description: parsed.requestPartDescription,
+          reason: parsed.requestReason,
+          part_image_bucket: parsed.requestImageBucket,
+          part_image_path: parsed.requestImagePath,
+          part_image_file_name: parsed.requestImageFileName,
+          requested_at: parsed.requestedAt,
+          requested_by: parsed.requestedBy,
+        },
+        decision: {
+          status: nextStatus,
+          decided_at: now,
+          decided_by: actor,
+          approval_photo_bucket: parsed.approvalPhotoBucket,
+          approval_photo_path: parsed.approvalPhotoPath,
+          approval_photo_file_name: parsed.approvalPhotoFileName,
+        },
+      }
+
+      const updated = await updateRepairCard(selected.id, {
+        additional_approval: JSON.stringify(nextPayload),
+      })
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      toast_(nextStatus === 'approved' ? 'Additional approval marked Approved ✅' : 'Additional approval marked Rejected ✅')
+    } catch (e: any) {
+      toast_(e?.message ?? 'Failed to save additional approval decision', false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   // filtered
@@ -2395,6 +2805,7 @@ export default function BodyshopRepairPage() {
                 const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                 const inGroup = g.stages.includes(effectiveCurrentStage)
                   || (effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted && g.stages.includes(11))
+                  || (additionalApprovalPending && floorWorkStarted && !floorStageCompleted && g.stages.includes(12))
                 const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
                   || (g.stages.includes(5) && docsDone)
                 return (
@@ -2436,7 +2847,7 @@ export default function BodyshopRepairPage() {
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                   return (
                 <div style={{ fontSize: 14, fontWeight: 800, color: getGroupForStage(selected.current_stage).color }}>
-                  {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)}
+                  {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                 </div>
                   )
                 })()}
@@ -2465,7 +2876,8 @@ export default function BodyshopRepairPage() {
                     : num === 5
                       ? docsDone || effectiveCurrentStage > num
                       : effectiveCurrentStage > num
-                  const isCur  = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
+                  const isCur = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
+                    || (num === 12 && additionalApprovalPending && floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
                     <div key={`stage-${num}`} style={{
@@ -2557,6 +2969,40 @@ export default function BodyshopRepairPage() {
                           </button>,
                         )
                       })
+
+                      if (additionalApprovalRequested) {
+                        const status = selectedAdditionalApproval.status
+                        const tone = status === 'approved' ? '#86efac' : status === 'rejected' ? '#fecaca' : '#fcd34d'
+                        const bg = status === 'approved' ? '#f0fdf4' : status === 'rejected' ? '#fef2f2' : '#fffbeb'
+                        const fg = status === 'approved' ? '#166534' : status === 'rejected' ? '#991b1b' : '#92400e'
+
+                        rows.push(
+                          <button
+                            key="stage-11-sub-additional-approval"
+                            type="button"
+                            onClick={() => setDetailTab('survey')}
+                            style={{
+                              margin: '0 0 5px 30px',
+                              padding: '6px 8px',
+                              borderRadius: 8,
+                              border: `1px solid ${tone}`,
+                              background: bg,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              width: 'calc(100% - 30px)',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <span style={{ fontSize: 10, fontWeight: 800, color: fg }}>12</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: fg, flex: 1 }}>Additional Approval</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: fg }}>
+                              {status === 'approved' ? 'Done' : status === 'rejected' ? 'Rejected' : 'Pending'}
+                            </span>
+                          </button>,
+                        )
+                      }
                     }
                   }
 
@@ -2640,7 +3086,7 @@ export default function BodyshopRepairPage() {
                         const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                         return (
                           <div style={{ fontSize: 15, fontWeight: 700, color: getGroupForStage(effectiveCurrentStage).color }}>
-                            {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)}
+                            {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                           </div>
                         )
                       })()}
@@ -2879,8 +3325,18 @@ export default function BodyshopRepairPage() {
                               Initial Vehicle Details (from Reception)
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+                              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
+                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Job Card</div>
+                                <input
+                                  className="inp"
+                                  type="text"
+                                  value={jcDraft}
+                                  onChange={(event) => setJcDraft(event.target.value.toUpperCase())}
+                                  placeholder="Enter Job Card"
+                                  autoComplete="off"
+                                />
+                              </div>
                               {[
-                                ['Job Card', vehicleSnapshot?.jc_number ?? selected.job_card_no ?? '—'],
                                 ['Registration No', vehicleSnapshot?.reg_number ?? selected.reg_number ?? '—'],
                                 ['Model', vehicleSnapshot?.model ?? '—'],
                                 ['Owner Name', vehicleSnapshot?.owner_name ?? selected.customer_name ?? '—'],
@@ -2992,7 +3448,7 @@ export default function BodyshopRepairPage() {
                               </div>
                             </div>
 
-                            {(Object.keys(editPatch).length > 0 || isKmDirty()) && (
+                            {(Object.keys(editPatch).length > 0 || isKmDirty() || isJcDirty()) && (
                               <button className="btn btn--primary" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}
                                 style={{ marginTop: 12 }}>
                                 {savingReceiving ? 'Saving…' : 'Save Receiving'}
@@ -3647,6 +4103,115 @@ export default function BodyshopRepairPage() {
                       </div>
                     )}
 
+                    {additionalApprovalRequested && (
+                      <div style={{ gridColumn: '1/-1', border: '1px solid #fcd34d', background: '#fffbeb', borderRadius: 12, padding: 12, display: 'grid', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e' }}>Additional Approval Requested</div>
+                            <div style={{ fontSize: 11, color: '#a16207' }}>
+                              Status: {selectedAdditionalApproval.status === 'approved' ? 'Approved' : selectedAdditionalApproval.status === 'rejected' ? 'Rejected' : 'Pending'}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {selectedAdditionalApproval.requestImagePath && selectedAdditionalApproval.requestParts.length <= 1 && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={() => void openAdditionalApprovalImage(selectedAdditionalApproval.requestImagePath, selectedAdditionalApproval.requestImageBucket)}
+                              >
+                                View Part Image
+                              </button>
+                            )}
+                            {selectedAdditionalApproval.approvalPhotoPath && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={() => void openAdditionalApprovalImage(selectedAdditionalApproval.approvalPhotoPath, selectedAdditionalApproval.approvalPhotoBucket)}
+                              >
+                                View Approval Photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {(selectedAdditionalApproval.requestParts.length > 0
+                            ? selectedAdditionalApproval.requestParts
+                            : [{
+                                part_no: selectedAdditionalApproval.requestPartNo,
+                                part_description: selectedAdditionalApproval.requestPartDescription,
+                                reason: selectedAdditionalApproval.requestReason,
+                                part_image_bucket: selectedAdditionalApproval.requestImageBucket,
+                                part_image_path: selectedAdditionalApproval.requestImagePath,
+                                part_image_file_name: selectedAdditionalApproval.requestImageFileName,
+                              }]).map((part, idx) => (
+                            <div key={`${part.part_image_path || 'part'}-${idx}`} style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                              <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>Part {idx + 1}</div>
+                                {part.part_image_path && (
+                                  <button
+                                    type="button"
+                                    className="btn btn--ghost btn--xs"
+                                    onClick={() => void openAdditionalApprovalImage(part.part_image_path, part.part_image_bucket)}
+                                  >
+                                    View Part Image
+                                  </button>
+                                )}
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 10, color: '#a16207' }}>Part No</div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#78350f' }}>{part.part_no || '—'}</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 10, color: '#a16207' }}>Part Description</div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#78350f' }}>{part.part_description || '—'}</div>
+                              </div>
+                              <div style={{ gridColumn: '1/-1' }}>
+                                <div style={{ fontSize: 10, color: '#a16207' }}>Reason</div>
+                                <div style={{ fontSize: 12, color: '#78350f' }}>{part.reason || '—'}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: 11, color: '#78350f' }}>
+                            Approval photo is mandatory before marking Approved.
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="btn"
+                              disabled={uploadingAdditionalApprovalPhoto}
+                              onClick={() => additionalApprovalPhotoInputRef.current?.click()}
+                            >
+                              {uploadingAdditionalApprovalPhoto
+                                ? 'Uploading…'
+                                : selectedAdditionalApproval.approvalPhotoPath
+                                  ? 'Replace Approval Photo'
+                                  : 'Upload Approval Photo'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--primary"
+                              disabled={saving || selectedAdditionalApproval.status === 'approved'}
+                              onClick={() => void handleAdditionalApprovalDecision('approved')}
+                            >
+                              Approved
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              disabled={saving || selectedAdditionalApproval.status === 'rejected'}
+                              onClick={() => void handleAdditionalApprovalDecision('rejected')}
+                            >
+                              Rejected
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {Object.keys(editPatch).length > 0 && (
                       <div style={{ gridColumn: '1/-1' }}>
                         <button className="btn btn--primary" onClick={() => void handleSaveSurveyInfo()} disabled={saving}>
@@ -3661,6 +4226,16 @@ export default function BodyshopRepairPage() {
                       className="hidden"
                       onChange={(event) => {
                         void handleBodyshopDocFilePicked(event.target.files)
+                        event.target.value = ''
+                      }}
+                    />
+                    <input
+                      ref={additionalApprovalPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        void handleAdditionalApprovalPhotoPicked(event.target.files)
                         event.target.value = ''
                       }}
                     />
@@ -3763,7 +4338,6 @@ export default function BodyshopRepairPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     {[
-                      { k: 'additional_approval', label: 'Additional Approval' },
                       { k: 'floor_hold_reason', label: 'Hold Reason' },
                     ].map(({ k, label }) => (
                       <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3775,6 +4349,21 @@ export default function BodyshopRepairPage() {
                         />
                       </label>
                     ))}
+                    <div style={{ gridColumn: '1/-1', border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', padding: 10 }}>
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Additional Approval</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: additionalApprovalPending ? '#92400e' : selectedAdditionalApproval.status === 'approved' ? '#166534' : selectedAdditionalApproval.status === 'rejected' ? '#991b1b' : '#475569' }}>
+                        {selectedAdditionalApproval.status === 'approved'
+                          ? 'Approved'
+                          : selectedAdditionalApproval.status === 'rejected'
+                            ? 'Rejected'
+                            : selectedAdditionalApproval.status === 'pending'
+                              ? 'Pending'
+                              : 'None'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                        Decisions are managed from Survey tab under Additional Approval Requested.
+                      </div>
+                    </div>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span style={{ fontSize: 12, color: '#6b7280' }}>Floor Status</span>
                       <select

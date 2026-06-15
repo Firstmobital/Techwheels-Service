@@ -4,12 +4,14 @@ import { validateRequest } from '../_shared/auth.ts'
 // ── Inlined email template (was: emailTemplates/technicianDailyEarningsTemplate.ts) ──
 interface TechnicianDailyEarningsTemplateInput {
   reportDateLabel: string
+  reportScopeLabel: string
   totalTechnicians: number
   totalEarnings: number
   generatedAtLabel: string
   dealershipName?: string | null
   pvPercent?: number
   evPercent?: number
+  rows?: Array<{ technicianName: string; earnings: number }>
 }
 
 interface EmailTemplatePayload {
@@ -30,10 +32,37 @@ function buildTechnicianDailyEarningsTemplate(
   input: TechnicianDailyEarningsTemplateInput,
 ): EmailTemplatePayload {
   const dealer = String(input.dealershipName ?? '').trim() || 'Techwheels Service'
-  const safeDate = String(input.reportDateLabel ?? '').trim() || 'Yesterday'
+  const safeDate = String(input.reportDateLabel ?? '').trim() || 'Selected Range'
+  const safeScope = String(input.reportScopeLabel ?? '').trim() || safeDate
   const safeGeneratedAt = String(input.generatedAtLabel ?? '').trim() || new Date().toLocaleString('en-IN')
   const safeTechnicianCount = Number.isFinite(input.totalTechnicians) ? Math.max(0, input.totalTechnicians) : 0
   const earningsLabel = formatCurrency(input.totalEarnings)
+  const detailRows = Array.isArray(input.rows) ? input.rows : []
+
+  const rowsHtml = detailRows.length > 0
+    ? `
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:8px;border-bottom:1px solid #e2e8f0;color:#334155;">Technician</th>
+            <th style="text-align:right;padding:8px;border-bottom:1px solid #e2e8f0;color:#334155;">Earnings</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${detailRows.map((row) => `
+            <tr>
+              <td style="padding:8px;border-bottom:1px solid #f1f5f9;color:#0f172a;">${row.technicianName}</td>
+              <td style="padding:8px;border-bottom:1px solid #f1f5f9;color:#0f172a;text-align:right;font-weight:600;">${formatCurrency(row.earnings)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `
+    : '<p style="margin-top:16px;color:#64748b;">No technician earnings rows found for this date range.</p>'
+
+  const rowsText = detailRows.length > 0
+    ? detailRows.map((row) => `- ${row.technicianName}: ${formatCurrency(row.earnings)}`).join('\n')
+    : 'No technician earnings rows found for this date range.'
 
   const subject = `Technician Earnings Report - ${safeDate}`
 
@@ -78,8 +107,10 @@ function buildTechnicianDailyEarningsTemplate(
 
       <div class="meta">
         Generated at: ${safeGeneratedAt}<br>
-        Scope: Yesterday only (IST)<br>Rates applied: PV ${input.pvPercent ?? 20}% | EV ${input.evPercent ?? 25}%
+        Scope: ${safeScope} (IST)<br>Rates applied: PV ${input.pvPercent ?? 20}% | EV ${input.evPercent ?? 25}%
       </div>
+
+      ${rowsHtml}
     </div>
     <div class="footer">
       This is an automated operational report email from Techwheels Service.
@@ -97,10 +128,13 @@ function buildTechnicianDailyEarningsTemplate(
     `Technicians in Report: ${safeTechnicianCount.toLocaleString('en-IN')}`,
     `Total Earnings: ${earningsLabel}`,
     `Generated at: ${safeGeneratedAt}`,
-    'Scope: Yesterday only (IST)',
+    `Scope: ${safeScope} (IST)`,
     `Rates applied: PV ${input.pvPercent ?? 20}% | EV ${input.evPercent ?? 25}%`,
     '',
     'Please find attached the technician-wise earnings Excel report.',
+    '',
+    'Technician-wise earnings:',
+    rowsText,
   ].join('\n')
 
   return { subject, html, text }
@@ -135,6 +169,8 @@ type EmployeeBankRow = {
 type RequestBody = {
   runMode?: 'test' | 'scheduled'
   runDateIst?: string
+  runFromIst?: string
+  runToIst?: string
 }
 
 const IST_ZONE = 'Asia/Kolkata'
@@ -252,6 +288,10 @@ function isValidDateKey(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
+function buildReportLabel(fromDate: string, toDate: string): string {
+  return fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`
+}
+
 function getIncomeDateKey(assignment: TechnicianAssignmentRow, revenue: RevenueRow): string | null {
   const source =
     revenue.closed_date_time ??
@@ -319,11 +359,36 @@ Deno.serve(async (req) => {
     }
 
     const requestedDate = String(body.runDateIst ?? '').trim()
-    const targetDateKey = requestedDate || getYesterdayIstDateKey()
+    const requestedFrom = String(body.runFromIst ?? '').trim()
+    const requestedTo = String(body.runToIst ?? '').trim()
 
-    if (!isValidDateKey(targetDateKey)) {
-      return json(headers, { error: 'runDateIst must be YYYY-MM-DD' }, 400)
+    let targetFromDateKey = getYesterdayIstDateKey()
+    let targetToDateKey = targetFromDateKey
+
+    if (requestedFrom || requestedTo) {
+      if (!requestedFrom || !requestedTo) {
+        return json(headers, { error: 'runFromIst and runToIst must both be provided' }, 400)
+      }
+      if (!isValidDateKey(requestedFrom) || !isValidDateKey(requestedTo)) {
+        return json(headers, { error: 'runFromIst and runToIst must be YYYY-MM-DD' }, 400)
+      }
+      if (requestedFrom > requestedTo) {
+        return json(headers, { error: 'runFromIst cannot be after runToIst' }, 400)
+      }
+      targetFromDateKey = requestedFrom
+      targetToDateKey = requestedTo
+    } else if (requestedDate) {
+      if (!isValidDateKey(requestedDate)) {
+        return json(headers, { error: 'runDateIst must be YYYY-MM-DD' }, 400)
+      }
+      targetFromDateKey = requestedDate
+      targetToDateKey = requestedDate
     }
+
+    const reportLabel = buildReportLabel(targetFromDateKey, targetToDateKey)
+    const reportFileSuffix = targetFromDateKey === targetToDateKey
+      ? targetFromDateKey
+      : `${targetFromDateKey}_to_${targetToDateKey}`
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -446,7 +511,8 @@ Deno.serve(async (req) => {
 
     assignmentRows.forEach((assignment) => {
       const assignmentDateKey = getIstDateKey(assignment.out_ts ?? assignment.assigned_at)
-      if (assignmentDateKey !== targetDateKey) return
+      if (!assignmentDateKey) return
+      if (assignmentDateKey < targetFromDateKey || assignmentDateKey > targetToDateKey) return
 
       const code = normalizeCode(assignment.technician_code)
       if (!code) return
@@ -524,8 +590,8 @@ Deno.serve(async (req) => {
     const workbookBytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
     const fileBytes = new Uint8Array(workbookBytes)
 
-    const fileName = `technician_earnings_${targetDateKey}.xlsx`
-    const storagePath = `reports/technician-earnings/${targetDateKey}/${fileName}`
+    const fileName = `technician_earnings_${reportFileSuffix}.xlsx`
+    const storagePath = `reports/technician-earnings/${reportFileSuffix}/${fileName}`
 
     const uploadRes = await fetch(
       `${SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/${AUTODOC_BUCKET}/${encodeStoragePath(storagePath)}`,
@@ -553,13 +619,18 @@ Deno.serve(async (req) => {
     const internalDispatchSecret = Deno.env.get('INTERNAL_EMAIL_DISPATCH_SECRET') ?? ''
     const totalEarnings = aggregatedRows.reduce((sum, row) => sum + row.earnings, 0)
     const template = buildTechnicianDailyEarningsTemplate({
-      reportDateLabel: targetDateKey,
+      reportDateLabel: reportLabel,
+      reportScopeLabel: reportLabel,
       totalTechnicians: aggregatedRows.length,
       totalEarnings,
       generatedAtLabel: new Date().toLocaleString('en-IN', { timeZone: IST_ZONE }),
       dealershipName: 'Techwheels Service',
       pvPercent: pvSharePercent,
       evPercent: evSharePercent,
+      rows: aggregatedRows.map((row) => ({
+        technicianName: row.technicianName,
+        earnings: row.earnings,
+      })),
     })
 
     // Always use internal dispatch secret to call send-transactional-email
@@ -600,7 +671,10 @@ Deno.serve(async (req) => {
     return json(headers, {
       success: true,
       runMode,
-      reportDateIst: targetDateKey,
+      reportDateIst: targetFromDateKey,
+      reportFromIst: targetFromDateKey,
+      reportToIst: targetToDateKey,
+      reportLabel,
       recipients,
       rowCount: aggregatedRows.length,
       totalEarnings: Number(totalEarnings.toFixed(2)),

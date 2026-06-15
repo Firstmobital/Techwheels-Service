@@ -291,6 +291,9 @@ This is an automated message from the AutoDoc Warranty Manager. Please do not re
 export interface TechnicianDailyEarningsTestResult {
   success: boolean
   reportDateIst: string
+  reportFromIst?: string
+  reportToIst?: string
+  reportLabel?: string
   recipients: string[]
   rowCount: number
   totalEarnings: number
@@ -301,13 +304,24 @@ export interface TechnicianDailyEarningsTestResult {
   }
 }
 
+export interface TechnicianDailyEarningsSendParams {
+  runDateIst?: string
+  runFromIst?: string
+  runToIst?: string
+}
+
 export async function sendTechnicianDailyEarningsTestEmail(
-  runDateIst?: string,
+  params: TechnicianDailyEarningsSendParams = {},
 ): Promise<ApiResult<TechnicianDailyEarningsTestResult>> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     const accessToken = session?.access_token
     if (!accessToken) return fail('No authenticated session for report email send')
+
+    const payload: Record<string, string> = { runMode: 'test' }
+    if (params.runDateIst) payload.runDateIst = params.runDateIst
+    if (params.runFromIst) payload.runFromIst = params.runFromIst
+    if (params.runToIst) payload.runToIst = params.runToIst
 
     const response = await fetch(
       `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/technician-daily-earnings-report`,
@@ -317,10 +331,7 @@ export async function sendTechnicianDailyEarningsTestEmail(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          runMode: 'test',
-          ...(runDateIst ? { runDateIst } : {}),
-        }),
+        body: JSON.stringify(payload),
       },
     )
 
