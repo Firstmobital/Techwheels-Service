@@ -587,9 +587,17 @@ export default function BodyshopRepairPage() {
   const floorRoleHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // new form
-  const [nf, setNf] = useState({
+  const [nf, setNf] = useState<{
+    job_card_no: string
+    reg_number: string
+    customer_name: string
+    customer_phone: string
+    customer_type: CustomerType | ''
+    branch: string
+    sa_name: string
+  }>({
     job_card_no: '', reg_number: '', customer_name: '', customer_phone: '',
-    customer_type: 'individual' as CustomerType, branch: '', sa_name: '',
+    customer_type: '', branch: '', sa_name: '',
   })
 
   useEffect(() => { void load() }, [dateRange])
@@ -661,11 +669,13 @@ export default function BodyshopRepairPage() {
   useEffect(() => {
     if (!selected?.id || selected.current_stage !== 5 || autoAdvanceDocsLockRef.current) return
 
-    const ct = selected.customer_type ?? 'individual'
+    const ct = String(selected.customer_type ?? '').trim().toLowerCase()
     const noDocsRequired = ct === 'cash' || ct === 'foc'
     if (noDocsRequired) return
 
-    const mandatoryDocs = BODYSHOP_DOCS.filter((d) => d.mandatoryFor.includes(ct as CustomerType))
+    const mandatoryDocs = isValidCustomerType(ct)
+      ? BODYSHOP_DOCS.filter((d) => d.mandatoryFor.includes(ct as CustomerType))
+      : []
     if (mandatoryDocs.length === 0) return
 
     const collectedMandatory = mandatoryDocs.filter((d) => Boolean(bodyshopDocsByKey[d.k])).length
@@ -1101,12 +1111,17 @@ export default function BodyshopRepairPage() {
 
   async function handleCreate() {
     if (!nf.job_card_no.trim()) { toast_('Job card number required', false); return }
+    if (!isValidCustomerType(nf.customer_type)) { toast_('Customer Type is required', false); return }
+    const customerType = nf.customer_type as CustomerType
     setSaving(true)
     try {
-      await createRepairCard(nf)
+      await createRepairCard({
+        ...nf,
+        customer_type: customerType,
+      })
       toast_('Repair card created ✅')
       setShowNew(false)
-      setNf({ job_card_no: '', reg_number: '', customer_name: '', customer_phone: '', customer_type: 'individual', branch: '', sa_name: '' })
+      setNf({ job_card_no: '', reg_number: '', customer_name: '', customer_phone: '', customer_type: '', branch: '', sa_name: '' })
       void load()
     } catch (e: any) { toast_(e.message, false) }
     setSaving(false)
@@ -2248,11 +2263,13 @@ export default function BodyshopRepairPage() {
     const floorValue = String((card as { bodyshop_floor?: string | null }).bodyshop_floor ?? '').trim()
     const floorSent = (floorValue === 'Floor 2' || floorValue === 'Floor 3') && effectiveCurrentStage >= 10
 
-    const customerType = card.customer_type ?? 'individual'
+    const customerType = String(card.customer_type ?? '').trim().toLowerCase()
     const noDocsRequired = customerType === 'cash' || customerType === 'foc'
     const mandatoryDocs = noDocsRequired
       ? []
-      : BODYSHOP_DOCS.filter((d) => d.mandatoryFor.includes(customerType)).map((d) => d.k)
+      : isValidCustomerType(customerType)
+        ? BODYSHOP_DOCS.filter((d) => d.mandatoryFor.includes(customerType as CustomerType)).map((d) => d.k)
+        : []
 
     const stage1Done = milestones.stage1Done
     const stage2Done = milestones.stage2Done
@@ -2802,7 +2819,8 @@ export default function BodyshopRepairPage() {
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Customer Type</span>
                   <select className="sel" value={nf.customer_type}
-                    onChange={(e) => setNf((f) => ({ ...f, customer_type: e.target.value as CustomerType }))}>
+                    onChange={(e) => setNf((f) => ({ ...f, customer_type: e.target.value as CustomerType | '' }))}>
+                    <option value="">Select customer type</option>
                     <option value="individual">Individual</option>
                     <option value="firm">Firm</option>
                     <option value="foc">FOC</option>
@@ -2868,10 +2886,12 @@ export default function BodyshopRepairPage() {
                 const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                 const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                 const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
-                const ct = selected.customer_type ?? 'individual'
+                const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                 const noDocsRequired = ct === 'cash' || ct === 'foc'
                 const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
-                const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                const mandatoryDocs = isValidCustomerType(ct)
+                  ? visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                  : []
                 const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
                 const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                 const inGroup = g.stages.includes(effectiveCurrentStage)
@@ -2929,10 +2949,12 @@ export default function BodyshopRepairPage() {
                   const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                   const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
-                  const ct = selected.customer_type ?? 'individual'
+                  const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                   const noDocsRequired = ct === 'cash' || ct === 'foc'
                   const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
-                  const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                  const mandatoryDocs = isValidCustomerType(ct)
+                    ? visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                    : []
                   const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
                   const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                   const num    = Number(numStr)
@@ -3232,10 +3254,12 @@ export default function BodyshopRepairPage() {
                 const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
 
                 // Calculate docs completion status for stage 5
-                const ct = selected.customer_type ?? 'individual'
+                const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                 const noDocsRequired = ct === 'cash' || ct === 'foc'
                 const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
-                const mandatoryDocs = visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                const mandatoryDocs = isValidCustomerType(ct)
+                  ? visibleDocs.filter(d => d.mandatoryFor.includes(ct as CustomerType))
+                  : []
                 const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
                 const allMandatoryDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
 

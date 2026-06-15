@@ -775,7 +775,7 @@ export default function BodyshopFloorPage() {
           reg_number: car.reg_number,
           customer_name: car.owner_name,
           customer_phone: car.owner_phone,
-          customer_type: 'individual',
+          customer_type: null,
           branch: car.branch,
           sa_name: car.sa_name ?? car.sa_display_name,
           current_stage: 11,
@@ -1630,12 +1630,12 @@ export default function BodyshopFloorPage() {
                           </div>
                         </td>
 
-                        {/* IN / OUT timestamps — use earliest assigned_at / latest out_ts across roles */}
+                        {/* IN / OUT timestamps */}
                         <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                           {(() => {
-                            const times = ALL_ROLES.map((r) => carMap[r]?.assigned_at).filter(Boolean) as string[]
-                            if (!times.length) return '—'
-                            return fmtDate(times.sort()[0])
+                            const assignedTimes = ALL_ROLES.map((r) => carMap[r]?.assigned_at).filter(Boolean) as string[]
+                            if (!assignedTimes.length) return '—'
+                            return fmtDate(assignedTimes.sort()[0])
                           })()}
                         </td>
                         <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
