@@ -340,8 +340,8 @@ export async function sendTechnicianDailyEarningsTestEmail(
       return fail(`Technician report email failed: ${details}`)
     }
 
-    const payload = await response.json() as TechnicianDailyEarningsTestResult
-    return ok(payload)
+    const responsePayload = await response.json() as TechnicianDailyEarningsTestResult
+    return ok<TechnicianDailyEarningsTestResult>(responsePayload)
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Unknown error sending technician report email')
   }
