@@ -1,16 +1,6 @@
 import { supabase } from '../supabase'
 import { fail, ok, type ApiResult } from './types'
 
-let usersDealerColumnsSupported: boolean | null = null
-
-function isMissingDealerUsersColumnsError(error: unknown): boolean {
-  const message =
-    typeof error === 'object' && error !== null && 'message' in error
-      ? String((error as { message?: unknown }).message ?? '')
-      : ''
-  return /dealer_code|dealer_name|column/i.test(message)
-}
-
 export type DealerContext = {
   dealerCode: string
   dealerName: string | null
@@ -110,37 +100,10 @@ async function resolveDealerScopeFromMappings(userId: string): Promise<DealerSco
   }
 }
 
-async function resolveDealerFromUsersTable(userId: string): Promise<DealerContext | null> {
-  if (usersDealerColumnsSupported === false) {
-    return null
-  }
-
-  const usersRes = await supabase
-    .from('users')
-    .select('dealer_code, dealer_name')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (usersRes.error) {
-    if (isMissingDealerUsersColumnsError(usersRes.error)) {
-      usersDealerColumnsSupported = false
-    }
-    return null
-  }
-
-  usersDealerColumnsSupported = true
-
-  const row = usersRes.data as { dealer_code?: string | null; dealer_name?: string | null } | null
-  const tableDealerCode = String(row?.dealer_code ?? '').trim().toUpperCase()
-  if (!tableDealerCode) {
-    return null
-  }
-
-  const tableDealerName = String(row?.dealer_name ?? '').trim()
-  return {
-    dealerCode: tableDealerCode,
-    dealerName: tableDealerName || null,
-  }
+async function resolveDealerFromUsersTable(_userId: string): Promise<DealerContext | null> {
+  // Authoritative schema has no dealer_code/dealer_name columns in public.users.
+  // Keep this source disabled and rely on mapping + JWT metadata sources.
+  return null
 }
 
 export async function getDealerContext(): Promise<ApiResult<DealerContext>> {

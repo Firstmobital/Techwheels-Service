@@ -300,28 +300,6 @@ export default function AdminPage() {
     setUsersLoadMode('fallback')
     setUsersEdgeError(await extractFunctionErrorMessage(withPhone.error))
 
-    const withDealer = await supabase
-      .from('users')
-      .select('id, email, full_name, role, branch, dealer_code, dealer_name, is_active, created_at')
-      .order('full_name')
-
-    if (!withDealer.error) {
-      setSupportsDealerColumns(true)
-      setUsers(
-        ((withDealer.data ?? []) as Array<Omit<AppUser, 'phone'>>).map((u) => ({
-          ...u,
-          phone: null,
-        }))
-      )
-      return
-    }
-
-    if (!isMissingDealerColumnError(withDealer.error)) {
-      showToastMsg(withDealer.error.message, 'error')
-      setUsers([])
-      return
-    }
-
     const fallback = await supabase
       .from('users')
       .select('id, email, full_name, role, branch, is_active, created_at')
