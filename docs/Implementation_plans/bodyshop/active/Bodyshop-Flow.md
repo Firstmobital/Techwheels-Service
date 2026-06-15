@@ -224,6 +224,29 @@ Stage-governance note:
 - [x] **Task 9.3:** Add additive migration script to persist `insurance_type` in `bodyshop_repair_cards` with value check constraint.
 - [ ] **Task 9.4:** Execute migration in DB environment and validate end-to-end persistence in authenticated `/bodyshop-repair` session.
 
+### Phase 10: Stage 11 + Stage 12 Parallel Additional Approval Workflow
+- [x] **Task 10.1:** Re-audit authoritative schema for Additional Approval capability before design.
+- [x] **Task 10.2:** Confirm current authoritative constraints:
+  - `bodyshop_repair_cards.additional_approval` exists as text only.
+  - `bodyshop_repair_card_documents.doc_key` allows only existing keys (`doc_*`, `doc_estimate`, `doc_survey_approval`) and has no dedicated additional-approval doc key.
+- [ ] **Task 10.3:** Define additive migration scope for required data contract (request details, requested/decision state, timestamps/actors, and image/document linkage) with backward compatibility.
+- [ ] **Task 10.4:** Implement Bodyshop Floor row action:
+  - Add `Additional Approval` button per vehicle row.
+  - Open popup with fields: Part No, Part Description, Reason (Remark), Part Image.
+  - Submit should persist request and keep vehicle active in Stage 11 while also entering Stage 12 queue.
+- [ ] **Task 10.5:** Implement Repair Tracker Stage Queue concurrency rule:
+  - A card can be simultaneously visible in Stage 11 (`Floor Assignment`) and Stage 12 (`Additional Approval`) while floor work continues and approval is pending.
+- [ ] **Task 10.6:** Implement Stage sidebar sub-stage extension under Stage 11:
+  - Add `Additional Approval` status node alongside role substages.
+- [ ] **Task 10.7:** Implement Survey tab section `Additional Approval Requested`:
+  - Show request details captured from Bodyshop Floor.
+  - Add decision actions: `Approved` and `Rejected`.
+  - On `Approved`, require approval photo upload before finalizing approval state.
+- [ ] **Task 10.8:** Implement Bodyshop Floor notification/rendering:
+  - Show `Additional Approval = Approved/Rejected/Pending`.
+  - Provide `View` action for approved photo/document.
+- [ ] **Task 10.9:** Validate end-to-end state transitions and cross-page consistency on localhost + UAT.
+
 ---
 
 ## Activity Tracker
@@ -316,6 +339,19 @@ Stage-governance note:
 ⏳ 9.4 | Execute migration + authenticated UAT on /bodyshop-repair | API + QA | - | - | live URL is auth-gated in audit session; pending post-login validation
 ```
 
+### Phase 10
+```
+✅ 10.1 | Authoritative Additional Approval schema audit | Web Dev | 2026-06-15 | 2026-06-15 | confirmed only bodyshop_repair_cards.additional_approval (text) exists in active dump
+✅ 10.2 | Authoritative doc-key constraint audit | Web Dev | 2026-06-15 | 2026-06-15 | confirmed bodyshop_repair_card_documents has no dedicated additional-approval doc key
+⏳ 10.3 | Draft additive migration contract for approval request lifecycle | API + Web Dev | - | - | required before full UX delivery
+⏳ 10.4 | Add Bodyshop Floor Additional Approval button + popup | Web Dev | - | - | Part No, Part Description, Reason, Part Image
+⏳ 10.5 | Stage queue parallel visibility (Stage 11 + Stage 12) | Web Dev | - | - | pending approval should not block floor worklist presence
+⏳ 10.6 | Sidebar Stage 11 sub-node: Additional Approval | Web Dev | - | - | show status with existing floor substages
+⏳ 10.7 | Survey tab decision panel (Approved/Rejected + photo gate) | Web Dev | - | - | approved requires approval photo before finalize
+⏳ 10.8 | Bodyshop Floor status + view approved photo | Web Dev | - | - | render approval state and view action
+⏳ 10.9 | End-to-end validation + UAT sign-off | QA + Ops | - | - | verify consistency across bodyshop-floor and bodyshop-repair
+```
+
 ---
 
 ## Dependencies & Prerequisites
@@ -327,6 +363,7 @@ Stage-governance note:
 - [x] DB-level canonical key hardening for bodyshop cards (`reception_entry_id` + uniqueness) executed and active.
 - [ ] Phase A deprecation validation sign-off: zero runtime dependency on `service_branches` in web/mobile.
 - [ ] Execute additive migration `scripts/18_add_insurance_type_to_bodyshop_repair_cards.sql` in target DB.
+- [ ] Additional Approval additive migration approved and executed before implementing full request lifecycle UI.
 
 ---
 
@@ -357,6 +394,9 @@ Stage-governance note:
 - ✅ Phase A complete: no runtime reads from `service_branches` in targeted web/mobile modules; Employee Master winner logic active.
 - ✅ Phase B complete: `public.service_branches` dropped via migration with no regressions in branch/fuel filters and assignments.
 - ✅ SA Docs includes manual Insurance Type capture (`TMI`/`Non-TMI`) and persists once additive migration is executed.
+- ✅ Stage 11 and Stage 12 can run in parallel for the same vehicle when additional approval is requested.
+- ✅ Survey tab can approve/reject Additional Approval requests with mandatory approval photo on approve.
+- ✅ Bodyshop Floor shows Additional Approval state and supports viewing approved proof image.
 
 ---
 
@@ -378,6 +418,19 @@ Stage-governance note:
 - Requirement locked: Floor category remains unchanged.
 - Requirement locked: Bodyshop advisor must capture Customer Type and up to 20 vehicle photos.
 - Requirement added: `bodyshop-floor` and `bodyshop-repair` are included as later-use integration phases in this plan.
+
+### 2026-06-15 - Additional Approval Parallel Workflow Requirement Captured
+- New business requirement captured from localhost validation:
+  - Bodyshop Floor needs per-row `Additional Approval` action with popup fields: Part No, Part Description, Reason, Part Image.
+  - Same vehicle must be operationally present in both Stage 11 and Stage 12 while approval is pending.
+  - Stage 11 sidebar must include `Additional Approval` as an additional sub-status line.
+  - Survey tab must expose `Additional Approval Requested` details and decision actions (`Approved`, `Rejected`) with mandatory approval photo on approve.
+  - Bodyshop Floor must reflect approval decision state and provide approved-photo view action.
+- Authoritative schema checkpoint completed from chunk mirror:
+  - `bodyshop_repair_cards.additional_approval` exists only as text in current dump.
+  - `bodyshop_repair_card_documents.doc_key` does not include an additional-approval-specific key in current dump.
+- Execution gate set:
+  - Full feature delivery is migration-gated and will proceed via additive schema change from authoritative baseline (no destructive change, no authority downgrade).
 
 ### 2026-06-11 - Stage Catalog Lock (From UI Screenshot)
 - Added and locked 18-stage bodyshop sequence from current `/bodyshop-repair` flow.

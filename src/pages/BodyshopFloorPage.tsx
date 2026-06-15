@@ -74,6 +74,8 @@ interface DBPrimaryAssignmentRow {
   technician_completed_by: string | null
   electrician_completed_by: string | null
   det_completed_by: string | null
+  bs_floor_completed_at: string | null
+  bs_floor_completed_by: string | null
 }
 
 interface BSAssignment {
@@ -279,6 +281,7 @@ export default function BodyshopFloorPage() {
     Record<string, Record<BSRole, { work_status: string; remark: string }>>
   >({})
   const [saving, setSaving]   = useState<string | null>(null) // jcKey being saved
+  const [bsFloorStatus, setBsFloorStatus] = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
 
   // ── Load ─────────────────────────────────────────────────────────────────
 
@@ -365,15 +368,22 @@ export default function BodyshopFloorPage() {
         console.warn('bodyshop_assignments:', assErr.message)
         setDataError(true)
         setAssignments({})
+        setBsFloorStatus({})
       } else {
         const map: Record<string, Record<BSRole, BSAssignment | undefined>> = {}
+        const floorMap: Record<string, { completedAt: string | null; completedBy: string | null }> = {}
         for (const row of (assData ?? []) as DBPrimaryAssignmentRow[]) {
           const k = row.job_card_number.toUpperCase()
           if (!map[k]) {
             map[k] = mapRowToRoleMap(row)
+            floorMap[k] = {
+              completedAt: row.bs_floor_completed_at ?? null,
+              completedBy: row.bs_floor_completed_by ?? null,
+            }
           }
         }
         setAssignments(map)
+        setBsFloorStatus(floorMap)
 
         // Populate stage drafts from existing assignments
         const drafts: Record<string, Record<BSRole, { work_status: string; remark: string }>> = {}
@@ -633,9 +643,17 @@ export default function BodyshopFloorPage() {
 
       const newA = mapRowToRoleMap(result.data as DBPrimaryAssignmentRow)[role]
       if (!newA) throw new Error('Failed to map updated primary assignment row')
+      const updatedRow = result.data as DBPrimaryAssignmentRow
       setAssignments((prev) => ({
         ...prev,
         [k]: { ...(prev[k] ?? emptyRoleMap()), [role]: newA },
+      }))
+      setBsFloorStatus((prev) => ({
+        ...prev,
+        [k]: {
+          completedAt: updatedRow.bs_floor_completed_at ?? null,
+          completedBy: updatedRow.bs_floor_completed_by ?? null,
+        },
       }))
       setStageDrafts((prev) => ({
         ...prev,
@@ -732,12 +750,20 @@ export default function BodyshopFloorPage() {
       const updatedRoleMap = mapRowToRoleMap(result.data as DBPrimaryAssignmentRow)
       const updatedRole = updatedRoleMap[role]
       if (!updatedRole) throw new Error('Failed to map saved stage data')
+      const updatedRow = result.data as DBPrimaryAssignmentRow
 
       setAssignments((prev) => ({
         ...prev,
         [k]: {
           ...(prev[k] ?? emptyRoleMap()),
           [role]: updatedRole,
+        },
+      }))
+      setBsFloorStatus((prev) => ({
+        ...prev,
+        [k]: {
+          completedAt: updatedRow.bs_floor_completed_at ?? null,
+          completedBy: updatedRow.bs_floor_completed_by ?? null,
         },
       }))
       showToast('Stage saved', 'success')
@@ -769,6 +795,51 @@ export default function BodyshopFloorPage() {
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
+  }
+
+  async function markBsFloorCompleted(car: AccidentCar) {
+    const k = jcKey(car)
+    const rowId = getRoleMapRowId(assignments[k])
+    if (!rowId) {
+      showToast('Assign at least one role before marking floor complete', 'error')
+      return
+    }
+
+    if (bsFloorStatus[k]?.completedAt) {
+      showToast('BS floor already completed for this job card', 'success')
+      return
+    }
+
+    setSaving(`${k}-bs-floor`)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const actor = user?.email ?? user?.id ?? null
+      const now = new Date().toISOString()
+      const result = await supabase
+        .from('bodyshop_assignments')
+        .update({
+          bs_floor_completed_at: now,
+          bs_floor_completed_by: actor,
+        })
+        .eq('id', rowId)
+        .select('id, bs_floor_completed_at, bs_floor_completed_by')
+        .single()
+
+      if (result.error) throw result.error
+
+      setBsFloorStatus((prev) => ({
+        ...prev,
+        [k]: {
+          completedAt: result.data?.bs_floor_completed_at ?? now,
+          completedBy: result.data?.bs_floor_completed_by ?? actor,
+        },
+      }))
+      showToast('BS floor marked as completed', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to mark floor completed', 'error')
+    } finally {
+      setSaving(null)
+    }
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -902,6 +973,7 @@ export default function BodyshopFloorPage() {
                     <th>🔧 Technician</th>
                     <th>⚡ Electrician</th>
                     <th>🧰 DET</th>
+                    <th>BS Floor Status</th>
                     <th>IN TS</th>
                     <th>OUT TS</th>
                   </tr>
@@ -911,6 +983,9 @@ export default function BodyshopFloorPage() {
                     const k = jcKey(car)
                     const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
                     const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+                    const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
+                    const isFloorCompleted = Boolean(floorStatus.completedAt)
+                    const isSavingFloorStatus = saving === `${k}-bs-floor`
 
                     return (
                       <tr key={car.id}>
@@ -1056,6 +1131,25 @@ export default function BodyshopFloorPage() {
                           )
                         })}
 
+                        <td style={{ minWidth: 170, verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <button
+                              className={`btn btn--sm ${isFloorCompleted ? 'btn--ghost' : 'btn--primary'}`}
+                              disabled={isFloorCompleted || isSavingFloorStatus}
+                              style={{ opacity: isFloorCompleted || isSavingFloorStatus ? 0.75 : 1 }}
+                              onClick={() => void markBsFloorCompleted(car)}
+                            >
+                              {isSavingFloorStatus ? 'Saving…' : 'Completed'}
+                            </button>
+                            {isFloorCompleted && (
+                              <div style={{ fontSize: 11, color: '#0f766e' }}>
+                                <div>{fmtDate(floorStatus.completedAt)}</div>
+                                <div>{floorStatus.completedBy ?? '—'}</div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
                         {/* IN / OUT timestamps — use earliest assigned_at / latest out_ts across roles */}
                         <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                           {(() => {
@@ -1065,13 +1159,7 @@ export default function BodyshopFloorPage() {
                           })()}
                         </td>
                         <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                          {(() => {
-                            const completed = ALL_ROLES.every((r) => carMap[r]?.work_status === 'completed')
-                            if (!completed) return '—'
-                            const times = ALL_ROLES.map((r) => carMap[r]?.out_ts).filter(Boolean) as string[]
-                            if (!times.length) return '—'
-                            return fmtDate(times.sort().reverse()[0])
-                          })()}
+                          {fmtDate(floorStatus.completedAt)}
                         </td>
                       </tr>
                     )

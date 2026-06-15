@@ -152,6 +152,12 @@ function hasFloorWorkStartedInPrimaryRow(row: Partial<BodyshopFloorPrimaryRow> |
   })
 }
 
+function hasFloorStageCompletedInPrimaryRow(row: Partial<BodyshopFloorPrimaryRow> | null | undefined): boolean {
+  if (!row) return false
+  const completedAt = String((row as { bs_floor_completed_at?: string | null }).bs_floor_completed_at ?? '').trim()
+  return Boolean(completedAt)
+}
+
 function normalizeCardKey(card: { job_card_no: string | null | undefined; reg_number: string | null | undefined }) {
   const receptionId = Number((card as { reception_entry_id?: number | null }).reception_entry_id)
   if (Number.isFinite(receptionId) && receptionId > 0) return `reception:${receptionId}`
@@ -220,6 +226,8 @@ type BodyshopFloorPrimaryRow = {
   technician_completed_by: string | null
   electrician_completed_by: string | null
   det_completed_by: string | null
+  bs_floor_completed_at: string | null
+  bs_floor_completed_by: string | null
 }
 
 type FloorRoleSnapshot = {
@@ -396,6 +404,7 @@ export default function BodyshopRepairPage() {
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
   const [floorWorkStartedLookup, setFloorWorkStartedLookup] = useState<Record<string, boolean>>({})
+  const [floorStageCompletedLookup, setFloorStageCompletedLookup] = useState<Record<string, boolean>>({})
   const [floorPrimaryRow, setFloorPrimaryRow] = useState<BodyshopFloorPrimaryRow | null>(null)
   const [loadingFloorPrimary, setLoadingFloorPrimary] = useState(false)
   const [pendingFloorScrollRole, setPendingFloorScrollRole] = useState<FloorRole | null>(null)
@@ -543,6 +552,7 @@ export default function BodyshopRepairPage() {
         'dentor_in_ts', 'painter_in_ts', 'technician_in_ts', 'electrician_in_ts', 'det_in_ts',
         'dentor_out_ts', 'painter_out_ts', 'technician_out_ts', 'electrician_out_ts', 'det_out_ts',
         'dentor_completed_by', 'painter_completed_by', 'technician_completed_by', 'electrician_completed_by', 'det_completed_by',
+        'bs_floor_completed_at', 'bs_floor_completed_by',
       ].join(', ')
 
       const byJcRes = await supabase
@@ -626,15 +636,20 @@ export default function BodyshopRepairPage() {
   }, [floorPrimaryRow])
 
   const floorParentStatus = useMemo<'Unassigned' | 'In Process' | 'Hold' | 'Completed'>(() => {
+    if (hasFloorStageCompletedInPrimaryRow(floorPrimaryRow)) return 'Completed'
     const assigned = floorRoleSnapshots.filter((r) => r.assigned)
     if (assigned.length === 0) return 'Unassigned'
     if (assigned.some((r) => r.normalizedStatus === 'hold')) return 'Hold'
     if (assigned.every((r) => r.normalizedStatus === 'completed')) return 'Completed'
     return 'In Process'
-  }, [floorRoleSnapshots])
+  }, [floorPrimaryRow, floorRoleSnapshots])
 
   const floorWorkStarted = useMemo(() => {
     return hasFloorWorkStartedInPrimaryRow(floorPrimaryRow)
+  }, [floorPrimaryRow])
+
+  const floorStageCompleted = useMemo(() => {
+    return hasFloorStageCompletedInPrimaryRow(floorPrimaryRow)
   }, [floorPrimaryRow])
 
   useEffect(() => {
@@ -788,6 +803,7 @@ export default function BodyshopRepairPage() {
       ))
 
       const floorLookup: Record<string, boolean> = {}
+      const floorCompletedLookup: Record<string, boolean> = {}
       if (jcNumbers.length > 0 || cardIds.length > 0) {
         const floorRowsByJc: BodyshopFloorPrimaryRow[] = []
         const floorRowsById: BodyshopFloorPrimaryRow[] = []
@@ -798,6 +814,7 @@ export default function BodyshopRepairPage() {
             .select([
               'repair_card_id',
               'job_card_number',
+              'bs_floor_completed_at',
               'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
               'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
               'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
@@ -816,6 +833,7 @@ export default function BodyshopRepairPage() {
             .select([
               'repair_card_id',
               'job_card_number',
+              'bs_floor_completed_at',
               'dentor_employee_code', 'dentor_employee_name', 'dentor_work_status', 'dentor_in_ts', 'dentor_out_ts',
               'painter_employee_code', 'painter_employee_name', 'painter_work_status', 'painter_in_ts', 'painter_out_ts',
               'technician_employee_code', 'technician_employee_name', 'technician_work_status', 'technician_in_ts', 'technician_out_ts',
@@ -839,21 +857,26 @@ export default function BodyshopRepairPage() {
         })
 
         ;(floorRows as BodyshopFloorPrimaryRow[]).forEach((row) => {
-          if (!hasFloorWorkStartedInPrimaryRow(row)) return
+          const started = hasFloorWorkStartedInPrimaryRow(row)
+          const completed = hasFloorStageCompletedInPrimaryRow(row)
+          if (!started && !completed) return
 
           const rid = Number((row as { repair_card_id?: number | null }).repair_card_id)
           if (Number.isFinite(rid) && rid > 0) {
-            floorLookup[`id:${rid}`] = true
+            if (started) floorLookup[`id:${rid}`] = true
+            if (completed) floorCompletedLookup[`id:${rid}`] = true
           }
 
           const jc = String((row as { job_card_number?: string | null }).job_card_number ?? '').trim().toUpperCase()
           if (jc) {
-            floorLookup[`jc:${jc}`] = true
+            if (started) floorLookup[`jc:${jc}`] = true
+            if (completed) floorCompletedLookup[`jc:${jc}`] = true
           }
         })
       }
 
       setFloorWorkStartedLookup(floorLookup)
+      setFloorStageCompletedLookup(floorCompletedLookup)
 
       const photoReceptionIds = nextCards
         .map((card) => Number(card.reception_entry_id))
@@ -1986,6 +2009,16 @@ export default function BodyshopRepairPage() {
     return false
   }
 
+  function getFloorStageCompletedForCard(card: RepairCard): boolean {
+    const rid = Number(card.id)
+    if (Number.isFinite(rid) && rid > 0 && floorStageCompletedLookup[`id:${rid}`]) return true
+
+    const jc = String(card.job_card_no ?? '').trim().toUpperCase()
+    if (jc && floorStageCompletedLookup[`jc:${jc}`]) return true
+
+    return false
+  }
+
   function isCardInStageWorklist(card: RepairCard, stage: number): boolean {
     if (card.overall_status !== 'active') return false
 
@@ -1995,6 +2028,7 @@ export default function BodyshopRepairPage() {
     const milestones = getIntakeMilestones(card, intakePhotoCount, hasKmReading)
     const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
     const floorStarted = getFloorWorkStartedForCard(card)
+    const floorCompleted = getFloorStageCompletedForCard(card)
     const floorValue = String((card as { bodyshop_floor?: string | null }).bodyshop_floor ?? '').trim()
     const floorSent = (floorValue === 'Floor 2' || floorValue === 'Floor 3') && effectiveCurrentStage >= 10
 
@@ -2023,6 +2057,7 @@ export default function BodyshopRepairPage() {
       && (surveyStatus !== 'hold' || Boolean(surveyHoldReason)))
       || effectiveCurrentStage > 9
     const stage10Done = effectiveCurrentStage > 10
+    const stage11Done = floorCompleted || effectiveCurrentStage > 11
 
     // Stage queue is an operational worklist: each stage card counts cards that
     // still need that specific stage's work, independent of earlier pending stages.
@@ -2047,6 +2082,7 @@ export default function BodyshopRepairPage() {
         && stage8Done
         && stage9Done
         && (floorSent || floorStarted)
+        && !stage11Done
     }
 
     return effectiveCurrentStage === stage
@@ -2070,7 +2106,7 @@ export default function BodyshopRepairPage() {
   const filtered = useMemo(() => {
     if (stageFilter === 'all') return baseFiltered
     return baseFiltered.filter((card) => isCardInStageWorklist(card, stageFilter))
-  }, [baseFiltered, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup])
+  }, [baseFiltered, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   const stageCounts = useMemo(() => {
     const counts: Record<number, number> = {}
@@ -2083,7 +2119,7 @@ export default function BodyshopRepairPage() {
       }
     })
     return counts
-  }, [baseFiltered, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup])
+  }, [baseFiltered, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   // pipeline counts
   const pipeline = useMemo(() =>
@@ -2358,7 +2394,7 @@ export default function BodyshopRepairPage() {
                 const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
                 const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                 const inGroup = g.stages.includes(effectiveCurrentStage)
-                  || (effectiveCurrentStage === 10 && floorWorkStarted && g.stages.includes(11))
+                  || (effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted && g.stages.includes(11))
                 const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
                   || (g.stages.includes(5) && docsDone)
                 return (
@@ -2400,7 +2436,7 @@ export default function BodyshopRepairPage() {
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                   return (
                 <div style={{ fontSize: 14, fontWeight: 800, color: getGroupForStage(selected.current_stage).color }}>
-                  {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted)}
+                  {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)}
                 </div>
                   )
                 })()}
@@ -2429,7 +2465,7 @@ export default function BodyshopRepairPage() {
                     : num === 5
                       ? docsDone || effectiveCurrentStage > num
                       : effectiveCurrentStage > num
-                  const isCur  = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted)
+                  const isCur  = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
                     <div key={`stage-${num}`} style={{
@@ -2539,7 +2575,7 @@ export default function BodyshopRepairPage() {
                     style={{ width: '100%', fontSize: 13 }}>
                       {saving
                         ? 'Saving…'
-                        : flow.effectiveCurrentStage === 10 && floorWorkStarted
+                        : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
                           ? '✓ Mark Stage 10 Done (Floor already active)'
                           : `✓ Stage ${flow.effectiveCurrentStage} Done → Stage ${flow.effectiveNextStage}`}
                   </button>
@@ -2604,7 +2640,7 @@ export default function BodyshopRepairPage() {
                         const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                         return (
                           <div style={{ fontSize: 15, fontWeight: 700, color: getGroupForStage(effectiveCurrentStage).color }}>
-                            {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted)}
+                            {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)}
                           </div>
                         )
                       })()}
@@ -2627,7 +2663,7 @@ export default function BodyshopRepairPage() {
                               ? milestones.stage3Done
                               : milestones.stage4Done
                         : effectiveCurrentStage > num
-                      const isCur   = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted)
+                      const isCur   = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
                       return (
                         <div key={num} style={{
@@ -2661,7 +2697,7 @@ export default function BodyshopRepairPage() {
                       style={{ marginTop: 16, width: '100%' }}>
                       {saving
                         ? 'Saving…'
-                        : flow.effectiveCurrentStage === 10 && floorWorkStarted
+                        : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
                           ? '✓ Mark Stage 10 Done (Floor already active)'
                           : `✓ Mark Stage ${flow.effectiveCurrentStage} Done → Move to Stage ${flow.effectiveNextStage}`}
                     </button>
