@@ -10,12 +10,21 @@ const SERVICE_TYPES = [
   'Paid Service', 'First Free Service', 'Second Free Service', 'Third Free Service',
   'Running Repairs', 'Accident', 'PDI', 'Campaign', 'E Breakdown', 'Updation',
 ]
-const FUEL_TYPES = ['Petrol', 'Diesel', 'CNG', 'EV', 'CNG+Petrol']
+const FUEL_TYPES = ['PV', 'EV']
 const CALL_OUTCOMES = ['Connected', 'Not Reachable', 'Callback', 'Declined']
-const TATA_MODELS = [
-  'Nexon', 'Nexon EV', 'Punch', 'Punch CNG', 'Tiago', 'Tigor', 'Tigor EV',
-  'Altroz', 'Harrier', 'Harrier EV', 'Safari', 'Curvv', 'Curvv EV',
-  'Hexa', 'Sierra', 'Xpres T Ev',
+const PV_MODELS = [
+  'Nexon', 'Punch', 'Punch CNG', 'Tiago', 'Tigor', 'Altroz',
+  'Harrier', 'Safari', 'Curvv', 'Hexa', 'Sierra',
+]
+const EV_MODELS = [
+  'Nexon EV', 'Tigor EV', 'Harrier EV', 'Curvv EV', 'Xpres T EV',
+]
+
+const TIME_SLOTS = [
+  '9:00 – 10:00', '9:30 – 10:30', '10:00 – 11:00', '10:30 – 11:30',
+  '11:00 – 12:00', '11:30 – 12:30', '12:00 – 13:00', '12:30 – 13:30',
+  '13:00 – 14:00', '14:00 – 15:00', '14:30 – 15:30', '15:00 – 16:00',
+  '15:30 – 16:30', '16:00 – 17:00',
 ]
 
 const STATUS_META: Record<string, { bg: string; color: string; dot: string }> = {
@@ -222,7 +231,7 @@ export default function ServiceBookingPage() {
       `Your service booking is confirmed!`,
       ``,
       `📅 *Date:* ${b.appointment_date ? new Date(b.appointment_date).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : 'TBD'}`,
-      b.booking_time ? `⏰ *Time:* ${b.booking_time.slice(0, 5)}` : '',
+      b.booking_time ? `⏰ *Slot:* ${b.booking_time}` : '',
       `🚗 *Vehicle:* ${b.reg_number}${b.model ? ` — ${b.model}` : ''}`,
       b.service_type ? `🔧 *Service:* ${b.service_type}` : '',
       b.branch ? `📍 *Branch:* ${b.branch}` : '',
@@ -387,7 +396,7 @@ export default function ServiceBookingPage() {
                       <td style={{ padding: '0.5rem 0.65rem', whiteSpace: 'nowrap' }}>
                         {b.appointment_date
                           ? <><div style={{ color: '#334155', fontWeight: 600, fontSize: '0.75rem' }}>{new Date(b.appointment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
-                            {b.booking_time && <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{b.booking_time.slice(0, 5)}</div>}</>
+                            {b.booking_time && <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{b.booking_time}</div>}</>
                           : <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>—</span>}
                       </td>
                       {/* Status */}
@@ -463,8 +472,11 @@ export default function ServiceBookingPage() {
                     <input type="date" style={inp} value={form.appointment_date ?? ''} onChange={e => setForm(p => ({ ...p, appointment_date: e.target.value }))} />
                   </Field>
 
-                  <Field label="Preferred Time">
-                    <input type="time" style={inp} value={form.booking_time ?? ''} onChange={e => setForm(p => ({ ...p, booking_time: e.target.value }))} />
+                  <Field label="Preferred Slot">
+                    <select style={selInp} value={form.booking_time ?? ''} onChange={e => setForm(p => ({ ...p, booking_time: e.target.value }))}>
+                      <option value="">Select slot…</option>
+                      {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </Field>
 
                   <Field label="Branch" span>
@@ -493,7 +505,10 @@ export default function ServiceBookingPage() {
                   <Field label="Model">
                     <select style={selInp} value={form.model ?? ''} onChange={e => setForm(p => ({ ...p, model: e.target.value }))}>
                       <option value="">Select model…</option>
-                      {TATA_MODELS.map(m => <option key={m}>{m}</option>)}
+                      {!form.fuel_type || form.fuel_type === 'PV'
+                        ? PV_MODELS.map(m => <option key={m}>{m}</option>)
+                        : EV_MODELS.map(m => <option key={m}>{m}</option>)
+                      }
                     </select>
                   </Field>
 
@@ -659,7 +674,7 @@ export default function ServiceBookingPage() {
                     <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
                       {selectedBooking.appointment_date ? new Date(selectedBooking.appointment_date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Not scheduled'}
                     </div>
-                    {selectedBooking.booking_time && <div style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 600 }}>⏰ {selectedBooking.booking_time.slice(0, 5)}</div>}
+                    {selectedBooking.booking_time && <div style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 600 }}>⏰ {selectedBooking.booking_time}</div>}
                     {selectedBooking.branch && <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.15rem' }}>📍 {selectedBooking.branch}</div>}
                   </div>
 
