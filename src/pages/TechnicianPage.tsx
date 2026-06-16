@@ -751,7 +751,7 @@ export default function TechnicianPage() {
       // Primary filter: Fetch job_card_closed_data where invoice_date is in the range
       const jccRes = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time, vehicle_registration_number')
+        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time, vehicle_registration_number, final_labour_amount')
         .gte('invoice_date', fromDate)
         .lte('invoice_date', toDate)
 
@@ -780,7 +780,7 @@ export default function TechnicianPage() {
       // Fetch assignment timestamps and status for those job cards.
       const taRes = await supabase
         .from('technician_assignments')
-        .select('id, job_card_number, out_ts, work_status, assigned_at, created_at, updated_at')
+        .select('id, job_card_number, technician_name, out_ts, work_status, assigned_at, created_at, updated_at')
         .in('job_card_number', sourceJcNumbers)
 
       if (taRes.error) {
@@ -841,9 +841,11 @@ export default function TechnicianPage() {
               invoice_date: row.invoice_date ?? '',
               closed_date_time: row.closed_date_time ?? '',
               sa_name: saNameMap.get(jc) ?? '',
+              technician_name: '',
               status: 'Unassigned',
               match_status: 'NO ASSIGNMENT',
               vehicle_registration_number: row.vehicle_registration_number ?? '',
+              labour: parseRevenueAmount(row.final_labour_amount) / 1.18,
             }]
           }
 
@@ -871,9 +873,11 @@ export default function TechnicianPage() {
               invoice_date: row.invoice_date ?? '',
               closed_date_time: row.closed_date_time ?? '',
               sa_name: saNameMap.get(jc) ?? '',
+              technician_name: String(assignment.technician_name ?? '').trim(),
               status: workStatus ? statusLabel(workStatus) : 'Unassigned',
               match_status: matchStatus,
               vehicle_registration_number: row.vehicle_registration_number ?? '',
+              labour: parseRevenueAmount(row.final_labour_amount) / 1.18,
             }
           })
         })
@@ -886,23 +890,25 @@ export default function TechnicianPage() {
 
       // Export to Excel
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Reg No', 'Branch', 'SA Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Match Status'],
+        ['Job Card Number', 'Service Type', 'Reg No', 'Branch', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Labour', 'Match Status'],
         ...issues.map((r: any) => [
           r.job_card_number,
           r.service_type,
           r.vehicle_registration_number,
           r.branch,
           r.sa_name,
+          r.technician_name,
           r.status,
           r.out_ts ? new Date(r.out_ts).toLocaleString('en-IN') : '',
           r.invoice_date,
           r.closed_date_time ? new Date(r.closed_date_time).toLocaleString('en-IN') : '',
+          Number((Number(r.labour ?? 0)).toFixed(2)),
           r.match_status,
         ]),
       ]
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(sheetData)
-      ws['!cols'] = [18, 20, 14, 16, 26, 15, 25, 15, 25, 15].map(w => ({ wch: w }))
+      ws['!cols'] = [18, 20, 14, 16, 26, 24, 15, 25, 15, 25, 14, 15].map(w => ({ wch: w }))
       XLSX.utils.book_append_sheet(wb, ws, 'Date Issues')
       XLSX.writeFile(wb, `JC_Date_Issues_${fromDate}_to_${toDate}.xlsx`)
     } catch (e: any) {
