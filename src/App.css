@@ -148,6 +148,8 @@ textarea.inp { height: auto; padding: 11px 13px; resize: vertical; line-height: 
   padding: 0 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 72;
 }
 .util__sp { flex: 1; }
 .util__dealer { display: flex; align-items: center; gap: 9px; min-width: 0; }
@@ -239,6 +241,7 @@ textarea.inp { height: auto; padding: 11px 13px; resize: vertical; line-height: 
 .menu__item--danger { color: var(--danger); }
 .menu__item--danger .ic { color: var(--danger); }
 .util__menu { right: 0; min-width: 320px; max-width: min(92vw, 360px); }
+.util .menu { z-index: 90; }
 .menu__notif-empty { padding: 10px; font-size: 13px; color: var(--muted); }
 .menu__notif-item { align-items: flex-start; gap: 9px; }
 .menu__notif-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

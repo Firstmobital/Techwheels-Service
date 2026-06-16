@@ -2085,6 +2085,8 @@ As of 2026-06-16, pending work is:
     4. Add optional external SMS/WhatsApp/email fallback.
   - Current status (2026-06-16): Web in-app notifications migration executed: `supabase/migrations/20260616200000_add_web_in_app_complaint_notifications.sql`.
     - Includes in-app notification columns, in-app channel support, list/unread/read RPCs, and web bell dropdown integration in `src/App.tsx`.
+  - Current status (2026-06-16): Web bell dropdown overlap fix applied in `src/App.css` by raising util/menu stacking order so the panel renders above nav.
+  - Pending validation: smoke test the bell flow end-to-end (event creation -> unread badge -> open list -> mark read/mark all read).
   - Next implementation step: mobile push token registry + sender worker.
   - Implement SMS/email integration stubs.
   - Decide and implement/defer reports page (category/branch/SA, CSAT, SLA attainment).
