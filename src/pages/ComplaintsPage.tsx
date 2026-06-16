@@ -312,6 +312,31 @@ export const ComplaintsPage: React.FC = () => {
     setIsInternal(false)
   }
 
+  const syncTicketFromDb = async (ticketId: bigint): Promise<ComplaintTicket> => {
+    const { data, error: err } = await supabase
+      .from('complaint_tickets')
+      .select('*')
+      .eq('id', ticketId)
+      .maybeSingle()
+
+    if (err) throw err
+    if (!data) {
+      throw new Error('Complaint not found after update. Reload and try again.')
+    }
+
+    const latest = data as ComplaintTicket
+    setSelectedTicket(latest)
+    setSelectedStaffId(latest.assigned_to ?? null)
+    setTickets((prev) => prev.map((ticket) => (ticket.id === latest.id ? latest : ticket)))
+    return latest
+  }
+
+  const persistenceError = (action: string): Error => {
+    return new Error(
+      `${action} did not persist to the database. Check dealer mapping and complaints modify access for this user.`,
+    )
+  }
+
   const handleStatusChange = async (newStatus: ComplaintStatus) => {
     if (!selectedTicket) return
 
@@ -336,9 +361,11 @@ export const ComplaintsPage: React.FC = () => {
           return
       }
 
-      const updated = { ...selectedTicket, status: newStatus }
-      setSelectedTicket(updated)
-      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
+      const latest = await syncTicketFromDb(selectedTicket.id)
+      if (latest.status !== newStatus) {
+        throw persistenceError(`Status change to ${STATUS_LABELS[newStatus]}`)
+      }
+
       setSuccess(`Status changed to ${STATUS_LABELS[newStatus]}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update status')
@@ -355,9 +382,11 @@ export const ComplaintsPage: React.FC = () => {
       setActionLoading(true)
       await escalate(selectedTicket.id, 'Manual escalation by staff')
 
-      const updated = { ...selectedTicket, is_escalated: true }
-      setSelectedTicket(updated)
-      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
+      const latest = await syncTicketFromDb(selectedTicket.id)
+      if (!latest.is_escalated) {
+        throw persistenceError('Escalation')
+      }
+
       setSuccess('Complaint escalated')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to escalate complaint')
@@ -374,9 +403,10 @@ export const ComplaintsPage: React.FC = () => {
       setActionLoading(true)
       await reassign(selectedTicket.id, selectedStaffId)
 
-      const updated = { ...selectedTicket, assigned_to: selectedStaffId }
-      setSelectedTicket(updated)
-      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
+      const latest = await syncTicketFromDb(selectedTicket.id)
+      if ((latest.assigned_to || null) !== selectedStaffId) {
+        throw persistenceError('Reassignment')
+      }
 
       const staffMember = staffList.find((s) => s.id === selectedStaffId)
       setSuccess(`Reassigned to ${staffMember?.full_name || 'staff member'}`)
@@ -395,9 +425,11 @@ export const ComplaintsPage: React.FC = () => {
       setActionLoading(true)
       await setPriority(selectedTicket.id, newPriority)
 
-      const updated = { ...selectedTicket, priority: newPriority }
-      setSelectedTicket(updated)
-      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updated : t)))
+      const latest = await syncTicketFromDb(selectedTicket.id)
+      if (latest.priority !== newPriority) {
+        throw persistenceError(`Priority change to ${newPriority}`)
+      }
+
       setSuccess(`Priority changed to ${newPriority}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change priority')

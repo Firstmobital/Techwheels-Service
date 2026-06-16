@@ -2046,6 +2046,39 @@ Evidence gathered:
    - Outbox/event pipeline and SMS or email stubs are pending.
    - Complaints reports page is still optional and not implemented.
 
+### Current Pending Only (Canonical Status)
+
+This subsection is the single source for open items. Use this list for status checks.
+
+As of 2026-06-16, pending work is:
+
+1. Testing hardening
+  - Create and apply pgTAP suite migration for single-use raise, tenant isolation, internal-note hiding, SLA breach checks.
+  - Run and pass test suites in SQL editor:
+    - `SELECT * FROM complaints_test.test_suite__raise_complaint_single_use();`
+    - `SELECT * FROM complaints_test.test_suite__complaint_tenant_isolation();`
+    - `SELECT * FROM complaints_test.test_suite__internal_notes_hidden_from_customers();`
+    - `SELECT * FROM complaints_test.test_suite__sla_breach_detection();`
+    - `SELECT * FROM complaints_test.test_suite__complaint_rbac();`
+  - Current status (2026-06-16): Initial migration executed; 4/5 suites fully green. `test_suite__raise_complaint_single_use` had 2 assertion mismatches, and aggregate runner hit pgTAP multi-plan conflict.
+  - Follow-up migration prepared: `supabase/migrations/20260616190000_fix_complaints_pgtap_contract_tests_runner_and_assertions.sql`.
+
+2. Customer portal completion
+  - Complete mobile-first parity pass against design checklist.
+  - Produce a formal scripted E2E artifact for mint link -> raise -> track -> reopen.
+
+3. Notifications and reporting
+  - Implement outbox/event pipeline.
+  - Implement SMS/email integration stubs.
+  - Decide and implement/defer reports page (category/branch/SA, CSAT, SLA attainment).
+
+4. Deployment readiness
+  - Run production deployment checklist after test hardening and E2E evidence are complete.
+
+Out of scope for "current pending":
+- Historical planning checklists in the roadmap section below are retained for traceability and effort estimates.
+- Treat roadmap checkbox state as archival unless mirrored in this canonical list.
+
 ---
 
 ## 13. RISK ASSESSMENT & MITIGATIONS
@@ -2088,6 +2121,9 @@ Evidence gathered:
 ---
 
 ## EXECUTION ROADMAP & DAILY TIMELINE
+
+Historical planning artifact: The day-wise checklist below was authored before later implementation progress.
+Do not use it as current status. Use "Current Pending Only (Canonical Status)" above for live pending items.
 
 **Total Duration:** 19 days (critical path); can be compressed to 12–14 days with parallel work on UI designs.
 
