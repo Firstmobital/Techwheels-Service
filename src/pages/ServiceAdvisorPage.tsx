@@ -183,7 +183,7 @@ function applySummaryCardFilter(
     return rows.filter((row) => isServiceTypeMissing(row.service_type))
   }
   if (selectedSummaryCard === 'estimate_pending') {
-    return rows.filter((row) => !isBodyshopServiceType(row.service_type) && !row.estimate_storage_path)
+    return rows.filter((row) => !isBodyshopServiceType(row.service_type) && !isNoEstimateInvoiceRequiredServiceType(row.service_type) && !row.estimate_storage_path)
   }
   if (selectedSummaryCard === 'no_technician') {
     // Match Floor Incharge's "Unassigned" logic: entries with NO assignment row
@@ -206,7 +206,7 @@ function applySummaryCardFilter(
   if (selectedSummaryCard === 'completed') {
     return rows.filter((row) => isCompleted(row) && Boolean(row.invoice_done_at))
   }
-  return rows.filter((row) => !isBodyshopServiceType(row.service_type) && isCompleted(row) && !row.invoice_done_at)
+  return rows.filter((row) => !isBodyshopServiceType(row.service_type) && !isNoEstimateInvoiceRequiredServiceType(row.service_type) && isCompleted(row) && !row.invoice_done_at)
 }
 
 function mergeServiceTypes(...groups: Array<string[]>): string[] {
@@ -272,6 +272,11 @@ function isWithinDateRange(createdAt: string | null | undefined, range: DateRang
 
 function isBodyshopServiceType(serviceType: string | null | undefined): boolean {
   return getCategoryForServiceType(serviceType) === 'bodyshop'
+}
+
+function isNoEstimateInvoiceRequiredServiceType(serviceType: string | null | undefined): boolean {
+  const normalized = normalizeServiceType(serviceType ?? '').toLowerCase()
+  return normalized === 'rusting'
 }
 
 function parseKmInput(value: string): number | null {
@@ -609,7 +614,7 @@ export default function ServiceAdvisorPage() {
     return 'Multiple branches'
   }, [rows, isAdmin, selectedBranch])
   const pendingEstimateCount = useMemo(
-    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && !r.estimate_storage_path).length,
+    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && !isNoEstimateInvoiceRequiredServiceType(r.service_type) && !r.estimate_storage_path).length,
     [displayedRows],
   )
   const pendingJobCardCount = useMemo(
@@ -621,7 +626,7 @@ export default function ServiceAdvisorPage() {
     [displayedRows],
   )
   const pendingInvoiceCount = useMemo(
-    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && isWorkCompleted(r) && !r.invoice_done_at).length,
+    () => displayedRows.filter((r) => !isBodyshopServiceType(r.service_type) && !isNoEstimateInvoiceRequiredServiceType(r.service_type) && isWorkCompleted(r) && !r.invoice_done_at).length,
     [displayedRows, completedJobCardNumbers],
   )
   const noTechnicianCount = useMemo(
@@ -1012,6 +1017,12 @@ export default function ServiceAdvisorPage() {
   }
 
   async function handleEstimateUpload(id: number, file: File) {
+    const row = rows.find((item) => item.id === id)
+    if (row && isNoEstimateInvoiceRequiredServiceType(row.service_type)) {
+      showToast('No estimate upload required for Rusting service type')
+      return
+    }
+
     setUploadingId(id)
     setError(null)
 
@@ -1038,6 +1049,11 @@ export default function ServiceAdvisorPage() {
   }
 
   async function handleInvoiceDone(row: ReceptionEntryRow) {
+    if (isNoEstimateInvoiceRequiredServiceType(row.service_type)) {
+      showToast('No invoice action required for Rusting service type')
+      return
+    }
+
     if (row && !canUpdateRow(row)) {
       const deniedMessage = 'You do not have edit permission for Mark Done.'
       setError(deniedMessage)
@@ -1661,6 +1677,7 @@ export default function ServiceAdvisorPage() {
                     const normalizedDraftServiceType = draftServiceType.trim().toLowerCase()
                     const effectiveServiceType = String(draft.service_type || row.service_type || '')
                     const isBodyshopRow = isBodyshopServiceType(effectiveServiceType)
+                    const isNoActionRequiredRow = isNoEstimateInvoiceRequiredServiceType(effectiveServiceType)
                     const isDirty = dirtyRowIds.has(row.id)
                     const hasJcNumber = Boolean(String(draft.jc_number ?? '').trim())
                     const isBodyshopPending = isBodyshopRow && !hasJcNumber
@@ -1740,6 +1757,8 @@ export default function ServiceAdvisorPage() {
                         <td className="td-estimate">
                           {isBodyshopRow ? (
                             <span className="td-muted-nowrap">Managed in Bodyshop Repair</span>
+                          ) : isNoActionRequiredRow ? (
+                            <span className="td-muted-nowrap">Not required</span>
                           ) : (
                             <div className="estimate-col">
                               {row.estimate_storage_path ? (
@@ -1800,6 +1819,10 @@ export default function ServiceAdvisorPage() {
                           {isBodyshopRow ? (
                             <div className="invoice-col">
                               <span className="td-muted-nowrap">Not applicable</span>
+                            </div>
+                          ) : isNoActionRequiredRow ? (
+                            <div className="invoice-col">
+                              <span className="td-muted-nowrap">Not required</span>
                             </div>
                           ) : (
                             <div className="invoice-col">

@@ -25,7 +25,17 @@ type TechnicianAssignmentRow = {
   fuel_type?: string | null
   gross_labour_amount?: number
   technician_income?: number
+  assignment_split_count?: number
   invoice_date?: string | null
+}
+
+type SupportAssignmentRow = {
+  job_card_number: string | null
+  support_role: string | null
+  employee_code: string | null
+  employee_name: string | null
+  assigned_at: string | null
+  is_active: boolean | null
 }
 
 type RevenueRow = {
@@ -69,6 +79,7 @@ type YesterdayRow = {
   bay_no: string
   gross_labour_amount: number
   technician_income: number
+  assignment_split_count: number
   work_status: string
 }
 
@@ -192,6 +203,104 @@ function normalizeJobCardNumber(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
 
+function normalizeSupportRole(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function isTechnicianSupportRole(value: string | null | undefined): boolean {
+  return normalizeSupportRole(value) === 'TECHNICIAN'
+}
+
+function buildSupportTechnicianMap(rows: SupportAssignmentRow[]): Map<string, SupportAssignmentRow[]> {
+  const supportByJc = new Map<string, SupportAssignmentRow[]>()
+
+  rows.forEach((row) => {
+    if (row.is_active === false) return
+    if (!isTechnicianSupportRole(row.support_role)) return
+
+    const jc = normalizeJobCardNumber(row.job_card_number)
+    if (!jc) return
+
+    const code = normalizeJobCardNumber(row.employee_code)
+    if (!code) return
+
+    const existing = supportByJc.get(jc) ?? []
+    const alreadyExists = existing.some((item) => normalizeJobCardNumber(item.employee_code) === code)
+    if (!alreadyExists) {
+      existing.push(row)
+      supportByJc.set(jc, existing)
+    }
+  })
+
+  return supportByJc
+}
+
+function buildSplitCountByJobCard(
+  primaryAssignments: TechnicianAssignmentRow[],
+  supportByJc: Map<string, SupportAssignmentRow[]>,
+): Map<string, number> {
+  const splitByJc = new Map<string, number>()
+
+  primaryAssignments.forEach((row) => {
+    const jc = normalizeJobCardNumber(row.job_card_number)
+    if (!jc) return
+
+    const participants = new Set<string>()
+    const primaryCode = normalizeJobCardNumber(row.technician_code)
+    if (primaryCode) participants.add(primaryCode)
+
+    const supportRows = supportByJc.get(jc) ?? []
+    supportRows.forEach((supportRow) => {
+      const supportCode = normalizeJobCardNumber(supportRow.employee_code)
+      if (supportCode) participants.add(supportCode)
+    })
+
+    splitByJc.set(jc, Math.max(1, participants.size))
+  })
+
+  return splitByJc
+}
+
+function expandAssignmentsWithSupportTechnicians(
+  primaryAssignments: TechnicianAssignmentRow[],
+  supportByJc: Map<string, SupportAssignmentRow[]>,
+): TechnicianAssignmentRow[] {
+  const expanded: TechnicianAssignmentRow[] = []
+  let syntheticId = -1
+
+  primaryAssignments.forEach((row) => {
+    expanded.push(row)
+
+    const jc = normalizeJobCardNumber(row.job_card_number)
+    if (!jc) return
+
+    const supportRows = supportByJc.get(jc) ?? []
+    if (supportRows.length === 0) return
+
+    const seenCodes = new Set<string>()
+    const primaryCode = normalizeJobCardNumber(row.technician_code)
+    if (primaryCode) seenCodes.add(primaryCode)
+
+    supportRows.forEach((supportRow) => {
+      const supportCode = normalizeJobCardNumber(supportRow.employee_code)
+      if (!supportCode || seenCodes.has(supportCode)) return
+      seenCodes.add(supportCode)
+
+      expanded.push({
+        ...row,
+        id: syntheticId,
+        technician_code: supportCode,
+        technician_name: String(supportRow.employee_name ?? '').trim() || supportCode,
+        assigned_at: supportRow.assigned_at ?? row.assigned_at,
+      })
+
+      syntheticId -= 1
+    })
+  })
+
+  return expanded
+}
+
 function toIstDateKey(value: string | null | undefined): string | null {
   const raw = String(value ?? '').trim()
   if (!raw) return null
@@ -268,6 +377,12 @@ function normalizeSharePercentInput(value: string, fallback: number): number {
   return Math.min(100, Math.max(0, parsed))
 }
 
+function getSplitLabel(splitCount: number | null | undefined): string {
+  const parsed = Number(splitCount ?? 1)
+  const safeCount = Number.isFinite(parsed) && parsed > 0 ? Math.max(1, Math.round(parsed)) : 1
+  return `Split: 1/${safeCount}`
+}
+
 function getAssignmentDateKey(row: TechnicianAssignmentRow): string | null {
   // Use ONLY invoice_date from job_card_closed_data (no fallback to assigned_at or out_ts)
   const dateSource = row.invoice_date
@@ -288,12 +403,15 @@ function calculateTechnicianIncome(
   bayNo: string | null | undefined,
   pvSharePercent: number,
   evSharePercent: number,
+  splitCount = 1,
 ): number {
   if (!Number.isFinite(grossLabourAmount) || grossLabourAmount <= 0) return 0
   const fuel = extractFuelFromBay(bayNo)
   const sharePercent = fuel === 'EV' ? evSharePercent : pvSharePercent
   const netBeforeShare = grossLabourAmount / 1.18
-  return netBeforeShare * (sharePercent / 100)
+  const income = netBeforeShare * (sharePercent / 100)
+  const safeSplitCount = Number.isFinite(splitCount) && splitCount > 0 ? splitCount : 1
+  return income / safeSplitCount
 }
 
 // ── Yesterday Report Generator ────────────────────────────────────────────────
@@ -325,6 +443,26 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
       .map(r => normalizeJobCardNumber(r.job_card_number))
       .filter(Boolean)
   ))
+
+  const supportRows: SupportAssignmentRow[] = []
+  for (let from = 0; from < completedJcs.length; from += QUERY_PAGE_SIZE) {
+    const batch = completedJcs.slice(from, from + QUERY_PAGE_SIZE)
+    if (batch.length === 0) continue
+
+    const supportRes = await supabase
+      .from('job_card_support_assignments')
+      .select('job_card_number, support_role, employee_code, employee_name, assigned_at, is_active')
+      .in('job_card_number', batch)
+      .eq('is_active', true)
+
+    if (!supportRes.error && supportRes.data) {
+      supportRows.push(...(supportRes.data as SupportAssignmentRow[]))
+    }
+  }
+
+  const supportByJc = buildSupportTechnicianMap(supportRows)
+  const splitCountByJc = buildSplitCountByJobCard(assignmentRows, supportByJc)
+  const expandedAssignmentRows = expandAssignmentsWithSupportTechnicians(assignmentRows, supportByJc)
 
   // Fetch revenue for completed JCs
   const revenueMap = new Map<string, number>()
@@ -360,12 +498,13 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
   }
 
   // Build rows
-  const rows: YesterdayRow[] = assignmentRows
+  const rows: YesterdayRow[] = expandedAssignmentRows
     .filter(r => normalizeStatus(r.work_status) === 'completed')
     .map(r => {
       const jc = normalizeJobCardNumber(r.job_card_number)
       const gross = revenueMap.get(jc) ?? 0
-      const income = calculateTechnicianIncome(gross, r.bay_no, pvPct, evPct)
+      const splitCount = splitCountByJc.get(jc) ?? 1
+      const income = calculateTechnicianIncome(gross, r.bay_no, pvPct, evPct, splitCount)
       return {
         technician_name: String(r.technician_name ?? '').trim() || r.technician_code,
         technician_code: String(r.technician_code ?? '').trim(),
@@ -376,6 +515,7 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
         bay_no: String(r.bay_no ?? '').trim(),
         gross_labour_amount: gross,
         technician_income: income,
+        assignment_split_count: splitCount,
         work_status: String(r.work_status ?? '').trim(),
       }
     })
@@ -545,7 +685,7 @@ export default function TechnicianPage() {
       }
 
       // Map invoice_date to assignments and filter by date range
-      const assignmentRows = dedupeLatestAssignments(
+      const primaryAssignmentRows = dedupeLatestAssignments(
         assignmentRowsRaw
           .map((row) => ({
             ...row,
@@ -560,14 +700,34 @@ export default function TechnicianPage() {
       )
 
       const assignmentJcNumbers = Array.from(new Set(
-        assignmentRows
+        primaryAssignmentRows
           .map((row) => normalizeJobCardNumber(row.job_card_number))
           .filter(Boolean),
       ))
 
+      const supportRows: SupportAssignmentRow[] = []
+      for (let i = 0; i < assignmentJcNumbers.length; i += QUERY_PAGE_SIZE) {
+        const jcBatch = assignmentJcNumbers.slice(i, i + QUERY_PAGE_SIZE)
+        if (jcBatch.length === 0) continue
+
+        const supportRes = await supabase
+          .from('job_card_support_assignments')
+          .select('job_card_number, support_role, employee_code, employee_name, assigned_at, is_active')
+          .in('job_card_number', jcBatch)
+          .eq('is_active', true)
+
+        if (!supportRes.error && supportRes.data) {
+          supportRows.push(...(supportRes.data as SupportAssignmentRow[]))
+        }
+      }
+
+      const supportByJc = buildSupportTechnicianMap(supportRows)
+      const splitCountByJc = buildSplitCountByJobCard(primaryAssignmentRows, supportByJc)
+      const assignmentRows = expandAssignmentsWithSupportTechnicians(primaryAssignmentRows, supportByJc)
+
       // Get completed assignments to query revenue data
       const completedMap = new Map<string, TechnicianAssignmentRow>()
-      assignmentRows
+      primaryAssignmentRows
         .filter((row) => normalizeStatus(row.work_status) === 'completed')
         .forEach((row) => {
           const jc = normalizeJobCardNumber(row.job_card_number)
@@ -713,6 +873,7 @@ export default function TechnicianPage() {
           branch: branchMap.get(jc) ?? inferredBranch,
           fuel_type: fuelTypeMap.get(jc) ?? null,
           gross_labour_amount: grossByJc.get(jc) ?? 0,
+          assignment_split_count: splitCountByJc.get(jc) ?? 1,
         }
       })
       setAssignments(enrichedAssignmentRows)
@@ -979,6 +1140,7 @@ export default function TechnicianPage() {
         row.bay_no,
         pvSharePercent,
         evSharePercent,
+        Number(row.assignment_split_count ?? 1),
       ),
     }))
   }, [assignments, pvSharePercent, evSharePercent])
@@ -1579,7 +1741,10 @@ export default function TechnicianPage() {
                               <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.branch}</td>
                               <td style={{ padding: '0.5rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{r.fuel_type}</td>
                               <td style={{ padding: '0.5rem 0.75rem', color: '#334155' }}>₹{Math.round(r.gross_labour_amount).toLocaleString('en-IN')}</td>
-                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: '#16a34a' }}>₹{Math.round(r.technician_income).toLocaleString('en-IN')}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: '#16a34a' }}>
+                                ₹{Math.round(r.technician_income).toLocaleString('en-IN')}
+                                <div style={{ marginTop: '0.15rem', fontSize: '0.7rem', fontWeight: 600, color: '#64748b' }}>{getSplitLabel(r.assignment_split_count)}</div>
+                              </td>
                             </tr>
                           </>
                         )
@@ -1856,6 +2021,7 @@ export default function TechnicianPage() {
                       <th className="ts-cell">Invoice Date</th>
                       <th className="ctr">Time Diff</th>
                       <th className="ctr">Labour ÷ 1.18</th>
+                      <th className="ctr">Split</th>
                       <th>Remark</th>
                     </tr>
                   </thead>
@@ -1875,6 +2041,7 @@ export default function TechnicianPage() {
                         <td className="ts-cell">{formatDateOnly(row.invoice_date)}</td>
                         <td className="ctr ts-cell">{row.time_diff ?? '—'}</td>
                         <td className="ctr ts-cell">{formatCurrency(Number(row.gross_labour_amount ?? 0) / 1.18)}</td>
+                        <td className="ctr ts-cell">{getSplitLabel(row.assignment_split_count)}</td>
                         <td className="remark-cell">{row.remark ?? '—'}</td>
                       </tr>
                     ))}

@@ -143,6 +143,7 @@ function buildTechnicianDailyEarningsTemplate(
 // ─────────────────────────────────────────────────────────────────────────────
 
 type TechnicianAssignmentRow = {
+  id?: number | null
   job_card_number: string | null
   technician_code: string | null
   technician_name: string | null
@@ -150,6 +151,15 @@ type TechnicianAssignmentRow = {
   work_status: string | null
   out_ts: string | null
   assigned_at: string | null
+}
+
+type SupportAssignmentRow = {
+  job_card_number: string | null
+  support_role: string | null
+  employee_code: string | null
+  employee_name: string | null
+  assigned_at: string | null
+  is_active: boolean | null
 }
 
 type RevenueRow = {
@@ -257,6 +267,103 @@ function calculateTechnicianIncome(grossLabourAmount: number, bayNo: string | nu
   const sharePercent = fuel === 'EV' ? evPct : pvPct
   const netBeforeShare = grossLabourAmount / 1.18
   return netBeforeShare * (sharePercent / 100)
+}
+
+function normalizeSupportRole(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function isTechnicianSupportRole(value: string | null | undefined): boolean {
+  return normalizeSupportRole(value) === 'TECHNICIAN'
+}
+
+function buildSupportTechnicianMap(rows: SupportAssignmentRow[]): Map<string, SupportAssignmentRow[]> {
+  const supportByJc = new Map<string, SupportAssignmentRow[]>()
+
+  rows.forEach((row) => {
+    if (row.is_active === false) return
+    if (!isTechnicianSupportRole(row.support_role)) return
+
+    const jc = normalizeCode(row.job_card_number)
+    if (!jc) return
+
+    const code = normalizeCode(row.employee_code)
+    if (!code) return
+
+    const existing = supportByJc.get(jc) ?? []
+    const duplicate = existing.some((item) => normalizeCode(item.employee_code) === code)
+    if (!duplicate) {
+      existing.push(row)
+      supportByJc.set(jc, existing)
+    }
+  })
+
+  return supportByJc
+}
+
+function buildSplitCountByJobCard(
+  primaryAssignments: TechnicianAssignmentRow[],
+  supportByJc: Map<string, SupportAssignmentRow[]>,
+): Map<string, number> {
+  const splitByJc = new Map<string, number>()
+
+  primaryAssignments.forEach((row) => {
+    const jc = normalizeCode(row.job_card_number)
+    if (!jc) return
+
+    const participants = new Set<string>()
+    const primaryCode = normalizeCode(row.technician_code)
+    if (primaryCode) participants.add(primaryCode)
+
+    const supportRows = supportByJc.get(jc) ?? []
+    supportRows.forEach((supportRow) => {
+      const supportCode = normalizeCode(supportRow.employee_code)
+      if (supportCode) participants.add(supportCode)
+    })
+
+    splitByJc.set(jc, Math.max(1, participants.size))
+  })
+
+  return splitByJc
+}
+
+function expandAssignmentsWithSupportTechnicians(
+  primaryAssignments: TechnicianAssignmentRow[],
+  supportByJc: Map<string, SupportAssignmentRow[]>,
+): TechnicianAssignmentRow[] {
+  const expanded: TechnicianAssignmentRow[] = []
+  let syntheticId = -1
+
+  primaryAssignments.forEach((row) => {
+    expanded.push(row)
+
+    const jc = normalizeCode(row.job_card_number)
+    if (!jc) return
+
+    const supportRows = supportByJc.get(jc) ?? []
+    if (supportRows.length === 0) return
+
+    const seenCodes = new Set<string>()
+    const primaryCode = normalizeCode(row.technician_code)
+    if (primaryCode) seenCodes.add(primaryCode)
+
+    supportRows.forEach((supportRow) => {
+      const supportCode = normalizeCode(supportRow.employee_code)
+      if (!supportCode || seenCodes.has(supportCode)) return
+      seenCodes.add(supportCode)
+
+      expanded.push({
+        ...row,
+        id: syntheticId,
+        technician_code: supportCode,
+        technician_name: String(supportRow.employee_name ?? '').trim() || supportCode,
+        assigned_at: supportRow.assigned_at ?? row.assigned_at,
+      })
+      syntheticId -= 1
+    })
+  })
+
+  return expanded
 }
 
 function getIstDateKey(value: string | null | undefined): string | null {
@@ -434,6 +541,34 @@ Deno.serve(async (req) => {
       from += QUERY_PAGE_SIZE
     }
 
+    const assignmentJcNumbers = Array.from(
+      new Set(
+        assignmentRows
+          .map((row) => normalizeCode(row.job_card_number))
+          .filter(Boolean),
+      ),
+    )
+
+    const supportRows: SupportAssignmentRow[] = []
+    for (const jcBatch of chunk(assignmentJcNumbers, 500)) {
+      if (jcBatch.length === 0) continue
+      const supportRes = await supabase
+        .from('job_card_support_assignments')
+        .select('job_card_number, support_role, employee_code, employee_name, assigned_at, is_active')
+        .in('job_card_number', jcBatch)
+        .eq('is_active', true)
+
+      if (supportRes.error) {
+        return json(headers, { error: supportRes.error.message }, 500)
+      }
+
+      supportRows.push(...((supportRes.data ?? []) as SupportAssignmentRow[]))
+    }
+
+    const supportByJc = buildSupportTechnicianMap(supportRows)
+    const splitCountByJc = buildSplitCountByJobCard(assignmentRows, supportByJc)
+    const expandedAssignmentRows = expandAssignmentsWithSupportTechnicians(assignmentRows, supportByJc)
+
     const completedMap = new Map<string, TechnicianAssignmentRow>()
     assignmentRows
       .filter((row) => normalizeStatus(row.work_status) === 'completed')
@@ -532,7 +667,7 @@ Deno.serve(async (req) => {
     } else {
       const aggregatedMap = new Map<string, Aggregated>()
 
-      assignmentRows.forEach((assignment) => {
+      expandedAssignmentRows.forEach((assignment) => {
         const assignmentDateKey = getIstDateKey(assignment.out_ts ?? assignment.assigned_at)
         if (!assignmentDateKey) return
         if (assignmentDateKey < targetFromDateKey || assignmentDateKey > targetToDateKey) return
@@ -543,7 +678,8 @@ Deno.serve(async (req) => {
 
         const jc = normalizeCode(assignment.job_card_number)
         const gross = jc ? grossByJc.get(jc) ?? 0 : 0
-        const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no, pvSharePercent, evSharePercent)
+        const splitCount = jc ? splitCountByJc.get(jc) ?? 1 : 1
+        const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no, pvSharePercent, evSharePercent) / splitCount
 
         const existing = aggregatedMap.get(code) ?? {
           technicianCode: code,
