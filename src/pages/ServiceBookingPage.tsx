@@ -311,9 +311,8 @@ export default function ServiceBookingPage() {
     lines.push('')
     lines.push(`🚗 *Vehicle Details*`)
     lines.push(`Reg. No.: *${booking.reg_number}*`)
-    if (booking.model)      lines.push(`Model: ${booking.model}${booking.variant ? ' ' + booking.variant : ''}`)
+    if (booking.model)      lines.push(`Model: ${booking.model}`)
     if (booking.fuel_type)  lines.push(`Fuel: ${booking.fuel_type}`)
-    if (booking.km_reading) lines.push(`KM Reading: ${booking.km_reading.toLocaleString('en-IN')} km`)
     lines.push('')
     lines.push(`🔧 *Service Details*`)
     if (booking.service_type)          lines.push(`Service Type: ${booking.service_type}`)
@@ -635,21 +634,6 @@ export default function ServiceBookingPage() {
                     <input className="inp" inputMode="numeric" placeholder="10-digit mobile" value={form.customer_phone ?? ''} onChange={e => setForm(p => ({ ...p, customer_phone: e.target.value }))} />
                   </label>
 
-                  <label className="field">
-                    <span className="label">Alternate Phone</span>
-                    <input className="inp" inputMode="numeric" placeholder="Alt number" value={form.alt_phone ?? ''} onChange={e => setForm(p => ({ ...p, alt_phone: e.target.value }))} />
-                  </label>
-
-                  <label className="field">
-                    <span className="label">Email</span>
-                    <input className="inp" type="email" placeholder="email@example.com" value={form.customer_email ?? ''} onChange={e => setForm(p => ({ ...p, customer_email: e.target.value }))} />
-                  </label>
-
-                  <label className="field" style={{ gridColumn: 'span 2' }}>
-                    <span className="label">Customer Address</span>
-                    <input className="inp" placeholder="Full address" value={form.customer_address ?? ''} onChange={e => setForm(p => ({ ...p, customer_address: e.target.value }))} />
-                  </label>
-
                   {/* ── Section: Vehicle ── */}
                   <div style={{ gridColumn: 'span 2', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.3rem', marginBottom: '0.1rem', marginTop: '0.3rem' }}>
                     <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>🚗 Vehicle Details</span>
@@ -669,26 +653,11 @@ export default function ServiceBookingPage() {
                   </label>
 
                   <label className="field">
-                    <span className="label">Variant</span>
-                    <input className="inp" placeholder="e.g. XZ+, XMS" value={form.variant ?? ''} onChange={e => setForm(p => ({ ...p, variant: e.target.value }))} />
-                  </label>
-
-                  <label className="field">
                     <span className="label">Fuel Type</span>
                     <select className="inp" value={form.fuel_type ?? ''} onChange={e => setForm(p => ({ ...p, fuel_type: e.target.value }))}>
                       <option value="">Select…</option>
                       {FUEL_TYPES.map(f => <option key={f}>{f}</option>)}
                     </select>
-                  </label>
-
-                  <label className="field">
-                    <span className="label">Mfg. Year</span>
-                    <input className="inp" type="number" inputMode="numeric" placeholder="2022" value={form.mfg_year ?? ''} onChange={e => setForm(p => ({ ...p, mfg_year: parseInt(e.target.value) || undefined }))} />
-                  </label>
-
-                  <label className="field">
-                    <span className="label">Current KM Reading</span>
-                    <input className="inp" type="number" inputMode="numeric" placeholder="e.g. 15000" value={form.km_reading ?? ''} onChange={e => setForm(p => ({ ...p, km_reading: parseInt(e.target.value) || undefined }))} />
                   </label>
 
                   {/* ── Section: Service ── */}
@@ -882,9 +851,6 @@ export default function ServiceBookingPage() {
                   <InfoCard title="👤 Customer" items={[
                     { label: 'Name', value: selectedBooking.customer_name },
                     { label: 'Phone', value: selectedBooking.customer_phone },
-                    { label: 'Alt Phone', value: selectedBooking.alt_phone },
-                    { label: 'Email', value: selectedBooking.customer_email },
-                    { label: 'Address', value: selectedBooking.customer_address },
                     { label: 'WA Opt-in', value: selectedBooking.wa_opt_in ? '✅ Yes' : undefined },
                   ]} />
 
@@ -892,10 +858,7 @@ export default function ServiceBookingPage() {
                   <InfoCard title="🚗 Vehicle" items={[
                     { label: 'Reg. No.', value: selectedBooking.reg_number, bold: true },
                     { label: 'Model', value: selectedBooking.model },
-                    { label: 'Variant', value: selectedBooking.variant },
                     { label: 'Fuel', value: selectedBooking.fuel_type },
-                    { label: 'Mfg. Year', value: selectedBooking.mfg_year?.toString() },
-                    { label: 'KM Reading', value: selectedBooking.km_reading ? `${selectedBooking.km_reading.toLocaleString('en-IN')} km` : undefined },
                   ]} />
 
                   {/* Service Card */}
@@ -1073,7 +1036,7 @@ export default function ServiceBookingPage() {
                 {[
                   { label: 'Name', val: waModal.booking.customer_name },
                   { label: 'Reg No.', val: waModal.booking.reg_number },
-                  { label: 'Model', val: [waModal.booking.model, waModal.booking.variant].filter(Boolean).join(' ') },
+                  { label: 'Model', val: waModal.booking.model || '' },
                   { label: 'Appointment', val: waModal.booking.appointment_date ? new Date(waModal.booking.appointment_date).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : '' },
                   { label: 'Time', val: waModal.booking.booking_time?.slice(0,5) ?? '' },
                   { label: 'Branch', val: waModal.booking.branch ?? '' },
