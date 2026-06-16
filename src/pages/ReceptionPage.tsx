@@ -7,6 +7,7 @@ import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
+  listReceptionEntries,
   listReceptionEntriesByDateRange,
   listReceptionEmployees,
   type ReceptionEmployeeOption,
@@ -53,6 +54,7 @@ const SERVICE_TYPE_CARD_ORDER = [
 ]
 
 const PERIOD_PRESETS: DateRangePreset[] = ['this-month', 'last-month', 'this-week', 'last-7', 'last-30']
+const DEFAULT_RECEPTION_VISIBLE_LIMIT = 100
 
 function toISTDate(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -372,6 +374,8 @@ export default function ReceptionPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [globalSearchEntries, setGlobalSearchEntries] = useState<ReceptionEntryRow[] | null>(null)
+  const [globalSearchLoading, setGlobalSearchLoading] = useState(false)
   const [selectedListFilter, setSelectedListFilter] = useState<ReceptionListFilter>('default')
   const [selectedLocation, setSelectedLocation] = useState<string | 'all'>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string | 'all'>('all')
@@ -522,8 +526,9 @@ export default function ReceptionPage() {
   }, [employeeOptions, form.model, form.service_type])
 
   const entryLookupById = useMemo(() => {
-    return new Map(entries.map((entry) => [entry.id, entry]))
-  }, [entries])
+    const merged = [...entries, ...(globalSearchEntries ?? [])]
+    return new Map(merged.map((entry) => [entry.id, entry]))
+  }, [entries, globalSearchEntries])
 
   const hasSelectedSaInOptions = useMemo(() => {
     const selectedCode = String(form.sa_employee_code ?? '').trim().toUpperCase()
@@ -540,33 +545,62 @@ export default function ReceptionPage() {
     setForm((prev) => ({ ...prev, sa_employee_code: '' }))
   }, [editingId, form.sa_employee_code, hasSelectedSaInOptions])
 
+  const serviceTypeFilteredEntries = useMemo(() => {
+    if (selectedServiceType === 'all') return serviceTypeBaseEntries
+    return serviceTypeBaseEntries.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
+  }, [selectedServiceType, serviceTypeBaseEntries])
+
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase()
-    const serviceTypeFilteredEntries =
-      selectedServiceType === 'all'
-        ? serviceTypeBaseEntries
-        : serviceTypeBaseEntries.filter((entry) => getServiceTypeLabel(entry.service_type) === selectedServiceType)
-
     if (!query) {
-      return serviceTypeFilteredEntries
+      return serviceTypeFilteredEntries.slice(0, DEFAULT_RECEPTION_VISIBLE_LIMIT)
     }
 
-    return serviceTypeFilteredEntries.filter((entry) => {
+    const searchPool = globalSearchEntries ?? []
+    return searchPool.filter((entry) => {
       const joined = [
         entry.reg_number,
         entry.model ?? '',
+        entry.jc_number ?? '',
         entry.sa_name,
+        entry.sa_display_name ?? '',
         entry.owner_name ?? '',
         entry.owner_phone ?? '',
         entry.source,
         entry.created_by,
+        entry.branch ?? '',
       ]
         .join(' ')
         .toLowerCase()
 
       return joined.includes(query)
     })
-  }, [serviceTypeBaseEntries, search, selectedServiceType])
+  }, [globalSearchEntries, search, serviceTypeFilteredEntries])
+
+  useEffect(() => {
+    const query = search.trim()
+    if (!query) return
+    if (globalSearchEntries !== null) return
+
+    let cancelled = false
+    setGlobalSearchLoading(true)
+
+    void listReceptionEntries().then((res) => {
+      if (cancelled) return
+      if (res.error) {
+        setError(res.error)
+        setGlobalSearchEntries([])
+        return
+      }
+      setGlobalSearchEntries(res.data ?? [])
+    }).finally(() => {
+      if (!cancelled) setGlobalSearchLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [globalSearchEntries, search])
 
   useEffect(() => {
     if (selectedServiceType === 'all') return
@@ -622,6 +656,7 @@ export default function ReceptionPage() {
   async function loadData() {
     setLoading(true)
     setError(null)
+    setGlobalSearchEntries(null)
 
     const presetAvailability = await Promise.all(
       PERIOD_PRESETS.map(async (preset) => {
@@ -1162,7 +1197,9 @@ export default function ReceptionPage() {
             <div>
               <h3>Reception entries</h3>
               <div className="sub">
-                Newest first · {visibleEntries.length} shown
+                {search.trim()
+                  ? `${globalSearchLoading ? 'Searching all records...' : 'Global search'} · ${visibleEntries.length} shown`
+                  : `Newest first · ${visibleEntries.length} shown${serviceTypeFilteredEntries.length > DEFAULT_RECEPTION_VISIBLE_LIMIT ? ` (latest ${DEFAULT_RECEPTION_VISIBLE_LIMIT})` : ''}`}
                 {selectedListFilter === 'today' ? ' · Today filter' : ''}
                 {selectedLocation !== 'all' ? ` · ${selectedLocation}` : ''}
                 {selectedFuelType !== 'all' ? ` · ${selectedFuelType}` : ''}
