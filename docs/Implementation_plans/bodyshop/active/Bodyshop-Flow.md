@@ -219,10 +219,10 @@ Stage-governance note:
 - [ ] **Task 8.5:** Add QA checks for cache-hit, stale-refresh, and API-failure fallback behavior.
 
 ### Phase 9: Insurance Type Parity (Authoritative Schema + UI)
-- [x] **Task 9.1:** Audit authoritative dump mirror and confirm `bodyshop_repair_cards` insurance columns currently include only `insurance_policy_no`, `insurance_company`, `insurance_valid_date`.
+- [x] **Task 9.1:** Audit authoritative dump mirror and confirm `bodyshop_repair_cards` insurance columns include `insurance_policy_no`, `insurance_company`, `insurance_valid_date`, and `insurance_type`.
 - [x] **Task 9.2:** Add manual `Insurance Type` field in SA -> Docs -> Insurance Details with allowed values `TMI` and `Non-TMI` placed side-by-side with `Valid Until`.
 - [x] **Task 9.3:** Add additive migration script to persist `insurance_type` in `bodyshop_repair_cards` with value check constraint.
-- [ ] **Task 9.4:** Execute migration in DB environment and validate end-to-end persistence in authenticated `/bodyshop-repair` session.
+- [ ] **Task 9.4:** Validate authenticated `/bodyshop-repair` end-to-end persistence/readback for existing `insurance_type` schema in target DB.
 
 ### Phase 10: Stage 11 + Stage 12 Parallel Additional Approval Workflow
 - [x] **Task 10.1:** Re-audit authoritative schema for Additional Approval capability before design.
@@ -248,7 +248,7 @@ Stage-governance note:
 - [ ] **Task 10.9:** Validate end-to-end state transitions and cross-page consistency on localhost + UAT.
 
 ### Phase 11: Initial Approved Parts Capture (Survey Tab - Parts Status Stage 10)
-- [ ] **Task 11.1:** Audit authoritative schema and confirm `bodyshop_repair_cards.approved_parts` column availability or define additive migration.
+- [x] **Task 11.1:** Audit authoritative schema and confirm `bodyshop_repair_cards.approved_parts` column availability (present in active authoritative dump).
 - [ ] **Task 11.2:** Define approved_parts data contract (JSON structure with part_index, part_no, part_description, approved_at, approved_by, finalized_at, finalized_by).
 - [ ] **Task 11.3:** Add `Initial Approved Parts` section in Survey tab, visible only when:
   - `surveyStatus === 'approved'`
@@ -403,10 +403,10 @@ Stage-governance note:
 
 ### Phase 9
 ```
-✅ 9.1 | Authoritative schema parity audit for Insurance Type | Web Dev | 2026-06-12 | 2026-06-12 | chunk mirror confirms bodyshop_repair_cards lacks insurance_type in active dump
+✅ 9.1 | Authoritative schema parity audit for Insurance Type | Web Dev | 2026-06-12 | 2026-06-12 | chunk mirror confirms bodyshop_repair_cards includes insurance_type in active dump
 ✅ 9.2 | Add SA Docs Insurance Type field (TMI/Non-TMI) | Web Dev | 2026-06-12 | 2026-06-12 | UI field added beside Valid Until in bodyshop-repair docs card
 ✅ 9.3 | Prepare additive insurance_type migration script | API/Web Dev | 2026-06-12 | 2026-06-12 | added scripts/18_add_insurance_type_to_bodyshop_repair_cards.sql
-⏳ 9.4 | Execute migration + authenticated UAT on /bodyshop-repair | API + QA | - | - | live URL is auth-gated in audit session; pending post-login validation
+⏳ 9.4 | Validate authenticated persistence/readback on /bodyshop-repair | API + QA | - | - | schema is present in authoritative dump; pending post-login verification
 ```
 
 ### Phase 10
@@ -424,7 +424,7 @@ Stage-governance note:
 
 ### Phase 11
 ```
-⏳ 11.1 | Audit approved_parts column in authoritative dump | Web Dev | - | - | confirm field exists or plan additive migration
+✅ 11.1 | Audit approved_parts column in authoritative dump | Web Dev | 2026-06-16 | 2026-06-16 | chunk mirror confirms bodyshop_repair_cards.approved_parts exists in active dump
 ⏳ 11.2 | Define approved_parts JSON contract (part_index, part_no, part_description, actor/timestamp fields) | Product + Web Dev | - | - | finalized_at/finalized_by tracking required for stage completion gate
 ⏳ 11.3 | Add Initial Approved Parts section in Survey tab (visible post-survey-approval) | Web Dev | - | - | show only when surveyStatus='approved' && approvalPhotoUploaded
 ⏳ 11.4 | Implement dynamic parts form (add/remove, Part No, Part Description, Finalize button) | Web Dev | - | - | client-side validation before submit
@@ -457,7 +457,7 @@ Stage-governance note:
 - [ ] UAT sample entries covering Accident + non-Accident service types.
 - [x] DB-level canonical key hardening for bodyshop cards (`reception_entry_id` + uniqueness) executed and active.
 - [ ] Phase A deprecation validation sign-off: zero runtime dependency on `service_branches` in web/mobile.
-- [ ] Execute additive migration `scripts/18_add_insurance_type_to_bodyshop_repair_cards.sql` in target DB.
+- [x] Authoritative schema parity confirmed for `insurance_type` in `bodyshop_repair_cards` (no additional schema-creation migration prerequisite).
 - [ ] Additional Approval additive migration approved and executed before implementing full request lifecycle UI.
 - [x] Execute `supabase/migrations/20260616183000_bodyshop_sa_stage_policy_hardening.sql` in target DB and archive results of `supabase/sql_checks/20260616183000_bodyshop_sa_stage_policy_hardening_checks.sql`.
 
