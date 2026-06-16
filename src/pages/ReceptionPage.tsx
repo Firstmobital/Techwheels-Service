@@ -28,6 +28,7 @@ const SERVICE_TYPE_ABBREVIATIONS: Record<string, string> = {
   'third free service': 'TFS',
   'paid service': 'PS',
   'accident': 'ACC',
+  'rusting': 'RST',
   'pdi': 'PDI',
   'campaign': 'CMP',
   'e breakdown': 'EBD',
@@ -46,6 +47,7 @@ const SERVICE_TYPE_CARD_ORDER = [
   'e breakdown',
   'campaign',
   'pdi',
+  'rusting',
   'null',
 ]
 
@@ -132,6 +134,7 @@ const RECEPTION_SERVICE_TYPE_OPTIONS = [
   'Third Free Service',
   'Paid Service',
   'Accident',
+  'Rusting',
   'PDI',
   'Campaign',
   'E Breakdown',

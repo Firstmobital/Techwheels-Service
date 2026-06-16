@@ -6,8 +6,9 @@
 -- 3) Deduplication rule for reception insert: JC number is unique across table.
 --    If same JC already exists in service_reception_entries, it is NOT inserted again.
 -- 4) Existing rows with same JC and blank sa_employee_code are updated from Employee Master lookup.
--- 5) Model normalization uses active Settings Models (public.settings_model_options).
--- 6) Reception branch is physical branch only:
+-- 5) Existing rows with same JC get created_at corrected from JC open timestamp when different.
+-- 6) Model normalization uses active Settings Models (public.settings_model_options).
+-- 7) Reception branch is physical branch only:
 --      Ajmer Road | Sitapura
 --    Source labels Sitapura PV / Sitapura EV are normalized to Sitapura.
 
@@ -52,7 +53,7 @@ source_rows AS (
       WHEN lower(regexp_replace(coalesce(j.branch, ''), '[_\\-]+', ' ', 'g')) IN ('sitapura', 'sitapura pv', 'sitapura ev') THEN 'Sitapura'
       ELSE NULL
     END AS reception_branch,
-    coalesce(j.closed_date_time, j.created_date_time, j.created_at) AS source_ts
+    coalesce(j.created_date_time, j.closed_date_time) AS source_ts
   FROM public.job_card_closed_data j
   INNER JOIN target_jc t
     ON upper(btrim(coalesce(j.job_card_number, ''))) = t.jc_number
@@ -133,7 +134,7 @@ to_insert AS (
     r.owner_phone,
     p.backfill_source AS source,
     'system-backfill-jc-closed'::text AS created_by,
-    coalesce(r.source_ts, now()) AS created_at,
+    r.source_ts AS created_at,
     now() AS updated_at,
     r.reception_branch AS branch,
     r.sa_employee_code,
@@ -142,6 +143,7 @@ to_insert AS (
   CROSS JOIN params p
   WHERE r.rn = 1
     AND r.reg_number IS NOT NULL
+    AND r.source_ts IS NOT NULL
     AND r.reception_branch IN ('Ajmer Road', 'Sitapura')
 ),
 inserted AS (
@@ -199,14 +201,28 @@ updated_existing AS (
     AND coalesce(nullif(btrim(r.sa_employee_code), ''), '') = ''
   RETURNING r.id
 ),
+updated_existing_created_at AS (
+  UPDATE public.service_reception_entries r
+  SET
+    created_at = i.created_at,
+    updated_at = now()
+  FROM to_insert i
+  WHERE
+    upper(btrim(coalesce(r.jc_number, ''))) = upper(btrim(coalesce(i.jc_number, '')))
+    AND i.created_at IS NOT NULL
+    AND r.created_at IS DISTINCT FROM i.created_at
+  RETURNING r.id
+),
 counts AS (
   SELECT
     (SELECT count(*)::bigint FROM inserted) AS inserted_count,
-    (SELECT count(*)::bigint FROM updated_existing) AS updated_count
+    (SELECT count(*)::bigint FROM updated_existing) AS updated_count,
+    (SELECT count(*)::bigint FROM updated_existing_created_at) AS created_at_corrected_count
 )
 SELECT
   inserted_count AS reception_rows_inserted,
-  updated_count AS reception_rows_sa_backfilled
+  updated_count AS reception_rows_sa_backfilled,
+  created_at_corrected_count AS reception_rows_created_at_corrected
 FROM counts;
 
 COMMIT;

@@ -28,6 +28,7 @@ const DEFAULT_SERVICE_TYPE_OPTIONS = [
   'Third Free Service',
   'Paid Service',
   'Accident',
+  'Rusting',
   'PDI',
   'Campaign',
   'E Breakdown',
@@ -232,6 +233,7 @@ function getCategoryForServiceType(serviceType: string | null | undefined): Excl
   const normalized = normalizeServiceType(String(serviceType ?? '')).toLowerCase()
   if (!normalized) return 'null'
   if (normalized === 'accident') return 'bodyshop'
+  if (normalized === 'rusting') return 'others'
   if (FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES.has(normalized)) return 'floor'
   return 'others'
 }
