@@ -2086,7 +2086,14 @@ As of 2026-06-16, pending work is:
   - Current status (2026-06-16): Web in-app notifications migration executed: `supabase/migrations/20260616200000_add_web_in_app_complaint_notifications.sql`.
     - Includes in-app notification columns, in-app channel support, list/unread/read RPCs, and web bell dropdown integration in `src/App.tsx`.
   - Current status (2026-06-16): Web bell dropdown overlap fix applied in `src/App.css` by raising util/menu stacking order so the panel renders above nav.
-  - Pending validation: smoke test the bell flow end-to-end (event creation -> unread badge -> open list -> mark read/mark all read).
+  - Current status (2026-06-16): Admin in-app visibility patch added: `supabase/migrations/20260616203000_add_admin_shared_in_app_complaint_notifications.sql`.
+    - Writes dealer-scoped shared admin in-app rows (`recipient_user_id IS NULL`, `recipient_type='admin'`) on raise/status/escalation/reassign events.
+    - Keeps staff personal rows untouched (`recipient_user_id = assigned_to`) so advisor read-state stays independent.
+    - Extends list/unread/read RPC filters so admins see and manage dealer-scoped admin rows.
+  - Current status (2026-06-16): Follow-up constraint hotfix added: `supabase/migrations/20260616204500_fix_complaint_notifications_recipient_type_for_admin_in_app.sql`.
+    - Expands `complaint_notifications_recipient_type_check` to include `admin` so trigger inserts are no longer skipped.
+  - Completed (2026-06-16): Web in-app bell smoke flow validated in UI.
+    - Verified: new notification appears, unread badge increments, dropdown lists events, click-to-read works, and mark-all-read works.
   - Next implementation step: mobile push token registry + sender worker.
   - Implement SMS/email integration stubs.
   - Decide and implement/defer reports page (category/branch/SA, CSAT, SLA attainment).
