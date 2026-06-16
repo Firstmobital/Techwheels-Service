@@ -777,27 +777,30 @@ export default function TechnicianPage() {
           .filter(Boolean),
       ))
 
-      // Fetch assignment timestamps and status for those job cards.
-      const taRes = await supabase
-        .from('technician_assignments')
-        .select('id, job_card_number, technician_name, out_ts, work_status, assigned_at, created_at, updated_at')
-        .in('job_card_number', sourceJcNumbers)
-
-      if (taRes.error) {
-        alert('Failed to fetch assignment data: ' + taRes.error.message)
-        return
-      }
-
-      // Keep all assignment rows per JC so export can include every status state.
+      // Fetch assignment timestamps and status for those job cards in batches (Supabase .in() limit ~100 items)
       const assignmentsByJc = new Map<string, TechnicianAssignmentRow[]>()
-      ;(taRes.data ?? []).forEach((row: any) => {
-        const key = normalizeJobCardNumber(row.job_card_number)
-        if (!key) return
-        const candidate = row as TechnicianAssignmentRow
-        const list = assignmentsByJc.get(key) ?? []
-        list.push(candidate)
-        assignmentsByJc.set(key, list)
-      })
+      const BATCH_SIZE = 100
+      for (let i = 0; i < sourceJcNumbers.length; i += BATCH_SIZE) {
+        const batch = sourceJcNumbers.slice(i, i + BATCH_SIZE)
+        const taRes = await supabase
+          .from('technician_assignments')
+          .select('*')
+          .in('job_card_number', batch)
+
+        if (taRes.error) {
+          alert('Failed to fetch assignment data: ' + taRes.error.message)
+          return
+        }
+
+        ;(taRes.data ?? []).forEach((row: any) => {
+          const key = normalizeJobCardNumber(row.job_card_number)
+          if (!key) return
+          const candidate = row as TechnicianAssignmentRow
+          const list = assignmentsByJc.get(key) ?? []
+          list.push(candidate)
+          assignmentsByJc.set(key, list)
+        })
+      }
 
       // Sort latest-first so exported rows are stable and easy to review.
       assignmentsByJc.forEach((list, key) => {
