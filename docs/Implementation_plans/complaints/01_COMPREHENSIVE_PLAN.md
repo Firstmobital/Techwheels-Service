@@ -1856,6 +1856,11 @@ export async function generateComplaintLink(receptionEntryId: number) {
 #### 15. Notification Strategy: Concrete Integration Plan Needed
 - **Issue:** Notifications are outlined as stubs; no integration with actual SMS/email provider specified.
 - **Action in Phase 4:** Decide: Gupshup (SMS) + Supabase email or SendGrid? Document in a separate "Notification Integration Plan" guide.
+- **Recommended rollout order:**
+  1. Keep current outbox SQL as foundation.
+  2. Add web in-app notifications first (faster internal validation).
+  3. Add mobile push token registry + sender worker.
+  4. Add optional external SMS/WhatsApp/email fallback.
 - **Priority:** P2 — Phase 4 implementation.
 
 ---
@@ -2053,22 +2058,34 @@ This subsection is the single source for open items. Use this list for status ch
 As of 2026-06-16, pending work is:
 
 1. Testing hardening
-  - Create and apply pgTAP suite migration for single-use raise, tenant isolation, internal-note hiding, SLA breach checks.
-  - Run and pass test suites in SQL editor:
+  - Completed (2026-06-16): pgTAP contract suites are green for single-use raise, tenant isolation, internal-note hiding, SLA breach checks, and complaints RBAC.
+  - Applied migrations:
+    - `supabase/migrations/20260616184000_create_complaints_pgtap_contract_tests.sql`
+    - `supabase/migrations/20260616190000_fix_complaints_pgtap_contract_tests_runner_and_assertions.sql`
+  - Verified suites:
     - `SELECT * FROM complaints_test.test_suite__raise_complaint_single_use();`
     - `SELECT * FROM complaints_test.test_suite__complaint_tenant_isolation();`
     - `SELECT * FROM complaints_test.test_suite__internal_notes_hidden_from_customers();`
     - `SELECT * FROM complaints_test.test_suite__sla_breach_detection();`
     - `SELECT * FROM complaints_test.test_suite__complaint_rbac();`
-  - Current status (2026-06-16): Initial migration executed; 4/5 suites fully green. `test_suite__raise_complaint_single_use` had 2 assertion mismatches, and aggregate runner hit pgTAP multi-plan conflict.
-  - Follow-up migration prepared: `supabase/migrations/20260616190000_fix_complaints_pgtap_contract_tests_runner_and_assertions.sql`.
 
 2. Customer portal completion
   - Complete mobile-first parity pass against design checklist.
-  - Produce a formal scripted E2E artifact for mint link -> raise -> track -> reopen.
+  - Current status (2026-06-16): Mobile-first parity pass applied in `src/pages/ComplaintPortalPage.tsx` and `src/pages/ComplaintPortalPage.css` (small-screen spacing, stepper/composer responsiveness, safe overflow handling, touch target refinements).
+  - Formal scripted E2E artifact consolidated into existing guide: `docs/COMPLAINTS_TEST_EXECUTION_GUIDE.md` (Part 5: Mint -> Raise -> Track -> Reopen).
+  - Current status (2026-06-16): Customer portal completion items are now documented and implementation-ready.
 
 3. Notifications and reporting
   - Implement outbox/event pipeline.
+  - Current status (2026-06-16): Outbox migration prepared: `supabase/migrations/20260616193000_create_complaint_notifications_outbox.sql` (table + RLS + write trigger).
+  - Recommended rollout order:
+    1. Keep current outbox SQL as foundation.
+    2. Add web in-app notifications first (faster internal validation).
+    3. Add mobile push token registry + sender worker.
+    4. Add optional external SMS/WhatsApp/email fallback.
+  - Current status (2026-06-16): Web in-app notifications migration executed: `supabase/migrations/20260616200000_add_web_in_app_complaint_notifications.sql`.
+    - Includes in-app notification columns, in-app channel support, list/unread/read RPCs, and web bell dropdown integration in `src/App.tsx`.
+  - Next implementation step: mobile push token registry + sender worker.
   - Implement SMS/email integration stubs.
   - Decide and implement/defer reports page (category/branch/SA, CSAT, SLA attainment).
 

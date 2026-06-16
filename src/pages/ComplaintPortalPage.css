@@ -16,6 +16,7 @@
   min-height: 100vh;
   background: var(--twcp-canvas);
   color: var(--twcp-ink);
+  overflow-x: hidden;
 }
 
 .twcp-shell {
@@ -36,6 +37,13 @@
   color: var(--twcp-muted);
   font-size: 11.5px;
   border-bottom: 1px solid #e5e9f0;
+}
+
+.twcp-urlbar span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .twcp-mode-pill {
@@ -114,10 +122,11 @@
 }
 
 .twcp-reg {
-  font-size: 35px;
+  font-size: clamp(28px, 9vw, 35px);
   line-height: 1;
   font-weight: 700;
   letter-spacing: 0.05em;
+  overflow-wrap: anywhere;
 }
 
 .twcp-veh-meta {
@@ -138,7 +147,7 @@
 }
 
 .twcp-title {
-  font-size: 21px;
+  font-size: clamp(19px, 5.4vw, 21px);
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -179,6 +188,7 @@
   position: sticky;
   bottom: 0;
   padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(148, 160, 181, 0.2);
   background: linear-gradient(to top, var(--twcp-canvas) 80%, rgba(243, 246, 251, 0));
 }
 
@@ -318,7 +328,7 @@
 .twcp-seg button {
   border: 0;
   border-radius: 8px;
-  height: 34px;
+  min-height: 40px;
   background: transparent;
   color: var(--twcp-muted);
   font-size: 13px;
@@ -482,6 +492,7 @@
 .twcp-stepper {
   display: flex;
   align-items: flex-start;
+  gap: 0;
 }
 
 .twcp-step {
@@ -538,6 +549,8 @@
   font-size: 11.5px;
   font-weight: 600;
   color: var(--twcp-muted);
+  max-width: 70px;
+  line-height: 1.2;
 }
 
 .twcp-step.current .twcp-step-lab {
@@ -669,7 +682,7 @@
 .twcp-msg {
   display: flex;
   gap: 10px;
-  max-width: 88%;
+  max-width: 92%;
 }
 
 .twcp-msg.me {
@@ -760,6 +773,80 @@
 .twcp-muted-mini {
   font-size: 12.5px;
   color: var(--twcp-muted);
+}
+
+@media (max-width: 420px) {
+  .twcp-body {
+    padding: 16px 14px 20px;
+  }
+
+  .twcp-head {
+    padding: 16px 14px 18px;
+  }
+
+  .twcp-sticky {
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .twcp-card-body {
+    padding: 14px;
+  }
+
+  .twcp-step-dot {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+
+  .twcp-step:not(:last-child)::after {
+    top: 13px;
+  }
+
+  .twcp-step-lab {
+    font-size: 10.5px;
+    max-width: 60px;
+  }
+
+  .twcp-composer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .twcp-composer .twcp-btn {
+    width: 100%;
+    height: 40px;
+  }
+}
+
+@media (max-width: 360px) {
+  .twcp-urlbar {
+    padding: 0 10px;
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .twcp-optcard {
+    padding: 11px;
+    gap: 10px;
+  }
+
+  .twcp-optcard-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .twcp-optcard-title {
+    font-size: 13px;
+  }
+
+  .twcp-optcard-desc {
+    font-size: 11.5px;
+  }
+
+  .twcp-msg {
+    max-width: 96%;
+  }
 }
 
 @media (min-width: 768px) {

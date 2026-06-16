@@ -4,6 +4,20 @@
 
 import { supabase } from '../supabase'
 
+export interface InAppComplaintNotification {
+  id: number
+  complaint_id: number
+  event_type: string
+  recipient_type: string
+  channel: 'in_app'
+  status: string
+  payload: Record<string, unknown> | null
+  created_at: string
+  seen_at: string | null
+  read_at: string | null
+  dismissed_at: string | null
+}
+
 // ── Customer Portal RPCs ─────────────────────────────────────────────────
 
 /**
@@ -193,6 +207,52 @@ export async function generateComplaintLink(
   const { data, error } = await supabase.rpc('generate_complaint_link', {
     p_reception_entry_id: receptionEntryId,
   })
+  if (error) throw error
+  return data
+}
+
+/**
+ * List current user's in-app complaint notifications.
+ */
+export async function listMyComplaintNotifications(
+  limit: number = 10,
+  offset: number = 0,
+  includeDismissed: boolean = false,
+) {
+  const { data, error } = await supabase.rpc('list_my_complaint_notifications', {
+    p_limit: limit,
+    p_offset: offset,
+    p_include_dismissed: includeDismissed,
+  })
+  if (error) throw error
+  return (data || []) as InAppComplaintNotification[]
+}
+
+/**
+ * Get unread in-app complaint notification count for current user.
+ */
+export async function getUnreadComplaintNotificationCount() {
+  const { data, error } = await supabase.rpc('get_unread_complaint_notification_count')
+  if (error) throw error
+  return Number(data || 0)
+}
+
+/**
+ * Mark one in-app complaint notification as read.
+ */
+export async function markComplaintNotificationRead(notificationId: number) {
+  const { data, error } = await supabase.rpc('mark_complaint_notification_read', {
+    p_notification_id: notificationId,
+  })
+  if (error) throw error
+  return data
+}
+
+/**
+ * Mark all in-app complaint notifications as read for current user.
+ */
+export async function markAllComplaintNotificationsRead() {
+  const { data, error } = await supabase.rpc('mark_all_complaint_notifications_read')
   if (error) throw error
   return data
 }

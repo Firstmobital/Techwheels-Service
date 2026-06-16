@@ -24,6 +24,13 @@ import TechnicianPage from './pages/TechnicianPage'
 import { Icon } from './components/Icon'
 import ComplaintsPage from './pages/ComplaintsPage'
 import ComplaintPortalPage from './pages/ComplaintPortalPage'
+import {
+  getUnreadComplaintNotificationCount,
+  listMyComplaintNotifications,
+  markAllComplaintNotificationsRead,
+  markComplaintNotificationRead,
+  type InAppComplaintNotification,
+} from './lib/api/complaints'
 import EWReminderPage from './pages/EWReminderPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
 import WAAgentPage from './pages/WAAgentPage'
@@ -143,6 +150,9 @@ function TopNav({
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [notificationRows, setNotificationRows] = useState<InAppComplaintNotification[]>([])
+  const [notificationLoading, setNotificationLoading] = useState(false)
+  const [notificationUnread, setNotificationUnread] = useState(0)
   const [windowWidth, setWindowWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : 1440,
   )
@@ -159,6 +169,99 @@ function TopNav({
     document.addEventListener('mousedown', handleOutsideClick)
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [])
+
+  const refreshNotificationCount = async () => {
+    if (!user) {
+      setNotificationUnread(0)
+      return
+    }
+    try {
+      const count = await getUnreadComplaintNotificationCount()
+      setNotificationUnread(count)
+    } catch {
+      // Keep header resilient even if notifications endpoint is unavailable.
+      setNotificationUnread(0)
+    }
+  }
+
+  const loadNotifications = async () => {
+    if (!user) {
+      setNotificationRows([])
+      return
+    }
+    setNotificationLoading(true)
+    try {
+      const rows = await listMyComplaintNotifications(8, 0, false)
+      setNotificationRows(rows)
+    } catch {
+      setNotificationRows([])
+    } finally {
+      setNotificationLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refreshNotificationCount()
+
+    const intervalId = window.setInterval(() => {
+      void refreshNotificationCount()
+    }, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [user?.id])
+
+  useEffect(() => {
+    if (open !== 'notifications') return
+    void loadNotifications()
+    void refreshNotificationCount()
+  }, [open, user?.id])
+
+  const notificationEventLabel = (eventType: string): string => {
+    const map: Record<string, string> = {
+      raised: 'Complaint raised',
+      acknowledged: 'Complaint acknowledged',
+      in_progress: 'Complaint in progress',
+      resolved: 'Complaint resolved',
+      closed: 'Complaint closed',
+      escalated: 'Complaint escalated',
+      reopened: 'Complaint reopened',
+      reassigned: 'Complaint reassigned',
+    }
+    return map[eventType] || eventType.replaceAll('_', ' ')
+  }
+
+  const openNotification = async (row: InAppComplaintNotification) => {
+    try {
+      if (!row.read_at) {
+        await markComplaintNotificationRead(Number(row.id))
+      }
+    } catch {
+      // Navigation should still proceed even if mark-read fails.
+    }
+
+    setNotificationRows((prev) => prev.map((item) => (
+      item.id === row.id
+        ? { ...item, read_at: item.read_at || new Date().toISOString(), seen_at: item.seen_at || new Date().toISOString() }
+        : item
+    )))
+    setNotificationUnread((prev) => Math.max(0, prev - (row.read_at ? 0 : 1)))
+    onNavigate('/complaints')
+    setOpen(null)
+  }
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await markAllComplaintNotificationsRead()
+      setNotificationRows((prev) => prev.map((item) => ({
+        ...item,
+        read_at: item.read_at || new Date().toISOString(),
+        seen_at: item.seen_at || new Date().toISOString(),
+      })))
+      setNotificationUnread(0)
+    } catch {
+      // no-op
+    }
+  }
 
   useEffect(() => {
     function handleResize() {
@@ -250,7 +353,7 @@ function TopNav({
   const homeActive = pathname === '/' || pathname.startsWith('/home')
 
   return (
-    <>
+    <div ref={navRef}>
       <div className="util">
         <div className="util__dealer">
           <Icon name="building" size={16} strokeWidth={1.7} className="util__ic-muted" />
@@ -264,15 +367,72 @@ function TopNav({
         <button type="button" className="util__icon" title="Search">
           <Icon name="search" size={17} strokeWidth={1.9} />
         </button>
-        <button type="button" className="util__icon" title="Notifications">
-          <Icon name="bell" size={17} strokeWidth={1.9} />
-          <span className="dot" />
-        </button>
+        <div className="navrel">
+          <button
+            type="button"
+            className="util__icon"
+            title="Notifications"
+            onClick={() => setOpen(open === 'notifications' ? null : 'notifications')}
+          >
+            <Icon name="bell" size={17} strokeWidth={1.9} />
+            {notificationUnread > 0 && (
+              <>
+                <span className="dot" />
+                <span className="dot-count">{notificationUnread > 9 ? '9+' : notificationUnread}</span>
+              </>
+            )}
+          </button>
+
+          {open === 'notifications' && (
+            <div className="menu menu--right-wide util__menu">
+              <div className="menu__label">Notifications</div>
+
+              {notificationLoading && (
+                <div className="menu__notif-empty">Loading notifications...</div>
+              )}
+
+              {!notificationLoading && notificationRows.length === 0 && (
+                <div className="menu__notif-empty">No new notifications</div>
+              )}
+
+              {!notificationLoading && notificationRows.map((row) => {
+                const payloadTicket = String((row.payload as Record<string, unknown> | null)?.ticket_number ?? '').trim()
+                const when = new Date(row.created_at).toLocaleString()
+
+                return (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className={[`menu__item`, `menu__notif-item`, !row.read_at ? 'is-active' : ''].join(' ').trim()}
+                    onClick={() => void openNotification(row)}
+                  >
+                    <span className="ic"><Icon name="bell" size={15} strokeWidth={1.9} /></span>
+                    <span className="menu__notif-main">
+                      <span className="menu__notif-title">{notificationEventLabel(row.event_type)}</span>
+                      <span className="menu__notif-sub">{payloadTicket || 'Complaint update'}</span>
+                      <span className="menu__notif-time">{when}</span>
+                    </span>
+                  </button>
+                )
+              })}
+
+              {notificationRows.length > 0 && (
+                <>
+                  <div className="menu__sep" />
+                  <button type="button" className="menu__item" onClick={() => void markAllNotificationsRead()}>
+                    <span className="ic"><Icon name="check" size={15} strokeWidth={2} /></span>
+                    Mark all as read
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <span className="util__sep" />
         <span className="util__ver">v1.0 · Firstmobital</span>
       </div>
 
-      <div className="nav" ref={navRef}>
+      <div className="nav">
         <div className="nav__brand">
           <span className="brand">
             <span className="brand__mark"><Icon name="truck" size={19} strokeWidth={2} /></span>
@@ -413,7 +573,7 @@ function TopNav({
           ))}
         </div>
       </div>
-    </>
+    </div>
   )
 }
 

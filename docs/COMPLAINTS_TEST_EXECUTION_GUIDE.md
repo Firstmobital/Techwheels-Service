@@ -382,3 +382,94 @@ SELECT COUNT(*) as tickets_created FROM complaint_tickets
 -- Next: Document results and move migration to exec_success_migrations/
 --
 -- ============================================================================
+
+-- ============================================================================
+-- PART 5: FORMAL SCRIPTED E2E (MINT -> RAISE -> TRACK -> REOPEN)
+-- ============================================================================
+--
+-- Objective:
+--   Provide one repeatable scripted flow artifact for customer portal validation.
+--
+-- Preconditions:
+--   1) Complaints module migrations are applied.
+--   2) Staff user with complaints modify access is available.
+--   3) Valid reception entry exists for selected dealer.
+--
+-- Test Data Sheet:
+--   Environment: __________________________
+--   Dealer code: _________________________
+--   Reception entry id: __________________
+--   Staff user email: ____________________
+--   Customer phone: ______________________
+--
+-- Step 1: Mint complaint link
+--   Action:
+--     - As staff, mint link via UI or generate_complaint_link(reception_entry_id)
+--   Expected:
+--     - Token + URL returned
+--     - Link status is active
+--   Evidence:
+--     - Screenshot/RPC response + token prefix
+--
+-- Step 2: Open token in anonymous browser
+--   Expected:
+--     - Portal loads in raise mode
+--     - Vehicle/visit context visible
+--
+-- Step 3: Raise complaint
+--   Action:
+--     - Select category + severity
+--     - Enter description + valid 10-digit contact
+--   Expected:
+--     - Success confirmation shown
+--     - Complaint number generated
+--     - Link transitions to view behavior
+--
+-- Step 4: Track complaint on same link
+--   Expected:
+--     - Tracker shows ticket number + status stepper
+--     - Conversation and SLA block visible
+--
+-- Step 5: Staff updates complaint
+--   Action:
+--     - Acknowledge and optionally move to in_progress
+--     - Add one staff reply
+--   Expected:
+--     - Status persists after hard refresh
+--     - Customer tracker reflects updated status + reply
+--
+-- Step 6: Resolve complaint
+--   Expected:
+--     - Customer sees resolved state
+--     - CSAT widget visible if not yet rated
+--
+-- Step 7: Reopen from customer portal
+--   Action:
+--     - Enter reopen reason and confirm
+--   Expected:
+--     - Reopen success shown
+--     - Staff side shows reopened/escalated behavior
+--
+-- Step 8: Persistence verification
+--   Action:
+--     - Hard refresh both customer and staff views
+--   Expected:
+--     - Latest status/messages do not revert
+--
+-- Optional read verification queries:
+--
+-- SELECT id, ticket_number, status, is_escalated, updated_at
+-- FROM public.complaint_tickets
+-- WHERE id = <complaint_id>;
+--
+-- SELECT id, author_type, is_internal, body, created_at
+-- FROM public.complaint_messages
+-- WHERE complaint_id = <complaint_id>
+-- ORDER BY created_at;
+--
+-- Sign-off:
+--   QA: ________________________
+--   Product: ___________________
+--   Engineering: _______________
+--
+-- ============================================================================

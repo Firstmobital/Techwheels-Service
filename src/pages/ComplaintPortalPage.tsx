@@ -441,6 +441,10 @@ export const ComplaintPortalPage: React.FC = () => {
                 <label>Your contact number <span className="twcp-req">*</span></label>
                 <input
                   className="twcp-inp"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  enterKeyHint="done"
                   value={formState.customerPhone}
                   onChange={(e) => setFormState((prev) => ({ ...prev, customerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
                   placeholder="10 digit mobile number"
@@ -573,6 +577,7 @@ export const ComplaintPortalPage: React.FC = () => {
                             <textarea
                               className="twcp-inp"
                               rows={2}
+                              maxLength={280}
                               placeholder="Anything else you'd like to tell us? (optional)"
                               value={csatComment}
                               onChange={(e) => setCsatComment(e.target.value)}
@@ -669,6 +674,7 @@ export const ComplaintPortalPage: React.FC = () => {
                       <textarea
                         className="twcp-inp"
                         rows={2}
+                        maxLength={300}
                         value={reopenReason}
                         onChange={(e) => setReopenReason(e.target.value)}
                         placeholder="Tell us why you want to reopen"
