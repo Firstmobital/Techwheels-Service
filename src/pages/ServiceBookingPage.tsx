@@ -109,7 +109,6 @@ export default function ServiceBookingPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [branches, setBranches] = useState<string[]>([])
-  const [saList, setSaList] = useState<{ code: string; name: string }[]>([])
 
   // Filters
   const today = new Date()
@@ -144,12 +143,8 @@ export default function ServiceBookingPage() {
   }, [dateRange])
 
   async function loadBranchesAndSAs() {
-    const [branchRes, saRes] = await Promise.all([
-      supabase.from('service_branches').select('name').order('name'),
-      supabase.from('employees').select('employee_code, name').eq('is_active', true).order('name'),
-    ])
+    const branchRes = await supabase.from('service_branches').select('name').order('name')
     if (branchRes.data) setBranches((branchRes.data as { name: string }[]).map(b => b.name))
-    if (saRes.data) setSaList((saRes.data as { employee_code: string; name: string }[]).map(e => ({ code: e.employee_code, name: e.name })))
   }
 
   async function loadBookings() {
