@@ -89,6 +89,35 @@ type RtoInsuranceCacheRow = {
 
 const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
 
+function normalizeAccessToken(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase().replace(/[_\s]+/g, ' ')
+}
+
+function isBodyshopDepartment(value: string | null | undefined): boolean {
+  const normalized = normalizeAccessToken(value)
+  return normalized === 'BODY SHOP' || normalized === 'BODYSHOP'
+}
+
+function isBodyshopSaRole(value: string | null | undefined): boolean {
+  const normalized = normalizeAccessToken(value)
+  return normalized === 'SA' || normalized === 'SERVICE ADVISOR'
+}
+
+function isBodyshopSsaRole(value: string | null | undefined): boolean {
+  const normalized = normalizeAccessToken(value)
+  return normalized === 'SSA' || normalized === 'SENIOR SERVICE ADVISOR'
+}
+
+function isBodyshopSurveyRole(value: string | null | undefined): boolean {
+  const normalized = normalizeAccessToken(value)
+  return normalized === 'SURVEY' || normalized === 'SURVEYOR'
+}
+
+function isBodyshopFloorInchargeRole(value: string | null | undefined): boolean {
+  const normalized = normalizeAccessToken(value)
+  return normalized === 'FLOOR INCHARGE'
+}
+
 function getIntakeMilestones(card: RepairCard, intakePhotoCount: number, hasKmReading: boolean) {
   const stage1Done = isValidCustomerType(card.customer_type) && hasKmReading
   const stage2Done = intakePhotoCount > 0
@@ -354,11 +383,11 @@ function dedupeCards(cards: RepairCard[]): RepairCard[] {
 }
 
 function getAdvisorFilterKey(card: RepairCard): string {
-  const code = String(card.sa_employee_code ?? '').trim().toUpperCase()
-  if (code) return `code:${code}`
-
   const name = String(card.sa_name ?? '').trim()
   if (name) return `name:${name.toLowerCase()}`
+
+  const code = String(card.sa_employee_code ?? '').trim().toUpperCase()
+  if (code) return `code:${code}`
 
   return 'unknown'
 }
@@ -766,6 +795,14 @@ export default function BodyshopRepairPage() {
   const [editingApprovedParts, setEditingApprovedParts] = useState(false)
   const [tempApprovedParts, setTempApprovedParts] = useState<ApprovedPartInitial[]>([])
   const [savingApprovedParts, setSavingApprovedParts] = useState(false)
+  const [userScopeResolved, setUserScopeResolved] = useState(false)
+  const [isAdminLikeUser, setIsAdminLikeUser] = useState(false)
+  const [hasBodyshopSaAccess, setHasBodyshopSaAccess] = useState(false)
+  const [hasBodyshopSsaAccess, setHasBodyshopSsaAccess] = useState(false)
+  const [hasBodyshopSurveyAccess, setHasBodyshopSurveyAccess] = useState(false)
+  const [hasBodyshopFloorAccess, setHasBodyshopFloorAccess] = useState(false)
+  const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
+  const [currentUserDisplayName, setCurrentUserDisplayName] = useState('')
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
   const additionalApprovalPhotoInputRef = useRef<HTMLInputElement | null>(null)
@@ -793,7 +830,117 @@ export default function BodyshopRepairPage() {
     customer_type: '', branch: '', sa_name: '',
   })
 
-  useEffect(() => { void load() }, [dateRange])
+  useEffect(() => {
+    if (!userScopeResolved) return
+    void load()
+  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser])
+
+  useEffect(() => {
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const userId = sessionData.session?.user?.id ?? null
+
+        if (!userId) {
+          if (cancelled) return
+          setIsAdminLikeUser(false)
+          setHasBodyshopSaAccess(false)
+          setHasBodyshopSsaAccess(false)
+          setHasBodyshopSurveyAccess(false)
+          setHasBodyshopFloorAccess(false)
+          setBodyshopSaCodesForUser([])
+          setCurrentUserDisplayName('')
+          setUserScopeResolved(true)
+          return
+        }
+
+        const [profileRes, linksRes] = await Promise.all([
+          supabase
+            .from('users')
+            .select('role, is_active, full_name')
+            .eq('id', userId)
+            .maybeSingle(),
+          supabase
+            .from('user_employee_links')
+            .select('employee_code')
+            .eq('user_id', userId)
+            .eq('is_active', true),
+        ])
+
+        // Keep compatibility with environments that may still have legacy soft-delete columns.
+        const linkRows = linksRes.error
+          ? (await supabase
+              .from('user_employee_links')
+              .select('employee_code')
+              .eq('user_id', userId)
+              .eq('is_active', true)).data
+          : linksRes.data
+
+        const profile = profileRes.data
+
+        const userRole = normalizeAccessToken((profile as { role?: string | null } | null)?.role)
+        const userIsActive = (profile as { is_active?: boolean | null } | null)?.is_active === true
+        const displayName = String((profile as { full_name?: string | null } | null)?.full_name ?? '').trim()
+        const nextIsAdminLike = (userRole === 'ADMIN' || userRole === 'SUPER ADMIN') && userIsActive
+
+        const linkedCodes = ((linkRows ?? []) as Array<{ employee_code?: string | null }>)
+          .map((row) => String(row.employee_code ?? '').trim().toUpperCase())
+          .filter(Boolean)
+
+        let employeeRows: Array<{ employee_code?: string | null; department?: string | null; role?: string | null }> = []
+        if (linkedCodes.length > 0) {
+          const empRes = await supabase
+            .from('employee_master')
+            .select('employee_code, department, role')
+            .in('employee_code', linkedCodes)
+
+          if (!empRes.error) {
+            employeeRows = (empRes.data ?? []) as Array<{ employee_code?: string | null; department?: string | null; role?: string | null }>
+          }
+        }
+
+        // Non-admin users may not have direct employee_master read access via RLS.
+        // Use active linked employee codes as the canonical scoped SA-code set.
+        const saCodes = Array.from(new Set(linkedCodes))
+        const bodyshopRows = employeeRows.filter((row) => isBodyshopDepartment(row.department))
+        const hasSaRoleFromMaster = bodyshopRows.some((row) => isBodyshopSaRole(row.role))
+        const hasSsaRoleFromMaster = bodyshopRows.some((row) => isBodyshopSsaRole(row.role))
+        const hasSurveyRoleFromMaster = bodyshopRows.some((row) => isBodyshopSurveyRole(row.role))
+        const hasFloorRoleFromMaster = bodyshopRows.some((row) => isBodyshopFloorInchargeRole(row.role))
+
+        const hasSaRole = employeeRows.length > 0 ? (hasSaRoleFromMaster || hasSsaRoleFromMaster) : saCodes.length > 0
+        const hasSsaRole = employeeRows.length > 0 ? hasSsaRoleFromMaster : false
+        const hasSurveyRole = employeeRows.length > 0 ? hasSurveyRoleFromMaster : false
+        const hasFloorRole = employeeRows.length > 0 ? hasFloorRoleFromMaster : false
+
+        if (cancelled) return
+        setIsAdminLikeUser(nextIsAdminLike)
+        setHasBodyshopSaAccess(hasSaRole)
+        setHasBodyshopSsaAccess(hasSsaRole)
+        setHasBodyshopSurveyAccess(hasSurveyRole)
+        setHasBodyshopFloorAccess(hasFloorRole)
+        setBodyshopSaCodesForUser(saCodes)
+        setCurrentUserDisplayName(displayName)
+        setUserScopeResolved(true)
+      } catch {
+        if (cancelled) return
+        setIsAdminLikeUser(false)
+        setHasBodyshopSaAccess(false)
+        setHasBodyshopSsaAccess(false)
+        setHasBodyshopSurveyAccess(false)
+        setHasBodyshopFloorAccess(false)
+        setBodyshopSaCodesForUser([])
+        setCurrentUserDisplayName('')
+        setUserScopeResolved(true)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -1083,28 +1230,62 @@ export default function BodyshopRepairPage() {
 
   function intakeKey(row: { jc_number: string | null; reg_number: string | null }) {
     const jc = String(row.jc_number ?? '').trim().toUpperCase()
-    return jc
+    if (jc) return jc
+    const reg = String(row.reg_number ?? '').trim().toUpperCase()
+    return reg
   }
 
   async function load() {
     setLoading(true)
     try {
+      const scopedSaCodes = !isAdminLikeUser
+        ? Array.from(new Set(bodyshopSaCodesForUser.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)))
+        : null
+      const scopedSaNames = !isAdminLikeUser
+        ? Array.from(new Set([String(currentUserDisplayName ?? '').trim()].filter(Boolean)))
+        : null
+
+      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0)) {
+        setCards([])
+        setFloorWorkStartedLookup({})
+        setFloorStageCompletedLookup({})
+        setPhotoCountByReceptionId({})
+        setKmPresentByReceptionId({})
+        setBranches([])
+        setLoading(false)
+        return
+      }
+
+      let accidentQuery = supabase
+        .from('service_reception_entries')
+        .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
+        .eq('service_type', 'Accident')
+        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
+        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
+        .order('created_at', { ascending: false })
+
+      if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
+        const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+        const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+        accidentQuery = accidentQuery.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv}),sa_display_name.in.(${nameCsv})`)
+      } else if (scopedSaCodes && scopedSaCodes.length > 0) {
+        accidentQuery = accidentQuery.in('sa_employee_code', scopedSaCodes)
+      } else if (scopedSaNames && scopedSaNames.length > 0) {
+        accidentQuery = accidentQuery.in('sa_name', scopedSaNames)
+      }
+
       const [data, accidentRes] = await Promise.all([
-        listRepairCards({ from: dateRange.from, to: dateRange.to }),
-        supabase
-          .from('service_reception_entries')
-          .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
-          .eq('service_type', 'Accident')
-          .gte('created_at', dateRange.from + 'T00:00:00+05:30')
-          .lte('created_at', dateRange.to + 'T23:59:59+05:30')
-          .order('created_at', { ascending: false }),
+        listRepairCards({ from: dateRange.from, to: dateRange.to, saCodes: scopedSaCodes ?? undefined, saNames: scopedSaNames ?? undefined }),
+        accidentQuery,
       ])
 
       const accidentRows = ((accidentRes.data ?? []) as AccidentReceptionRow[])
-        .filter((row) => {
-          // Bodyshop Repair cards must be keyed by JC only.
-          return Boolean(String(row.jc_number ?? '').trim())
-        })
+        .filter((row) => Boolean(intakeKey(row)))
+      const accidentByReceptionId = new Map<number, AccidentReceptionRow>()
+      accidentRows.forEach((row) => {
+        const id = Number(row.id)
+        if (Number.isFinite(id) && id > 0) accidentByReceptionId.set(id, row)
+      })
       const receptionIds = accidentRows.map((row) => row.id)
       const accidentKeys = Array.from(
         new Set(accidentRows.map((row) => intakeKey(row)).filter(Boolean)),
@@ -1112,21 +1293,34 @@ export default function BodyshopRepairPage() {
 
       const existingKeys = new Set<string>()
       const existingReceptionIds = new Set<number>()
+      let existingByReceptionRows: Array<{
+        id: number
+        reception_entry_id?: number | null
+        sa_employee_code?: string | null
+        sa_name?: string | null
+      }> = []
       if (receptionIds.length > 0 || accidentKeys.length > 0) {
         const [existingByReceptionRes, existingByJcRes] = await Promise.all([
           receptionIds.length > 0
             ? supabase
                 .from('bodyshop_repair_cards')
-                .select('reception_entry_id')
+                .select('id, reception_entry_id, sa_employee_code, sa_name')
                 .in('reception_entry_id', receptionIds)
-            : Promise.resolve({ data: [] as Array<{ reception_entry_id?: number | null }> }),
+            : Promise.resolve({ data: [] as Array<{ id: number; reception_entry_id?: number | null; sa_employee_code?: string | null; sa_name?: string | null }> }),
           supabase
             .from('bodyshop_repair_cards')
             .select('job_card_no, reg_number')
             .in('job_card_no', accidentKeys),
         ])
 
-        ;((existingByReceptionRes.data ?? []) as Array<{ reception_entry_id?: number | null }>).forEach((row) => {
+        existingByReceptionRows = (existingByReceptionRes.data ?? []) as Array<{
+          id: number
+          reception_entry_id?: number | null
+          sa_employee_code?: string | null
+          sa_name?: string | null
+        }>
+
+        existingByReceptionRows.forEach((row) => {
           const receptionId = Number(row.reception_entry_id)
           if (Number.isFinite(receptionId)) existingReceptionIds.add(receptionId)
         })
@@ -1170,8 +1364,39 @@ export default function BodyshopRepairPage() {
         await supabase.from('bodyshop_repair_cards').insert(toInsert)
       }
 
-      const mergedData = toInsert.length > 0
-        ? await listRepairCards({ from: dateRange.from, to: dateRange.to })
+      // Heal existing cards that were created with stale/null SA mapping so scoped users can see them.
+      const rowsToHeal = existingByReceptionRows
+        .map((card) => {
+          const receptionId = Number(card.reception_entry_id)
+          if (!Number.isFinite(receptionId) || receptionId <= 0) return null
+          const source = accidentByReceptionId.get(receptionId)
+          if (!source) return null
+
+          const nextSaCode = String(source.sa_employee_code ?? '').trim().toUpperCase() || null
+          const nextSaName = String(source.sa_display_name ?? source.sa_name ?? '').trim() || null
+          const currentSaCode = String(card.sa_employee_code ?? '').trim().toUpperCase() || null
+          const currentSaName = String(card.sa_name ?? '').trim() || null
+
+          const patch: { sa_employee_code?: string | null; sa_name?: string | null } = {}
+          if (nextSaCode !== currentSaCode) patch.sa_employee_code = nextSaCode
+          if (nextSaName !== currentSaName) patch.sa_name = nextSaName
+
+          if (Object.keys(patch).length === 0) return null
+          return { id: card.id, patch }
+        })
+        .filter(Boolean) as Array<{ id: number; patch: { sa_employee_code?: string | null; sa_name?: string | null } }>
+
+      if (rowsToHeal.length > 0) {
+        await Promise.all(rowsToHeal.map(async (row) => {
+          await supabase
+            .from('bodyshop_repair_cards')
+            .update(row.patch)
+            .eq('id', row.id)
+        }))
+      }
+
+      const mergedData = (toInsert.length > 0 || rowsToHeal.length > 0)
+        ? await listRepairCards({ from: dateRange.from, to: dateRange.to, saCodes: scopedSaCodes ?? undefined, saNames: scopedSaNames ?? undefined })
         : data
 
       const nextCards = dedupeCards(mergedData)
@@ -2894,7 +3119,25 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  const scopeFilteredCards = useMemo(() => cards.filter((c) => {
+  const restrictRowsToSaCodes = useMemo(() => {
+    return !isAdminLikeUser
+  }, [isAdminLikeUser])
+
+  const bodyshopSaCodeSetForUser = useMemo(() => {
+    return new Set(bodyshopSaCodesForUser.map((code) => code.trim().toUpperCase()).filter(Boolean))
+  }, [bodyshopSaCodesForUser])
+
+  const roleScopedCards = useMemo(() => {
+    if (!restrictRowsToSaCodes) return cards
+    if (bodyshopSaCodeSetForUser.size === 0) return []
+
+    return cards.filter((card) => {
+      const rowSaCode = String(card.sa_employee_code ?? '').trim().toUpperCase()
+      return rowSaCode ? bodyshopSaCodeSetForUser.has(rowSaCode) : false
+    })
+  }, [cards, restrictRowsToSaCodes, bodyshopSaCodeSetForUser])
+
+  const scopeFilteredCards = useMemo(() => roleScopedCards.filter((c) => {
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false
     if (statusFilter !== 'all' && c.overall_status !== statusFilter) return false
     if (search.trim()) {
@@ -2906,7 +3149,7 @@ export default function BodyshopRepairPage() {
       )
     }
     return true
-  }), [cards, branchFilter, statusFilter, search])
+  }), [roleScopedCards, branchFilter, statusFilter, search])
 
   const stageScopedCards = useMemo(() => {
     if (stageFilter === 'all') return scopeFilteredCards
@@ -2970,11 +3213,37 @@ export default function BodyshopRepairPage() {
   const pipeline = useMemo(() =>
     STAGE_GROUPS.map((g) => ({
       ...g,
-      count: cards.filter((c) => g.stages.includes(getEffectiveStageForCard(c)) && c.overall_status === 'active').length,
+      count: roleScopedCards.filter((c) => g.stages.includes(getEffectiveStageForCard(c)) && c.overall_status === 'active').length,
     })),
-  [cards, photoCountByReceptionId])
+  [roleScopedCards, photoCountByReceptionId])
 
-  const tabs: DetailTab[] = ['overview', 'sa', 'approval', 'survey', 'floor', 'qc', 'billing']
+  const tabs = useMemo<DetailTab[]>(() => {
+    const nextTabs: DetailTab[] = ['overview']
+
+    if (isAdminLikeUser || hasBodyshopSaAccess) {
+      nextTabs.push('sa')
+    }
+    if (isAdminLikeUser || hasBodyshopSsaAccess) {
+      nextTabs.push('approval')
+    }
+    if (isAdminLikeUser || hasBodyshopSurveyAccess) {
+      nextTabs.push('survey')
+    }
+    if (isAdminLikeUser || hasBodyshopFloorAccess) {
+      nextTabs.push('floor')
+    }
+    if (isAdminLikeUser) {
+      nextTabs.push('qc', 'billing')
+    }
+
+    return nextTabs
+  }, [isAdminLikeUser, hasBodyshopSaAccess, hasBodyshopSsaAccess, hasBodyshopSurveyAccess, hasBodyshopFloorAccess])
+
+  useEffect(() => {
+    if (!tabs.includes(detailTab)) {
+      setDetailTab('overview')
+    }
+  }, [tabs, detailTab])
 
   return (
     <div className="page">
@@ -3106,8 +3375,12 @@ export default function BodyshopRepairPage() {
           </div>
         </div>
 
-        {loading ? (
+        {!userScopeResolved ? (
+          <div className="empty-state">Resolving role access…</div>
+        ) : loading ? (
           <div className="empty-state">Loading…</div>
+        ) : restrictRowsToSaCodes && bodyshopSaCodeSetForUser.size === 0 ? (
+          <div className="empty-state">No BODY SHOP SA code is linked to this login. Please map this user in Employee Master and User-Employee Links.</div>
         ) : filtered.length === 0 ? (
           <div className="empty-state">No repair cards found</div>
         ) : (

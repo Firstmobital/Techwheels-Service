@@ -132,7 +132,24 @@ export async function listRepairCards(opts: {
   status?: string
   from?: string
   to?: string
+  saCodes?: string[]
+  saNames?: string[]
 } = {}): Promise<RepairCard[]> {
+  const scopedSaCodes = Array.isArray(opts.saCodes)
+    ? opts.saCodes.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)
+    : null
+  const scopedSaNames = Array.isArray(opts.saNames)
+    ? opts.saNames.map((name) => String(name ?? '').trim()).filter(Boolean)
+    : null
+
+  if (
+    (Array.isArray(opts.saCodes) || Array.isArray(opts.saNames))
+    && (scopedSaCodes?.length ?? 0) === 0
+    && (scopedSaNames?.length ?? 0) === 0
+  ) {
+    return []
+  }
+
   let q = supabase
     .from('bodyshop_repair_cards')
     .select('*')
@@ -142,6 +159,16 @@ export async function listRepairCards(opts: {
   if (opts.branch && opts.branch !== 'all')  q = q.eq('branch', opts.branch)
   if (opts.from) q = q.gte('received_at', opts.from)
   if (opts.to)   q = q.lte('received_at', opts.to)
+
+  if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
+    const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+    const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
+    q = q.or(`sa_employee_code.in.(${codeCsv}),sa_name.in.(${nameCsv})`)
+  } else if (scopedSaCodes && scopedSaCodes.length > 0) {
+    q = q.in('sa_employee_code', scopedSaCodes)
+  } else if (scopedSaNames && scopedSaNames.length > 0) {
+    q = q.in('sa_name', scopedSaNames)
+  }
 
   const { data, error } = await q
   if (error) throw error

@@ -274,6 +274,49 @@ Stage-governance note:
   - Verify both sections render together correctly.
   - Confirm Stage 10 completion logic respects both initial + additional workflows.
 
+### Phase 12: Bodyshop Role-Gated Visibility (SA Code + Tab Access)
+- [x] **Task 12.1:** Lock row visibility in `bodyshop-repair` for non-admin BODY SHOP SA users by SA code mapping only.
+  - Resolve current user -> linked employee codes via `user_employee_links`.
+  - Resolve employee attributes via `employee_master` (`department`, `role`, `employee_code`).
+  - If Department = `BODY SHOP` and Role = `SA`, show only rows where `bodyshop_repair_cards.sa_employee_code` is in linked SA codes.
+  - If SA user has no linked SA code, show empty-state guidance (no fallback to all rows).
+- [x] **Task 12.2:** Keep Overview tab visible for any authenticated user with module access.
+- [x] **Task 12.3:** Gate tab visibility by BODY SHOP role mapping:
+  - `SA` tab: Department `BODY SHOP` + Role `SA`
+  - `Approval` tab: Department `BODY SHOP` + Role `SSA`
+  - `Survey` tab: Department `BODY SHOP` + Role `SURVEY`
+  - `Floor` tab: Department `BODY SHOP` + Role `FLOOR INCHARGE`
+  - `QC` and `Billing`: deferred (no business-role rollout in this phase)
+- [x] **Task 12.4:** Admin compatibility mode:
+  - Admin/Super Admin retain full tab access for support and troubleshooting.
+  - Non-admin users get deny-by-default for tabs not mapped to their BODY SHOP role.
+- [x] **Task 12.5:** Save/Upload guard alignment:
+  - Ensure `Save Receiving` and `Attach photos` are usable only on rows visible under SA-code scope.
+  - Prevent silent failures by surfacing clear toast/error if policy blocks update/upload.
+- [ ] **Task 12.6:** QA matrix for role-gating:
+  - BODY SHOP + SA with valid SA code link: own rows visible; `SA` tab visible.
+  - BODY SHOP + SSA with valid link: `Approval` tab visible.
+  - BODY SHOP + SA without SA code link: no rows visible; clear guidance shown.
+  - BODY SHOP + SURVEY: `Survey` tab visible; `SA/SSA-Approval/Floor` hidden.
+  - BODY SHOP + FLOOR INCHARGE: `Floor` tab visible; `SA/SSA-Approval/Survey` hidden.
+  - Mixed-role user (multiple employee links): union of allowed tabs.
+  - Admin/Super Admin: all tabs visible, no SA-code row restriction.
+- [ ] **Task 12.7:** UAT sign-off evidence:
+  - Capture screenshots/video for each role profile.
+  - Verify no regression in stage transitions and existing bodyshop intake persistence.
+- [x] **Task 12.8:** Root-cause hardening (no future SA-code drift):
+  - Add DB trigger on `service_reception_entries` (insert/update for Accident rows) to upsert/sync `bodyshop_repair_cards` SA fields by `reception_entry_id`.
+  - Ensure late SA changes in Reception (`sa_employee_code`, `sa_display_name`) are propagated to Bodyshop cards automatically.
+  - Add paired SQL checks for drift count (`service_reception_entries` vs `bodyshop_repair_cards`) and trigger existence.
+- [x] **Task 12.9:** Audit Permissions/Module Access page contract for SA-stage execution.
+  - Ensure user has at least one module with `modify`: `service_advisor` or `reception` or `bodyshop_repair`.
+  - Ensure user has at least one module with `view`: `service_advisor` or `reception` or `bodyshop_repair` (or floor/tracker where applicable).
+  - Ensure user has active `user_employee_links` + `employee_master` role mapping for BODY SHOP row/tab gating.
+  - Ensure `Effective Access Summary` reflects expected dealer scope and active mapping count before UAT.
+- [x] **Task 12.10:** Execute and verify SA-stage policy hardening migration in target DB.
+  - Migration: `supabase/migrations/20260616183000_bodyshop_sa_stage_policy_hardening.sql`
+  - Checks: `supabase/sql_checks/20260616183000_bodyshop_sa_stage_policy_hardening_checks.sql`
+
 ---
 
 ## Activity Tracker
@@ -391,6 +434,19 @@ Stage-governance note:
 ⏳ 11.8 | Complete end-to-end UAT (initial + additional parallel workflows) | QA + Ops | - | - | verify both sections, stage completion logic, and re-activation on additional approval request
 ```
 
+### Phase 12
+```
+✅ 12.1 | Enforce SA-code row visibility in bodyshop-repair | Web Dev | 2026-06-16 | 2026-06-16 | query-time scoping + deny-by-default empty state
+✅ 12.2 | Keep Overview visible for module-access users | Web Dev | 2026-06-16 | 2026-06-16 | overview always available; hidden tabs fallback handled
+✅ 12.3 | Role-tab gating implementation | Web Dev | 2026-06-16 | 2026-06-16 | SA tab for SA, Approval tab for SSA, Survey/Floor role-mapped
+✅ 12.4 | Admin compatibility mode in tab visibility | Web Dev | 2026-06-16 | 2026-06-16 | admin/super_admin retain full support tabs
+✅ 12.5 | Save/Upload flow guard alignment | Web Dev + API | 2026-06-16 | 2026-06-16 | receiving/docs/estimate/claim writes now policy-aligned
+✅ 12.8 | Root-cause sync hardening migration + checks prepared | API | 2026-06-16 | 2026-06-16 | added 20260616170000 trigger sync + sql_checks
+✅ 12.9 | Permissions/Module Access page contract audited | Web Dev + QA | 2026-06-16 | 2026-06-16 | effective summary + module rights requirements documented
+✅ 12.10 | Execute 20260616183000 policy hardening migration + checks | User + QA | 2026-06-16 | 2026-06-16 | SQL Editor execution complete; RLS enabled + expected v2/v3 policies + storage autodoc policies confirmed
+⏳ 12.7 | UAT evidence pack (SA/SSA/Survey/Floor/Admin) | QA + Ops | - | - | screenshots + flow videos pending
+```
+
 ---
 
 ## Dependencies & Prerequisites
@@ -403,6 +459,7 @@ Stage-governance note:
 - [ ] Phase A deprecation validation sign-off: zero runtime dependency on `service_branches` in web/mobile.
 - [ ] Execute additive migration `scripts/18_add_insurance_type_to_bodyshop_repair_cards.sql` in target DB.
 - [ ] Additional Approval additive migration approved and executed before implementing full request lifecycle UI.
+- [x] Execute `supabase/migrations/20260616183000_bodyshop_sa_stage_policy_hardening.sql` in target DB and archive results of `supabase/sql_checks/20260616183000_bodyshop_sa_stage_policy_hardening_checks.sql`.
 
 ---
 

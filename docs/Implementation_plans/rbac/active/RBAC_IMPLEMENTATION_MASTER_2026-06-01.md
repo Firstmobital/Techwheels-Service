@@ -1,10 +1,46 @@
 # RBAC Dynamic Access Control — Master Implementation Plan
 
 **Version**: 2026-06-01  
-**Status**: Phase 1C In Progress - Admin Unrestricted Access Hardening Verified (Targeted Policy Families)  
+**Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-09 13:25 UTC  
+**Last Updated**: 2026-06-16 13:05 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-06-16 - Bodyshop Policy Hardening + Permissions Page Audit)
+
+- `/bodyshop-repair` tab contract corrected to match live implementation:
+  - `sa`: BODY SHOP + SA
+  - `approval`: BODY SHOP + SSA (admin/super_admin still support-bypass)
+  - `survey`: BODY SHOP + SURVEY
+  - `floor`: BODY SHOP + FLOOR INCHARGE
+- Admin -> Permissions page contract audited for Bodyshop SA-stage flows:
+  - Before UAT, user must have at least one module with `modify`: `service_advisor` or `reception` or `bodyshop_repair`.
+  - For visibility, user must have at least one module with `view`: `service_advisor` or `reception` or `bodyshop_repair` (or floor/tracker where applicable).
+  - `Effective Access Summary` must show active mapping + expected dealer scope.
+- Policy hardening migration prepared for non-delete action-path stability:
+  - `supabase/migrations/20260616183000_bodyshop_sa_stage_policy_hardening.sql`
+  - `supabase/sql_checks/20260616183000_bodyshop_sa_stage_policy_hardening_checks.sql`
+  - Scope: `bodyshop_repair_cards`, `bodyshop_intake_vehicle_photos`, `bodyshop_repair_card_documents` select/insert/update policy re-creation (delete unchanged).
+  - Storage dependency verified in authoritative dump: `storage.objects` policies `autodoc objects: own dealer insert/read/update`.
+  - Execution status: completed in SQL Editor on 2026-06-16; all check queries returned expected rows (RLS=true on all 3 public tables, v2/v3 policy names present, storage autodoc insert/read/update policies present).
+
+### Execution Update (2026-06-16)
+
+- Bodyshop Repair RBAC/UI contract alignment added for `/bodyshop-repair` to mirror existing SA ownership principles:
+  - Non-admin BODY SHOP users with business role `SA` are row-scoped by SA code ownership only.
+  - Identity path used for scope resolution: `auth user -> user_employee_links.employee_code -> employee_master(department, role)`.
+  - Effective SA row visibility contract: show only rows where `bodyshop_repair_cards.sa_employee_code` belongs to active linked BODY SHOP SA employee codes.
+  - If no active linked BODY SHOP SA code exists, UI must show explicit guidance (deny-by-default), never fallback to all rows.
+- Bodyshop tab visibility contract added (role-gated, deny-by-default):
+  - `overview`: visible to any authenticated user with module access
+  - `sa`: BODY SHOP + SA
+  - `approval`: BODY SHOP + SSA
+  - `survey`: BODY SHOP + SURVEY
+  - `floor`: BODY SHOP + FLOOR INCHARGE
+  - `qc` + `billing`: deferred role rollout (admin compatibility mode only)
+- Governance parity note:
+  - This Bodyshop contract follows the same identity and ownership model already enforced in service-advisor/reception tracks (module gate + employee-code ownership + admin bypass compatibility).
+  - Bodyshop implementation planning is tracked in `docs/Implementation_plans/bodyshop/active/Bodyshop-Flow.md` (Phase 12), and this RBAC master now records the cross-module governance requirement.
 
 ### Execution Update (2026-06-09)
 
@@ -299,6 +335,9 @@ Progress update (2026-06-08, staged tightening):
 5. Complete staging verification that Floor Incharge dropdowns exclude non-TECHNICIAN roles in web and mobile.
 6. Validate Floor Incharge row-scope filter by (`role = Floor Incharge`) + matching `fuel_type` context resolved from mapped `SA CODE`.
 7. Wire web/mobile UI to persist new stage fields (`bay_no`, `work_status`, `out_ts`, `time_diff`, `remark`) from technician_assignments.
+8. Add DB policy audit for `bodyshop_repair_cards` SELECT/UPDATE to confirm employee-code ownership semantics are aligned with Bodyshop SA row visibility.
+9. Add deny-by-default tab-gating checks for `bodyshop-repair` by BODY SHOP business roles (SA, SURVEY, FLOOR INCHARGE).
+10. Validate admin compatibility mode on `bodyshop-repair` (full support visibility without role-specific blockage).
 
 ---
 
@@ -707,8 +746,34 @@ Included in **Migration 4** (`20260601030000_fix_reception_rls_policies.sql`):
 - **E2E**: Non-technician employees never appear in technician assignment dropdown (web + mobile)
 - **Integration**: Floor Incharge row list is filtered by `role = Floor Incharge` scope and mapped `fuel_type`
 - **E2E**: Floor Incharge user with PV scope sees only PV rows; EV scope sees only EV rows
+- **Integration**: BODY SHOP SA user sees only own `bodyshop_repair_cards.sa_employee_code` rows on `/bodyshop-repair`
+- **Integration**: BODY SHOP SA user with no active linked SA code sees zero rows + explicit guidance
+- **Integration**: `/bodyshop-repair` tabs are role-gated (overview always visible; SA/SSA-Approval/Survey/Floor by BODY SHOP role)
+- **E2E**: Save Receiving and Attach Photos succeed only on policy-eligible rows and fail with explicit messaging when unauthorized
 - **Security**: Direct RLS bypass attempt (e.g., raw Supabase query) returns zero rows
 - **Performance**: SA filter query executes <100ms
+
+#### 1.7 Bodyshop Role-Gated Visibility Contract (Cross-Module RBAC)
+
+- Scope target: `bodyshop_repair` module web flow (`/bodyshop-repair`)
+- Canonical identity path for role/ownership checks:
+  - `auth user -> user_employee_links (active links) -> employee_master (department + role + employee_code)`
+- Row ownership contract:
+  - Non-admin BODY SHOP SA users are scoped by SA code only (`bodyshop_repair_cards.sa_employee_code` membership)
+  - No linked BODY SHOP SA code -> no rows (deny-by-default)
+- Tab ownership contract:
+  - `overview`: module-access users
+  - `sa`: BODY SHOP + SA
+  - `approval`: BODY SHOP + SSA
+  - `survey`: BODY SHOP + SURVEY
+  - `floor`: BODY SHOP + FLOOR INCHARGE
+  - `qc`, `billing`: deferred role rollout (admin compatibility only until explicit policy defined)
+- Permissions page contract:
+  - Bodyshop SA-stage mutation paths are policy-eligible when user has `modify` on at least one of: `service_advisor`, `reception`, `bodyshop_repair`.
+  - Upload path additionally requires dealer-scoped autodoc object path (first segment equals `my_dealer_code()`).
+- Admin compatibility contract:
+  - Active admin/super_admin retain support visibility (not blocked by business-role predicates)
+  - Any future policy migration must preserve `is_admin()` bypass pattern for admin operational continuity
 
 ---
 
@@ -796,6 +861,13 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 5.11 | Define Floor Incharge row-scope contract (role + fuel_type via SA CODE) | ✓ Done | Copilot + User | 2026-06-01 | Documented as authoritative requirement in this master plan | ☑ |
 | 5.12 | Implement Floor Incharge row filtering by mapped fuel_type (web) | ✓ Done | Copilot + User | 2026-06-01 | DB policy scaffold executed + web dedicated query path wired | ☑ |
 | 5.13 | Implement Floor Incharge row filtering by mapped fuel_type (mobile) | 🟡 In Progress | Copilot + User | 2026-06-01 | DB policy active; mobile path validation/wiring pending against new stage fields | ☐ |
+| 5.14 | Define Bodyshop SA row-scope contract (SA code ownership) | ✓ Done | Copilot + User | 2026-06-16 | Added to master plan + Bodyshop Phase 12 alignment | ☑ |
+| 5.15 | Implement `/bodyshop-repair` SA-code row visibility gating (web) | ✓ Done | Copilot + User | 2026-06-16 | Non-admin BODY SHOP SA users now see only linked SA-code rows | ☑ |
+| 5.16 | Implement `/bodyshop-repair` role-based tab visibility (web) | ✓ Done | Copilot + User | 2026-06-16 | Overview always visible; SA/SSA-Approval/Survey/Floor role-gated | ☑ |
+| 5.17 | Add empty-state guidance for BODY SHOP SA users without linked SA code | ✓ Done | Copilot + User | 2026-06-16 | Explicit deny-by-default guidance shown in UI | ☑ |
+| 5.18 | Add Bodyshop admin compatibility mode validation (web) | ⚪ Not Started | TBD | — | Confirm admin/super_admin full tab support behavior in UAT | ☐ |
+| 5.19 | Prepare Bodyshop non-delete policy hardening migration | ✓ Done | Copilot | 2026-06-16 | Added 20260616183000 + sql_checks for SA stage action stability | ☑ |
+| 5.20 | Execute Bodyshop non-delete policy hardening migration | ✓ Done | User + QA | 2026-06-16 | 2026-06-16 | SQL Editor run complete; checks passed for RLS + public v2/v3 policies + storage autodoc policies | ☑ |
 
 ### 4.6 Testing & Validation
 
@@ -816,6 +888,13 @@ Use this section as the real-time status dashboard. Update immediately after eac
 | 6.13 | Integration test: mobile Floor Incharge PV/EV row filtering by mapped SA CODE scope | ⚪ Not Started | TBD | — | Verify rows match mapped fuel_type for Floor Incharge role | ☐ |
 | 6.14 | Integration test: OUT TS auto-captures only on completed status | ⚪ Not Started | TBD | — | Validate trigger sync + check constraint behavior | ☐ |
 | 6.15 | Integration test: time_diff auto-populates from assigned_at to out_ts | ⚪ Not Started | TBD | — | Validate generated column on completed transitions | ☐ |
+| 6.16 | Integration test: BODY SHOP SA sees only own `/bodyshop-repair` rows by SA code | ⚪ Not Started | TBD | — | Validate user_employee_links + employee_master role/department gate | ☐ |
+| 6.17 | Integration test: BODY SHOP SA without active SA code link sees zero rows + guidance | ⚪ Not Started | TBD | — | Deny-by-default verification | ☐ |
+| 6.18 | Integration test: BODY SHOP SURVEY tab gating on `/bodyshop-repair` | ⚪ Not Started | TBD | — | Survey visible; SA/SSA-Approval/Floor hidden | ☐ |
+| 6.19 | Integration test: BODY SHOP FLOOR INCHARGE tab gating on `/bodyshop-repair` | ⚪ Not Started | TBD | — | Floor visible; SA/SSA-Approval/Survey hidden | ☐ |
+| 6.20 | Integration test: admin/super_admin support visibility on `/bodyshop-repair` | ⚪ Not Started | TBD | — | Full tab access retained for support operations | ☐ |
+| 6.21 | Integration test: BODY SHOP SSA approval-tab gating on `/bodyshop-repair` | ⚪ Not Started | TBD | — | Approval visible to SSA; hidden for SA-only user | ☐ |
+| 6.22 | Integration test: Permissions page contract for bodyshop SA-stage actions | ⚪ Not Started | TBD | — | Save/Upload succeeds with modify rights on service_advisor/reception/bodyshop_repair | ☐ |
 
 ### 4.7 Rollout & Documentation
 
@@ -842,6 +921,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 - ⚪ **Ownership**: SA row visibility fully verified by employee_code after backfill completion
 - ⚪ **Security**: Direct API queries from unauthorized users validated via staging test matrix
 - ⚪ **Admin UX**: Non-technical admin can manage user-employee mappings via UI without SQL
+- ⚪ **Bodyshop RBAC**: `/bodyshop-repair` row/tab visibility validated for BODY SHOP SA/SURVEY/FLOOR INCHARGE roles using user_employee_links + employee_master
 - ⚪ **Testing**: All tests in Part 4.6 passing in staging environment
 - ⚪ **Performance**: All permission checks complete <10ms (p99) with production-like load
 - ⚪ **Production**: Migrated and monitored successfully; zero permission-related incidents first 48h
@@ -876,7 +956,7 @@ Use this section as the real-time status dashboard. Update immediately after eac
 
 - **Authoritative dump**: local_folder/backups/full_database.sql (source of all schema/policy facts)
 - **Codebase**: src/App.tsx, src/pages/{AdminPage,ServiceAdvisorPage,SettingsPage}.tsx, src/lib/api/reception.ts
-- **Related modules**: reception, service_advisor (Phase 1); floor_incharge, admin (Phase 2)
+- **Related modules**: reception, service_advisor, bodyshop_repair (Phase 1); floor_incharge, admin, bodyshop_floor (Phase 2)
 - **Deployment**: Will be created in docs/Implementation_plans/ before production rollout
 
 ---
