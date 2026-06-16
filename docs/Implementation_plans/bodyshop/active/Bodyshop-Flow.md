@@ -247,6 +247,33 @@ Stage-governance note:
   - Provide `View` action for approved photo/document.
 - [ ] **Task 10.9:** Validate end-to-end state transitions and cross-page consistency on localhost + UAT.
 
+### Phase 11: Initial Approved Parts Capture (Survey Tab - Parts Status Stage 10)
+- [ ] **Task 11.1:** Audit authoritative schema and confirm `bodyshop_repair_cards.approved_parts` column availability or define additive migration.
+- [ ] **Task 11.2:** Define approved_parts data contract (JSON structure with part_index, part_no, part_description, approved_at, approved_by, finalized_at, finalized_by).
+- [ ] **Task 11.3:** Add `Initial Approved Parts` section in Survey tab, visible only when:
+  - `surveyStatus === 'approved'`
+  - `surveyApprovalPhotoUploaded === true`
+- [ ] **Task 11.4:** Implement approved parts form:
+  - Dynamic list with Part No and Part Description fields per part.
+  - Add Part button to add more parts.
+  - Remove Part button for multi-part rows.
+  - Submit/Finalize button to lock approved parts list.
+- [ ] **Task 11.5:** Implement approved parts display mode (read-only after finalized):
+  - Show finalized approved parts with timestamp + actor.
+  - Prevent edit after finalization (must request new parts via Additional Approval Requested if needed).
+- [ ] **Task 11.6:** Update Stage 10 (Parts Status) completion logic:
+  - `stage10Done` if: `approvedPartsFinalized === true` AND `additionalApproval.status !== 'pending'` (or 'none').
+  - Stage 10 becomes incomplete again if additional approval is requested later.
+- [ ] **Task 11.7:** Validate persistence:
+  - Store approved_parts JSON to bodyshop_repair_cards.approved_parts.
+  - Ensure history tracking of finalization actor and timestamp.
+- [ ] **Task 11.8:** End-to-end UAT:
+  - Capture initial approved parts after survey approval photo upload.
+  - Finalize parts list.
+  - Request additional approval for new parts separately.
+  - Verify both sections render together correctly.
+  - Confirm Stage 10 completion logic respects both initial + additional workflows.
+
 ---
 
 ## Activity Tracker
@@ -352,6 +379,18 @@ Stage-governance note:
 ⏳ 10.9 | End-to-end validation + UAT sign-off | QA + Ops | - | - | verify consistency across bodyshop-floor and bodyshop-repair
 ```
 
+### Phase 11
+```
+⏳ 11.1 | Audit approved_parts column in authoritative dump | Web Dev | - | - | confirm field exists or plan additive migration
+⏳ 11.2 | Define approved_parts JSON contract (part_index, part_no, part_description, actor/timestamp fields) | Product + Web Dev | - | - | finalized_at/finalized_by tracking required for stage completion gate
+⏳ 11.3 | Add Initial Approved Parts section in Survey tab (visible post-survey-approval) | Web Dev | - | - | show only when surveyStatus='approved' && approvalPhotoUploaded
+⏳ 11.4 | Implement dynamic parts form (add/remove, Part No, Part Description, Finalize button) | Web Dev | - | - | client-side validation before submit
+⏳ 11.5 | Implement read-only display mode after finalization | Web Dev | - | - | finalized parts locked; changes require new Additional Approval Requested flow
+⏳ 11.6 | Update Stage 10 completion logic for approved_parts + additional_approval dual flow | Web Dev | - | - | stage10Done = approvedPartsFinalized AND (additionalApproval.status='none' OR 'approved' OR 'rejected')
+⏳ 11.7 | Persist approved_parts JSON and finalization metadata | API + Web Dev | - | - | upsert to bodyshop_repair_cards.approved_parts with actor/timestamp
+⏳ 11.8 | Complete end-to-end UAT (initial + additional parallel workflows) | QA + Ops | - | - | verify both sections, stage completion logic, and re-activation on additional approval request
+```
+
 ---
 
 ## Dependencies & Prerequisites
@@ -447,6 +486,17 @@ Stage-governance note:
 - Implemented bodyshop card sync on save: `customer_type` and base card fields are upserted to `bodyshop_repair_cards`.
 - Local validation done on localhost (`/service-advisor`) with Bodyshop category rows.
 - Current blocker outside this scope: unrelated TypeScript build error in Floor Incharge page (`unused getFuelTypeLabel`).
+
+### 2026-06-16 - Phase 11: Initial Approved Parts Workflow Requirement Added
+- New business requirement to enhance Stage 10 (Parts Status) visibility:
+  - Employee needs to capture pre-approved parts immediately after Survey Approval Photo upload + Survey Status approved.
+  - New section: `Initial Approved Parts` (rendered between Survey Approval section and Additional Approval Requested section on Survey tab).
+  - Use case: Parts supervisor knows which parts are definitely needed (captured early), separate from later additional-approval flow.
+  - Architecture: Use existing `approved_parts` JSON column in bodyshop_repair_cards if available, else additive migration.
+  - UI: Dynamic form to add/remove parts (Part No, Part Description), Finalize button to lock list.
+  - Stage completion: Stage 10 done when `approvedParts.finalized === true` AND `additionalApproval.status !== 'pending'`.
+  - Workflow independence: Initial approved parts finalization does NOT prevent Additional Approval Requested from appearing later for new/changed parts.
+- Phase 11 is the final gate for Stage 10 completion visibility; planning to start implementation 2026-06-16.
 
 ### 2026-06-11 - Database Authority Reminder Applied
 - Re-validated bodyshop schema from authoritative dump: `local_folder/backups/full_database.sql`.

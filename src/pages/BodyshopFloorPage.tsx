@@ -22,6 +22,7 @@ interface AccidentCar {
 }
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
+type AdditionalApprovalAggregateStatus = AdditionalApprovalDecisionStatus | 'none' | 'mixed'
 
 type AdditionalApprovalRequestPart = {
   part_no: string | null
@@ -30,6 +31,16 @@ type AdditionalApprovalRequestPart = {
   part_image_bucket: string | null
   part_image_path: string | null
   part_image_file_name: string | null
+}
+
+type AdditionalApprovalDecisionPart = {
+  part_index: number
+  status: AdditionalApprovalDecisionStatus
+  decided_at: string | null
+  decided_by: string | null
+  approval_photo_bucket: string | null
+  approval_photo_path: string | null
+  approval_photo_file_name: string | null
 }
 
 type AdditionalApprovalPayload = {
@@ -47,6 +58,7 @@ type AdditionalApprovalPayload = {
   }
   decision?: {
     status: AdditionalApprovalDecisionStatus
+    parts?: AdditionalApprovalDecisionPart[]
     decided_at: string | null
     decided_by: string | null
     approval_photo_bucket: string | null
@@ -55,10 +67,27 @@ type AdditionalApprovalPayload = {
   }
 }
 
+type AdditionalApprovalPartRowState = {
+  partIndex: number
+  part_no: string | null
+  part_description: string | null
+  reason: string | null
+  part_image_bucket: string | null
+  part_image_path: string | null
+  part_image_file_name: string | null
+  status: AdditionalApprovalDecisionStatus
+  approvalPhotoBucket: string | null
+  approvalPhotoPath: string | null
+}
+
 type AdditionalApprovalRowState = {
   raw: string | null
-  status: AdditionalApprovalDecisionStatus | 'none'
+  status: AdditionalApprovalAggregateStatus
   requestParts: AdditionalApprovalRequestPart[]
+  partStates: AdditionalApprovalPartRowState[]
+  pendingCount: number
+  approvedCount: number
+  rejectedCount: number
   requestReason: string | null
   requestPartNo: string | null
   requestPartDescription: string | null
@@ -68,6 +97,18 @@ type AdditionalApprovalRowState = {
   approvalPhotoBucket: string | null
   approvalPhotoPath: string | null
   approvalPhotoFileName: string | null
+}
+
+function getAggregateAdditionalApprovalStatus(parts: AdditionalApprovalPartRowState[]): AdditionalApprovalAggregateStatus {
+  if (!parts.length) return 'none'
+  const pendingCount = parts.filter((part) => part.status === 'pending').length
+  if (pendingCount > 0) return 'pending'
+  const approvedCount = parts.filter((part) => part.status === 'approved').length
+  const rejectedCount = parts.filter((part) => part.status === 'rejected').length
+  if (approvedCount > 0 && rejectedCount > 0) return 'mixed'
+  if (approvedCount === parts.length) return 'approved'
+  if (rejectedCount === parts.length) return 'rejected'
+  return 'pending'
 }
 
 interface Employee {
@@ -251,6 +292,10 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
     raw: raw ?? null,
     status: 'none',
     requestParts: [],
+    partStates: [],
+    pendingCount: 0,
+    approvedCount: 0,
+    rejectedCount: 0,
     requestReason: null,
     requestPartNo: null,
     requestPartDescription: null,
@@ -267,7 +312,7 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
 
   try {
     const parsed = JSON.parse(text) as AdditionalApprovalPayload
-    const status = parsed?.decision?.status
+    const legacyStatus = parsed?.decision?.status
     const parsedParts = Array.isArray(parsed?.request?.parts)
       ? parsed.request.parts
           .map((part) => ({
@@ -299,25 +344,64 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
         : null
     const allParts = fallbackPart ? [fallbackPart] : parsedParts
     const first = allParts[0] ?? null
+    const parsedDecisionParts = Array.isArray(parsed?.decision?.parts)
+      ? parsed.decision.parts
+          .map((part, idx) => ({
+            part_index: Number.isFinite(Number(part?.part_index)) ? Number(part.part_index) : idx,
+            status: part?.status === 'approved' || part?.status === 'rejected' || part?.status === 'pending' ? part.status : 'pending',
+            approval_photo_bucket: part?.approval_photo_bucket ?? null,
+            approval_photo_path: part?.approval_photo_path ?? null,
+          }))
+      : []
+    const legacyDecisionStatus: AdditionalApprovalDecisionStatus = legacyStatus === 'approved' || legacyStatus === 'rejected' || legacyStatus === 'pending'
+      ? legacyStatus
+      : 'pending'
+    const partStates: AdditionalApprovalPartRowState[] = allParts.map((part, idx) => {
+      const explicit = parsedDecisionParts.find((item) => item.part_index === idx) ?? parsedDecisionParts[idx] ?? null
+      return {
+        partIndex: idx,
+        part_no: part.part_no,
+        part_description: part.part_description,
+        reason: part.reason,
+        part_image_bucket: part.part_image_bucket,
+        part_image_path: part.part_image_path,
+        part_image_file_name: part.part_image_file_name,
+        status: explicit?.status ?? legacyDecisionStatus,
+        approvalPhotoBucket: explicit?.approval_photo_bucket ?? parsed?.decision?.approval_photo_bucket ?? null,
+        approvalPhotoPath: explicit?.approval_photo_path ?? parsed?.decision?.approval_photo_path ?? null,
+      }
+    })
+    const approvedCount = partStates.filter((part) => part.status === 'approved').length
+    const rejectedCount = partStates.filter((part) => part.status === 'rejected').length
+    const pendingCount = partStates.filter((part) => part.status === 'pending').length
+    const aggregateStatus = partStates.length > 0
+      ? getAggregateAdditionalApprovalStatus(partStates)
+      : (legacyStatus === 'approved' || legacyStatus === 'rejected' || legacyStatus === 'pending' ? legacyStatus : 'pending')
+    const firstApprovalPart = partStates.find((part) => Boolean(part.approvalPhotoPath)) ?? null
 
     return {
       ...base,
-      status: status === 'approved' || status === 'rejected' || status === 'pending' ? status : 'pending',
+      status: aggregateStatus,
       requestParts: allParts,
+      partStates,
+      pendingCount,
+      approvedCount,
+      rejectedCount,
       requestReason: first?.reason ?? null,
       requestPartNo: first?.part_no ?? null,
       requestPartDescription: first?.part_description ?? null,
       requestImageBucket: first?.part_image_bucket ?? null,
       requestImagePath: first?.part_image_path ?? null,
       requestImageFileName: first?.part_image_file_name ?? null,
-      approvalPhotoBucket: parsed?.decision?.approval_photo_bucket ?? null,
-      approvalPhotoPath: parsed?.decision?.approval_photo_path ?? null,
+      approvalPhotoBucket: firstApprovalPart?.approvalPhotoBucket ?? parsed?.decision?.approval_photo_bucket ?? null,
+      approvalPhotoPath: firstApprovalPart?.approvalPhotoPath ?? parsed?.decision?.approval_photo_path ?? null,
       approvalPhotoFileName: parsed?.decision?.approval_photo_file_name ?? null,
     }
   } catch {
     return {
       ...base,
       status: 'pending',
+      pendingCount: 1,
       requestParts: [{
         part_no: null,
         part_description: null,
@@ -325,6 +409,18 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
         part_image_bucket: null,
         part_image_path: null,
         part_image_file_name: null,
+      }],
+      partStates: [{
+        partIndex: 0,
+        part_no: null,
+        part_description: null,
+        reason: text,
+        part_image_bucket: null,
+        part_image_path: null,
+        part_image_file_name: null,
+        status: 'pending',
+        approvalPhotoBucket: null,
+        approvalPhotoPath: null,
       }],
       requestReason: text,
     }
@@ -929,13 +1025,18 @@ export default function BodyshopFloorPage() {
     const assignment = assignments[k]?.[role]
     if (!assignment?.id) { showToast('Assign person first', 'error'); return }
     const draft = stageDrafts[k]?.[role] ?? { work_status: 'work_inprocess', remark: '' }
+    const trimmedRemark = draft.remark.trim()
+    if (draft.work_status === 'hold' && !trimmedRemark) {
+      showToast('Hold reason is required when role status is Hold', 'error')
+      return
+    }
     setSaving(`${k}-${role}-stage`)
     try {
       const cols = ROLE_COLUMNS[role]
       const { data: { user } } = await supabase.auth.getUser()
       const update: Record<string, unknown> = {
         [cols.workStatus]: draft.work_status,
-        [cols.remark]: draft.remark.trim() || null,
+        [cols.remark]: trimmedRemark || null,
       }
       if (draft.work_status === 'completed' && !assignment.out_ts) {
         update[cols.outTs] = new Date().toISOString()
@@ -1091,20 +1192,71 @@ export default function BodyshopFloorPage() {
     })
   }
 
+  async function openAdditionalApprovalFile(path: string | null | undefined, bucket: string | null | undefined) {
+    const cleanPath = String(path ?? '').trim()
+    if (!cleanPath) {
+      showToast('No image found for additional approval', 'error')
+      return false
+    }
+
+    const resolvedBucket = String(bucket ?? '').trim() || AUTODOC_BUCKET
+    const signedRes = await supabase.storage.from(resolvedBucket).createSignedUrl(cleanPath, 300)
+    if (!signedRes.error && signedRes.data?.signedUrl) {
+      window.open(signedRes.data.signedUrl, '_blank', 'noopener,noreferrer')
+      return true
+    }
+
+    // Source object may be deleted after universal-drive-upload; fallback to Drive URL.
+    const driveRes = await supabase
+      .from('bodyshop_intake_vehicle_photos')
+      .select('drive_url, uploaded_at')
+      .eq('storage_path', cleanPath)
+      .not('drive_url', 'is', null)
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+
+    const driveUrl = String(driveRes.data?.[0]?.drive_url ?? '').trim()
+    if (driveUrl) {
+      window.open(driveUrl, '_blank', 'noopener,noreferrer')
+      return true
+    }
+
+    return false
+  }
+
   async function viewAdditionalApprovalFile(state: AdditionalApprovalRowState) {
-    const bucket = state.approvalPhotoBucket ?? state.requestImageBucket
-    const path = state.approvalPhotoPath ?? state.requestImagePath
-    if (!bucket || !path) {
+    const candidates: Array<{ bucket: string; path: string }> = []
+
+    state.partStates.forEach((part) => {
+      if (part.approvalPhotoBucket && part.approvalPhotoPath) {
+        candidates.push({ bucket: part.approvalPhotoBucket, path: part.approvalPhotoPath })
+      }
+      if (part.part_image_bucket && part.part_image_path) {
+        candidates.push({ bucket: part.part_image_bucket, path: part.part_image_path })
+      }
+    })
+
+    if (state.approvalPhotoBucket && state.approvalPhotoPath) {
+      candidates.push({ bucket: state.approvalPhotoBucket, path: state.approvalPhotoPath })
+    }
+    if (state.requestImageBucket && state.requestImagePath) {
+      candidates.push({ bucket: state.requestImageBucket, path: state.requestImagePath })
+    }
+
+    const uniqueCandidates = candidates.filter((item, idx) => candidates.findIndex((c) => c.bucket === item.bucket && c.path === item.path) === idx)
+    if (!uniqueCandidates.length) {
       showToast('No image found for additional approval', 'error')
       return
     }
 
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 300)
-    if (error || !data?.signedUrl) {
-      showToast(error?.message ?? 'Failed to open image', 'error')
-      return
+    for (const candidate of uniqueCandidates) {
+      const opened = await openAdditionalApprovalFile(candidate.path, candidate.bucket)
+      if (opened) {
+        return
+      }
     }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+
+    showToast('Unable to open additional approval image (file may be moved or missing)', 'error')
   }
 
   async function submitAdditionalApprovalRequest() {
@@ -1277,6 +1429,15 @@ export default function BodyshopFloorPage() {
         },
         decision: {
           status: 'pending',
+          parts: uploadedParts.map((_, partIndex) => ({
+            part_index: partIndex,
+            status: 'pending',
+            decided_at: null,
+            decided_by: null,
+            approval_photo_bucket: null,
+            approval_photo_path: null,
+            approval_photo_file_name: null,
+          })),
           decided_at: null,
           decided_by: null,
           approval_photo_bucket: null,
@@ -1456,6 +1617,14 @@ export default function BodyshopFloorPage() {
                     const isFloorCompleted = Boolean(floorStatus.completedAt)
                     const isSavingFloorStatus = saving === `${k}-bs-floor`
                     const additionalApproval = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
+                    const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
+                    const hasActiveRoleWork = ALL_ROLES.some((role) => {
+                      const assignment = carMap[role]
+                      if (!assignment) return false
+                      const status = String(assignment.work_status ?? '').trim().toLowerCase()
+                      return status === 'work_inprocess' || status === 'hold'
+                    })
+                    const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && !hasActiveRoleWork && additionalApprovalResolved
                     const isSavingAdditionalApproval = saving === `${k}-additional-approval`
 
                     return (
@@ -1606,12 +1775,27 @@ export default function BodyshopFloorPage() {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             <button
                               className={`btn btn--sm ${isFloorCompleted ? 'btn--ghost' : 'btn--primary'}`}
-                              disabled={isFloorCompleted || isSavingFloorStatus}
-                              style={{ opacity: isFloorCompleted || isSavingFloorStatus ? 0.75 : 1 }}
+                              disabled={!canMarkFloorCompleted}
+                              style={{ opacity: canMarkFloorCompleted ? 1 : 0.6 }}
+                              title={hasActiveRoleWork
+                                ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
+                                : !additionalApprovalResolved
+                                  ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
+                                  : undefined}
                               onClick={() => void markBsFloorCompleted(car)}
                             >
                               {isSavingFloorStatus ? 'Saving…' : 'Completed'}
                             </button>
+                            {!isFloorCompleted && hasActiveRoleWork && (
+                              <div style={{ fontSize: 11, color: '#92400e' }}>
+                                Disabled until all assigned roles are not Work In Process/Hold.
+                              </div>
+                            )}
+                            {!isFloorCompleted && !hasActiveRoleWork && !additionalApprovalResolved && (
+                              <div style={{ fontSize: 11, color: '#92400e' }}>
+                                Disabled until Additional Approval is fully resolved.
+                              </div>
+                            )}
                             {isFloorCompleted && (
                               <div style={{ fontSize: 11, color: '#0f766e' }}>
                                 <div>{fmtDate(floorStatus.completedAt)}</div>
@@ -1632,22 +1816,73 @@ export default function BodyshopFloorPage() {
                             >
                               {isSavingAdditionalApproval ? 'Saving…' : 'Additional Approval'}
                             </button>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: additionalApproval.status === 'approved' ? '#166534' : additionalApproval.status === 'rejected' ? '#b91c1c' : additionalApproval.status === 'pending' ? '#92400e' : '#64748b' }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: additionalApproval.status === 'approved' ? '#166534' : additionalApproval.status === 'rejected' ? '#b91c1c' : additionalApproval.status === 'mixed' ? '#1d4ed8' : additionalApproval.status === 'pending' ? '#92400e' : '#64748b' }}>
                               {additionalApproval.status === 'approved'
-                                ? 'Approved'
+                                ? 'All Approved'
                                 : additionalApproval.status === 'rejected'
-                                  ? 'Rejected'
+                                  ? 'All Rejected'
+                                  : additionalApproval.status === 'mixed'
+                                    ? 'Completed (Mixed)'
                                   : additionalApproval.status === 'pending'
                                     ? 'Pending'
                                     : 'None'}
                             </div>
+                            {additionalApproval.status !== 'none' && (
+                              <>
+                                <div style={{ fontSize: 10, color: '#64748b' }}>
+                                  {additionalApproval.partStates.length} Parts Requested
+                                </div>
+                                <div style={{ fontSize: 10, color: '#64748b' }}>
+                                  Approved: {additionalApproval.approvedCount} · Rejected: {additionalApproval.rejectedCount} · Pending: {additionalApproval.pendingCount}
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                  {additionalApproval.partStates.slice(0, 3).map((part) => (
+                                    <span
+                                      key={`part-chip-${k}-${part.partIndex}`}
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        borderRadius: 999,
+                                        padding: '2px 6px',
+                                        border: `1px solid ${part.status === 'approved' ? '#86efac' : part.status === 'rejected' ? '#fecaca' : '#fcd34d'}`,
+                                        background: part.status === 'approved' ? '#f0fdf4' : part.status === 'rejected' ? '#fef2f2' : '#fffbeb',
+                                        color: part.status === 'approved' ? '#166534' : part.status === 'rejected' ? '#991b1b' : '#92400e',
+                                      }}
+                                    >
+                                      P{part.partIndex + 1}: {part.status === 'approved' ? 'Approved' : part.status === 'rejected' ? 'Rejected' : 'Pending'}
+                                    </span>
+                                  ))}
+                                  {additionalApproval.partStates.length > 3 && (
+                                    <span style={{ fontSize: 10, color: '#64748b', alignSelf: 'center' }}>
+                                      +{additionalApproval.partStates.length - 3} more
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                  {additionalApproval.partStates
+                                    .filter((part) => Boolean(part.part_image_path || part.approvalPhotoPath))
+                                    .map((part) => (
+                                      <button
+                                        key={`part-view-${k}-${part.partIndex}`}
+                                        type="button"
+                                        className="btn btn--ghost btn--xs"
+                                        onClick={() => {
+                                          void openAdditionalApprovalFile(part.part_image_path ?? part.approvalPhotoPath, part.part_image_bucket ?? part.approvalPhotoBucket)
+                                        }}
+                                      >
+                                        View P{part.partIndex + 1}
+                                      </button>
+                                    ))}
+                                </div>
+                              </>
+                            )}
                             {(additionalApproval.requestImagePath || additionalApproval.approvalPhotoPath) && (
                               <button
                                 type="button"
                                 className="btn btn--ghost btn--xs"
                                 onClick={() => void viewAdditionalApprovalFile(additionalApproval)}
                               >
-                                View
+                                View Any
                               </button>
                             )}
                           </div>

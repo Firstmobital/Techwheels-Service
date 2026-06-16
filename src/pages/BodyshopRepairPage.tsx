@@ -142,6 +142,10 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
   const base: AdditionalApprovalState = {
     status: 'none',
     requestParts: [],
+    partStates: [],
+    pendingCount: 0,
+    approvedCount: 0,
+    rejectedCount: 0,
     requestPartNo: null,
     requestPartDescription: null,
     requestReason: null,
@@ -162,7 +166,7 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
 
   try {
     const parsed = JSON.parse(text) as AdditionalApprovalPayload
-    const status = parsed?.decision?.status
+    const legacyStatus = parsed?.decision?.status
     const parsedParts = Array.isArray(parsed?.request?.parts)
       ? parsed.request.parts
           .map((part) => ({
@@ -194,11 +198,59 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
         : null
     const allParts = fallbackPart ? [fallbackPart] : parsedParts
     const first = allParts[0] ?? null
+    const parsedDecisionParts = Array.isArray(parsed?.decision?.parts)
+      ? parsed.decision.parts
+          .map((part, idx) => ({
+            part_index: Number.isFinite(Number(part?.part_index)) ? Number(part.part_index) : idx,
+            status: part?.status === 'approved' || part?.status === 'rejected' || part?.status === 'pending' ? part.status : 'pending',
+            decided_at: part?.decided_at ?? null,
+            decided_by: part?.decided_by ?? null,
+            approval_photo_bucket: part?.approval_photo_bucket ?? null,
+            approval_photo_path: part?.approval_photo_path ?? null,
+            approval_photo_file_name: part?.approval_photo_file_name ?? null,
+          }))
+      : []
+    const legacyDecisionStatus: AdditionalApprovalDecisionStatus = legacyStatus === 'pending' || legacyStatus === 'approved' || legacyStatus === 'rejected'
+      ? legacyStatus
+      : 'pending'
+    const partStates: AdditionalApprovalPartState[] = allParts.map((part, idx) => {
+      const explicit = parsedDecisionParts.find((item) => item.part_index === idx) ?? parsedDecisionParts[idx] ?? null
+      const status = explicit?.status ?? legacyDecisionStatus
+      const approvalPhotoBucket = explicit?.approval_photo_bucket ?? parsed?.decision?.approval_photo_bucket ?? null
+      const approvalPhotoPath = explicit?.approval_photo_path ?? parsed?.decision?.approval_photo_path ?? null
+      const approvalPhotoFileName = explicit?.approval_photo_file_name ?? parsed?.decision?.approval_photo_file_name ?? null
+
+      return {
+        partIndex: idx,
+        part_no: part.part_no,
+        part_description: part.part_description,
+        reason: part.reason,
+        part_image_bucket: part.part_image_bucket,
+        part_image_path: part.part_image_path,
+        part_image_file_name: part.part_image_file_name,
+        status,
+        decidedAt: explicit?.decided_at ?? parsed?.decision?.decided_at ?? null,
+        decidedBy: explicit?.decided_by ?? parsed?.decision?.decided_by ?? null,
+        approvalPhotoBucket,
+        approvalPhotoPath,
+        approvalPhotoFileName,
+      }
+    })
+    const pendingCount = partStates.filter((part) => part.status === 'pending').length
+    const approvedCount = partStates.filter((part) => part.status === 'approved').length
+    const rejectedCount = partStates.filter((part) => part.status === 'rejected').length
+    const aggregateStatus = partStates.length > 0
+      ? getAggregateAdditionalApprovalStatus(partStates)
+      : (legacyStatus === 'pending' || legacyStatus === 'approved' || legacyStatus === 'rejected' ? legacyStatus : 'pending')
 
     return {
       ...base,
-      status: status === 'pending' || status === 'approved' || status === 'rejected' ? status : 'pending',
+      status: aggregateStatus,
       requestParts: allParts,
+      partStates,
+      pendingCount,
+      approvedCount,
+      rejectedCount,
       requestPartNo: first?.part_no ?? null,
       requestPartDescription: first?.part_description ?? null,
       requestReason: first?.reason ?? null,
@@ -217,6 +269,30 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
     return {
       ...base,
       status: 'pending',
+      requestParts: [{
+        part_no: null,
+        part_description: null,
+        reason: text,
+        part_image_bucket: null,
+        part_image_path: null,
+        part_image_file_name: null,
+      }],
+      partStates: [{
+        partIndex: 0,
+        part_no: null,
+        part_description: null,
+        reason: text,
+        part_image_bucket: null,
+        part_image_path: null,
+        part_image_file_name: null,
+        status: 'pending',
+        decidedAt: null,
+        decidedBy: null,
+        approvalPhotoBucket: null,
+        approvalPhotoPath: null,
+        approvalPhotoFileName: null,
+      }],
+      pendingCount: 1,
       requestReason: text,
     }
   }
@@ -300,6 +376,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
+type AdditionalApprovalAggregateStatus = AdditionalApprovalDecisionStatus | 'none' | 'mixed'
 
 type AdditionalApprovalRequestPart = {
   part_no: string | null
@@ -308,6 +385,16 @@ type AdditionalApprovalRequestPart = {
   part_image_bucket: string | null
   part_image_path: string | null
   part_image_file_name: string | null
+}
+
+type AdditionalApprovalDecisionPart = {
+  part_index: number
+  status: AdditionalApprovalDecisionStatus
+  decided_at: string | null
+  decided_by: string | null
+  approval_photo_bucket: string | null
+  approval_photo_path: string | null
+  approval_photo_file_name: string | null
 }
 
 type AdditionalApprovalPayload = {
@@ -325,6 +412,7 @@ type AdditionalApprovalPayload = {
   }
   decision?: {
     status: AdditionalApprovalDecisionStatus
+    parts?: AdditionalApprovalDecisionPart[]
     decided_at: string | null
     decided_by: string | null
     approval_photo_bucket: string | null
@@ -333,9 +421,29 @@ type AdditionalApprovalPayload = {
   }
 }
 
+type AdditionalApprovalPartState = {
+  partIndex: number
+  part_no: string | null
+  part_description: string | null
+  reason: string | null
+  part_image_bucket: string | null
+  part_image_path: string | null
+  part_image_file_name: string | null
+  status: AdditionalApprovalDecisionStatus
+  decidedAt: string | null
+  decidedBy: string | null
+  approvalPhotoBucket: string | null
+  approvalPhotoPath: string | null
+  approvalPhotoFileName: string | null
+}
+
 type AdditionalApprovalState = {
-  status: AdditionalApprovalDecisionStatus | 'none'
+  status: AdditionalApprovalAggregateStatus
   requestParts: AdditionalApprovalRequestPart[]
+  partStates: AdditionalApprovalPartState[]
+  pendingCount: number
+  approvedCount: number
+  rejectedCount: number
   requestPartNo: string | null
   requestPartDescription: string | null
   requestReason: string | null
@@ -349,6 +457,75 @@ type AdditionalApprovalState = {
   approvalPhotoFileName: string | null
   decidedAt: string | null
   decidedBy: string | null
+}
+
+function getAggregateAdditionalApprovalStatus(partStates: AdditionalApprovalPartState[]): AdditionalApprovalAggregateStatus {
+  if (!partStates.length) return 'none'
+  const pendingCount = partStates.filter((part) => part.status === 'pending').length
+  if (pendingCount > 0) return 'pending'
+  const approvedCount = partStates.filter((part) => part.status === 'approved').length
+  const rejectedCount = partStates.filter((part) => part.status === 'rejected').length
+  if (approvedCount > 0 && rejectedCount > 0) return 'mixed'
+  if (approvedCount === partStates.length) return 'approved'
+  if (rejectedCount === partStates.length) return 'rejected'
+  return 'pending'
+}
+
+function toLegacyDecisionStatus(partStates: AdditionalApprovalPartState[]): AdditionalApprovalDecisionStatus {
+  const aggregate = getAggregateAdditionalApprovalStatus(partStates)
+  if (aggregate === 'approved') return 'approved'
+  if (aggregate === 'rejected') return 'rejected'
+  return 'pending'
+}
+
+// ── Initial Approved Parts Types ───────────────────────────────────────────
+type ApprovedPartInitial = {
+  part_index: number
+  part_no: string
+  part_description: string
+  approved_at: string
+  approved_by: string
+}
+
+type ApprovedPartsPayload = {
+  version: 1
+  parts?: ApprovedPartInitial[]
+  finalized_at: string | null
+  finalized_by: string | null
+}
+
+type ApprovedPartsState = {
+  parts: ApprovedPartInitial[]
+  finalized: boolean
+  finalizedAt: string | null
+  finalizedBy: string | null
+}
+
+function parseApprovedPartsState(raw: string | null | undefined): ApprovedPartsState {
+  const state: ApprovedPartsState = {
+    parts: [],
+    finalized: false,
+    finalizedAt: null,
+    finalizedBy: null,
+  }
+
+  if (!raw) return state
+
+  try {
+    const payload: ApprovedPartsPayload = JSON.parse(raw)
+    if (payload?.parts && Array.isArray(payload.parts)) {
+      state.parts = payload.parts
+    }
+    if (payload?.finalized_at) {
+      state.finalized = true
+      state.finalizedAt = payload.finalized_at
+      state.finalizedBy = payload.finalized_by || null
+    }
+  } catch {
+    // Invalid JSON, return empty state
+  }
+
+  return state
 }
 
 type FloorRole = 'DENTOR' | 'PAINTER' | 'TECHNICIAN' | 'ELECTRICIAN' | 'DET'
@@ -372,6 +549,11 @@ type BodyshopFloorPrimaryRow = {
   technician_work_status: string | null
   electrician_work_status: string | null
   det_work_status: string | null
+  dentor_remark: string | null
+  painter_remark: string | null
+  technician_remark: string | null
+  electrician_remark: string | null
+  det_remark: string | null
   dentor_in_ts: string | null
   painter_in_ts: string | null
   technician_in_ts: string | null
@@ -401,8 +583,7 @@ type FloorRoleSnapshot = {
   displayStatus: 'Not Required' | 'Work In Process' | 'Hold' | 'Completed'
   inTs: string | null
   outTs: string | null
-  doneAt: string | null
-  doneBy: string | null
+  reason: string | null
 }
 
 const FLOOR_ROLES: FloorRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
@@ -419,6 +600,7 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
   employeeCode: keyof BodyshopFloorPrimaryRow
   employeeName: keyof BodyshopFloorPrimaryRow
   workStatus: keyof BodyshopFloorPrimaryRow
+  remark: keyof BodyshopFloorPrimaryRow
   inTs: keyof BodyshopFloorPrimaryRow
   outTs: keyof BodyshopFloorPrimaryRow
   completedBy: keyof BodyshopFloorPrimaryRow
@@ -427,6 +609,7 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     employeeCode: 'dentor_employee_code',
     employeeName: 'dentor_employee_name',
     workStatus: 'dentor_work_status',
+    remark: 'dentor_remark',
     inTs: 'dentor_in_ts',
     outTs: 'dentor_out_ts',
     completedBy: 'dentor_completed_by',
@@ -435,6 +618,7 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     employeeCode: 'painter_employee_code',
     employeeName: 'painter_employee_name',
     workStatus: 'painter_work_status',
+    remark: 'painter_remark',
     inTs: 'painter_in_ts',
     outTs: 'painter_out_ts',
     completedBy: 'painter_completed_by',
@@ -443,6 +627,7 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     employeeCode: 'technician_employee_code',
     employeeName: 'technician_employee_name',
     workStatus: 'technician_work_status',
+    remark: 'technician_remark',
     inTs: 'technician_in_ts',
     outTs: 'technician_out_ts',
     completedBy: 'technician_completed_by',
@@ -451,6 +636,7 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     employeeCode: 'electrician_employee_code',
     employeeName: 'electrician_employee_name',
     workStatus: 'electrician_work_status',
+    remark: 'electrician_remark',
     inTs: 'electrician_in_ts',
     outTs: 'electrician_out_ts',
     completedBy: 'electrician_completed_by',
@@ -459,6 +645,7 @@ const FLOOR_ROLE_COLUMNS: Record<FloorRole, {
     employeeCode: 'det_employee_code',
     employeeName: 'det_employee_name',
     workStatus: 'det_work_status',
+    remark: 'det_remark',
     inTs: 'det_in_ts',
     outTs: 'det_out_ts',
     completedBy: 'det_completed_by',
@@ -573,6 +760,10 @@ export default function BodyshopRepairPage() {
   const [pendingFloorScrollRole, setPendingFloorScrollRole] = useState<FloorRole | null>(null)
   const [highlightedFloorRole, setHighlightedFloorRole] = useState<FloorRole | null>(null)
   const [uploadingAdditionalApprovalPhoto, setUploadingAdditionalApprovalPhoto] = useState(false)
+  const [additionalApprovalPhotoPartIndex, setAdditionalApprovalPhotoPartIndex] = useState<number | null>(null)
+  const [editingApprovedParts, setEditingApprovedParts] = useState(false)
+  const [tempApprovedParts, setTempApprovedParts] = useState<ApprovedPartInitial[]>([])
+  const [savingApprovedParts, setSavingApprovedParts] = useState(false)
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
   const additionalApprovalPhotoInputRef = useRef<HTMLInputElement | null>(null)
@@ -725,6 +916,7 @@ export default function BodyshopRepairPage() {
         'electrician_employee_code', 'electrician_employee_name',
         'det_employee_code', 'det_employee_name',
         'dentor_work_status', 'painter_work_status', 'technician_work_status', 'electrician_work_status', 'det_work_status',
+        'dentor_remark', 'painter_remark', 'technician_remark', 'electrician_remark', 'det_remark',
         'dentor_in_ts', 'painter_in_ts', 'technician_in_ts', 'electrician_in_ts', 'det_in_ts',
         'dentor_out_ts', 'painter_out_ts', 'technician_out_ts', 'electrician_out_ts', 'det_out_ts',
         'dentor_completed_by', 'painter_completed_by', 'technician_completed_by', 'electrician_completed_by', 'det_completed_by',
@@ -794,6 +986,7 @@ export default function BodyshopRepairPage() {
       const normalizedStatus: FloorRoleSnapshot['normalizedStatus'] =
         rawStatus === 'hold' || rawStatus === 'completed' ? rawStatus : 'work_inprocess'
       const outTs = (row?.[cols.outTs] as string | null) ?? null
+      const remark = String((row?.[cols.remark] as string | null) ?? '').trim() || null
 
       return {
         role,
@@ -805,8 +998,7 @@ export default function BodyshopRepairPage() {
         displayStatus: normalizedStatus === 'hold' ? 'Hold' : normalizedStatus === 'completed' ? 'Completed' : 'Work In Process',
         inTs: (row?.[cols.inTs] as string | null) ?? null,
         outTs,
-        doneAt: normalizedStatus === 'completed' ? outTs : null,
-        doneBy: normalizedStatus === 'completed' ? ((row?.[cols.completedBy] as string | null) ?? null) : null,
+        reason: normalizedStatus === 'hold' ? remark : null,
       }
     })
   }, [floorPrimaryRow])
@@ -828,12 +1020,23 @@ export default function BodyshopRepairPage() {
     return hasFloorStageCompletedInPrimaryRow(floorPrimaryRow)
   }, [floorPrimaryRow])
 
+  const derivedFloorStatusLabel = useMemo<'Unassigned' | 'Work In Process' | 'Hold' | 'Completed'>(() => {
+    if (floorStageCompleted) return 'Completed'
+    if (floorParentStatus === 'Hold') return 'Hold'
+    if (floorWorkStarted) return 'Work In Process'
+    return 'Unassigned'
+  }, [floorStageCompleted, floorParentStatus, floorWorkStarted])
+
   const selectedAdditionalApproval = useMemo(() => {
     return parseAdditionalApprovalState(selected?.additional_approval)
   }, [selected?.additional_approval])
 
   const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
   const additionalApprovalPending = selectedAdditionalApproval.status === 'pending'
+
+  const selectedApprovedParts = useMemo(() => {
+    return parseApprovedPartsState(selected?.approved_parts)
+  }, [selected?.approved_parts])
 
   useEffect(() => {
     if (detailTab !== 'floor' || !pendingFloorScrollRole || loadingFloorPrimary) return
@@ -2295,10 +2498,38 @@ export default function BodyshopRepairPage() {
       && (surveyStatus === 'hold' || surveyStatus === 'approved')
       && (surveyStatus !== 'hold' || Boolean(surveyHoldReason)))
       || effectiveCurrentStage > 9
-    const stage10Done = effectiveCurrentStage > 10
-    const stage11Done = floorCompleted || effectiveCurrentStage > 11
+    
+    // Stage 10: Initial Approved Parts must be submitted when survey is approved + approval photo uploaded
+    const surveyApproved = surveyStatus === 'approved'
+    const surveyApprovalDoc = Boolean(card.doc_survey_approval ?? null)
+      // Some list payloads don't hydrate doc_survey_approval; reaching stage 10 implies survey approval evidence exists.
+      || effectiveCurrentStage >= 10
+    const approvedPartsState = parseApprovedPartsState(card.approved_parts)
+    const approvedPartsFinalized = approvedPartsState.finalized
+    // Stage 10 is done only after explicit initial approved-parts submission.
+    const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
+
     const additionalApproval = parseAdditionalApprovalState(card.additional_approval)
-    const stage12Done = additionalApproval.status === 'approved' || additionalApproval.status === 'rejected' || effectiveCurrentStage > 12
+    const additionalApprovalRequested = additionalApproval.status !== 'none'
+    const stage12Done = (
+      (additionalApproval.partStates.length > 0 && additionalApproval.pendingCount === 0)
+      || (additionalApproval.partStates.length === 0 && (additionalApproval.status === 'approved' || additionalApproval.status === 'rejected'))
+      || effectiveCurrentStage > 12
+    )
+    // Stage 11 completes only when floor is completed and all required upstream gates are complete.
+    const stage11Done = floorCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
+
+    const stage10And11Ready = stage1Done
+      && stage2Done
+      && stage3Done
+      && stage4Done
+      && stage5Done
+      && stage6Done
+      && stage7Done
+      && stage8Done
+      && stage9Done
+      && surveyApproved
+      && surveyApprovalDoc
 
     // Stage queue is an operational worklist: each stage card counts cards that
     // still need that specific stage's work, independent of earlier pending stages.
@@ -2311,33 +2542,14 @@ export default function BodyshopRepairPage() {
     if (stage === 7) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && !stage7Done
     if (stage === 8) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && !stage8Done
     if (stage === 9) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && !stage9Done
-    if (stage === 10) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && stage9Done && !stage10Done
+    if (stage === 10) return stage10And11Ready && !stage10Done
     if (stage === 11) {
-      return stage1Done
-        && stage2Done
-        && stage3Done
-        && stage4Done
-        && stage5Done
-        && stage6Done
-        && stage7Done
-        && stage8Done
-        && stage9Done
-        && (floorSent || floorStarted)
-        && !stage11Done
+      return stage10And11Ready && !stage11Done
     }
 
     if (stage === 12) {
-      return stage1Done
-        && stage2Done
-        && stage3Done
-        && stage4Done
-        && stage5Done
-        && stage6Done
-        && stage7Done
-        && stage8Done
-        && stage9Done
-        && (floorSent || floorStarted)
-        && additionalApproval.status !== 'none'
+      return stage10And11Ready
+        && additionalApprovalRequested
         && !stage12Done
     }
 
@@ -2349,17 +2561,34 @@ export default function BodyshopRepairPage() {
       toast_('No image found for additional approval', false)
       return
     }
-    const { data, error } = await supabase.storage
-      .from((bucket && String(bucket).trim()) || AUTODOC_BUCKET)
+    const resolvedBucket = (bucket && String(bucket).trim()) || AUTODOC_BUCKET
+    const signedRes = await supabase.storage
+      .from(resolvedBucket)
       .createSignedUrl(path, 300)
-    if (error || !data?.signedUrl) {
-      toast_(error?.message ?? 'Unable to open file', false)
+    if (!signedRes.error && signedRes.data?.signedUrl) {
+      window.open(signedRes.data.signedUrl, '_blank', 'noopener,noreferrer')
       return
     }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+
+    // Source object may be deleted post universal-drive-upload; fallback to Drive URL.
+    const driveRes = await supabase
+      .from('bodyshop_intake_vehicle_photos')
+      .select('drive_url, uploaded_at')
+      .eq('storage_path', path)
+      .not('drive_url', 'is', null)
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+
+    const driveUrl = String(driveRes.data?.[0]?.drive_url ?? '').trim()
+    if (driveUrl) {
+      window.open(driveUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    toast_('Unable to open additional approval image (file may be moved to Drive)', false)
   }
 
-  async function handleAdditionalApprovalPhotoPicked(files: FileList | null) {
+  async function handleAdditionalApprovalPhotoPicked(files: FileList | null, partIndex: number) {
     if (!selected || !files || files.length === 0) return
     const file = files[0]
     if (!String(file.type ?? '').startsWith('image/')) {
@@ -2370,6 +2599,11 @@ export default function BodyshopRepairPage() {
     const parsed = parseAdditionalApprovalState(selected.additional_approval)
     if (parsed.status === 'none') {
       toast_('Additional approval request not found', false)
+      return
+    }
+    const targetPart = parsed.partStates[partIndex]
+    if (!targetPart) {
+      toast_('Invalid additional approval part', false)
       return
     }
 
@@ -2466,12 +2700,31 @@ export default function BodyshopRepairPage() {
           requested_by: parsed.requestedBy,
         },
         decision: {
-          status: parsed.status === 'approved' || parsed.status === 'rejected' ? parsed.status : 'pending',
+          status: toLegacyDecisionStatus(parsed.partStates),
+          parts: parsed.partStates.map((part) => part.partIndex === partIndex
+            ? {
+                part_index: part.partIndex,
+                status: part.status,
+                decided_at: part.decidedAt,
+                decided_by: part.decidedBy,
+                approval_photo_bucket: AUTODOC_BUCKET,
+                approval_photo_path: objectPath,
+                approval_photo_file_name: file.name,
+              }
+            : {
+                part_index: part.partIndex,
+                status: part.status,
+                decided_at: part.decidedAt,
+                decided_by: part.decidedBy,
+                approval_photo_bucket: part.approvalPhotoBucket,
+                approval_photo_path: part.approvalPhotoPath,
+                approval_photo_file_name: part.approvalPhotoFileName,
+              }),
           decided_at: parsed.decidedAt,
           decided_by: parsed.decidedBy,
-          approval_photo_bucket: AUTODOC_BUCKET,
-          approval_photo_path: objectPath,
-          approval_photo_file_name: file.name,
+          approval_photo_bucket: parsed.approvalPhotoBucket,
+          approval_photo_path: parsed.approvalPhotoPath,
+          approval_photo_file_name: parsed.approvalPhotoFileName,
         },
       }
 
@@ -2480,22 +2733,28 @@ export default function BodyshopRepairPage() {
       })
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
-      toast_('Approval photo uploaded ✅')
+      toast_(`Approval photo uploaded for Part ${partIndex + 1} ✅`)
     } catch (e: any) {
       toast_(e?.message ?? 'Failed to upload approval photo', false)
     } finally {
       setUploadingAdditionalApprovalPhoto(false)
+      setAdditionalApprovalPhotoPartIndex(null)
     }
   }
 
-  async function handleAdditionalApprovalDecision(nextStatus: 'approved' | 'rejected') {
+  async function handleAdditionalApprovalDecision(partIndex: number, nextStatus: 'approved' | 'rejected') {
     if (!selected) return
     const parsed = parseAdditionalApprovalState(selected.additional_approval)
     if (parsed.status === 'none') {
       toast_('Additional approval request not found', false)
       return
     }
-    if (nextStatus === 'approved' && !parsed.approvalPhotoPath) {
+    const targetPart = parsed.partStates[partIndex]
+    if (!targetPart) {
+      toast_('Invalid additional approval part', false)
+      return
+    }
+    if (nextStatus === 'approved' && !targetPart.approvalPhotoPath) {
       toast_('Approval photo is required before approving', false)
       return
     }
@@ -2520,7 +2779,33 @@ export default function BodyshopRepairPage() {
           requested_by: parsed.requestedBy,
         },
         decision: {
-          status: nextStatus,
+          status: toLegacyDecisionStatus(parsed.partStates.map((part) => part.partIndex === partIndex
+            ? {
+                ...part,
+                status: nextStatus,
+                decidedAt: now,
+                decidedBy: actor,
+              }
+            : part)),
+          parts: parsed.partStates.map((part) => part.partIndex === partIndex
+            ? {
+                part_index: part.partIndex,
+                status: nextStatus,
+                decided_at: now,
+                decided_by: actor,
+                approval_photo_bucket: part.approvalPhotoBucket,
+                approval_photo_path: part.approvalPhotoPath,
+                approval_photo_file_name: part.approvalPhotoFileName,
+              }
+            : {
+                part_index: part.partIndex,
+                status: part.status,
+                decided_at: part.decidedAt,
+                decided_by: part.decidedBy,
+                approval_photo_bucket: part.approvalPhotoBucket,
+                approval_photo_path: part.approvalPhotoPath,
+                approval_photo_file_name: part.approvalPhotoFileName,
+              }),
           decided_at: now,
           decided_by: actor,
           approval_photo_bucket: parsed.approvalPhotoBucket,
@@ -2534,11 +2819,86 @@ export default function BodyshopRepairPage() {
       })
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
-      toast_(nextStatus === 'approved' ? 'Additional approval marked Approved ✅' : 'Additional approval marked Rejected ✅')
+      toast_(nextStatus === 'approved' ? `Part ${partIndex + 1} marked Approved ✅` : `Part ${partIndex + 1} marked Rejected ✅`)
     } catch (e: any) {
       toast_(e?.message ?? 'Failed to save additional approval decision', false)
     } finally {
       setSaving(false)
+    }
+  }
+
+  // ── Initial Approved Parts Handlers ────────────────────────────────────────
+  function handleStartEditingApprovedParts() {
+    setTempApprovedParts(selectedApprovedParts.parts)
+    setEditingApprovedParts(true)
+  }
+
+  function handleCancelEditingApprovedParts() {
+    setEditingApprovedParts(false)
+    setTempApprovedParts([])
+  }
+
+  function handleAddApprovedPart() {
+    const newPart: ApprovedPartInitial = {
+      part_index: tempApprovedParts.length,
+      part_no: '',
+      part_description: '',
+      approved_at: new Date().toISOString(),
+      approved_by: '',
+    }
+    setTempApprovedParts([...tempApprovedParts, newPart])
+  }
+
+  function handleRemoveApprovedPart(index: number) {
+    setTempApprovedParts(tempApprovedParts.filter((_, i) => i !== index))
+  }
+
+  function handleUpdateApprovedPart(index: number, field: 'part_no' | 'part_description', value: string) {
+    setTempApprovedParts(
+      tempApprovedParts.map((part, i) => i === index ? { ...part, [field]: value } : part)
+    )
+  }
+
+  async function handleSaveApprovedParts() {
+    if (!selected) return
+
+    // Validation
+    if (tempApprovedParts.length === 0) {
+      toast_('Please add at least one approved part', false)
+      return
+    }
+
+    const hasEmptyFields = tempApprovedParts.some((part) => !part.part_no.trim() || !part.part_description.trim())
+    if (hasEmptyFields) {
+      toast_('All approved parts must have Part No and Part Description', false)
+      return
+    }
+
+    setSavingApprovedParts(true)
+    try {
+      const authRes = await supabase.auth.getUser()
+      const actor = authRes.data.user?.email || authRes.data.user?.id || null
+      const now = new Date().toISOString()
+
+      const payload: ApprovedPartsPayload = {
+        version: 1,
+        parts: tempApprovedParts,
+        finalized_at: now,
+        finalized_by: actor,
+      }
+
+      const updated = await updateRepairCard(selected.id, {
+        approved_parts: JSON.stringify(payload),
+      })
+      setSelected(updated)
+      setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      setEditingApprovedParts(false)
+      setTempApprovedParts([])
+      toast_(`${tempApprovedParts.length} approved part(s) saved successfully ✅`)
+    } catch (e: any) {
+      toast_(e?.message ?? 'Failed to save approved parts', false)
+    } finally {
+      setSavingApprovedParts(false)
     }
   }
 
@@ -2963,6 +3323,42 @@ export default function BodyshopRepairPage() {
                     : []
                   const collectedMandatory = mandatoryDocs.filter(d => Boolean(bodyshopDocsByKey[d.k])).length
                   const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+                  const surveyStatusNormalized = String(selected.survey_status ?? '').trim().toLowerCase()
+                  const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
+                  const surveyApproved = surveyStatusNormalized === 'approved'
+                  const surveyApprovalDoc = Boolean(selected.doc_survey_approval ?? null)
+                    || Boolean(bodyshopDocsByKey.doc_survey_approval?.id)
+                    || effectiveCurrentStage >= 10
+                  const approvedPartsFinalized = parseApprovedPartsState(selected.approved_parts).finalized
+                  const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
+                  const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
+                  const stage5Done = noDocsRequired
+                    || mandatoryDocs.every((doc) => Boolean(bodyshopDocsByKey[doc.k]))
+                    || effectiveCurrentStage > 5
+                  const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
+                  const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
+                  const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
+                  const stage9Done = (Boolean(String(selected.survey_date ?? '').trim())
+                    && (surveyStatusNormalized === 'hold' || surveyStatusNormalized === 'approved')
+                    && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason)))
+                    || effectiveCurrentStage > 9
+                  const stage12Done = (
+                    (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
+                    || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
+                    || effectiveCurrentStage > 12
+                  )
+                  const stage11Done = floorStageCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
+                  const stage10And11Ready = milestones.stage1Done
+                    && milestones.stage2Done
+                    && milestones.stage3Done
+                    && milestones.stage4Done
+                    && stage5Done
+                    && stage6Done
+                    && stage7Done
+                    && stage8Done
+                    && stage9Done
+                    && surveyApproved
+                    && surveyApprovalDoc
                   const num    = Number(numStr)
                   const isDone = num <= 4
                     ? num === 1
@@ -2974,9 +3370,23 @@ export default function BodyshopRepairPage() {
                           : milestones.stage4Done
                     : num === 5
                       ? docsDone || effectiveCurrentStage > num
-                      : effectiveCurrentStage > num
-                  const isCur = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
-                    || (num === 12 && additionalApprovalPending && floorWorkStarted && !floorStageCompleted)
+                      : num === 10
+                        ? stage10Done
+                        : num === 11
+                          ? stage11Done
+                          : num === 12
+                            ? stage12Done
+                        : effectiveCurrentStage > num
+                  const stage10Active = stage10And11Ready && !stage10Done
+                  const stage11Active = stage10And11Ready && !stage11Done
+                  const stage12Active = stage10And11Ready && additionalApprovalRequested && !stage12Done
+                  const isCur = num === 10
+                    ? stage10Active
+                    : num === 11
+                      ? stage11Active
+                      : num === 12
+                        ? stage12Active
+                        : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
                     <div key={`stage-${num}`} style={{
@@ -3071,9 +3481,9 @@ export default function BodyshopRepairPage() {
 
                       if (additionalApprovalRequested) {
                         const status = selectedAdditionalApproval.status
-                        const tone = status === 'approved' ? '#86efac' : status === 'rejected' ? '#fecaca' : '#fcd34d'
-                        const bg = status === 'approved' ? '#f0fdf4' : status === 'rejected' ? '#fef2f2' : '#fffbeb'
-                        const fg = status === 'approved' ? '#166534' : status === 'rejected' ? '#991b1b' : '#92400e'
+                        const tone = status === 'approved' ? '#86efac' : status === 'rejected' ? '#fecaca' : status === 'mixed' ? '#bfdbfe' : '#fcd34d'
+                        const bg = status === 'approved' ? '#f0fdf4' : status === 'rejected' ? '#fef2f2' : status === 'mixed' ? '#eff6ff' : '#fffbeb'
+                        const fg = status === 'approved' ? '#166534' : status === 'rejected' ? '#991b1b' : status === 'mixed' ? '#1d4ed8' : '#92400e'
 
                         rows.push(
                           <button
@@ -3097,7 +3507,7 @@ export default function BodyshopRepairPage() {
                             <span style={{ fontSize: 10, fontWeight: 800, color: fg }}>12</span>
                             <span style={{ fontSize: 11, fontWeight: 700, color: fg, flex: 1 }}>Additional Approval</span>
                             <span style={{ fontSize: 10, fontWeight: 700, color: fg }}>
-                              {status === 'approved' ? 'Done' : status === 'rejected' ? 'Rejected' : 'Pending'}
+                              {status === 'approved' ? 'Done' : status === 'rejected' ? 'Rejected' : status === 'mixed' ? 'Completed' : 'Pending'}
                             </span>
                           </button>,
                         )
@@ -3198,6 +3608,50 @@ export default function BodyshopRepairPage() {
                       const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                       const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                       const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                      const ct = String(selected.customer_type ?? '').trim().toLowerCase()
+                      const noDocsRequired = ct === 'cash' || ct === 'foc'
+                      const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
+                      const mandatoryDocs = isValidCustomerType(ct)
+                        ? visibleDocs.filter((d) => d.mandatoryFor.includes(ct as CustomerType))
+                        : []
+                      const collectedMandatory = mandatoryDocs.filter((d) => Boolean(bodyshopDocsByKey[d.k])).length
+                      const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
+                      const surveyStatusNormalized = String(selected.survey_status ?? '').trim().toLowerCase()
+                      const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
+                      const surveyApproved = surveyStatusNormalized === 'approved'
+                      const surveyApprovalDoc = Boolean(selected.doc_survey_approval ?? null)
+                        || Boolean(bodyshopDocsByKey.doc_survey_approval?.id)
+                        || effectiveCurrentStage >= 10
+                      const approvedPartsFinalized = parseApprovedPartsState(selected.approved_parts).finalized
+                      const stage10Done = surveyApproved && surveyApprovalDoc && approvedPartsFinalized
+                      const additionalApprovalRequested = selectedAdditionalApproval.status !== 'none'
+                      const stage5Done = noDocsRequired
+                        || mandatoryDocs.every((doc) => Boolean(bodyshopDocsByKey[doc.k]))
+                        || effectiveCurrentStage > 5
+                      const stage6Done = Number(selected.estimated_amount ?? 0) > 0 || effectiveCurrentStage > 6
+                      const stage7Done = Boolean(String(selected.estimation_approved_by ?? '').trim()) || effectiveCurrentStage > 7
+                      const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
+                      const stage9Done = (Boolean(String(selected.survey_date ?? '').trim())
+                        && (surveyStatusNormalized === 'hold' || surveyStatusNormalized === 'approved')
+                        && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason)))
+                        || effectiveCurrentStage > 9
+                      const stage12Done = (
+                        (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
+                        || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
+                        || effectiveCurrentStage > 12
+                      )
+                      const stage11Done = floorStageCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
+                      const stage10And11Ready = milestones.stage1Done
+                        && milestones.stage2Done
+                        && milestones.stage3Done
+                        && milestones.stage4Done
+                        && stage5Done
+                        && stage6Done
+                        && stage7Done
+                        && stage8Done
+                        && stage9Done
+                        && surveyApproved
+                        && surveyApprovalDoc
                       const num     = Number(numStr)
                       const isDone  = num <= 4
                         ? num === 1
@@ -3207,8 +3661,23 @@ export default function BodyshopRepairPage() {
                             : num === 3
                               ? milestones.stage3Done
                               : milestones.stage4Done
-                        : effectiveCurrentStage > num
-                      const isCur   = isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
+                        : num === 10
+                          ? stage10Done
+                          : num === 11
+                            ? stage11Done
+                            : num === 12
+                              ? stage12Done
+                          : effectiveCurrentStage > num
+                      const stage10Active = stage10And11Ready && !stage10Done
+                      const stage11Active = stage10And11Ready && !stage11Done
+                      const stage12Active = stage10And11Ready && additionalApprovalRequested && !stage12Done
+                      const isCur   = num === 10
+                        ? stage10Active
+                        : num === 11
+                          ? stage11Active
+                          : num === 12
+                            ? stage12Active
+                            : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
                       return (
                         <div key={num} style={{
@@ -4205,60 +4674,182 @@ export default function BodyshopRepairPage() {
                       </div>
                     )}
 
+                    {isSurveyApproved && surveyApprovalDoc && (
+                      <div style={{ gridColumn: '1/-1', border: '1px solid #d1d5db', background: '#f9fafb', borderRadius: 12, padding: 12, display: 'grid', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Initial Approved Parts</div>
+                            <div style={{ fontSize: 11, color: '#6b7280' }}>
+                              {selectedApprovedParts.finalized
+                                ? `${selectedApprovedParts.parts.length} part(s) finalized`
+                                : 'Capture parts that are definitely needed'}
+                            </div>
+                          </div>
+                          {!selectedApprovedParts.finalized && !editingApprovedParts && (
+                            <button
+                              type="button"
+                              className="btn btn--primary btn--sm"
+                              onClick={() => handleStartEditingApprovedParts()}
+                            >
+                              Add Parts
+                            </button>
+                          )}
+                        </div>
+
+                        {editingApprovedParts ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {tempApprovedParts.map((part, idx) => (
+                              <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#374151' }}>Part {idx + 1}</div>
+                                  {tempApprovedParts.length > 1 && (
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--xs"
+                                      onClick={() => handleRemoveApprovedPart(idx)}
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                                <input
+                                  type="text"
+                                  className="inp"
+                                  placeholder="Part No"
+                                  value={part.part_no}
+                                  onChange={(e) => handleUpdateApprovedPart(idx, 'part_no', e.target.value)}
+                                  style={{ fontSize: 12 }}
+                                />
+                                <input
+                                  type="text"
+                                  className="inp"
+                                  placeholder="Part Description"
+                                  value={part.part_description}
+                                  onChange={(e) => handleUpdateApprovedPart(idx, 'part_description', e.target.value)}
+                                  style={{ fontSize: 12 }}
+                                />
+                              </div>
+                            ))}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                type="button"
+                                className="btn btn--primary"
+                                onClick={() => handleAddApprovedPart()}
+                              >
+                                + Add Part
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => handleCancelEditingApprovedParts()}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn--primary"
+                                disabled={savingApprovedParts}
+                                onClick={() => void handleSaveApprovedParts()}
+                              >
+                                {savingApprovedParts ? 'Saving…' : 'Submit'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {selectedApprovedParts.parts.length > 0 ? (
+                              <>
+                                {selectedApprovedParts.parts.map((part, idx) => (
+                                  <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div>
+                                      <div style={{ fontSize: 10, color: '#6b7280' }}>Part No</div>
+                                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937' }}>{part.part_no || '—'}</div>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: 10, color: '#6b7280' }}>Part Description</div>
+                                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937' }}>{part.part_description || '—'}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                                {selectedApprovedParts.finalizedAt && (
+                                  <div style={{ fontSize: 10, color: '#6b7280', marginTop: 4 }}>
+                                    Finalized at {fmt(selectedApprovedParts.finalizedAt)} by {selectedApprovedParts.finalizedBy || 'unknown'}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div style={{ fontSize: 11, color: '#6b7280', fontStyle: 'italic' }}>No approved parts added yet</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {additionalApprovalRequested && (
                       <div style={{ gridColumn: '1/-1', border: '1px solid #fcd34d', background: '#fffbeb', borderRadius: 12, padding: 12, display: 'grid', gap: 10 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                           <div>
                             <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e' }}>Additional Approval Requested</div>
                             <div style={{ fontSize: 11, color: '#a16207' }}>
-                              Status: {selectedAdditionalApproval.status === 'approved' ? 'Approved' : selectedAdditionalApproval.status === 'rejected' ? 'Rejected' : 'Pending'}
+                              Status: {selectedAdditionalApproval.status === 'approved'
+                                ? 'All Approved'
+                                : selectedAdditionalApproval.status === 'rejected'
+                                  ? 'All Rejected'
+                                  : selectedAdditionalApproval.status === 'mixed'
+                                    ? 'Completed (Mixed)'
+                                    : 'Pending'}
+                              {' · '}
+                              {selectedAdditionalApproval.partStates.length} Parts Requested
+                              {' · '}
+                              {selectedAdditionalApproval.approvedCount} Approved / {selectedAdditionalApproval.rejectedCount} Rejected / {selectedAdditionalApproval.pendingCount} Pending
                             </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            {selectedAdditionalApproval.requestImagePath && selectedAdditionalApproval.requestParts.length <= 1 && (
-                              <button
-                                type="button"
-                                className="btn btn--ghost"
-                                onClick={() => void openAdditionalApprovalImage(selectedAdditionalApproval.requestImagePath, selectedAdditionalApproval.requestImageBucket)}
-                              >
-                                View Part Image
-                              </button>
-                            )}
-                            {selectedAdditionalApproval.approvalPhotoPath && (
-                              <button
-                                type="button"
-                                className="btn btn--ghost"
-                                onClick={() => void openAdditionalApprovalImage(selectedAdditionalApproval.approvalPhotoPath, selectedAdditionalApproval.approvalPhotoBucket)}
-                              >
-                                View Approval Photo
-                              </button>
-                            )}
                           </div>
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {(selectedAdditionalApproval.requestParts.length > 0
-                            ? selectedAdditionalApproval.requestParts
+                          {(selectedAdditionalApproval.partStates.length > 0
+                            ? selectedAdditionalApproval.partStates
                             : [{
+                                partIndex: 0,
                                 part_no: selectedAdditionalApproval.requestPartNo,
                                 part_description: selectedAdditionalApproval.requestPartDescription,
                                 reason: selectedAdditionalApproval.requestReason,
                                 part_image_bucket: selectedAdditionalApproval.requestImageBucket,
                                 part_image_path: selectedAdditionalApproval.requestImagePath,
                                 part_image_file_name: selectedAdditionalApproval.requestImageFileName,
+                                status: 'pending' as AdditionalApprovalDecisionStatus,
+                                decidedAt: null,
+                                decidedBy: null,
+                                approvalPhotoBucket: selectedAdditionalApproval.approvalPhotoBucket,
+                                approvalPhotoPath: selectedAdditionalApproval.approvalPhotoPath,
+                                approvalPhotoFileName: selectedAdditionalApproval.approvalPhotoFileName,
                               }]).map((part, idx) => (
                             <div key={`${part.part_image_path || 'part'}-${idx}`} style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                               <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>Part {idx + 1}</div>
-                                {part.part_image_path && (
-                                  <button
-                                    type="button"
-                                    className="btn btn--ghost btn--xs"
-                                    onClick={() => void openAdditionalApprovalImage(part.part_image_path, part.part_image_bucket)}
-                                  >
-                                    View Part Image
-                                  </button>
-                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: part.status === 'approved' ? '#166534' : part.status === 'rejected' ? '#991b1b' : '#92400e' }}>
+                                    {part.status === 'approved' ? 'Approved' : part.status === 'rejected' ? 'Rejected' : 'Pending'}
+                                  </span>
+                                  {part.part_image_path && (
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--xs"
+                                      onClick={() => void openAdditionalApprovalImage(part.part_image_path, part.part_image_bucket)}
+                                    >
+                                      View Part Image
+                                    </button>
+                                  )}
+                                  {part.approvalPhotoPath && (
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--xs"
+                                      onClick={() => void openAdditionalApprovalImage(part.approvalPhotoPath, part.approvalPhotoBucket)}
+                                    >
+                                      View Approval Photo
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               <div>
                                 <div style={{ fontSize: 10, color: '#a16207' }}>Part No</div>
@@ -4272,44 +4863,44 @@ export default function BodyshopRepairPage() {
                                 <div style={{ fontSize: 10, color: '#a16207' }}>Reason</div>
                                 <div style={{ fontSize: 12, color: '#78350f' }}>{part.reason || '—'}</div>
                               </div>
+                              <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                                <div style={{ fontSize: 11, color: '#78350f' }}>Approval photo is mandatory before approving this part.</div>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn--xs"
+                                    disabled={uploadingAdditionalApprovalPhoto}
+                                    onClick={() => {
+                                      setAdditionalApprovalPhotoPartIndex(idx)
+                                      additionalApprovalPhotoInputRef.current?.click()
+                                    }}
+                                  >
+                                    {uploadingAdditionalApprovalPhoto && additionalApprovalPhotoPartIndex === idx
+                                      ? 'Uploading…'
+                                      : part.approvalPhotoPath
+                                        ? 'Replace Approval Photo'
+                                        : 'Upload Approval Photo'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn--primary btn--xs"
+                                    disabled={saving || part.status === 'approved'}
+                                    onClick={() => void handleAdditionalApprovalDecision(idx, 'approved')}
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn--xs"
+                                    disabled={saving || part.status === 'rejected'}
+                                    onClick={() => void handleAdditionalApprovalDecision(idx, 'rejected')}
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           ))}
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                          <div style={{ fontSize: 11, color: '#78350f' }}>
-                            Approval photo is mandatory before marking Approved.
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button
-                              type="button"
-                              className="btn"
-                              disabled={uploadingAdditionalApprovalPhoto}
-                              onClick={() => additionalApprovalPhotoInputRef.current?.click()}
-                            >
-                              {uploadingAdditionalApprovalPhoto
-                                ? 'Uploading…'
-                                : selectedAdditionalApproval.approvalPhotoPath
-                                  ? 'Replace Approval Photo'
-                                  : 'Upload Approval Photo'}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn--primary"
-                              disabled={saving || selectedAdditionalApproval.status === 'approved'}
-                              onClick={() => void handleAdditionalApprovalDecision('approved')}
-                            >
-                              Approved
-                            </button>
-                            <button
-                              type="button"
-                              className="btn"
-                              disabled={saving || selectedAdditionalApproval.status === 'rejected'}
-                              onClick={() => void handleAdditionalApprovalDecision('rejected')}
-                            >
-                              Rejected
-                            </button>
-                          </div>
                         </div>
                       </div>
                     )}
@@ -4337,7 +4928,12 @@ export default function BodyshopRepairPage() {
                       accept="image/*"
                       className="hidden"
                       onChange={(event) => {
-                        void handleAdditionalApprovalPhotoPicked(event.target.files)
+                        const partIndex = additionalApprovalPhotoPartIndex
+                        if (partIndex == null) {
+                          toast_('Select a part before uploading approval photo', false)
+                        } else {
+                          void handleAdditionalApprovalPhotoPicked(event.target.files, partIndex)
+                        }
                         event.target.value = ''
                       }}
                     />
@@ -4370,8 +4966,7 @@ export default function BodyshopRepairPage() {
                             <th>Status</th>
                             <th>IN TS</th>
                             <th>OUT TS</th>
-                            <th>Done At</th>
-                            <th>Done By</th>
+                            <th>Reason</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -4429,8 +5024,7 @@ export default function BodyshopRepairPage() {
                               </td>
                               <td>{fmt(role.inTs)}</td>
                               <td>{fmt(role.outTs)}</td>
-                              <td>{fmt(role.doneAt)}</td>
-                              <td>{role.doneBy ?? '—'}</td>
+                              <td>{role.reason ?? '—'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -4439,52 +5033,48 @@ export default function BodyshopRepairPage() {
                   )}
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    {[
-                      { k: 'floor_hold_reason', label: 'Hold Reason' },
-                    ].map(({ k, label }) => (
-                      <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
-                        <input
-                          className="inp"
-                          value={(selected as any)[k] ?? ''}
-                          onChange={(e) => patch(k as keyof RepairCard, e.target.value)}
-                        />
-                      </label>
-                    ))}
                     <div style={{ gridColumn: '1/-1', border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', padding: 10 }}>
                       <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Additional Approval</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: additionalApprovalPending ? '#92400e' : selectedAdditionalApproval.status === 'approved' ? '#166534' : selectedAdditionalApproval.status === 'rejected' ? '#991b1b' : '#475569' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: additionalApprovalPending ? '#92400e' : selectedAdditionalApproval.status === 'approved' ? '#166534' : selectedAdditionalApproval.status === 'rejected' ? '#991b1b' : selectedAdditionalApproval.status === 'mixed' ? '#1d4ed8' : '#475569' }}>
                         {selectedAdditionalApproval.status === 'approved'
-                          ? 'Approved'
+                          ? 'All Approved'
                           : selectedAdditionalApproval.status === 'rejected'
-                            ? 'Rejected'
+                            ? 'All Rejected'
+                            : selectedAdditionalApproval.status === 'mixed'
+                              ? 'Completed (Mixed)'
                             : selectedAdditionalApproval.status === 'pending'
                               ? 'Pending'
                               : 'None'}
                       </div>
+                      {selectedAdditionalApproval.status !== 'none' && (
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                          {selectedAdditionalApproval.approvedCount} Approved / {selectedAdditionalApproval.rejectedCount} Rejected / {selectedAdditionalApproval.pendingCount} Pending
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
                         Decisions are managed from Survey tab under Additional Approval Requested.
                       </div>
                     </div>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span style={{ fontSize: 12, color: '#6b7280' }}>Floor Status</span>
-                      <select
-                        className="sel"
-                        value={selected.floor_status ?? 'work_inprocess'}
-                        onChange={(e) => patch('floor_status', e.target.value)}
+                      <div
+                        className="inp"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          minHeight: 38,
+                          background: '#f8fafc',
+                          color: '#0f172a',
+                          fontWeight: 700,
+                        }}
+                        aria-readonly="true"
                       >
-                        <option value="work_inprocess">Work In Process</option>
-                        <option value="hold">Hold</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </label>
-                    {Object.keys(editPatch).length > 0 && (
-                      <div style={{ gridColumn: '1/-1' }}>
-                        <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
-                          {saving ? 'Saving…' : 'Save Floor'}
-                        </button>
+                        {derivedFloorStatusLabel}
                       </div>
-                    )}
+                      <span style={{ fontSize: 11, color: '#64748b' }}>
+                        Derived from role-wise floor status and BS Floor Completed action in bodyshop-floor.
+                      </span>
+                    </label>
                   </div>
                 </div>
               )}
