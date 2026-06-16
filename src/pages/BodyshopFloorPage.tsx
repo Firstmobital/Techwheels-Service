@@ -1235,41 +1235,6 @@ export default function BodyshopFloorPage() {
     return false
   }
 
-  async function viewAdditionalApprovalFile(state: AdditionalApprovalRowState) {
-    const candidates: Array<{ bucket: string; path: string }> = []
-
-    state.partStates.forEach((part) => {
-      if (part.approvalPhotoBucket && part.approvalPhotoPath) {
-        candidates.push({ bucket: part.approvalPhotoBucket, path: part.approvalPhotoPath })
-      }
-      if (part.part_image_bucket && part.part_image_path) {
-        candidates.push({ bucket: part.part_image_bucket, path: part.part_image_path })
-      }
-    })
-
-    if (state.approvalPhotoBucket && state.approvalPhotoPath) {
-      candidates.push({ bucket: state.approvalPhotoBucket, path: state.approvalPhotoPath })
-    }
-    if (state.requestImageBucket && state.requestImagePath) {
-      candidates.push({ bucket: state.requestImageBucket, path: state.requestImagePath })
-    }
-
-    const uniqueCandidates = candidates.filter((item, idx) => candidates.findIndex((c) => c.bucket === item.bucket && c.path === item.path) === idx)
-    if (!uniqueCandidates.length) {
-      showToast('No image found for additional approval', 'error')
-      return
-    }
-
-    for (const candidate of uniqueCandidates) {
-      const opened = await openAdditionalApprovalFile(candidate.path, candidate.bucket)
-      if (opened) {
-        return
-      }
-    }
-
-    showToast('Unable to open additional approval image (file may be moved or missing)', 'error')
-  }
-
   async function submitAdditionalApprovalRequest() {
     const car = additionalApprovalModal.car
     if (!car) return
