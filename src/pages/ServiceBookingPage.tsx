@@ -254,7 +254,7 @@ export default function ServiceBookingPage() {
             <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>Manage appointments, telecalling & walk-ins</p>
           </div>
           <div style={{ flex: 1 }} />
-          <DateRangeFilter value={dateRange} onChange={setDateRange} />
+          <DateRangeFilter range={dateRange} onChange={setDateRange} />
           <button onClick={openNew} style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.45rem 1rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
             <span style={{ fontSize: '1rem' }}>＋</span> New Booking
           </button>
