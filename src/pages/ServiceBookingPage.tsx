@@ -673,33 +673,6 @@ export default function ServiceBookingPage() {
                     </select>
                   </label>
 
-                  <label className="field">
-                    <span className="label">Assigned SA</span>
-                    <select className="inp" value={form.assigned_sa ?? ''} onChange={e => {
-                      const sa = saList.find(s => s.code === e.target.value)
-                      setForm(p => ({ ...p, assigned_sa: e.target.value, assigned_sa_name: sa?.name ?? '' }))
-                    }}>
-                      <option value="">Unassigned</option>
-                      {saList.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
-                    </select>
-                  </label>
-
-                  <label className="field" style={{ gridColumn: 'span 2' }}>
-                    <span className="label">Customer Complaints / Concerns</span>
-                    <textarea className="inp" rows={2} placeholder="Describe what the customer reported…"
-                      value={form.complaint_description ?? ''}
-                      onChange={e => setForm(p => ({ ...p, complaint_description: e.target.value }))}
-                      style={{ resize: 'vertical' }} />
-                  </label>
-
-                  <label className="field" style={{ gridColumn: 'span 2' }}>
-                    <span className="label">Special Requests</span>
-                    <textarea className="inp" rows={2} placeholder="Pickup/drop, specific parts, wash, etc."
-                      value={form.special_requests ?? ''}
-                      onChange={e => setForm(p => ({ ...p, special_requests: e.target.value }))}
-                      style={{ resize: 'vertical' }} />
-                  </label>
-
                   {/* Pickup / Drop */}
                   <div style={{ gridColumn: 'span 2', display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', cursor: 'pointer' }}>
