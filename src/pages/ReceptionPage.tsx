@@ -7,6 +7,7 @@ import {
   bulkCreateReceptionEntries,
   createReceptionEntry,
   deleteReceptionEntry,
+  listReceptionEntriesByDateRange,
   listReceptionEmployees,
   type ReceptionEmployeeOption,
   type ReceptionEntryInput,
@@ -645,22 +646,17 @@ export default function ReceptionPage() {
         .map((item) => item.preset),
     )
 
-    const [{ data: _entriesRaw, error: _entriesErr }, employeeRes, authRes] = await Promise.all([
-      supabase
-        .from('service_reception_entries')
-        .select('*')
-        .gte('created_at', dateRange.from + 'T00:00:00+05:30')
-        .lte('created_at', dateRange.to + 'T23:59:59+05:30')
-        .order('created_at', { ascending: false }),
+    const [entriesRes, employeeRes, authRes] = await Promise.all([
+      listReceptionEntriesByDateRange(dateRange),
       listReceptionEmployees(),
       supabase.auth.getSession(),
     ])
 
-    if (_entriesErr) {
-      setError(_entriesErr.message)
+    if (entriesRes.error) {
+      setError(entriesRes.error)
       setEntries([])
     } else {
-      setEntries(_entriesRaw ?? [])
+      setEntries(entriesRes.data ?? [])
     }
 
     if (!employeeRes.error) {

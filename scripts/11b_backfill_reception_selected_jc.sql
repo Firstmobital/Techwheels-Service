@@ -22,12 +22,7 @@ WITH params AS (
 target_jc AS (
   SELECT upper(v.jc_number) AS jc_number
   FROM (VALUES
-    ('JC-MBTPLT-JP2-2627-002632'),
-    ('JC-MBTPLT-JP1-2627-002655'),
-    ('JC-MBTPLT-JP1-2627-002766'),
-    ('JC-MBTPLT-JP1-2627-003441'),
-    ('JC-MBTPLT-JP2-2627-002525'),
-    ('JC-MBTPLT-JP2-2627-002631')
+    ('JC-MBTPLT-JP2-2627-002525')
   ) AS v(jc_number)
 ),
 canonical_models AS (
@@ -233,12 +228,7 @@ COMMIT;
 -- WITH target_jc AS (
 --   SELECT upper(v.jc_number) AS jc_number
 --   FROM (VALUES
---     ('JC-MBTPLT-JP2-2627-002632'),
---     ('JC-MBTPLT-JP1-2627-002655'),
---     ('JC-MBTPLT-JP1-2627-002766'),
---     ('JC-MBTPLT-JP1-2627-003441'),
---     ('JC-MBTPLT-JP2-2627-002525'),
---     ('JC-MBTPLT-JP2-2627-002631')
+--     ('JC-MBTPLT-JP2-2627-002525')
 --   ) AS v(jc_number)
 -- )
 -- SELECT
