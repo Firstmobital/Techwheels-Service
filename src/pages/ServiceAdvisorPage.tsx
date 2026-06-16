@@ -261,6 +261,15 @@ function getServiceTypeForMessage(rowServiceType: string | null | undefined, dra
   return rowValue || 'Service'
 }
 
+function isWithinDateRange(createdAt: string | null | undefined, range: DateRange): boolean {
+  if (!range.from || !range.to) return true
+  const date = new Date(String(createdAt ?? ''))
+  if (Number.isNaN(date.getTime())) return false
+
+  const dateKey = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return dateKey >= range.from && dateKey <= range.to
+}
+
 function isBodyshopServiceType(serviceType: string | null | undefined): boolean {
   return getCategoryForServiceType(serviceType) === 'bodyshop'
 }
@@ -292,7 +301,7 @@ export default function ServiceAdvisorPage() {
   const [canModifyServiceAdvisor, setCanModifyServiceAdvisor] = useState(false)
 
   const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' })
   const [disabledPeriodPresets, setDisabledPeriodPresets] = useState<DateRangePreset[]>([])
   const [error, setError] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
@@ -748,9 +757,11 @@ export default function ServiceAdvisorPage() {
     // Fetch appropriate data
     let res
     if (nextIsAdmin) {
-      res = await listReceptionEntriesByDateRange(dateRange) // Admin: date-scoped + enriched reception entries
+      res = dateRange.from && dateRange.to
+        ? await listReceptionEntriesByDateRange(dateRange) // Admin: date scoped
+        : await listServiceAdvisorEntries() // Admin: all rows when period is All
     } else {
-      res = await listServiceAdvisorEntries() // SA: see only assigned rows
+      res = await listServiceAdvisorEntries() // SA: see only assigned rows; date range applied client-side below
     }
 
     if (res.error) {
@@ -762,7 +773,8 @@ export default function ServiceAdvisorPage() {
       return
     }
 
-    const data = res.data ?? []
+    const rawData = res.data ?? []
+    const data = rawData.filter((row) => isWithinDateRange(row.created_at, dateRange))
     if (nextIsAdmin) {
       setRows(data)
       setSelectedBranch('all')
@@ -1294,7 +1306,14 @@ export default function ServiceAdvisorPage() {
         {/* Branch & Fuel Type Filters (Admin or Multi-Dealer Users) */}
         {showScopeFilters && (
           <>
-              <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" disabledPresets={disabledPeriodPresets} />
+              <DateRangeFilter
+                range={dateRange}
+                onChange={setDateRange}
+                label="Period:"
+                disabledPresets={disabledPeriodPresets}
+                includeAll
+                defaultPreset="all"
+              />
 
               {showLocationFilter && (
                 <div className="toolbar toolbar--tight">

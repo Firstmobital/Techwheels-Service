@@ -58,10 +58,16 @@ interface Props {
   onChange: (r: DateRange) => void
   label?: string
   disabledPresets?: DateRangePreset[]
+  includeAll?: boolean
+  defaultPreset?: DateRangePreset | 'all'
 }
 
-export default function DateRangeFilter({ range, onChange, label, disabledPresets }: Props) {
-  const [preset, setPreset] = useState<DateRangePreset>('this-month')
+export default function DateRangeFilter({ range, onChange, label, disabledPresets, includeAll = false, defaultPreset }: Props) {
+  const initialPreset: DateRangePreset | 'all' =
+    defaultPreset
+      ?? (includeAll && !range.from && !range.to ? 'all' : 'this-month')
+
+  const [preset, setPreset] = useState<DateRangePreset | 'all'>(initialPreset)
   const [custom, setCustom] = useState<DateRange>(range)
   const disabledSet = new Set(disabledPresets ?? [])
 
@@ -71,13 +77,20 @@ export default function DateRangeFilter({ range, onChange, label, disabledPreset
     onChange(r)
   }
 
-  function handlePreset(p: DateRangePreset) {
+  function handlePreset(p: DateRangePreset | 'all') {
+    if (p === 'all') {
+      setPreset('all')
+      onChange({ from: '', to: '' })
+      return
+    }
+
     if (disabledSet.has(p)) return
     setPreset(p)
     if (p !== 'custom') apply(p)
   }
 
-  const PRESETS: { key: DateRangePreset; label: string }[] = [
+  const PRESETS: Array<{ key: DateRangePreset | 'all'; label: string }> = [
+    ...(includeAll ? [{ key: 'all' as const, label: 'All' }] : []),
     { key: 'this-month', label: 'This Month' },
     { key: 'last-month', label: 'Last Month' },
     { key: 'this-week',  label: 'This Week'  },
