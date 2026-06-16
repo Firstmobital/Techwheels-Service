@@ -103,16 +103,21 @@ export default function DateRangeFilter({ range, onChange, label, disabledPreset
     <div className="toolbar toolbar--tight" style={{ flexWrap: 'wrap', rowGap: 6 }}>
       {label && <span className="toolbar__label">{label}</span>}
       {PRESETS.map((p) => (
+        (() => {
+          const isDisabled = p.key !== 'all' && disabledSet.has(p.key)
+          return (
         <button
           key={p.key}
           type="button"
-          disabled={disabledSet.has(p.key)}
+          disabled={isDisabled}
           className={`btn btn--sm ${preset === p.key ? 'btn--primary' : 'btn--ghost'}`}
-          style={disabledSet.has(p.key) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+          style={isDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
           onClick={() => handlePreset(p.key)}
         >
           {p.label}
         </button>
+          )
+        })()
       ))}
       {preset === 'custom' && (
         <>
