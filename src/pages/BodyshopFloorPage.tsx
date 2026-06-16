@@ -197,7 +197,7 @@ interface SupportAssignment {
   updated_at?: string
 }
 
-type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed'
+type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed' | 'approvals'
 
 const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
   DENTOR:      { label: 'Dentor',      icon: '🔨' },
@@ -788,8 +788,12 @@ export default function BodyshopFloorPage() {
     work_inprocess: cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess')).length,
     hold:           cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold')).length,
     completed:      cars.filter((c) => isBsFloorCompleted(c)).length,
+    approvals:      cars.filter((c) => {
+      const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
+      return state.status !== 'none' && state.pendingCount > 0
+    }).length,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cars, assignments, bsFloorStatus])
+  }), [cars, assignments, bsFloorStatus, additionalApprovalByJc])
 
   // ── Filtered rows ────────────────────────────────────────────────────────
 
@@ -821,9 +825,13 @@ export default function BodyshopFloorPage() {
     if (assignmentView === 'work_inprocess') return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess'))
     if (assignmentView === 'hold')           return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold'))
     if (assignmentView === 'completed')      return list.filter((c) => isBsFloorCompleted(c))
+    if (assignmentView === 'approvals')      return list.filter((c) => {
+      const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
+      return state.status !== 'none' && state.pendingCount > 0
+    })
     return list
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, branchFilter, floorFilter, roleFilter, search, assignmentView, assignments, bsFloorStatus])
+  }, [cars, branchFilter, floorFilter, roleFilter, search, assignmentView, assignments, bsFloorStatus, additionalApprovalByJc])
 
   // ── Assign (inline select) ───────────────────────────────────────────────
 
@@ -967,7 +975,10 @@ export default function BodyshopFloorPage() {
   async function addSupportAssignment(car: AccidentCar, role: SupportRole) {
     const pickerKey = `${jcKey(car)}-${role}-support`
     const empCode = inlinePickerValue[pickerKey] ?? ''
-    if (!empCode) return
+    if (!empCode) {
+      showToast(`Select ${ROLE_META[role].label} support first`, 'error')
+      return
+    }
 
     const emp = empBySupportRole[role].find((e) => e.employee_code === empCode)
     if (!emp) return
@@ -1484,446 +1495,437 @@ export default function BodyshopFloorPage() {
         </div>
       )}
 
-      {/* ── TOP CONTROL BAR ───────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
-          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🚗 Bodyshop Floor</span>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{cars.length} vehicles</span>
+      <div className="pagehead">
+        <div>
+          <div className="greet">Bodyshop · Floor 2 & 3</div>
+          <h1>Bodyshop Floor</h1>
+          <p className="bsf-subline">{cars.length} accident vehicles currently on Floor 2 & 3 · live assignment and status.</p>
+        </div>
+        <div className="bsf-top-actions">
+          <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5" />
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="bsf-kpis">
+        {([
+          { key: 'all', label: 'On Floor', count: counts.all },
+          { key: 'unassigned', label: 'Unassigned', count: counts.unassigned },
+          { key: 'work_inprocess', label: 'In-Process', count: counts.work_inprocess },
+          { key: 'hold', label: 'On Hold', count: counts.hold },
+          { key: 'completed', label: 'Completed', count: counts.completed },
+          { key: 'approvals', label: 'Approvals Pending', count: counts.approvals },
+        ] as { key: AssignmentView; label: string; count: number }[]).map(({ key, label, count }) => (
+          <button
+            key={key}
+            type="button"
+            className={`bsf-kpi bsf-kpi--${key} ${assignmentView === key ? 'is-active' : ''}`}
+            onClick={() => setAssignmentView(key)}
+            disabled={count === 0}
+          >
+            <div className="bsf-kpi__count">{count}</div>
+            <div className="bsf-kpi__label">{label}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="bsf-filterbar">
+        <div className="bsf-search">
+          <Icon name="search" size={16} />
+          <input
+            className="bsf-search__input"
+            placeholder="Search reg / JC / model / owner / SA…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+        <span className="bsf-sep" />
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
-
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Branch:</span>
-        <button type="button" onClick={() => setBranchFilter('all')}
-          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({cars.length})
-        </button>
-        {branches.map((b) => (
-          <button key={b} type="button" onClick={() => setBranchFilter(b)}
-            className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {b} ({cars.filter((c) => (c.branch ?? 'Unknown') === b).length})
+        <div className="bsf-group">
+          <span className="bsf-label">Branch</span>
+          <button type="button" onClick={() => setBranchFilter('all')}
+            className={`bsf-chip ${branchFilter === 'all' ? 'is-active' : ''}`}>
+            All <span className="bsf-chip__n">{cars.length}</span>
           </button>
-        ))}
+          {branches.map((b) => (
+            <button key={b} type="button" onClick={() => setBranchFilter(b)}
+              className={`bsf-chip ${branchFilter === b ? 'is-active' : ''}`}>
+              {b} <span className="bsf-chip__n">{cars.filter((c) => (c.branch ?? 'Unknown') === b).length}</span>
+            </button>
+          ))}
+        </div>
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+        <span className="bsf-sep" />
 
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Floor:</span>
-        <button type="button" onClick={() => setFloorFilter('all')}
-          className={`btn btn--sm ${floorFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({cars.length})
-        </button>
-        {floors.map((floor) => (
-          <button key={floor} type="button" onClick={() => setFloorFilter(floor)}
-            className={`btn btn--sm ${floorFilter === floor ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {floor} ({cars.filter((c) => c.bodyshop_floor === floor).length})
+        <div className="bsf-group">
+          <span className="bsf-label">Floor</span>
+          <button type="button" onClick={() => setFloorFilter('all')}
+            className={`bsf-chip ${floorFilter === 'all' ? 'is-active' : ''}`}>
+            All <span className="bsf-chip__n">{cars.length}</span>
           </button>
-        ))}
+          {floors.map((floor) => (
+            <button key={floor} type="button" onClick={() => setFloorFilter(floor)}
+              className={`bsf-chip ${floorFilter === floor ? 'is-active' : ''}`}>
+              {floor} <span className="bsf-chip__n">{cars.filter((c) => c.bodyshop_floor === floor).length}</span>
+            </button>
+          ))}
+        </div>
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+        <span className="bsf-sep" />
 
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Role:</span>
+        <div className="bsf-group">
+          <span className="bsf-label">Role</span>
         <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as BSRole | 'all')}
-          className="sel sel--advisor-filter" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}>
+          className="sel sel--advisor-filter">
           <option value="all">All roles</option>
           {ALL_ROLES.map((r) => (
-            <option key={r} value={r}>{ROLE_META[r].icon} {ROLE_META[r].label}</option>
+            <option key={r} value={r}>{ROLE_META[r].label}</option>
           ))}
         </select>
       </div>
-
-      {/* ── STATUS TABS ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
-        {([
-          { key: 'all',            label: 'All',        count: counts.all,             color: '#6366f1' },
-          { key: 'unassigned',     label: 'Unassigned', count: counts.unassigned,      color: '#ef4444' },
-          { key: 'assigned',       label: 'Assigned',   count: counts.assigned,        color: '#2563eb' },
-          { key: 'hold',           label: 'Hold',       count: counts.hold,            color: '#f59e0b' },
-          { key: 'work_inprocess', label: 'In-Process', count: counts.work_inprocess,  color: '#0ea5e9' },
-          { key: 'completed',      label: 'Completed',  count: counts.completed,       color: '#16a34a' },
-        ] as { key: AssignmentView; label: string; count: number; color: string }[]).map(({ key, label, count, color }) => (
-          <button key={key} type="button" onClick={() => setAssignmentView(key)} disabled={count === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.75rem', background: assignmentView === key ? color : `${color}18`, color: assignmentView === key ? '#fff' : color, border: `1.5px solid ${color}44`, borderRadius: '20px', fontWeight: assignmentView === key ? 700 : 500, fontSize: '0.78rem', cursor: count === 0 ? 'not-allowed' : 'pointer', opacity: count === 0 ? 0.5 : 1 }}>
-            <span style={{ fontWeight: 800 }}>{count}</span> {label}
-          </button>
-        ))}
       </div>
 
-      {/* Main card */}
-      <div className="card">
-        <div className="card__head">
-          <div>
-            <h3>Accident vehicles <span className="count-badge">({filtered.length})</span></h3>
+      <div className="bsf-roster-shell">
+        {loading ? (
+          <div className="empty-state">Loading bodyshop floor…</div>
+        ) : dataError ? (
+          <div className="empty-state">
+            Table <code>bodyshop_assignments</code> not found — run the SQL script in Supabase first.
           </div>
-          <div className="card__head-flex">
-            <span className="inp-wrap inp-wrap-lg">
-              <span className="icon-l"><Icon name="search" size={16} /></span>
-              <input className="inp inp-lg" placeholder="Search JC / reg / model / SA / owner"
-                value={search} onChange={(e) => setSearch(e.target.value)} />
-            </span>
-            <button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAll()}>
-              <Icon name="refresh" size={14} /> Refresh
-            </button>
+        ) : filtered.length === 0 ? (
+          <div className="empty-state">
+            {search.trim() || branchFilter !== 'all' || floorFilter !== 'all' || assignmentView !== 'all'
+              ? 'No cars match your filters.'
+              : 'No vehicles have been sent to Floor 2/Floor 3 yet.'}
           </div>
-        </div>
+        ) : (
+          <div className="bsf-roster-list">
+            {filtered.map((car) => {
+              const k = jcKey(car)
+              const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
+              const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
+              const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
+              const isFloorCompleted = Boolean(floorStatus.completedAt)
+              const isSavingFloorStatus = saving === `${k}-bs-floor`
+              const additionalApproval = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
+              const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
+              const hasActiveRoleWork = ALL_ROLES.some((role) => {
+                const assignment = carMap[role]
+                if (!assignment) return false
+                const status = String(assignment.work_status ?? '').trim().toLowerCase()
+                return status === 'work_inprocess' || status === 'hold'
+              })
+              const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && !hasActiveRoleWork && additionalApprovalResolved
+              const isSavingAdditionalApproval = saving === `${k}-additional-approval`
+              const additionalApprovalLabel = additionalApproval.status === 'approved'
+                ? 'All Approved'
+                : additionalApproval.status === 'rejected'
+                  ? 'All Rejected'
+                  : additionalApproval.status === 'mixed'
+                    ? 'Completed (Mixed)'
+                    : additionalApproval.status === 'pending'
+                      ? 'Pending'
+                      : 'None requested'
+              const approvalToneClass = additionalApproval.status === 'approved'
+                ? 'b-success'
+                : additionalApproval.status === 'rejected'
+                  ? 'b-danger'
+                  : additionalApproval.status === 'mixed'
+                    ? 'b-violet'
+                    : additionalApproval.status === 'pending'
+                      ? 'b-warn'
+                      : 'b-muted'
 
-        <div className="card__body dense">
-          {loading ? (
-            <div className="empty-state">Loading bodyshop floor…</div>
-          ) : dataError ? (
-            <div className="empty-state">
-              Table <code>bodyshop_assignments</code> not found — run the SQL script in Supabase first.
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="empty-state">
-              {search.trim() || branchFilter !== 'all' || floorFilter !== 'all' || assignmentView !== 'all'
-                ? 'No cars match your filters.'
-                : 'No vehicles have been sent to Floor 2/Floor 3 yet.'}
-            </div>
-          ) : (
-            <div className="tbl-wrap scroll">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Received</th>
-                    <th>Reg No</th>
-                    <th>Model</th>
-                    <th>Owner</th>
-                    <th>SA</th>
-                    <th>JC Number</th>
-                    <th>Branch</th>
-                    <th>🔨 Dentor</th>
-                    <th>🎨 Painter</th>
-                    <th>🔧 Technician</th>
-                    <th>⚡ Electrician</th>
-                    <th>🧰 DET</th>
-                    <th>BS Floor Status</th>
-                    <th>Additional Approval</th>
-                    <th>IN TS</th>
-                    <th>OUT TS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((car) => {
-                    const k = jcKey(car)
-                    const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
-                    const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
-                    const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
-                    const isFloorCompleted = Boolean(floorStatus.completedAt)
-                    const isSavingFloorStatus = saving === `${k}-bs-floor`
-                    const additionalApproval = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
-                    const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
-                    const hasActiveRoleWork = ALL_ROLES.some((role) => {
-                      const assignment = carMap[role]
-                      if (!assignment) return false
-                      const status = String(assignment.work_status ?? '').trim().toLowerCase()
-                      return status === 'work_inprocess' || status === 'hold'
-                    })
-                    const canMarkFloorCompleted = !isFloorCompleted && !isSavingFloorStatus && !hasActiveRoleWork && additionalApprovalResolved
-                    const isSavingAdditionalApproval = saving === `${k}-additional-approval`
+              const assignedCount = ALL_ROLES.filter((role) => Boolean(carMap[role])).length
+              const inTs = (() => {
+                const assignedTimes = ALL_ROLES.map((r) => carMap[r]?.assigned_at).filter(Boolean) as string[]
+                if (!assignedTimes.length) return null
+                return assignedTimes.sort()[0]
+              })()
 
-                    return (
-                      <tr key={car.id}>
-                        <td style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--muted)' }}>{fmtDate(car.created_at)}</td>
-                        <td style={{ fontWeight: 600 }}>{car.reg_number ?? '—'}</td>
-                        <td>{car.model ?? '—'}</td>
-                        <td>
-                          <div style={{ fontSize: 13 }}>{car.owner_name ?? '—'}</div>
-                          {car.owner_phone && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{car.owner_phone}</div>}
-                        </td>
-                        <td style={{ fontSize: 12 }}>{car.sa_display_name ?? car.sa_name ?? '—'}</td>
-                        <td>
-                          <code style={{ fontSize: 11, background: 'var(--blue-50,#eff6ff)', color: 'var(--blue-600,#2563eb)', borderRadius: 4, padding: '2px 5px' }}>
-                            {car.jc_number ?? '—'}
-                          </code>
-                        </td>
-                        <td style={{ fontSize: 12 }}>{car.branch ?? '—'}</td>
+              const overallLabel = isFloorCompleted
+                ? 'Floor Done'
+                : hasStatus(car, 'hold')
+                  ? 'On Hold'
+                  : hasAnyAssignment(car)
+                    ? 'In Process'
+                    : 'Unassigned'
+              const overallToneClass = isFloorCompleted
+                ? 'b-success'
+                : hasStatus(car, 'hold')
+                  ? 'b-warn'
+                  : hasAnyAssignment(car)
+                    ? 'b-info'
+                    : 'b-danger'
 
-                        {/* Role columns */}
-                        {ALL_ROLES.map((role) => {
-                          const ass = carMap[role]
-                          const supportList = supportMap[role] ?? []
-                          const draft = stageDrafts[k]?.[role] ?? { work_status: ass?.work_status ?? 'work_inprocess', remark: '' }
-                          const isSavingThis = saving === `${k}-${role}` || saving === `${k}-${role}-stage`
-                          const isSavingSupport = saving === `${k}-${role}-support`
-                          const changed = hasDraftChanges(k, role)
-                          const pickerKey = `${k}-${role}-support`
-                          const showPicker = inlinePickerOpen[pickerKey]
-                          const pickerValue = inlinePickerValue[pickerKey] ?? ''
+              return (
+                <article className="bsf-vcard" key={car.id}>
+                  <div className="bsf-vcard__top">
+                    <div className="bsf-ident">
+                      <div className="bsf-reg">{car.reg_number ?? '—'}</div>
+                      <div className="bsf-model">{car.model ?? '—'}</div>
+                      <code className="bsf-jc-code">{car.jc_number ?? '—'}</code>
+                      <div className="bsf-meta">
+                        <div><strong>{car.owner_name ?? '—'}</strong>{car.owner_phone ? ` · ${car.owner_phone}` : ''}</div>
+                        <div>SA: <strong>{car.sa_display_name ?? car.sa_name ?? '—'}</strong> · {car.branch ?? '—'}</div>
+                      </div>
+                    </div>
 
-                          return (
-                            <td key={role} style={{ minWidth: 240, verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 }}>
-                              <div className="fi-assignment-cell">
-                                {/* Primary assignment select + add support button */}
-                                <div className="fi-assignment-row" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  <select
-                                    className="sel sel-md"
-                                    value={ass?.employee_code ?? ''}
-                                    disabled={isSavingThis}
-                                    onChange={(e) => void assignRole(car, role, e.target.value)}
-                                    style={{ flex: 1 }}
-                                  >
-                                    <option value="">— Select {ROLE_META[role].label} —</option>
-                                    {empByRole[role].map((emp) => (
-                                      <option key={emp.employee_code} value={emp.employee_code}>
-                                        {emp.employee_name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      width: 20,
-                                      height: 20,
-                                      borderRadius: '50%',
-                                      border: '1px solid #cbd5e1',
-                                      background: '#f8fafc',
-                                      color: '#475569',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      padding: 0,
-                                      flexShrink: 0,
-                                    }}
-                                    onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
-                                    disabled={isSavingSupport}
-                                  >
-                                    +
-                                  </button>
-                                </div>
+                    <div className="bsf-summary">
+                      <div className="bsf-summary-row">
+                        <div className="bsf-tags">
+                          <span className={`badge ${overallToneClass} nodot`}>{overallLabel}</span>
+                          <span className="bsf-floor-badge">{car.bodyshop_floor ?? '—'}</span>
+                          {additionalApproval.status !== 'none' && (
+                            <span className={`badge ${approvalToneClass} nodot`}>
+                              {additionalApproval.pendingCount > 0 ? 'Approval Pending' : additionalApprovalLabel}
+                            </span>
+                          )}
+                        </div>
+                        <span className="ts">Received {fmtDate(car.created_at)}</span>
+                      </div>
+                      <div className="bsf-summary-row">
+                        <span className="bsf-assigned-count"><strong>{assignedCount}/5</strong> roles assigned</span>
+                        <span className="ts">
+                          IN {fmtDate(inTs)}{isFloorCompleted ? ` · OUT ${fmtDate(floorStatus.completedAt)}` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                                {/* Support people pills */}
-                                {supportList.length > 0 && (
-                                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-                                    {supportList.map((sp) => (
-                                      <div key={sp.id} className="fi-support-pill" style={{ fontSize: 11, background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 12, padding: '3px 8px', whiteSpace: 'nowrap' }}>
-                                        {sp.employee_name}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                  <div className="bsf-lanes">
+                    {ALL_ROLES.map((role) => {
+                      const ass = carMap[role]
+                      const supportList = supportMap[role] ?? []
+                      const draft = stageDrafts[k]?.[role] ?? { work_status: ass?.work_status ?? 'work_inprocess', remark: '' }
+                      const isSavingThis = saving === `${k}-${role}` || saving === `${k}-${role}-stage`
+                      const isSavingSupport = saving === `${k}-${role}-support`
+                      const changed = hasDraftChanges(k, role)
+                      const statusTone = draft.work_status === 'completed'
+                        ? 'is-completed'
+                        : draft.work_status === 'hold'
+                          ? 'is-hold'
+                          : 'is-work'
+                      const holdRemarkMissing = draft.work_status === 'hold' && !draft.remark.trim()
+                      const pickerKey = `${k}-${role}-support`
+                      const showPicker = inlinePickerOpen[pickerKey]
+                      const pickerValue = inlinePickerValue[pickerKey] ?? ''
+                      const roleClass = `bsf-lane bsf-lane--${role.toLowerCase()} ${ass ? 'is-assigned' : ''}`
 
-                                {/* Inline picker (when + clicked) */}
-                                {showPicker && (
-                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    <select
-                                      className="sel sel-sm"
-                                      value={pickerValue}
-                                      onChange={(e) => setInlinePickerValue((prev) => ({ ...prev, [pickerKey]: e.target.value }))}
-                                      disabled={isSavingSupport}
-                                    >
-                                      <option value="">— Select {ROLE_META[role].label} —</option>
-                                      {empBySupportRole[role].map((emp) => (
-                                        <option key={emp.employee_code} value={emp.employee_code}>
-                                          {emp.employee_name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      className="btn btn--primary btn--xs"
-                                      disabled={!pickerValue || isSavingSupport}
-                                      style={{ opacity: pickerValue && !isSavingSupport ? 1 : 0.5 }}
-                                      onClick={() => void addSupportAssignment(car, role)}
-                                    >
-                                      {isSavingSupport ? 'Adding…' : 'Add'}
-                                    </button>
-                                  </div>
-                                )}
-
-                                {/* Status + remark + save (only when primary assigned) */}
-                                {ass && (
-                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    <select
-                                      className="sel sel-sm"
-                                      value={draft.work_status}
-                                      onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
-                                    >
-                                      {STATUS_OPTIONS.map((s) => (
-                                        <option key={s.value} value={s.value}>{s.label}</option>
-                                      ))}
-                                    </select>
-                                    <input
-                                      className="inp inp-md"
-                                      placeholder="Add remark"
-                                      value={draft.remark}
-                                      onChange={(e) => patchDraft(k, role, { remark: e.target.value })}
-                                    />
-                                    <button
-                                      className="btn btn--primary btn--sm"
-                                      disabled={!changed || isSavingThis}
-                                      style={{ opacity: changed && !isSavingThis ? 1 : 0.5 }}
-                                      onClick={() => void saveStage(car, role)}
-                                    >
-                                      {isSavingThis ? 'Saving…' : 'Save stage'}
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          )
-                        })}
-
-                        <td style={{ minWidth: 170, verticalAlign: 'top' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <button
-                              className={`btn btn--sm ${isFloorCompleted ? 'btn--ghost' : 'btn--primary'}`}
-                              disabled={!canMarkFloorCompleted}
-                              style={{ opacity: canMarkFloorCompleted ? 1 : 0.6 }}
-                              title={hasActiveRoleWork
-                                ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
-                                : !additionalApprovalResolved
-                                  ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
-                                  : undefined}
-                              onClick={() => void markBsFloorCompleted(car)}
-                            >
-                              {isSavingFloorStatus ? 'Saving…' : 'Completed'}
-                            </button>
-                            {!isFloorCompleted && hasActiveRoleWork && (
-                              <div style={{ fontSize: 11, color: '#92400e' }}>
-                                Disabled until all assigned roles are not Work In Process/Hold.
-                              </div>
-                            )}
-                            {!isFloorCompleted && !hasActiveRoleWork && !additionalApprovalResolved && (
-                              <div style={{ fontSize: 11, color: '#92400e' }}>
-                                Disabled until Additional Approval is fully resolved.
-                              </div>
-                            )}
-                            {isFloorCompleted && (
-                              <div style={{ fontSize: 11, color: '#0f766e' }}>
-                                <div>{fmtDate(floorStatus.completedAt)}</div>
-                                <div>{floorStatus.completedBy ?? '—'}</div>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        <td style={{ minWidth: 190, verticalAlign: 'top' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      return (
+                        <div key={role} className={roleClass}>
+                          <div className="bsf-lane__head">
+                            <span className="bsf-lane__role">{ROLE_META[role].label}</span>
                             <button
                               type="button"
-                              className="btn btn--sm btn--primary"
-                              disabled={isSavingAdditionalApproval}
-                              onClick={() => openAdditionalApprovalModal(car)}
-                              style={{ opacity: isSavingAdditionalApproval ? 0.75 : 1 }}
+                              className="bsf-role-plus"
+                              onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
+                              disabled={isSavingSupport}
                             >
-                              {isSavingAdditionalApproval ? 'Saving…' : 'Additional Approval'}
+                              +
                             </button>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: additionalApproval.status === 'approved' ? '#166534' : additionalApproval.status === 'rejected' ? '#b91c1c' : additionalApproval.status === 'mixed' ? '#1d4ed8' : additionalApproval.status === 'pending' ? '#92400e' : '#64748b' }}>
-                              {additionalApproval.status === 'approved'
-                                ? 'All Approved'
-                                : additionalApproval.status === 'rejected'
-                                  ? 'All Rejected'
-                                  : additionalApproval.status === 'mixed'
-                                    ? 'Completed (Mixed)'
-                                  : additionalApproval.status === 'pending'
-                                    ? 'Pending'
-                                    : 'None'}
-                            </div>
-                            {additionalApproval.status !== 'none' && (
-                              <>
-                                <div style={{ fontSize: 10, color: '#64748b' }}>
-                                  {additionalApproval.partStates.length} Parts Requested
-                                </div>
-                                <div style={{ fontSize: 10, color: '#64748b' }}>
-                                  Approved: {additionalApproval.approvedCount} · Rejected: {additionalApproval.rejectedCount} · Pending: {additionalApproval.pendingCount}
-                                </div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                  {additionalApproval.partStates.slice(0, 3).map((part) => (
-                                    <span
-                                      key={`part-chip-${k}-${part.partIndex}`}
-                                      style={{
-                                        fontSize: 10,
-                                        fontWeight: 700,
-                                        borderRadius: 999,
-                                        padding: '2px 6px',
-                                        border: `1px solid ${part.status === 'approved' ? '#86efac' : part.status === 'rejected' ? '#fecaca' : '#fcd34d'}`,
-                                        background: part.status === 'approved' ? '#f0fdf4' : part.status === 'rejected' ? '#fef2f2' : '#fffbeb',
-                                        color: part.status === 'approved' ? '#166534' : part.status === 'rejected' ? '#991b1b' : '#92400e',
-                                      }}
-                                    >
-                                      P{part.partIndex + 1}: {part.status === 'approved' ? 'Approved' : part.status === 'rejected' ? 'Rejected' : 'Pending'}
-                                    </span>
-                                  ))}
-                                  {additionalApproval.partStates.length > 3 && (
-                                    <span style={{ fontSize: 10, color: '#64748b', alignSelf: 'center' }}>
-                                      +{additionalApproval.partStates.length - 3} more
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                  {additionalApproval.partStates
-                                    .filter((part) => Boolean(part.part_image_path || part.approvalPhotoPath))
-                                    .map((part) => (
-                                      <button
-                                        key={`part-view-${k}-${part.partIndex}`}
-                                        type="button"
-                                        className="btn btn--ghost btn--xs"
-                                        onClick={() => {
-                                          void openAdditionalApprovalFile(part.part_image_path ?? part.approvalPhotoPath, part.part_image_bucket ?? part.approvalPhotoBucket)
-                                        }}
-                                      >
-                                        View P{part.partIndex + 1}
-                                      </button>
-                                    ))}
-                                </div>
-                              </>
-                            )}
-                            {(additionalApproval.requestImagePath || additionalApproval.approvalPhotoPath) && (
-                              <button
-                                type="button"
-                                className="btn btn--ghost btn--xs"
-                                onClick={() => void viewAdditionalApprovalFile(additionalApproval)}
-                              >
-                                View Any
-                              </button>
-                            )}
                           </div>
-                        </td>
 
-                        {/* IN / OUT timestamps */}
-                        <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                          {(() => {
-                            const assignedTimes = ALL_ROLES.map((r) => carMap[r]?.assigned_at).filter(Boolean) as string[]
-                            if (!assignedTimes.length) return '—'
-                            return fmtDate(assignedTimes.sort()[0])
-                          })()}
-                        </td>
-                        <td className="ts-cell" style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                          {fmtDate(floorStatus.completedAt)}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                          <select
+                            className="sel sel-md bsf-role-select"
+                            value={ass?.employee_code ?? ''}
+                            disabled={isSavingThis}
+                            onChange={(e) => void assignRole(car, role, e.target.value)}
+                          >
+                            <option value="">— Select {ROLE_META[role].label} —</option>
+                            {empByRole[role].map((emp) => (
+                              <option key={emp.employee_code} value={emp.employee_code}>
+                                {emp.employee_name}
+                              </option>
+                            ))}
+                          </select>
+
+                          {supportList.length > 0 && (
+                            <div className="fi-support-list bsf-support-list">
+                              {supportList.map((sp) => (
+                                <div key={sp.id} className="fi-support-pill bsf-support-pill">
+                                  {sp.employee_name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {showPicker && (
+                            <div className="bsf-inline-picker bsf-inline-picker--boxed">
+                              <select
+                                className="sel sel-sm"
+                                value={pickerValue}
+                                onChange={(e) => setInlinePickerValue((prev) => ({ ...prev, [pickerKey]: e.target.value }))}
+                                disabled={isSavingSupport}
+                              >
+                                <option value="">— Select {ROLE_META[role].label} —</option>
+                                {empBySupportRole[role].map((emp) => (
+                                  <option key={emp.employee_code} value={emp.employee_code}>
+                                    {emp.employee_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                className={`btn btn--primary btn--xs ${isSavingSupport ? 'btn--dim' : ''}`}
+                                disabled={isSavingSupport}
+                                onClick={() => void addSupportAssignment(car, role)}
+                              >
+                                {isSavingSupport ? 'Adding…' : 'Add support'}
+                              </button>
+                            </div>
+                          )}
+
+                          {ass ? (
+                            <div className={`bsf-stage-editor ${statusTone}`}>
+                              <span className={`bsf-statpill ${statusTone}`}>{draft.work_status === 'work_inprocess' ? 'In Process' : draft.work_status === 'hold' ? 'Hold' : 'Completed'}</span>
+                              <select
+                                className={`sel sel-sm bsf-stage-status ${statusTone}`}
+                                value={draft.work_status}
+                                onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
+                              >
+                                {STATUS_OPTIONS.map((s) => (
+                                  <option key={s.value} value={s.value}>{s.label}</option>
+                                ))}
+                              </select>
+                              <input
+                                className={`inp inp-md bsf-stage-remark ${holdRemarkMissing ? 'is-required' : ''}`}
+                                placeholder="Add remark"
+                                value={draft.remark}
+                                onChange={(e) => patchDraft(k, role, { remark: e.target.value })}
+                              />
+                              {holdRemarkMissing && <div className="bsf-stage-hint">Remark is required when status is Hold.</div>}
+                              <button
+                                className={`btn btn--primary btn--xs bsf-stage-save ${!changed || isSavingThis ? 'btn--dim' : ''}`}
+                                disabled={!changed || isSavingThis}
+                                onClick={() => void saveStage(car, role)}
+                              >
+                                {isSavingThis ? 'Saving…' : 'Save stage'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="bsf-lane-empty">Not assigned</div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="bsf-foot">
+                    <div className="bsf-foot-block">
+                      <div className="bsf-foot-title">BS Floor Status</div>
+                      <div>
+                        <button
+                          className={`btn btn--sm ${isFloorCompleted ? 'btn--ghost' : 'btn--primary'} ${canMarkFloorCompleted ? '' : 'btn--dim'}`}
+                          disabled={!canMarkFloorCompleted}
+                          title={hasActiveRoleWork
+                            ? 'Complete or resolve Hold for all assigned roles before marking BS Floor Completed'
+                            : !additionalApprovalResolved
+                              ? 'Resolve Additional Approval first (none requested, or all requested parts approved/rejected)'
+                              : undefined}
+                          onClick={() => void markBsFloorCompleted(car)}
+                        >
+                          {isSavingFloorStatus ? 'Saving…' : isFloorCompleted ? 'Completed' : 'Mark Floor Completed'}
+                        </button>
+                      </div>
+                      {!isFloorCompleted && hasActiveRoleWork && (
+                        <div className="bsf-floor-note is-warn">
+                          Disabled until all assigned roles are not Work In Process/Hold.
+                        </div>
+                      )}
+                      {!isFloorCompleted && !hasActiveRoleWork && !additionalApprovalResolved && (
+                        <div className="bsf-floor-note is-warn">
+                          Disabled until Additional Approval is fully resolved.
+                        </div>
+                      )}
+                      {isFloorCompleted && (
+                        <div className="bsf-floor-note is-success">
+                          <div>{fmtDate(floorStatus.completedAt)}</div>
+                          <div>{floorStatus.completedBy ?? '—'}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bsf-foot-block">
+                      <div className="bsf-foot-title">Additional Approval</div>
+                      <div className="bsf-aa-head-actions">
+                        <button
+                          type="button"
+                          className={`btn btn--ghost btn--sm ${isSavingAdditionalApproval ? 'btn--dim' : ''}`}
+                          disabled={isSavingAdditionalApproval}
+                          onClick={() => openAdditionalApprovalModal(car)}
+                        >
+                          {isSavingAdditionalApproval ? 'Saving…' : 'Request / Manage'}
+                        </button>
+                        <span className={`badge ${approvalToneClass} nodot`}>{additionalApprovalLabel}</span>
+                      </div>
+                      {additionalApproval.status !== 'none' && (
+                        <>
+                          <div className="bsf-aa-meta">
+                            {additionalApproval.partStates.length} parts · {additionalApproval.approvedCount} approved · {additionalApproval.rejectedCount} rejected · {additionalApproval.pendingCount} pending
+                          </div>
+                          <div className="bsf-aa-parts">
+                            {additionalApproval.partStates.map((part) => (
+                              <span
+                                key={`part-chip-${k}-${part.partIndex}`}
+                                className={`bsf-aa-chip is-${part.status}`}
+                              >
+                                P{part.partIndex + 1} · {part.status === 'approved' ? 'Approved' : part.status === 'rejected' ? 'Rejected' : 'Pending'}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="bsf-aa-actions">
+                            {additionalApproval.partStates
+                              .filter((part) => Boolean(part.part_image_path || part.approvalPhotoPath))
+                              .map((part) => (
+                                <button
+                                  key={`part-view-${k}-${part.partIndex}`}
+                                  type="button"
+                                  className="btn btn--ghost btn--xs"
+                                  onClick={() => {
+                                    void openAdditionalApprovalFile(part.part_image_path ?? part.approvalPhotoPath, part.part_image_bucket ?? part.approvalPhotoBucket)
+                                  }}
+                                >
+                                  View P{part.partIndex + 1}
+                                </button>
+                              ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {additionalApprovalModal.car && (
         <div className="modal-overlay" onClick={closeAdditionalApprovalModal}>
-          <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--md bsf-aa-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
-              <h2 className="modal__title">Additional Approval Request</h2>
+              <div>
+                <h2 className="modal__title">Additional Approval Request</h2>
+                <div className="bsf-aa-modal-sub">
+                  {`${additionalApprovalModal.car.reg_number ?? '—'} · ${additionalApprovalModal.car.jc_number ?? '—'} · ${additionalApprovalModal.car.owner_name ?? '—'}`}
+                </div>
+              </div>
               <button className="modal__close" onClick={closeAdditionalApprovalModal}>✕</button>
             </div>
             <div className="modal__body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <span style={{ fontSize: 12, color: '#475569', fontWeight: 700, gridColumn: '1/-1' }}>Requested Parts</span>
-                <div style={{ gridColumn: '1/-1', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="bsf-aa-modal-grid">
+                <span className="bsf-aa-modal-label">Requested Parts</span>
+                <div className="bsf-aa-part-list">
                   {additionalApprovalModal.parts.map((part, idx) => (
-                    <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Part {idx + 1}</div>
+                    <div key={idx} className="bsf-aa-part-card">
+                      <div className="bsf-aa-part-head">
+                        <div className="bsf-aa-part-title">Part {idx + 1} · Pending</div>
                         {additionalApprovalModal.parts.length > 1 && (
                           <button
                             type="button"
@@ -1934,24 +1936,24 @@ export default function BodyshopFloorPage() {
                           </button>
                         )}
                       </div>
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 12, color: '#475569' }}>Part No</span>
+                      <label className="bsf-aa-field">
+                        <span className="bsf-aa-field__label">Part No</span>
                         <input
                           className="inp"
                           value={part.partNo}
                           onChange={(e) => patchAdditionalApprovalPart(idx, { partNo: e.target.value })}
                         />
                       </label>
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 12, color: '#475569' }}>Part Description</span>
+                      <label className="bsf-aa-field">
+                        <span className="bsf-aa-field__label">Part Description</span>
                         <input
                           className="inp"
                           value={part.partDescription}
                           onChange={(e) => patchAdditionalApprovalPart(idx, { partDescription: e.target.value })}
                         />
                       </label>
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
-                        <span style={{ fontSize: 12, color: '#475569' }}>Reason (Remark)</span>
+                      <label className="bsf-aa-field is-full">
+                        <span className="bsf-aa-field__label">Reason (Remark)</span>
                         <textarea
                           className="inp"
                           value={part.reason}
@@ -1959,11 +1961,13 @@ export default function BodyshopFloorPage() {
                           onChange={(e) => patchAdditionalApprovalPart(idx, { reason: e.target.value })}
                         />
                       </label>
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
-                        <span style={{ fontSize: 12, color: '#475569' }}>Part Image</span>
+                      <label className="bsf-aa-field is-full">
+                        <span className="bsf-aa-field__label">Part Image</span>
                         <input
+                          id={`bsf-aa-file-${idx}`}
                           type="file"
                           accept="image/*"
+                          style={{ display: 'none' }}
                           onChange={(e) => patchAdditionalApprovalPart(idx, {
                             imageFile: e.target.files?.[0] ?? null,
                             existingImageBucket: e.target.files?.[0] ? null : part.existingImageBucket,
@@ -1971,19 +1975,36 @@ export default function BodyshopFloorPage() {
                             existingImageFileName: e.target.files?.[0] ? null : part.existingImageFileName,
                           })}
                         />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>
-                          {part.imageFile
-                            ? part.imageFile.name
-                            : (part.existingImageFileName || part.existingImagePath || 'No file chosen')}
-                        </span>
+                        <div className="bsf-aa-filebox">
+                          <span className="bsf-aa-file-current">
+                            {part.imageFile
+                              ? part.imageFile.name
+                              : (part.existingImageFileName || part.existingImagePath || 'No file chosen')}
+                          </span>
+                          <div className="bsf-aa-file-actions">
+                            <label className="btn btn--ghost btn--xs" htmlFor={`bsf-aa-file-${idx}`}>
+                              {part.existingImagePath ? 'Replace' : 'Choose'}
+                            </label>
+                            {part.existingImagePath && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--xs"
+                                onClick={() => {
+                                  void openAdditionalApprovalFile(part.existingImagePath, part.existingImageBucket)
+                                }}
+                              >
+                                View
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </label>
                     </div>
                   ))}
                 </div>
                 <button
                   type="button"
-                  className="btn btn--ghost btn--sm"
-                  style={{ width: 'fit-content' }}
+                  className="btn btn--ghost btn--xs bsf-aa-add-part"
                   onClick={addAdditionalApprovalPart}
                 >
                   + Add Part
@@ -1991,13 +2012,13 @@ export default function BodyshopFloorPage() {
               </div>
             </div>
             <div className="modal__footer">
-              <button className="btn btn--ghost" onClick={closeAdditionalApprovalModal}>Cancel</button>
+              <button className="btn btn--ghost btn--sm" onClick={closeAdditionalApprovalModal}>Cancel</button>
               <button
-                className="btn btn--primary"
+                className="btn btn--primary btn--sm"
                 onClick={() => void submitAdditionalApprovalRequest()}
                 disabled={Boolean(saving && saving.includes('-additional-approval'))}
               >
-                {saving && saving.includes('-additional-approval') ? 'Submitting…' : 'Submit'}
+                {saving && saving.includes('-additional-approval') ? 'Submitting…' : 'Submit Request'}
               </button>
             </div>
           </div>

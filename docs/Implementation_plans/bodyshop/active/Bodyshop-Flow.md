@@ -117,6 +117,28 @@ If any visual behavior is ambiguous in references:
 6. New Intake and card filtering logic in repair tracker must remain behaviorally equivalent.
 7. Floor completion gating must remain dependent on active work + approval resolution rules.
 
+### 3.4 R0.3 behavior-contract freeze checklist
+
+This checklist is the implementation freeze baseline and must remain invariant during redesign:
+
+1. Bodyshop Floor:
+   - Preserve role assignment and support assignment handlers.
+   - Preserve hold status remark requirement before stage save.
+   - Preserve BS floor completion gate conditions (active work + approval resolution constraints).
+   - Preserve Additional Approval request flow, multipart payload structure, and related stage persistence behavior.
+
+2. Bodyshop Repair:
+   - Preserve stage 1-18 labels and progression gates.
+   - Preserve intake milestones (customer type, photos, JC/customer-group conditions).
+   - Preserve survey/doc prerequisites and hold-reason checks.
+   - Preserve stage queue semantics including stage 10/11/12 concurrency behavior.
+   - Preserve Additional Approval per-part decision and approval-photo requirements.
+
+3. Data and permissions:
+   - Preserve role-gated visibility and tab access behavior.
+   - Preserve all production DB read/write paths and payload contracts.
+   - Preserve no-doc behavior for cash/foc customer types where already implemented.
+
 ---
 
 ## 4. Target Implementation Map (Real Repo)
@@ -191,8 +213,8 @@ If any visual behavior is ambiguous in references:
 ### Phase R0 - Audit Lock And Baseline
 
 - [ ] R0.1 Capture baseline screenshots/video for /bodyshop-floor and /bodyshop-repair.
-- [ ] R0.2 Document current gating-critical controls (disabled states, role visibility, stage transitions).
-- [ ] R0.3 Freeze behavior-contract checklist from audited TS/API sources.
+- [x] R0.2 Document current gating-critical controls (disabled states, role visibility, stage transitions).
+- [x] R0.3 Freeze behavior-contract checklist from audited TS/API sources.
 
 ### Phase R1 - Shared Styling Foundation
 
@@ -261,26 +283,26 @@ Legend:
 
 ### Phase R0
 
-IN PROGRESS | R0.1 | Capture baseline evidence | Web QA | 2026-06-16 | 2026-06-16 | Baseline capture started (bodyshop-floor and bodyshop-repair)
-PENDING | R0.2 | Gating-critical control inventory | Web QA | - | - | Pending baseline capture
-PENDING | R0.3 | Behavior-contract freeze doc | Web Dev | - | - | Pending source lock
+IN PROGRESS | R0.1 | Capture baseline evidence | Web QA | 2026-06-16 | 2026-06-16 | Live routes reached and baseline auth-gate state captured for bodyshop-floor/bodyshop-repair; authenticated module captures pending
+COMPLETED | R0.2 | Gating-critical control inventory | Web QA | 2026-06-16 | 2026-06-16 | Extracted from production code: stage gates, hold-remark requirements, doc dependencies, and stage 10/11/12 concurrency behavior
+COMPLETED | R0.3 | Behavior-contract freeze doc | Web Dev | 2026-06-16 | 2026-06-16 | Frozen in section 3.4 from audited TS/API behavior contracts
 
 ### Phase R1
 
-PENDING | R1.1 | Token alignment in shared CSS | Web Dev | - | - | Not started
+IN PROGRESS | R1.1 | Token alignment in shared CSS | Web Dev | 2026-06-16 | 2026-06-16 | Added first bodyshop-floor shared class set in App.css (KPI/filter/header/status primitives); build passes
 PENDING | R1.2 | Primitive component visual normalization | Web Dev | - | - | Not started
 PENDING | R1.3 | Mono typography normalization | Web Dev | - | - | Not started
 PENDING | R1.4 | Emoji to icon replacement pass | Web Dev | - | - | Not started
 
 ### Phase R2
 
-PENDING | R2.1 | Floor header/KPI/filter redesign | Web Dev | - | - | Not started
-PENDING | R2.2 | Floor roster-card shell | Web Dev | - | - | Not started
-PENDING | R2.3 | Role lanes redesign | Web Dev | - | - | Not started
-PENDING | R2.4 | Lane status/save/remark visual states | Web Dev | - | - | Not started
-PENDING | R2.5 | Footer status/action redesign | Web Dev | - | - | Not started
-PENDING | R2.6 | Additional Approval modal redesign | Web Dev | - | - | Not started
-PENDING | R2.7 | Floor gating parity validation | QA + Web Dev | - | - | Not started
+COMPLETED | R2.1 | Floor header/KPI/filter redesign | Web Dev | 2026-06-16 | 2026-06-16 | Header/KPI/filter/search aligned to reference grammar; handlers and DB-driven filters preserved
+COMPLETED | R2.2 | Floor roster-card shell | Web Dev | 2026-06-16 | 2026-06-16 | Converted floor list from table to reference-style roster cards with identity/summary sections
+COMPLETED | R2.3 | Role lanes redesign | Web Dev | 2026-06-16 | 2026-06-16 | Implemented 5-role lane cards with assignment + support picker and existing save handlers
+COMPLETED | R2.4 | Lane status/save/remark visual states | Web Dev | 2026-06-16 | 2026-06-16 | Added state-aware lane visuals (work/hold/completed), hold-remark cue, and save-state normalization without logic changes
+COMPLETED | R2.5 | Footer status/action redesign | Web Dev | 2026-06-16 | 2026-06-16 | Added card footer blocks for floor completion and additional approval summaries/actions
+COMPLETED | R2.6 | Additional Approval modal redesign | Web Dev | 2026-06-16 | 2026-06-16 | Modal redesigned to reference structure with class-based responsive part-card form layout
+COMPLETED | R2.7 | Floor gating parity validation | QA + Web Dev | 2026-06-16 | 2026-06-16 | Localhost smoke-validated floor completion gate and additional approval modal interactions after redesign
 
 ### Phase R3
 
@@ -369,6 +391,12 @@ Run this checklist in end-phase validation before release sign-off.
 2. The prototype contract is explicit that this initiative is UI-only and must preserve all runtime behavior.
 3. The reference set includes both high-fidelity HTML prototypes and TS/API mirrors, reducing ambiguity.
 4. Redesign execution officially started with Phase R0 baseline evidence capture (R0.1 set to IN PROGRESS).
+5. Live baseline navigation confirms both routes are auth-gated in production; unauthenticated baseline state captured.
+6. R0.2 gating inventory is completed from production code extraction for Bodyshop Floor and Bodyshop Repair.
+7. R1.1/R2.1 first implementation slice is active in codebase (shared CSS primitives + floor top-section refactor); compile/build is green on localhost.
+8. Localhost authenticated verification resumed; Bodyshop Floor redesign now includes roster shell and role lane class pass (R2.2/R2.3 in progress) and unsupported refresh icon token warnings removed from current source.
+9. R2.4 and R2.6 implementation pass added lane state visual normalization and Additional Approval modal class-based responsive redesign; localhost build verification passed.
+10. Bodyshop Floor reference-UI completion pass done: table surface replaced by roster-card + lane + footer architecture, modal verified in localhost, and production build remains green.
 
 ---
 
