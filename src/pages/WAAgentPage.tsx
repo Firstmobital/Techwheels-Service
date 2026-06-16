@@ -240,6 +240,27 @@ export default function WAAgentPage() {
     setTimeout(() => setToast(''), 3000)
   }
 
+  async function callTemplateSubmitApi(payload: Record<string, unknown>) {
+    const { data } = await supabase.auth.getSession()
+    const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${data.session?.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    let responseBody: Record<string, unknown> = {}
+    try {
+      responseBody = await res.json()
+    } catch {
+      responseBody = { error: `Request failed (${res.status})` }
+    }
+
+    return { ok: res.ok, status: res.status, body: responseBody }
+  }
+
   // ── Preview segment contacts ─────────────────────────────────────────────────
   async function loadPreview(segment: string) {
     setLoadingPreview(true)
@@ -888,15 +909,15 @@ export default function WAAgentPage() {
               <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.75rem' }} disabled={syncingTemplates}
                 onClick={async () => {
                   setSyncingTemplates(true)
-                  const { data } = await supabase.auth.getSession()
-                  const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
-                    method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
-                    body: JSON.stringify({ action:'sync_all' })
-                  })
-                  const r = await res.json()
-                  setSyncingTemplates(false)
-                  if (r.error) setToast(`❌ ${r.error}`)
-                  else { setToast(`✅ Synced ${r.synced} templates from Meta`); await loadAll() }
+                  try {
+                    const { ok, status, body } = await callTemplateSubmitApi({ action: 'sync_all' })
+                    if (!ok) setToast(`❌ ${String(body.error || `Sync failed (${status})`)}`)
+                    else { setToast(`✅ Synced ${String(body.synced || 0)} templates from Meta`); await loadAll() }
+                  } catch (e) {
+                    setToast(`❌ Network error: ${String(e)}`)
+                  } finally {
+                    setSyncingTemplates(false)
+                  }
                 }}>
                 {syncingTemplates ? '⏳ Syncing…' : '🔄 Sync from Meta'}
               </button>
@@ -999,15 +1020,15 @@ export default function WAAgentPage() {
                           disabled={submittingTemplate === tpl.id}
                           onClick={async () => {
                             setSubmittingTemplate(tpl.id)
-                            const { data } = await supabase.auth.getSession()
-                            const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
-                              method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
-                              body: JSON.stringify({ action:'submit', template_id:tpl.id })
-                            })
-                            const r = await res.json()
-                            setSubmittingTemplate(null)
-                            if (r.error) setToast(`❌ ${r.error}`)
-                            else { setToast(`✅ ${r.message}`); await loadAll() }
+                            try {
+                              const { ok, status, body } = await callTemplateSubmitApi({ action:'submit', template_id:tpl.id })
+                              if (!ok) setToast(`❌ ${String(body.error || `Submit failed (${status})`)}`)
+                              else { setToast(`✅ ${String(body.message || 'Template submitted')}`); await loadAll() }
+                            } catch (e) {
+                              setToast(`❌ Network error: ${String(e)}`)
+                            } finally {
+                              setSubmittingTemplate(null)
+                            }
                           }}>
                           {submittingTemplate === tpl.id ? '⏳ Submitting…' : '🚀 Submit for Approval'}
                         </button>
@@ -1016,14 +1037,13 @@ export default function WAAgentPage() {
                       {['pending'].includes(tpl.status) && (
                         <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.72rem' }}
                           onClick={async () => {
-                            const { data } = await supabase.auth.getSession()
-                            const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
-                              method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
-                              body: JSON.stringify({ action:'sync_status', template_id:tpl.id })
-                            })
-                            const r = await res.json()
-                            if (r.error) setToast(`❌ ${r.error}`)
-                            else { setToast(`Status: ${r.status}`); await loadAll() }
+                            try {
+                              const { ok, status, body } = await callTemplateSubmitApi({ action:'sync_status', template_id:tpl.id })
+                              if (!ok) setToast(`❌ ${String(body.error || `Status check failed (${status})`)}`)
+                              else { setToast(`Status: ${String(body.status || 'unknown')}`); await loadAll() }
+                            } catch (e) {
+                              setToast(`❌ Network error: ${String(e)}`)
+                            }
                           }}>🔄 Check Status</button>
                       )}
                       {/* Use in Campaign */}
@@ -1038,14 +1058,13 @@ export default function WAAgentPage() {
                         <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.72rem', color:'#dc2626', marginLeft:'auto' }}
                           onClick={async () => {
                             if (!confirm(`Delete template "${tpl.display_name}"?`)) return
-                            const { data } = await supabase.auth.getSession()
-                            const res = await fetch('https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/wa-template-submit', {
-                              method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${data.session?.access_token}` },
-                              body: JSON.stringify({ action:'delete', template_id:tpl.id })
-                            })
-                            const r = await res.json()
-                            if (r.error) setToast(`❌ ${r.error}`)
-                            else { setToast('🗑 Template deleted'); await loadAll() }
+                            try {
+                              const { ok, status, body } = await callTemplateSubmitApi({ action:'delete', template_id:tpl.id })
+                              if (!ok) setToast(`❌ ${String(body.error || `Delete failed (${status})`)}`)
+                              else { setToast('🗑 Template deleted'); await loadAll() }
+                            } catch (e) {
+                              setToast(`❌ Network error: ${String(e)}`)
+                            }
                           }}>🗑 Delete</button>
                       )}
                     </div>
