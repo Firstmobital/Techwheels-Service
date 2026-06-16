@@ -187,7 +187,7 @@ export default function WAAgentPage() {
   const [syncingTemplates, setSyncingTemplates] = useState(false)
   const [templateFilter, setTemplateFilter] = useState('all')
   const [templateForm, setTemplateForm] = useState({
-    display_name: '', name: '', category: 'UTILITY', language: 'en',
+    display_name: '', name: '', category: 'UTILITY', language: 'en', flow_type: 'blast', template_id: null,
     header_type: 'NONE', header_text: '',
     body_text: '', footer_text: '',
     buttons: '[{"type":"QUICK_REPLY","text":"Book Now"},{"type":"QUICK_REPLY","text":"Call Me"}]',
@@ -881,7 +881,7 @@ export default function WAAgentPage() {
             <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap' }}>
               <span style={{ fontWeight:800, fontSize:'1rem' }}>📋 WhatsApp Message Templates</span>
               <button className="btn btn--primary btn--sm" style={{ marginLeft:'auto', fontSize:'0.75rem' }}
-                onClick={() => { setShowTemplateForm(true); setEditingTemplate(null); setTemplateForm({ display_name:'', name:'', category:'UTILITY', language:'en', header_type:'NONE', header_text:'', body_text:'', footer_text:'', buttons:'[{"type":"QUICK_REPLY","text":"Book Now"},{"type":"QUICK_REPLY","text":"Call Me"}]', variable_examples:'[{"name":"customer_name","example_value":"Rahul Sharma"},{"name":"model","example_value":"Nexon"}]', campaign_type:'service_reminder' }) }}>
+                onClick={() => { setShowTemplateForm(true); setEditingTemplate(null); setTemplateForm({ display_name:'', name:'', category:'UTILITY', language:'en', header_type:'NONE', header_text:'', body_text:'', footer_text:'', buttons:'[{"type":"QUICK_REPLY","text":"Book Now"},{"type":"QUICK_REPLY","text":"Call Me"}]', variable_examples:'[{"name":"customer_name","example_value":"Rahul Sharma"},{"name":"model","example_value":"Nexon"}]', campaign_type:'service_reminder', flow_type: 'blast', template_id: null }) }}>
                 + Create Template
               </button>
               <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.75rem' }} disabled={syncingTemplates}
@@ -988,6 +988,7 @@ export default function WAAgentPage() {
                               buttons: JSON.stringify(tpl.buttons || [], null, 2),
                               variable_examples: JSON.stringify(tpl.variable_examples || [], null, 2),
                               campaign_type: tpl.campaign_type || 'service_reminder',
+                              flow_type: 'blast', template_id: null,
                             })
                             setShowTemplateForm(true)
                           }}>✏️ Edit</button>
