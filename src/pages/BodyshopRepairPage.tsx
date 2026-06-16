@@ -584,6 +584,8 @@ type FloorRoleSnapshot = {
   inTs: string | null
   outTs: string | null
   reason: string | null
+  doneAt: string | null
+  doneBy: string | null
 }
 
 const FLOOR_ROLES: FloorRole[] = ['DENTOR', 'PAINTER', 'TECHNICIAN', 'ELECTRICIAN', 'DET']
@@ -977,6 +979,7 @@ export default function BodyshopRepairPage() {
           displayStatus: 'Not Required',
           inTs: null,
           outTs: null,
+          reason: null,
           doneAt: null,
           doneBy: null,
         }
@@ -2467,10 +2470,8 @@ export default function BodyshopRepairPage() {
     const hasKmReading = kmPresentByReceptionId[receptionId] ?? false
     const milestones = getIntakeMilestones(card, intakePhotoCount, hasKmReading)
     const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
-    const floorStarted = getFloorWorkStartedForCard(card)
     const floorCompleted = getFloorStageCompletedForCard(card)
     const floorValue = String((card as { bodyshop_floor?: string | null }).bodyshop_floor ?? '').trim()
-    const floorSent = (floorValue === 'Floor 2' || floorValue === 'Floor 3') && effectiveCurrentStage >= 10
 
     const customerType = String(card.customer_type ?? '').trim().toLowerCase()
     const noDocsRequired = customerType === 'cash' || customerType === 'foc'
@@ -3615,7 +3616,6 @@ export default function BodyshopRepairPage() {
                         ? visibleDocs.filter((d) => d.mandatoryFor.includes(ct as CustomerType))
                         : []
                       const collectedMandatory = mandatoryDocs.filter((d) => Boolean(bodyshopDocsByKey[d.k])).length
-                      const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                       const surveyStatusNormalized = String(selected.survey_status ?? '').trim().toLowerCase()
                       const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
                       const surveyApproved = surveyStatusNormalized === 'approved'

@@ -70,6 +70,7 @@ export interface RepairCard {
   doc_gst: boolean
   doc_company_pan: boolean
   doc_bank_detail: boolean
+  doc_survey_approval: boolean | null
   // survey
   survey_date: string | null
   survey_status: string | null
