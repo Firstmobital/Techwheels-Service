@@ -193,6 +193,8 @@ export default function WAAgentPage() {
     buttons: '[{"type":"QUICK_REPLY","text":"Book Now"},{"type":"QUICK_REPLY","text":"Call Me"}]',
     variable_examples: '[{"name":"customer_name","example_value":"Rahul Sharma"},{"name":"model","example_value":"Nexon"}]',
     campaign_type: 'service_reminder',
+    flow_type: 'blast',
+    template_id: null,
   })
 
   // ── Load ────────────────────────────────────────────────────────────────────
@@ -279,6 +281,8 @@ export default function WAAgentPage() {
       template_message: campaignForm.template_message,
       scheduled_at: campaignForm.scheduled_at || null,
       status: 'Draft',
+      campaign_flow_type: campaignForm.flow_type || 'blast',
+      template_id: campaignForm.flow_type === 'flow' ? campaignForm.template_id : null,
     }]).select().single()
     if (campErr || !camp) { setError(campErr?.message || 'Failed to create campaign'); setSaving(false); return }
 
@@ -593,10 +597,52 @@ export default function WAAgentPage() {
                   </label>
                 </div>
 
+                {/* ── Campaign Type ──────────────────────────────── */}
+                <div style={{ marginTop: '0.75rem', padding: '0.85rem 1rem', background: '#f0f9ff', borderRadius: '10px', border: '1px solid #bae6fd' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#0369a1', marginBottom: '0.6rem' }}>📲 Campaign Type</div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {[
+                      { val: 'blast',    icon: '📢', label: 'Text Blast',         desc: 'Send a plain message to all contacts' },
+                      { val: 'flow',     icon: '🔄', label: 'Button Flow Booking', desc: 'Interactive step-by-step booking via buttons' },
+                    ].map(({ val, icon, label, desc }) => (
+                      <div key={val} onClick={() => setCampaignForm(p => ({ ...p, flow_type: val }))}
+                        style={{ flex: 1, padding: '0.65rem 0.75rem', borderRadius: '8px', border: `2px solid ${campaignForm.flow_type === val ? '#0284c7' : '#e2e8f0'}`,
+                          background: campaignForm.flow_type === val ? '#e0f2fe' : '#fff', cursor: 'pointer' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.82rem', color: campaignForm.flow_type === val ? '#0369a1' : '#374151' }}>{icon} {label}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.2rem' }}>{desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {campaignForm.flow_type === 'flow' && (
+                    <div style={{ marginTop: '0.65rem', padding: '0.6rem 0.75rem', background: '#fff', borderRadius: '7px', border: '1px solid #bae6fd', fontSize: '0.75rem', color: '#0369a1' }}>
+                      <strong>Flow:</strong> Blast → Customer taps "Book My Service" → Date picker buttons → Time slot → Branch (Sitapura / Ajmer Road) → Visit or Pickup → Address (if pickup) → ✅ Booking confirmed automatically
+                      <div style={{ marginTop: '0.4rem', color: '#64748b' }}>⚠️ Requires a Meta-approved template with a "Book My Service" button. Make sure the template is approved in the <strong>Templates tab</strong> first.</div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Template */}
+                {campaignForm.flow_type === 'flow' && (
+                  <div style={{ marginTop:'0.75rem' }}>
+                    <label className="field">
+                      <span className="label">✅ Select Approved Meta Template *</span>
+                      <select className="inp" value={campaignForm.template_id ?? ''} onChange={e => setCampaignForm(p => ({ ...p, template_id: parseInt(e.target.value) || null }))}>
+                        <option value="">-- Select an approved template --</option>
+                        {templates.filter(t => t.status === 'approved').map(t => (
+                          <option key={t.id} value={t.id}>{t.display_name} ({t.name})</option>
+                        ))}
+                      </select>
+                      {templates.filter(t => t.status === 'approved').length === 0 && (
+                        <div style={{ fontSize:'0.72rem', color:'#dc2626', marginTop:'0.3rem' }}>
+                          ⚠️ No approved templates yet. Go to <strong>📋 Templates</strong> tab to create and submit one for Meta approval.
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                )}
                 <div style={{ marginTop: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.3rem' }}>
-                    <span className="label">📝 Message Template</span>
+                    <span className="label">📝 {campaignForm.flow_type === 'flow' ? 'Initial Blast Message (Meta template name)' : 'Message Template'}</span>
                     <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: '#94a3b8' }}>Variables: {'{{name}} {{model}} {{reg_no}} {{service_due}} {{agent}} {{business}} {{branch}}'}</span>
                   </div>
                   <textarea className="inp" rows={8} value={campaignForm.template_message}

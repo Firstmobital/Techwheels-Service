@@ -414,13 +414,31 @@ Deno.serve(async (req) => {
   if (!msgs?.length) return new Response('OK', { status: 200 })
 
   const msg = msgs[0] as Record<string, unknown>
-  if (msg.type !== 'text') return new Response('OK', { status: 200 })
+  // Accept both text and interactive (button/list reply) messages
+  const msgType = msg.type as string
+  if (!['text', 'interactive', 'location'].includes(msgType)) return new Response('OK', { status: 200 })
 
   const { e164: fromE164, local10: from10 } = normalizePhone(msg.from as string)
-  const messageText = ((msg.text as Record<string, string>)?.body || '').trim()
-  const waMessageId = msg.id as string
 
-  if (!messageText) return new Response('OK', { status: 200 })
+  // Extract text body
+  let messageText = ''
+  if (msgType === 'text') {
+    messageText = ((msg.text as Record<string, string>)?.body || '').trim()
+  } else if (msgType === 'interactive') {
+    const inter = msg.interactive as Record<string, unknown>
+    const interType = inter?.type as string
+    if (interType === 'button_reply') {
+      messageText = ((inter?.button_reply as Record<string,string>)?.title || '').trim()
+    } else if (interType === 'list_reply') {
+      messageText = ((inter?.list_reply as Record<string,string>)?.title || '').trim()
+    }
+  } else if (msgType === 'location') {
+    const loc = msg.location as Record<string, unknown>
+    messageText = `📍 ${loc?.latitude},${loc?.longitude}`
+  }
+
+  const waMessageId = msg.id as string
+  if (!messageText && msgType === 'text') return new Response('OK', { status: 200 })
 
   // ── Deduplication ──────────────────────────────────────────────────────────
   const { data: dup } = await sb.from('wa_messages').select('id').eq('wa_message_id', waMessageId).limit(1)
@@ -461,6 +479,99 @@ Deno.serve(async (req) => {
   }
 
   const convId = conv!.id as number
+
+
+  // ── FLOW BOOT: customer tapped "Book My Service" from campaign blast ──────
+  const convFlowStep = conv?.flow_step as string
+  if (convFlowStep === 'blast_sent' && msgType === 'interactive') {
+    const inter = msg.interactive as Record<string, unknown>
+    const interType = inter?.type as string
+    if (interType === 'button_reply') {
+      const btnId = ((inter.button_reply as Record<string,string>)?.id || '').toLowerCase()
+      const btnTitle = ((inter.button_reply as Record<string,string>)?.title || '').toLowerCase()
+      if (btnId.includes('book') || btnTitle.includes('book') || btnTitle.includes('service')) {
+        // Activate the flow
+        await sb.from('wa_conversations').update({
+          flow_active: true,
+          flow_step: 'flow_starting',
+          updated_at: new Date().toISOString(),
+        }).eq('id', convId)
+
+        // Save inbound tap
+        await sb.from('wa_messages').insert([{
+          conversation_id: convId, direction: 'inbound', sender: 'customer',
+          body: 'Book My Service (button tap)', wa_message_id: waMessageId,
+          status: 'delivered', ai_generated: false,
+        }])
+        await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+
+        // Start the flow
+        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/wa-campaign-flow`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+          body: JSON.stringify({ action: 'start', phone: fromE164, conv_id: convId }),
+        })
+        return new Response('OK', { status: 200 })
+      }
+    }
+  }
+
+  // ── FLOW ROUTER: if this conv is in an active button flow, handle it there ──
+  if (conv!.flow_active) {
+    // Extract button reply info
+    let replyType = 'text'
+    let replyId   = ''
+    let replyTitle = messageText
+    let locationLat: string | null = null
+    let locationLon: string | null = null
+
+    if (msgType === 'interactive') {
+      const inter = msg.interactive as Record<string, unknown>
+      const interType = inter?.type as string
+      if (interType === 'button_reply') {
+        replyType  = 'button_reply'
+        replyId    = ((inter.button_reply as Record<string,string>)?.id || '').trim()
+        replyTitle = ((inter.button_reply as Record<string,string>)?.title || '').trim()
+      } else if (interType === 'list_reply') {
+        replyType  = 'list_reply'
+        replyId    = ((inter.list_reply as Record<string,string>)?.id || '').trim()
+        replyTitle = ((inter.list_reply as Record<string,string>)?.title || '').trim()
+      }
+    } else if (msgType === 'location') {
+      const loc = msg.location as Record<string, unknown>
+      locationLat = String(loc?.latitude || '')
+      locationLon = String(loc?.longitude || '')
+      replyTitle  = `📍 ${locationLat},${locationLon}`
+    }
+
+    // Save the inbound message first
+    await sb.from('wa_messages').insert([{
+      conversation_id: convId, direction: 'inbound', sender: 'customer',
+      body: replyTitle, wa_message_id: waMessageId, status: 'delivered', ai_generated: false,
+    }])
+    await sb.from('wa_conversations').update({ last_message_at: new Date().toISOString() }).eq('id', convId)
+
+    // Hand off to wa-campaign-flow
+    const flowRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/wa-campaign-flow`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      },
+      body: JSON.stringify({
+        action:       'handle_reply',
+        phone:        fromE164,
+        conv_id:      convId,
+        reply_type:   replyType,
+        reply_id:     replyId,
+        reply_text:   replyTitle,
+        location_lat: locationLat,
+        location_lon: locationLon,
+      }),
+    })
+    console.log('Flow handler response:', await flowRes.text())
+    return new Response('OK', { status: 200 })
+  }
 
   // ── Save inbound message ───────────────────────────────────────────────────
   await sb.from('wa_messages').insert([{
