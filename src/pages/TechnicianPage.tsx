@@ -84,6 +84,7 @@ type YesterdayRow = {
 }
 
 const QUERY_PAGE_SIZE = 1000
+const IN_FILTER_BATCH_SIZE = 200
 const DEFAULT_PV_SHARE_PERCENT = 20
 const DEFAULT_EV_SHARE_PERCENT = 25
 const UNKNOWN_FUEL_TYPE = 'Unknown'
@@ -200,7 +201,14 @@ function parseRevenueAmount(value: unknown): number {
 }
 
 function normalizeJobCardNumber(value: string | null | undefined): string {
-  return String(value ?? '').trim().toUpperCase()
+  const raw = String(value ?? '').trim().toUpperCase()
+  if (!raw) return ''
+
+  const normalizedDashes = raw.replace(/[–—−]/g, '-')
+  const compact = normalizedDashes.replace(/\s+/g, '')
+
+  // Some imported rows have repeated prefixes like JC-JC-...; collapse to canonical JC-...
+  return compact.replace(/^JC-(JC-)+/, 'JC-')
 }
 
 function normalizeSupportRole(value: string | null | undefined): string {
@@ -670,12 +678,22 @@ export default function TechnicianPage() {
 
       const invoiceDateMap = new Map<string, string | null>()
       if (jcNumbers.length > 0) {
-        const invoiceRes = await supabase
-          .from('job_card_closed_data')
-          .select('job_card_number, invoice_date')
-          .in('job_card_number', jcNumbers)
+        for (let i = 0; i < jcNumbers.length; i += IN_FILTER_BATCH_SIZE) {
+          const jcBatch = jcNumbers.slice(i, i + IN_FILTER_BATCH_SIZE)
+          if (jcBatch.length === 0) continue
 
-        if (!invoiceRes.error && invoiceRes.data) {
+          const invoiceRes = await supabase
+            .from('job_card_closed_data')
+            .select('job_card_number, invoice_date')
+            .in('job_card_number', jcBatch)
+
+          if (invoiceRes.error) {
+            setError(invoiceRes.error.message)
+            setAssignments([])
+            setLoading(false)
+            return
+          }
+
           ;(invoiceRes.data ?? []).forEach((row: any) => {
             const key = normalizeJobCardNumber((row as { job_card_number?: string | null }).job_card_number)
             if (!key) return
@@ -706,8 +724,8 @@ export default function TechnicianPage() {
       ))
 
       const supportRows: SupportAssignmentRow[] = []
-      for (let i = 0; i < assignmentJcNumbers.length; i += QUERY_PAGE_SIZE) {
-        const jcBatch = assignmentJcNumbers.slice(i, i + QUERY_PAGE_SIZE)
+      for (let i = 0; i < assignmentJcNumbers.length; i += IN_FILTER_BATCH_SIZE) {
+        const jcBatch = assignmentJcNumbers.slice(i, i + IN_FILTER_BATCH_SIZE)
         if (jcBatch.length === 0) continue
 
         const supportRes = await supabase
@@ -816,34 +834,38 @@ export default function TechnicianPage() {
       }
 
       if (completedJcNumbers.length > 0) {
-        const revenueRes = await supabase
-          .from('job_card_closed_data')
-          .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
-          .in('job_card_number', completedJcNumbers)
+        for (let i = 0; i < completedJcNumbers.length; i += IN_FILTER_BATCH_SIZE) {
+          const jcBatch = completedJcNumbers.slice(i, i + IN_FILTER_BATCH_SIZE)
+          if (jcBatch.length === 0) continue
 
-        if (revenueRes.error) {
-          setError(revenueRes.error.message)
-          setLoading(false)
-          return
-        }
+          const revenueRes = await supabase
+            .from('job_card_closed_data')
+            .select('job_card_number, closed_date_time, invoice_date, final_labour_amount')
+            .in('job_card_number', jcBatch)
 
-        ;(revenueRes.data ?? []).forEach((row: any) => {
-          const key = normalizeJobCardNumber((row as { job_card_number?: string | null }).job_card_number)
-          if (!key) return
-
-          const existing = revenueMap.get(key)
-          const candidate = row as RevenueRow
-          if (!existing) {
-            revenueMap.set(key, candidate)
-          } else {
-            const existingTs = new Date(existing.closed_date_time ?? existing.invoice_date ?? 0).getTime()
-            const candidateTs = new Date(candidate.closed_date_time ?? candidate.invoice_date ?? 0).getTime()
-            if (candidateTs > existingTs) {
-              revenueMap.set(key, candidate)
-            }
+          if (revenueRes.error) {
+            setError(revenueRes.error.message)
+            setLoading(false)
+            return
           }
-        })
 
+          ;(revenueRes.data ?? []).forEach((row: any) => {
+            const key = normalizeJobCardNumber((row as { job_card_number?: string | null }).job_card_number)
+            if (!key) return
+
+            const existing = revenueMap.get(key)
+            const candidate = row as RevenueRow
+            if (!existing) {
+              revenueMap.set(key, candidate)
+            } else {
+              const existingTs = new Date(existing.closed_date_time ?? existing.invoice_date ?? 0).getTime()
+              const candidateTs = new Date(candidate.closed_date_time ?? candidate.invoice_date ?? 0).getTime()
+              if (candidateTs > existingTs) {
+                revenueMap.set(key, candidate)
+              }
+            }
+          })
+        }
       }
 
       // Add reg_number to assignment rows
