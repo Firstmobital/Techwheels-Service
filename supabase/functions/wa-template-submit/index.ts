@@ -3,33 +3,39 @@
  * Submits/syncs/deletes WhatsApp message templates via Meta Graph API
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders } from '../_shared/cors.ts'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+function json(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders })
+}
+
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405)
   let body: Record<string, unknown> = {}
-  try { body = await req.json() } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  try { body = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400) }
 
   const { data: cfgArr } = await sb.from('wa_agent_config').select('*').eq('id', 1).limit(1)
   const config = cfgArr?.[0] as Record<string, unknown>
-  if (!config) return Response.json({ error: 'Agent config not found' }, { status: 500 })
+  if (!config) return json({ error: 'Agent config not found' }, 500)
 
   const metaToken = config.meta_access_token as string
   const wabaId    = config.waba_id as string
   const action    = body.action as string
 
-  if (!metaToken) return Response.json({ error: 'meta_access_token not configured' }, { status: 400 })
+  if (!metaToken) return json({ error: 'meta_access_token not configured' }, 400)
 
   // ── submit ────────────────────────────────────────────────────────────────
   if (action === 'submit') {
-    if (!wabaId) return Response.json({ error: 'waba_id not configured in Settings. Add your WhatsApp Business Account ID.' }, { status: 400 })
+    if (!wabaId) return json({ error: 'waba_id not configured in Settings. Add your WhatsApp Business Account ID.' }, 400)
     const { data: tplArr } = await sb.from('wa_templates').select('*').eq('id', body.template_id).limit(1)
     const tpl = tplArr?.[0] as Record<string, unknown>
-    if (!tpl) return Response.json({ error: 'Template not found' }, { status: 404 })
+    if (!tpl) return json({ error: 'Template not found' }, 404)
     if (['approved','pending'].includes(tpl.status as string))
-      return Response.json({ error: `Template is already ${tpl.status}` }, { status: 400 })
+      return json({ error: `Template is already ${tpl.status}` }, 400)
 
     const components: unknown[] = []
     if (tpl.header_type && tpl.header_type !== 'NONE') {
@@ -58,37 +64,37 @@ Deno.serve(async (req) => {
     const metaData = await metaRes.json()
     if (metaData.error) {
       await sb.from('wa_templates').update({ status:'rejected', rejection_reason:`Meta: ${metaData.error.message}`, updated_at:new Date().toISOString() }).eq('id', body.template_id)
-      return Response.json({ error: metaData.error.message, meta_error: metaData.error }, { status: 400 })
+      return json({ error: metaData.error.message, meta_error: metaData.error }, 400)
     }
     await sb.from('wa_templates').update({ meta_template_id:metaData.id||null, status:(metaData.status||'PENDING').toLowerCase(), rejection_reason:null, submitted_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', body.template_id)
-    return Response.json({ success:true, meta_template_id:metaData.id, status:metaData.status, message:`Template submitted! Meta will review within 24–48 hours. Status: ${metaData.status}` })
+    return json({ success:true, meta_template_id:metaData.id, status:metaData.status, message:`Template submitted! Meta will review within 24–48 hours. Status: ${metaData.status}` })
   }
 
   // ── sync_status ───────────────────────────────────────────────────────────
   if (action === 'sync_status') {
-    if (!wabaId) return Response.json({ error:'waba_id not configured' }, { status:400 })
+    if (!wabaId) return json({ error:'waba_id not configured' }, 400)
     const { data: tplArr } = await sb.from('wa_templates').select('*').eq('id', body.template_id).limit(1)
     const tpl = tplArr?.[0] as Record<string,unknown>
-    if (!tpl?.meta_template_id) return Response.json({ error:'Template not submitted to Meta yet' }, { status:400 })
+    if (!tpl?.meta_template_id) return json({ error:'Template not submitted to Meta yet' }, 400)
     const metaRes = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?name=${encodeURIComponent(tpl.name as string)}&fields=id,name,status,rejected_reason`, { headers:{Authorization:`Bearer ${metaToken}`} })
     const metaData = await metaRes.json()
-    if (metaData.error) return Response.json({ error:metaData.error.message }, { status:400 })
+    if (metaData.error) return json({ error:metaData.error.message }, 400)
     const found = metaData.data?.[0]
-    if (!found) return Response.json({ error:'Not found in Meta' }, { status:404 })
+    if (!found) return json({ error:'Not found in Meta' }, 404)
     const newStatus = (found.status||'').toLowerCase()
     const upd: Record<string,unknown> = { status:newStatus, updated_at:new Date().toISOString() }
     if (found.rejected_reason) upd.rejection_reason = found.rejected_reason
     if (newStatus === 'approved') upd.approved_at = new Date().toISOString()
     await sb.from('wa_templates').update(upd).eq('id', body.template_id)
-    return Response.json({ success:true, status:newStatus, rejection_reason:found.rejected_reason||null })
+    return json({ success:true, status:newStatus, rejection_reason:found.rejected_reason||null })
   }
 
   // ── sync_all ──────────────────────────────────────────────────────────────
   if (action === 'sync_all') {
-    if (!wabaId) return Response.json({ error:'waba_id not configured' }, { status:400 })
+    if (!wabaId) return json({ error:'waba_id not configured' }, 400)
     const metaRes = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?fields=id,name,status,rejected_reason&limit=100`, { headers:{Authorization:`Bearer ${metaToken}`} })
     const metaData = await metaRes.json()
-    if (metaData.error) return Response.json({ error:metaData.error.message }, { status:400 })
+    if (metaData.error) return json({ error:metaData.error.message }, 400)
     const metaMap = Object.fromEntries((metaData.data||[]).map((t: Record<string,string>) => [t.name, t]))
     const { data: ourTpls } = await sb.from('wa_templates').select('id,name,status').in('status',['pending','submitted'])
     let synced = 0
@@ -102,23 +108,23 @@ Deno.serve(async (req) => {
       await sb.from('wa_templates').update(upd).eq('id', tpl.id)
       synced++
     }
-    return Response.json({ success:true, synced, total_meta_templates:(metaData.data||[]).length })
+    return json({ success:true, synced, total_meta_templates:(metaData.data||[]).length })
   }
 
   // ── delete ────────────────────────────────────────────────────────────────
   if (action === 'delete') {
-    if (!wabaId) return Response.json({ error:'waba_id not configured' }, { status:400 })
+    if (!wabaId) return json({ error:'waba_id not configured' }, 400)
     const { data: tplArr } = await sb.from('wa_templates').select('*').eq('id', body.template_id).limit(1)
     const tpl = tplArr?.[0] as Record<string,unknown>
-    if (!tpl) return Response.json({ error:'Template not found' }, { status:404 })
+    if (!tpl) return json({ error:'Template not found' }, 404)
     if (tpl.meta_template_id) {
       const delRes = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?hsm_id=${tpl.meta_template_id}&name=${tpl.name}`, { method:'DELETE', headers:{Authorization:`Bearer ${metaToken}`} })
       const dd = await delRes.json()
-      if (dd.error && dd.error.code !== 100) return Response.json({ error:dd.error.message }, { status:400 })
+      if (dd.error && dd.error.code !== 100) return json({ error:dd.error.message }, 400)
     }
     await sb.from('wa_templates').update({ status:'deleted', updated_at:new Date().toISOString() }).eq('id', body.template_id)
-    return Response.json({ success:true })
+    return json({ success:true })
   }
 
-  return Response.json({ error:`Unknown action: ${action}` }, { status:400 })
+  return json({ error:`Unknown action: ${action}` }, 400)
 })

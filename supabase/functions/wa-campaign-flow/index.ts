@@ -69,6 +69,40 @@ function sendList(phoneId: string, token: string, to: string, bodyText: string, 
   })
 }
 
+function sendMetaFlow(
+  phoneId: string,
+  token: string,
+  to: string,
+  flowId: string,
+  flowToken: string,
+  ctaLabel: string,
+  prefill: Record<string, unknown>,
+) {
+  return sendWA(phoneId, token, to, {
+    type: 'interactive',
+    interactive: {
+      type: 'flow',
+      header: { type: 'text', text: '🚗 Book Your Service' },
+      body: { text: 'Please fill your preferred date, time, branch, and pickup option.' },
+      footer: { text: 'Techwheels — Tata Authorised Service' },
+      action: {
+        name: 'flow',
+        parameters: {
+          flow_message_version: '3',
+          flow_id: flowId,
+          flow_cta: ctaLabel,
+          flow_token: flowToken,
+          flow_action: 'navigate',
+          flow_action_payload: {
+            screen: 'BOOK_SERVICE',
+            data: prefill,
+          },
+        },
+      },
+    },
+  })
+}
+
 // Format a Date as "Mon, 16 Jun"
 function fmtDate(d: Date) {
   return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -96,6 +130,50 @@ function parseUserDate(input: string): Date | null {
     return new Date(yr, mon, day)
   }
   return null
+}
+
+function slotToSqlTime(slot: string | null | undefined): string | null {
+  if (!slot) return null
+  const s = slot.toLowerCase()
+  if (s.includes('morning') || s.includes('9 am') || s.includes('9–11')) return '09:00:00'
+  if (s.includes('afternoon') || s.includes('12 pm') || s.includes('12–2')) return '12:00:00'
+  if (s.includes('evening') || s.includes('3 pm') || s.includes('3–6')) return '15:00:00'
+  const m = s.match(/(\d{1,2}):(\d{2})/)
+  if (m) return `${m[1].padStart(2, '0')}:${m[2]}:00`
+  return null
+}
+
+function normalizeIndianPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2)
+  return digits.slice(-10)
+}
+
+function normalizeBranch(input: string | null | undefined): string | null {
+  if (!input) return null
+  const s = input.toLowerCase()
+  if (s.includes('sitapura')) return 'Sitapura'
+  if (s.includes('ajmer')) return 'Ajmer Road'
+  return input
+}
+
+function parseMetaFlowDate(input: string | null | undefined): string | null {
+  if (!input) return null
+  const s = String(input).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?$/)
+  if (!m) return null
+  const now = new Date()
+  const dd = m[1].padStart(2, '0')
+  const mm = m[2].padStart(2, '0')
+  const yy = m[3] || String(now.getFullYear())
+  return `${yy}-${mm}-${dd}`
+}
+
+function parseMetaFlowPickupFlag(input: unknown): boolean {
+  if (typeof input === 'boolean') return input
+  const s = String(input || '').toLowerCase()
+  return s.includes('pickup') || s === 'yes' || s === 'true' || s === '1'
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
@@ -148,6 +226,32 @@ Deno.serve(async (req) => {
   // ────────────────────────────────────────────────────────────────────────
   if (action === 'start') {
     const custName = (conv.customer_name as string || 'there').split(' ')[0]
+    const metaFlowId = (cfg.meta_booking_flow_id as string) || ''
+    const metaFlowCta = (cfg.meta_booking_flow_cta as string) || 'Book My Service'
+
+    if (metaFlowId) {
+      const flowRes = await sendMetaFlow(
+        phoneId,
+        token,
+        phone,
+        metaFlowId,
+        `tw_booking_${convId}_${Date.now()}`,
+        metaFlowCta,
+        {
+          customer_name: conv.customer_name || custName,
+          model: conv.model || '',
+          reg_number: conv.reg_number || '',
+          branches: (cfg.available_branches as string[]) || ['Sitapura', 'Ajmer Road'],
+        },
+      )
+
+      if (!(flowRes as Record<string, unknown>)?.error) {
+        await saveFlow('meta_flow_sent')
+        return Response.json({ success: true, step: 'meta_flow_sent' })
+      }
+      console.error('Meta Flow send failed, falling back to button flow')
+    }
+
     const tomorrow   = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
     const dayAfter   = new Date(); dayAfter.setDate(dayAfter.getDate() + 2)
     // Skip Sunday
@@ -176,6 +280,60 @@ Deno.serve(async (req) => {
     const replyId     = payload.reply_id as string     // button ID (for button_reply)
     const replyText   = payload.reply_text as string   // raw text (for text type)
     const currentStep = conv.flow_step as string
+
+    if (currentStep === 'meta_flow_sent' && replyType === 'nfm_reply') {
+      const flowReply = (payload.reply_data || {}) as Record<string, unknown>
+      const response = (flowReply.response_json || flowReply) as Record<string, unknown>
+
+      const dateRaw = (response.appointment_date || response.booking_date || response.date || response.service_date) as string | undefined
+      const timeRaw = (response.booking_time || response.time_slot || response.time) as string | undefined
+      const branchRaw = (response.branch || response.service_centre || response.service_center) as string | undefined
+      const pickupRaw = response.pickup_required || response.visit_mode || response.pickup_mode
+      const pickupAddress = (response.pickup_address || response.address || response.location_address || null) as string | null
+
+      const bookingDate = parseMetaFlowDate(dateRaw)
+      const branch = normalizeBranch(branchRaw)
+      const pickupRequired = parseMetaFlowPickupFlag(pickupRaw)
+
+      if (!bookingDate || !timeRaw || !branch) {
+        await sendText(phoneId, token, phone,
+          'I could not read complete details from the form. Please continue with quick buttons below 👇'
+        )
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+        const dayAfter = new Date(); dayAfter.setDate(dayAfter.getDate() + 2)
+        await sendButtons(phoneId, token, phone,
+          `📅 Which date works for you?`,
+          [
+            { id: `date_tmr_${tomorrow.toISOString().split('T')[0]}`, title: `Tomorrow, ${fmtDate(tomorrow)}` },
+            { id: `date_da_${dayAfter.toISOString().split('T')[0]}`, title: `${fmtDate(dayAfter)}` },
+            { id: 'date_other', title: '📅 Choose Another Date' },
+          ]
+        )
+        await saveFlow('date_sent')
+        return Response.json({ success: true, step: 'date_sent' })
+      }
+
+      const nextFlowData = {
+        ...flowData,
+        booking_date: bookingDate,
+        time_slot: String(timeRaw),
+        branch,
+        pickup_required: pickupRequired,
+        pickup_address: pickupRequired ? pickupAddress : null,
+      }
+
+      await saveFlow('confirming', nextFlowData)
+      return await createBookingAndConfirm(
+        conv,
+        nextFlowData,
+        pickupRequired,
+        pickupRequired ? pickupAddress : null,
+        phone,
+        phoneId,
+        token,
+        endFlow,
+      )
+    }
 
     // ── STEP: date_sent ── waiting for date button ────────────────────────
     if (currentStep === 'date_sent') {
@@ -343,30 +501,32 @@ async function createBookingAndConfirm(
   const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-  const bookingDate = flowData.booking_date as string
+  const appointmentDate = flowData.booking_date as string
   const timeSlot    = flowData.time_slot as string
   const branch      = flowData.branch as string
+  const bookingTime = slotToSqlTime(timeSlot)
+  const customerPhone = normalizeIndianPhone(phone)
 
   // Generate lead number
   const leadNum = `TW-WA-${Date.now().toString().slice(-6)}`
 
   const bookingPayload = {
-    booking_source:       'WhatsApp Campaign',
+    booking_source:       'WhatsApp',
     lead_number:          leadNum,
-    booking_date:         bookingDate,
-    booking_time:         timeSlot,
-    appointment_date:     bookingDate,
+    booking_date:         new Date().toISOString().split('T')[0],
+    booking_time:         bookingTime,
+    appointment_date:     appointmentDate,
     reg_number:           conv.reg_number || null,
     model:                conv.model || null,
     fuel_type:            conv.fuel_type || null,
     customer_name:        conv.customer_name || null,
-    customer_phone:       phone,
+    customer_phone:       customerPhone,
     service_type:         conv.service_type || null,
     complaint_description: conv.complaint_description || null,
     pickup_required:      pickupRequired,
     pickup_address:       pickupAddress,
     branch:               branch,
-    status:               'Scheduled',
+    status:               'Confirmed',
     wa_conversation_id:   conv.id,
     wa_opt_in:            true,
     created_at:           new Date().toISOString(),
@@ -376,7 +536,7 @@ async function createBookingAndConfirm(
   const { data: bk, error: bkErr } = await sb.from('service_bookings').insert([bookingPayload]).select().single()
   if (bkErr) {
     console.error('Booking insert error:', bkErr)
-    await sb.from('conversations').update({ flow_active: false }).eq('id', conv.id)
+    await sb.from('wa_conversations').update({ flow_active: false }).eq('id', conv.id)
     const sendWA2 = async (to: string, body: Record<string, unknown>) => {
       await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
         method: 'POST',
@@ -392,7 +552,7 @@ async function createBookingAndConfirm(
   await endFlow(bookingId)
 
   // Format confirmation date
-  const d = new Date(bookingDate + 'T00:00:00')
+  const d = new Date(appointmentDate + 'T00:00:00')
   const fmtD = d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
 
   // Send beautiful confirmation

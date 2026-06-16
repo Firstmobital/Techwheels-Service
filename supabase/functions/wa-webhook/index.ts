@@ -431,6 +431,10 @@ Deno.serve(async (req) => {
       messageText = ((inter?.button_reply as Record<string,string>)?.title || '').trim()
     } else if (interType === 'list_reply') {
       messageText = ((inter?.list_reply as Record<string,string>)?.title || '').trim()
+    } else if (interType === 'nfm_reply') {
+      const nfm = (inter?.nfm_reply as Record<string, unknown>) || {}
+      messageText = 'Flow form submitted'
+      if (typeof nfm.body === 'string' && nfm.body.trim()) messageText = nfm.body.trim()
     }
   } else if (msgType === 'location') {
     const loc = msg.location as Record<string, unknown>
@@ -536,6 +540,29 @@ Deno.serve(async (req) => {
         replyType  = 'list_reply'
         replyId    = ((inter.list_reply as Record<string,string>)?.id || '').trim()
         replyTitle = ((inter.list_reply as Record<string,string>)?.title || '').trim()
+      } else if (interType === 'nfm_reply') {
+        replyType = 'nfm_reply'
+        const nfm = (inter.nfm_reply as Record<string, unknown>) || {}
+        replyTitle = (typeof nfm.body === 'string' && nfm.body.trim()) ? nfm.body.trim() : 'Flow form submitted'
+      }
+    }
+
+    let replyData: Record<string, unknown> | null = null
+    if (msgType === 'interactive') {
+      const inter = msg.interactive as Record<string, unknown>
+      const interType = inter?.type as string
+      if (interType === 'nfm_reply') {
+        const nfm = (inter.nfm_reply as Record<string, unknown>) || {}
+        const rawResp = nfm.response_json
+        let parsedResp: unknown = rawResp
+        if (typeof rawResp === 'string') {
+          try { parsedResp = JSON.parse(rawResp) } catch { parsedResp = { raw: rawResp } }
+        }
+        replyData = {
+          name: nfm.name || null,
+          body: nfm.body || null,
+          response_json: (parsedResp as Record<string, unknown>) || {},
+        }
       }
     } else if (msgType === 'location') {
       const loc = msg.location as Record<string, unknown>
@@ -565,6 +592,7 @@ Deno.serve(async (req) => {
         reply_type:   replyType,
         reply_id:     replyId,
         reply_text:   replyTitle,
+        reply_data:   replyData,
         location_lat: locationLat,
         location_lon: locationLon,
       }),

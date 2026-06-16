@@ -25,6 +25,8 @@ interface AgentConfig {
   staff_notify_on_escalation: boolean
   waba_id?: string
   meta_app_id?: string
+  meta_booking_flow_id?: string
+  meta_booking_flow_cta?: string
 }
 
 
@@ -1449,6 +1451,16 @@ export default function WAAgentPage() {
                       onClick={() => { navigator.clipboard.writeText(config.wa_verify_token || ''); showToast('✅ Copied!') }}
                       title="Copy token">📋 Copy</button>
                   </div>
+                </label>
+                <label className="field">
+                  <span className="label">Meta Booking Flow ID</span>
+                  <input className="inp" placeholder="From Meta Flows (numeric Flow ID)" value={config.meta_booking_flow_id || ''} onChange={e => setConfig(p => p ? { ...p, meta_booking_flow_id: e.target.value } : p)} />
+                  <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>If set, campaign booking starts with native WhatsApp Flow form (calendar-style).</div>
+                </label>
+                <label className="field">
+                  <span className="label">Meta Flow CTA Label</span>
+                  <input className="inp" placeholder="Book My Service" value={config.meta_booking_flow_cta || ''} onChange={e => setConfig(p => p ? { ...p, meta_booking_flow_cta: e.target.value } : p)} />
+                  <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Button text shown on the Flow message.</div>
                 </label>
               </div>
             </Section>

@@ -26,7 +26,7 @@ async function sendText(phoneId: string, token: string, to: string, text: string
 async function sendFlowTemplate(
   phoneId: string, token: string, to: string,
   templateName: string, language: string,
-  vars: Record<string,string>
+  params: Array<{ type: 'text'; text: string }>
 ) {
   // Send Meta template with "Book My Service" CTA button
   const res = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
@@ -42,13 +42,30 @@ async function sendFlowTemplate(
         components: [
           {
             type: 'body',
-            parameters: Object.values(vars).map(v => ({ type: 'text', text: v })),
+            parameters: params,
           },
         ],
       },
     }),
   })
   return res.json()
+}
+
+function buildTemplateBodyParams(
+  vars: Record<string, string>,
+  flowTemplate: Record<string, unknown> | null,
+): Array<{ type: 'text'; text: string }> {
+  const examples = (flowTemplate?.variable_examples as Array<{ name?: string; example_value?: string }> | null) || []
+  if (examples.length > 0) {
+    return examples.map((ex) => {
+      const key = (ex.name || '').trim()
+      const val = (key && vars[key]) ? vars[key] : (ex.example_value || '')
+      return { type: 'text', text: String(val || '') }
+    })
+  }
+
+  const fallbackOrder = ['name', 'model', 'reg_no', 'service_due', 'branch', 'agent', 'business']
+  return fallbackOrder.map((k) => ({ type: 'text', text: vars[k] || '' }))
 }
 
 Deno.serve(async (req) => {
@@ -108,8 +125,9 @@ Deno.serve(async (req) => {
 
       if (isFlow && flowTemplate) {
         // Send Meta template with CTA button
+        const bodyParams = buildTemplateBodyParams(vars, flowTemplate)
         waRes = await sendFlowTemplate(phoneId, token, e164,
-          flowTemplate.name as string, flowTemplate.language as string || 'en', vars)
+          flowTemplate.name as string, flowTemplate.language as string || 'en', bodyParams)
       } else {
         // Plain text blast
         const message = renderTemplate(campaign.template_message as string, vars)

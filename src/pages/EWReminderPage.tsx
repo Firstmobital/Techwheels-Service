@@ -1,9 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+import { supabase } from '../lib/supabase'
 
 interface EWRecord {
   id: number
