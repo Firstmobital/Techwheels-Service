@@ -32,6 +32,12 @@ This plan is presentational-only. It explicitly forbids business-logic, API-cont
 
 ## 2. Authority And Drift Guard
 
+### 2.0 Schema authority lock (mandatory)
+
+1. Treat local_folder/backups/full_database.sql as the authoritative schema and full database dump (authority never downgrades).
+2. If direct file access is blocked by size limits, use local_folder/backups/chunks/full_database.sql.part_* as the access mirror of the same authoritative dump.
+3. Do not assume schema entities, fields, or data contracts outside the authoritative dump.
+
 ### 2.1 Authority order
 
 1. Bodyshop-Flow.md (this file, execution tracker)
@@ -56,6 +62,8 @@ This plan is presentational-only. It explicitly forbids business-logic, API-cont
 8. Keep Additional Approval and Floor Assignment concurrent behavior unchanged.
 9. Keep all customer-type document requirements and no-doc cases (cash/foc) unchanged.
 10. No new dependencies unless absolutely required and approved.
+11. Do not use test data, trial data, assumed data, placeholder/mock records, or hardcoded fake counts in any redesigned surface.
+12. All redesign surfaces must be wired to live database-backed data paths already used by production code.
 
 ### 2.3 Unknown handling protocol
 
@@ -253,7 +261,7 @@ Legend:
 
 ### Phase R0
 
-PENDING | R0.1 | Capture baseline evidence | Web QA | - | - | Pending redesign kickoff
+IN PROGRESS | R0.1 | Capture baseline evidence | Web QA | 2026-06-16 | 2026-06-16 | Baseline capture started (bodyshop-floor and bodyshop-repair)
 PENDING | R0.2 | Gating-critical control inventory | Web QA | - | - | Pending baseline capture
 PENDING | R0.3 | Behavior-contract freeze doc | Web Dev | - | - | Pending source lock
 
@@ -323,6 +331,7 @@ PENDING | R6.3 | Rollout and rollback notes | Web Dev + Ops | - | - | Not starte
 5. Additional Approval and floor completion flows pass parity checks.
 6. Responsive checkpoints pass for operational usage.
 7. Visual Sync Lock end-phase global drift check passes across all touched files.
+8. No test/trial/assumed/mock data appears in UI; all rendered data is DB-wired through production data paths.
 
 ---
 
@@ -359,6 +368,7 @@ Run this checklist in end-phase validation before release sign-off.
 1. Reference package is sufficiently complete for phased production redesign of both pages.
 2. The prototype contract is explicit that this initiative is UI-only and must preserve all runtime behavior.
 3. The reference set includes both high-fidelity HTML prototypes and TS/API mirrors, reducing ambiguity.
+4. Redesign execution officially started with Phase R0 baseline evidence capture (R0.1 set to IN PROGRESS).
 
 ---
 
