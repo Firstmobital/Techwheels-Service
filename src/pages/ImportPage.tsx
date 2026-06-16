@@ -577,7 +577,7 @@ async function getTableColumns(tableName: string): Promise<string[]> {
 async function getEmployeeLookupIndex(): Promise<EmployeeLookupIndex> {
   const { data, error } = await supabase
     .from('employee_master')
-    .select('employee_code, employee_name, location, department, role')
+    .select('employee_code, employee_name, location, fuel_type, department, role')
 
   if (error) throw new Error(error.message)
 
@@ -733,6 +733,23 @@ function resolveLocationAndPortalFromSlotBranch(branch: string): LocationPortal 
 
 function resolveStandardBranchFromSlot(branch: string): 'Ajmer Road' | 'Sitapura' {
   return resolveLocationAndPortalFromSlotBranch(branch).location
+}
+
+function normalizePortalFromFuelType(value: string | null | undefined): Portal | null {
+  if (!value) return null
+  const normalized = value.trim().toUpperCase()
+  if (normalized === 'PV' || normalized === 'ICE') return 'PV'
+  if (normalized === 'EV') return 'EV'
+  return null
+}
+
+function normalizeLocationValue(value: string | null | undefined): 'Ajmer Road' | 'Sitapura' | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized.includes('ajmer')) return 'Ajmer Road'
+  if (normalized.includes('sitapura')) return 'Sitapura'
+  return null
 }
 
 // ─── SlotDropzone ──────────────────────────────────────────────────────────────
@@ -1875,6 +1892,8 @@ export default function ImportPage() {
                 }
 
                 if (employeeLookup) {
+                  let matchedEmployeeLocation: 'Ajmer Road' | 'Sitapura' | null = null
+                  let matchedEmployeePortal: Portal | null = null
                   const sheetEmployeeCodeRaw = row.employee_code
                   const sheetEmployeeCode =
                     sheetEmployeeCodeRaw == null ? '' : String(sheetEmployeeCodeRaw).trim()
@@ -1885,6 +1904,8 @@ export default function ImportPage() {
                     row.employee_code = byCodeMatch ? byCodeMatch.employee_code : null
                     // If SA code is valid, prefer employee location-derived branch.
                     row.branch = byCodeMatch ? normalizeEmployeeBranch(byCodeMatch.location) ?? standardBranch : standardBranch
+                    matchedEmployeeLocation = normalizeLocationValue(byCodeMatch?.location)
+                    matchedEmployeePortal = normalizePortalFromFuelType(byCodeMatch?.fuel_type)
 
                     if (!byCodeMatch) {
                       mappingIssues.push({
@@ -1904,6 +1925,13 @@ export default function ImportPage() {
                     // Prefer employee branch derived from employee_master.location, fallback to selected slot branch.
                     row.branch = matched.employeeBranch ?? standardBranch
 
+                    const matchedByCode =
+                      matched.employeeCode == null
+                        ? null
+                        : employeeLookup.byCode.get(matched.employeeCode.trim().toUpperCase())
+                    matchedEmployeeLocation = normalizeLocationValue(matchedByCode?.location)
+                    matchedEmployeePortal = normalizePortalFromFuelType(matchedByCode?.fuel_type)
+
                     if (matched.reason === 'no_employee_match') {
                       mappingIssues.push({
                         source_table: 'job_card_closed_data',
@@ -1915,6 +1943,23 @@ export default function ImportPage() {
                         reason: matched.reason,
                       })
                     }
+                  }
+
+                  const slotLocationPortal = resolveLocationAndPortalFromSlotBranch(standardBranch)
+                  const fallbackByCode = resolveDealerCodeLocationAndPortal(row.employee_code)
+                  const resolvedLocation =
+                    matchedEmployeeLocation ?? fallbackByCode?.location ?? slotLocationPortal.location
+                  const resolvedPortal =
+                    matchedEmployeePortal ?? fallbackByCode?.portal ?? slotLocationPortal.portal
+
+                  if (jcClosedColumnSet.has('location')) {
+                    row.location = resolvedLocation
+                  }
+                  if (jcClosedColumnSet.has('portal')) {
+                    row.portal = resolvedPortal
+                  }
+                  if (jcClosedColumnSet.has('branch_label')) {
+                    row.branch_label = resolvedLocation
                   }
                 }
                 // Ensure branch is always set (fallback to selected branch if not set)

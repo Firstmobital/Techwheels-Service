@@ -2,6 +2,7 @@ export interface EmployeeRecord {
   employee_code: string
   employee_name: string
   location: string | null
+  fuel_type?: string | null
   department: string | null
   role?: string | null
 }
