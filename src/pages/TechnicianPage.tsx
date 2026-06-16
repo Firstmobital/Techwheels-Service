@@ -1221,6 +1221,8 @@ export default function TechnicianPage() {
   )
 
   const hasEmailRange = Boolean(fromDate) && Boolean(toDate)
+  const hasFilteredRowsForEmail = technicianCards.length > 0
+  const canSendRangeReportEmail = hasEmailRange && hasFilteredRowsForEmail
 
   async function handleSendRangeReportEmail() {
     if (!hasEmailRange) {
@@ -1231,12 +1233,32 @@ export default function TechnicianPage() {
       return
     }
 
+    if (!hasFilteredRowsForEmail) {
+      setReportEmailState({
+        type: 'error',
+        message: 'No filtered technician rows available for the selected range.',
+      })
+      return
+    }
+
     setSendingReportEmail(true)
     setReportEmailState(null)
+
+    const reportScopeLabel = [
+      fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`,
+      `Loc: ${branchFilter === 'all' ? 'All' : branchFilter}`,
+      `Portal: ${fuelTypeFilter === 'all' ? 'All' : fuelTypeFilter}`,
+    ].join(' | ')
 
     const res = await sendTechnicianDailyEarningsTestEmail({
       runFromIst: fromDate,
       runToIst: toDate,
+      reportScopeLabel,
+      rows: technicianCards.map((card) => ({
+        technicianCode: card.code,
+        technicianName: card.name,
+        earnings: Number(card.totalIncome.toFixed(2)),
+      })),
     })
     if (res.error || !res.data) {
       setReportEmailState({
@@ -1311,8 +1333,14 @@ export default function TechnicianPage() {
           <button
             type="button"
             onClick={() => void handleSendRangeReportEmail()}
-            disabled={sendingReportEmail || !hasEmailRange}
-            title={hasEmailRange ? 'Send report for selected range' : 'Select both start and end date in Range to enable'}
+              disabled={sendingReportEmail || !canSendRangeReportEmail}
+              title={
+                !hasEmailRange
+                  ? 'Select both start and end date in Range to enable'
+                  : hasFilteredRowsForEmail
+                    ? 'Send report for currently filtered rows'
+                    : 'No filtered rows to send'
+              }
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -1324,8 +1352,8 @@ export default function TechnicianPage() {
               borderRadius: '6px',
               fontWeight: 600,
               fontSize: '0.78rem',
-              cursor: sendingReportEmail || !hasEmailRange ? 'not-allowed' : 'pointer',
-              opacity: sendingReportEmail || !hasEmailRange ? 0.45 : 1,
+              cursor: sendingReportEmail || !canSendRangeReportEmail ? 'not-allowed' : 'pointer',
+              opacity: sendingReportEmail || !canSendRangeReportEmail ? 0.45 : 1,
             }}>
             ✉️ {sendingReportEmail ? 'Sending…' : 'Email Report'}
           </button>

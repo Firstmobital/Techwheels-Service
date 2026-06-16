@@ -171,6 +171,12 @@ type RequestBody = {
   runDateIst?: string
   runFromIst?: string
   runToIst?: string
+  reportScopeLabel?: string
+  rows?: Array<{
+    technicianCode?: string
+    technicianName?: string
+    earnings?: number
+  }>
 }
 
 const IST_ZONE = 'Asia/Kolkata'
@@ -507,32 +513,51 @@ Deno.serve(async (req) => {
       earnings: number
     }
 
-    const aggregatedMap = new Map<string, Aggregated>()
+    let aggregatedRows: Aggregated[] = []
+    const providedRows = Array.isArray(body.rows) ? body.rows : []
 
-    assignmentRows.forEach((assignment) => {
-      const assignmentDateKey = getIstDateKey(assignment.out_ts ?? assignment.assigned_at)
-      if (!assignmentDateKey) return
-      if (assignmentDateKey < targetFromDateKey || assignmentDateKey > targetToDateKey) return
+    if (runMode === 'test' && providedRows.length > 0) {
+      aggregatedRows = providedRows
+        .map((row) => {
+          const technicianCode = normalizeCode(row?.technicianCode)
+          const technicianName = String(row?.technicianName ?? '').trim() || technicianCode || 'Unknown Technician'
+          const earnings = Number(row?.earnings ?? 0)
+          return {
+            technicianCode,
+            technicianName,
+            earnings: Number.isFinite(earnings) && earnings >= 0 ? earnings : 0,
+          }
+        })
+        .sort((a, b) => b.earnings - a.earnings)
+    } else {
+      const aggregatedMap = new Map<string, Aggregated>()
 
-      const code = normalizeCode(assignment.technician_code)
-      if (!code) return
-      const name = String(assignment.technician_name ?? '').trim() || code
+      assignmentRows.forEach((assignment) => {
+        const assignmentDateKey = getIstDateKey(assignment.out_ts ?? assignment.assigned_at)
+        if (!assignmentDateKey) return
+        if (assignmentDateKey < targetFromDateKey || assignmentDateKey > targetToDateKey) return
 
-      const jc = normalizeCode(assignment.job_card_number)
-      const gross = jc ? grossByJc.get(jc) ?? 0 : 0
-      const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no, pvSharePercent, evSharePercent)
+        const code = normalizeCode(assignment.technician_code)
+        if (!code) return
+        const name = String(assignment.technician_name ?? '').trim() || code
 
-      const existing = aggregatedMap.get(code) ?? {
-        technicianCode: code,
-        technicianName: name,
-        earnings: 0,
-      }
+        const jc = normalizeCode(assignment.job_card_number)
+        const gross = jc ? grossByJc.get(jc) ?? 0 : 0
+        const technicianIncome = calculateTechnicianIncome(gross, assignment.bay_no, pvSharePercent, evSharePercent)
 
-      existing.earnings += Number.isFinite(technicianIncome) ? technicianIncome : 0
-      aggregatedMap.set(code, existing)
-    })
+        const existing = aggregatedMap.get(code) ?? {
+          technicianCode: code,
+          technicianName: name,
+          earnings: 0,
+        }
 
-    const aggregatedRows = Array.from(aggregatedMap.values()).sort((a, b) => b.earnings - a.earnings)
+        existing.earnings += Number.isFinite(technicianIncome) ? technicianIncome : 0
+        aggregatedMap.set(code, existing)
+      })
+
+      aggregatedRows = Array.from(aggregatedMap.values()).sort((a, b) => b.earnings - a.earnings)
+    }
+
     const technicianCodes = aggregatedRows.map((row) => row.technicianCode)
 
     const bankByCode = new Map<string, EmployeeBankRow>()
@@ -618,9 +643,12 @@ Deno.serve(async (req) => {
 
     const internalDispatchSecret = Deno.env.get('INTERNAL_EMAIL_DISPATCH_SECRET') ?? ''
     const totalEarnings = aggregatedRows.reduce((sum, row) => sum + row.earnings, 0)
+    const requestedScope = String(body.reportScopeLabel ?? '').trim()
+    const scopeLabel = requestedScope || reportLabel
+
     const template = buildTechnicianDailyEarningsTemplate({
       reportDateLabel: reportLabel,
-      reportScopeLabel: reportLabel,
+      reportScopeLabel: scopeLabel,
       totalTechnicians: aggregatedRows.length,
       totalEarnings,
       generatedAtLabel: new Date().toLocaleString('en-IN', { timeZone: IST_ZONE }),

@@ -308,6 +308,12 @@ export interface TechnicianDailyEarningsSendParams {
   runDateIst?: string
   runFromIst?: string
   runToIst?: string
+  reportScopeLabel?: string
+  rows?: Array<{
+    technicianCode: string
+    technicianName: string
+    earnings: number
+  }>
 }
 
 export async function sendTechnicianDailyEarningsTestEmail(
@@ -322,6 +328,12 @@ export async function sendTechnicianDailyEarningsTestEmail(
     if (params.runDateIst) payload.runDateIst = params.runDateIst
     if (params.runFromIst) payload.runFromIst = params.runFromIst
     if (params.runToIst) payload.runToIst = params.runToIst
+    if (params.reportScopeLabel) payload.reportScopeLabel = params.reportScopeLabel
+
+    const body: Record<string, unknown> = payload
+    if (params.rows && params.rows.length > 0) {
+      body.rows = params.rows
+    }
 
     const response = await fetch(
       `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/technician-daily-earnings-report`,
@@ -331,7 +343,7 @@ export async function sendTechnicianDailyEarningsTestEmail(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       },
     )
 
