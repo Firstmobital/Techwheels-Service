@@ -1002,6 +1002,8 @@ export default function BodyshopRepairPage() {
         inTs: (row?.[cols.inTs] as string | null) ?? null,
         outTs,
         reason: normalizedStatus === 'hold' ? remark : null,
+        doneAt: null,
+        doneBy: null,
       }
     })
   }, [floorPrimaryRow])
@@ -2442,16 +2444,6 @@ export default function BodyshopRepairPage() {
     return getEffectiveStageFlow(card, intakePhotoCount, hasKmReading).effectiveCurrentStage
   }
 
-  function getFloorWorkStartedForCard(card: RepairCard): boolean {
-    const rid = Number(card.id)
-    if (Number.isFinite(rid) && rid > 0 && floorWorkStartedLookup[`id:${rid}`]) return true
-
-    const jc = String(card.job_card_no ?? '').trim().toUpperCase()
-    if (jc && floorWorkStartedLookup[`jc:${jc}`]) return true
-
-    return false
-  }
-
   function getFloorStageCompletedForCard(card: RepairCard): boolean {
     const rid = Number(card.id)
     if (Number.isFinite(rid) && rid > 0 && floorStageCompletedLookup[`id:${rid}`]) return true
@@ -2471,7 +2463,6 @@ export default function BodyshopRepairPage() {
     const milestones = getIntakeMilestones(card, intakePhotoCount, hasKmReading)
     const effectiveCurrentStage = card.current_stage <= 4 ? milestones.activeStage : card.current_stage
     const floorCompleted = getFloorStageCompletedForCard(card)
-    const floorValue = String((card as { bodyshop_floor?: string | null }).bodyshop_floor ?? '').trim()
 
     const customerType = String(card.customer_type ?? '').trim().toLowerCase()
     const noDocsRequired = customerType === 'cash' || customerType === 'foc'
@@ -3615,7 +3606,6 @@ export default function BodyshopRepairPage() {
                       const mandatoryDocs = isValidCustomerType(ct)
                         ? visibleDocs.filter((d) => d.mandatoryFor.includes(ct as CustomerType))
                         : []
-                      const collectedMandatory = mandatoryDocs.filter((d) => Boolean(bodyshopDocsByKey[d.k])).length
                       const surveyStatusNormalized = String(selected.survey_status ?? '').trim().toLowerCase()
                       const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
                       const surveyApproved = surveyStatusNormalized === 'approved'

@@ -325,7 +325,7 @@ export default function WAAgentPage() {
 
     showToast(`✅ Campaign created with ${rows.length} contacts!`)
     setShowCampaignForm(false)
-    setCampaignForm({ name: '', description: '', target_segment: 'DueForService', template_message: DEFAULT_TEMPLATE, scheduled_at: '' })
+    setCampaignForm({ name: '', description: '', target_segment: 'DueForService', template_message: DEFAULT_TEMPLATE, scheduled_at: '', flow_type: 'blast', template_id: null })
     await loadAll()
     setSaving(false)
   }
