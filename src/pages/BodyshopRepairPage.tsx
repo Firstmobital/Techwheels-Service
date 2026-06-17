@@ -3213,6 +3213,8 @@ export default function BodyshopRepairPage() {
   const pipeline = useMemo(() =>
     STAGE_GROUPS.map((g) => ({
       ...g,
+      minStage: Math.min(...g.stages),
+      maxStage: Math.max(...g.stages),
       count: roleScopedCards.filter((c) => g.stages.includes(getEffectiveStageForCard(c)) && c.overall_status === 'active').length,
     })),
   [roleScopedCards, photoCountByReceptionId])
@@ -3248,52 +3250,17 @@ export default function BodyshopRepairPage() {
   return (
     <div className="page">
       {toast && (
-        <div style={{
-          position: 'fixed', top: 16, right: 16, zIndex: 9999,
-          background: toast.ok ? '#16a34a' : '#dc2626',
-          color: '#fff', padding: '10px 18px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-        }}>{toast.msg}</div>
+        <div className={`brx-toast ${toast.ok ? 'is-ok' : 'is-err'}`}>{toast.msg}</div>
       )}
 
-      {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
-      <div className="brx-toolbar">
-        <div className="brx-title-wrap">
-          <span className="brx-title">Repair Tracker</span>
-          <span className="brx-count">{cards.length} records</span>
+      <div className="pagehead">
+        <div>
+          <div className="greet">Bodyshop · End-to-end repair pipeline</div>
+          <h1>Repair Tracker</h1>
+          <p>{cards.length} repair cards · accident repairs from receiving to delivery across 18 stages.</p>
         </div>
 
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
-
-        <span className="brx-sep" />
-
-        <input className="inp brx-search" placeholder="Search JC / reg / customer…"
-          value={search} onChange={(e) => setSearch(e.target.value)} />
-
-        <select className="sel brx-sel" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-          <option value="all">All Branches</option>
-          {branches.map((b) => <option key={b} value={b}>{b}</option>)}
-        </select>
-
-        <span className="brx-advisor-label">Filter by advisor:</span>
-        <select className="sel brx-sel" value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)} aria-label="Filter by advisor">
-          <option value="all">All Advisors ({stageScopedCards.length})</option>
-          {advisorOptions.map((advisor) => (
-            <option key={advisor.value} value={advisor.value}>
-              {advisor.label} ({advisor.count})
-            </option>
-          ))}
-        </select>
-
-        <select className="sel brx-sel" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="delivered">Delivered</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-
-        <span className="brx-spacer" />
-
-        <button className="btn btn--primary brx-new-btn" onClick={() => setShowNew(true)}>
+        <button className="btn btn--primary" onClick={() => setShowNew(true)}>
           + New Intake
         </button>
       </div>
@@ -3303,13 +3270,48 @@ export default function BodyshopRepairPage() {
         {pipeline.map((g) => (
           <div key={g.label} className="brx-pipe-pill" style={{ ['--pc' as any]: g.color }}>
             <span className="brx-pipe-pill__n">{g.count}</span>
-            <span className="brx-pipe-pill__l">{g.label}</span>
+            <span className="brx-pipe-pill__l">
+              {g.label}
+              <small>stage {g.minStage}{g.maxStage > g.minStage ? `-${g.maxStage}` : ''}</small>
+            </span>
           </div>
         ))}
         <div className="brx-pipe-pill brx-pipe-pill--delivered">
           <span className="brx-pipe-pill__n">{cards.filter(c => c.overall_status === 'delivered').length}</span>
-          <span className="brx-pipe-pill__l">Delivered</span>
+          <span className="brx-pipe-pill__l">Delivered<small>completed</small></span>
         </div>
+      </div>
+
+      {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
+      <div className="brx-toolbar">
+        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+
+        <span className="brx-sep" />
+
+        <input className="inp brx-search" placeholder="Search JC / reg / customer…"
+          value={search} onChange={(e) => setSearch(e.target.value)} />
+
+        <select className="sel brx-sel brx-sel--branch" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
+          <option value="all">All Branches</option>
+          {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+
+        <span className="brx-advisor-label">Advisor</span>
+        <select className="sel brx-sel brx-sel--advisor" value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)} aria-label="Filter by advisor">
+          <option value="all">All Advisors ({stageScopedCards.length})</option>
+          {advisorOptions.map((advisor) => (
+            <option key={advisor.value} value={advisor.value}>
+              {advisor.label} ({advisor.count})
+            </option>
+          ))}
+        </select>
+
+        <select className="sel brx-sel brx-sel--status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
       </div>
 
       {/* ── Card Grid ─────────────────────────────────────────────────────── */}
@@ -3322,7 +3324,8 @@ export default function BodyshopRepairPage() {
               onClick={() => setStageFilter('all')}
               className={`brx-qbtn ${stageFilter === 'all' ? 'is-active' : ''}`}
             >
-              <div className="brx-qbtn__stage">All Stages</div>
+              <div className="brx-qbtn__stage">ALL</div>
+              <div className="brx-qbtn__label">All Stages</div>
               <div className="brx-qbtn__count">{advisorScopedCards.length} vehicles</div>
             </button>
 
@@ -3364,6 +3367,7 @@ export default function BodyshopRepairPage() {
                 : card.overall_status === 'cancelled'
                   ? 'is-cancelled'
                   : 'is-active'
+              const doneStages = Math.max(0, Math.min(18, effectiveStage - 1))
               return (
                 <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setSaActiveCard(null); setApprovalActiveCard(null); setEditPatch({}) }}
                   className="brx-card" style={{ ['--sc' as any]: grp.color }}>
@@ -3371,16 +3375,24 @@ export default function BodyshopRepairPage() {
                     <span className="brx-card__jc">{card.job_card_no}</span>
                     <span className={`brx-statusbadge ${statusClass}`}>{card.overall_status}</span>
                   </div>
-                  <div className="brx-card__who">
-                    {card.reg_number ?? '—'} · {card.customer_name ?? '—'}
+                  <div className="brx-card__in">
+                    <div className="brx-card__who">
+                      {card.reg_number ?? '—'} · {card.customer_name ?? '—'}
+                    </div>
+                    <div className="brx-card__meta">
+                      {card.branch ?? '—'} · {CT_LABELS[card.customer_type ?? ''] ?? '—'} · SA: {card.sa_name ?? '—'}
+                    </div>
+                    <div className="brx-card__stage" style={{ ['--sc' as any]: grp.color }}>
+                      Stage {effectiveStage} — {STAGE_LABELS[effectiveStage]}
+                    </div>
+                    <div className="brx-card__progress">
+                      <div className="brx-card__bar" style={{ width: `${(doneStages / 18) * 100}%` }} />
+                    </div>
+                    <div className="brx-card__foot">
+                      <span>In: {fmt(card.received_at)}</span>
+                      <span className="mono">{doneStages}/18</span>
+                    </div>
                   </div>
-                  <div className="brx-card__meta">
-                    {card.branch ?? '—'} · {CT_LABELS[card.customer_type ?? ''] ?? '—'} · SA: {card.sa_name ?? '—'}
-                  </div>
-                  <div className="brx-card__stage" style={{ ['--sc' as any]: grp.color }}>
-                    Stage {effectiveStage} — {STAGE_LABELS[effectiveStage]}
-                  </div>
-                  <div className="brx-card__in">In: {fmt(card.received_at)}</div>
                 </div>
               )
             })}
@@ -3397,7 +3409,7 @@ export default function BodyshopRepairPage() {
               <button className="modal__close" onClick={() => setShowNew(false)}>✕</button>
             </div>
             <div className="modal__body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="brx-new-grid">
                 {[
                   { k: 'job_card_no', label: 'Job Card No. *' },
                   { k: 'reg_number',  label: 'Reg. Number' },
@@ -3405,14 +3417,14 @@ export default function BodyshopRepairPage() {
                   { k: 'customer_phone', label: 'Customer Phone' },
                   { k: 'sa_name', label: 'SA Name' },
                 ].map(({ k, label }) => (
-                  <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{label}</span>
+                  <label key={k} className="brx-new-field">
+                    <span className="brx-new-label">{label}</span>
                     <input className="inp" value={(nf as any)[k]}
                       onChange={(e) => setNf((f) => ({ ...f, [k]: e.target.value }))} />
                   </label>
                 ))}
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Customer Type</span>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Customer Type</span>
                   <select className="sel" value={nf.customer_type}
                     onChange={(e) => setNf((f) => ({ ...f, customer_type: e.target.value as CustomerType | '' }))}>
                     <option value="">Select customer type</option>
@@ -3422,8 +3434,8 @@ export default function BodyshopRepairPage() {
                     <option value="cash">Cash</option>
                   </select>
                 </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Branch</span>
+                <label className="brx-new-field">
+                  <span className="brx-new-label">Branch</span>
                   <select className="sel" value={nf.branch}
                     onChange={(e) => setNf((f) => ({ ...f, branch: e.target.value }))}>
                     <option value="">Select branch</option>
@@ -3444,38 +3456,24 @@ export default function BodyshopRepairPage() {
 
       {/* ── Detail Full-Screen (Portal — escapes stacking context of .main) ── */}
       {selected && createPortal((
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: '#f1f5f9',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
+        <div className="brx-detail">
 
           {/* ── Top Bar ── */}
-          <div style={{
-            background: '#fff', borderBottom: '1px solid #e5e7eb',
-            padding: '0 24px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16,
-            height: 60,
-          }}>
-            <button onClick={() => { setSelected(null); setSaActiveCard(null); setApprovalActiveCard(null) }} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 14, fontWeight: 600, color: '#6b7280',
-              padding: '6px 10px', borderRadius: 8,
-            }}>
+          <div className="brx-dtop">
+            <button onClick={() => { setSelected(null); setSaActiveCard(null); setApprovalActiveCard(null) }} className="brx-dback">
               ← Back
             </button>
-            <div style={{ width: 1, height: 28, background: '#e5e7eb' }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 16, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div className="brx-dsep" />
+            <div className="brx-dtitle">
+              <div className="brx-dtitle-main">
                 🔧 {selected.job_card_no} — {selected.reg_number ?? '—'}
               </div>
-              <div style={{ fontSize: 12, color: '#6b7280' }}>
+              <div className="brx-dtitle-sub">
                 {selected.customer_name} · {selected.branch} · {CT_LABELS[selected.customer_type ?? ''] ?? '—'} · SA: {selected.sa_name ?? '—'}
               </div>
             </div>
             {/* Stage group pills */}
-            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            <div className="brx-dgroupbar">
               {STAGE_GROUPS.map((g) => {
                 const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                 const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
@@ -3495,50 +3493,41 @@ export default function BodyshopRepairPage() {
                 const done    = g.stages[g.stages.length - 1] < effectiveCurrentStage
                   || (g.stages.includes(5) && docsDone)
                 return (
-                  <div key={g.label} style={{
-                    padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 20,
-                    background: done ? g.color : inGroup ? `${g.color}20` : '#f3f4f6',
-                    color: done ? '#fff' : inGroup ? g.color : '#9ca3af',
-                    border: `1.5px solid ${inGroup ? g.color : 'transparent'}`,
-                    whiteSpace: 'nowrap',
-                  }}>
+                  <div
+                    key={g.label}
+                    className={`brx-dgchip ${done ? 'is-done' : inGroup ? 'is-cur' : ''}`}
+                    style={{ ['--gc' as any]: g.color, ['--gc-soft' as any]: `${g.color}20` }}
+                  >
                     {done ? '✓ ' : inGroup ? '● ' : ''}{g.label}
                   </div>
                 )
               })}
             </div>
-            <span style={{
-              fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
-              background: selected.overall_status === 'active' ? '#dbeafe' : selected.overall_status === 'delivered' ? '#d1fae5' : '#fee2e2',
-              color: selected.overall_status === 'active' ? '#1d4ed8' : selected.overall_status === 'delivered' ? '#065f46' : '#991b1b',
-              flexShrink: 0,
-            }}>{selected.overall_status}</span>
+            <span className={`brx-dstatus ${selected.overall_status === 'delivered' ? 'is-delivered' : selected.overall_status === 'cancelled' ? 'is-cancelled' : 'is-active'}`}>
+              {selected.overall_status}
+            </span>
           </div>
 
           {/* ── Body: Left sidebar + Right content ── */}
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          <div className="brx-dbody">
 
             {/* ── Left: Stage Panel ── */}
-            <div style={{
-              width: 260, flexShrink: 0, background: '#fff',
-              borderRight: '1px solid #e5e7eb',
-              display: 'flex', flexDirection: 'column', overflow: 'hidden',
-            }}>
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Current Stage</div>
+            <div className="brx-stepper">
+              <div className="brx-stp-head">
+                <div className="brx-stp-head-k">Current Stage</div>
                 {(() => {
                   const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                   const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                   const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                   const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                   return (
-                <div style={{ fontSize: 14, fontWeight: 800, color: getGroupForStage(selected.current_stage).color }}>
+                <div className="brx-stp-head-v" style={{ ['--sc' as any]: getGroupForStage(selected.current_stage).color }}>
                   {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                 </div>
                   )
                 })()}
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
+              <div className="brx-stp-list">
                 {Object.entries(STAGE_LABELS).flatMap(([numStr, label]) => {
                   const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                   const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
@@ -3618,39 +3607,25 @@ export default function BodyshopRepairPage() {
                         : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                   const grp    = getGroupForStage(num)
                   const rows = [
-                    <div key={`stage-${num}`} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '7px 10px', borderRadius: 8, marginBottom: 3,
-                      background: isCur ? `${grp.color}15` : isDone ? '#f0fdf4' : '#fafafa',
-                      border: `1px solid ${isCur ? grp.color : isDone ? '#bbf7d0' : '#f1f5f9'}`,
-                    }}>
-                      <div style={{
-                        width: 22, height: 22, borderRadius: 11, flexShrink: 0,
-                        background: isDone ? '#16a34a' : isCur ? grp.color : '#e5e7eb',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 10, fontWeight: 800, color: isDone || isCur ? '#fff' : '#9ca3af',
-                      }}>
+                    <div
+                      key={`stage-${num}`}
+                      className={`brx-stp ${isCur ? 'is-cur' : ''} ${isDone ? 'is-done' : ''}`}
+                      style={{ ['--sg' as any]: grp.color }}
+                    >
+                      <div className="brx-stp-num">
                         {isDone ? '✓' : num}
                       </div>
-                      <span style={{ fontSize: 12, fontWeight: isCur ? 700 : 500, color: isCur ? grp.color : isDone ? '#374151' : '#9ca3af', flex: 1 }}>
+                      <span className="brx-stp-lab">
                         {label}
                       </span>
-                      {isCur && <span style={{ fontSize: 10, color: grp.color }}>●</span>}
+                      {isCur && <span className="brx-stp-dot">●</span>}
                     </div>
                   ]
 
                   if (num === 11) {
                     if (loadingFloorPrimary) {
                       rows.push(
-                        <div key="stage-11-sub-loading" style={{
-                          margin: '0 0 6px 30px',
-                          padding: '6px 8px',
-                          borderRadius: 8,
-                          border: '1px solid #e2e8f0',
-                          background: '#f8fafc',
-                          fontSize: 11,
-                          color: '#64748b',
-                        }}>
+                        <div key="stage-11-sub-loading" className="brx-sub-loading">
                           Loading floor substages...
                         </div>,
                       )
@@ -3669,39 +3644,18 @@ export default function BodyshopRepairPage() {
                               setDetailTab('floor')
                               setPendingFloorScrollRole(sub.role)
                             }}
+                            className="brx-substp"
                             style={{
-                            margin: '0 0 5px 30px',
-                            padding: '6px 8px',
-                            borderRadius: 8,
-                            border: `1px solid ${subDone ? '#86efac' : subHold ? '#fcd34d' : subWip ? '#93c5fd' : '#cbd5e1'}`,
-                            background: subDone ? '#f0fdf4' : subHold ? '#fffbeb' : subWip ? '#eff6ff' : '#f8fafc',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            width: 'calc(100% - 30px)',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                          }}>
-                            <span style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: 3,
-                              background: subDone ? '#16a34a' : subHold ? '#d97706' : subWip ? '#2563eb' : '#94a3b8',
-                              flexShrink: 0,
-                            }} />
-                            <span style={{
-                              fontSize: 11,
-                              fontWeight: 600,
-                              color: subDone ? '#166534' : subHold ? '#92400e' : subWip ? '#1d4ed8' : '#475569',
-                              flex: 1,
+                              ['--ss-border' as any]: subDone ? '#86efac' : subHold ? '#fcd34d' : subWip ? '#93c5fd' : '#cbd5e1',
+                              ['--ss-bg' as any]: subDone ? '#f0fdf4' : subHold ? '#fffbeb' : subWip ? '#eff6ff' : '#f8fafc',
+                              ['--ss-tone' as any]: subDone ? '#166534' : subHold ? '#92400e' : subWip ? '#1d4ed8' : '#475569',
+                              ['--ss-dot' as any]: subDone ? '#16a34a' : subHold ? '#d97706' : subWip ? '#2563eb' : '#94a3b8',
                             }}>
+                            <span className="brx-substp-dot" />
+                            <span className="brx-substp-lab">
                               {sub.roleLabel}
                             </span>
-                            <span style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              color: subDone ? '#166534' : subHold ? '#92400e' : subWip ? '#1d4ed8' : '#64748b',
-                            }}>
+                            <span className="brx-substp-stat">
                               {subNotRequired ? 'Not Required' : subDone ? 'Done' : subHold ? 'Hold' : 'In Process'}
                             </span>
                           </button>,
@@ -3719,23 +3673,17 @@ export default function BodyshopRepairPage() {
                             key="stage-11-sub-additional-approval"
                             type="button"
                             onClick={() => setDetailTab('survey')}
+                            className="brx-substp"
                             style={{
-                              margin: '0 0 5px 30px',
-                              padding: '6px 8px',
-                              borderRadius: 8,
-                              border: `1px solid ${tone}`,
-                              background: bg,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              width: 'calc(100% - 30px)',
-                              textAlign: 'left',
-                              cursor: 'pointer',
+                              ['--ss-border' as any]: tone,
+                              ['--ss-bg' as any]: bg,
+                              ['--ss-tone' as any]: fg,
+                              ['--ss-dot' as any]: fg,
                             }}
                           >
-                            <span style={{ fontSize: 10, fontWeight: 800, color: fg }}>12</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: fg, flex: 1 }}>Additional Approval</span>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: fg }}>
+                            <span className="brx-substp-stage">12</span>
+                            <span className="brx-substp-lab">Additional Approval</span>
+                            <span className="brx-substp-stat">
                               {status === 'approved' ? 'Done' : status === 'rejected' ? 'Rejected' : status === 'mixed' ? 'Completed' : 'Pending'}
                             </span>
                           </button>,
@@ -3749,14 +3697,13 @@ export default function BodyshopRepairPage() {
               </div>
               {/* Advance button at bottom of stage panel */}
               {selected.overall_status === 'active' && selected.current_stage < 18 && (
-                <div style={{ padding: 12, borderTop: '1px solid #e5e7eb' }}>
+                <div className="brx-stp-foot">
                   {(() => {
                     const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                     const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                     const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
                     return (
-                  <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
-                    style={{ width: '100%', fontSize: 13 }}>
+                  <button className="btn btn--primary brx-stp-advance" onClick={() => void handleAdvance()} disabled={saving}>
                       {saving
                         ? 'Saving…'
                         : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
@@ -3770,33 +3717,24 @@ export default function BodyshopRepairPage() {
             </div>
 
             {/* ── Right: Tab content ── */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="brx-dmain">
 
               {/* Tab bar */}
-              <div style={{
-                display: 'flex', borderBottom: '2px solid #e5e7eb',
-                padding: '0 24px', background: '#fff', flexShrink: 0,
-              }}>
+              <div className="brx-tabbar">
                 {tabs.map((t) => (
-                  <button key={t} onClick={() => setDetailTab(t)} style={{
-                    padding: '12px 18px', fontSize: 13, fontWeight: 600,
-                    border: 'none', background: 'none', cursor: 'pointer',
-                    borderBottom: detailTab === t ? '2px solid #2563eb' : '2px solid transparent',
-                    color: detailTab === t ? '#2563eb' : '#6b7280',
-                    marginBottom: -2,
-                  }}>
+                  <button key={t} onClick={() => setDetailTab(t)} className={`brx-tab ${detailTab === t ? 'is-active' : ''}`}>
                     {t === 'sa' ? 'SA' : t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
                 ))}
               </div>
 
               {/* Tab content scroll area */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+              <div className="brx-tabcontent">
 
               {/* ── Overview ── */}
               {detailTab === 'overview' && (
-                <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div className="brx-overview">
+                  <div className="brx-overview-kv">
                     {[
                       ['Job Card', selected.job_card_no],
                       ['Reg No.', selected.reg_number ?? '—'],
@@ -3807,23 +3745,23 @@ export default function BodyshopRepairPage() {
                       ['Received', fmt(selected.received_at)],
                       ['Status', selected.overall_status],
                     ].map(([l, v]) => (
-                      <div key={l}>
-                        <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>{l}</div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{v}</div>
+                      <div key={l} className="brx-overview-kv-item">
+                        <div className="brx-overview-k">{l}</div>
+                        <div className="brx-overview-v">{v}</div>
                       </div>
                     ))}
                   </div>
 
                   {/* current stage */}
-                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Current Stage</div>
+                  <div className="brx-overview-stagebox">
+                    <div className="brx-overview-stagebox-k">Current Stage</div>
                       {(() => {
                         const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                         const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                         const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
                         const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
                         return (
-                          <div style={{ fontSize: 15, fontWeight: 700, color: getGroupForStage(effectiveCurrentStage).color }}>
+                          <div className="brx-overview-stagebox-v" style={{ ['--sc' as any]: getGroupForStage(effectiveCurrentStage).color }}>
                             {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                           </div>
                         )
@@ -3831,7 +3769,7 @@ export default function BodyshopRepairPage() {
                   </div>
 
                   {/* stage stepper */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <div className="brx-overview-steps">
                     {Object.entries(STAGE_LABELS).map(([numStr, label]) => {
                       const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                       const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
@@ -3907,21 +3845,13 @@ export default function BodyshopRepairPage() {
                             : isStageConcurrentActive(num, effectiveCurrentStage, floorWorkStarted && !floorStageCompleted)
                       const grp     = getGroupForStage(num)
                       return (
-                        <div key={num} style={{
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          padding: '6px 10px', borderRadius: 8,
-                          background: isCur ? `${grp.color}15` : isDone ? '#f0fdf4' : '#fafafa',
-                          border: isCur ? `1px solid ${grp.color}` : '1px solid #e5e7eb',
-                        }}>
-                          <div style={{
-                            width: 14, height: 14, borderRadius: 7, flexShrink: 0,
-                            background: isDone ? '#16a34a' : isCur ? grp.color : '#d1d5db',
-                          }} />
-                          <span style={{ fontSize: 11, fontWeight: isCur ? 700 : 500, color: isCur ? grp.color : isDone ? '#374151' : '#9ca3af' }}>
+                        <div key={num} className={`brx-overview-step ${isCur ? 'is-cur' : ''} ${isDone ? 'is-done' : ''}`} style={{ ['--sg' as any]: grp.color }}>
+                          <div className="brx-overview-step-dot" />
+                          <span className="brx-overview-step-label">
                             {num}. {label}
                           </span>
-                          {isCur && <span style={{ fontSize: 10, marginLeft: 'auto', color: grp.color }}>←</span>}
-                          {isDone && <span style={{ fontSize: 10, marginLeft: 'auto', color: '#16a34a' }}>✓</span>}
+                          {isCur && <span className="brx-overview-step-tail is-cur">←</span>}
+                          {isDone && <span className="brx-overview-step-tail is-done">✓</span>}
                         </div>
                       )
                     })}
@@ -3934,8 +3864,7 @@ export default function BodyshopRepairPage() {
                       const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                       const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
                       return (
-                    <button className="btn btn--primary" onClick={() => void handleAdvance()} disabled={saving}
-                      style={{ marginTop: 16, width: '100%' }}>
+                    <button className="btn btn--primary brx-overview-advance" onClick={() => void handleAdvance()} disabled={saving}>
                       {saving
                         ? 'Saving…'
                         : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
@@ -4016,30 +3945,22 @@ export default function BodyshopRepairPage() {
                 const photoLimit = 20
 
                 return (
-                  <div style={{ display: 'grid', gap: 14 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
+                  <div className="brx-sa-wrap">
+                    <div className="brx-sa-cards">
                       {groups.map((group) => {
                         const selectedCard = saActiveCard === group.key
                         return (
-                          <button key={group.name} onClick={() => setSaActiveCard((prev) => prev === group.key ? null : group.key)} style={{
-                            background: '#fff',
-                            border: `1.5px solid ${selectedCard ? group.color : `${group.color}33`}`,
-                            borderRadius: 12,
-                            padding: 10,
-                            boxShadow: selectedCard ? `0 0 0 2px ${group.color}22` : '0 1px 4px rgba(0,0,0,0.04)',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                          }}>
-                            <div style={{
-                              fontSize: 12,
-                              fontWeight: 800,
-                              color: group.color,
-                              marginBottom: 8,
-                            }}>
+                          <button
+                            key={group.name}
+                            onClick={() => setSaActiveCard((prev) => prev === group.key ? null : group.key)}
+                            className={`brx-sa-card ${selectedCard ? 'is-active' : ''}`}
+                            style={{ ['--sa' as any]: group.color, ['--sa-soft' as any]: `${group.color}22`, ['--sa-border' as any]: selectedCard ? group.color : `${group.color}33` }}
+                          >
+                            <div className="brx-sa-card-title">
                               {group.name}
                             </div>
 
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <div className="brx-sa-card-stages">
                               {group.stages.map((stage) => {
                                 const done = stageDone(stage)
                                 const current = effectiveCurrentStage === stage
@@ -4050,35 +3971,11 @@ export default function BodyshopRepairPage() {
                                 const textColor = done ? '#166534' : current ? group.color : '#6b7280'
 
                                 return (
-                                  <div key={stage} style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                    borderRadius: 999,
-                                    border: `1px solid ${borderColor}`,
-                                    background: bgColor,
-                                    padding: '4px 8px',
-                                  }}>
-                                    <span style={{
-                                      minWidth: 24,
-                                      height: 18,
-                                      borderRadius: 9,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: 10,
-                                      fontWeight: 700,
-                                      background: done ? '#16a34a' : current ? group.color : '#d1d5db',
-                                      color: '#fff',
-                                      flexShrink: 0,
-                                    }}>
+                                  <div key={stage} className="brx-sa-pill" style={{ ['--pill-border' as any]: borderColor, ['--pill-bg' as any]: bgColor }}>
+                                    <span className="brx-sa-pill-b" style={{ ['--pill-b-bg' as any]: done ? '#16a34a' : current ? group.color : '#d1d5db' }}>
                                       {done ? '✓' : STAGE_ABBR[stage] ?? `S${stage}`}
                                     </span>
-                                    <span style={{
-                                      fontSize: 10,
-                                      color: textColor,
-                                      fontWeight: 700,
-                                    }}>
+                                    <span className="brx-sa-pill-l" style={{ ['--pill-l' as any]: textColor }}>
                                       {done ? 'Done' : current ? 'Pending' : notStarted ? 'Not Started' : ''}
                                     </span>
                                   </div>
@@ -4091,39 +3988,27 @@ export default function BodyshopRepairPage() {
                     </div>
 
                     {!saActiveCard && (
-                      <div style={{
-                        background: '#fff',
-                        border: '1px dashed #cbd5e1',
-                        borderRadius: 12,
-                        padding: 14,
-                        fontSize: 12,
-                        color: '#6b7280',
-                      }}>
+                      <div className="brx-sa-empty">
                         Select Receiving, Docs, Estimate or Claim Intimation to view details.
                       </div>
                     )}
 
                     {saActiveCard === 'receiving' && (
-                      <div style={{
-                        background: '#fff',
-                        border: '1px solid #dbeafe',
-                        borderRadius: 12,
-                        padding: 14,
-                      }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: '#1d4ed8', marginBottom: 10 }}>
+                      <div className="brx-sa-panel is-receiving">
+                        <div className="brx-sa-panel-title">
                           Receiving Intake Form
                         </div>
 
                         {loadingSelectedReception ? (
-                          <div style={{ fontSize: 12, color: '#6b7280' }}>Loading reception details...</div>
+                          <div className="brx-sa-muted">Loading reception details...</div>
                         ) : (
                           <>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                            <div className="brx-sa-subtitle">
                               Initial Vehicle Details (from Reception)
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-                              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
-                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>Job Card</div>
+                            <div className="brx-sa-grid-3">
+                              <div className="brx-sa-box">
+                                <div className="brx-sa-box-k">Job Card</div>
                                 <input
                                   className="inp"
                                   type="text"
@@ -4141,52 +4026,47 @@ export default function BodyshopRepairPage() {
                                 ['Branch', vehicleSnapshot?.branch ?? selected.branch ?? '—'],
                                 ['Received At', fmt(vehicleSnapshot?.created_at ?? selected.received_at)],
                               ].map(([label, value]) => (
-                                <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
-                                  <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>{label}</div>
-                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{String(value)}</div>
+                                <div key={label} className="brx-sa-box">
+                                  <div className="brx-sa-box-k">{label}</div>
+                                  <div className="brx-sa-box-v">{String(value)}</div>
                                 </div>
                               ))}
-                              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
-                                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>KM Reading</div>
+                              <div className="brx-sa-box">
+                                <div className="brx-sa-box-k">KM Reading</div>
                                 <input
-                                  className="inp"
                                   type="number"
                                   min={0}
                                   step={1}
                                   value={kmDraft}
                                   onChange={(event) => setKmDraft(event.target.value)}
                                   placeholder="Enter KM"
-                                  style={{ height: 34, padding: '6px 10px', fontSize: 12 }}
+                                  className="inp brx-sa-km"
                                 />
                               </div>
                             </div>
 
-                            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                            <div className="brx-sa-section">
+                              <div className="brx-sa-section-title">
                                 Customer Type
                               </div>
-                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <div className="brx-sa-type-row">
                                 {(['individual', 'firm', 'foc', 'cash'] as CustomerType[]).map((t) => (
-                                  <button key={t} onClick={() => patch('customer_type', t)} style={{
-                                    padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-                                    border: '1.5px solid',
-                                    borderColor: selected.customer_type === t ? '#2563eb' : '#e5e7eb',
-                                    background: selected.customer_type === t ? '#2563eb' : '#fff',
-                                    color: selected.customer_type === t ? '#fff' : '#6b7280',
-                                    cursor: 'pointer',
-                                    textTransform: 'capitalize',
-                                  }}>
+                                  <button
+                                    key={t}
+                                    onClick={() => patch('customer_type', t)}
+                                    className={`brx-sa-type-btn ${selected.customer_type === t ? 'is-active' : ''}`}
+                                  >
                                     {t.charAt(0).toUpperCase() + t.slice(1)}
                                   </button>
                                 ))}
                               </div>
                             </div>
 
-                            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                            <div className="brx-sa-section">
+                              <div className="brx-sa-head-row">
                                 <div>
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Customer Group</div>
-                                  <div style={{ fontSize: 11, color: '#6b7280' }}>
+                                  <div className="brx-sa-section-title">Customer Group</div>
+                                  <div className="brx-sa-note">
                                     {milestones.stage4Done
                                       ? 'WhatsApp sent. Stage 4 completed.'
                                       : milestones.stage1Done && milestones.stage2Done && milestones.stage3Done
@@ -4194,7 +4074,7 @@ export default function BodyshopRepairPage() {
                                         : 'Complete Stage 1, 2 and 3 first to enable Send WA.'}
                                   </div>
                                   {milestones.stage4Done && (
-                                    <div style={{ fontSize: 11, color: '#374151', marginTop: 4 }}>
+                                      <div className="brx-sa-meta-line">
                                       {selected.customer_group_wa_sent_at
                                         ? `Sent at: ${fmt(selected.customer_group_wa_sent_at)}`
                                         : 'Sent at: —'}
@@ -4206,25 +4086,24 @@ export default function BodyshopRepairPage() {
                                   )}
                                 </div>
                                 <button
-                                  className="btn btn--primary"
+                                  className="btn btn--primary brx-sa-nowrap"
                                   onClick={() => void handleSendWaForCustomerGroup()}
                                   disabled={
                                     saving ||
                                     milestones.stage4Done ||
                                     !(milestones.stage1Done && milestones.stage2Done && milestones.stage3Done)
                                   }
-                                  style={{ whiteSpace: 'nowrap' }}
                                 >
                                   {milestones.stage4Done ? 'WA Sent' : 'Send WA'}
                                 </button>
                               </div>
                             </div>
 
-                            <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                            <div className="brx-sa-section">
+                              <div className="brx-sa-head-row brx-sa-head-row--mb">
                                 <div>
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Car Photos</div>
-                                  <div style={{ fontSize: 11, color: '#6b7280' }}>
+                                  <div className="brx-sa-section-title">Car Photos</div>
+                                  <div className="brx-sa-note">
                                     {intakePhotoCount}/{photoLimit} uploaded (max {photoLimit})
                                   </div>
                                 </div>
@@ -4246,8 +4125,7 @@ export default function BodyshopRepairPage() {
                             </div>
 
                             {(Object.keys(editPatch).length > 0 || isKmDirty() || isJcDirty()) && (
-                              <button className="btn btn--primary" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}
-                                style={{ marginTop: 12 }}>
+                              <button className="btn btn--primary brx-sa-save" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}>
                                 {savingReceiving ? 'Saving…' : 'Save Receiving'}
                               </button>
                             )}
@@ -4261,53 +4139,48 @@ export default function BodyshopRepairPage() {
                       const optionalDocs  = visibleDocs.filter(d => d.mandatoryFor.length === 0)
 
                       return (
-                        <div>
-                          <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                        <div className="brx-docs-wrap">
+                          <div className="brx-docs-ctype-box">
+                            <span className="brx-docs-ctype-text">
                               Customer Type: {CT_LABELS[selected.customer_type ?? ''] ?? 'Not set'}
                             </span>
                           </div>
 
                           {!noDocsRequired && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                              <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-                                <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                            <div className="brx-docs-insurance-grid">
+                              <div className="brx-docs-insurance-head">
+                                <div className="brx-docs-insurance-title">
                                   🛡️ Insurance Details
                                 </div>
                                 <button
-                                  className="btn btn--primary"
+                                  className={`btn btn--primary brx-docs-fetch ${fetchingInsurance || !insuranceRegNo || insuranceFetched ? 'is-disabled' : ''} ${insuranceFetched ? 'is-fetched' : ''} ${fetchingInsurance ? 'is-fetching' : ''}`}
                                   type="button"
                                   onClick={() => void handleFetchInsuranceDetails()}
                                   disabled={fetchingInsurance || !insuranceRegNo || insuranceFetched}
                                   title={insuranceFetched ? 'Insurance details already fetched' : (insuranceRegNo ? 'Fetch from RC cache/API' : 'Registration number required')}
-                                  style={{
-                                    opacity: (fetchingInsurance || !insuranceRegNo || insuranceFetched) ? 0.5 : 1,
-                                    cursor: (fetchingInsurance || !insuranceRegNo || insuranceFetched) ? 'not-allowed' : 'pointer',
-                                    backgroundColor: insuranceFetched ? '#d1d5db' : fetchingInsurance ? '#9ca3af' : undefined,
-                                  }}
                                 >
                                   {fetchingInsurance ? 'Fetching...' : insuranceFetched ? 'Fetched ✓' : 'Fetch'}
                                 </button>
                               </div>
-                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Policy No.</span>
+                              <label className="brx-docs-field">
+                                <span className="brx-docs-label">Policy No.</span>
                                 <input className="inp" value={selected.insurance_policy_no ?? ''}
                                   onChange={(e) => patch('insurance_policy_no', e.target.value || null)}
                                   placeholder="e.g. POL-2024-001234" />
                               </label>
-                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Insurance Company</span>
+                              <label className="brx-docs-field">
+                                <span className="brx-docs-label">Insurance Company</span>
                                 <input className="inp" value={selected.insurance_company ?? ''}
                                   onChange={(e) => patch('insurance_company', e.target.value || null)}
                                   placeholder="e.g. New India Assurance" />
                               </label>
-                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Valid Until</span>
+                              <label className="brx-docs-field">
+                                <span className="brx-docs-label">Valid Until</span>
                                 <input className="inp" type="date" value={selected.insurance_valid_date ?? ''}
                                   onChange={(e) => patch('insurance_valid_date', e.target.value || null)} />
                               </label>
-                              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Insurance Type</span>
+                              <label className="brx-docs-field">
+                                <span className="brx-docs-label">Insurance Type</span>
                                 <select
                                   className="inp"
                                   value={selected.insurance_type ?? ''}
@@ -4324,83 +4197,68 @@ export default function BodyshopRepairPage() {
                           )}
 
                           {noDocsRequired ? (
-                            <div style={{ textAlign: 'center', padding: '32px 16px', background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0' }}>
-                              <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-                              <div style={{ fontWeight: 700, fontSize: 15, color: '#15803d' }}>No Documents Required</div>
-                              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+                            <div className="brx-docs-none">
+                              <div className="brx-docs-none-icon">✅</div>
+                              <div className="brx-docs-none-title">No Documents Required</div>
+                              <div className="brx-docs-none-sub">
                                 {ct === 'cash' ? 'Cash customers' : 'FOC customers'} do not require any documentation.
                               </div>
                             </div>
                           ) : (
                             <>
-                              <div style={{ marginBottom: 16 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                                  <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                              <div className="brx-docs-progress-wrap">
+                                <div className="brx-docs-progress-head">
+                                  <span className="brx-docs-progress-title">
                                     Mandatory Documents
                                   </span>
-                                  <span style={{ fontSize: 13, fontWeight: 700, color: allMandatoryDone ? '#16a34a' : '#dc2626' }}>
+                                  <span className={`brx-docs-progress-stat ${allMandatoryDone ? 'is-done' : 'is-pending'}`}>
                                     {collectedMandatory} / {mandatoryDocs.length} {allMandatoryDone ? '✓ Complete' : '⚠ Pending'}
                                   </span>
                                 </div>
-                                <div style={{ height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
-                                  <div style={{
-                                    height: '100%', borderRadius: 4, transition: 'width 0.3s',
-                                    width: mandatoryDocs.length ? `${(collectedMandatory / mandatoryDocs.length) * 100}%` : '0%',
-                                    background: allMandatoryDone ? '#16a34a' : '#f59e0b',
-                                  }} />
+                                <div className="brx-docs-progress-bar">
+                                  <div
+                                    className={`brx-docs-progress-fill ${allMandatoryDone ? 'is-done' : 'is-pending'}`}
+                                    style={{ ['--w' as any]: mandatoryDocs.length ? `${(collectedMandatory / mandatoryDocs.length) * 100}%` : '0%' }}
+                                  />
                                 </div>
                               </div>
 
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 8, marginBottom: 16 }}>
+                              <div className="brx-docs-grid brx-docs-grid--mb">
                                 {mandatoryDocs.map(({ k, label }) => {
                                   const attachedDoc = bodyshopDocsByKey[k]
                                   const checked = Boolean(attachedDoc)
                                   const busy = uploadingDocKey === k
                                   return (
-                                    <div key={k} style={{
-                                      display: 'flex', alignItems: 'center', gap: 10,
-                                      padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-                                      background: checked ? '#f0fdf4' : '#fff9f9',
-                                      border: `1.5px solid ${checked ? '#86efac' : '#fca5a5'}`,
-                                    }}>
-                                      <button onClick={() => patch(k, !checked)} style={{
-                                        width: 20, height: 20, borderRadius: 4, flexShrink: 0,
-                                        border: `2px solid ${checked ? '#16a34a' : '#ef4444'}`,
-                                        background: checked ? '#16a34a' : '#fff',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        cursor: 'pointer',
-                                      }}>
-                                        {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
+                                    <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-required'}`}>
+                                      <button onClick={() => patch(k, !checked)} className={`brx-doc-check ${checked ? 'is-checked' : 'is-required'}`}>
+                                        {checked && <span className="brx-doc-check-mark">✓</span>}
                                       </button>
-                                      <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{label}</div>
-                                        <div style={{ fontSize: 10, color: checked ? '#16a34a' : '#ef4444', fontWeight: 600 }}>
+                                      <div className="brx-doc-meta">
+                                        <div className="brx-doc-name">{label}</div>
+                                        <div className={`brx-doc-state ${checked ? 'is-checked' : 'is-required'}`}>
                                           {checked ? 'Collected' : 'Required'}
                                         </div>
                                       </div>
-                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                                      <div className="brx-doc-actions">
                                         <button
-                                          className="btn"
+                                          className="btn brx-doc-btn"
                                           onClick={() => startBodyshopDocUpload(k, 'upload')}
                                           disabled={busy}
-                                          style={{ padding: '6px 10px', fontSize: 11 }}
                                         >
                                           {busy ? 'Uploading…' : 'Upload'}
                                         </button>
                                         {attachedDoc && (
                                           <>
                                             <button
-                                              className="btn"
+                                              className="btn brx-doc-btn"
                                               onClick={() => void handleViewBodyshopDoc(k)}
-                                              style={{ padding: '6px 10px', fontSize: 11 }}
                                             >
                                               View
                                             </button>
                                             <button
-                                              className="btn"
+                                              className="btn brx-doc-btn"
                                               onClick={() => startBodyshopDocUpload(k, 'replace')}
                                               disabled={busy}
-                                              style={{ padding: '6px 10px', fontSize: 11 }}
                                             >
                                               Replace
                                             </button>
@@ -4414,57 +4272,43 @@ export default function BodyshopRepairPage() {
 
                               {optionalDocs.length > 0 && (
                                 <>
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                                  <div className="brx-docs-opt-title">
                                     Optional Documents
                                   </div>
-                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 8 }}>
+                                  <div className="brx-docs-grid">
                                     {optionalDocs.map(({ k, label }) => {
                                       const attachedDoc = bodyshopDocsByKey[k]
                                       const checked = Boolean(attachedDoc)
                                       const busy = uploadingDocKey === k
                                       return (
-                                        <div key={k} style={{
-                                          display: 'flex', alignItems: 'center', gap: 10,
-                                          padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-                                          background: checked ? '#f0fdf4' : '#fafafa',
-                                          border: `1.5px solid ${checked ? '#86efac' : '#e5e7eb'}`,
-                                        }}>
-                                          <button onClick={() => patch(k, !checked)} style={{
-                                            width: 20, height: 20, borderRadius: 4, flexShrink: 0,
-                                            border: `2px solid ${checked ? '#16a34a' : '#d1d5db'}`,
-                                            background: checked ? '#16a34a' : '#fff',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            cursor: 'pointer',
-                                          }}>
-                                            {checked && <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>✓</span>}
+                                        <div key={k} className={`brx-doc-item ${checked ? 'is-checked' : 'is-optional'}`}>
+                                          <button onClick={() => patch(k, !checked)} className={`brx-doc-check ${checked ? 'is-checked' : 'is-optional'}`}>
+                                            {checked && <span className="brx-doc-check-mark">✓</span>}
                                           </button>
-                                          <div style={{ flex: 1 }}>
-                                            <div style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>{label}</div>
-                                            <div style={{ fontSize: 10, color: '#9ca3af' }}>Firm Applicable</div>
+                                          <div className="brx-doc-meta">
+                                            <div className="brx-doc-name is-optional">{label}</div>
+                                            <div className="brx-doc-sub">Firm Applicable</div>
                                           </div>
-                                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                                          <div className="brx-doc-actions">
                                             <button
-                                              className="btn"
+                                              className="btn brx-doc-btn"
                                               onClick={() => startBodyshopDocUpload(k, 'upload')}
                                               disabled={busy}
-                                              style={{ padding: '6px 10px', fontSize: 11 }}
                                             >
                                               {busy ? 'Uploading…' : 'Upload'}
                                             </button>
                                             {attachedDoc && (
                                               <>
                                                 <button
-                                                  className="btn"
+                                                  className="btn brx-doc-btn"
                                                   onClick={() => void handleViewBodyshopDoc(k)}
-                                                  style={{ padding: '6px 10px', fontSize: 11 }}
                                                 >
                                                   View
                                                 </button>
                                                 <button
-                                                  className="btn"
+                                                  className="btn brx-doc-btn"
                                                   onClick={() => startBodyshopDocUpload(k, 'replace')}
                                                   disabled={busy}
-                                                  style={{ padding: '6px 10px', fontSize: 11 }}
                                                 >
                                                   Replace
                                                 </button>
@@ -4481,8 +4325,7 @@ export default function BodyshopRepairPage() {
                           )}
 
                           {Object.keys(editPatch).length > 0 && (
-                            <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}
-                              style={{ marginTop: 16, width: '100%' }}>
+                            <button className="btn btn--primary brx-docs-save" onClick={() => void handleSavePatch()} disabled={saving}>
                               {saving ? 'Saving…' : 'Save Documents'}
                             </button>
                           )}
@@ -4491,13 +4334,8 @@ export default function BodyshopRepairPage() {
                     })()}
 
                     {saActiveCard === 'estimate' && (
-                      <div style={{
-                        background: '#fff',
-                        border: '1px solid #bae6fd',
-                        borderRadius: 12,
-                        padding: 14,
-                      }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0369a1', marginBottom: 10 }}>
+                      <div className="brx-sa-panel is-estimate">
+                        <div className="brx-sa-panel-title is-estimate">
                           Estimation Stage
                         </div>
                         {(() => {
@@ -4508,13 +4346,9 @@ export default function BodyshopRepairPage() {
                           const estimateDocBusy = uploadingDocKey === 'doc_estimate'
 
                           return (
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1fr',
-                          gap: 10,
-                        }}>
-                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1 / span 1' }}>
-                            <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Estimate Amount (required)</span>
+                        <div className="brx-estimate-grid">
+                          <label className="brx-docs-field">
+                            <span className="brx-docs-label">Estimate Amount (required)</span>
                             <input
                               className="inp"
                               type="number"
@@ -4525,22 +4359,21 @@ export default function BodyshopRepairPage() {
                               disabled={isEstimateLocked}
                             />
                           </label>
-                          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
-                            <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, marginBottom: 8 }}>
+                          <div className="brx-estimate-upload-box">
+                            <div className="brx-docs-label brx-estimate-upload-label">
                               Estimate Upload (required)
                             </div>
                             {!estimateDoc ? (
                               <button
                                 type="button"
-                                className="btn btn--primary"
+                                className="btn btn--primary brx-estimate-upload-btn"
                                 onClick={() => startBodyshopDocUpload('doc_estimate', 'upload')}
                                 disabled={estimateDocBusy || isEstimateLocked}
-                                style={{ width: '100%' }}
                               >
                                 {estimateDocBusy ? 'Uploading...' : 'Upload Estimate'}
                               </button>
                             ) : (
-                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <div className="brx-estimate-upload-actions">
                                 <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_estimate')}>
                                   View
                                 </button>
@@ -4552,17 +4385,16 @@ export default function BodyshopRepairPage() {
                                 >
                                   {estimateDocBusy ? 'Uploading...' : 'Replace'}
                                 </button>
-                                <span style={{ fontSize: 11, color: '#059669', fontWeight: 700 }}>Uploaded</span>
+                                <span className="brx-estimate-upload-ok">Uploaded</span>
                               </div>
                             )}
                           </div>
-                          <div style={{ gridColumn: '1 / -1' }}>
+                          <div className="brx-grid-full">
                             <button
                               type="button"
-                              className="btn btn--primary"
+                              className="btn btn--primary brx-estimate-save"
                               onClick={() => void handleSaveEstimateStage()}
                               disabled={saving || !canSaveEstimate}
-                              style={{ width: '100%' }}
                               title={
                                 isEstimateLocked
                                   ? 'Complete Documentation stage first'
@@ -4581,22 +4413,17 @@ export default function BodyshopRepairPage() {
                     )}
 
                     {saActiveCard === 'claim_intimation' && (
-                      <div style={{
-                        background: '#fff',
-                        border: '1px solid #fed7aa',
-                        borderRadius: 12,
-                        padding: 14,
-                      }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: '#c2410c', marginBottom: 10 }}>
+                      <div className="brx-sa-panel is-claim">
+                        <div className="brx-sa-panel-title is-claim">
                           Claim Intimation Stage
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+                        <div className="brx-claim-grid">
                           {(() => {
                             const isClaimLocked = effectiveCurrentStage < 8
                             return (
                               <>
-                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Claim Intimation No (required)</span>
+                          <label className="brx-docs-field">
+                            <span className="brx-docs-label">Claim Intimation No (required)</span>
                             <input
                               className="inp"
                               value={selected.claim_intimation_no ?? ''}
@@ -4607,10 +4434,9 @@ export default function BodyshopRepairPage() {
                           </label>
                           <button
                             type="button"
-                            className="btn btn--primary"
+                            className="btn btn--primary brx-claim-save"
                             onClick={() => void handleSaveClaimIntimationStage()}
                             disabled={saving || isClaimLocked || !String(selected.claim_intimation_no ?? '').trim()}
-                            style={{ width: '100%' }}
                             title={
                               isClaimLocked
                                 ? 'Complete Estimation Approval stage first'
@@ -4652,65 +4478,46 @@ export default function BodyshopRepairPage() {
                 const hasEstimateAmount = Number(selected.estimated_amount ?? 0) > 0
 
                 return (
-                  <div style={{ display: 'grid', gap: 14 }}>
+                  <div className="brx-approval-wrap">
                     <button
                       type="button"
                       onClick={() => setApprovalActiveCard((prev) => prev === 'estimation_approval' ? null : 'estimation_approval')}
-                      style={{
-                        background: '#fff',
-                        border: `1.5px solid ${approvalActiveCard === 'estimation_approval' ? '#0ea5e9' : '#bae6fd'}`,
-                        borderRadius: 12,
-                        padding: 10,
-                        boxShadow: approvalActiveCard === 'estimation_approval' ? '0 0 0 2px #0ea5e922' : '0 1px 4px rgba(0,0,0,0.04)',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                      }}
+                      className={`brx-approval-card ${approvalActiveCard === 'estimation_approval' ? 'is-active' : ''}`}
                     >
-                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0369a1', marginBottom: 8 }}>
+                      <div className="brx-approval-card-title">
                         Estimation Approval
                       </div>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, border: `1px solid ${isApprovedStageDone ? '#86efac' : '#0ea5e9'}`, background: isApprovedStageDone ? '#f0fdf4' : '#e0f2fe', padding: '4px 8px' }}>
-                        <span style={{ minWidth: 24, height: 18, borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: isApprovedStageDone ? '#16a34a' : '#0ea5e9', color: '#fff' }}>
+                      <div className={`brx-approval-pill ${isApprovedStageDone ? 'is-done' : 'is-pending'}`}>
+                        <span className="brx-approval-pill-b">
                           {isApprovedStageDone ? '✓' : 'APV'}
                         </span>
-                        <span style={{ fontSize: 10, color: isApprovedStageDone ? '#166534' : '#0369a1', fontWeight: 700 }}>
+                        <span className="brx-approval-pill-l">
                           {isApprovedStageDone ? 'Done' : 'Pending'}
                         </span>
                       </div>
                     </button>
 
                     {approvalActiveCard === 'estimation_approval' && (
-                      <div style={{
-                        background: '#fff',
-                        border: '1px solid #bae6fd',
-                        borderRadius: 12,
-                        padding: 14,
-                      }}>
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1fr',
-                          gap: 10,
-                          marginBottom: 12,
-                        }}>
-                          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb' }}>
-                            <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Estimate Amount</div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                      <div className="brx-approval-panel">
+                        <div className="brx-approval-grid">
+                          <div className="brx-approval-box">
+                            <div className="brx-approval-k">Estimate Amount</div>
+                            <div className="brx-approval-v">
                               {hasEstimateAmount ? inr(selected.estimated_amount ?? null) : 'Not entered'}
                             </div>
                           </div>
-                          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <div className="brx-approval-box brx-approval-box--row">
                             <div>
-                              <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2 }}>Estimate Document</div>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                              <div className="brx-approval-k">Estimate Document</div>
+                              <div className="brx-approval-v">
                                 {estimateDoc ? 'Uploaded' : 'Not uploaded'}
                               </div>
                             </div>
                             <button
                               type="button"
-                              className="btn"
+                              className="btn brx-approval-view-btn"
                               onClick={() => void handleViewBodyshopDoc('doc_estimate')}
                               disabled={!estimateDoc}
-                              style={{ padding: '6px 10px', fontSize: 11 }}
                             >
                               View Estimate
                             </button>
@@ -4718,10 +4525,9 @@ export default function BodyshopRepairPage() {
                         </div>
                         <button
                           type="button"
-                          className="btn btn--primary"
+                          className="btn btn--primary brx-approval-save"
                           onClick={() => void handleApproveEstimationStage()}
                           disabled={saving || effectiveCurrentStage < 7 || isApprovedStageDone}
-                          style={{ width: '100%' }}
                           title={effectiveCurrentStage < 7 ? 'Move to Estimation Approval stage first' : undefined}
                         >
                           {saving ? 'Saving…' : 'Approved'}
@@ -4742,17 +4548,20 @@ export default function BodyshopRepairPage() {
                 const surveyApprovalFeedback = docUploadFeedbackByKey.doc_survey_approval
 
                 return (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>Claim Intimation No.</span>
+                  <div className="brx-survey-wrap">
+                    <div className="brx-panel">
+                      <div className="brx-panel-h">Survey & Parts</div>
+                      <div className="brx-survey-grid">
+                    <label className="brx-survey-field">
+                      <span className="brx-survey-label">Claim Intimation No.</span>
                       <input
                         className="inp"
                         value={selected.claim_intimation_no ?? ''}
                         onChange={(e) => patch('claim_intimation_no', e.target.value)}
                       />
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>Survey Date</span>
+                    <label className="brx-survey-field">
+                      <span className="brx-survey-label">Survey Date</span>
                       <input
                         className="inp"
                         type="date"
@@ -4760,8 +4569,8 @@ export default function BodyshopRepairPage() {
                         onChange={(e) => patch('survey_date', e.target.value || null)}
                       />
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>Surveyor Name</span>
+                    <label className="brx-survey-field">
+                      <span className="brx-survey-label">Surveyor Name</span>
                       <input
                         className="inp"
                         list="bodyshop-surveyor-options"
@@ -4779,16 +4588,16 @@ export default function BodyshopRepairPage() {
                         ))}
                       </datalist>
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>Surveyor Contact</span>
+                    <label className="brx-survey-field">
+                      <span className="brx-survey-label">Surveyor Contact</span>
                       <input
                         className="inp"
                         value={selected.surveyor_contact ?? ''}
                         onChange={(e) => patch('surveyor_contact', e.target.value)}
                       />
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>Survey Status</span>
+                    <label className="brx-survey-field">
+                      <span className="brx-survey-label">Survey Status</span>
                       <select
                         className="sel"
                         value={isSurveyHold || isSurveyApproved ? surveyStatus : ''}
@@ -4802,8 +4611,8 @@ export default function BodyshopRepairPage() {
                     {[
                       { k: 'approved_parts', label: 'Approved Parts' },
                     ].map(({ k, label }) => (
-                      <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+                      <label key={k} className="brx-survey-field">
+                        <span className="brx-survey-label">{label}</span>
                         <input
                           className="inp"
                           value={(selected as any)[k] ?? ''}
@@ -4813,8 +4622,8 @@ export default function BodyshopRepairPage() {
                     ))}
 
                     {isSurveyHold && (
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1/-1' }}>
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>Hold Remark</span>
+                      <label className="brx-survey-field brx-grid-full">
+                        <span className="brx-survey-label">Hold Remark</span>
                         <input
                           className="inp"
                           value={selected.survey_hold_reason ?? ''}
@@ -4823,27 +4632,19 @@ export default function BodyshopRepairPage() {
                         />
                       </label>
                     )}
+                      </div>
+                    </div>
 
                     {isSurveyApproved && (
-                      <div style={{ gridColumn: '1/-1', border: '1px solid #dbeafe', borderRadius: 12, background: '#f8fbff', padding: 12, display: 'grid', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div className="brx-survey-approval brx-grid-full">
+                        <div className="brx-survey-approval-head">
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#1e3a8a' }}>Survey Approval Photo</div>
-                            <div style={{ fontSize: 11, color: '#64748b' }}>
+                            <div className="brx-survey-approval-title">Survey Approval Photo</div>
+                            <div className="brx-survey-approval-sub">
                               {surveyApprovalDoc ? 'Uploaded' : 'Upload is required for Approved status'}
                             </div>
                             {surveyApprovalFeedback?.text && (
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  marginTop: 4,
-                                  color: surveyApprovalFeedback.tone === 'error'
-                                    ? '#b91c1c'
-                                    : surveyApprovalFeedback.tone === 'ok'
-                                      ? '#166534'
-                                      : '#1d4ed8',
-                                }}
-                              >
+                              <div className={`brx-survey-feedback ${surveyApprovalFeedback.tone === 'error' ? 'is-error' : surveyApprovalFeedback.tone === 'ok' ? 'is-ok' : 'is-info'}`}>
                                 {surveyApprovalFeedback.text}
                               </div>
                             )}
@@ -4858,7 +4659,7 @@ export default function BodyshopRepairPage() {
                               {surveyApprovalDocBusy ? 'Uploading…' : 'Upload Photo'}
                             </button>
                           ) : (
-                            <div style={{ display: 'flex', gap: 8 }}>
+                            <div className="brx-survey-actions">
                               <button type="button" className="btn btn--ghost" onClick={() => void handleViewBodyshopDoc('doc_survey_approval')}>
                                 View
                               </button>
@@ -4874,7 +4675,7 @@ export default function BodyshopRepairPage() {
                           )}
                         </div>
                         {surveyApprovalDoc && (
-                          <div style={{ display: 'flex', gap: 8 }}>
+                          <div className="brx-survey-actions">
                             <button
                               type="button"
                               className="btn btn--primary"
@@ -4892,7 +4693,7 @@ export default function BodyshopRepairPage() {
                               Send To Floor 3
                             </button>
                             {String(selected.bodyshop_floor ?? '').trim() && (
-                              <span style={{ alignSelf: 'center', fontSize: 12, color: '#065f46', fontWeight: 600 }}>
+                              <span className="brx-survey-current-floor">
                                 Current: {selected.bodyshop_floor}
                               </span>
                             )}
@@ -4902,11 +4703,11 @@ export default function BodyshopRepairPage() {
                     )}
 
                     {isSurveyApproved && surveyApprovalDoc && (
-                      <div style={{ gridColumn: '1/-1', border: '1px solid #d1d5db', background: '#f9fafb', borderRadius: 12, padding: 12, display: 'grid', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div className="brx-survey-parts brx-grid-full">
+                        <div className="brx-survey-parts-head">
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Initial Approved Parts</div>
-                            <div style={{ fontSize: 11, color: '#6b7280' }}>
+                            <div className="brx-survey-parts-title">Initial Approved Parts</div>
+                            <div className="brx-survey-parts-sub">
                               {selectedApprovedParts.finalized
                                 ? `${selectedApprovedParts.parts.length} part(s) finalized`
                                 : 'Capture parts that are definitely needed'}
@@ -4924,11 +4725,11 @@ export default function BodyshopRepairPage() {
                         </div>
 
                         {editingApprovedParts ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <div className="brx-survey-parts-list">
                             {tempApprovedParts.map((part, idx) => (
-                              <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#374151' }}>Part {idx + 1}</div>
+                              <div key={idx} className="brx-survey-part-card is-editing">
+                                <div className="brx-survey-part-head">
+                                  <div className="brx-survey-part-n">Part {idx + 1}</div>
                                   {tempApprovedParts.length > 1 && (
                                     <button
                                       type="button"
@@ -4941,23 +4742,21 @@ export default function BodyshopRepairPage() {
                                 </div>
                                 <input
                                   type="text"
-                                  className="inp"
                                   placeholder="Part No"
                                   value={part.part_no}
                                   onChange={(e) => handleUpdateApprovedPart(idx, 'part_no', e.target.value)}
-                                  style={{ fontSize: 12 }}
+                                  className="inp brx-survey-part-inp"
                                 />
                                 <input
                                   type="text"
-                                  className="inp"
+                                  className="inp brx-survey-part-inp"
                                   placeholder="Part Description"
                                   value={part.part_description}
                                   onChange={(e) => handleUpdateApprovedPart(idx, 'part_description', e.target.value)}
-                                  style={{ fontSize: 12 }}
                                 />
                               </div>
                             ))}
-                            <div style={{ display: 'flex', gap: 8 }}>
+                            <div className="brx-survey-actions">
                               <button
                                 type="button"
                                 className="btn btn--primary"
@@ -4983,29 +4782,29 @@ export default function BodyshopRepairPage() {
                             </div>
                           </div>
                         ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div className="brx-survey-parts-list is-view">
                             {selectedApprovedParts.parts.length > 0 ? (
                               <>
                                 {selectedApprovedParts.parts.map((part, idx) => (
-                                  <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                  <div key={idx} className="brx-survey-part-card">
                                     <div>
-                                      <div style={{ fontSize: 10, color: '#6b7280' }}>Part No</div>
-                                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937' }}>{part.part_no || '—'}</div>
+                                      <div className="brx-survey-part-k">Part No</div>
+                                      <div className="brx-survey-part-v">{part.part_no || '—'}</div>
                                     </div>
                                     <div>
-                                      <div style={{ fontSize: 10, color: '#6b7280' }}>Part Description</div>
-                                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937' }}>{part.part_description || '—'}</div>
+                                      <div className="brx-survey-part-k">Part Description</div>
+                                      <div className="brx-survey-part-v">{part.part_description || '—'}</div>
                                     </div>
                                   </div>
                                 ))}
                                 {selectedApprovedParts.finalizedAt && (
-                                  <div style={{ fontSize: 10, color: '#6b7280', marginTop: 4 }}>
+                                  <div className="brx-survey-finalized">
                                     Finalized at {fmt(selectedApprovedParts.finalizedAt)} by {selectedApprovedParts.finalizedBy || 'unknown'}
                                   </div>
                                 )}
                               </>
                             ) : (
-                              <div style={{ fontSize: 11, color: '#6b7280', fontStyle: 'italic' }}>No approved parts added yet</div>
+                              <div className="brx-survey-empty">No approved parts added yet</div>
                             )}
                           </div>
                         )}
@@ -5013,11 +4812,11 @@ export default function BodyshopRepairPage() {
                     )}
 
                     {additionalApprovalRequested && (
-                      <div style={{ gridColumn: '1/-1', border: '1px solid #fcd34d', background: '#fffbeb', borderRadius: 12, padding: 12, display: 'grid', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div className="brx-survey-approval-req brx-grid-full">
+                        <div className="brx-survey-approval-req-head">
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e' }}>Additional Approval Requested</div>
-                            <div style={{ fontSize: 11, color: '#a16207' }}>
+                            <div className="brx-survey-approval-req-title">Additional Approval Requested</div>
+                            <div className="brx-survey-approval-req-sub">
                               Status: {selectedAdditionalApproval.status === 'approved'
                                 ? 'All Approved'
                                 : selectedAdditionalApproval.status === 'rejected'
@@ -5033,7 +4832,7 @@ export default function BodyshopRepairPage() {
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div className="brx-survey-approval-req-list">
                           {(selectedAdditionalApproval.partStates.length > 0
                             ? selectedAdditionalApproval.partStates
                             : [{
@@ -5051,11 +4850,11 @@ export default function BodyshopRepairPage() {
                                 approvalPhotoPath: selectedAdditionalApproval.approvalPhotoPath,
                                 approvalPhotoFileName: selectedAdditionalApproval.approvalPhotoFileName,
                               }]).map((part, idx) => (
-                            <div key={`${part.part_image_path || 'part'}-${idx}`} style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                              <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>Part {idx + 1}</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={{ fontSize: 10, fontWeight: 700, color: part.status === 'approved' ? '#166534' : part.status === 'rejected' ? '#991b1b' : '#92400e' }}>
+                            <div key={`${part.part_image_path || 'part'}-${idx}`} className="brx-survey-approval-part">
+                              <div className="brx-survey-approval-part-top">
+                                <div className="brx-survey-approval-part-n">Part {idx + 1}</div>
+                                <div className="brx-survey-approval-part-tools">
+                                  <span className={`brx-survey-approval-status ${part.status === 'approved' ? 'is-approved' : part.status === 'rejected' ? 'is-rejected' : 'is-pending'}`}>
                                     {part.status === 'approved' ? 'Approved' : part.status === 'rejected' ? 'Rejected' : 'Pending'}
                                   </span>
                                   {part.part_image_path && (
@@ -5079,20 +4878,20 @@ export default function BodyshopRepairPage() {
                                 </div>
                               </div>
                               <div>
-                                <div style={{ fontSize: 10, color: '#a16207' }}>Part No</div>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: '#78350f' }}>{part.part_no || '—'}</div>
+                                <div className="brx-survey-approval-k">Part No</div>
+                                <div className="brx-survey-approval-v brx-survey-approval-v--strong">{part.part_no || '—'}</div>
                               </div>
                               <div>
-                                <div style={{ fontSize: 10, color: '#a16207' }}>Part Description</div>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: '#78350f' }}>{part.part_description || '—'}</div>
+                                <div className="brx-survey-approval-k">Part Description</div>
+                                <div className="brx-survey-approval-v brx-survey-approval-v--strong">{part.part_description || '—'}</div>
                               </div>
-                              <div style={{ gridColumn: '1/-1' }}>
-                                <div style={{ fontSize: 10, color: '#a16207' }}>Reason</div>
-                                <div style={{ fontSize: 12, color: '#78350f' }}>{part.reason || '—'}</div>
+                              <div className="brx-grid-full">
+                                <div className="brx-survey-approval-k">Reason</div>
+                                <div className="brx-survey-approval-v">{part.reason || '—'}</div>
                               </div>
-                              <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                                <div style={{ fontSize: 11, color: '#78350f' }}>Approval photo is mandatory before approving this part.</div>
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <div className="brx-survey-approval-actions-wrap brx-grid-full">
+                                <div className="brx-survey-approval-note">Approval photo is mandatory before approving this part.</div>
+                                <div className="brx-survey-actions">
                                   <button
                                     type="button"
                                     className="btn btn--xs"
@@ -5133,7 +4932,7 @@ export default function BodyshopRepairPage() {
                     )}
 
                     {Object.keys(editPatch).length > 0 && (
-                      <div style={{ gridColumn: '1/-1' }}>
+                      <div className="brx-grid-full">
                         <button className="btn btn--primary" onClick={() => void handleSaveSurveyInfo()} disabled={saving}>
                           {saving ? 'Saving…' : 'Save Survey'}
                         </button>
@@ -5170,13 +4969,13 @@ export default function BodyshopRepairPage() {
 
               {/* ── Floor ── */}
               {detailTab === 'floor' && (
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, background: '#f8fafc' }}>
+                <div className="brx-floor-wrap">
+                  <div className="brx-floor-head">
                     <div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 2 }}>Stage 11 Parent Status</div>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{floorParentStatus}</div>
+                      <div className="brx-floor-head-k">Stage 11 Parent Status</div>
+                      <div className="brx-floor-head-v">{floorParentStatus === 'Hold' ? 'On Hold' : floorParentStatus}</div>
                     </div>
-                    <div style={{ fontSize: 12, color: '#475569' }}>
+                    <div className="brx-floor-head-meta">
                       Assigned roles: {floorRoleSnapshots.filter((r) => r.assigned).length} / {FLOOR_ROLES.length}
                     </div>
                   </div>
@@ -5198,54 +4997,30 @@ export default function BodyshopRepairPage() {
                         </thead>
                         <tbody>
                           {floorRoleSnapshots.map((role) => (
+                            (() => {
+                              const statusClass = role.displayStatus === 'Completed'
+                                ? 'is-completed'
+                                : role.displayStatus === 'Hold'
+                                  ? 'is-hold'
+                                  : role.displayStatus === 'Work In Process'
+                                    ? 'is-wip'
+                                    : 'is-neutral'
+                              return (
                             <tr
                               key={role.role}
+                              className={highlightedFloorRole === role.role ? 'brx-floor-row is-highlighted' : 'brx-floor-row'}
                               ref={(node) => {
                                 floorRoleRowRefs.current[role.role] = node
                               }}
-                              style={{
-                                background: highlightedFloorRole === role.role ? '#fef3c7' : undefined,
-                                transition: 'background 220ms ease',
-                              }}
                             >
-                              <td style={{ fontWeight: 700 }}>{role.roleLabel}</td>
+                              <td className="brx-floor-role">{role.roleLabel}</td>
                               <td>
                                 {role.assigned
                                   ? `${role.employeeName ?? '—'}${role.employeeCode ? ` (${role.employeeCode})` : ''}`
                                   : '—'}
                               </td>
                               <td>
-                                <span
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    padding: '2px 8px',
-                                    borderRadius: 999,
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    border: role.displayStatus === 'Completed'
-                                      ? '1px solid #86efac'
-                                      : role.displayStatus === 'Hold'
-                                        ? '1px solid #fcd34d'
-                                        : role.displayStatus === 'Work In Process'
-                                          ? '1px solid #93c5fd'
-                                          : '1px solid #cbd5e1',
-                                    background: role.displayStatus === 'Completed'
-                                      ? '#f0fdf4'
-                                      : role.displayStatus === 'Hold'
-                                        ? '#fffbeb'
-                                        : role.displayStatus === 'Work In Process'
-                                          ? '#eff6ff'
-                                          : '#f8fafc',
-                                    color: role.displayStatus === 'Completed'
-                                      ? '#166534'
-                                      : role.displayStatus === 'Hold'
-                                        ? '#92400e'
-                                        : role.displayStatus === 'Work In Process'
-                                          ? '#1d4ed8'
-                                          : '#475569',
-                                  }}
-                                >
+                                <span className={`brx-floor-status ${statusClass}`}>
                                   {role.displayStatus}
                                 </span>
                               </td>
@@ -5253,16 +5028,18 @@ export default function BodyshopRepairPage() {
                               <td>{fmt(role.outTs)}</td>
                               <td>{role.reason ?? '—'}</td>
                             </tr>
+                              )
+                            })()
                           ))}
                         </tbody>
                       </table>
                     </div>
                   )}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div style={{ gridColumn: '1/-1', border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', padding: 10 }}>
-                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Additional Approval</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: additionalApprovalPending ? '#92400e' : selectedAdditionalApproval.status === 'approved' ? '#166534' : selectedAdditionalApproval.status === 'rejected' ? '#991b1b' : selectedAdditionalApproval.status === 'mixed' ? '#1d4ed8' : '#475569' }}>
+                  <div className="brx-floor-meta-grid">
+                    <div className="brx-floor-additional">
+                      <div className="brx-floor-additional-k">Additional Approval</div>
+                      <div className={`brx-floor-additional-v ${additionalApprovalPending ? 'is-pending' : selectedAdditionalApproval.status === 'approved' ? 'is-approved' : selectedAdditionalApproval.status === 'rejected' ? 'is-rejected' : selectedAdditionalApproval.status === 'mixed' ? 'is-mixed' : 'is-none'}`}>
                         {selectedAdditionalApproval.status === 'approved'
                           ? 'All Approved'
                           : selectedAdditionalApproval.status === 'rejected'
@@ -5274,152 +5051,147 @@ export default function BodyshopRepairPage() {
                               : 'None'}
                       </div>
                       {selectedAdditionalApproval.status !== 'none' && (
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                        <div className="brx-floor-additional-meta">
                           {selectedAdditionalApproval.approvedCount} Approved / {selectedAdditionalApproval.rejectedCount} Rejected / {selectedAdditionalApproval.pendingCount} Pending
                         </div>
                       )}
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                      <div className="brx-floor-additional-note">
                         Decisions are managed from Survey tab under Additional Approval Requested.
                       </div>
                     </div>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>Floor Status</span>
-                      <div
-                        className="inp"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          minHeight: 38,
-                          background: '#f8fafc',
-                          color: '#0f172a',
-                          fontWeight: 700,
-                        }}
-                        aria-readonly="true"
-                      >
+                    <div className="brx-floor-additional brx-floor-additional--status">
+                      <div className="brx-floor-additional-k">Floor Status</div>
+                      <div className={`brx-floor-additional-v ${derivedFloorStatusLabel === 'Completed' ? 'is-approved' : derivedFloorStatusLabel === 'Hold' ? 'is-pending' : derivedFloorStatusLabel === 'Work In Process' ? 'is-mixed' : 'is-none'}`}>
                         {derivedFloorStatusLabel}
                       </div>
-                      <span style={{ fontSize: 11, color: '#64748b' }}>
+                      <div className="brx-floor-additional-note">
                         Derived from role-wise floor status and BS Floor Completed action in bodyshop-floor.
-                      </span>
-                    </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* ── QC ── */}
               {detailTab === 'qc' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>QC Status</span>
-                    <select className="sel" value={selected.qc_status ?? 'pending'}
-                      onChange={(e) => patch('qc_status', e.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="pass">Pass</option>
-                      <option value="fail">Fail</option>
-                    </select>
-                  </label>
-                  {[
-                    { k: 'qc_checked_by',   label: 'QC Checked By' },
-                    { k: 'qc_fail_reason',  label: 'Fail Reason' },
-                    { k: 'reinspection_by', label: 'Re-Inspection By' },
-                  ].map(({ k, label }) => (
-                    <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
-                      <input className="inp" value={(selected as any)[k] ?? ''}
-                        onChange={(e) => patch(k as keyof RepairCard, e.target.value)} />
+                <div className="brx-panel">
+                  <div className="brx-panel-h">Quality Check & Re-Inspection</div>
+                  <div className="brx-form-grid-2">
+                    <label className="brx-field">
+                      <span className="brx-field-label">QC Status</span>
+                      <select className="sel" value={selected.qc_status ?? 'pending'}
+                        onChange={(e) => patch('qc_status', e.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="pass">Pass</option>
+                        <option value="fail">Fail</option>
+                      </select>
                     </label>
-                  ))}
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Re-Inspection Type</span>
-                    <select className="sel" value={selected.reinspection_type ?? ''}
-                      onChange={(e) => patch('reinspection_type', e.target.value)}>
-                      <option value="">— None —</option>
-                      <option value="team_member">Team Member</option>
-                      <option value="surveyor">Surveyor</option>
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Delivery Status</span>
-                    <select className="sel" value={selected.delivery_status ?? 'pending'}
-                      onChange={(e) => patch('delivery_status', e.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="done">Done</option>
-                    </select>
-                  </label>
-                  {Object.keys(editPatch).length > 0 && (
-                    <div style={{ gridColumn: '1/-1' }}>
-                      <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
-                        {saving ? 'Saving…' : 'Save QC'}
-                      </button>
-                    </div>
-                  )}
+                    {[
+                      { k: 'qc_checked_by',   label: 'QC Checked By' },
+                      { k: 'qc_fail_reason',  label: 'Fail Reason' },
+                      { k: 'reinspection_by', label: 'Re-Inspection By' },
+                    ].map(({ k, label }) => (
+                      <label key={k} className="brx-field">
+                        <span className="brx-field-label">{label}</span>
+                        <input className="inp" value={(selected as any)[k] ?? ''}
+                          onChange={(e) => patch(k as keyof RepairCard, e.target.value)} />
+                      </label>
+                    ))}
+                    <label className="brx-field">
+                      <span className="brx-field-label">Re-Inspection Type</span>
+                      <select className="sel" value={selected.reinspection_type ?? ''}
+                        onChange={(e) => patch('reinspection_type', e.target.value)}>
+                        <option value="">— None —</option>
+                        <option value="team_member">Team Member</option>
+                        <option value="surveyor">Surveyor</option>
+                      </select>
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Delivery Status</span>
+                      <select className="sel" value={selected.delivery_status ?? 'pending'}
+                        onChange={(e) => patch('delivery_status', e.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="done">Done</option>
+                      </select>
+                    </label>
+                    {Object.keys(editPatch).length > 0 && (
+                      <div className="brx-grid-full">
+                        <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
+                          {saving ? 'Saving…' : 'Save QC'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* ── Billing ── */}
               {detailTab === 'billing' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Parts Entry Status</span>
-                    <select className="sel" value={selected.parts_entry_status ?? 'pending'}
-                      onChange={(e) => patch('parts_entry_status', e.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="entered">Entered</option>
-                      <option value="billed">Billed</option>
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Billed Amount (₹)</span>
-                    <input className="inp" type="number" value={selected.billed_amount ?? ''}
-                      onChange={(e) => patch('billed_amount', e.target.value ? Number(e.target.value) : null)} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>DO Status</span>
-                    <select className="sel" value={selected.do_status ?? 'pending'}
-                      onChange={(e) => patch('do_status', e.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="received">Received</option>
-                      <option value="not_received">Not Received</option>
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>DO Amount (₹)</span>
-                    <input className="inp" type="number" value={selected.do_amount ?? ''}
-                      onChange={(e) => patch('do_amount', e.target.value ? Number(e.target.value) : null)} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Customer Diff Amount (₹)</span>
-                    <input className="inp" type="number" value={selected.customer_diff_amount ?? ''}
-                      onChange={(e) => patch('customer_diff_amount', e.target.value ? Number(e.target.value) : null)} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Payment Status</span>
-                    <select className="sel" value={selected.payment_status ?? 'pending'}
-                      onChange={(e) => patch('payment_status', e.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="received">Received</option>
-                      <option value="not_received">Not Received</option>
-                    </select>
-                  </label>
-                  {/* summary */}
-                  <div style={{ gridColumn: '1/-1', background: '#f8fafc', borderRadius: 10, padding: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#374151' }}>Billing Summary</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                      {[['Billed', selected.billed_amount], ['DO', selected.do_amount], ['Customer Diff', selected.customer_diff_amount]].map(([l, v]) => (
-                        <div key={String(l)}>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{l}</div>
-                          <div style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>{inr(v as number | null)}</div>
-                        </div>
-                      ))}
+                <div className="brx-panel">
+                  <div className="brx-panel-h">Billing, DO &amp; Payment</div>
+                  <div className="brx-form-grid-2">
+                    <label className="brx-field">
+                      <span className="brx-field-label">Parts Entry Status</span>
+                      <select className="sel" value={selected.parts_entry_status ?? 'pending'}
+                        onChange={(e) => patch('parts_entry_status', e.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="entered">Entered</option>
+                        <option value="billed">Billed</option>
+                      </select>
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Billed Amount (₹)</span>
+                      <input className="inp" type="number" value={selected.billed_amount ?? ''}
+                        onChange={(e) => patch('billed_amount', e.target.value ? Number(e.target.value) : null)} />
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">DO Status</span>
+                      <select className="sel" value={selected.do_status ?? 'pending'}
+                        onChange={(e) => patch('do_status', e.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="received">Received</option>
+                        <option value="not_received">Not Received</option>
+                      </select>
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">DO Amount (₹)</span>
+                      <input className="inp" type="number" value={selected.do_amount ?? ''}
+                        onChange={(e) => patch('do_amount', e.target.value ? Number(e.target.value) : null)} />
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Customer Diff Amount (₹)</span>
+                      <input className="inp" type="number" value={selected.customer_diff_amount ?? ''}
+                        onChange={(e) => patch('customer_diff_amount', e.target.value ? Number(e.target.value) : null)} />
+                    </label>
+                    <label className="brx-field">
+                      <span className="brx-field-label">Payment Status</span>
+                      <select className="sel" value={selected.payment_status ?? 'pending'}
+                        onChange={(e) => patch('payment_status', e.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="received">Received</option>
+                        <option value="not_received">Not Received</option>
+                      </select>
+                    </label>
+                    {/* summary */}
+                    <div className="brx-billing-summary">
+                      <div className="brx-billing-summary-title">Billing Summary</div>
+                      <div className="brx-billing-summary-grid">
+                        {[['Billed', selected.billed_amount], ['DO', selected.do_amount], ['Customer Diff', selected.customer_diff_amount]].map(([l, v]) => (
+                          <div key={String(l)}>
+                            <div className="brx-billing-k">{l}</div>
+                            <div className="brx-billing-v">{inr(v as number | null)}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+                    {Object.keys(editPatch).length > 0 && (
+                      <div className="brx-grid-full">
+                        <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
+                          {saving ? 'Saving…' : 'Save Billing'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {Object.keys(editPatch).length > 0 && (
-                    <div style={{ gridColumn: '1/-1' }}>
-                      <button className="btn btn--primary" onClick={() => void handleSavePatch()} disabled={saving}>
-                        {saving ? 'Saving…' : 'Save Billing'}
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 
