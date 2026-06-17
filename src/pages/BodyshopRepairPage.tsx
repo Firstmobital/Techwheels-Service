@@ -3227,11 +3227,11 @@ export default function BodyshopRepairPage() {
     return counts
   }, [advisorScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
-  // pipeline counts (unique cards per group by stage-worklist membership)
+  // Pipeline counts should follow the same toolbar/advisor scope as Stage Queue.
   const pipeline = useMemo(() =>
     STAGE_GROUPS.map((g) => {
       const filterStages = g.label === 'SA Intake' ? [1, 2, 3, 4, 5, 6, 8] : g.stages
-      const count = roleScopedCards.reduce((acc, card) => {
+      const count = advisorScopedCards.reduce((acc, card) => {
         if (card.overall_status !== 'active') return acc
         return filterStages.some((stage) => isCardInStageWorklist(card, stage)) ? acc + 1 : acc
       }, 0)
@@ -3244,11 +3244,11 @@ export default function BodyshopRepairPage() {
         count,
       }
     }),
-  [roleScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+  [advisorScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   const deliveredCount = useMemo(
-    () => roleScopedCards.filter((c) => c.overall_status === 'delivered').length,
-    [roleScopedCards],
+    () => advisorScopedCards.filter((c) => c.overall_status === 'delivered').length,
+    [advisorScopedCards],
   )
 
   const pipelineSelected = pipelineFilter !== 'all'
