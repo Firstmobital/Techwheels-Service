@@ -1,34 +1,20 @@
 /**
  * mobile/src/app/(tabs)/reception.tsx
- * Full-parity mobile mirror of the web ReceptionPage
- * - Uses employee_master (same as web)
- * - Date-range filter (This Month / Today toggle)
- * - Location + Portal (fuel type) + Service Type filters
- * - RBAC: Owner Name, Owner Phone, SA Name required
- * - Auto-creates bodyshop_repair_cards for Accident entries
- * - Exact validation logic as web
+ * Mobile mirror of web ReceptionPage — business logic 100% identical to web.
+ * UI is mobile-specific (React Native). All data columns, filtering, validation,
+ * SA logic, and bodyshop card creation match the web version exactly.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform,
+  RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants (exact match with web ReceptionPage) ─────────────────────────────
 const SOURCE_OPTIONS = ['Self', 'Driver Pickup', 'Walk-in', 'RSA']
 
 const RECEPTION_SERVICE_TYPE_OPTIONS = [
@@ -53,34 +39,39 @@ const ST_COLOR: Record<string, { bg: string; text: string }> = {
   'UPD': { bg: '#f8fafc', text: '#475569' }, 'NULL': { bg: '#f1f5f9', text: '#94a3b8' },
 }
 
-const DEFAULT_MODELS = [
-  'Nexon', 'Nexon EV', 'Punch', 'Punch CNG', 'Punch EV', 'Tiago', 'Tiago EV',
-  'Tigor', 'Tigor EV', 'Altroz', 'Harrier', 'Harrier EV', 'Safari',
-  'Curvv', 'Curvv EV', 'Hexa', 'Sierra', 'Xpres T Ev',
-]
+// Exact same select columns as web RECEPTION_ENTRY_SELECT_COLUMNS
+const ENTRY_SELECT = [
+  'id', 'dealer_code', 'reg_number', 'model', 'service_type',
+  'sa_name', 'sa_employee_code', 'sa_display_name', 'jc_number',
+  'owner_name', 'owner_phone', 'branch', 'location', 'portal',
+  'branch_label', 'km_reading', 'source', 'remark',
+  'created_by', 'created_at', 'updated_at',
+].join(', ')
 
-const UNKNOWN_FUEL_TYPE = 'Unknown'
-const UNKNOWN_LOCATION = 'Unknown'
-const UNKNOWN_SERVICE_TYPE = 'Null'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types (mirrors web ReceptionEntryRow) ────────────────────────────────────
 interface ReceptionEntry {
   id: number
+  dealer_code: string | null
   reg_number: string
-  jc_number: string | null
   model: string | null
   service_type: string | null
   sa_name: string | null
-  sa_display_name: string | null
   sa_employee_code: string | null
+  sa_display_name: string | null
+  jc_number: string | null
   owner_name: string | null
   owner_phone: string | null
-  source: string
   branch: string | null
-  fuel_type: string | null
+  location: string | null
+  portal: string | null
+  branch_label: string | null
   km_reading: number | null
+  source: string
+  remark: string | null
   created_by: string
   created_at: string
+  updated_at: string | null
+  fuel_type?: string | null  // runtime-enriched, not in DB
 }
 
 interface Employee {
@@ -95,846 +86,881 @@ type FormState = {
   reg_number: string
   km_reading: string
   model: string
+  service_type: string
   sa_employee_code: string
   owner_name: string
   owner_phone: string
   source: string
-  service_type: string
+  remark: string
 }
 
 const EMPTY_FORM: FormState = {
-  reg_number: '', km_reading: '', model: '',
-  sa_employee_code: '', owner_name: '', owner_phone: '',
-  source: SOURCE_OPTIONS[0], service_type: '',
+  reg_number: '', km_reading: '', model: '', service_type: '',
+  sa_employee_code: '', owner_name: '', owner_phone: '', source: '', remark: '',
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function abbr(serviceType: string | null): string {
-  const key = String(serviceType ?? '').trim().toLowerCase()
-  return SERVICE_TYPE_ABB[key] ?? (serviceType?.slice(0, 3).toUpperCase() ?? '?')
+// ─── Pure helpers — exact same logic as web ──────────────────────────────────
+function normalizeServiceType(v: string | null | undefined): string {
+  const s = String(v ?? '').trim()
+  if (!s || s.toLowerCase() === 'null') return 'Null'
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function stColor(serviceType: string | null) {
-  const key = abbr(serviceType)
-  return ST_COLOR[key] ?? { bg: '#f1f5f9', text: '#64748b' }
+function getServiceTypeAbbr(st: string | null | undefined): string {
+  const key = normalizeServiceType(st).toLowerCase()
+  return SERVICE_TYPE_ABB[key] ?? (st?.slice(0, 3).toUpperCase() ?? '?')
 }
 
-function toISTDate(d: Date) {
-  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+function normalizeDept(v: string | null | undefined): string {
+  const s = String(v ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+  if (s === 'BODYSHOP') return 'BODY SHOP'
+  return s
 }
 
-function fmtDateTime(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleString('en-IN', {
-    day: '2-digit', month: 'short',
-    hour: '2-digit', minute: '2-digit',
-    hour12: true, timeZone: 'Asia/Kolkata',
-  })
-}
-
-function getLocationLabel(value: string | null | undefined): string {
-  return String(value ?? '').trim() || UNKNOWN_LOCATION
-}
-
-function getFuelTypeLabel(value: string | null | undefined): string {
-  return String(value ?? '').trim() || UNKNOWN_FUEL_TYPE
-}
-
-function getServiceTypeLabel(value: string | null | undefined): string {
-  const n = String(value ?? '').trim()
-  if (!n || n.toLowerCase() === 'null') return UNKNOWN_SERVICE_TYPE
-  return n
-}
-
-function normalizeDept(value: string | null | undefined): string {
-  const n = String(value ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
-  return n === 'BODYSHOP' ? 'BODY SHOP' : n
-}
-
-function getRequiredDept(serviceType: string): 'SERVICE' | 'BODY SHOP' | 'PDI' {
-  const s = serviceType.toLowerCase().trim()
-  if (s === 'accident') return 'BODY SHOP'
-  if (s === 'pdi') return 'PDI'
+// Exact web: Accident->BODY SHOP, PDI->PDI, else->SERVICE
+function getRequiredDeptForServiceType(st: string | null | undefined): 'SERVICE' | 'BODY SHOP' | 'PDI' {
+  const key = normalizeServiceType(st).toLowerCase()
+  if (key === 'accident') return 'BODY SHOP'
+  if (key === 'pdi') return 'PDI'
   return 'SERVICE'
 }
 
-function shouldApplyFuelFilter(serviceType: string): boolean {
-  return serviceType.toLowerCase().trim() !== 'accident'
+// Exact web: EV if contains EV, else PV
+function normFuelBucket(v: string | null | undefined): 'EV' | 'PV' | '' {
+  const s = String(v ?? '').trim().toUpperCase()
+  if (!s) return ''
+  return s.includes('EV') ? 'EV' : 'PV'
 }
 
-function inferFuelBucket(model: string): 'EV' | 'PV' {
-  return /EV/i.test(model) ? 'EV' : 'PV'
+// Exact web: model contains EV => EV, else PV
+function inferFuelFromModel(model: string | null | undefined): 'EV' | 'PV' {
+  return String(model ?? '').trim().toUpperCase().includes('EV') ? 'EV' : 'PV'
 }
 
-function normFuelBucket(value: string | null | undefined): 'EV' | 'PV' | '' {
-  const n = String(value ?? '').trim().toUpperCase()
-  if (!n) return ''
-  return n.includes('EV') ? 'EV' : 'PV'
+// Exact web: Accident exempt from fuel filter
+function shouldApplyFuelFilter(st: string | null | undefined): boolean {
+  return normalizeServiceType(st).toLowerCase() !== 'accident'
 }
 
-function currentMonthIST(): { from: string; to: string } {
-  const now = new Date()
-  const y = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 4)
-  const m = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(5, 7)
-  const lastDay = new Date(Number(y), Number(m), 0).getDate()
-  return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
+function getLocationLabel(branch: string | null | undefined): string {
+  return String(branch ?? '').trim() || 'Unknown'
 }
 
-// ─── Main Screen ─────────────────────────────────────────────────────────────
+function getFuelTypeLabel(v: string | null | undefined): string {
+  const s = String(v ?? '').trim().toUpperCase()
+  if (!s) return 'Unknown'
+  return s.includes('EV') ? 'EV' : 'PV'
+}
+
+// Exact web: derive fuel from portal column, then employee lookup
+function getEntryFuelLabel(
+  entry: ReceptionEntry,
+  empFuelByCode: Map<string, string>,
+  empFuelByName: Map<string, string>,
+): string {
+  const raw = String(entry.portal ?? entry.fuel_type ?? '').trim()
+  if (raw) return raw
+  const code = String(entry.sa_employee_code ?? '').trim().toUpperCase()
+  if (code) { const v = empFuelByCode.get(code); if (v) return v }
+  const name = String(entry.sa_name ?? '').trim().toLowerCase()
+  if (name) { const v = empFuelByName.get(name); if (v) return v }
+  return 'Unknown'
+}
+
+// Exact web IST today key
+function getTodayKey(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
+}
+
+function getEntryDateKey(createdAt: string): string {
+  const d = new Date(createdAt)
+  if (isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d)
+}
+
+function normalizePhone(v: string | null | undefined): string | null {
+  const digits = String(v ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  return digits.slice(0, 10)
+}
+
+function normalizeKm(v: string): number | null {
+  const n = parseInt(v, 10)
+  if (!isFinite(n) || n < 0) return null
+  return Math.trunc(n)
+}
+
+// ─── Supabase helpers (mirrors web reception.ts) ──────────────────────────────
+async function fetchAllEntries(): Promise<ReceptionEntry[]> {
+  const PAGE = 500
+  const rows: ReceptionEntry[] = []
+  let cursorCreatedAt: string | null = null
+  let cursorId: number | null = null
+
+  while (true) {
+    let q = supabase
+      .from('service_reception_entries')
+      .select(ENTRY_SELECT)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(PAGE)
+
+    if (cursorCreatedAt && cursorId !== null) {
+      q = q.or(`created_at.lt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.lt.${cursorId})`)
+    }
+
+    const { data, error } = await q
+    if (error) { console.warn('fetchAllEntries error:', error.message); break }
+    const batch = (data ?? []) as ReceptionEntry[]
+    rows.push(...batch)
+    if (batch.length < PAGE) break
+    const last = batch[batch.length - 1]
+    cursorCreatedAt = last.created_at ?? null
+    cursorId = last.id ?? null
+    if (!cursorCreatedAt || cursorId === null) break
+  }
+  return rows
+}
+
+async function getEmployeeNameByCode(code: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('employee_master')
+    .select('employee_name')
+    .eq('employee_code', code)
+    .single()
+  if (error || !data) return null
+  return String((data as { employee_name?: string }).employee_name ?? '').trim() || null
+}
+
+// Exact web enrichEntriesWithEmployeeBranch
+async function enrichEntries(entries: ReceptionEntry[]): Promise<ReceptionEntry[]> {
+  const needEnrich = entries.filter(e => !e.branch && e.sa_employee_code)
+  if (!needEnrich.length) return entries
+  const codes = [...new Set(needEnrich.map(e => e.sa_employee_code).filter(Boolean))] as string[]
+  const { data: emps } = await supabase
+    .from('employee_master')
+    .select('employee_code, location, fuel_type')
+    .in('employee_code', codes)
+  const metaMap = new Map<string, { location: string; fuelType: string }>(
+    (emps ?? []).map((emp: { employee_code?: string; location?: string | null; fuel_type?: string | null }) => [
+      String(emp.employee_code ?? '').trim().toUpperCase(),
+      { location: String(emp.location ?? '').trim(), fuelType: String(emp.fuel_type ?? '').trim() },
+    ])
+  )
+  return entries.map(e => {
+    if (!e.sa_employee_code) return e
+    const meta = metaMap.get(e.sa_employee_code.trim().toUpperCase())
+    if (!meta) return e
+    const nextBranch = meta.location || e.branch || null
+    const nextFuel = meta.fuelType || e.fuel_type || null
+    return { ...e, branch: nextBranch, fuel_type: nextFuel }
+  })
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function ReceptionScreen() {
   const { user } = useAuth()
 
   const [entries, setEntries] = useState<ReceptionEntry[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [modelOptions, setModelOptions] = useState<string[]>(DEFAULT_MODELS)
+  const [modelOptions, setModelOptions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  // Date/list mode
   const [listMode, setListMode] = useState<'today' | 'month'>('today')
-
-  // Filter state
-  const [search, setSearch] = useState('')
   const [selectedLocation, setSelectedLocation] = useState<string>('all')
   const [selectedFuelType, setSelectedFuelType] = useState<string>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string>('all')
+  const [search, setSearch] = useState('')
 
-  // Form modal
-  const [showForm, setShowForm] = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
 
-  // Picker modals
-  const [modelPicker, setModelPicker] = useState(false)
-  const [saPicker, setSaPicker] = useState(false)
-  const [stPicker, setStPicker] = useState(false)
-  const [sourcePicker, setSourcePicker] = useState(false)
-  const [saSearch, setSaSearch] = useState('')
-  const [modelSearch, setModelSearch] = useState('')
+  const [showPicker, setShowPicker] = useState<'model' | 'service_type' | 'source' | 'sa' | null>(null)
+  const [pickerSearch, setPickerSearch] = useState('')
 
-  useFocusEffect(useCallback(() => { void loadAll() }, []))
-
-  // ── Load ────────────────────────────────────────────────────────────────────
-  async function loadAll(isRefresh = false) {
-    if (isRefresh) setRefreshing(true); else setLoading(true)
-    setError(null)
-
-    const { from, to } = currentMonthIST()
-
-    const [entriesRes, empRes, modelsRes] = await Promise.all([
-      supabase
-        .from('service_reception_entries')
-        .select('id,reg_number,jc_number,model,service_type,sa_name,sa_display_name,sa_employee_code,owner_name,owner_phone,source,branch,location,portal,branch_label,km_reading,created_by,created_at')
-        .gte('created_at', `${from}T00:00:00+05:30`)
-        .lte('created_at', `${to}T23:59:59+05:30`)
-        .order('created_at', { ascending: false })
-        .limit(500),
+  // ── Load data ──────────────────────────────────────────────────────────────
+  const loadAll = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true)
+    const [entriesRaw, empRes, modelsRes] = await Promise.all([
+      fetchAllEntries(),
       supabase
         .from('employee_master')
         .select('employee_code,employee_name,department,fuel_type,role')
         .order('employee_name'),
       supabase.from('settings_models').select('model_name').order('model_name'),
     ])
+    const enriched = await enrichEntries(entriesRaw)
+    setEntries(enriched)
 
-    if (entriesRes.error) setError(entriesRes.error.message)
-    else setEntries((entriesRes.data ?? []) as ReceptionEntry[])
-
-    if (empRes.data && empRes.data.length > 0)
-      setEmployees(empRes.data as Employee[])
+    // Exact web: only SA and SSA roles
+    const allowedRoles = new Set(['sa', 'ssa', 'service advisor', 'service_advisor'])
+    const empData = (empRes.data ?? []) as Employee[]
+    setEmployees(empData.filter(e =>
+      allowedRoles.has(String(e.role ?? '').trim().toLowerCase()) &&
+      String(e.employee_code ?? '').trim().length > 0
+    ))
 
     if (modelsRes.data && modelsRes.data.length > 0)
-      setModelOptions(modelsRes.data.map((r: any) => r.model_name).filter(Boolean))
+      setModelOptions((modelsRes.data as { model_name: string }[]).map(r => r.model_name))
 
-    setLoading(false); setRefreshing(false)
-  }
+    setLoading(false)
+    setRefreshing(false)
+  }, [])
 
-  // ── Derived / filtered entries ───────────────────────────────────────────────
-  const todayStr = useMemo(() => toISTDate(new Date()), [])
+  useFocusEffect(useCallback(() => { void loadAll() }, [loadAll]))
 
+  // ── Derived state ─────────────────────────────────────────────────────────
+  const todayKey = useMemo(() => getTodayKey(), [])
   const todayEntries = useMemo(() =>
-    entries.filter(e => toISTDate(new Date(e.created_at)) === todayStr),
-    [entries, todayStr])
+    entries.filter(e => getEntryDateKey(e.created_at) === todayKey), [entries, todayKey])
+  const baseEntries = useMemo(() =>
+    listMode === 'today' ? todayEntries : entries, [listMode, todayEntries, entries])
 
-  // Employee fuel type lookup maps (same as web)
   const empFuelByCode = useMemo(() =>
     new Map(employees.map(e => [String(e.employee_code ?? '').trim().toUpperCase(), getFuelTypeLabel(e.fuel_type)])),
     [employees])
-
   const empFuelByName = useMemo(() =>
     new Map(employees.map(e => [String(e.employee_name ?? '').trim().toLowerCase(), getFuelTypeLabel(e.fuel_type)])),
     [employees])
 
-  function getEntryFuelType(entry: ReceptionEntry): string {
-    const raw = String(entry.portal ?? '').trim()
-    if (raw) return raw
-    const byCode = empFuelByCode.get(String(entry.sa_employee_code ?? '').trim().toUpperCase())
-    if (byCode) return byCode
-    const byName = empFuelByName.get(String(entry.sa_name ?? '').trim().toLowerCase())
-    if (byName) return byName
-    return UNKNOWN_FUEL_TYPE
-  }
-
-  // Base entries depend on list mode
-  const listModeEntries = useMemo(() =>
-    listMode === 'today' ? todayEntries : entries,
-    [listMode, todayEntries, entries])
-
-  // Location filter
   const locationOptions = useMemo(() => {
-    const vals = Array.from(new Set(listModeEntries.map(e => getLocationLabel(e.branch))))
+    const vals = [...new Set(baseEntries.map(e => getLocationLabel(e.branch)))]
     return vals.sort((a, b) => a.localeCompare(b))
-  }, [listModeEntries])
+  }, [baseEntries])
 
-  const locationFiltered = useMemo(() => {
-    if (selectedLocation === 'all') return listModeEntries
-    return listModeEntries.filter(e => getLocationLabel(e.branch) === selectedLocation)
-  }, [listModeEntries, selectedLocation])
+  const locFiltered = useMemo(() =>
+    selectedLocation === 'all' ? baseEntries
+      : baseEntries.filter(e => getLocationLabel(e.branch) === selectedLocation),
+    [baseEntries, selectedLocation])
 
-  // Fuel (Portal) filter
   const fuelTypeOptions = useMemo(() => {
-    const vals = Array.from(new Set(locationFiltered.map(e => getEntryFuelType(e))))
+    const vals = [...new Set(locFiltered.map(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName)))]
     return vals.sort((a, b) => a.localeCompare(b))
-  }, [locationFiltered, empFuelByCode, empFuelByName])
+  }, [locFiltered, empFuelByCode, empFuelByName])
 
-  const fuelFiltered = useMemo(() => {
-    if (selectedFuelType === 'all') return locationFiltered
-    return locationFiltered.filter(e => getEntryFuelType(e) === selectedFuelType)
-  }, [locationFiltered, selectedFuelType, empFuelByCode, empFuelByName])
+  const fuelFiltered = useMemo(() =>
+    selectedFuelType === 'all' ? locFiltered
+      : locFiltered.filter(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName) === selectedFuelType),
+    [locFiltered, selectedFuelType, empFuelByCode, empFuelByName])
 
-  // Service type counts
   const serviceTypeCounts = useMemo(() => {
-    const counts = new Map<string, number>()
+    const m = new Map<string, number>()
     fuelFiltered.forEach(e => {
-      const label = getServiceTypeLabel(e.service_type)
-      counts.set(label, (counts.get(label) ?? 0) + 1)
+      const label = normalizeServiceType(e.service_type)
+      m.set(label, (m.get(label) ?? 0) + 1)
     })
-    return counts
+    return m
   }, [fuelFiltered])
 
-  const serviceTypeOptions = useMemo(() =>
-    Array.from(serviceTypeCounts.keys()).sort((a, b) => a.localeCompare(b)),
-    [serviceTypeCounts])
+  const stFiltered = useMemo(() =>
+    selectedServiceType === 'all' ? fuelFiltered
+      : fuelFiltered.filter(e => normalizeServiceType(e.service_type) === selectedServiceType),
+    [fuelFiltered, selectedServiceType])
 
-  const serviceTypeFiltered = useMemo(() => {
-    if (selectedServiceType === 'all') return fuelFiltered
-    return fuelFiltered.filter(e => getServiceTypeLabel(e.service_type) === selectedServiceType)
-  }, [fuelFiltered, selectedServiceType])
-
-  // Search
-  const filtered = useMemo(() => {
-    if (!search.trim()) return serviceTypeFiltered
+  const displayEntries = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return serviceTypeFiltered.filter(e =>
+    if (!q) return stFiltered
+    return stFiltered.filter(e =>
       (e.reg_number ?? '').toLowerCase().includes(q) ||
-      (e.jc_number ?? '').toLowerCase().includes(q) ||
-      (e.owner_name ?? '').toLowerCase().includes(q) ||
+      (e.model ?? '').toLowerCase().includes(q) ||
       (e.sa_name ?? '').toLowerCase().includes(q) ||
-      (e.model ?? '').toLowerCase().includes(q)
+      (e.sa_display_name ?? '').toLowerCase().includes(q) ||
+      (e.jc_number ?? '').toLowerCase().includes(q) ||
+      (e.owner_name ?? '').toLowerCase().includes(q)
     )
-  }, [serviceTypeFiltered, search])
+  }, [stFiltered, search])
 
-  // Today stats
-  const todayStats = useMemo(() => {
-    const counts: Record<string, number> = {}
-    todayEntries.forEach(e => {
-      const k = abbr(e.service_type)
-      counts[k] = (counts[k] ?? 0) + 1
-    })
-    return counts
-  }, [todayEntries])
-
-  // ── SA options filtered by dept+fuel (exact as web) ─────────────────────────
+  // ── SA dropdown — exact web business rules ────────────────────────────────
   const filteredSAs = useMemo(() => {
-    const reqDept = form.service_type ? getRequiredDept(form.service_type) : 'SERVICE'
-    const useFuel = form.service_type ? shouldApplyFuelFilter(form.service_type) : true
-    const reqFuel = form.model ? inferFuelBucket(form.model) : null
-
-    // Only show SA / SSA roles (same logic as web ReceptionPage)
-    const allowedRoles = new Set(['sa', 'ssa', 'service advisor', 'service_advisor'])
+    const reqDept = getRequiredDeptForServiceType(form.service_type)
+    const useFuel = shouldApplyFuelFilter(form.service_type)
+    const reqFuel = inferFuelFromModel(form.model)
     const hasServiceType = !!form.service_type.trim()
-    return employees.filter(e => {
-      const role = String(e.role ?? '').trim().toLowerCase()
-      if (!allowedRoles.has(role)) return false
-      // If no service type selected yet, show all SAs across all depts
-      if (!hasServiceType) return true
-      const dept = normalizeDept(e.department)
-      if (dept !== reqDept) return false
-      if (!useFuel) return true
-      if (!reqFuel) return true
-      return normFuelBucket(e.fuel_type) === reqFuel
-    }).filter(e => {
-      if (!saSearch.trim()) return true
-      const q = saSearch.toLowerCase()
-      return e.employee_name.toLowerCase().includes(q) || e.employee_code.toLowerCase().includes(q)
-    })
-  }, [employees, form.service_type, form.model, saSearch])
+    return employees
+      .filter(e => {
+        if (!hasServiceType) return true  // show all SAs when no service type chosen yet
+        const dept = normalizeDept(e.department)
+        if (dept !== reqDept) return false
+        if (!useFuel) return true  // Accident: show all BODY SHOP, no fuel filter
+        return normFuelBucket(e.fuel_type) === reqFuel
+      })
+      .sort((a, b) => a.employee_name.localeCompare(b.employee_name))
+  }, [employees, form.model, form.service_type])
 
-  const hasSelectedSAInOptions = useMemo(() => {
-    const code = form.sa_employee_code.trim().toUpperCase()
-    if (!code) return false
-    return filteredSAs.some(e => e.employee_code.trim().toUpperCase() === code)
-  }, [form.sa_employee_code, filteredSAs])
-
-  // Reset SA when it falls outside filtered options
+  // Clear SA if no longer valid after service_type/model change (exact web behavior)
   useEffect(() => {
-    if (editingId !== null) return
-    if (!form.sa_employee_code) return
-    if (hasSelectedSAInOptions) return
-    setForm(p => ({ ...p, sa_employee_code: '' }))
-  }, [editingId, form.sa_employee_code, hasSelectedSAInOptions])
+    if (!form.sa_employee_code || !form.service_type) return
+    const code = form.sa_employee_code.trim().toUpperCase()
+    const valid = filteredSAs.some(e => e.employee_code.trim().toUpperCase() === code)
+    if (!valid) setForm(p => ({ ...p, sa_employee_code: '' }))
+  }, [form.sa_employee_code, form.service_type, filteredSAs])
 
-  // ── Open form helpers ────────────────────────────────────────────────────────
-  function openNew() {
-    setForm(EMPTY_FORM); setEditingId(null); setNotice(null); setError(null); setShowForm(true)
+  // ── Form actions ──────────────────────────────────────────────────────────
+  function openAdd() {
+    setForm(EMPTY_FORM); setEditingId(null); setFormError(null); setShowModal(true)
   }
 
   function openEdit(entry: ReceptionEntry) {
-    const byCode = employees.find(e => e.employee_code.trim().toUpperCase() === String(entry.sa_employee_code ?? '').trim().toUpperCase())
-    const byName = employees.find(e => e.employee_name.trim().toLowerCase() === String(entry.sa_name ?? '').trim().toLowerCase())
-    const resolvedCode = byCode?.employee_code ?? byName?.employee_code ?? entry.sa_employee_code ?? ''
-    setEditingId(entry.id)
     setForm({
-      reg_number: entry.reg_number,
-      km_reading: entry.km_reading == null ? '' : String(entry.km_reading),
-      model: entry.model ?? '',
-      sa_employee_code: resolvedCode,
-      owner_name: entry.owner_name ?? '',
-      owner_phone: entry.owner_phone ?? '',
-      source: entry.source,
-      service_type: entry.service_type ?? '',
+      reg_number:       entry.reg_number ?? '',
+      km_reading:       entry.km_reading != null ? String(entry.km_reading) : '',
+      model:            entry.model ?? '',
+      service_type:     entry.service_type ?? '',
+      sa_employee_code: entry.sa_employee_code ?? '',
+      owner_name:       entry.owner_name ?? '',
+      owner_phone:      entry.owner_phone ?? '',
+      source:           entry.source ?? '',
+      remark:           entry.remark ?? '',
     })
-    setNotice(null); setError(null); setShowForm(true)
+    setEditingId(entry.id); setFormError(null); setShowModal(true)
   }
 
-  // ── Save ─────────────────────────────────────────────────────────────────────
+  // ── Save — exact web validation + payload + bodyshop card logic ───────────
   async function handleSave() {
-    if (!form.reg_number.trim()) { Alert.alert('Required', 'Registration number is required'); return }
-    if (form.reg_number.trim().length > 10) { Alert.alert('Invalid', 'Registration number must be 10 characters or less'); return }
-    if (!form.model.trim()) { Alert.alert('Required', 'Model is required'); return }
-    if (!form.sa_employee_code.trim()) { Alert.alert('Required', 'Select a Service Advisor'); return }
-    if (!form.owner_name.trim()) { Alert.alert('Required', 'Owner name is required'); return }
-    if (!form.owner_phone.trim()) { Alert.alert('Required', 'Owner phone is required'); return }
-    if (form.owner_phone.replace(/\D/g, '').length !== 10) { Alert.alert('Invalid', 'Owner phone must be exactly 10 digits'); return }
+    setFormError(null)
+
+    // Exact web required-field check
+    if (!form.reg_number.trim() || !form.model.trim() || !form.sa_employee_code.trim() ||
+        !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
+      setFormError('Please fill all required fields: Registration No, Model, SA Name, Owner Name, Owner Phone, Source')
+      return
+    }
+    if (form.reg_number.trim().length > 10) {
+      setFormError('Registration number must be 10 characters or less')
+      return
+    }
+    if (form.owner_phone.replace(/\D/g, '').length !== 10) {
+      setFormError('Owner phone must be exactly 10 digits')
+      return
+    }
 
     setSaving(true)
-    const sa = employees.find(e => e.employee_code === form.sa_employee_code)
+
+    // Exact web normalizePayload
     const payload = {
-      reg_number: form.reg_number.trim().toUpperCase(),
-      km_reading: form.km_reading ? parseInt(form.km_reading) : null,
-      model: form.model || null,
-      sa_employee_code: form.sa_employee_code,
-      sa_name: sa?.employee_name ?? null,
-      owner_name: form.owner_name.trim() || null,
-      owner_phone: form.owner_phone.trim() || null,
-      source: form.source,
-      service_type: form.service_type || null,
+      reg_number:       form.reg_number.trim().toUpperCase(),
+      model:            form.model.trim() || null,
+      service_type:     form.service_type.trim() || null,
+      sa_employee_code: form.sa_employee_code.trim().toUpperCase(),
+      owner_name:       form.owner_name.trim() || null,
+      owner_phone:      normalizePhone(form.owner_phone),
+      km_reading:       normalizeKm(form.km_reading),
+      source:           form.source.trim(),
+      branch:           null as string | null,
+      remark:           form.remark.trim() || null,
     }
 
-    let result: { data?: any; error?: any }
-    if (editingId) {
-      result = await supabase.from('service_reception_entries').update(payload).eq('id', editingId).select().single()
-    } else {
-      result = await supabase.from('service_reception_entries').insert([payload]).select().single()
-    }
-
-    if (result.error) {
-      Alert.alert('Error', result.error.message)
+    // Exact web: resolve sa_name from employee_master
+    const saName = await getEmployeeNameByCode(payload.sa_employee_code)
+    if (!saName) {
+      setFormError(`Employee code '${payload.sa_employee_code}' not found`)
       setSaving(false)
       return
     }
 
-    // Auto-create bodyshop repair card for Accident (mirrors web logic)
-    if (!editingId && form.service_type === 'Accident' && result.data) {
-      const entry = result.data as ReceptionEntry & { id: number }
+    let resultData: ReceptionEntry | null = null
+    let resultError: string | null = null
+
+    if (editingId === null) {
+      const { data, error } = await supabase
+        .from('service_reception_entries')
+        .insert({ ...payload, sa_name: saName, sa_display_name: saName })
+        .select(ENTRY_SELECT)
+        .single()
+      resultData = data as ReceptionEntry | null
+      resultError = error?.message ?? null
+    } else {
+      const { data, error } = await supabase
+        .from('service_reception_entries')
+        .update({ ...payload, sa_name: saName, sa_display_name: saName })
+        .eq('id', editingId)
+        .select(ENTRY_SELECT)
+        .single()
+      resultData = data as ReceptionEntry | null
+      resultError = error?.message ?? null
+    }
+
+    setSaving(false)
+
+    if (resultError) { setFormError(resultError); return }
+
+    // ── Exact web: auto-create bodyshop_repair_card for Accident ─────────────
+    if (editingId === null && form.service_type === 'Accident' && resultData) {
+      const entry = resultData
       const jcNo = String(entry.jc_number ?? '').trim().toUpperCase()
       const receptionEntryId = Number(entry.id)
-
       let existingCard: { id: number } | null = null
 
-      if (Number.isFinite(receptionEntryId)) {
-        const byRecepRes = await supabase
+      if (isFinite(receptionEntryId)) {
+        const { data: byRec } = await supabase
           .from('bodyshop_repair_cards')
           .select('id')
           .eq('reception_entry_id', receptionEntryId)
           .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1)
-        existingCard = ((byRecepRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+        existingCard = ((byRec ?? []) as { id: number }[])[0] ?? null
       }
 
       if (!existingCard && jcNo) {
-        const byJcRes = await supabase
+        const { data: byJc } = await supabase
           .from('bodyshop_repair_cards')
           .select('id')
           .eq('job_card_no', jcNo)
           .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1)
-        existingCard = ((byJcRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+        existingCard = ((byJc ?? []) as { id: number }[])[0] ?? null
       }
 
       if (!existingCard) {
         await supabase.from('bodyshop_repair_cards').insert({
-          reception_entry_id: Number.isFinite(receptionEntryId) ? receptionEntryId : null,
-          job_card_no: jcNo || '',
-          reg_number: form.reg_number.trim().toUpperCase(),
-          customer_name: form.owner_name.trim() || null,
-          customer_phone: form.owner_phone.trim() || null,
-          customer_type: null,
-          branch: entry.branch ?? null,
-          sa_name: entry.sa_name ?? entry.sa_display_name ?? sa?.employee_name ?? null,
-          current_stage: 1,
+          reception_entry_id: isFinite(receptionEntryId) ? receptionEntryId : null,
+          job_card_no:        jcNo || '',
+          reg_number:         form.reg_number.trim().toUpperCase(),
+          customer_name:      form.owner_name.trim() || null,
+          customer_phone:     normalizePhone(form.owner_phone),
+          customer_type:      null,
+          branch:             entry.branch ?? null,
+          sa_name:            saName,
+          current_stage:      1,
           current_stage_name: 'Vehicle Receiving',
-          overall_status: 'active',
-          received_at: new Date().toISOString(),
+          overall_status:     'active',
+          received_at:        new Date().toISOString(),
         })
       }
     }
 
-    setSaving(false)
-    setShowForm(false)
+    setShowModal(false)
     setForm(EMPTY_FORM)
     setEditingId(null)
-    setNotice(editingId ? 'Entry updated' : 'Entry created')
-    void loadAll()
+    Alert.alert('Success', editingId === null ? 'Entry created successfully' : 'Entry updated successfully')
+    await loadAll()
   }
 
-  // ── Delete ───────────────────────────────────────────────────────────────────
   async function handleDelete(id: number) {
-    Alert.alert('Delete Entry', 'Are you sure you want to delete this reception entry?', [
+    Alert.alert('Delete Entry', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          setDeletingId(id)
-          const { error: err } = await supabase.from('service_reception_entries').delete().eq('id', id)
-          setDeletingId(null)
-          if (err) { Alert.alert('Error', err.message); return }
-          setNotice('Entry deleted')
-          void loadAll()
-        }
-      }
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const { error } = await supabase.from('service_reception_entries').delete().eq('id', id)
+        if (error) { Alert.alert('Error', error.message); return }
+        await loadAll()
+      }},
     ])
   }
 
-  // ─── Styles ──────────────────────────────────────────────────────────────────
-  const tfStyle = {
-    backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
-    fontSize: 14, borderWidth: 1, borderColor: '#e2e8f0', color: '#1e293b',
-  }
-  const pickerStyle = {
-    backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 11,
-    borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row' as const, alignItems: 'center' as const,
+  // ── Picker helpers ────────────────────────────────────────────────────────
+  function pickerItems(): string[] {
+    const q = pickerSearch.toLowerCase()
+    if (showPicker === 'model') return modelOptions.filter(m => m.toLowerCase().includes(q))
+    if (showPicker === 'service_type') return RECEPTION_SERVICE_TYPE_OPTIONS.filter(s => s.toLowerCase().includes(q))
+    if (showPicker === 'source') return SOURCE_OPTIONS.filter(s => s.toLowerCase().includes(q))
+    if (showPicker === 'sa') return filteredSAs
+      .filter(e => e.employee_name.toLowerCase().includes(q))
+      .map(e => e.employee_code)
+    return []
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }} edges={['top']}>
+  function pickerLabel(item: string): string {
+    if (showPicker === 'sa') {
+      const emp = employees.find(e => e.employee_code === item)
+      return emp
+        ? `${emp.employee_name}  ·  ${getFuelTypeLabel(emp.fuel_type)}  ·  ${normalizeDept(emp.department)}`
+        : item
+    }
+    return item
+  }
 
-      {/* ── Header ── */}
-      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingHorizontal: 16, paddingVertical: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View>
-            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1e293b' }}>🏢 Reception</Text>
-            <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>
-              {listModeEntries.length} records · {listMode === 'today' ? 'Today' : 'This Month'}
-            </Text>
+  function onPickerSelect(item: string) {
+    if (showPicker === 'model') setForm(p => ({ ...p, model: item }))
+    else if (showPicker === 'service_type') setForm(p => ({ ...p, service_type: item }))
+    else if (showPicker === 'source') setForm(p => ({ ...p, source: item }))
+    else if (showPicker === 'sa') setForm(p => ({ ...p, sa_employee_code: item }))
+    setShowPicker(null); setPickerSearch('')
+  }
+
+  function getFormSALabel(): string {
+    if (!form.sa_employee_code) return ''
+    const emp = employees.find(e =>
+      e.employee_code.trim().toUpperCase() === form.sa_employee_code.trim().toUpperCase()
+    )
+    return emp ? emp.employee_name : form.sa_employee_code
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+  const s = styles
+
+  function EntryCard({ entry }: { entry: ReceptionEntry }) {
+    const abbr = getServiceTypeAbbr(entry.service_type)
+    const col = ST_COLOR[abbr] ?? ST_COLOR['NULL']
+    const fuelLabel = getEntryFuelLabel(entry, empFuelByCode, empFuelByName)
+    return (
+      <View style={s.card}>
+        <View style={s.cardHeader}>
+          <Text style={s.regNo}>{entry.reg_number}</Text>
+          <View style={[s.stChip, { backgroundColor: col.bg }]}>
+            <Text style={[s.stChipText, { color: col.text }]}>{abbr}</Text>
           </View>
-          <TouchableOpacity onPress={openNew}
-            style={{ backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>＋ New Entry</Text>
+        </View>
+        <View style={s.cardRow}>
+          <Text style={s.cardLabel}>Model</Text>
+          <Text style={s.cardValue}>{entry.model ?? '—'}</Text>
+          <Text style={[s.cardLabel, { marginLeft: 12 }]}>Fuel</Text>
+          <Text style={s.cardValue}>{fuelLabel}</Text>
+        </View>
+        <View style={s.cardRow}>
+          <Text style={s.cardLabel}>SA</Text>
+          <Text style={s.cardValue}>{entry.sa_display_name ?? entry.sa_name ?? '—'}</Text>
+        </View>
+        <View style={s.cardRow}>
+          <Text style={s.cardLabel}>Owner</Text>
+          <Text style={s.cardValue}>{entry.owner_name ?? '—'}</Text>
+          {entry.owner_phone ? (
+            <><Text style={[s.cardLabel, { marginLeft: 8 }]}>Ph</Text>
+            <Text style={s.cardValue}>{entry.owner_phone}</Text></>
+          ) : null}
+        </View>
+        <View style={s.cardRow}>
+          <Text style={s.cardLabel}>JC</Text>
+          <Text style={s.cardValue}>{entry.jc_number ?? '—'}</Text>
+        </View>
+        <View style={s.cardRow}>
+          <Text style={s.cardLabel}>Source</Text>
+          <Text style={s.cardValue}>{entry.source}</Text>
+          {entry.km_reading != null ? (
+            <><Text style={[s.cardLabel, { marginLeft: 12 }]}>KM</Text>
+            <Text style={s.cardValue}>{entry.km_reading.toLocaleString()}</Text></>
+          ) : null}
+        </View>
+        {entry.remark ? (
+          <View style={s.cardRow}>
+            <Text style={s.cardLabel}>Remark</Text>
+            <Text style={s.cardValue}>{entry.remark}</Text>
+          </View>
+        ) : null}
+        <View style={s.cardActions}>
+          <TouchableOpacity style={s.editBtn} onPress={() => openEdit(entry)}>
+            <Text style={s.editBtnText}>✏️  Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.delBtn} onPress={() => handleDelete(entry.id)}>
+            <Text style={s.delBtnText}>🗑️  Delete</Text>
           </TouchableOpacity>
         </View>
+      </View>
+    )
+  }
 
-        {/* Today / Month toggle */}
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
-          {(['today', 'month'] as const).map(m => (
-            <TouchableOpacity key={m} onPress={() => { setListMode(m); setSelectedLocation('all'); setSelectedFuelType('all'); setSelectedServiceType('all') }}
-              style={{ backgroundColor: listMode === m ? '#2563eb' : '#f1f5f9', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: listMode === m ? '#fff' : '#64748b' }}>
-                {m === 'today' ? `Today (${todayEntries.length})` : `This Month (${entries.length})`}
+  return (
+    <SafeAreaView style={s.root}>
+
+      {/* Header */}
+      <View style={s.header}>
+        <View>
+          <Text style={s.headerTitle}>🏢 Reception</Text>
+          <Text style={s.headerSub}>{displayEntries.length} records · {listMode === 'today' ? 'Today' : 'This Month'}</Text>
+        </View>
+        <TouchableOpacity style={s.addBtn} onPress={openAdd}>
+          <Text style={s.addBtnText}>+ New Entry</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Today / Month toggle */}
+      <View style={s.toggleRow}>
+        {(['today', 'month'] as const).map(m => (
+          <TouchableOpacity key={m} style={[s.toggleBtn, listMode === m && s.toggleBtnActive]} onPress={() => setListMode(m)}>
+            <Text style={[s.toggleBtnText, listMode === m && s.toggleBtnTextActive]}>
+              {m === 'today' ? `Today (${todayEntries.length})` : `This Month (${entries.length})`}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Search */}
+      <View style={s.searchRow}>
+        <TextInput style={s.searchInput}
+          placeholder="🔍 Search reg / name / model / SA / JC..."
+          placeholderTextColor="#94a3b8"
+          value={search} onChangeText={setSearch} clearButtonMode="while-editing"
+        />
+      </View>
+
+      {/* Location filter */}
+      {locationOptions.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow}>
+          {['all', ...locationOptions].map(loc => (
+            <TouchableOpacity key={loc} style={[s.chip, selectedLocation === loc && s.chipActive]} onPress={() => setSelectedLocation(loc)}>
+              <Text style={[s.chipText, selectedLocation === loc && s.chipTextActive]}>
+                {loc === 'all' ? `All (${baseEntries.length})` : loc}
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
-      </View>
-
-      {/* ── Today Stats ── */}
-      {todayEntries.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 6 }}>
-          {Object.entries(todayStats).map(([k, v]) => {
-            const c = ST_COLOR[k] ?? { bg: '#f1f5f9', text: '#64748b' }
-            return (
-              <View key={k} style={{ backgroundColor: c.bg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', minWidth: 48 }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: c.text }}>{v}</Text>
-                <Text style={{ fontSize: 10, fontWeight: '600', color: c.text, marginTop: 1 }}>{k}</Text>
-              </View>
-            )
-          })}
-          <View style={{ backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', minWidth: 48 }}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1e293b' }}>{todayEntries.length}</Text>
-            <Text style={{ fontSize: 10, fontWeight: '600', color: '#64748b', marginTop: 1 }}>Total</Text>
-          </View>
         </ScrollView>
       )}
 
-      {/* ── Filters ── */}
-      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingVertical: 6 }}>
-        {/* Location filter */}
-        {locationOptions.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 5, paddingBottom: 4 }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', alignSelf: 'center', marginRight: 2 }}>Loc:</Text>
-            <FilterChip label={`All (${listModeEntries.length})`} active={selectedLocation === 'all'} onPress={() => setSelectedLocation('all')} />
-            {locationOptions.map(loc => (
-              <FilterChip key={loc} label={`${loc} (${listModeEntries.filter(e => getLocationLabel(e.branch) === loc).length})`}
-                active={selectedLocation === loc} onPress={() => setSelectedLocation(loc)} />
-            ))}
-          </ScrollView>
-        )}
-
-        {/* Portal (fuel type) filter */}
-        {fuelTypeOptions.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 5, paddingBottom: 4, paddingTop: 2 }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', alignSelf: 'center', marginRight: 2 }}>Portal:</Text>
-            <FilterChip label={`All (${locationFiltered.length})`} active={selectedFuelType === 'all'} onPress={() => setSelectedFuelType('all')} />
-            {fuelTypeOptions.map(ft => (
-              <FilterChip key={ft} label={`${ft} (${locationFiltered.filter(e => getEntryFuelType(e) === ft).length})`}
-                active={selectedFuelType === ft} onPress={() => setSelectedFuelType(ft)} />
-            ))}
-          </ScrollView>
-        )}
-
-        {/* Service type chips */}
-        {serviceTypeOptions.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 5, paddingTop: 2 }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', alignSelf: 'center', marginRight: 2 }}>Type:</Text>
-            <FilterChip label={`All SR (${fuelFiltered.length})`} active={selectedServiceType === 'all'} onPress={() => setSelectedServiceType('all')} />
-            {serviceTypeOptions.map(st => {
-              const c = stColor(st)
-              return (
-                <TouchableOpacity key={st} onPress={() => setSelectedServiceType(st)}
-                  style={{ backgroundColor: selectedServiceType === st ? c.bg : '#f8fafc', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: selectedServiceType === st ? c.text : '#e2e8f0' }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: selectedServiceType === st ? c.text : '#64748b' }}>
-                    {abbr(st)} · {serviceTypeCounts.get(st) ?? 0}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
-          </ScrollView>
-        )}
-      </View>
-
-      {/* ── Search ── */}
-      <View style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
-        <TextInput
-          placeholder="🔍 Search reg / name / model / SA / JC…"
-          value={search} onChangeText={setSearch}
-          style={{ backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, borderWidth: 1, borderColor: '#e2e8f0', color: '#1e293b' }}
-          placeholderTextColor="#94a3b8"
-        />
-      </View>
-
-      {/* Notice */}
-      {notice && (
-        <View style={{ backgroundColor: '#f0fdf4', padding: 10, marginHorizontal: 12, marginTop: 8, borderRadius: 8 }}>
-          <Text style={{ color: '#16a34a', fontSize: 13, fontWeight: '600' }}>✓ {notice}</Text>
-        </View>
+      {/* Fuel filter */}
+      {fuelTypeOptions.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow}>
+          {['all', ...fuelTypeOptions].map(ft => (
+            <TouchableOpacity key={ft} style={[s.chip, selectedFuelType === ft && s.chipActive]} onPress={() => setSelectedFuelType(ft)}>
+              <Text style={[s.chipText, selectedFuelType === ft && s.chipTextActive]}>
+                {ft === 'all' ? `All (${locFiltered.length})` : ft}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       )}
 
-      {/* Error */}
-      {error && (
-        <View style={{ backgroundColor: '#fef2f2', padding: 10, marginHorizontal: 12, marginTop: 8, borderRadius: 8 }}>
-          <Text style={{ color: '#dc2626', fontSize: 13 }}>⚠️ {error}</Text>
-        </View>
+      {/* Service type filter */}
+      {serviceTypeCounts.size > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow}>
+          <TouchableOpacity style={[s.chip, selectedServiceType === 'all' && s.chipActive]} onPress={() => setSelectedServiceType('all')}>
+            <Text style={[s.chipText, selectedServiceType === 'all' && s.chipTextActive]}>All ({fuelFiltered.length})</Text>
+          </TouchableOpacity>
+          {[...serviceTypeCounts.entries()].map(([st, cnt]) => {
+            const abbr = getServiceTypeAbbr(st)
+            const col = ST_COLOR[abbr] ?? ST_COLOR['NULL']
+            const active = selectedServiceType === st
+            return (
+              <TouchableOpacity key={st} style={[s.chip, active && { backgroundColor: col.bg, borderColor: col.text }]} onPress={() => setSelectedServiceType(st)}>
+                <Text style={[s.chipText, active && { color: col.text }]}>{abbr} ({cnt})</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
       )}
 
-      {/* ── List ── */}
+      {/* List */}
       {loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={{ marginTop: 8, color: '#94a3b8', fontSize: 13 }}>Loading entries…</Text>
-        </View>
+        <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563eb" />
       ) : (
         <FlatList
-          data={filtered}
-          keyExtractor={item => String(item.id)}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} tintColor="#2563eb" />}
-          contentContainerStyle={{ padding: 12, paddingBottom: 100, gap: 8 }}
+          data={displayEntries}
+          keyExtractor={e => String(e.id)}
+          renderItem={({ item }) => <EntryCard entry={item} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAll(true) }} />}
+          contentContainerStyle={{ padding: 12, paddingBottom: 80, flexGrow: 1 }}
           ListEmptyComponent={
-            <View style={{ alignItems: 'center', paddingTop: 48 }}>
-              <Text style={{ fontSize: 36 }}>🏁</Text>
-              <Text style={{ fontWeight: '700', color: '#475569', marginTop: 8 }}>No entries found</Text>
-              <Text style={{ color: '#94a3b8', fontSize: 13, marginTop: 4 }}>Pull to refresh or add a new entry</Text>
-              <TouchableOpacity onPress={openNew}
-                style={{ marginTop: 16, backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 }}>
-                <Text style={{ color: '#fff', fontWeight: '700' }}>＋ Add Entry</Text>
+            <View style={s.empty}>
+              <Text style={s.emptyIcon}>🏁</Text>
+              <Text style={s.emptyTitle}>No entries found</Text>
+              <Text style={s.emptySub}>Pull to refresh or add a new entry</Text>
+              <TouchableOpacity style={[s.addBtn, { marginTop: 16 }]} onPress={openAdd}>
+                <Text style={s.addBtnText}>+ Add Entry</Text>
               </TouchableOpacity>
             </View>
           }
-          renderItem={({ item: e }) => {
-            const c = stColor(e.service_type)
-            const isDeleting = deletingId === e.id
-            return (
-              <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                  {/* Service type badge */}
-                  <View style={{ backgroundColor: c.bg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginRight: 10, minWidth: 42, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: c.text }}>{abbr(e.service_type)}</Text>
-                  </View>
-
-                  {/* Main info */}
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                      <Text style={{ fontWeight: '800', fontSize: 15, color: '#1e293b', letterSpacing: 0.5 }}>{e.reg_number}</Text>
-                      {e.jc_number && (
-                        <View style={{ backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 }}>
-                          <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>✓ {e.jc_number}</Text>
-                        </View>
-                      )}
-                      {/* Source pill */}
-                      <View style={{ backgroundColor: e.source === 'Walk-in' ? '#f0fdf4' : e.source === 'Self' ? '#fafafa' : '#eff6ff', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 }}>
-                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#475569' }}>{e.source}</Text>
-                      </View>
-                    </View>
-
-                    {e.model && <Text style={{ fontSize: 13, color: '#475569', marginTop: 1 }}>{e.model}</Text>}
-
-                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
-                      {(e.sa_display_name || e.sa_name) &&
-                        <Text style={{ fontSize: 12, color: '#64748b' }}>👤 {e.sa_display_name || e.sa_name}</Text>}
-                      {e.owner_name &&
-                        <Text style={{ fontSize: 12, color: '#64748b' }}>🙍 {e.owner_name}{e.owner_phone ? ` · ${e.owner_phone}` : ''}</Text>}
-                    </View>
-
-                    {e.km_reading != null &&
-                      <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>🛣 {e.km_reading.toLocaleString('en-IN')} km</Text>}
-
-                    <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                      {fmtDateTime(e.created_at)} · By {e.created_by}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Actions */}
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
-                  <TouchableOpacity onPress={() => openEdit(e)}
-                    style={{ flex: 1, backgroundColor: '#eff6ff', borderRadius: 6, paddingVertical: 7, alignItems: 'center' }}>
-                    <Text style={{ color: '#2563eb', fontWeight: '700', fontSize: 13 }}>Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDelete(e.id)} disabled={isDeleting}
-                    style={{ flex: 1, backgroundColor: '#fef2f2', borderRadius: 6, paddingVertical: 7, alignItems: 'center' }}>
-                    <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>{isDeleting ? 'Deleting…' : 'Delete'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )
-          }}
         />
       )}
 
-      {/* ══ ADD / EDIT FORM MODAL ══ */}
-      <Modal visible={showForm} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setShowForm(false); setForm(EMPTY_FORM); setEditingId(null) }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      {/* ── Add / Edit Modal ──────────────────────────────────────────────── */}
+      <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+              <View style={s.modalHeader}>
+                <Text style={s.modalTitle}>{editingId ? 'Edit Entry' : 'New Reception Entry'}</Text>
+                <TouchableOpacity onPress={() => setShowModal(false)}>
+                  <Text style={{ fontSize: 24, color: '#64748b' }}>✕</Text>
+                </TouchableOpacity>
+              </View>
 
-            {/* Modal Header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
-              <TouchableOpacity onPress={() => { setShowForm(false); setForm(EMPTY_FORM); setEditingId(null) }}>
-                <Text style={{ color: '#64748b', fontSize: 15, fontWeight: '600' }}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '800', color: '#1e293b' }}>
-                {editingId ? 'Edit Entry' : '➕ New Intake'}
-              </Text>
-              <TouchableOpacity onPress={handleSave} disabled={saving}
-                style={{ backgroundColor: saving ? '#93c5fd' : '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 }}>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{saving ? '…' : 'Save'}</Text>
-              </TouchableOpacity>
-            </View>
+              {formError && <View style={s.errorBox}><Text style={s.errorText}>⚠️  {formError}</Text></View>}
 
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+              {form.service_type === 'Accident' && (
+                <View style={s.warningBox}>
+                  <Text style={s.warningText}>⚠️  Accident — will appear in Bodyshop Repair Tracker</Text>
+                </View>
+              )}
 
-              {/* Registration No */}
               <FormField label="Registration No *">
-                <TextInput style={tfStyle} placeholder="e.g. RJ14XX1234" placeholderTextColor="#94a3b8"
-                  value={form.reg_number} autoCapitalize="characters"
-                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))} maxLength={10} autoCapitalize="characters" />
+                <TextInput style={s.input}
+                  placeholder="e.g. RJ14AB1234"
+                  placeholderTextColor="#94a3b8"
+                  value={form.reg_number}
+                  maxLength={10}
+                  autoCapitalize="characters"
+                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))}
+                />
               </FormField>
 
-              {/* KM Reading */}
-              <FormField label="KM Reading">
-                <TextInput style={tfStyle} placeholder="e.g. 24560" placeholderTextColor="#94a3b8"
-                  value={form.km_reading} keyboardType="numeric"
-                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/[^0-9]/g, '') }))} />
-              </FormField>
-
-              {/* Model */}
               <FormField label="Model *">
-                <TouchableOpacity style={pickerStyle} onPress={() => { setModelSearch(''); setModelPicker(true) }}>
-                  <Text style={{ fontSize: 14, color: form.model ? '#1e293b' : '#94a3b8', flex: 1 }}>{form.model || 'Select model…'}</Text>
-                  <Text style={{ color: '#94a3b8' }}>▾</Text>
+                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('model'); setPickerSearch('') }}>
+                  <Text style={form.model ? s.selectText : s.selectPlaceholder}>{form.model || 'Select model'}</Text>
+                  <Text style={s.chevron}>▼</Text>
                 </TouchableOpacity>
               </FormField>
 
-              {/* Source */}
-              <FormField label="Source *">
-                <TouchableOpacity style={pickerStyle} onPress={() => setSourcePicker(true)}>
-                  <Text style={{ fontSize: 14, color: '#1e293b', flex: 1 }}>{form.source}</Text>
-                  <Text style={{ color: '#94a3b8' }}>▾</Text>
-                </TouchableOpacity>
-              </FormField>
-
-              {/* Service Type */}
               <FormField label="Service Type">
-                <TouchableOpacity
-                  style={[pickerStyle, form.service_type === 'Accident' ? { borderColor: '#ef4444' } : {}]}
-                  onPress={() => setStPicker(true)}>
-                  <Text style={{ fontSize: 14, color: form.service_type ? '#1e293b' : '#94a3b8', flex: 1 }}>{form.service_type || 'Select service type…'}</Text>
-                  <Text style={{ color: '#94a3b8' }}>▾</Text>
-                </TouchableOpacity>
-                {form.service_type === 'Accident' && (
-                  <Text style={{ fontSize: 12, color: '#ef4444', marginTop: 4, fontWeight: '600' }}>
-                    ⚠️ Accident — will appear in Bodyshop Repair Tracker
-                  </Text>
-                )}
-              </FormField>
-
-              {/* SA Name */}
-              <FormField label={`SA Name * · ${filteredSAs.length} available`}>
-                <TouchableOpacity style={pickerStyle} onPress={() => { setSaSearch(''); setSaPicker(true) }}>
-                  <Text style={{ fontSize: 14, color: form.sa_employee_code ? '#1e293b' : '#94a3b8', flex: 1 }}>
-                    {form.sa_employee_code
-                      ? (employees.find(e => e.employee_code === form.sa_employee_code)?.employee_name ?? form.sa_employee_code)
-                      : `Select SA (${form.service_type ? getRequiredDept(form.service_type) : 'SERVICE'}${form.model && form.service_type && shouldApplyFuelFilter(form.service_type) ? ' + ' + inferFuelBucket(form.model) : ''})…`}
-                  </Text>
-                  <Text style={{ color: '#94a3b8' }}>▾</Text>
+                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('service_type'); setPickerSearch('') }}>
+                  <Text style={form.service_type ? s.selectText : s.selectPlaceholder}>{form.service_type || 'Select service type'}</Text>
+                  <Text style={s.chevron}>▼</Text>
                 </TouchableOpacity>
               </FormField>
 
-              {/* Owner Name */}
+              <FormField label={`SA Name *  (${filteredSAs.length} available)`}>
+                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('sa'); setPickerSearch('') }}>
+                  <Text style={form.sa_employee_code ? s.selectText : s.selectPlaceholder}>{getFormSALabel() || 'Select SA'}</Text>
+                  <Text style={s.chevron}>▼</Text>
+                </TouchableOpacity>
+              </FormField>
+
               <FormField label="Owner Name *">
-                <TextInput style={tfStyle} placeholder="Customer name" placeholderTextColor="#94a3b8"
-                  value={form.owner_name} onChangeText={t => setForm(p => ({ ...p, owner_name: t }))} />
+                <TextInput style={s.input}
+                  placeholder="Customer name"
+                  placeholderTextColor="#94a3b8"
+                  value={form.owner_name}
+                  onChangeText={t => setForm(p => ({ ...p, owner_name: t }))}
+                />
               </FormField>
 
-              {/* Owner Phone */}
-              <FormField label="Owner Phone * (10 digits)">
-                <TextInput style={tfStyle} placeholder="10-digit mobile" placeholderTextColor="#94a3b8"
-                  value={form.owner_phone} keyboardType="phone-pad" maxLength={10}
-                  onChangeText={t => setForm(p => ({ ...p, owner_phone: t.replace(/\D/g, '').slice(0, 10) }))} />
+              <FormField label="Owner Phone *">
+                <TextInput style={s.input}
+                  placeholder="10-digit mobile number"
+                  placeholderTextColor="#94a3b8"
+                  value={form.owner_phone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  onChangeText={t => setForm(p => ({ ...p, owner_phone: t.replace(/\D/g, '') }))}
+                />
               </FormField>
 
+              <FormField label="Source *">
+                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('source'); setPickerSearch('') }}>
+                  <Text style={form.source ? s.selectText : s.selectPlaceholder}>{form.source || 'Select source'}</Text>
+                  <Text style={s.chevron}>▼</Text>
+                </TouchableOpacity>
+              </FormField>
+
+              <FormField label="KM Reading">
+                <TextInput style={s.input}
+                  placeholder="e.g. 12500"
+                  placeholderTextColor="#94a3b8"
+                  value={form.km_reading}
+                  keyboardType="number-pad"
+                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/\D/g, '') }))}
+                />
+              </FormField>
+
+              <FormField label="Remark">
+                <TextInput style={[s.input, { height: 72, textAlignVertical: 'top' }]}
+                  placeholder="Optional note"
+                  placeholderTextColor="#94a3b8"
+                  value={form.remark}
+                  multiline
+                  onChangeText={t => setForm(p => ({ ...p, remark: t }))}
+                />
+              </FormField>
+
+              <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+                {saving
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={s.saveBtnText}>{editingId ? 'Update Entry' : 'Create Entry'}</Text>
+                }
+              </TouchableOpacity>
             </ScrollView>
-          </SafeAreaView>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
-      {/* ── Model Picker ── */}
-      <PickerModal visible={modelPicker} title="Select Model" onClose={() => setModelPicker(false)}
-        search={modelSearch} onSearch={setModelSearch}
-        items={modelOptions.filter(m => !modelSearch.trim() || m.toLowerCase().includes(modelSearch.toLowerCase()))}
-        renderItem={m => (
-          <TouchableOpacity key={m} onPress={() => { setForm(p => ({ ...p, model: m })); setModelPicker(false) }}
-            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center' }}>
-            {form.model === m && <Text style={{ color: '#2563eb', marginRight: 8, fontWeight: '800' }}>✓</Text>}
-            <Text style={{ fontSize: 15, color: '#1e293b', fontWeight: form.model === m ? '700' : '400' }}>{m}</Text>
-          </TouchableOpacity>
-        )} />
-
-      {/* ── Service Type Picker ── */}
-      <PickerModal visible={stPicker} title="Select Service Type" onClose={() => setStPicker(false)}
-        items={RECEPTION_SERVICE_TYPE_OPTIONS}
-        renderItem={st => (
-          <TouchableOpacity key={st} onPress={() => { setForm(p => ({ ...p, service_type: st })); setStPicker(false) }}
-            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {form.service_type === st && <Text style={{ color: '#2563eb', fontWeight: '800' }}>✓</Text>}
-            <View style={{ backgroundColor: stColor(st).bg, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: stColor(st).text }}>{abbr(st)}</Text>
-            </View>
-            <Text style={{ fontSize: 15, color: '#1e293b', flex: 1, fontWeight: form.service_type === st ? '700' : '400' }}>{st}</Text>
-          </TouchableOpacity>
-        )} />
-
-      {/* ── Source Picker ── */}
-      <PickerModal visible={sourcePicker} title="Select Source" onClose={() => setSourcePicker(false)}
-        items={SOURCE_OPTIONS}
-        renderItem={src => (
-          <TouchableOpacity key={src} onPress={() => { setForm(p => ({ ...p, source: src })); setSourcePicker(false) }}
-            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center' }}>
-            {form.source === src && <Text style={{ color: '#2563eb', marginRight: 8, fontWeight: '800' }}>✓</Text>}
-            <Text style={{ fontSize: 15, color: '#1e293b', fontWeight: form.source === src ? '700' : '400' }}>{src}</Text>
-          </TouchableOpacity>
-        )} />
-
-      {/* ── SA Picker ── */}
-      <PickerModal visible={saPicker} title="Select Service Advisor" onClose={() => setSaPicker(false)}
-        search={saSearch} onSearch={setSaSearch}
-        items={filteredSAs}
-        renderItem={emp => (
-          <TouchableOpacity key={emp.employee_code} onPress={() => { setForm(p => ({ ...p, sa_employee_code: emp.employee_code })); setSaPicker(false) }}
-            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {form.sa_employee_code === emp.employee_code && <Text style={{ color: '#2563eb', fontWeight: '800' }}>✓</Text>}
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, color: '#1e293b', fontWeight: form.sa_employee_code === emp.employee_code ? '700' : '400' }}>{emp.employee_name}</Text>
-              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{emp.employee_code} · {normalizeDept(emp.department)} · {getFuelTypeLabel(emp.fuel_type)}</Text>
-            </View>
-          </TouchableOpacity>
-        )} />
+      {/* ── Picker Modal ─────────────────────────────────────────────────── */}
+      <Modal visible={showPicker !== null} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0' }}>
+            <TextInput
+              style={{ flex: 1, fontSize: 15, backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
+              placeholder="Search..."
+              placeholderTextColor="#94a3b8"
+              value={pickerSearch}
+              onChangeText={setPickerSearch}
+              autoFocus
+            />
+            <TouchableOpacity onPress={() => { setShowPicker(null); setPickerSearch('') }} style={{ marginLeft: 12 }}>
+              <Text style={{ fontSize: 16, color: '#2563eb', fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={pickerItems()}
+            keyExtractor={item => item}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={{ padding: 16, borderBottomWidth: 1, borderColor: '#f1f5f9' }} onPress={() => onPickerSelect(item)}>
+                <Text style={{ fontSize: 15, color: '#1e293b' }}>{pickerLabel(item)}</Text>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 40 }}>No options found</Text>}
+          />
+        </SafeAreaView>
+      </Modal>
 
     </SafeAreaView>
   )
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ── Layout helper ─────────────────────────────────────────────────────────────
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <View style={{ gap: 6 }}>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>{label}</Text>
+    <View style={{ marginBottom: 14 }}>
+      <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569', marginBottom: 4 }}>{label}</Text>
       {children}
     </View>
   )
 }
 
-function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity onPress={onPress}
-      style={{ backgroundColor: active ? '#2563eb' : '#f1f5f9', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
-      <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : '#64748b' }}>{label}</Text>
-    </TouchableOpacity>
-  )
-}
-
-function PickerModal({ visible, title, onClose, search, onSearch, items, renderItem }: {
-  visible: boolean; title: string; onClose: () => void
-  search?: string; onSearch?: (s: string) => void
-  items: any[]; renderItem: (item: any) => JSX.Element
-}) {
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
-          <Text style={{ flex: 1, fontSize: 16, fontWeight: '800', color: '#1e293b' }}>{title}</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: '#64748b' }}>Done</Text>
-          </TouchableOpacity>
-        </View>
-        {onSearch && (
-          <View style={{ padding: 12 }}>
-            <TextInput placeholder="Search…" placeholderTextColor="#94a3b8"
-              value={search} onChangeText={onSearch}
-              style={{ backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, borderWidth: 1, borderColor: '#e2e8f0' }} />
-          </View>
-        )}
-        <FlatList
-          data={items}
-          keyExtractor={(_, i) => String(i)}
-          renderItem={({ item }) => { return renderItem(item) as JSX.Element }}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          keyboardShouldPersistTaps="handled" />
-      </SafeAreaView>
-    </Modal>
-  )
+// ── Styles ────────────────────────────────────────────────────────────────────
+const styles = {
+  root:               { flex: 1, backgroundColor: '#f8fafc' } as const,
+  header:             { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  headerTitle:        { fontSize: 18, fontWeight: '700' as const, color: '#1e293b' },
+  headerSub:          { fontSize: 12, color: '#64748b', marginTop: 2 },
+  addBtn:             { backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  addBtnText:         { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
+  toggleRow:          { flexDirection: 'row' as const, padding: 10, gap: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  toggleBtn:          { borderRadius: 6, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: '#f1f5f9' },
+  toggleBtnActive:    { backgroundColor: '#2563eb' },
+  toggleBtnText:      { fontSize: 13, fontWeight: '600' as const, color: '#64748b' },
+  toggleBtnTextActive:{ color: '#fff' },
+  searchRow:          { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff' },
+  searchInput:        { backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' },
+  filterRow:          { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#f1f5f9', maxHeight: 44 },
+  chip:               { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0', marginRight: 6, alignSelf: 'center' as const },
+  chipActive:         { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
+  chipText:           { fontSize: 12, fontWeight: '600' as const, color: '#64748b' },
+  chipTextActive:     { color: '#2563eb' },
+  card:               { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  cardHeader:         { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 8 },
+  regNo:              { fontSize: 16, fontWeight: '800' as const, color: '#1e293b', letterSpacing: 0.5 },
+  stChip:             { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  stChipText:         { fontSize: 11, fontWeight: '700' as const },
+  cardRow:            { flexDirection: 'row' as const, flexWrap: 'wrap' as const, marginBottom: 4 },
+  cardLabel:          { fontSize: 11, color: '#94a3b8', marginRight: 4, minWidth: 36 },
+  cardValue:          { fontSize: 12, color: '#334155', fontWeight: '500' as const, marginRight: 4 },
+  cardActions:        { flexDirection: 'row' as const, marginTop: 10, gap: 8 },
+  editBtn:            { flex: 1, backgroundColor: '#eff6ff', borderRadius: 6, paddingVertical: 8, alignItems: 'center' as const },
+  editBtnText:        { fontSize: 13, fontWeight: '600' as const, color: '#2563eb' },
+  delBtn:             { flex: 1, backgroundColor: '#fef2f2', borderRadius: 6, paddingVertical: 8, alignItems: 'center' as const },
+  delBtnText:         { fontSize: 13, fontWeight: '600' as const, color: '#dc2626' },
+  empty:              { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingTop: 60 },
+  emptyIcon:          { fontSize: 48, marginBottom: 12 },
+  emptyTitle:         { fontSize: 16, fontWeight: '700' as const, color: '#1e293b' },
+  emptySub:           { fontSize: 13, color: '#94a3b8', marginTop: 4 },
+  modalHeader:        { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 16 },
+  modalTitle:         { fontSize: 18, fontWeight: '700' as const, color: '#1e293b' },
+  errorBox:           { backgroundColor: '#fef2f2', borderRadius: 8, padding: 12, marginBottom: 12 },
+  errorText:          { color: '#dc2626', fontSize: 13 },
+  warningBox:         { backgroundColor: '#fff7ed', borderRadius: 8, padding: 10, marginBottom: 12 },
+  warningText:        { color: '#c2410c', fontSize: 13 },
+  input:              { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1e293b' },
+  select:             { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
+  selectText:         { fontSize: 14, color: '#1e293b' },
+  selectPlaceholder:  { fontSize: 14, color: '#94a3b8' },
+  chevron:            { fontSize: 10, color: '#94a3b8' },
+  saveBtn:            { backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 14, alignItems: 'center' as const, marginTop: 8 },
+  saveBtnText:        { color: '#fff', fontWeight: '700' as const, fontSize: 16 },
 }
