@@ -22,6 +22,7 @@ import { getDealerContext } from '../../../lib/api/auth'
 import { createPanelPhoto, deletePanelPhoto } from '../../../lib/api/photos'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 import { supabase } from '../../../lib/supabase'
+import { Icon } from '../../../components/ui'
 
 type Params = {
   jobCardId?: string | string[]
@@ -177,6 +178,7 @@ export default function CapturePhotoScreen() {
         ...s,
         gpsLat: location.lat,
         gpsLng: location.lng,
+        gpsCity: (location as any).city ?? null,
         gpsAccuracy: location.accuracy,
         capturedAt: new Date().toISOString(),
         gpsProcessing: false,
@@ -307,26 +309,31 @@ export default function CapturePhotoScreen() {
     }
   }
 
-  const stageLabel = stage.replace('-', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+  const stageLabel = stage.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: `${mode === 'replace' ? 'Replace' : 'Add'} Photo`,
+          title: 'Add Photo',
           headerShown: true,
         }}
       />
 
-      <View className="flex-1 bg-gray-50">
+      <View className="flex-1 bg-[#e9e7e2]">
         <ScrollView contentContainerStyle={{ padding: 16, flexGrow: 1 }}>
+          <Text className="text-[13px] uppercase tracking-[1.5px] text-[#7a7d89] font-semibold mb-1">
+            {`${panelName || 'Panel'} · ${stageLabel}`}
+          </Text>
+          <Text className="text-[34px] leading-[38px] font-bold text-[#1f2430] mb-4">Add Photo</Text>
+
           {/* Info card */}
-          <View className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <Text className="text-sm text-blue-900 font-semibold">
-              {panelName} • {stageLabel}
-            </Text>
-            <Text className="text-xs text-blue-700 mt-1">
-              GPS stamp will be automatically added to the photo before upload.
+          <View className="bg-[#f5ead6] border border-[#e7cfa3] rounded-3xl p-4 mb-5 flex-row">
+            <View className="w-8 h-8 rounded-full border border-[#cc7a1f] items-center justify-center mr-3">
+              <Icon name="info" size={16} color="#cc7a1f" />
+            </View>
+            <Text className="text-[18px] leading-[29px] text-[#495063] flex-1">
+              A <Text className="font-bold">GPS location stamp</Text> is added automatically before upload. Shoot in open sky for an accurate lock.
             </Text>
           </View>
 
@@ -335,40 +342,64 @@ export default function CapturePhotoScreen() {
             <View className="mb-6">
               <Image
                 source={{ uri: state.imageUri }}
-                className="w-full h-64 rounded-lg bg-gray-200"
+                className="w-full h-[360px] rounded-2xl bg-[#f5f3ef]"
                 resizeMode="cover"
               />
               <TouchableOpacity
-                className="mt-3 border border-gray-300 rounded-lg py-3 items-center"
+                className="mt-4 border border-[#cbc4b8] rounded-3xl py-4 items-center bg-white"
                 onPress={() => setState((s) => ({ ...s, imageUri: null }))}
               >
-                <Text className="text-gray-700 font-semibold">Change Photo</Text>
+                <View className="flex-row items-center">
+                  <Icon name="rotate-cw" size={20} color="#1f2430" />
+                  <Text className="text-[#1f2430] font-semibold text-[34px] ml-3">Retake photo</Text>
+                </View>
               </TouchableOpacity>
             </View>
           ) : (
             <View className="mb-6 gap-3">
               <TouchableOpacity
                 disabled={cameraPermission === false}
-                className="bg-blue-600 rounded-lg py-4 items-center"
+                className="bg-[#3359d4] rounded-2xl py-4 items-center"
                 onPress={() => capturePhoto('camera')}
               >
-                <Text className="text-white font-semibold">📷 Take Photo</Text>
+                <View className="flex-row items-center">
+                  <Icon name="camera" size={20} color="#ffffff" />
+                  <Text className="text-white font-semibold text-[22px] ml-2">Take photo</Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
                 disabled={libraryPermission === false}
-                className="bg-gray-600 rounded-lg py-4 items-center"
+                className="bg-white border border-[#cbc4b8] rounded-2xl py-4 items-center"
                 onPress={() => capturePhoto('library')}
               >
-                <Text className="text-white font-semibold">🖼️ Choose from Gallery</Text>
+                <View className="flex-row items-center">
+                  <Icon name="image" size={20} color="#1f2430" />
+                  <Text className="text-[#1f2430] font-semibold text-[22px] ml-2">Choose from gallery</Text>
+                </View>
               </TouchableOpacity>
             </View>
           )}
 
           {/* GPS Status */}
           {state.imageUri && (
-            <View className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
-              <Text className="text-sm font-semibold text-gray-900 mb-3">GPS Information</Text>
+            <View className="bg-white border border-[#d8d2c6] rounded-3xl p-4 mb-6">
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <View className="w-14 h-14 rounded-2xl bg-[#dcefe5] items-center justify-center">
+                    <Icon name="map-pin" size={24} color="#1f9466" />
+                  </View>
+                  <View className="ml-3">
+                    <Text className="text-[22px] font-bold text-[#1f2430]">GPS location</Text>
+                    <Text className="text-[22px] font-semibold text-[#1f9466]">
+                      {state.gpsLat !== null && state.gpsLng !== null ? 'Locked' : 'Searching...'}
+                    </Text>
+                  </View>
+                </View>
+                {state.gpsLat !== null && state.gpsLng !== null ? (
+                  <Icon name="check" size={26} color="#1f9466" />
+                ) : null}
+              </View>
 
               {state.gpsProcessing ? (
                 <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex-row items-center">
@@ -380,28 +411,23 @@ export default function CapturePhotoScreen() {
                 </View>
               ) : state.gpsLat !== null && state.gpsLng !== null ? (
                 <>
-                  <View className="space-y-2">
-                    <View className="flex-row justify-between">
-                      <Text className="text-xs text-gray-600">Latitude:</Text>
-                      <Text className="text-xs font-mono text-gray-900">
-                        {state.gpsLat.toFixed(6)}°
-                      </Text>
+                  <View className="flex-row flex-wrap justify-between">
+                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3 mb-2">
+                      <Text className="text-[#7a7d89] text-[12px] uppercase">Latitude</Text>
+                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">{state.gpsLat.toFixed(6)}°</Text>
                     </View>
-                    <View className="flex-row justify-between">
-                      <Text className="text-xs text-gray-600">Longitude:</Text>
-                      <Text className="text-xs font-mono text-gray-900">
-                        {state.gpsLng.toFixed(6)}°
-                      </Text>
+                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3 mb-2">
+                      <Text className="text-[#7a7d89] text-[12px] uppercase">Longitude</Text>
+                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">{state.gpsLng.toFixed(6)}°</Text>
                     </View>
-                    {state.gpsAccuracy && (
-                      <View className="flex-row justify-between">
-                        <Text className="text-xs text-gray-600">Accuracy:</Text>
-                        <Text className="text-xs text-gray-900">±{state.gpsAccuracy.toFixed(0)}m</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View className="border-t border-gray-200 mt-3 pt-3">
-                    <Text className="text-xs text-green-700 font-semibold">GPS location added successfully.</Text>
+                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3">
+                      <Text className="text-[#7a7d89] text-[12px] uppercase">Accuracy</Text>
+                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">±{(state.gpsAccuracy ?? 0).toFixed(0)} m</Text>
+                    </View>
+                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3">
+                      <Text className="text-[#7a7d89] text-[12px] uppercase">City</Text>
+                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">{state.gpsCity || '--'}</Text>
+                    </View>
                   </View>
                 </>
               ) : (
@@ -426,7 +452,7 @@ export default function CapturePhotoScreen() {
             <View className="gap-3 mt-auto">
               <TouchableOpacity
                 disabled={state.uploading || state.gpsProcessing || state.gpsLat === null || state.gpsLng === null}
-                className={`${state.uploading || state.gpsProcessing || state.gpsLat === null || state.gpsLng === null ? 'bg-gray-400' : 'bg-green-600'} rounded-lg py-4 items-center`}
+                className={`${state.uploading || state.gpsProcessing || state.gpsLat === null || state.gpsLng === null ? 'bg-gray-400' : 'bg-[#3359d4]'} rounded-2xl py-5 items-center mt-2`}
                 onPress={handleUpload}
               >
                 {state.uploading ? (
@@ -434,19 +460,22 @@ export default function CapturePhotoScreen() {
                 ) : state.gpsProcessing || state.gpsLat === null || state.gpsLng === null ? (
                   <View className="flex-row items-center">
                     <ActivityIndicator color="white" size="small" />
-                    <Text className="text-white font-semibold ml-2">Processing photo with GPS...</Text>
+                    <Text className="text-white font-semibold text-[18px] ml-2">Processing photo with GPS...</Text>
                   </View>
                 ) : (
-                  <Text className="text-white font-semibold">Upload Photo</Text>
+                  <View className="flex-row items-center">
+                    <Icon name="arrow-up" size={20} color="#ffffff" />
+                    <Text className="text-white font-semibold text-[22px] ml-2">Upload photo</Text>
+                  </View>
                 )}
               </TouchableOpacity>
 
               <TouchableOpacity
                 disabled={state.uploading}
-                className="border border-gray-300 rounded-lg py-4 items-center"
+                className="border border-[#cbc4b8] rounded-2xl py-4 items-center bg-white"
                 onPress={() => router.back()}
               >
-                <Text className="text-gray-700 font-semibold">Cancel</Text>
+                <Text className="text-[#495063] font-semibold text-[22px]">Cancel</Text>
               </TouchableOpacity>
             </View>
           ) : null}

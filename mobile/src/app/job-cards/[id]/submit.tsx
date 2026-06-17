@@ -383,8 +383,8 @@ export default function SubmitStageScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Submit Stage' }} />
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+      <Stack.Screen options={{ title: 'Submit claim' }} />
+      <ScrollView className="flex-1 bg-amber-50" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
         <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="submit" />
 
         {loading ? (
@@ -408,15 +408,25 @@ export default function SubmitStageScreen() {
               </View>
             ) : null}
 
-            <View className="bg-slate-900 rounded-2xl px-4 py-4 mb-3">
+            <View className="bg-slate-900 rounded-2xl px-4 py-4 mb-3 border border-slate-700">
               <View className="flex-row items-center justify-between">
                 <View>
-                  <Text className="text-[11px] uppercase tracking-widest text-slate-300">Submit Stage</Text>
+                  <Text className="text-[11px] uppercase tracking-widest text-slate-300">Submit claim</Text>
                   <Text className="text-xl font-bold text-white mt-1">{jobCard?.jc_number ?? '-'}</Text>
                   <Text className="text-sm text-slate-200 mt-1">Reg: {jobCard?.reg_number ?? '-'}</Text>
                 </View>
                 <View className="bg-amber-300 rounded-full px-3 py-1">
                   <Text className="text-[11px] font-semibold text-amber-900">Awaiting Approval</Text>
+                </View>
+              </View>
+              <View className="flex-row gap-2 mt-3">
+                <View className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-2">
+                  <Text className="text-[10px] uppercase text-slate-300">Pre-Submit</Text>
+                  <Text className="text-sm font-bold text-white mt-1">PPT + Excel + Send</Text>
+                </View>
+                <View className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-2">
+                  <Text className="text-[10px] uppercase text-slate-300">Post-Repair</Text>
+                  <Text className="text-sm font-bold text-white mt-1">PPT + Final Submit</Text>
                 </View>
               </View>
               <View className="mt-4 rounded-xl bg-slate-800 px-3 py-3">
@@ -430,7 +440,7 @@ export default function SubmitStageScreen() {
 
             <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
               <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Submission Checklist</Text>
+                <Text className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Checklist</Text>
                 <Text className="text-xs font-bold text-slate-700">{[prePptDoc, excelDoc, walkaroundDoc, postPptDoc].filter(Boolean).length}/4</Text>
               </View>
               <View className="gap-y-2">
@@ -455,13 +465,14 @@ export default function SubmitStageScreen() {
             </View>
 
             <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
-              <Text className="text-base font-semibold text-slate-900">Pre-Submit Actions</Text>
-              <Text className="text-xs text-slate-500 mt-1">Generate files first, then send claim email to set job as submitted.</Text>
+              <Text className="text-base font-semibold text-slate-900">Pre-Submit</Text>
+              <Text className="text-xs text-slate-500 mt-1">Generate files first, then compose and send claim email.</Text>
 
               <View className="mt-3 gap-y-2">
                 <ActionRow
                   title="Generate Pre-Repair PPT"
                   subtitle="Create presentation from pre-repair photos"
+                  statusText={prePptDoc ? 'Done' : 'Required'}
                   icon="image"
                   variant="primary"
                   enabled={!busy}
@@ -472,6 +483,7 @@ export default function SubmitStageScreen() {
                 <ActionRow
                   title="Export Estimate Excel"
                   subtitle="Generate spreadsheet from estimate rows"
+                  statusText={excelDoc ? 'Done' : 'Required'}
                   icon="file-text"
                   variant="primary"
                   enabled={!busy}
@@ -482,6 +494,7 @@ export default function SubmitStageScreen() {
                 <ActionRow
                   title="Compose & Send (Set Submitted)"
                   subtitle={composeReady ? 'Send claim email' : 'Awaiting uploads'}
+                  statusText={composeReady ? 'Ready' : 'Blocked'}
                   icon="send"
                   variant={composeReady ? 'success' : 'secondary'}
                   enabled={composeReady && !busy}
@@ -495,13 +508,14 @@ export default function SubmitStageScreen() {
             </View>
 
             <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3">
-              <Text className="text-base font-semibold text-slate-900">Final Submit</Text>
-              <Text className="text-xs text-slate-500 mt-1">Post-repair file generation and final warranty submission.</Text>
+              <Text className="text-base font-semibold text-slate-900">Post-Repair</Text>
+              <Text className="text-xs text-slate-500 mt-1">Generate post-repair deck and finish final submission.</Text>
 
               <View className="mt-3 gap-y-2">
                 <ActionRow
                   title="Generate Post-Repair PPT"
                   subtitle={postRepairPptReady ? 'Create after photos presentation' : 'Missing repair photos'}
+                  statusText={postPptDoc ? 'Done' : (postRepairPptReady ? 'Ready' : 'Blocked')}
                   icon="camera"
                   variant={postRepairPptReady ? 'primary' : 'secondary'}
                   enabled={postRepairPptReady && !busy}
@@ -512,6 +526,7 @@ export default function SubmitStageScreen() {
                 <ActionRow
                   title="Submit Claim (Complete Job)"
                   subtitle={submitReady ? 'Final warranty submission' : 'Awaiting Post-Repair PPT'}
+                  statusText={submitReady ? 'Ready' : 'Blocked'}
                   icon="check-circle"
                   variant={submitReady ? 'success' : 'secondary'}
                   enabled={submitReady && !busy}

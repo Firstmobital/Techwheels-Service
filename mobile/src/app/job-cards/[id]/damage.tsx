@@ -204,6 +204,16 @@ export default function DamageStageScreen() {
     )
   }, [selectedPanelRows])
 
+  const missingPreRepairPanels = useMemo(
+    () => selectedPanelRows.filter((panel) => panel.preRepairCount === 0).map((panel) => panel.panelName),
+    [selectedPanelRows],
+  )
+
+  const allSelectedPanelsHavePreRepair = useMemo(
+    () => selectedPanelRows.length > 0 && missingPreRepairPanels.length === 0,
+    [missingPreRepairPanels.length, selectedPanelRows.length],
+  )
+
   const panelPhotoCountByName = useMemo(() => {
     const map = new Map<string, number>()
     for (const row of panelRows) {
@@ -541,8 +551,8 @@ export default function DamageStageScreen() {
 
             <View style={{ marginHorizontal: 16, marginTop: 14 }}>
               <TouchableOpacity
-                style={{ borderRadius: 12, backgroundColor: selectedPanels.length === 0 || totals.pre === 0 ? '#a8b6f1' : '#2a4cd0', paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 7 }}
-                disabled={selectedPanels.length === 0 || totals.pre === 0}
+                style={{ borderRadius: 12, backgroundColor: selectedPanels.length === 0 || !allSelectedPanelsHavePreRepair ? '#a8b6f1' : '#2a4cd0', paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 7 }}
+                disabled={selectedPanels.length === 0 || !allSelectedPanelsHavePreRepair}
                 onPress={() => {
                   if (!jobCardId) return
                   
@@ -552,8 +562,11 @@ export default function DamageStageScreen() {
                     return
                   }
                   
-                  if (totals.pre === 0) {
-                    Alert.alert('Pre-Repair Photos Required', 'All selected panels must have at least one pre-repair photo before proceeding to Estimate.')
+                  if (!allSelectedPanelsHavePreRepair) {
+                    const preview = missingPreRepairPanels.slice(0, 3).join(', ')
+                    const suffix = missingPreRepairPanels.length > 3 ? '...' : ''
+                    const details = preview ? ` Missing: ${preview}${suffix}` : ''
+                    Alert.alert('Pre-Repair Photos Required', `All selected panels must have at least one pre-repair photo before proceeding to Estimate.${details}`)
                     return
                   }
                   

@@ -66,7 +66,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | Item ID | Program Workstream | Source Plan(s) | Status | Owner | Next Action |
 |---|---|---|---|---|---|
 | M10-001 | Establish canonical authority and cross-links | MOBILE-000, MOBILE-001, MOBILE-010 | Done | Mobile Team | Keep links current when new plans are added |
-| M10-002 | AutoDoc mobile screen parity (full flow audit) | MOBILE-009 | In Progress | Mobile Team | Live-test fixes applied for BP-02/BP-04 (fetch false-error removal, stronger draft persistence, damage focus-refresh for photo counts). Next: fresh sign-in + re-test persistence/counter updates, then close evidence. |
+| M10-002 | AutoDoc mobile screen parity (full flow audit) | MOBILE-009 | In Progress | Mobile Team | BP-05/BP-06/BP-07/BP-08 visual redesign parity pass completed (Add Photo, Damage Gallery, Estimate editor, Submit claim). Next: Expo Go parity validation and evidence capture for BP-02/BP-04/BP-05/BP-06/BP-07/BP-08 in one run. |
 | M10-003 | Platform home hardening phase | MOBILE-007 | In Progress | Mobile Team | Execute pending P4 tasks and verify end-to-end |
 | M10-004 | Processing-state UX rollout | MOBILE-008 | Not Started | Mobile Team | Start Sprint 1 critical items (M8-001/2/6/11) |
 | M10-005 | GPS stamp parity closure | MOBILE-005 | In Progress | Mobile Team | Complete remaining phases and QA gates |
@@ -85,7 +85,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 2. Step 1 target outcome: complete BP-01 baseline gap log with fresh evidence (iOS, Android, stage-strip crop).
 3. Step 2: BP-02 intake business-logic parity update - Completed in code, pending device validation evidence.
 4. Step 3: BP-02/BP-04 live-test defect fixes - Completed in code (fetch sync fallback, Next persistence hardening, damage focus refresh).
-5. Next step: sign in again (refresh-token reset), re-test fetch/next/photo-count flow, then resume BP-01 evidence closure.
+5. Next step: sign in again (refresh-token reset), re-test fetch/next/photo-count flow plus BP-05/BP-06/BP-07/BP-08 redesigned UI, then resume BP-01 evidence closure.
 
 ---
 
@@ -139,4 +139,4 @@ Program completion requires all to be true:
 
 ---
 
-Last Updated: 2026-06-17 (BP-02/BP-04 live-test defect fixes applied; auth reset + device re-test pending)
+Last Updated: 2026-06-17 (BP-05/BP-06/BP-07/BP-08 redesign parity pass applied; unified device re-test pending for active BP flow)
