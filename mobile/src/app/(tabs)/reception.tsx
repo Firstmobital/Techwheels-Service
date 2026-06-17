@@ -1,13 +1,27 @@
 /**
  * mobile/src/app/(tabs)/reception.tsx
- * Mobile mirror of the web ReceptionPage
- * Read-only list + today stats + Add Entry form
+ * Full-parity mobile mirror of the web ReceptionPage
+ * - Uses employee_master (same as web)
+ * - Date-range filter (This Month / Today toggle)
+ * - Location + Portal (fuel type) + Service Type filters
+ * - RBAC: Owner Name, Owner Phone, SA Name required
+ * - Auto-creates bodyshop_repair_cards for Accident entries
+ * - Exact validation logic as web
  */
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  View, Text, ScrollView, TextInput, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Modal, FlatList,
-  Alert, KeyboardAvoidingView, Platform,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -27,7 +41,7 @@ const SERVICE_TYPE_ABB: Record<string, string> = {
   'running repairs': 'RR', 'first free service': 'FFS', 'second free service': 'SFS',
   'third free service': 'TFS', 'paid service': 'PS', 'accident': 'ACC',
   'rusting': 'RST', 'pdi': 'PDI', 'campaign': 'CMP', 'e breakdown': 'EBD',
-  'updation': 'UPD',
+  'updation': 'UPD', 'null': 'NULL',
 }
 
 const ST_COLOR: Record<string, { bg: string; text: string }> = {
@@ -36,7 +50,7 @@ const ST_COLOR: Record<string, { bg: string; text: string }> = {
   'PS':  { bg: '#faf5ff', text: '#7c3aed' }, 'ACC': { bg: '#fef2f2', text: '#dc2626' },
   'RST': { bg: '#fff7ed', text: '#c2410c' }, 'PDI': { bg: '#f0f9ff', text: '#0284c7' },
   'CMP': { bg: '#fffbeb', text: '#b45309' }, 'EBD': { bg: '#fdf4ff', text: '#a21caf' },
-  'UPD': { bg: '#f8fafc', text: '#475569' },
+  'UPD': { bg: '#f8fafc', text: '#475569' }, 'NULL': { bg: '#f1f5f9', text: '#94a3b8' },
 }
 
 const DEFAULT_MODELS = [
@@ -44,6 +58,10 @@ const DEFAULT_MODELS = [
   'Tigor', 'Tigor EV', 'Altroz', 'Harrier', 'Harrier EV', 'Safari',
   'Curvv', 'Curvv EV', 'Hexa', 'Sierra', 'Xpres T Ev',
 ]
+
+const UNKNOWN_FUEL_TYPE = 'Unknown'
+const UNKNOWN_LOCATION = 'Unknown'
+const UNKNOWN_SERVICE_TYPE = 'Null'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ReceptionEntry {
@@ -61,6 +79,7 @@ interface ReceptionEntry {
   branch: string | null
   fuel_type: string | null
   km_reading: number | null
+  created_by: string
   created_at: string
 }
 
@@ -103,19 +122,61 @@ function toISTDate(d: Date) {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+function fmtDateTime(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleString('en-IN', {
+    day: '2-digit', month: 'short',
+    hour: '2-digit', minute: '2-digit',
+    hour12: true, timeZone: 'Asia/Kolkata',
+  })
 }
 
-function inferFuelType(model: string): 'EV' | 'PV' {
+function getLocationLabel(value: string | null | undefined): string {
+  return String(value ?? '').trim() || UNKNOWN_LOCATION
+}
+
+function getFuelTypeLabel(value: string | null | undefined): string {
+  return String(value ?? '').trim() || UNKNOWN_FUEL_TYPE
+}
+
+function getServiceTypeLabel(value: string | null | undefined): string {
+  const n = String(value ?? '').trim()
+  if (!n || n.toLowerCase() === 'null') return UNKNOWN_SERVICE_TYPE
+  return n
+}
+
+function normalizeDept(value: string | null | undefined): string {
+  const n = String(value ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
+  return n === 'BODYSHOP' ? 'BODY SHOP' : n
+}
+
+function getRequiredDept(serviceType: string): 'SERVICE' | 'BODY SHOP' | 'PDI' {
+  const s = serviceType.toLowerCase().trim()
+  if (s === 'accident') return 'BODY SHOP'
+  if (s === 'pdi') return 'PDI'
+  return 'SERVICE'
+}
+
+function shouldApplyFuelFilter(serviceType: string): boolean {
+  return serviceType.toLowerCase().trim() !== 'accident'
+}
+
+function inferFuelBucket(model: string): 'EV' | 'PV' {
   return /EV/i.test(model) ? 'EV' : 'PV'
 }
 
-function getRequiredDept(serviceType: string): string {
-  const st = serviceType.toLowerCase().trim()
-  if (st === 'accident' || st === 'rusting') return 'BODY SHOP'
-  if (st === 'pdi') return 'PDI'
-  return 'SERVICE'
+function normFuelBucket(value: string | null | undefined): 'EV' | 'PV' | '' {
+  const n = String(value ?? '').trim().toUpperCase()
+  if (!n) return ''
+  return n.includes('EV') ? 'EV' : 'PV'
+}
+
+function currentMonthIST(): { from: string; to: string } {
+  const now = new Date()
+  const y = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 4)
+  const m = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(5, 7)
+  const lastDay = new Date(Number(y), Number(m), 0).getDate()
+  return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, '0')}` }
 }
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
@@ -128,17 +189,23 @@ export default function ReceptionScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
-  // Filters
+  // Date/list mode
+  const [listMode, setListMode] = useState<'today' | 'month'>('today')
+
+  // Filter state
   const [search, setSearch] = useState('')
-  const [filterST, setFilterST] = useState('all')
-  const [listMode, setListMode] = useState<'today' | 'all'>('today')
+  const [selectedLocation, setSelectedLocation] = useState<string>('all')
+  const [selectedFuelType, setSelectedFuelType] = useState<string>('all')
+  const [selectedServiceType, setSelectedServiceType] = useState<string>('all')
 
   // Form modal
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   // Picker modals
   const [modelPicker, setModelPicker] = useState(false)
@@ -155,16 +222,18 @@ export default function ReceptionScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true)
     setError(null)
 
-    const today = toISTDate(new Date())
-    const monthStart = today.slice(0, 8) + '01'
+    const { from, to } = currentMonthIST()
 
     const [entriesRes, empRes, modelsRes] = await Promise.all([
-      supabase.from('service_reception_entries')
-        .select('id,reg_number,jc_number,model,service_type,sa_name,sa_display_name,sa_employee_code,owner_name,owner_phone,source,branch,fuel_type,km_reading,created_at')
-        .gte('created_at', `${monthStart}T00:00:00+05:30`)
+      supabase
+        .from('service_reception_entries')
+        .select('id,reg_number,jc_number,model,service_type,sa_name,sa_display_name,sa_employee_code,owner_name,owner_phone,source,branch,fuel_type,km_reading,created_by,created_at')
+        .gte('created_at', `${from}T00:00:00+05:30`)
+        .lte('created_at', `${to}T23:59:59+05:30`)
         .order('created_at', { ascending: false })
         .limit(500),
-      supabase.from('employees')
+      supabase
+        .from('employee_master')
         .select('employee_code,employee_name,department,fuel_type')
         .eq('is_active', true)
         .order('employee_name'),
@@ -174,42 +243,102 @@ export default function ReceptionScreen() {
     if (entriesRes.error) setError(entriesRes.error.message)
     else setEntries((entriesRes.data ?? []) as ReceptionEntry[])
 
-    if (empRes.data) setEmployees(empRes.data as Employee[])
+    if (empRes.data && empRes.data.length > 0)
+      setEmployees(empRes.data as Employee[])
 
-    if (modelsRes.data && modelsRes.data.length > 0) {
+    if (modelsRes.data && modelsRes.data.length > 0)
       setModelOptions(modelsRes.data.map((r: any) => r.model_name).filter(Boolean))
-    }
 
     setLoading(false); setRefreshing(false)
   }
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  // ── Derived / filtered entries ───────────────────────────────────────────────
   const todayStr = useMemo(() => toISTDate(new Date()), [])
 
   const todayEntries = useMemo(() =>
     entries.filter(e => toISTDate(new Date(e.created_at)) === todayStr),
     [entries, todayStr])
 
-  const baseEntries = listMode === 'today' ? todayEntries : entries
+  // Employee fuel type lookup maps (same as web)
+  const empFuelByCode = useMemo(() =>
+    new Map(employees.map(e => [String(e.employee_code ?? '').trim().toUpperCase(), getFuelTypeLabel(e.fuel_type)])),
+    [employees])
 
+  const empFuelByName = useMemo(() =>
+    new Map(employees.map(e => [String(e.employee_name ?? '').trim().toLowerCase(), getFuelTypeLabel(e.fuel_type)])),
+    [employees])
+
+  function getEntryFuelType(entry: ReceptionEntry): string {
+    const raw = String(entry.fuel_type ?? '').trim()
+    if (raw) return raw
+    const byCode = empFuelByCode.get(String(entry.sa_employee_code ?? '').trim().toUpperCase())
+    if (byCode) return byCode
+    const byName = empFuelByName.get(String(entry.sa_name ?? '').trim().toLowerCase())
+    if (byName) return byName
+    return UNKNOWN_FUEL_TYPE
+  }
+
+  // Base entries depend on list mode
+  const listModeEntries = useMemo(() =>
+    listMode === 'today' ? todayEntries : entries,
+    [listMode, todayEntries, entries])
+
+  // Location filter
+  const locationOptions = useMemo(() => {
+    const vals = Array.from(new Set(listModeEntries.map(e => getLocationLabel(e.branch))))
+    return vals.sort((a, b) => a.localeCompare(b))
+  }, [listModeEntries])
+
+  const locationFiltered = useMemo(() => {
+    if (selectedLocation === 'all') return listModeEntries
+    return listModeEntries.filter(e => getLocationLabel(e.branch) === selectedLocation)
+  }, [listModeEntries, selectedLocation])
+
+  // Fuel (Portal) filter
+  const fuelTypeOptions = useMemo(() => {
+    const vals = Array.from(new Set(locationFiltered.map(e => getEntryFuelType(e))))
+    return vals.sort((a, b) => a.localeCompare(b))
+  }, [locationFiltered, empFuelByCode, empFuelByName])
+
+  const fuelFiltered = useMemo(() => {
+    if (selectedFuelType === 'all') return locationFiltered
+    return locationFiltered.filter(e => getEntryFuelType(e) === selectedFuelType)
+  }, [locationFiltered, selectedFuelType, empFuelByCode, empFuelByName])
+
+  // Service type counts
+  const serviceTypeCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    fuelFiltered.forEach(e => {
+      const label = getServiceTypeLabel(e.service_type)
+      counts.set(label, (counts.get(label) ?? 0) + 1)
+    })
+    return counts
+  }, [fuelFiltered])
+
+  const serviceTypeOptions = useMemo(() =>
+    Array.from(serviceTypeCounts.keys()).sort((a, b) => a.localeCompare(b)),
+    [serviceTypeCounts])
+
+  const serviceTypeFiltered = useMemo(() => {
+    if (selectedServiceType === 'all') return fuelFiltered
+    return fuelFiltered.filter(e => getServiceTypeLabel(e.service_type) === selectedServiceType)
+  }, [fuelFiltered, selectedServiceType])
+
+  // Search
   const filtered = useMemo(() => {
-    let rows = baseEntries
-    if (filterST !== 'all') rows = rows.filter(e => abbr(e.service_type) === filterST)
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      rows = rows.filter(e =>
-        (e.reg_number ?? '').toLowerCase().includes(q) ||
-        (e.jc_number ?? '').toLowerCase().includes(q) ||
-        (e.owner_name ?? '').toLowerCase().includes(q) ||
-        (e.sa_name ?? '').toLowerCase().includes(q) ||
-        (e.model ?? '').toLowerCase().includes(q)
-      )
-    }
-    return rows
-  }, [baseEntries, filterST, search])
+    if (!search.trim()) return serviceTypeFiltered
+    const q = search.trim().toLowerCase()
+    return serviceTypeFiltered.filter(e =>
+      (e.reg_number ?? '').toLowerCase().includes(q) ||
+      (e.jc_number ?? '').toLowerCase().includes(q) ||
+      (e.owner_name ?? '').toLowerCase().includes(q) ||
+      (e.sa_name ?? '').toLowerCase().includes(q) ||
+      (e.model ?? '').toLowerCase().includes(q)
+    )
+  }, [serviceTypeFiltered, search])
 
-  // Stats for today
-  const stats = useMemo(() => {
+  // Today stats
+  const todayStats = useMemo(() => {
     const counts: Record<string, number> = {}
     todayEntries.forEach(e => {
       const k = abbr(e.service_type)
@@ -218,19 +347,18 @@ export default function ReceptionScreen() {
     return counts
   }, [todayEntries])
 
-  // Filtered SA options based on form
+  // ── SA options filtered by dept+fuel (exact as web) ─────────────────────────
   const filteredSAs = useMemo(() => {
     const reqDept = form.service_type ? getRequiredDept(form.service_type) : 'SERVICE'
-    const reqFuel = form.model ? inferFuelType(form.model) : null
-    const useBodyShop = reqDept === 'BODY SHOP'
+    const useFuel = form.service_type ? shouldApplyFuelFilter(form.service_type) : true
+    const reqFuel = form.model ? inferFuelBucket(form.model) : null
 
     return employees.filter(e => {
-      const dept = (e.department ?? '').toUpperCase().replace('BODYSHOP', 'BODY SHOP').trim()
+      const dept = normalizeDept(e.department)
       if (dept !== reqDept) return false
-      if (useBodyShop) return true // Accident: no fuel filter
+      if (!useFuel) return true
       if (!reqFuel) return true
-      const ef = (e.fuel_type ?? '').trim().toUpperCase()
-      return ef === reqFuel || ef === 'PV' && reqFuel === 'PV' || ef === 'EV' && reqFuel === 'EV'
+      return normFuelBucket(e.fuel_type) === reqFuel
     }).filter(e => {
       if (!saSearch.trim()) return true
       const q = saSearch.toLowerCase()
@@ -238,10 +366,51 @@ export default function ReceptionScreen() {
     })
   }, [employees, form.service_type, form.model, saSearch])
 
+  const hasSelectedSAInOptions = useMemo(() => {
+    const code = form.sa_employee_code.trim().toUpperCase()
+    if (!code) return false
+    return filteredSAs.some(e => e.employee_code.trim().toUpperCase() === code)
+  }, [form.sa_employee_code, filteredSAs])
+
+  // Reset SA when it falls outside filtered options
+  useEffect(() => {
+    if (editingId !== null) return
+    if (!form.sa_employee_code) return
+    if (hasSelectedSAInOptions) return
+    setForm(p => ({ ...p, sa_employee_code: '' }))
+  }, [editingId, form.sa_employee_code, hasSelectedSAInOptions])
+
+  // ── Open form helpers ────────────────────────────────────────────────────────
+  function openNew() {
+    setForm(EMPTY_FORM); setEditingId(null); setNotice(null); setError(null); setShowForm(true)
+  }
+
+  function openEdit(entry: ReceptionEntry) {
+    const byCode = employees.find(e => e.employee_code.trim().toUpperCase() === String(entry.sa_employee_code ?? '').trim().toUpperCase())
+    const byName = employees.find(e => e.employee_name.trim().toLowerCase() === String(entry.sa_name ?? '').trim().toLowerCase())
+    const resolvedCode = byCode?.employee_code ?? byName?.employee_code ?? entry.sa_employee_code ?? ''
+    setEditingId(entry.id)
+    setForm({
+      reg_number: entry.reg_number,
+      km_reading: entry.km_reading == null ? '' : String(entry.km_reading),
+      model: entry.model ?? '',
+      sa_employee_code: resolvedCode,
+      owner_name: entry.owner_name ?? '',
+      owner_phone: entry.owner_phone ?? '',
+      source: entry.source,
+      service_type: entry.service_type ?? '',
+    })
+    setNotice(null); setError(null); setShowForm(true)
+  }
+
   // ── Save ─────────────────────────────────────────────────────────────────────
   async function handleSave() {
     if (!form.reg_number.trim()) { Alert.alert('Required', 'Registration number is required'); return }
+    if (!form.model.trim()) { Alert.alert('Required', 'Model is required'); return }
     if (!form.sa_employee_code.trim()) { Alert.alert('Required', 'Select a Service Advisor'); return }
+    if (!form.owner_name.trim()) { Alert.alert('Required', 'Owner name is required'); return }
+    if (!form.owner_phone.trim()) { Alert.alert('Required', 'Owner phone is required'); return }
+    if (form.owner_phone.replace(/\D/g, '').length !== 10) { Alert.alert('Invalid', 'Owner phone must be exactly 10 digits'); return }
 
     setSaving(true)
     const sa = employees.find(e => e.employee_code === form.sa_employee_code)
@@ -251,76 +420,132 @@ export default function ReceptionScreen() {
       model: form.model || null,
       sa_employee_code: form.sa_employee_code,
       sa_name: sa?.employee_name ?? null,
-      owner_name: form.owner_name || null,
-      owner_phone: form.owner_phone || null,
+      owner_name: form.owner_name.trim() || null,
+      owner_phone: form.owner_phone.trim() || null,
       source: form.source,
       service_type: form.service_type || null,
     }
 
-    let result
+    let result: { data?: any; error?: any }
     if (editingId) {
-      result = await supabase.from('service_reception_entries').update(payload).eq('id', editingId)
+      result = await supabase.from('service_reception_entries').update(payload).eq('id', editingId).select().single()
     } else {
-      result = await supabase.from('service_reception_entries').insert([payload])
+      result = await supabase.from('service_reception_entries').insert([payload]).select().single()
     }
 
     if (result.error) {
       Alert.alert('Error', result.error.message)
-    } else {
-      setShowForm(false)
-      setForm(EMPTY_FORM)
-      setEditingId(null)
-      void loadAll()
+      setSaving(false)
+      return
     }
+
+    // Auto-create bodyshop repair card for Accident (mirrors web logic)
+    if (!editingId && form.service_type === 'Accident' && result.data) {
+      const entry = result.data as ReceptionEntry & { id: number }
+      const jcNo = String(entry.jc_number ?? '').trim().toUpperCase()
+      const receptionEntryId = Number(entry.id)
+
+      let existingCard: { id: number } | null = null
+
+      if (Number.isFinite(receptionEntryId)) {
+        const byRecepRes = await supabase
+          .from('bodyshop_repair_cards')
+          .select('id')
+          .eq('reception_entry_id', receptionEntryId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+        existingCard = ((byRecepRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+      }
+
+      if (!existingCard && jcNo) {
+        const byJcRes = await supabase
+          .from('bodyshop_repair_cards')
+          .select('id')
+          .eq('job_card_no', jcNo)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+        existingCard = ((byJcRes.data ?? []) as Array<{ id: number }>)[0] ?? null
+      }
+
+      if (!existingCard) {
+        await supabase.from('bodyshop_repair_cards').insert({
+          reception_entry_id: Number.isFinite(receptionEntryId) ? receptionEntryId : null,
+          job_card_no: jcNo || '',
+          reg_number: form.reg_number.trim().toUpperCase(),
+          customer_name: form.owner_name.trim() || null,
+          customer_phone: form.owner_phone.trim() || null,
+          customer_type: null,
+          branch: entry.branch ?? null,
+          sa_name: entry.sa_name ?? entry.sa_display_name ?? sa?.employee_name ?? null,
+          current_stage: 1,
+          current_stage_name: 'Vehicle Receiving',
+          overall_status: 'active',
+          received_at: new Date().toISOString(),
+        })
+      }
+    }
+
     setSaving(false)
+    setShowForm(false)
+    setForm(EMPTY_FORM)
+    setEditingId(null)
+    setNotice(editingId ? 'Entry updated' : 'Entry created')
+    void loadAll()
   }
 
-  function openNew() {
-    setForm(EMPTY_FORM); setEditingId(null); setShowForm(true)
+  // ── Delete ───────────────────────────────────────────────────────────────────
+  async function handleDelete(id: number) {
+    Alert.alert('Delete Entry', 'Are you sure you want to delete this reception entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          setDeletingId(id)
+          const { error: err } = await supabase.from('service_reception_entries').delete().eq('id', id)
+          setDeletingId(null)
+          if (err) { Alert.alert('Error', err.message); return }
+          setNotice('Entry deleted')
+          void loadAll()
+        }
+      }
+    ])
   }
 
-  function openEdit(entry: ReceptionEntry) {
-    setForm({
-      reg_number: entry.reg_number ?? '',
-      km_reading: entry.km_reading ? String(entry.km_reading) : '',
-      model: entry.model ?? '',
-      sa_employee_code: entry.sa_employee_code ?? '',
-      owner_name: entry.owner_name ?? '',
-      owner_phone: entry.owner_phone ?? '',
-      source: entry.source ?? SOURCE_OPTIONS[0],
-      service_type: entry.service_type ?? '',
-    })
-    setEditingId(entry.id)
-    setShowForm(true)
+  // ─── Styles ──────────────────────────────────────────────────────────────────
+  const tfStyle = {
+    backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, borderWidth: 1, borderColor: '#e2e8f0', color: '#1e293b',
+  }
+  const pickerStyle = {
+    backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 11,
+    borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row' as const, alignItems: 'center' as const,
   }
 
-  // ── UI helpers ───────────────────────────────────────────────────────────────
-  const filteredModels = useMemo(() =>
-    modelOptions.filter(m => !modelSearch || m.toLowerCase().includes(modelSearch.toLowerCase())),
-    [modelOptions, modelSearch])
-
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }} edges={['top']}>
 
       {/* ── Header ── */}
-      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingHorizontal: 16, paddingVertical: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1e293b' }}>🏁 Reception</Text>
-            <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>Today's entries & vehicle intake</Text>
+      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingHorizontal: 16, paddingVertical: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1e293b' }}>🏢 Reception</Text>
+            <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>
+              {listModeEntries.length} records · {listMode === 'today' ? 'Today' : 'This Month'}
+            </Text>
           </View>
           <TouchableOpacity onPress={openNew}
             style={{ backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>＋ Add</Text>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>＋ New Entry</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Toggle today / month */}
-        <View style={{ flexDirection: 'row', marginTop: 10, backgroundColor: '#f1f5f9', borderRadius: 8, padding: 3 }}>
-          {(['today', 'all'] as const).map(m => (
-            <TouchableOpacity key={m} onPress={() => setListMode(m)} style={{ flex: 1, borderRadius: 6, paddingVertical: 5, backgroundColor: listMode === m ? '#fff' : 'transparent', alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, fontWeight: listMode === m ? '700' : '500', color: listMode === m ? '#1e293b' : '#64748b' }}>
+        {/* Today / Month toggle */}
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+          {(['today', 'month'] as const).map(m => (
+            <TouchableOpacity key={m} onPress={() => { setListMode(m); setSelectedLocation('all'); setSelectedFuelType('all'); setSelectedServiceType('all') }}
+              style={{ backgroundColor: listMode === m ? '#2563eb' : '#f1f5f9', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: listMode === m ? '#fff' : '#64748b' }}>
                 {m === 'today' ? `Today (${todayEntries.length})` : `This Month (${entries.length})`}
               </Text>
             </TouchableOpacity>
@@ -328,38 +553,93 @@ export default function ReceptionScreen() {
         </View>
       </View>
 
-      {/* ── Stats chips ── */}
-      {Object.keys(stats).length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 6, flexDirection: 'row' }}>
-          <TouchableOpacity onPress={() => setFilterST('all')}
-            style={{ backgroundColor: filterST === 'all' ? '#1e293b' : '#f1f5f9', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: filterST === 'all' ? '#1e293b' : '#e2e8f0' }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: filterST === 'all' ? '#fff' : '#64748b' }}>All {todayEntries.length}</Text>
-          </TouchableOpacity>
-          {Object.entries(stats).sort((a, b) => b[1] - a[1]).map(([k, v]) => {
+      {/* ── Today Stats ── */}
+      {todayEntries.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 6 }}>
+          {Object.entries(todayStats).map(([k, v]) => {
             const c = ST_COLOR[k] ?? { bg: '#f1f5f9', text: '#64748b' }
-            const active = filterST === k
             return (
-              <TouchableOpacity key={k} onPress={() => setFilterST(active ? 'all' : k)}
-                style={{ backgroundColor: active ? c.text : c.bg, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: c.text + '40' }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : c.text }}>{k} {v}</Text>
-              </TouchableOpacity>
+              <View key={k} style={{ backgroundColor: c.bg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', minWidth: 48 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: c.text }}>{v}</Text>
+                <Text style={{ fontSize: 10, fontWeight: '600', color: c.text, marginTop: 1 }}>{k}</Text>
+              </View>
             )
           })}
+          <View style={{ backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', minWidth: 48 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1e293b' }}>{todayEntries.length}</Text>
+            <Text style={{ fontSize: 10, fontWeight: '600', color: '#64748b', marginTop: 1 }}>Total</Text>
+          </View>
         </ScrollView>
       )}
 
+      {/* ── Filters ── */}
+      <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingVertical: 6 }}>
+        {/* Location filter */}
+        {locationOptions.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 5, paddingBottom: 4 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', alignSelf: 'center', marginRight: 2 }}>Loc:</Text>
+            <FilterChip label={`All (${listModeEntries.length})`} active={selectedLocation === 'all'} onPress={() => setSelectedLocation('all')} />
+            {locationOptions.map(loc => (
+              <FilterChip key={loc} label={`${loc} (${listModeEntries.filter(e => getLocationLabel(e.branch) === loc).length})`}
+                active={selectedLocation === loc} onPress={() => setSelectedLocation(loc)} />
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Portal (fuel type) filter */}
+        {fuelTypeOptions.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 5, paddingBottom: 4, paddingTop: 2 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', alignSelf: 'center', marginRight: 2 }}>Portal:</Text>
+            <FilterChip label={`All (${locationFiltered.length})`} active={selectedFuelType === 'all'} onPress={() => setSelectedFuelType('all')} />
+            {fuelTypeOptions.map(ft => (
+              <FilterChip key={ft} label={`${ft} (${locationFiltered.filter(e => getEntryFuelType(e) === ft).length})`}
+                active={selectedFuelType === ft} onPress={() => setSelectedFuelType(ft)} />
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Service type chips */}
+        {serviceTypeOptions.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 5, paddingTop: 2 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', alignSelf: 'center', marginRight: 2 }}>Type:</Text>
+            <FilterChip label={`All SR (${fuelFiltered.length})`} active={selectedServiceType === 'all'} onPress={() => setSelectedServiceType('all')} />
+            {serviceTypeOptions.map(st => {
+              const c = stColor(st)
+              return (
+                <TouchableOpacity key={st} onPress={() => setSelectedServiceType(st)}
+                  style={{ backgroundColor: selectedServiceType === st ? c.bg : '#f8fafc', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: selectedServiceType === st ? c.text : '#e2e8f0' }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: selectedServiceType === st ? c.text : '#64748b' }}>
+                    {abbr(st)} · {serviceTypeCounts.get(st) ?? 0}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
+        )}
+      </View>
+
       {/* ── Search ── */}
-      <View style={{ paddingHorizontal: 12, paddingBottom: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+      <View style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
         <TextInput
-          placeholder="🔍 Search reg / name / JC…"
+          placeholder="🔍 Search reg / name / model / SA / JC…"
           value={search} onChangeText={setSearch}
           style={{ backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, borderWidth: 1, borderColor: '#e2e8f0', color: '#1e293b' }}
           placeholderTextColor="#94a3b8"
         />
       </View>
 
+      {/* Notice */}
+      {notice && (
+        <View style={{ backgroundColor: '#f0fdf4', padding: 10, marginHorizontal: 12, marginTop: 8, borderRadius: 8 }}>
+          <Text style={{ color: '#16a34a', fontSize: 13, fontWeight: '600' }}>✓ {notice}</Text>
+        </View>
+      )}
+
+      {/* Error */}
       {error && (
-        <View style={{ backgroundColor: '#fef2f2', padding: 10, margin: 12, borderRadius: 8 }}>
+        <View style={{ backgroundColor: '#fef2f2', padding: 10, marginHorizontal: 12, marginTop: 8, borderRadius: 8 }}>
           <Text style={{ color: '#dc2626', fontSize: 13 }}>⚠️ {error}</Text>
         </View>
       )}
@@ -381,60 +661,75 @@ export default function ReceptionScreen() {
               <Text style={{ fontSize: 36 }}>🏁</Text>
               <Text style={{ fontWeight: '700', color: '#475569', marginTop: 8 }}>No entries found</Text>
               <Text style={{ color: '#94a3b8', fontSize: 13, marginTop: 4 }}>Pull to refresh or add a new entry</Text>
-              <TouchableOpacity onPress={openNew} style={{ marginTop: 16, backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 }}>
+              <TouchableOpacity onPress={openNew}
+                style={{ marginTop: 16, backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 }}>
                 <Text style={{ color: '#fff', fontWeight: '700' }}>＋ Add Entry</Text>
               </TouchableOpacity>
             </View>
           }
           renderItem={({ item: e }) => {
             const c = stColor(e.service_type)
+            const isDeleting = deletingId === e.id
             return (
-              <TouchableOpacity onPress={() => openEdit(e)} activeOpacity={0.85}
-                style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
+              <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                   {/* Service type badge */}
-                  <View style={{ backgroundColor: c.bg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginRight: 10, minWidth: 40, alignItems: 'center' }}>
+                  <View style={{ backgroundColor: c.bg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginRight: 10, minWidth: 42, alignItems: 'center' }}>
                     <Text style={{ fontSize: 11, fontWeight: '800', color: c.text }}>{abbr(e.service_type)}</Text>
                   </View>
 
                   {/* Main info */}
                   <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                       <Text style={{ fontWeight: '800', fontSize: 15, color: '#1e293b', letterSpacing: 0.5 }}>{e.reg_number}</Text>
                       {e.jc_number && (
                         <View style={{ backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 }}>
                           <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>✓ {e.jc_number}</Text>
                         </View>
                       )}
+                      {/* Source pill */}
+                      <View style={{ backgroundColor: e.source === 'Walk-in' ? '#f0fdf4' : e.source === 'Self' ? '#fafafa' : '#eff6ff', borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#475569' }}>{e.source}</Text>
+                      </View>
                     </View>
 
                     {e.model && <Text style={{ fontSize: 13, color: '#475569', marginTop: 1 }}>{e.model}</Text>}
 
-                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
-                      {(e.sa_display_name || e.sa_name) && (
-                        <Text style={{ fontSize: 12, color: '#64748b' }}>👤 {e.sa_display_name || e.sa_name}</Text>
-                      )}
-                      {e.source && (
-                        <Text style={{ fontSize: 12, color: '#64748b' }}>
-                          {e.source === 'Walk-in' ? '🚶' : e.source === 'Self' ? '🙋' : e.source === 'Driver Pickup' ? '🚗' : '📞'} {e.source}
-                        </Text>
-                      )}
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+                      {(e.sa_display_name || e.sa_name) &&
+                        <Text style={{ fontSize: 12, color: '#64748b' }}>👤 {e.sa_display_name || e.sa_name}</Text>}
+                      {e.owner_name &&
+                        <Text style={{ fontSize: 12, color: '#64748b' }}>🙍 {e.owner_name}{e.owner_phone ? ` · ${e.owner_phone}` : ''}</Text>}
                     </View>
 
-                    {e.owner_name && <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{e.owner_name}{e.owner_phone ? ` · ${e.owner_phone}` : ''}</Text>}
-                  </View>
+                    {e.km_reading != null &&
+                      <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>🛣 {e.km_reading.toLocaleString('en-IN')} km</Text>}
 
-                  {/* Time */}
-                  <Text style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>{fmtTime(e.created_at)}</Text>
+                    <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                      {fmtDateTime(e.created_at)} · By {e.created_by}
+                    </Text>
+                  </View>
                 </View>
-              </TouchableOpacity>
+
+                {/* Actions */}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+                  <TouchableOpacity onPress={() => openEdit(e)}
+                    style={{ flex: 1, backgroundColor: '#eff6ff', borderRadius: 6, paddingVertical: 7, alignItems: 'center' }}>
+                    <Text style={{ color: '#2563eb', fontWeight: '700', fontSize: 13 }}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDelete(e.id)} disabled={isDeleting}
+                    style={{ flex: 1, backgroundColor: '#fef2f2', borderRadius: 6, paddingVertical: 7, alignItems: 'center' }}>
+                    <Text style={{ color: '#dc2626', fontWeight: '700', fontSize: 13 }}>{isDeleting ? 'Deleting…' : 'Delete'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )
           }}
         />
       )}
 
       {/* ══ ADD / EDIT FORM MODAL ══ */}
-      <Modal visible={showForm} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowForm(false)}>
+      <Modal visible={showForm} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setShowForm(false); setForm(EMPTY_FORM); setEditingId(null) }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
 
@@ -444,7 +739,7 @@ export default function ReceptionScreen() {
                 <Text style={{ color: '#64748b', fontSize: 15, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <Text style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '800', color: '#1e293b' }}>
-                {editingId ? 'Edit Entry' : '➕ New Entry'}
+                {editingId ? 'Edit Entry' : '➕ New Intake'}
               </Text>
               <TouchableOpacity onPress={handleSave} disabled={saving}
                 style={{ backgroundColor: saving ? '#93c5fd' : '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 }}>
@@ -452,73 +747,76 @@ export default function ReceptionScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }} keyboardShouldPersistTaps="handled">
+            <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
-              {/* Reg Number */}
-              <FormField label="Registration Number *">
-                <TextInput
-                  style={tfStyle} placeholder="e.g. RJ14XX1234" placeholderTextColor="#94a3b8"
+              {/* Registration No */}
+              <FormField label="Registration No *">
+                <TextInput style={tfStyle} placeholder="e.g. RJ14XX1234" placeholderTextColor="#94a3b8"
                   value={form.reg_number} autoCapitalize="characters"
-                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))}
-                />
+                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))} />
               </FormField>
 
               {/* KM Reading */}
               <FormField label="KM Reading">
-                <TextInput
-                  style={tfStyle} placeholder="Current odometer" placeholderTextColor="#94a3b8"
+                <TextInput style={tfStyle} placeholder="e.g. 24560" placeholderTextColor="#94a3b8"
                   value={form.km_reading} keyboardType="numeric"
-                  onChangeText={t => setForm(p => ({ ...p, km_reading: t }))}
-                />
+                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/[^0-9]/g, '') }))} />
               </FormField>
 
-              {/* Model Picker */}
-              <FormField label="Model">
+              {/* Model */}
+              <FormField label="Model *">
                 <TouchableOpacity style={pickerStyle} onPress={() => { setModelSearch(''); setModelPicker(true) }}>
                   <Text style={{ fontSize: 14, color: form.model ? '#1e293b' : '#94a3b8', flex: 1 }}>{form.model || 'Select model…'}</Text>
                   <Text style={{ color: '#94a3b8' }}>▾</Text>
                 </TouchableOpacity>
               </FormField>
 
-              {/* Service Type Picker */}
-              <FormField label="Service Type">
-                <TouchableOpacity style={pickerStyle} onPress={() => setStPicker(true)}>
-                  <Text style={{ fontSize: 14, color: form.service_type ? '#1e293b' : '#94a3b8', flex: 1 }}>{form.service_type || 'Select service type…'}</Text>
-                  <Text style={{ color: '#94a3b8' }}>▾</Text>
-                </TouchableOpacity>
-              </FormField>
-
-              {/* Source Picker */}
-              <FormField label="Source">
+              {/* Source */}
+              <FormField label="Source *">
                 <TouchableOpacity style={pickerStyle} onPress={() => setSourcePicker(true)}>
                   <Text style={{ fontSize: 14, color: '#1e293b', flex: 1 }}>{form.source}</Text>
                   <Text style={{ color: '#94a3b8' }}>▾</Text>
                 </TouchableOpacity>
               </FormField>
 
-              {/* SA Picker */}
-              <FormField label="Service Advisor *">
+              {/* Service Type */}
+              <FormField label="Service Type">
+                <TouchableOpacity
+                  style={[pickerStyle, form.service_type === 'Accident' ? { borderColor: '#ef4444' } : {}]}
+                  onPress={() => setStPicker(true)}>
+                  <Text style={{ fontSize: 14, color: form.service_type ? '#1e293b' : '#94a3b8', flex: 1 }}>{form.service_type || 'Select service type…'}</Text>
+                  <Text style={{ color: '#94a3b8' }}>▾</Text>
+                </TouchableOpacity>
+                {form.service_type === 'Accident' && (
+                  <Text style={{ fontSize: 12, color: '#ef4444', marginTop: 4, fontWeight: '600' }}>
+                    ⚠️ Accident — will appear in Bodyshop Repair Tracker
+                  </Text>
+                )}
+              </FormField>
+
+              {/* SA Name */}
+              <FormField label={`SA Name * · ${filteredSAs.length} available`}>
                 <TouchableOpacity style={pickerStyle} onPress={() => { setSaSearch(''); setSaPicker(true) }}>
                   <Text style={{ fontSize: 14, color: form.sa_employee_code ? '#1e293b' : '#94a3b8', flex: 1 }}>
                     {form.sa_employee_code
-                      ? employees.find(e => e.employee_code === form.sa_employee_code)?.employee_name ?? form.sa_employee_code
-                      : 'Select SA…'}
+                      ? (employees.find(e => e.employee_code === form.sa_employee_code)?.employee_name ?? form.sa_employee_code)
+                      : `Select SA (${form.service_type ? getRequiredDept(form.service_type) : 'SERVICE'}${form.model && form.service_type && shouldApplyFuelFilter(form.service_type) ? ' + ' + inferFuelBucket(form.model) : ''})…`}
                   </Text>
                   <Text style={{ color: '#94a3b8' }}>▾</Text>
                 </TouchableOpacity>
               </FormField>
 
               {/* Owner Name */}
-              <FormField label="Owner Name">
+              <FormField label="Owner Name *">
                 <TextInput style={tfStyle} placeholder="Customer name" placeholderTextColor="#94a3b8"
                   value={form.owner_name} onChangeText={t => setForm(p => ({ ...p, owner_name: t }))} />
               </FormField>
 
               {/* Owner Phone */}
-              <FormField label="Owner Phone">
+              <FormField label="Owner Phone * (10 digits)">
                 <TextInput style={tfStyle} placeholder="10-digit mobile" placeholderTextColor="#94a3b8"
-                  value={form.owner_phone} keyboardType="phone-pad"
-                  onChangeText={t => setForm(p => ({ ...p, owner_phone: t }))} />
+                  value={form.owner_phone} keyboardType="phone-pad" maxLength={10}
+                  onChangeText={t => setForm(p => ({ ...p, owner_phone: t.replace(/\D/g, '').slice(0, 10) }))} />
               </FormField>
 
             </ScrollView>
@@ -526,91 +824,82 @@ export default function ReceptionScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Model Picker Modal ── */}
-      <PickerModal
-        visible={modelPicker} title="Select Model"
-        onClose={() => setModelPicker(false)}
+      {/* ── Model Picker ── */}
+      <PickerModal visible={modelPicker} title="Select Model" onClose={() => setModelPicker(false)}
         search={modelSearch} onSearch={setModelSearch}
-        items={filteredModels}
+        items={modelOptions.filter(m => !modelSearch.trim() || m.toLowerCase().includes(modelSearch.toLowerCase()))}
         renderItem={m => (
-          <TouchableOpacity key={m} onPress={() => { setForm(p => ({ ...p, model: m, sa_employee_code: '' })); setModelPicker(false) }}
-            style={{ ...listItemStyle, backgroundColor: form.model === m ? '#eff6ff' : '#fff' }}>
-            <Text style={{ fontSize: 14, color: form.model === m ? '#2563eb' : '#1e293b', fontWeight: form.model === m ? '700' : '400' }}>{m}</Text>
-            {form.model === m && <Text style={{ color: '#2563eb' }}>✓</Text>}
+          <TouchableOpacity key={m} onPress={() => { setForm(p => ({ ...p, model: m })); setModelPicker(false) }}
+            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center' }}>
+            {form.model === m && <Text style={{ color: '#2563eb', marginRight: 8, fontWeight: '800' }}>✓</Text>}
+            <Text style={{ fontSize: 15, color: '#1e293b', fontWeight: form.model === m ? '700' : '400' }}>{m}</Text>
           </TouchableOpacity>
-        )}
-      />
-
-      {/* ── SA Picker Modal ── */}
-      <PickerModal
-        visible={saPicker} title="Select Service Advisor"
-        onClose={() => setSaPicker(false)}
-        search={saSearch} onSearch={setSaSearch}
-        items={filteredSAs}
-        renderItem={e => (
-          <TouchableOpacity key={e.employee_code} onPress={() => { setForm(p => ({ ...p, sa_employee_code: e.employee_code })); setSaPicker(false) }}
-            style={{ ...listItemStyle, backgroundColor: form.sa_employee_code === e.employee_code ? '#eff6ff' : '#fff' }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: form.sa_employee_code === e.employee_code ? '#2563eb' : '#1e293b' }}>{e.employee_name}</Text>
-              <Text style={{ fontSize: 11, color: '#94a3b8' }}>{e.employee_code} · {e.fuel_type ?? 'PV'}</Text>
-            </View>
-            {form.sa_employee_code === e.employee_code && <Text style={{ color: '#2563eb' }}>✓</Text>}
-          </TouchableOpacity>
-        )}
-      />
+        )} />
 
       {/* ── Service Type Picker ── */}
-      <PickerModal
-        visible={stPicker} title="Service Type"
-        onClose={() => setStPicker(false)}
+      <PickerModal visible={stPicker} title="Select Service Type" onClose={() => setStPicker(false)}
         items={RECEPTION_SERVICE_TYPE_OPTIONS}
         renderItem={st => (
-          <TouchableOpacity key={st} onPress={() => { setForm(p => ({ ...p, service_type: st, sa_employee_code: '' })); setStPicker(false) }}
-            style={{ ...listItemStyle, backgroundColor: form.service_type === st ? '#eff6ff' : '#fff' }}>
-            {(() => { const c = stColor(st); const a = abbr(st); return (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                <View style={{ backgroundColor: c.bg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: c.text }}>{a}</Text>
-                </View>
-                <Text style={{ fontSize: 14, color: form.service_type === st ? '#2563eb' : '#1e293b', fontWeight: form.service_type === st ? '700' : '400' }}>{st}</Text>
-              </View>
-            )})()}
-            {form.service_type === st && <Text style={{ color: '#2563eb' }}>✓</Text>}
+          <TouchableOpacity key={st} onPress={() => { setForm(p => ({ ...p, service_type: st })); setStPicker(false) }}
+            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {form.service_type === st && <Text style={{ color: '#2563eb', fontWeight: '800' }}>✓</Text>}
+            <View style={{ backgroundColor: stColor(st).bg, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: stColor(st).text }}>{abbr(st)}</Text>
+            </View>
+            <Text style={{ fontSize: 15, color: '#1e293b', flex: 1, fontWeight: form.service_type === st ? '700' : '400' }}>{st}</Text>
           </TouchableOpacity>
-        )}
-      />
+        )} />
 
       {/* ── Source Picker ── */}
-      <PickerModal
-        visible={sourcePicker} title="Booking Source"
-        onClose={() => setSourcePicker(false)}
+      <PickerModal visible={sourcePicker} title="Select Source" onClose={() => setSourcePicker(false)}
         items={SOURCE_OPTIONS}
-        renderItem={s => (
-          <TouchableOpacity key={s} onPress={() => { setForm(p => ({ ...p, source: s })); setSourcePicker(false) }}
-            style={{ ...listItemStyle, backgroundColor: form.source === s ? '#eff6ff' : '#fff' }}>
-            <Text style={{ fontSize: 14, color: form.source === s ? '#2563eb' : '#1e293b', fontWeight: form.source === s ? '700' : '400', flex: 1 }}>{s}</Text>
-            {form.source === s && <Text style={{ color: '#2563eb' }}>✓</Text>}
+        renderItem={src => (
+          <TouchableOpacity key={src} onPress={() => { setForm(p => ({ ...p, source: src })); setSourcePicker(false) }}
+            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center' }}>
+            {form.source === src && <Text style={{ color: '#2563eb', marginRight: 8, fontWeight: '800' }}>✓</Text>}
+            <Text style={{ fontSize: 15, color: '#1e293b', fontWeight: form.source === src ? '700' : '400' }}>{src}</Text>
           </TouchableOpacity>
-        )}
-      />
+        )} />
+
+      {/* ── SA Picker ── */}
+      <PickerModal visible={saPicker} title="Select Service Advisor" onClose={() => setSaPicker(false)}
+        search={saSearch} onSearch={setSaSearch}
+        items={filteredSAs}
+        renderItem={emp => (
+          <TouchableOpacity key={emp.employee_code} onPress={() => { setForm(p => ({ ...p, sa_employee_code: emp.employee_code })); setSaPicker(false) }}
+            style={{ paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {form.sa_employee_code === emp.employee_code && <Text style={{ color: '#2563eb', fontWeight: '800' }}>✓</Text>}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, color: '#1e293b', fontWeight: form.sa_employee_code === emp.employee_code ? '700' : '400' }}>{emp.employee_name}</Text>
+              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{emp.employee_code} · {normalizeDept(emp.department)} · {getFuelTypeLabel(emp.fuel_type)}</Text>
+            </View>
+          </TouchableOpacity>
+        )} />
 
     </SafeAreaView>
   )
 }
 
-// ─── Reusable sub-components ──────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <View style={{ gap: 5 }}>
-      <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>{label}</Text>
+    <View style={{ gap: 6 }}>
+      <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>{label}</Text>
       {children}
     </View>
   )
 }
 
-function PickerModal({
-  visible, title, onClose, search, onSearch, items, renderItem,
-}: {
+function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress}
+      style={{ backgroundColor: active ? '#2563eb' : '#f1f5f9', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : '#64748b' }}>{label}</Text>
+    </TouchableOpacity>
+  )
+}
+
+function PickerModal({ visible, title, onClose, search, onSearch, items, renderItem }: {
   visible: boolean; title: string; onClose: () => void
   search?: string; onSearch?: (s: string) => void
   items: any[]; renderItem: (item: any) => React.ReactNode
@@ -626,11 +915,9 @@ function PickerModal({
         </View>
         {onSearch && (
           <View style={{ padding: 12 }}>
-            <TextInput
-              placeholder="Search…" placeholderTextColor="#94a3b8"
+            <TextInput placeholder="Search…" placeholderTextColor="#94a3b8"
               value={search} onChangeText={onSearch}
-              style={{ backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, borderWidth: 1, borderColor: '#e2e8f0' }}
-            />
+              style={{ backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, borderWidth: 1, borderColor: '#e2e8f0' }} />
           </View>
         )}
         <FlatList
@@ -638,26 +925,8 @@ function PickerModal({
           keyExtractor={(_, i) => String(i)}
           renderItem={({ item }) => renderItem(item) as any}
           contentContainerStyle={{ paddingBottom: 40 }}
-        />
+          keyboardShouldPersistTaps="handled" />
       </SafeAreaView>
     </Modal>
   )
-}
-
-const tfStyle = {
-  borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8,
-  paddingHorizontal: 12, paddingVertical: 10,
-  fontSize: 14, color: '#1e293b', backgroundColor: '#fff',
-}
-
-const pickerStyle = {
-  borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8,
-  paddingHorizontal: 12, paddingVertical: 11,
-  backgroundColor: '#fff', flexDirection: 'row' as const, alignItems: 'center' as const,
-}
-
-const listItemStyle = {
-  flexDirection: 'row' as const, alignItems: 'center' as const,
-  paddingHorizontal: 16, paddingVertical: 13,
-  borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
 }
