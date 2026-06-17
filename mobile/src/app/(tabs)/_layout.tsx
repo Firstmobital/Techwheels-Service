@@ -226,6 +226,14 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="reception"
+        options={{
+          title: 'Reception',
+          headerShown: false,
+          href: null,
+        }}
+      />
     </Tabs>
   )
 }
