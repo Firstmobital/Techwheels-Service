@@ -608,12 +608,12 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
-function PickerModal<T>({
+function PickerModal({
   visible, title, onClose, search, onSearch, items, renderItem,
 }: {
   visible: boolean; title: string; onClose: () => void
   search?: string; onSearch?: (s: string) => void
-  items: T[]; renderItem: (item: T) => React.ReactNode
+  items: any[]; renderItem: (item: any) => React.ReactNode
 }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
