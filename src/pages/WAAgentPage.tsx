@@ -178,7 +178,7 @@ export default function WAAgentPage() {
   const [followupSteps, setFollowupSteps] = useState<Array<{id:number;day_offset:number;message_template:string;sort_order:number;is_active:boolean}>>([])
   const [followupQueue, setFollowupQueue] = useState<Array<{id:number;phone:string;customer_name:string;model:string;scheduled_at:string;status:string;skip_reason:string;wa_followup_steps:{message_template:string;day_offset:number}}>>([])
   const [enrollingCamp, setEnrollingCamp] = useState<number|null>(null)
-  const [followupFilter, setFollowupFilter] = useState('pending')
+  // followupFilter state reserved for future use
   const [editingStep, setEditingStep] = useState<number|null>(null)
   const [stepDraft, setStepDraft] = useState('')
   const [savingStep, setSavingStep] = useState(false)

@@ -1712,25 +1712,26 @@ export default function AutoDocPage() {
 
       const vehicleRes = await fetchVehicleByReg(activeSummary.reg_number)
       if (vehicleRes.error || !vehicleRes.data) {
-        const dbJcNumber = activeSummary.jc_number ?? prev.jcNumber
-        const jcNumberForForm = dbJcNumber?.startsWith('TEMP-') ? '' : dbJcNumber
-        
-        setForm((prev) => ({
-          ...prev,
-          regNumber: activeSummary.reg_number ?? prev.regNumber,
-          jcNumber: jcNumberForForm,
-          model: activeSummary.model ?? prev.model,
-        }))
+        setForm((prev) => {
+          const dbJcNumber = activeSummary.jc_number ?? prev.jcNumber
+          const jcNumberForForm = dbJcNumber?.startsWith('TEMP-') ? '' : dbJcNumber
+          return {
+            ...prev,
+            regNumber: activeSummary.reg_number ?? prev.regNumber,
+            jcNumber: jcNumberForForm,
+            model: activeSummary.model ?? prev.model,
+          }
+        })
         setVehicleLookupStatus('found')
         return
       }
 
       const vehicle = vehicleRes.data
-      const dbJcNumber = activeSummary.jc_number ?? prev.jcNumber
-      // Don't populate form field with temporary TEMP- JC numbers; keep field blank so user can enter actual JC
-      const jcNumberForForm = dbJcNumber?.startsWith('TEMP-') ? '' : dbJcNumber
-      
-      setForm((prev) => ({
+      setForm((prev) => {
+        const dbJcNumber = activeSummary.jc_number ?? prev.jcNumber
+        // Don't populate form field with temporary TEMP- JC numbers; keep field blank so user can enter actual JC
+        const jcNumberForForm = dbJcNumber?.startsWith('TEMP-') ? '' : dbJcNumber
+        return {
         ...prev,
         regNumber: activeSummary.reg_number ?? prev.regNumber,
         jcNumber: jcNumberForForm,
@@ -1748,7 +1749,8 @@ export default function AutoDocPage() {
         ownerName: vehicle.owner_name ?? prev.ownerName,
         ownerPhone: vehicle.owner_phone ?? prev.ownerPhone,
         dateOfSale: vehicle.date_of_sale ?? prev.dateOfSale,
-      }))
+      }
+      })
       setVehicleLookupStatus('found')
     }
 
