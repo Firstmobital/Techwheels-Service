@@ -301,12 +301,22 @@ export default function ReceptionScreen() {
     setEntries(enriched)
 
     // Exact web: only SA and SSA roles
-    const allowedRoles = new Set(['sa', 'ssa', 'service advisor', 'service_advisor'])
+    const allowedRoles = new Set(['sa', 'service advisor', 'service_advisor'])
     const empData = (empRes.data ?? []) as Employee[]
-    setEmployees(empData.filter(e =>
-      allowedRoles.has(String(e.role ?? '').trim().toLowerCase()) &&
-      String(e.employee_code ?? '').trim().length > 0
-    ))
+    // Deduplicate by employee_code (take first occurrence) — matches web listReceptionEmployees
+    const seenCodes = new Set<string>()
+    setEmployees(empData
+      .filter(e =>
+        allowedRoles.has(String(e.role ?? '').trim().toLowerCase()) &&
+        String(e.employee_code ?? '').trim().length > 0
+      )
+      .filter(e => {
+        const code = String(e.employee_code ?? '').trim().toUpperCase()
+        if (seenCodes.has(code)) return false
+        seenCodes.add(code)
+        return true
+      })
+    )
 
     if (modelsRes.data && modelsRes.data.length > 0)
       setModelOptions([...new Set((modelsRes.data as { model_name: string }[]).map(r => String(r.model_name ?? '').trim()).filter(Boolean))])
@@ -572,11 +582,23 @@ export default function ReceptionScreen() {
   function pickerLabel(item: string): string {
     if (showPicker === 'sa') {
       const emp = employees.find(e => e.employee_code === item)
-      return emp
-        ? `${emp.employee_name}  ·  ${getFuelTypeLabel(emp.fuel_type)}  ·  ${normalizeDept(emp.department)}`
-        : item
+      if (!emp) return item
+      // Format: "Employee Name (CODE)" — same as web option text
+      // Sub-label shows dept + fuel for clarity on mobile
+      return emp.employee_name + ' (' + emp.employee_code + ')'
     }
     return item
+  }
+
+  function pickerSubLabel(item: string): string {
+    if (showPicker === 'sa') {
+      const emp = employees.find(e => e.employee_code === item)
+      if (!emp) return ''
+      const dept = normalizeDept(emp.department) || 'SERVICE'
+      const fuel = getFuelTypeLabel(emp.fuel_type)
+      return dept + '  ·  ' + fuel
+    }
+    return ''
   }
 
   function onPickerSelect(item: string) {
@@ -805,7 +827,7 @@ export default function ReceptionScreen() {
                 </TouchableOpacity>
               </FormField>
 
-              <FormField label={`SA Name *  (${filteredSAs.length} available)`}>
+              <FormField label={`SA Name *  —  ${filteredSAs.length} ${getRequiredDeptForServiceType(form.service_type)}${shouldApplyFuelFilter(form.service_type) ? ' · ' + inferFuelFromModel(form.model) : ' · All fuel'} SA(s)`}>
                 <TouchableOpacity style={s.select} onPress={() => { setShowPicker('sa'); setPickerSearch('') }}>
                   <Text style={form.sa_employee_code ? s.selectText : s.selectPlaceholder}>{getFormSALabel() || 'Select SA'}</Text>
                   <Text style={s.chevron}>▼</Text>
@@ -889,11 +911,15 @@ export default function ReceptionScreen() {
           <FlatList
             data={pickerItems()}
             keyExtractor={item => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={{ padding: 16, borderBottomWidth: 1, borderColor: '#f1f5f9' }} onPress={() => onPickerSelect(item)}>
-                <Text style={{ fontSize: 15, color: '#1e293b' }}>{pickerLabel(item)}</Text>
-              </TouchableOpacity>
-            )}
+            renderItem={({ item }) => {
+              const sub = pickerSubLabel(item)
+              return (
+                <TouchableOpacity style={{ padding: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#f1f5f9' }} onPress={() => onPickerSelect(item)}>
+                  <Text style={{ fontSize: 15, color: '#1e293b', fontWeight: '500' }}>{pickerLabel(item)}</Text>
+                  {sub ? <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{sub}</Text> : null}
+                </TouchableOpacity>
+              )
+            }}
             ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 40 }}>No options found</Text>}
           />
         </SafeAreaView>
