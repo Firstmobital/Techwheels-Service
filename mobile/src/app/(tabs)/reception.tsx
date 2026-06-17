@@ -228,7 +228,7 @@ export default function ReceptionScreen() {
     const [entriesRes, empRes, modelsRes] = await Promise.all([
       supabase
         .from('service_reception_entries')
-        .select('id,reg_number,jc_number,model,service_type,sa_name,sa_display_name,sa_employee_code,owner_name,owner_phone,source,branch,fuel_type,km_reading,created_by,created_at')
+        .select('id,reg_number,jc_number,model,service_type,sa_name,sa_display_name,sa_employee_code,owner_name,owner_phone,source,branch,location,portal,branch_label,km_reading,created_by,created_at')
         .gte('created_at', `${from}T00:00:00+05:30`)
         .lte('created_at', `${to}T23:59:59+05:30`)
         .order('created_at', { ascending: false })
@@ -269,7 +269,7 @@ export default function ReceptionScreen() {
     [employees])
 
   function getEntryFuelType(entry: ReceptionEntry): string {
-    const raw = String(entry.fuel_type ?? '').trim()
+    const raw = String(entry.portal ?? '').trim()
     if (raw) return raw
     const byCode = empFuelByCode.get(String(entry.sa_employee_code ?? '').trim().toUpperCase())
     if (byCode) return byCode
@@ -413,6 +413,7 @@ export default function ReceptionScreen() {
   // ── Save ─────────────────────────────────────────────────────────────────────
   async function handleSave() {
     if (!form.reg_number.trim()) { Alert.alert('Required', 'Registration number is required'); return }
+    if (form.reg_number.trim().length > 10) { Alert.alert('Invalid', 'Registration number must be 10 characters or less'); return }
     if (!form.model.trim()) { Alert.alert('Required', 'Model is required'); return }
     if (!form.sa_employee_code.trim()) { Alert.alert('Required', 'Select a Service Advisor'); return }
     if (!form.owner_name.trim()) { Alert.alert('Required', 'Owner name is required'); return }
@@ -760,7 +761,7 @@ export default function ReceptionScreen() {
               <FormField label="Registration No *">
                 <TextInput style={tfStyle} placeholder="e.g. RJ14XX1234" placeholderTextColor="#94a3b8"
                   value={form.reg_number} autoCapitalize="characters"
-                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))} />
+                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))} maxLength={10} autoCapitalize="characters" />
               </FormField>
 
               {/* KM Reading */}
