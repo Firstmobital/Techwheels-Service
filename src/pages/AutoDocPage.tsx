@@ -417,7 +417,9 @@ export default function AutoDocPage() {
   const [carImageName, setCarImageName] = useState(() => readSessionValue(SESSION_KEYS.carImageName) || '')
   const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
   const [uploadingWalkaround, setUploadingWalkaround] = useState(false)
+  const [walkaroundProgress, setWalkaroundProgress] = useState(0)
   const [uploadingCarImage, setUploadingCarImage] = useState(false)
+  const [carImageProgress, setCarImageProgress] = useState(0)
   const suppressNextVehicleHydrationRef = useRef(false)
   const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
   const [, setLoadingModelRates] = useState(false)
@@ -1237,7 +1239,7 @@ export default function AutoDocPage() {
       jcNumber: form.jcNumber,
       kmReading: form.kmReading,
     })
-    const jobCardId = await persistDraftJobCard(false)
+    const jobCardId = await persistDraftJobCard(false, true)
     if (!jobCardId) {
       console.error('[autodoc-upload-debug] Draft persistence failed; upload blocked', {
         regNumber: form.regNumber,
@@ -1259,6 +1261,8 @@ export default function AutoDocPage() {
     if (!jobCardId) return false
 
     setUploadingWalkaround(true)
+    setWalkaroundProgress(10)
+
     const uploadRes = await uploadDocumentFile({
       jobCardId,
       docType: 'video_job_card',
@@ -1266,7 +1270,12 @@ export default function AutoDocPage() {
       fileName: file.name,
       contentType: file.type || 'video/mp4',
     })
-    setUploadingWalkaround(false)
+    
+    setWalkaroundProgress(100)
+    setTimeout(() => {
+      setUploadingWalkaround(false)
+      setWalkaroundProgress(0)
+    }, 500)
 
     if (uploadRes.error) {
       console.error('[autodoc-upload-debug] Walkaround upload failed', {
@@ -1274,6 +1283,8 @@ export default function AutoDocPage() {
         fileName: file.name,
         error: uploadRes.error,
       })
+      setUploadingWalkaround(false)
+      setWalkaroundProgress(0)
       showToast(uploadRes.error, false)
       return false
     }
@@ -1325,8 +1336,8 @@ export default function AutoDocPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    if (!form.regNumber.trim() || !form.jcNumber.trim() || !form.kmReading.trim()) {
-      showToast('Enter Registration No, Job Card Number, and KM Reading before uploading walkaround video.', false)
+    if (!form.regNumber.trim() || !form.kmReading.trim()) {
+      showToast('Enter Registration No and KM Reading before uploading walkaround video.', false)
       event.target.value = ''
       return
     }
@@ -1348,14 +1359,18 @@ export default function AutoDocPage() {
     if (!jobCardId) return false
 
     setUploadingCarImage(true)
+    setCarImageProgress(10)
     try {
       const location = await getCurrentLocation()
+      setCarImageProgress(25)
+      
       const gpsMetadata = await assembleGpsMetadata(
         location.lat,
         location.lng,
         'pre-repair',
         'Car Image',
       )
+      setCarImageProgress(40)
 
       const stampedBlob = await stampImageWithGps(file, {
         lat: gpsMetadata.lat,
@@ -1370,6 +1385,7 @@ export default function AutoDocPage() {
         stage: gpsMetadata.stage,
         panelName: gpsMetadata.panelName,
       })
+      setCarImageProgress(60)
 
       const baseName = file.name.includes('.')
         ? file.name.slice(0, Math.max(1, file.name.lastIndexOf('.')))
@@ -1387,22 +1403,30 @@ export default function AutoDocPage() {
         gpsCity: gpsMetadata.city,
         capturedAt: gpsMetadata.capturedAtIso,
       })
+      setCarImageProgress(85)
 
       if (uploadRes.error) {
+        setUploadingCarImage(false)
+        setCarImageProgress(0)
         showToast(uploadRes.error, false)
         return false
       }
 
       setCarImageName(stampedName)
       await refreshDocuments(jobCardId)
+      setCarImageProgress(100)
+      setTimeout(() => {
+        setUploadingCarImage(false)
+        setCarImageProgress(0)
+      }, 500)
       showToast(successMessage, true)
       return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to upload Car Image.'
+      setUploadingCarImage(false)
+      setCarImageProgress(0)
       showToast(`Car Image upload failed: ${msg}`, false)
       return false
-    } finally {
-      setUploadingCarImage(false)
     }
   }
 
@@ -1410,8 +1434,8 @@ export default function AutoDocPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    if (!form.regNumber.trim() || !form.jcNumber.trim() || !form.kmReading.trim()) {
-      showToast('Enter Registration No, Job Card Number, and KM Reading before uploading Car Image.', false)
+    if (!form.regNumber.trim() || !form.kmReading.trim()) {
+      showToast('Enter Registration No and KM Reading before uploading Car Image.', false)
       event.target.value = ''
       return
     }
@@ -1688,10 +1712,13 @@ export default function AutoDocPage() {
 
       const vehicleRes = await fetchVehicleByReg(activeSummary.reg_number)
       if (vehicleRes.error || !vehicleRes.data) {
+        const dbJcNumber = activeSummary.jc_number ?? prev.jcNumber
+        const jcNumberForForm = dbJcNumber?.startsWith('TEMP-') ? '' : dbJcNumber
+        
         setForm((prev) => ({
           ...prev,
           regNumber: activeSummary.reg_number ?? prev.regNumber,
-          jcNumber: activeSummary.jc_number ?? prev.jcNumber,
+          jcNumber: jcNumberForForm,
           model: activeSummary.model ?? prev.model,
         }))
         setVehicleLookupStatus('found')
@@ -1699,10 +1726,14 @@ export default function AutoDocPage() {
       }
 
       const vehicle = vehicleRes.data
+      const dbJcNumber = activeSummary.jc_number ?? prev.jcNumber
+      // Don't populate form field with temporary TEMP- JC numbers; keep field blank so user can enter actual JC
+      const jcNumberForForm = dbJcNumber?.startsWith('TEMP-') ? '' : dbJcNumber
+      
       setForm((prev) => ({
         ...prev,
         regNumber: activeSummary.reg_number ?? prev.regNumber,
-        jcNumber: activeSummary.jc_number ?? prev.jcNumber,
+        jcNumber: jcNumberForForm,
         complaintDate: activeSummary.complaint_date ?? prev.complaintDate,
         kmReading: activeSummary.km_reading != null ? String(activeSummary.km_reading) : prev.kmReading,
         claimType: activeSummary.claim_type ?? prev.claimType,
@@ -2146,7 +2177,7 @@ export default function AutoDocPage() {
     setCreating(false)
   }
 
-  async function persistDraftJobCard(showSuccessToast: boolean): Promise<string | null> {
+  async function persistDraftJobCard(showSuccessToast: boolean, isPreFetchUpload: boolean = false): Promise<string | null> {
     setCreateError(null)
     const selectedPanelsSnapshot = sanitizePanelList(selectedPanelsRef.current)
 
@@ -2154,10 +2185,6 @@ export default function AutoDocPage() {
     const jcNumber = form.jcNumber.trim()
     if (!regNumber) {
       showToast('Enter registration number before saving draft.', false)
-      return null
-    }
-    if (!jcNumber) {
-      showToast('Enter job card number before saving draft.', false)
       return null
     }
 
@@ -2266,6 +2293,9 @@ export default function AutoDocPage() {
     }
 
     const persistedActiveJobCardId = isDifferentFromActiveSummary ? null : activeJobCardId
+
+    // Generate temporary JC number for pre-fetch uploads if not yet entered
+    const finalJcNumber = jcNumber || `TEMP-${Date.now()}`
 
     async function syncPanels(jobCardId: string): Promise<boolean> {
       const selected = selectedPanelsSnapshot
@@ -2481,7 +2511,9 @@ export default function AutoDocPage() {
 
       const synced = await syncEstimateRows(persistedActiveJobCardId)
       if (!synced) return null
-      await fetchRows(true)
+      if (!isPreFetchUpload) {
+        await fetchRows(true)
+      }
       if (showSuccessToast) showToast('Draft saved.', true)
       return persistedActiveJobCardId
     }
@@ -2495,7 +2527,7 @@ export default function AutoDocPage() {
     })
     const jcRes = await createJobCard({
       regNumber: form.regNumber,
-      jcNumber: form.jcNumber,
+      jcNumber: finalJcNumber,
       complaintDate,
       kmReading,
       claimType: form.claimType,
@@ -2526,7 +2558,9 @@ export default function AutoDocPage() {
       // Job card is already created; allow downstream flows like uploads to proceed.
       return jobCardId
     }
-    await fetchRows(true)
+    if (!isPreFetchUpload) {
+      await fetchRows(true)
+    }
 
     if (showSuccessToast) showToast('Draft created and saved.', true)
     return jobCardId
@@ -3263,7 +3297,7 @@ export default function AutoDocPage() {
                   onBlur={() => {
                     setForm((prev) => ({ ...prev, regNumber: prev.regNumber.toUpperCase() }))
                   }}
-                  placeholder="REGISTRATION NO"
+                  placeholder="REGISTRATION NO *"
                   className="inp"
                 />
               </span>
@@ -3275,7 +3309,7 @@ export default function AutoDocPage() {
                   onChange={(e) => {
                     setForm((prev) => ({ ...prev, kmReading: e.target.value }))
                   }}
-                  placeholder="KM Reading"
+                  placeholder="KM Reading *"
                   className="inp"
                   min="0"
                 />
@@ -3283,7 +3317,7 @@ export default function AutoDocPage() {
 
               <button
                 onClick={() => void handleVehicleLookup()}
-                disabled={lookupBusy || creating || uploadingWalkaround || uploadingCarImage || !form.regNumber.trim() || !form.kmReading.trim()}
+                disabled={lookupBusy || creating || uploadingWalkaround || uploadingCarImage || !form.regNumber.trim() || !form.kmReading.trim() || !walkaroundVideoName || !carImageName}
                 className="btn btn--soft"
               >
                 {lookupBusy ? 'Checking…' : 'Fetch'}
@@ -3518,8 +3552,8 @@ export default function AutoDocPage() {
                         setSavingDraft(false)
                       }
                     }}
-                    disabled={savingDraft}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    disabled={savingDraft || !form.paintType.trim() || !form.ownerName.trim() || !form.ownerPhone.trim() || !form.jcNumber.trim()}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -3541,15 +3575,33 @@ export default function AutoDocPage() {
             </div>
           </div>
           <div className="card__body space-y-3">
-            <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+            <label className={`flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 ${uploadingWalkaround || uploadingCarImage ? 'hover:bg-white' : 'hover:bg-gray-50'}`}>
               <span>Walkaround video</span>
-              <span className="text-xs text-gray-500">{uploadingWalkaround ? 'Uploading...' : (walkaroundVideoName || 'Upload')}</span>
+              {uploadingWalkaround ? (
+                <div className="flex flex-col items-end gap-1 flex-grow ml-4">
+                  <div className="w-32 bg-gray-200 rounded-full h-2">
+                    <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${walkaroundProgress}%` }}></div>
+                  </div>
+                  <span className="text-xs text-gray-600">{walkaroundProgress}%</span>
+                </div>
+              ) : (
+                <span className="text-xs text-gray-500">{walkaroundVideoName || 'Upload'}</span>
+              )}
               <input type="file" accept="video/*" disabled={uploadingWalkaround || uploadingCarImage} onChange={(event) => { void handlePreFetchWalkaroundVideoUpload(event) }} className="hidden" />
             </label>
 
-            <label className="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+            <label className={`flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 ${uploadingWalkaround || uploadingCarImage ? 'hover:bg-white' : 'hover:bg-gray-50'}`}>
               <span>Car image (GPS-stamped)</span>
-              <span className="text-xs text-gray-500">{uploadingCarImage ? 'Uploading...' : (carImageName || 'Upload')}</span>
+              {uploadingCarImage ? (
+                <div className="flex flex-col items-end gap-1 flex-grow ml-4">
+                  <div className="w-32 bg-gray-200 rounded-full h-2">
+                    <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${carImageProgress}%` }}></div>
+                  </div>
+                  <span className="text-xs text-gray-600">{carImageProgress}%</span>
+                </div>
+              ) : (
+                <span className="text-xs text-gray-500">{carImageName || 'Upload'}</span>
+              )}
               <input type="file" accept="image/*" disabled={uploadingWalkaround || uploadingCarImage} onChange={(event) => { void handlePreFetchCarImageUpload(event) }} className="hidden" />
             </label>
 

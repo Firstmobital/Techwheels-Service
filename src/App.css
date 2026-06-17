@@ -89,6 +89,7 @@ textarea.inp { height: auto; padding: 11px 13px; resize: vertical; line-height: 
   white-space: nowrap;
 }
 .btn:active { transform: translateY(.5px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 .btn--block { width: 100%; }
 .btn--primary { background: var(--accent); color: var(--on-accent); box-shadow: var(--sh-1); }
 .btn--primary:hover { background: var(--accent-press); box-shadow: var(--sh-2); }

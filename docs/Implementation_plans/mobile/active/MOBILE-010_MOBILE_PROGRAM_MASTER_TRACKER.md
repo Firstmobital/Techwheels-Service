@@ -43,6 +43,14 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 
 ---
 
+## 3.1) Immediate Program Priority (Override)
+
+1. Highest priority now: mobile screen implementation/parity for web AutoDoc route: `https://techwheels-service.vercel.app/autodoc`.
+2. Execution anchor: MOBILE-009 redesign parity tracker (current active screen focus).
+3. Until this screen reaches Review/Done in child tracking, no lower-priority item should preempt active execution except production blockers.
+
+---
+
 ## 4) Program-Level Tracker
 
 Use: Not Started | In Progress | Blocked | Review | Done
@@ -50,7 +58,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | Item ID | Program Workstream | Source Plan(s) | Status | Owner | Next Action |
 |---|---|---|---|---|---|
 | M10-001 | Establish canonical authority and cross-links | MOBILE-000, MOBILE-001, MOBILE-010 | Done | Mobile Team | Keep links current when new plans are added |
-| M10-002 | Body and Paint redesign sequence completion | MOBILE-009 | In Progress | Mobile Team | Continue from current next screen in MOBILE-009 |
+| M10-002 | AutoDoc mobile screen parity (`/autodoc`) | MOBILE-009 | In Progress | Mobile Team | Implement and validate mobile parity against web `/autodoc` as immediate priority |
 | M10-003 | Platform home hardening phase | MOBILE-007 | In Progress | Mobile Team | Execute pending P4 tasks and verify end-to-end |
 | M10-004 | Processing-state UX rollout | MOBILE-008 | Not Started | Mobile Team | Start Sprint 1 critical items (M8-001/2/6/11) |
 | M10-005 | GPS stamp parity closure | MOBILE-005 | In Progress | Mobile Team | Complete remaining phases and QA gates |
@@ -71,7 +79,7 @@ Use: Not Started | In Progress | Blocked | Review | Done
 
 When restarting in a new chat:
 1. Open this file first.
-2. Continue from the first highest-priority item that is not Done.
+2. Continue from M10-002 first (AutoDoc mobile screen parity for `/autodoc`) until it is Review/Done.
 3. Update this file and the relevant child tracker together before ending the session.
 
 Recommended restart prompt:
