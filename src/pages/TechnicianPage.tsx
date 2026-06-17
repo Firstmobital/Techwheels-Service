@@ -89,6 +89,7 @@ const DEFAULT_PV_SHARE_PERCENT = 20
 const DEFAULT_EV_SHARE_PERCENT = 25
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const UNKNOWN_LOCATION = 'Unknown location'
+const TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE = 'vw_technician_income_assignments'
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
@@ -213,6 +214,31 @@ function normalizeJobCardNumber(value: string | null | undefined): string {
 
 function normalizeSupportRole(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
+}
+
+function isTechnicianBusinessRole(value: string | null | undefined): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === 'technician' || normalized.includes('technician')
+}
+
+async function fetchTechnicianCodeSet(): Promise<Set<string>> {
+  const techRes = await supabase
+    .from('employee_master')
+    .select('employee_code, role')
+
+  if (techRes.error) {
+    throw new Error(`Failed to load technician roster: ${techRes.error.message}`)
+  }
+
+  const set = new Set<string>()
+  ;(techRes.data ?? []).forEach((row: any) => {
+    if (!isTechnicianBusinessRole(row.role)) return
+    const code = normalizeJobCardNumber(row.employee_code)
+    if (!code) return
+    set.add(code)
+  })
+
+  return set
 }
 
 function isTechnicianSupportRole(value: string | null | undefined): boolean {
@@ -433,17 +459,21 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
   const dateStr = yest.toISOString().slice(0, 10)
   const fromTs = dateStr + 'T00:00:00+05:30'
   const toTs = dateStr + 'T23:59:59+05:30'
+  const technicianCodeSet = await fetchTechnicianCodeSet()
 
   // Fetch assignments for yesterday
   const assignRes = await supabase
-    .from('technician_assignments')
+    .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
     .select('*')
     .gte('assigned_at', fromTs)
     .lte('assigned_at', toTs)
     .order('assigned_at', { ascending: true })
 
   if (assignRes.error) throw new Error(assignRes.error.message)
-  const assignmentRows = dedupeLatestAssignments((assignRes.data ?? []) as TechnicianAssignmentRow[])
+  const assignmentRows = dedupeLatestAssignments(
+    ((assignRes.data ?? []) as TechnicianAssignmentRow[])
+      .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.technician_code))),
+  )
 
   const completedJcs = Array.from(new Set(
     assignmentRows
@@ -464,7 +494,10 @@ async function fetchYesterdayReportData(pvPct: number, evPct: number): Promise<{
       .eq('is_active', true)
 
     if (!supportRes.error && supportRes.data) {
-      supportRows.push(...(supportRes.data as SupportAssignmentRow[]))
+      supportRows.push(
+        ...(supportRes.data as SupportAssignmentRow[])
+          .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.employee_code))),
+      )
     }
   }
 
@@ -638,6 +671,8 @@ export default function TechnicianPage() {
       }
       // ───────────────────────────────────────────────────────────────────────
 
+      const technicianCodeSet = await fetchTechnicianCodeSet()
+
       // Fetch all technician assignments for the date range
       const assignmentRowsRaw: TechnicianAssignmentRow[] = []
       let from = 0
@@ -645,7 +680,7 @@ export default function TechnicianPage() {
       while (true) {
         // Fetch technician assignments (no join - will map invoice_date separately)
         let assignQuery = supabase
-          .from('technician_assignments')
+          .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
           .select('*')
           .order('assigned_at', { ascending: false })
           .range(from, from + QUERY_PAGE_SIZE - 1)
@@ -705,6 +740,7 @@ export default function TechnicianPage() {
       // Map invoice_date to assignments and filter by date range
       const primaryAssignmentRows = dedupeLatestAssignments(
         assignmentRowsRaw
+          .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.technician_code)))
           .map((row) => ({
             ...row,
             invoice_date: invoiceDateMap.get(normalizeJobCardNumber(row.job_card_number)) ?? null,
@@ -735,7 +771,10 @@ export default function TechnicianPage() {
           .eq('is_active', true)
 
         if (!supportRes.error && supportRes.data) {
-          supportRows.push(...(supportRes.data as SupportAssignmentRow[]))
+          supportRows.push(
+            ...(supportRes.data as SupportAssignmentRow[])
+              .filter((row) => technicianCodeSet.has(normalizeJobCardNumber(row.employee_code))),
+          )
         }
       }
 
@@ -966,7 +1005,7 @@ export default function TechnicianPage() {
       for (let i = 0; i < sourceJcNumbers.length; i += BATCH_SIZE) {
         const batch = sourceJcNumbers.slice(i, i + BATCH_SIZE)
         const taRes = await supabase
-          .from('technician_assignments')
+          .from(TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE)
           .select('*')
           .in('job_card_number', batch)
 

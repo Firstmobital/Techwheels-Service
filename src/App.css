@@ -3350,11 +3350,24 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   padding: 11px 16px;
   background: var(--surface);
   box-shadow: var(--sh-1);
-  cursor: default;
+  cursor: pointer;
   position: relative;
   overflow: hidden;
   flex: 1;
   min-width: 150px;
+  text-align: left;
+  transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+
+.brx-pipe-pill:hover {
+  border-color: color-mix(in srgb, var(--pc, var(--accent)) 32%, var(--border));
+  box-shadow: var(--sh-2);
+  transform: translateY(-1px);
+}
+
+.brx-pipe-pill.is-active {
+  border-color: color-mix(in srgb, var(--pc, var(--accent)) 52%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc, var(--accent)) 18%, transparent), var(--sh-1);
 }
 
 .brx-pipe-pill::before {

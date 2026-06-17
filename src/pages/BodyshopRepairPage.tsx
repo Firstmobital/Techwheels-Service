@@ -759,6 +759,7 @@ export default function BodyshopRepairPage() {
   const [advisorFilter, setAdvisorFilter] = useState('all')
   const [statusFilter, setStatusFilter]   = useState('active')
   const [stageFilter, setStageFilter] = useState<number | 'all'>('all')
+  const [pipelineFilter, setPipelineFilter] = useState<'all' | 'SA Intake' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery' | 'Delivered'>('all')
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
   const [kmPresentByReceptionId, setKmPresentByReceptionId] = useState<Record<number, boolean>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
@@ -3194,7 +3195,24 @@ export default function BodyshopRepairPage() {
     setAdvisorFilter('all')
   }, [advisorFilter, advisorOptions])
 
-  const filtered = useMemo(() => baseFiltered, [baseFiltered])
+  const pipelineFiltered = useMemo(() => {
+    if (pipelineFilter === 'all') return baseFiltered
+
+    if (pipelineFilter === 'Delivered') {
+      return baseFiltered.filter((card) => card.overall_status === 'delivered')
+    }
+
+    const selectedGroup = STAGE_GROUPS.find((g) => g.label === pipelineFilter)
+    if (!selectedGroup) return baseFiltered
+    const filterStages = selectedGroup.label === 'SA Intake' ? [1, 2, 3, 4, 5, 6, 8] : selectedGroup.stages
+
+    return baseFiltered.filter((card) => {
+      if (card.overall_status !== 'active') return false
+      return filterStages.some((stage) => isCardInStageWorklist(card, stage))
+    })
+  }, [baseFiltered, pipelineFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+
+  const filtered = useMemo(() => pipelineFiltered, [pipelineFiltered])
 
   const stageCounts = useMemo(() => {
     const counts: Record<number, number> = {}
@@ -3209,15 +3227,31 @@ export default function BodyshopRepairPage() {
     return counts
   }, [advisorScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
-  // pipeline counts
+  // pipeline counts (unique cards per group by stage-worklist membership)
   const pipeline = useMemo(() =>
-    STAGE_GROUPS.map((g) => ({
-      ...g,
-      minStage: Math.min(...g.stages),
-      maxStage: Math.max(...g.stages),
-      count: roleScopedCards.filter((c) => g.stages.includes(getEffectiveStageForCard(c)) && c.overall_status === 'active').length,
-    })),
-  [roleScopedCards, photoCountByReceptionId])
+    STAGE_GROUPS.map((g) => {
+      const filterStages = g.label === 'SA Intake' ? [1, 2, 3, 4, 5, 6, 8] : g.stages
+      const count = roleScopedCards.reduce((acc, card) => {
+        if (card.overall_status !== 'active') return acc
+        return filterStages.some((stage) => isCardInStageWorklist(card, stage)) ? acc + 1 : acc
+      }, 0)
+
+      return {
+        ...g,
+        filterStages,
+        minStage: Math.min(...filterStages),
+        maxStage: Math.max(...filterStages),
+        count,
+      }
+    }),
+  [roleScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+
+  const deliveredCount = useMemo(
+    () => roleScopedCards.filter((c) => c.overall_status === 'delivered').length,
+    [roleScopedCards],
+  )
+
+  const pipelineSelected = pipelineFilter !== 'all'
 
   const tabs = useMemo<DetailTab[]>(() => {
     const nextTabs: DetailTab[] = ['overview']
@@ -3268,18 +3302,38 @@ export default function BodyshopRepairPage() {
       {/* ── PIPELINE PILLS ──────────────────────────────────────────────── */}
       <div className="brx-pipeline">
         {pipeline.map((g) => (
-          <div key={g.label} className="brx-pipe-pill" style={{ ['--pc' as any]: g.color }}>
+          <button
+            key={g.label}
+            type="button"
+            className={`brx-pipe-pill ${pipelineFilter === g.label ? 'is-active' : ''}`}
+            style={{ ['--pc' as any]: g.color }}
+            onClick={() => {
+              const label = g.label as 'SA Intake' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery'
+              setPipelineFilter((prev) => prev === label ? 'all' : label)
+              setStageFilter('all')
+            }}
+          >
             <span className="brx-pipe-pill__n">{g.count}</span>
             <span className="brx-pipe-pill__l">
               {g.label}
-              <small>stage {g.minStage}{g.maxStage > g.minStage ? `-${g.maxStage}` : ''}</small>
+              <small>
+                stage {g.label === 'SA Intake' ? '1-6 & 8' : `${g.minStage}${g.maxStage > g.minStage ? `-${g.maxStage}` : ''}`}
+              </small>
             </span>
-          </div>
+          </button>
         ))}
-        <div className="brx-pipe-pill brx-pipe-pill--delivered">
-          <span className="brx-pipe-pill__n">{cards.filter(c => c.overall_status === 'delivered').length}</span>
+        <button
+          type="button"
+          className={`brx-pipe-pill brx-pipe-pill--delivered ${pipelineFilter === 'Delivered' ? 'is-active' : ''}`}
+          onClick={() => {
+            setPipelineFilter((prev) => prev === 'Delivered' ? 'all' : 'Delivered')
+            setStageFilter('all')
+            setStatusFilter('all')
+          }}
+        >
+          <span className="brx-pipe-pill__n">{deliveredCount}</span>
           <span className="brx-pipe-pill__l">Delivered<small>completed</small></span>
-        </div>
+        </button>
       </div>
 
       {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
@@ -3321,8 +3375,11 @@ export default function BodyshopRepairPage() {
           <div className="brx-queue-grid">
             <button
               type="button"
-              onClick={() => setStageFilter('all')}
-              className={`brx-qbtn ${stageFilter === 'all' ? 'is-active' : ''}`}
+              onClick={() => {
+                setStageFilter('all')
+                setPipelineFilter('all')
+              }}
+              className={`brx-qbtn ${!pipelineSelected && stageFilter === 'all' ? 'is-active' : ''}`}
             >
               <div className="brx-qbtn__stage">ALL</div>
               <div className="brx-qbtn__label">All Stages</div>
@@ -3332,12 +3389,15 @@ export default function BodyshopRepairPage() {
             {Object.entries(STAGE_LABELS).map(([stageStr, label]) => {
               const stageNum = Number(stageStr)
               const count = stageCounts[stageNum] ?? 0
-              const selectedStage = stageFilter === stageNum
+              const selectedStage = !pipelineSelected && stageFilter === stageNum
               return (
                 <button
                   key={stageNum}
                   type="button"
-                  onClick={() => setStageFilter(stageNum)}
+                  onClick={() => {
+                    setStageFilter(stageNum)
+                    setPipelineFilter('all')
+                  }}
                   className={`brx-qbtn ${selectedStage ? 'is-active' : ''}`}
                 >
                   <div className="brx-qbtn__stage">Stage {stageNum}</div>
