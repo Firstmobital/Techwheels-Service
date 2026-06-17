@@ -23,6 +23,7 @@ const MODULES: ModuleRow[] = [
   { key: 'admin', label: 'Admin', icon: 'users', iconBg: 'bg-slate-100', description: 'Users, roles & branches', route: '/(tabs)/admin' },
   { key: 'settings', label: 'Settings', icon: 'settings', iconBg: 'bg-amber-100', description: 'Preferences & device', route: '/(tabs)/settings' },
   { key: 'reception', label: 'Reception', icon: 'check-circle', iconBg: 'bg-green-100', description: 'Vehicle intake & entries', route: '/(tabs)/reception' },
+  { key: 'floor-incharge', label: 'Floor Incharge', icon: 'grid', iconBg: 'bg-indigo-100', description: 'Technician assignments · bay · status', route: '/(tabs)/floor-incharge' },
 ]
 
 const DEFAULT_METRICS: HomeDashboardMetrics = {
