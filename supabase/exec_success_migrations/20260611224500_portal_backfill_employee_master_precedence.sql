@@ -80,9 +80,9 @@ SET
     resolved.branch_suffix_portal
   ),
   branch_label = COALESCE(
-    NULLIF(btrim(s.branch_label), ''),
+    NULLIF(btrim(resolved.em_location), ''),
     NULLIF(btrim(s.branch), ''),
-    COALESCE(NULLIF(btrim(resolved.em_location), ''), NULLIF(btrim(s.location), ''))
+    NULLIF(btrim(s.location), '')
   )
 FROM resolved
 WHERE s.id = resolved.id;
@@ -148,9 +148,9 @@ SET
     resolved.branch_suffix_portal
   ),
   branch_label = COALESCE(
-    NULLIF(btrim(b.branch_label), ''),
+    NULLIF(btrim(resolved.em_location), ''),
     NULLIF(btrim(b.branch), ''),
-    COALESCE(NULLIF(btrim(resolved.em_location), ''), NULLIF(btrim(b.location), ''))
+    NULLIF(btrim(b.location), '')
   )
 FROM resolved
 WHERE b.id = resolved.id;
@@ -204,6 +204,16 @@ SET
     NULLIF(btrim(regexp_replace(coalesce(j.branch, ''), '(?i)\s+(EV|PV)$', '')), ''),
     NULLIF(btrim(j.branch), '')
   ),
+  branch = COALESCE(
+    NULLIF(btrim(resolved.em_location), ''),
+    NULLIF(btrim(j.branch), ''),
+    CASE resolved.mapped_dealer_code
+      WHEN '500A840' THEN 'Sitapura'
+      WHEN '3000840' THEN 'Sitapura'
+      WHEN '3001440' THEN 'Ajmer Road'
+      ELSE NULL
+    END
+  ),
   portal = COALESCE(
     CASE WHEN upper(btrim(coalesce(resolved.em_fuel_type, ''))) IN ('EV', 'PV') THEN upper(btrim(resolved.em_fuel_type)) ELSE NULL END,
     CASE resolved.mapped_dealer_code
@@ -216,9 +226,9 @@ SET
     resolved.branch_suffix_portal
   ),
   branch_label = COALESCE(
-    NULLIF(btrim(j.branch_label), ''),
+    NULLIF(btrim(resolved.em_location), ''),
     NULLIF(btrim(j.branch), ''),
-    COALESCE(NULLIF(btrim(resolved.em_location), ''), NULLIF(btrim(j.location), ''))
+    NULLIF(btrim(j.location), '')
   )
 FROM resolved
 WHERE j.id = resolved.id;
@@ -311,7 +321,6 @@ BEGIN
   );
 
   NEW.branch_label := COALESCE(
-    NULLIF(btrim(coalesce(NEW.branch_label, '')), ''),
     NULLIF(btrim(coalesce(NEW.branch, '')), ''),
     NEW.location
   );
