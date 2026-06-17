@@ -88,6 +88,7 @@ interface Employee {
   employee_name: string
   department: string | null
   fuel_type: string | null
+  role: string | null
 }
 
 type FormState = {
@@ -234,8 +235,7 @@ export default function ReceptionScreen() {
         .limit(500),
       supabase
         .from('employee_master')
-        .select('employee_code,employee_name,department,fuel_type')
-        .eq('is_active', true)
+        .select('employee_code,employee_name,department,fuel_type,role')
         .order('employee_name'),
       supabase.from('settings_models').select('model_name').order('model_name'),
     ])
@@ -353,7 +353,14 @@ export default function ReceptionScreen() {
     const useFuel = form.service_type ? shouldApplyFuelFilter(form.service_type) : true
     const reqFuel = form.model ? inferFuelBucket(form.model) : null
 
+    // Only show SA / SSA roles (same logic as web ReceptionPage)
+    const allowedRoles = new Set(['sa', 'ssa', 'service advisor', 'service_advisor'])
+    const hasServiceType = !!form.service_type.trim()
     return employees.filter(e => {
+      const role = String(e.role ?? '').trim().toLowerCase()
+      if (!allowedRoles.has(role)) return false
+      // If no service type selected yet, show all SAs across all depts
+      if (!hasServiceType) return true
       const dept = normalizeDept(e.department)
       if (dept !== reqDept) return false
       if (!useFuel) return true
