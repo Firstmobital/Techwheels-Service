@@ -1,8 +1,8 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** PHASE C IN PROGRESS: BP-01 `/autodoc` PRIORITY PASS ACTIVE; BP-02 (RV), BP-03 (RV), BP-04 QUEUED  
+**Status:** PHASE C IN PROGRESS: BP-01 `/autodoc` PRIORITY PASS ACTIVE; BP-02/BP-04/BP-05/BP-06/BP-07/BP-08 re-validation pending after redesign pass  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-06-17 (BP-02/BP-04 live test fixes applied: fetch false-error resolved, draft persistence hardened, damage count auto-refresh added.)  
+**Last Updated:** 2026-06-17 (BP-05/BP-06/BP-07/BP-08 redesign parity pass applied; unified device validation pending for active BP flow.)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
 **Primary Goal:** Execute BP-01 through BP-08 AutoDoc full-flow, device-specific UI parity audit against web baseline with documented evidence and no business-logic/functionality changes.
 **Program Reporting:** Reports upward to `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` (master authority)
@@ -305,10 +305,10 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | IP | Mobile | 🔄 Regression fix pass applied from live device test (2026-06-17): fetch draft-sync now uses effective JC fallback (no blank-JC save failure), Next now persists vehicle/job-card/status in one path, and auth-expiry handling is clearer. Pending re-validation on device before returning to `RV`. |
 | BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | RV | Mobile | ✅ User confirmed screen looks complete in current pass (2026-05-31). Keep business logic unchanged; only visual parity follow-ups if explicitly requested. |
 | BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | IP | Mobile | 🔄 Live test defect fix applied (2026-06-17): damage screen now reloads on focus so uploaded photo counts refresh immediately after returning from capture/photos. Pending confirmation of real-time counter behavior on device. |
-| BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | NS | Mobile | Capture flow camera/gallery selection. |
-| BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | NS | Mobile | Review captured panel photos by repair stage. |
-| BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | NS | Mobile | Pending fresh audit; include OTA-safe hero rendering validation on existing binaries. |
-| BP-08 | Body & Paint | submit | `mobile/src/app/job-cards/[id]/submit.tsx` | `documents`, `panel_photos`, `estimate_rows`, `job_cards` | NS | Mobile | Pending fresh audit after estimate parity closure. |
+| BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | IP | Mobile | ✅ Redesign parity pass applied (Add Photo hierarchy, GPS lock card, upload CTA styling); logic preserved. Pending device evidence validation. |
+| BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | IP | Mobile | ✅ Redesign parity pass applied (stage chips, gallery cards, add/replace/remove actions, empty-state blocks); logic preserved. Pending device evidence validation. |
+| BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | IP | Mobile | ✅ Redesign parity pass applied (Estimate editor hierarchy, checklist block, summary/export labeling, visual system alignment). Pending device evidence and interaction validation. |
+| BP-08 | Body & Paint | submit | `mobile/src/app/job-cards/[id]/submit.tsx` | `documents`, `panel_photos`, `estimate_rows`, `job_cards` | IP | Mobile | ✅ Redesign parity pass applied (Submit claim hierarchy, Pre-Submit/Post-Repair blocks, status-text action rows). Pending device evidence and end-to-end submit validation. |
 | REP-01 | Reports | reports | `mobile/src/app/(tabs)/reports.tsx` | report query layer | NS | Mobile | |
 | REP-02 | Reports | report_* | `mobile/src/app/reports/[id].tsx` (or existing report route mapping) | report query layer | NS | Mobile | Route parity validation needed |
 | OPS-01 | Operations | import | `mobile/src/app/(tabs)/import.tsx` | import pipeline tables/APIs | NS | Mobile | |

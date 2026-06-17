@@ -16,15 +16,16 @@ import {
   updateEstimateRow,
   type AddEstimateRowInput,
 } from '../../../lib/api/estimate'
-import { getJobCardSummary } from '../../../lib/api/jobCards'
+import { getJobCardSummary, type JobCardStatus } from '../../../lib/api/jobCards'
 import { listPanels } from '../../../lib/api/panels'
 import { listPanelPhotos } from '../../../lib/api/photos'
 import { getActiveModelRates, getAutoDocWorkflowOptions, type ModelPanelRate } from '../../../lib/api/autodocRates'
-import JobWorkflowHeader from '../../../components/autodoc/JobWorkflowHeader'
 import NativeSelectField from '../../../components/common/NativeSelectField'
 import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
 import { uploadDocumentFile } from '../../../lib/api/documents'
 import { HeroBlock, Pill } from '../../../components/ui'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Icon } from '../../../components/ui/Icon'
 
 type Params = {
   id?: string | string[]
@@ -135,12 +136,49 @@ function buildRowsForPanels(panelNames: string[], dbRows: EstimateFormRow[]): Es
   })
 }
 
+function isEstimateCompleteRow(row: EstimateFormRow): boolean {
+  const action = canonicalizeEstimateAction(row.action)
+  const defect = row.defect.trim()
+  const partNumber = row.partNumber.trim()
+  if (!action || !defect) return false
+  if (action === 'replace' && !partNumber) return false
+  return true
+}
+
 function formatCurrency(value: number): string {
-  return `Rs ${value.toLocaleString('en-IN')}`
+  return `₹${value.toLocaleString('en-IN')}`
+}
+
+function getStatusChipStyle(tone: 'green' | 'blue' | 'amber') {
+  if (tone === 'green') {
+    return {
+      bg: '#e4f4ec',
+      border: '#bfe6d2',
+      dot: '#1c8f63',
+      text: '#1c8f63',
+    }
+  }
+
+  if (tone === 'blue') {
+    return {
+      bg: '#e9f0fd',
+      border: '#cadcf8',
+      dot: '#2f63cf',
+      text: '#2f63cf',
+    }
+  }
+
+  return {
+    bg: '#fdf2e4',
+    border: '#f1dcb8',
+    dot: '#c9751b',
+    text: '#c9751b',
+  }
 }
 
 export default function JobCardEstimateScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
@@ -157,8 +195,10 @@ export default function JobCardEstimateScreen() {
   const [resolvedModelName, setResolvedModelName] = useState('')
   const [resolvedPaintType, setResolvedPaintType] = useState('')
   const [resolvedCityCategory, setResolvedCityCategory] = useState('')
+  const [jobStatus, setJobStatus] = useState<JobCardStatus>('draft')
   const [loadingModelRates, setLoadingModelRates] = useState(false)
   const [savingRowId, setSavingRowId] = useState<string | null>(null)
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
 
   const load = async () => {
@@ -202,28 +242,40 @@ export default function JobCardEstimateScreen() {
     ))
     const dbRows = (estimateRes.data ?? []).map(mapDbRowToForm)
 
+    const mergedRows = buildRowsForPanels(panelNames, dbRows)
+
     setPanels(panelNames)
-    setRows(buildRowsForPanels(panelNames, dbRows))
+    setRows(mergedRows)
+    setExpandedRowId((prev) => {
+      const hasPrev = prev ? mergedRows.some((row) => row.id === prev) : false
+      if (hasPrev) return prev
+
+      const firstPending = mergedRows.find((row) => !isEstimateCompleteRow(row))
+      return firstPending?.id ?? mergedRows[0]?.id ?? null
+    })
 
     const panelNameById = new Map<string, string>()
+    const selectedPanelIds: string[] = []
     for (const panel of panelRes.data ?? []) {
       const name = panel.panel_name?.trim()
       if (!name) continue
+      selectedPanelIds.push(panel.id)
       panelNameById.set(panel.id, normalizePanelKey(name))
     }
 
+    const preRepairPanelIds = new Set<string>()
     const preRepairSet = new Set<string>()
     for (const photo of photoRes.data ?? []) {
-      const stage = String((photo as any).stage ?? '').trim().toLowerCase()
+      const stage = String((photo as any).repair_stage ?? '').trim().toLowerCase()
       if (stage !== 'pre-repair') continue
+      if (photo.panel_id) preRepairPanelIds.add(photo.panel_id)
       const panelKey = panelNameById.get(photo.panel_id)
       if (panelKey) preRepairSet.add(panelKey)
     }
     setPreRepairPanelNames(preRepairSet)
 
     // Stage gate: enforce pre-repair photos for all selected panels before accessing Estimate
-    const normalizedPanelNames = panelNames.map((name) => normalizePanelKey(name))
-    const hasAllPreRepairPhotos = normalizedPanelNames.every((panelKey) => preRepairSet.has(panelKey))
+    const hasAllPreRepairPhotos = selectedPanelIds.every((panelId) => preRepairPanelIds.has(panelId))
 
     if (!hasAllPreRepairPhotos) {
       setError('Pre-repair photos required')
@@ -260,6 +312,7 @@ export default function JobCardEstimateScreen() {
     const modelName = String(summaryRes.data?.model ?? '').trim()
     const cityCategory = String(summaryRes.data?.bp_city_category ?? '').trim()
     const paintType = String(summaryRes.data?.paint_type ?? '').trim()
+    setJobStatus((summaryRes.data?.status as JobCardStatus) ?? 'draft')
 
     setResolvedModelName(modelName)
     setResolvedCityCategory(cityCategory)
@@ -321,14 +374,7 @@ export default function JobCardEstimateScreen() {
     }))
   }
 
-  const isEstimateComplete = useCallback((row: EstimateFormRow): boolean => {
-    const action = canonicalizeEstimateAction(row.action)
-    const defect = row.defect.trim()
-    const partNumber = row.partNumber.trim()
-    if (!action || !defect) return false
-    if (action === 'replace' && !partNumber) return false
-    return true
-  }, [])
+  const isEstimateComplete = useCallback((row: EstimateFormRow): boolean => isEstimateCompleteRow(row), [])
 
   const validateRow = (row: EstimateFormRow): string | null => {
     if (!row.panelName.trim()) return 'Panel is required.'
@@ -362,7 +408,7 @@ export default function JobCardEstimateScreen() {
       panelName: row.panelName,
       partNumber: isRepaintAction(row.action) ? undefined : (row.partNumber || undefined),
       // Keep part_description backend-managed in web-parity mode.
-      partDescription: row.panelName || undefined,
+      partDescription: row.partDescription.trim() || row.panelName || undefined,
       defect: row.defect,
       action: canonicalizeEstimateAction(row.action),
       qty: Number(row.qty || '1'),
@@ -448,6 +494,24 @@ export default function JobCardEstimateScreen() {
 
   const grandTotal = estimateTotals.parts + estimateTotals.paint + estimateTotals.labour
 
+  const statusLabel = useMemo(() => {
+    if (jobStatus === 'completed') return 'Submitted'
+    if (jobStatus === 'approved') return 'Approved'
+    if (jobStatus === 'submitted') return 'Submitted'
+    if (jobStatus === 'in_work') return 'In Work'
+    return 'Draft'
+  }, [jobStatus])
+
+  const statusAccent = useMemo(() => {
+    if (jobStatus === 'completed' || jobStatus === 'submitted') return '#1f9a6b'
+    if (jobStatus === 'approved') return '#7048cf'
+    if (jobStatus === 'in_work') return '#c9751b'
+    return '#7d8090'
+  }, [jobStatus])
+
+  const stageLabels = ['Intake', 'Document', 'Estimate', 'Pre-Submit', 'Submit']
+  const stageIndex = 2
+
   const onExportEstimate = async () => {
     if (!jobCardId) return
 
@@ -484,17 +548,111 @@ export default function JobCardEstimateScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Estimate Editor' }} />
-      <ScrollView className="flex-1 bg-slate-100" contentContainerStyle={{ padding: 14, paddingBottom: 28 }}>
-        <JobWorkflowHeader jobCardId={jobCardId} jcNumber={jobCardNumberHint} regNumber={regNumberHint} activeTab="estimate" />
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView className="flex-1 bg-amber-50" contentContainerStyle={{ paddingBottom: 28 }}>
+        <SafeAreaView
+          edges={['top']}
+          style={{
+            backgroundColor: '#ffffff',
+            borderBottomWidth: 1,
+            borderBottomColor: '#e7e3d9',
+            paddingHorizontal: 16,
+            paddingTop: Math.max(insets.top > 0 ? 8 : 18, 8),
+            paddingBottom: 12,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <TouchableOpacity
+                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
+                onPress={() => router.push('/(tabs)/autodoc')}
+              >
+                <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
+              </TouchableOpacity>
+              <View style={{ minWidth: 0, flex: 1 }}>
+                <Text style={{ fontSize: 11, color: '#8b90a0', fontWeight: '700', letterSpacing: 0.12, textTransform: 'uppercase' }}>
+                  {jobCardNumberHint || 'Job Card'}
+                </Text>
+                <Text style={{ fontSize: 20, color: '#1a1b21', fontWeight: '700' }}>Estimate</Text>
+              </View>
+            </View>
+            <View style={{ borderWidth: 1, borderColor: '#e3ceb0', backgroundColor: '#fbefdd', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: statusAccent, marginRight: 7 }} />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: statusAccent }}>{statusLabel}</Text>
+            </View>
+          </View>
+        </SafeAreaView>
+
+        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e7e3d9', backgroundColor: '#ffffff' }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/jobcard', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="file" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Job Card</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/damage', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="grid" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Damage</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, borderRadius: 14, backgroundColor: '#2a4cd0', borderWidth: 1, borderColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}>
+              <Icon name="file-text" size={18} color="#ffffff" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#ffffff' }}>Estimate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/job-cards/[id]/submit', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
+              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Icon name="send" size={18} color="#8b90a0" strokeWidth={1.8} />
+              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Submit</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center' }}>
+            {stageLabels.map((label, idx) => {
+              const active = idx <= stageIndex
+              const current = idx === stageIndex
+
+              return (
+                <View key={label} style={{ flex: idx === stageLabels.length - 1 ? 0 : 1, flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ alignItems: 'center' }}>
+                    <View
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        borderWidth: 2,
+                        borderColor: active ? '#1f9a6b' : '#cfc8b8',
+                        backgroundColor: current ? '#2a4cd0' : active ? '#ffffff' : '#ffffff',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {active && !current ? <Icon name="check" size={12} color="#1f9a6b" strokeWidth={2.6} /> : <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: current ? '#ffffff' : '#cfc8b8' }} />}
+                    </View>
+                    <Text style={{ marginTop: 5, fontSize: 11, fontWeight: current ? '700' : '600', color: current ? '#2a4cd0' : active ? '#1f9a6b' : '#9a9ea9' }}>{label}</Text>
+                  </View>
+
+                  {idx < stageLabels.length - 1 ? (
+                    <View style={{ flex: 1, height: 2, marginHorizontal: 6, backgroundColor: idx < stageIndex ? '#1f9a6b' : '#e2ddcf' }} />
+                  ) : null}
+                </View>
+              )
+            })}
+          </View>
+        </View>
 
         {loading ? (
-          <View className="items-center justify-center py-20">
+          <View className="items-center justify-center py-20 px-4">
             <ActivityIndicator size="large" color="#1d4ed8" />
             <Text className="text-sm text-slate-600 mt-3">Loading estimate data...</Text>
           </View>
         ) : error ? (
-          <View className="bg-white border border-red-200 rounded-2xl p-5 mt-3">
+          <View className="bg-white border border-red-200 rounded-2xl p-5 mt-3 mx-4">
             <Text className="text-lg font-semibold text-red-700">Unable to load estimate</Text>
             <Text className="text-sm text-red-600 mt-1">{error}</Text>
             <TouchableOpacity className="mt-4 bg-blue-600 rounded-xl py-3 items-center" onPress={load}>
@@ -503,206 +661,278 @@ export default function JobCardEstimateScreen() {
           </View>
         ) : (
           <>
-            <HeroBlock
+            <View className="px-4 pt-3">
+              <View className="flex-row flex-wrap gap-2 mb-2">
+                <Pill
+                  label={resolvedModelName ? `Model: ${resolvedModelName}` : 'Model pending'}
+                  variant={resolvedModelName ? 'post' : 'warning'}
+                  size="sm"
+                />
+                <Pill
+                  label={resolvedPaintType ? `Paint: ${resolvedPaintType}` : 'Paint pending'}
+                  variant={resolvedPaintType ? 'under' : 'warning'}
+                  size="sm"
+                />
+                <Pill
+                  label={resolvedCityCategory ? `City: ${resolvedCityCategory}` : 'City pending'}
+                  variant={resolvedCityCategory ? 'estimate' : 'warning'}
+                  size="sm"
+                />
+              </View>
+            </View>
+
+            <View className="px-4">
+              <HeroBlock
               title="Estimate Total"
               mainValue={formatCurrency(grandTotal)}
               subtitle={`${completedEstimatePanels.size} of ${panels.length} panels estimate-ready`}
               variant="brand"
             >
               <View className="mt-3 flex-row gap-2">
-                <View className="flex-1 rounded-lg bg-white bg-opacity-15 px-2 py-2">
-                  <Text className="text-[9px] font-semibold text-blue-100 uppercase">Parts</Text>
-                  <Text className="text-base font-bold text-white mt-0.5">{formatCurrency(estimateTotals.parts)}</Text>
+                <View style={{ flex: 1, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 12, paddingVertical: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#d5e3ff' }}>Parts</Text>
+                  <Text style={{ fontSize: 32, fontWeight: '700', color: '#ffffff', marginTop: 2 }}>{formatCurrency(estimateTotals.parts)}</Text>
                 </View>
-                <View className="flex-1 rounded-lg bg-white bg-opacity-15 px-2 py-2">
-                  <Text className="text-[9px] font-semibold text-blue-100 uppercase">Paint + Labour</Text>
-                  <Text className="text-base font-bold text-white mt-0.5">{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
+                <View style={{ flex: 1, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 12, paddingVertical: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#d5e3ff' }}>Paint + Labour</Text>
+                  <Text style={{ fontSize: 32, fontWeight: '700', color: '#ffffff', marginTop: 2 }}>{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
                 </View>
               </View>
-              <Text className="text-[11px] mt-2 text-blue-50">
+              <Text style={{ fontSize: 12, marginTop: 8, color: '#e4ecff' }}>
                 Rate Card Status:{' '}
                 {!resolvedModelName || !resolvedCityCategory ? (
-                  <Text className="text-blue-100">Awaiting model/city category</Text>
+                  <Text style={{ color: '#d5e3ff' }}>Awaiting model/city category</Text>
                 ) : loadingModelRates ? (
-                  <Text className="text-blue-100">Loading rates...</Text>
+                  <Text style={{ color: '#d5e3ff' }}>Loading rates...</Text>
                 ) : activeModelRates.length > 0 ? (
-                  <Text className="text-emerald-100 font-semibold">{activeModelRates.length} panel rates active</Text>
+                  <Text style={{ color: '#bfe6d2', fontWeight: '700' }}>{activeModelRates.length} panel rates active</Text>
                 ) : (
-                  <Text className="text-amber-100">No active rates found</Text>
+                  <Text style={{ color: '#e4ecff' }}>No active rates found</Text>
                 )}
               </Text>
-            </HeroBlock>
+              </HeroBlock>
+            </View>
 
-            <View className="bg-white border border-slate-200 rounded-xl p-3 mt-2">
-              <Text className="text-[11px] uppercase tracking-wide text-slate-500">Panel Readiness</Text>
+            <View style={{ marginHorizontal: 16, marginTop: 8, borderRadius: 16, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 14 }}>
+              <Text style={{ fontSize: 11, letterSpacing: 1.2, fontWeight: '700', color: '#8b90a0', textTransform: 'uppercase' }}>Panel Readiness</Text>
               {panelReadiness.length === 0 ? (
-                <Text className="text-sm text-slate-600 mt-2">No panels selected in Damage stage yet.</Text>
+                <Text style={{ fontSize: 14, color: '#6b7280', marginTop: 8 }}>No panels selected in Damage stage yet.</Text>
               ) : (
                 panelReadiness.map((item) => (
-                  <View key={item.panelName} className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2">
-                    <Text className="text-sm font-semibold text-slate-900">{item.panelName}</Text>
-                    <View className="flex-row mt-1.5 gap-1.5">
-                      <Pill
-                        label={item.hasPreRepair ? 'Pre-Repair OK' : 'Pre-Repair Missing'}
-                        variant={item.hasPreRepair ? 'post' : 'warning'}
-                        size="sm"
-                      />
-                      <Pill
-                        label={item.hasCompleteEstimate ? 'Estimate OK' : 'Estimate Pending'}
-                        variant={item.hasCompleteEstimate ? 'under' : 'warning'}
-                        size="sm"
-                      />
+                  <View key={item.panelName} style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#1a1b21', flex: 1, marginRight: 8 }}>{item.panelName}</Text>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {(() => {
+                        const tone = item.hasPreRepair ? 'green' : 'amber'
+                        const chip = getStatusChipStyle(tone)
+                        return (
+                          <View style={{ borderRadius: 999, borderWidth: 1, borderColor: chip.border, backgroundColor: chip.bg, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: chip.dot, marginRight: 6 }} />
+                            <Text style={{ color: chip.text, fontSize: 10, fontWeight: '700' }}>{item.hasPreRepair ? 'Pre OK' : 'Pre Missing'}</Text>
+                          </View>
+                        )
+                      })()}
+                      {(() => {
+                        const tone = item.hasCompleteEstimate ? 'blue' : 'amber'
+                        const chip = getStatusChipStyle(tone)
+                        return (
+                          <View style={{ borderRadius: 999, borderWidth: 1, borderColor: chip.border, backgroundColor: chip.bg, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: chip.dot, marginRight: 6 }} />
+                            <Text style={{ color: chip.text, fontSize: 10, fontWeight: '700' }}>{item.hasCompleteEstimate ? 'Est OK' : 'Pending'}</Text>
+                          </View>
+                        )
+                      })()}
                     </View>
                   </View>
                 ))
               )}
-
-              {missingEstimatePanels.length > 0 && (
-                <Text className="text-[11px] text-amber-700 mt-2">
-                  Pending: {missingEstimatePanels.map((x) => x.panelName).join(', ')}
-                </Text>
-              )}
             </View>
 
-            <View className="bg-white border border-slate-200 rounded-xl p-3 mt-2">
-              <Text className="text-base font-bold text-slate-900">Estimate Panels</Text>
-              <Text className="text-[11px] text-slate-500 mt-0.5">Auto-synced from Damage selection.</Text>
+            <View style={{ marginHorizontal: 16, marginTop: 16 }}>
+              <Text style={{ fontSize: 12, letterSpacing: 1.3, fontWeight: '700', color: '#8b90a0', textTransform: 'uppercase' }}>Estimate Panels</Text>
 
               {rows.length === 0 && (
-                <View className="mt-2 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2">
-                  <Text className="text-[11px] text-amber-800">Select panels in Damage stage to generate estimate cards.</Text>
+                <View style={{ marginTop: 10, borderRadius: 14, borderWidth: 1, borderColor: '#f1dcb8', backgroundColor: '#fbefdd', padding: 12 }}>
+                  <Text style={{ fontSize: 12, color: '#8c5a21' }}>Select panels in Damage stage to generate estimate cards.</Text>
                 </View>
               )}
 
               {rows.map((row, index) => {
                 const isRepaint = isRepaintAction(row.action)
                 const rowTotal = (Number(row.ndpValue || '0') || 0) + (Number(row.paintCharges || '0') || 0) + (Number(row.labourCharges || '0') || 0)
+                const isReady = isEstimateComplete(row)
+                const isExpanded = expandedRowId === row.id
 
                 return (
-                  <View key={row.id} className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                    <View className="flex-row items-center justify-between mb-2">
-                      <View>
-                        <Text className="text-[10px] uppercase text-slate-500">Panel {index + 1}</Text>
-                        <Text className="text-sm font-bold text-slate-900 mt-0.5">{row.panelName}</Text>
-                      </View>
-                      <Text className={`text-[10px] px-2 py-0.5 rounded ${isEstimateComplete(row) ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {isEstimateComplete(row) ? 'Ready' : 'Pending'}
-                      </Text>
-                    </View>
-
-                    <Text className="text-[11px] text-slate-600 mb-1">Action *</Text>
-                    <NativeSelectField
-                      value={canonicalizeEstimateAction(row.action)}
-                      placeholder="Select action"
-                      options={estimateActionOptions}
-                      onChange={(value) => updateLocalRow(row.id, { action: canonicalizeEstimateAction(value) })}
-                    />
-
-                    <Text className="text-[11px] text-slate-600 mt-2 mb-1">Defect *</Text>
-                    <NativeSelectField
-                      value={row.defect}
-                      placeholder="Select defect"
-                      options={estimateDefectOptions}
-                      onChange={(value) => updateLocalRow(row.id, { defect: value })}
-                    />
-
-                    <Text className="text-[11px] text-slate-600 mt-2 mb-1">Part Number {isReplaceAction(row.action) ? '*' : ''}</Text>
-                    <TextInput
-                      value={isRepaint ? '-' : row.partNumber}
-                      editable={!isRepaint}
-                      onChangeText={(value) => updateLocalRow(row.id, { partNumber: value })}
-                      placeholder={isRepaint ? 'Not required for repaint' : 'Part number'}
-                      className={`border rounded-lg px-2.5 py-2 text-sm ${isRepaint ? 'border-slate-200 bg-slate-100 text-slate-500' : 'border-slate-300 bg-white text-slate-900'}`}
-                    />
-
-                    <View className="flex-row mt-2">
-                      <View className="flex-1 mr-1.5">
-                        <Text className="text-[11px] text-slate-600 mb-1">Qty *</Text>
-                        <TextInput
-                          value={row.qty}
-                          onChangeText={(value) => updateLocalRow(row.id, { qty: value })}
-                          keyboardType="number-pad"
-                          className="border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 text-sm"
-                        />
-                      </View>
-                      <View className="flex-1 ml-1.5">
-                        <Text className="text-[11px] text-slate-600 mb-1">Parts (Rs)</Text>
-                        <TextInput
-                          value={isRepaint ? '0' : row.ndpValue}
-                          editable={!isRepaint}
-                          onChangeText={(value) => updateLocalRow(row.id, { ndpValue: value })}
-                          keyboardType="decimal-pad"
-                          className={`border rounded-lg px-2.5 py-2 text-sm ${isRepaint ? 'border-slate-200 bg-slate-100 text-slate-500' : 'border-slate-300 bg-white text-slate-900'}`}
-                        />
-                      </View>
-                    </View>
-
-                    <View className="flex-row mt-2">
-                      <View className="flex-1 mr-1.5">
-                        <Text className="text-[11px] text-slate-600 mb-1">Paint (Rs)</Text>
-                        <TextInput
-                          value={row.paintCharges}
-                          onChangeText={(value) => updateLocalRow(row.id, { paintCharges: value })}
-                          keyboardType="decimal-pad"
-                          className="border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 text-sm"
-                        />
-                      </View>
-                      <View className="flex-1 ml-1.5">
-                        <Text className="text-[11px] text-slate-600 mb-1">Labour (Rs)</Text>
-                        <TextInput
-                          value={row.labourCharges}
-                          onChangeText={(value) => updateLocalRow(row.id, { labourCharges: value })}
-                          keyboardType="decimal-pad"
-                          className="border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-900 text-sm"
-                        />
-                      </View>
-                    </View>
-
-                    <View className="mt-2 rounded-lg border border-blue-300 bg-blue-100 bg-opacity-40 px-2.5 py-2">
-                      <Text className="text-[10px] font-semibold text-blue-700 uppercase">Row Total</Text>
-                      <Text className="text-lg font-bold text-blue-700 mt-0.5">{formatCurrency(rowTotal)}</Text>
-                    </View>
-
+                  <View key={row.id} style={{ marginTop: 10, borderRadius: 14, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', overflow: 'hidden' }}>
                     <TouchableOpacity
-                      className={`mt-2 rounded-lg py-2.5 items-center ${savingRowId === row.id ? 'bg-blue-300' : 'bg-blue-600'}`}
-                      onPress={() => saveRow(row)}
-                      disabled={savingRowId === row.id}
+                      activeOpacity={0.8}
+                      onPress={() => setExpandedRowId((prev) => (prev === row.id ? null : row.id))}
+                      style={{ paddingHorizontal: 14, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
                     >
-                      <Text className="text-white text-[13px] font-semibold">
-                        {savingRowId === row.id ? 'Saving...' : 'Save Estimate'}
-                      </Text>
+                      <View style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#8b90a0', letterSpacing: 0.8, textTransform: 'uppercase' }}>Panel {index + 1}</Text>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', marginTop: 2 }}>{row.panelName}</Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {(() => {
+                          const tone = isReady ? 'green' : 'amber'
+                          const chip = getStatusChipStyle(tone)
+                          return (
+                            <View style={{ borderRadius: 999, borderWidth: 1, borderColor: chip.border, backgroundColor: chip.bg, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', marginRight: 6 }}>
+                              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: chip.dot, marginRight: 6 }} />
+                              <Text style={{ color: chip.text, fontSize: 10, fontWeight: '700' }}>{isReady ? 'Ready' : 'Pending'}</Text>
+                            </View>
+                          )
+                        })()}
+                        <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color="#7d8090" strokeWidth={2} />
+                      </View>
                     </TouchableOpacity>
+
+                    {isExpanded && (
+                      <View style={{ borderTopWidth: 1, borderTopColor: '#ece8dc', paddingHorizontal: 14, paddingVertical: 12 }}>
+                        <Text style={{ fontSize: 15, color: '#3f4250', marginBottom: 6 }}>Action<Text style={{ color: '#c33b53' }}> *</Text></Text>
+                        <NativeSelectField
+                          value={canonicalizeEstimateAction(row.action)}
+                          placeholder="Select"
+                          options={estimateActionOptions}
+                          onChange={(value) => updateLocalRow(row.id, { action: canonicalizeEstimateAction(value) })}
+                        />
+
+                        <Text style={{ fontSize: 15, color: '#3f4250', marginTop: 12, marginBottom: 6 }}>Defect<Text style={{ color: '#c33b53' }}> *</Text></Text>
+                        <NativeSelectField
+                          value={row.defect}
+                          placeholder="Select"
+                          options={estimateDefectOptions}
+                          onChange={(value) => updateLocalRow(row.id, { defect: value })}
+                        />
+
+                        <Text style={{ fontSize: 15, color: '#3f4250', marginTop: 12, marginBottom: 6 }}>Part number</Text>
+                        <TextInput
+                          value={isRepaint ? '-' : row.partNumber}
+                          editable={!isRepaint}
+                          onChangeText={(value) => updateLocalRow(row.id, { partNumber: value })}
+                          placeholder={isRepaint ? 'Not required for repaint' : '579030912R'}
+                          style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: isRepaint ? '#9a9ea9' : '#1a1b21', backgroundColor: isRepaint ? '#f3f2ef' : '#ffffff' }}
+                        />
+
+                        <Text style={{ fontSize: 15, color: '#3f4250', marginTop: 12, marginBottom: 6 }}>Part description</Text>
+                        <TextInput
+                          value={row.partDescription}
+                          onChangeText={(value) => updateLocalRow(row.id, { partDescription: value })}
+                          placeholder="e.g. Rear bumper assy"
+                          style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: '#1a1b21', backgroundColor: '#ffffff' }}
+                        />
+
+                        <View style={{ flexDirection: 'row', marginTop: 12, gap: 10 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, color: '#3f4250', marginBottom: 6 }}>Qty</Text>
+                            <TextInput
+                              value={row.qty}
+                              onChangeText={(value) => updateLocalRow(row.id, { qty: value })}
+                              keyboardType="number-pad"
+                              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: '#1a1b21', backgroundColor: '#ffffff' }}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, color: '#3f4250', marginBottom: 6 }}>Parts price</Text>
+                            <TextInput
+                              value={isRepaint ? '0' : row.ndpValue}
+                              editable={!isRepaint}
+                              onChangeText={(value) => updateLocalRow(row.id, { ndpValue: value })}
+                              keyboardType="decimal-pad"
+                              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: isRepaint ? '#9a9ea9' : '#1a1b21', backgroundColor: isRepaint ? '#f3f2ef' : '#ffffff' }}
+                            />
+                          </View>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', marginTop: 12, gap: 10 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, color: '#3f4250', marginBottom: 6 }}>Paint price</Text>
+                            <TextInput
+                              value={row.paintCharges}
+                              onChangeText={(value) => updateLocalRow(row.id, { paintCharges: value })}
+                              keyboardType="decimal-pad"
+                              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: '#1a1b21', backgroundColor: '#ffffff' }}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 15, color: '#3f4250', marginBottom: 6 }}>Labour</Text>
+                            <TextInput
+                              value={row.labourCharges}
+                              onChangeText={(value) => updateLocalRow(row.id, { labourCharges: value })}
+                              keyboardType="decimal-pad"
+                              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: '#1a1b21', backgroundColor: '#ffffff' }}
+                            />
+                          </View>
+                        </View>
+
+                        <View style={{ marginTop: 14, borderRadius: 12, borderWidth: 1, borderColor: '#97b3f4', backgroundColor: '#d9e5fb', paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#2a4cd0' }}>Row total</Text>
+                          <Text style={{ fontSize: 18, fontWeight: '700', color: '#2a4cd0' }}>{formatCurrency(rowTotal)}</Text>
+                        </View>
+
+                        <TouchableOpacity
+                          style={{ marginTop: 14, borderRadius: 12, backgroundColor: savingRowId === row.id ? '#90a9f5' : '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}
+                          onPress={() => saveRow(row)}
+                          disabled={savingRowId === row.id}
+                        >
+                          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
+                            {savingRowId === row.id ? 'Saving...' : 'Save panel estimate'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 )
               })}
             </View>
 
             {rows.length > 0 && (
-              <View className="bg-white border border-slate-200 rounded-xl p-3 mt-2">
-                <Text className="text-[11px] uppercase text-slate-500">Summary</Text>
-                <View className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-                  <Text className="text-[13px] text-slate-700">Parts: {formatCurrency(estimateTotals.parts)}</Text>
-                  <Text className="text-[13px] text-slate-700 mt-0.5">Paint: {formatCurrency(estimateTotals.paint)}</Text>
-                  <Text className="text-[13px] text-slate-700 mt-0.5">Labour: {formatCurrency(estimateTotals.labour)}</Text>
-                  <Text className="text-sm font-bold text-slate-900 mt-1">Total: {formatCurrency(grandTotal)}</Text>
+              <View style={{ marginHorizontal: 16, marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', padding: 14 }}>
+                <Text style={{ fontSize: 12, letterSpacing: 1.2, fontWeight: '700', color: '#8b90a0', textTransform: 'uppercase' }}>Summary</Text>
+
+                <View style={{ marginTop: 12, gap: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 15, color: '#4b4e59' }}>Parts total</Text>
+                    <Text style={{ fontSize: 15, color: '#1a1b21', fontWeight: '700' }}>{formatCurrency(estimateTotals.parts)}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 15, color: '#4b4e59' }}>Paint total</Text>
+                    <Text style={{ fontSize: 15, color: '#1a1b21', fontWeight: '700' }}>{formatCurrency(estimateTotals.paint)}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 15, color: '#4b4e59' }}>Labour total</Text>
+                    <Text style={{ fontSize: 15, color: '#1a1b21', fontWeight: '700' }}>{formatCurrency(estimateTotals.labour)}</Text>
+                  </View>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: '#ece8dc', marginVertical: 14 }} />
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 17, color: '#1a1b21', fontWeight: '700' }}>Grand total</Text>
+                  <Text style={{ fontSize: 22, color: '#2a4cd0', fontWeight: '800' }}>{formatCurrency(grandTotal)}</Text>
                 </View>
 
                 <TouchableOpacity
-                  className={`mt-2 rounded-lg py-2.5 items-center ${exporting ? 'bg-indigo-300' : 'bg-indigo-600'}`}
+                  style={{ marginTop: 14, borderRadius: 12, borderWidth: 1, borderColor: '#d8d2c6', backgroundColor: '#ffffff', paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
                   disabled={exporting}
                   onPress={() => void onExportEstimate()}
                 >
-                  <Text className="text-white text-[13px] font-semibold">{exporting ? 'Exporting...' : 'Export Estimate'}</Text>
+                  <Icon name="download" size={16} color="#1a1b21" strokeWidth={2} />
+                  <Text style={{ color: '#1a1b21', fontSize: 16, fontWeight: '700' }}>{exporting ? 'Exporting...' : 'Export estimate Excel'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  className="mt-2 rounded-lg py-2.5 items-center bg-slate-800"
+                  style={{ marginTop: 12, borderRadius: 12, backgroundColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
                   onPress={() => {
                     if (!jobCardId) return
                     router.push(`/job-cards/${jobCardId}/submit`)
                   }}
                 >
-                  <Text className="text-white text-[13px] font-semibold">Next: Submit</Text>
+                  <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>Next · Submit stage</Text>
+                  <Icon name="arrow-right" size={17} color="#ffffff" strokeWidth={2} />
                 </TouchableOpacity>
               </View>
             )}

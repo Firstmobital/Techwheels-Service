@@ -10,7 +10,7 @@ export async function listPanelPhotos(jobCardId: string, hints?: JobReferenceHin
 
   const { data, error } = await supabase
     .from('panel_photos')
-    .select('id, panel_id, photo_type, repair_stage, storage_path, drive_url, drive_file_id, gps_city, captured_at')
+    .select('id, panel_id, photo_type, repair_stage, storage_path, drive_url, drive_file_id, gps_lat, gps_lng, gps_city, captured_at')
     .eq('job_card_id', resolvedIdRes.data)
 
   if (error) return fail(error)
@@ -50,7 +50,7 @@ export async function createPanelPhoto(input: {
   const { data, error } = await supabase
     .from('panel_photos')
     .insert(payload as unknown as PanelPhotoInsert)
-    .select('id, panel_id, photo_type, repair_stage, storage_path, drive_url, drive_file_id, gps_city, captured_at')
+    .select('id, panel_id, photo_type, repair_stage, storage_path, drive_url, drive_file_id, gps_lat, gps_lng, gps_city, captured_at')
     .single<PanelPhotoRow>()
 
   if (error) return fail(error)
