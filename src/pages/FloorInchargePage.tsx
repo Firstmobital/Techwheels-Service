@@ -161,6 +161,74 @@ function normalizeEmployeeCode(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
 
+function normalizeDepartmentValue(value: string | null | undefined): string {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function normalizeLocationForMatch(value: string | null | undefined): string | null {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized.includes('ajmer')) return 'AJMER ROAD'
+  if (normalized.includes('sitapura')) return 'SITAPURA'
+  return normalized.toUpperCase()
+}
+
+function normalizeFuelTypeForMatch(value: string | null | undefined): 'PV' | 'EV' | null {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  if (!normalized) return null
+
+  if (
+    normalized === 'EV' ||
+    normalized.includes('ELECTRIC') ||
+    normalized.includes('BATTERY')
+  ) {
+    return 'EV'
+  }
+
+  if (
+    normalized === 'PV' ||
+    normalized === 'ICE' ||
+    normalized.includes('PETROL') ||
+    normalized.includes('DIESEL') ||
+    normalized.includes('CNG') ||
+    normalized.includes('LPG') ||
+    normalized.includes('GAS') ||
+    normalized.includes('HYBRID')
+  ) {
+    return 'PV'
+  }
+
+  return null
+}
+
+function isTechnicianRole(value: string | null | undefined): boolean {
+  const normalizedRole = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '')
+  return normalizedRole === 'TECHNICIAN'
+}
+
+function isServiceDepartment(value: string | null | undefined): boolean {
+  const normalizedDepartment = normalizeDepartmentValue(value).replace(/[^A-Z]/g, '')
+  return normalizedDepartment === 'SERVICE'
+}
+
+function isEmployeeEligibleForJobCard(employee: Employee, jobCard: JobCard): boolean {
+  if (!isServiceDepartment(employee.department)) return false
+  if (!isTechnicianRole(employee.role)) return false
+
+  const jobCardLocation = normalizeLocationForMatch(jobCard.location ?? jobCard.branch)
+  const employeeLocation = normalizeLocationForMatch(employee.location)
+  if (jobCardLocation && employeeLocation !== jobCardLocation) return false
+
+  const jobCardFuelType = normalizeFuelTypeForMatch(jobCard.portal ?? jobCard.fuel_type)
+  const employeeFuelType = normalizeFuelTypeForMatch(employee.fuel_type)
+  if (jobCardFuelType && employeeFuelType !== jobCardFuelType) return false
+
+  return true
+}
+
 function normalizeJobCardNumber(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase()
 }
@@ -204,6 +272,7 @@ interface Employee {
   employee_name: string
   department: string
   location: string
+  fuel_type?: string | null
   role?: string | null
 }
 
@@ -374,7 +443,7 @@ export default function FloorInchargePage() {
         listFloorInchargeEntries(),
         supabase
           .from('employee_master')
-          .select('id, employee_code, employee_name, department, location, role')
+          .select('id, employee_code, employee_name, department, location, fuel_type, role')
           .order('employee_name'),
       ])
 
@@ -420,10 +489,9 @@ export default function FloorInchargePage() {
         })(),
       }))
 
-      const technicianEmployees = (empRes.data ?? []).filter((employee) => {
-        const normalizedRole = String(employee.role ?? '').trim().toLowerCase()
-        return normalizedRole === 'technician' || normalizedRole.includes('technician')
-      })
+      const technicianEmployees = (empRes.data ?? []).filter((employee) =>
+        isServiceDepartment(employee.department) && isTechnicianRole(employee.role),
+      )
 
       setJobCards(receptionRows)
       setAllEmployees((empRes.data ?? []) as Employee[])
@@ -533,6 +601,18 @@ export default function FloorInchargePage() {
     }
   }
 
+  const techniciansByJobCard = useMemo<Record<string, Employee[]>>(() => {
+    const map: Record<string, Employee[]> = {}
+
+    jobCards.forEach((jobCard) => {
+      map[jobCard.assignment_key] = employees
+        .filter((employee) => isEmployeeEligibleForJobCard(employee, jobCard))
+        .sort((a, b) => a.employee_name.localeCompare(b.employee_name))
+    })
+
+    return map
+  }, [employees, jobCards])
+
   async function assignTechnician(jobCardNumber: string, employeeCode: string) {
     const normalizedJobCardNumber = normalizeJobCardNumber(jobCardNumber)
     if (!normalizedJobCardNumber) {
@@ -543,15 +623,16 @@ export default function FloorInchargePage() {
     setSaving(normalizedJobCardNumber)
     try {
       const isNotRequired = employeeCode === NOT_REQUIRED_TECHNICIAN_CODE
+      const scopedEmployees = techniciansByJobCard[normalizedJobCardNumber] ?? []
       const emp = isNotRequired
         ? {
             employee_code: NOT_REQUIRED_TECHNICIAN_CODE,
             employee_name: NOT_REQUIRED_TECHNICIAN_NAME,
           }
-        : employees.find((e) => e.employee_code === employeeCode)
+        : scopedEmployees.find((e) => normalizeEmployeeCode(e.employee_code) === normalizeEmployeeCode(employeeCode))
 
       if (!emp) {
-        showToast('Please select a technician', 'error')
+        showToast('Selected technician does not match Service/Location/Fuel rules for this row', 'error')
         return
       }
 
@@ -651,8 +732,13 @@ export default function FloorInchargePage() {
 
   const supportModalEmployees = useMemo(() => {
     if (!supportModalRole) return []
-    return supportEmployeesByRole[supportModalRole]
-  }, [supportModalRole, supportEmployeesByRole])
+
+    const roleEmployees = supportEmployeesByRole[supportModalRole]
+    if (supportModalRole !== 'TECHNICIAN') return roleEmployees
+    if (!supportModalJobCard) return roleEmployees
+
+    return roleEmployees.filter((employee) => isEmployeeEligibleForJobCard(employee, supportModalJobCard))
+  }, [supportModalRole, supportEmployeesByRole, supportModalJobCard])
 
   function closeSupportModal() {
     if (supportSaving) return
@@ -674,11 +760,16 @@ export default function FloorInchargePage() {
     }
 
     const jobCardNumber = supportModalJobCard.assignment_key
-    const employee = supportEmployeesByRole[supportModalRole].find(
+    const employee = supportModalEmployees.find(
       (item) => item.employee_code === supportModalEmployeeCode,
     )
 
     if (!employee) {
+      if (supportModalRole === 'TECHNICIAN') {
+        showToast('Selected support technician does not match Service/Location/Fuel rules for this row', 'error')
+        return
+      }
+
       showToast('Selected employee is not available for the chosen role', 'error')
       return
     }
@@ -1182,6 +1273,7 @@ export default function FloorInchargePage() {
                   {filtered.map((jc) => {
                     const assignment = assignments[jc.assignment_key]
                     const supportPeople = supportAssignments[jc.assignment_key] ?? []
+                    const scopedTechnicians = techniciansByJobCard[jc.assignment_key] ?? []
                     const isSaving = saving === jc.assignment_key
                     const draft = stageDrafts[jc.assignment_key] ?? {
                       bay_no: assignment?.bay_no ?? '',
@@ -1225,11 +1317,22 @@ export default function FloorInchargePage() {
                               >
                                 <option value="">— Select Technician —</option>
                                 <option value={NOT_REQUIRED_TECHNICIAN_CODE}>{NOT_REQUIRED_TECHNICIAN_NAME}</option>
-                                {employees.map((emp) => (
+                                {scopedTechnicians.map((emp) => (
                                   <option key={emp.employee_code} value={emp.employee_code}>
                                     {emp.employee_name}
                                   </option>
                                 ))}
+                                {assignment?.technician_code &&
+                                  assignment.technician_code !== NOT_REQUIRED_TECHNICIAN_CODE &&
+                                  !scopedTechnicians.some(
+                                    (emp) =>
+                                      normalizeEmployeeCode(emp.employee_code) ===
+                                      normalizeEmployeeCode(assignment.technician_code),
+                                  ) && (
+                                    <option value={assignment.technician_code}>
+                                      {assignment.technician_name || assignment.technician_code} (Current)
+                                    </option>
+                                  )}
                               </select>
                               <button
                                 type="button"
