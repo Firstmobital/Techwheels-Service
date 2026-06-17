@@ -902,7 +902,7 @@ function FilterChip({ label, active, onPress }: { label: string; active: boolean
 function PickerModal({ visible, title, onClose, search, onSearch, items, renderItem }: {
   visible: boolean; title: string; onClose: () => void
   search?: string; onSearch?: (s: string) => void
-  items: any[]; renderItem: (item: any) => React.ReactNode
+  items: any[]; renderItem: (item: any) => JSX.Element
 }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -923,7 +923,7 @@ function PickerModal({ visible, title, onClose, search, onSearch, items, renderI
         <FlatList
           data={items}
           keyExtractor={(_, i) => String(i)}
-          renderItem={({ item }) => renderItem(item) as any}
+          renderItem={({ item }) => { return renderItem(item) as JSX.Element }}
           contentContainerStyle={{ paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled" />
       </SafeAreaView>
