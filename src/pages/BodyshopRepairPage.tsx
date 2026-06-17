@@ -3256,29 +3256,26 @@ export default function BodyshopRepairPage() {
       )}
 
       {/* ── TOP CONTROL BAR ─────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem 0.85rem', marginBottom: '0.6rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
-          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🔧 Repair Tracker</span>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{cards.length} records</span>
+      <div className="brx-toolbar">
+        <div className="brx-title-wrap">
+          <span className="brx-title">Repair Tracker</span>
+          <span className="brx-count">{cards.length} records</span>
         </div>
 
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+        <span className="brx-sep" />
 
-        <input className="inp" placeholder="Search JC / reg / customer…"
-          value={search} onChange={(e) => setSearch(e.target.value)}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem', width: '200px' }} />
+        <input className="inp brx-search" placeholder="Search JC / reg / customer…"
+          value={search} onChange={(e) => setSearch(e.target.value)} />
 
-        <select className="sel" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
-          style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}>
+        <select className="sel brx-sel" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
           <option value="all">All Branches</option>
           {branches.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
 
-        <span style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 600 }}>Filter by advisor:</span>
-        <select className="sel" value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)}
-          style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }} aria-label="Filter by advisor">
+        <span className="brx-advisor-label">Filter by advisor:</span>
+        <select className="sel brx-sel" value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)} aria-label="Filter by advisor">
           <option value="all">All Advisors ({stageScopedCards.length})</option>
           {advisorOptions.map((advisor) => (
             <option key={advisor.value} value={advisor.value}>
@@ -3287,64 +3284,46 @@ export default function BodyshopRepairPage() {
           ))}
         </select>
 
-        <select className="sel" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ padding: '0.2rem 0.5rem', fontSize: '0.78rem' }}>
+        <select className="sel brx-sel" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="all">All Status</option>
           <option value="active">Active</option>
           <option value="delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>
         </select>
 
-        <span style={{ flex: 1 }} />
+        <span className="brx-spacer" />
 
-        <button className="btn btn--primary" onClick={() => setShowNew(true)}
-          style={{ padding: '0.3rem 0.85rem', fontSize: '0.78rem', fontWeight: 700 }}>
+        <button className="btn btn--primary brx-new-btn" onClick={() => setShowNew(true)}>
           + New Intake
         </button>
       </div>
 
       {/* ── PIPELINE PILLS ──────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+      <div className="brx-pipeline">
         {pipeline.map((g) => (
-          <div key={g.label} style={{ border: `1.5px solid ${g.color}44`, borderRadius: '20px', padding: '0.25rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: `${g.color}10` }}>
-            <span style={{ fontWeight: 800, color: g.color, fontSize: '0.88rem' }}>{g.count}</span>
-            <span style={{ fontSize: '0.72rem', color: g.color }}>{g.label}</span>
+          <div key={g.label} className="brx-pipe-pill" style={{ ['--pc' as any]: g.color }}>
+            <span className="brx-pipe-pill__n">{g.count}</span>
+            <span className="brx-pipe-pill__l">{g.label}</span>
           </div>
         ))}
-        <div style={{ border: '1.5px solid #6b728044', borderRadius: '20px', padding: '0.25rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#6b72800f' }}>
-          <span style={{ fontWeight: 800, color: '#6b7280', fontSize: '0.88rem' }}>{cards.filter(c => c.overall_status === 'delivered').length}</span>
-          <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>Delivered</span>
+        <div className="brx-pipe-pill brx-pipe-pill--delivered">
+          <span className="brx-pipe-pill__n">{cards.filter(c => c.overall_status === 'delivered').length}</span>
+          <span className="brx-pipe-pill__l">Delivered</span>
         </div>
       </div>
 
       {/* ── Card Grid ─────────────────────────────────────────────────────── */}
       <div className="page__body">
-        <div style={{
-          marginBottom: 12,
-          background: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          padding: '10px 12px',
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-            Stage Queue
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+        <div className="brx-queue">
+          <div className="brx-queue-title">Stage Queue</div>
+          <div className="brx-queue-grid">
             <button
               type="button"
               onClick={() => setStageFilter('all')}
-              style={{
-                border: `1.5px solid ${stageFilter === 'all' ? '#2563eb' : '#d1d5db'}`,
-                background: stageFilter === 'all' ? '#eff6ff' : '#fff',
-                color: stageFilter === 'all' ? '#1d4ed8' : '#374151',
-                borderRadius: 10,
-                padding: '8px 10px',
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
+              className={`brx-qbtn ${stageFilter === 'all' ? 'is-active' : ''}`}
             >
-              <div style={{ fontSize: 12, fontWeight: 700 }}>All Stages</div>
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{advisorScopedCards.length} vehicles</div>
+              <div className="brx-qbtn__stage">All Stages</div>
+              <div className="brx-qbtn__count">{advisorScopedCards.length} vehicles</div>
             </button>
 
             {Object.entries(STAGE_LABELS).map(([stageStr, label]) => {
@@ -3356,19 +3335,11 @@ export default function BodyshopRepairPage() {
                   key={stageNum}
                   type="button"
                   onClick={() => setStageFilter(stageNum)}
-                  style={{
-                    border: `1.5px solid ${selectedStage ? '#2563eb' : '#d1d5db'}`,
-                    background: selectedStage ? '#eff6ff' : '#fff',
-                    color: selectedStage ? '#1d4ed8' : '#374151',
-                    borderRadius: 10,
-                    padding: '8px 10px',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                  }}
+                  className={`brx-qbtn ${selectedStage ? 'is-active' : ''}`}
                 >
-                  <div style={{ fontSize: 11, fontWeight: 700 }}>Stage {stageNum}</div>
-                  <div style={{ fontSize: 11, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{count} vehicles</div>
+                  <div className="brx-qbtn__stage">Stage {stageNum}</div>
+                  <div className="brx-qbtn__label">{label}</div>
+                  <div className="brx-qbtn__count">{count} vehicles</div>
                 </button>
               )
             })}
@@ -3384,39 +3355,32 @@ export default function BodyshopRepairPage() {
         ) : filtered.length === 0 ? (
           <div className="empty-state">No repair cards found</div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: 12 }}>
+          <div className="brx-cardgrid">
             {filtered.map((card) => {
               const effectiveStage = getEffectiveStageForCard(card)
               const grp = getGroupForStage(effectiveStage)
+              const statusClass = card.overall_status === 'delivered'
+                ? 'is-delivered'
+                : card.overall_status === 'cancelled'
+                  ? 'is-cancelled'
+                  : 'is-active'
               return (
                 <div key={card.id} onClick={() => { setSelected(card); setDetailTab('overview'); setSaActiveCard(null); setApprovalActiveCard(null); setEditPatch({}) }}
-                  style={{
-                    background: '#fff', borderRadius: 12, padding: 14, cursor: 'pointer',
-                    borderLeft: `4px solid ${grp.color}`,
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
-                  }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{card.job_card_no}</span>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                      background: card.overall_status === 'active' ? '#dbeafe' : card.overall_status === 'delivered' ? '#d1fae5' : '#fee2e2',
-                      color: card.overall_status === 'active' ? '#1d4ed8' : card.overall_status === 'delivered' ? '#065f46' : '#991b1b',
-                    }}>{card.overall_status}</span>
+                  className="brx-card" style={{ ['--sc' as any]: grp.color }}>
+                  <div className="brx-card__head">
+                    <span className="brx-card__jc">{card.job_card_no}</span>
+                    <span className={`brx-statusbadge ${statusClass}`}>{card.overall_status}</span>
                   </div>
-                  <div style={{ fontSize: 13, color: '#374151', marginBottom: 2 }}>
+                  <div className="brx-card__who">
                     {card.reg_number ?? '—'} · {card.customer_name ?? '—'}
                   </div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 6 }}>
+                  <div className="brx-card__meta">
                     {card.branch ?? '—'} · {CT_LABELS[card.customer_type ?? ''] ?? '—'} · SA: {card.sa_name ?? '—'}
                   </div>
-                  <div style={{
-                    display: 'inline-block', fontSize: 11, fontWeight: 600,
-                    background: `${grp.color}18`, color: grp.color,
-                    padding: '3px 8px', borderRadius: 6,
-                  }}>
+                  <div className="brx-card__stage" style={{ ['--sc' as any]: grp.color }}>
                     Stage {effectiveStage} — {STAGE_LABELS[effectiveStage]}
                   </div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>In: {fmt(card.received_at)}</div>
+                  <div className="brx-card__in">In: {fmt(card.received_at)}</div>
                 </div>
               )
             })}

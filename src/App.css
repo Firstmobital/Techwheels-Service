@@ -3200,3 +3200,315 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   height: 34px;
   font-size: 12.5px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BODYSHOP REPAIR (BRX) — List Surface Redesign (R3/R4)
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* Toolbar — top control bar */
+.brx-toolbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 10px 13px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--sh-1);
+}
+
+.brx-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+}
+
+.brx-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.brx-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.brx-search {
+  min-width: 200px;
+  height: 38px;
+  font-size: 13px;
+}
+
+.brx-sel {
+  height: 38px;
+  font-size: 13px;
+}
+
+.brx-advisor-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.brx-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.brx-spacer {
+  flex: 1;
+  min-width: 20px;
+}
+
+.brx-new-btn {
+  font-size: 12.5px;
+  height: 34px;
+  padding: 0 14px;
+}
+
+/* Pipeline pills */
+.brx-pipeline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.brx-pipe-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px solid var(--pc, var(--border));
+  border-radius: 20px;
+  padding: 10px 16px;
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  cursor: default;
+  opacity: 0.95;
+  transition: opacity 0.15s;
+}
+
+.brx-pipe-pill:hover {
+  opacity: 1;
+}
+
+.brx-pipe-pill__n {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--pc, var(--muted));
+  line-height: 1;
+}
+
+.brx-pipe-pill__l {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.brx-pipe-pill--delivered {
+  border-color: #6b7280;
+}
+
+.brx-pipe-pill--delivered .brx-pipe-pill__n {
+  color: #6b7280;
+}
+
+/* Queue — stage filter section */
+.brx-queue {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  box-shadow: var(--sh-1);
+}
+
+.brx-queue-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 10px;
+}
+
+.brx-queue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.brx-qbtn {
+  text-align: left;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  padding: 9px 11px;
+  cursor: pointer;
+  transition: border-color 0.12s, background-color 0.12s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.brx-qbtn:hover {
+  border-color: var(--accent);
+}
+
+.brx-qbtn.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.brx-qbtn__stage {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--faint);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.brx-qbtn.is-active .brx-qbtn__stage {
+  color: var(--accent);
+}
+
+.brx-qbtn__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brx-qbtn__count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Card grid and cards */
+.brx-cardgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.brx-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 0;
+  box-shadow: var(--sh-1);
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.14s, transform 0.12s;
+  position: relative;
+}
+
+.brx-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: var(--sc, var(--border));
+}
+
+.brx-card:hover {
+  box-shadow: var(--sh-2);
+  transform: translateY(-2px);
+}
+
+.brx-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brx-card__jc {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  flex: 1;
+  min-width: 0;
+}
+
+.brx-statusbadge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 14px;
+  text-transform: capitalize;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.brx-statusbadge.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.brx-statusbadge.is-delivered {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.brx-statusbadge.is-cancelled {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.brx-card__in {
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.brx-card__who {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.brx-card__meta {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.brx-card__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--sc, var(--muted)) 10%, #fff);
+  color: var(--sc, var(--muted));
+  width: fit-content;
+}
+
+.brx-card__in .brx-card__stage {
+  margin-top: 2px;
+}
+
+.brx-card__in > :last-child {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+}

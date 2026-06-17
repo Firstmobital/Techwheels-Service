@@ -934,7 +934,7 @@ export default function TechnicianPage() {
       // Primary filter: Fetch job_card_closed_data where invoice_date is in the range
       const jccRes = await supabase
         .from('job_card_closed_data')
-        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time, vehicle_registration_number, final_labour_amount')
+        .select('job_card_number, sr_type, branch, invoice_date, closed_date_time, vehicle_registration_number, final_labour_amount, sr_assigned_to, created_date_time')
         .gte('invoice_date', fromDate)
         .lte('invoice_date', toDate)
 
@@ -998,6 +998,7 @@ export default function TechnicianPage() {
 
       // Build SA name map (Service Advisor page source) by JC number.
       const saNameMap = new Map<string, string>()
+      const receptionSrTypeMap = new Map<string, string>()
       const receptionRes = await listReceptionEntries()
       if (!receptionRes.error && receptionRes.data) {
         const sourceJcSet = new Set(sourceJcNumbers.map((jc) => normalizeJobCardNumber(jc)))
@@ -1008,6 +1009,11 @@ export default function TechnicianPage() {
           const saName = String(row.sa_display_name ?? row.sa_name ?? '').trim()
           if (saName && !saNameMap.has(key)) {
             saNameMap.set(key, saName)
+          }
+
+          const receptionSrType = String(row.service_type ?? '').trim()
+          if (receptionSrType && !receptionSrTypeMap.has(key)) {
+            receptionSrTypeMap.set(key, receptionSrType)
           }
         })
       }
@@ -1026,6 +1032,9 @@ export default function TechnicianPage() {
               out_ts: null,
               invoice_date: row.invoice_date ?? '',
               closed_date_time: row.closed_date_time ?? '',
+              dms_assigned_to: row.sr_assigned_to ?? '',
+              dms_jc_created: row.created_date_time ?? '',
+              reception_sr_type: receptionSrTypeMap.get(jc) ?? '',
               sa_name: saNameMap.get(jc) ?? '',
               technician_name: '',
               status: 'Unassigned',
@@ -1058,6 +1067,9 @@ export default function TechnicianPage() {
               out_ts: outTs,
               invoice_date: row.invoice_date ?? '',
               closed_date_time: row.closed_date_time ?? '',
+              dms_assigned_to: row.sr_assigned_to ?? '',
+              dms_jc_created: row.created_date_time ?? '',
+              reception_sr_type: receptionSrTypeMap.get(jc) ?? '',
               sa_name: saNameMap.get(jc) ?? '',
               technician_name: String(assignment.technician_name ?? '').trim(),
               status: workStatus ? statusLabel(workStatus) : 'Unassigned',
@@ -1076,12 +1088,15 @@ export default function TechnicianPage() {
 
       // Export to Excel
       const sheetData = [
-        ['Job Card Number', 'Service Type', 'Reg No', 'Branch', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Labour', 'Match Status'],
+        ['Job Card Number', 'Service Type', 'Reception SR Type', 'Reg No', 'Branch', 'DMS Assigned To', 'DMS JC Created', 'SA Name', 'Technician Name', 'Status', 'Out TS', 'Invoice Date', 'Closed Date Time', 'Labour', 'Match Status'],
         ...issues.map((r: any) => [
           r.job_card_number,
           r.service_type,
+          r.reception_sr_type,
           r.vehicle_registration_number,
           r.branch,
+          r.dms_assigned_to,
+          r.dms_jc_created ? new Date(r.dms_jc_created).toLocaleString('en-IN') : '',
           r.sa_name,
           r.technician_name,
           r.status,
@@ -1094,7 +1109,7 @@ export default function TechnicianPage() {
       ]
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet(sheetData)
-      ws['!cols'] = [18, 20, 14, 16, 26, 24, 15, 25, 15, 25, 14, 15].map(w => ({ wch: w }))
+      ws['!cols'] = [18, 20, 20, 14, 16, 24, 25, 26, 24, 15, 25, 15, 25, 14, 15].map(w => ({ wch: w }))
       XLSX.utils.book_append_sheet(wb, ws, 'Date Issues')
       XLSX.writeFile(wb, `JC_Date_Issues_${fromDate}_to_${toDate}.xlsx`)
     } catch (e: any) {
