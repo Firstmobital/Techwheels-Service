@@ -5,6 +5,12 @@
 **Parity Goal**: 100% feature parity with web version (v1.0)  
 **UI Strategy**: Mobile-centric design (NOT web UI copy)
 
+## Program Authority (Effective 2026-06-17)
+
+1. Master cross-plan execution authority: `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md`
+2. This file remains the strategy baseline and implementation blueprint.
+3. When status/priority conflicts occur between plan files, MOBILE-010 wins until explicitly updated.
+
 ---
 
 ## Table of Contents

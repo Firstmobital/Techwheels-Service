@@ -6,6 +6,12 @@
 **Timeline**: 7-10 days for full implementation  
 **Target Platforms**: Android (primary), iOS (secondary)
 
+## Program Authority (Effective 2026-06-17)
+
+1. Master program tracker (single execution authority): `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md`
+2. Strategy baseline: `docs/Implementation_plans/mobile/active/MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md`
+3. This file is an overview and quick-start reference, not the cross-plan execution tracker.
+
 ---
 
 ## 📋 Quick Summary
@@ -23,7 +29,7 @@ You have a fully functional **Techwheels Service web application** (React + Type
 
 ## 📄 Documents Created
 
-### 1. **MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md** (Main Plan)
+### 1. **MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md** (Strategy Baseline)
 - **Purpose**: Detailed 7-phase implementation roadmap
 - **Contents**:
   - Executive summary
@@ -33,6 +39,13 @@ You have a fully functional **Techwheels Service web application** (React + Type
   - Module bundling approach
   - Risk mitigation
   - Success criteria
+
+### 1A. **MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md** (Master Program Tracker)
+- **Purpose**: Single source of truth for cross-plan status, sequencing, and execution governance
+- **Contents**:
+   - Authority model for MOBILE-000/001/005/006/007/008/009
+   - Program-level tracker with priorities and dependencies
+   - Child-tracker sync rules and restart protocol
 
 ### 2. **MOBILE-002_EXECUTION_CHECKLIST.md** (Day-to-Day)
 - **Purpose**: Actionable task list for development team

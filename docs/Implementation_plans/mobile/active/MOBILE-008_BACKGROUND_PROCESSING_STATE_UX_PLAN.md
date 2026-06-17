@@ -4,6 +4,7 @@ Last Updated: 2026-05-30
 Status: Pending  
 Priority: High  
 Owner: Mobile Team + Product + GitHub Copilot
+Program Reporting: Reports upward to `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` (master authority)
 
 ---
 

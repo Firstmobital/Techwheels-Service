@@ -6,6 +6,7 @@
 **Priority:** HIGH  
 **Owner:** Techwheels Product + Mobile/Web Dev Team  
 **Status:** PENDING (documented for later execution)
+**Program Reporting:** Reports upward to `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` (master authority)
 
 ---
 

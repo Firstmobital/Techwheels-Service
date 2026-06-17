@@ -6,6 +6,7 @@
 **Priority:** HIGH  
 **Owner:** Techwheels Product + Mobile Dev Team  
 **Status:** IN PROGRESS (Phases 0-2 Complete, Phase 3 In Progress)
+**Program Reporting:** Reports upward to `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` (master authority)
 **Estimated Completion:** 2-3 days (Phase 3-6)
 
 ---

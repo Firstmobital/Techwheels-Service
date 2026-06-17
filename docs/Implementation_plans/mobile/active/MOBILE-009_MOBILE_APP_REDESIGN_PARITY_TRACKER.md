@@ -5,6 +5,7 @@
 **Last Updated:** 2026-05-31 22:26 IST (Sequence updated per user: Job Card accepted for current pass; Damage is next focus; Estimate starts only after Damage pass.)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
 **Primary Goal:** Complete BP-03 through BP-08 screens one-at-a-time with documented visual parity audits. BP-02 (Create Job Card) is now closed for review in this cycle.
+**Program Reporting:** Reports upward to `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` (master authority)
 
 ---
 
