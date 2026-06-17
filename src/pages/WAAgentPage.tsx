@@ -906,6 +906,21 @@ export default function WAAgentPage() {
                 onClick={() => { setShowTemplateForm(true); setEditingTemplate(null); setTemplateForm({ display_name:'', name:'', category:'UTILITY', language:'en', header_type:'NONE', header_text:'', body_text:'', footer_text:'', buttons:'[{"type":"QUICK_REPLY","text":"Book Now"},{"type":"QUICK_REPLY","text":"Call Me"}]', variable_examples:'[{"name":"customer_name","example_value":"Rahul Sharma"},{"name":"model","example_value":"Nexon"}]', campaign_type:'service_reminder' }) }}>
                 + Create Template
               </button>
+              <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.75rem', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe' }} disabled={syncingTemplates}
+                onClick={async () => {
+                  setSyncingTemplates(true)
+                  try {
+                    const { ok, status, body } = await callTemplateSubmitApi({ action: 'import_from_meta' })
+                    if (!ok) setToast(`❌ ${String(body.error || `Import failed (${status})`)}`)
+                    else { setToast(`✅ Imported ${String(body.imported ?? 0)} new, updated ${String(body.updated ?? 0)} from Meta`); await loadAll() }
+                  } catch (e) {
+                    setToast(`❌ Network error: ${String(e)}`)
+                  } finally {
+                    setSyncingTemplates(false)
+                  }
+                }}>
+                {syncingTemplates ? '⏳ Importing…' : '⬇️ Import from Meta'}
+              </button>
               <button className="btn btn--ghost btn--sm" style={{ fontSize:'0.75rem' }} disabled={syncingTemplates}
                 onClick={async () => {
                   setSyncingTemplates(true)
@@ -919,7 +934,7 @@ export default function WAAgentPage() {
                     setSyncingTemplates(false)
                   }
                 }}>
-                {syncingTemplates ? '⏳ Syncing…' : '🔄 Sync from Meta'}
+                {syncingTemplates ? '⏳ Syncing…' : '🔄 Sync status'}
               </button>
             </div>
 

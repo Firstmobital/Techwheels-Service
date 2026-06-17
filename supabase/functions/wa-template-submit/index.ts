@@ -111,6 +111,63 @@ Deno.serve(async (req) => {
     return json({ success:true, synced, total_meta_templates:(metaData.data||[]).length })
   }
 
+  // ── import_from_meta — pull all Meta templates into wa_templates ──────────
+  if (action === 'import_from_meta') {
+    if (!wabaId) return json({ error:'waba_id not configured' }, 400)
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v19.0/${wabaId}/message_templates?fields=id,name,status,category,language,components,rejected_reason&limit=100`,
+      { headers:{ Authorization:`Bearer ${metaToken}` } }
+    )
+    const metaData = await metaRes.json()
+    if (metaData.error) return json({ error:metaData.error.message, detail: metaData.error }, 400)
+
+    const templates = (metaData.data || []) as Array<Record<string, unknown>>
+    let imported = 0, updated = 0
+
+    for (const t of templates) {
+      const name   = t.name as string
+      const status = ((t.status as string) || '').toLowerCase()
+      const metaId = t.id as string
+
+      // Parse components back into our schema
+      const components = (t.components as Array<Record<string,unknown>>) || []
+      const headerComp = components.find(c => c.type === 'HEADER')
+      const bodyComp   = components.find(c => c.type === 'BODY')
+      const footerComp = components.find(c => c.type === 'FOOTER')
+      const btnComp    = components.find(c => c.type === 'BUTTONS')
+
+      const row: Record<string, unknown> = {
+        name,
+        display_name:    name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        category:        (t.category as string) || 'UTILITY',
+        language:        (t.language as string) || 'en',
+        status,
+        meta_template_id: metaId,
+        header_type:     headerComp ? (headerComp.format as string) || 'TEXT' : null,
+        header_text:     headerComp?.text as string || null,
+        body_text:       bodyComp?.text as string || '',
+        footer_text:     footerComp?.text as string || null,
+        buttons:         btnComp ? (btnComp.buttons as unknown) || null : null,
+        updated_at:      new Date().toISOString(),
+      }
+      if (status === 'approved') row.approved_at = new Date().toISOString()
+      if (t.rejected_reason) row.rejection_reason = t.rejected_reason as string
+
+      // Check if we already have this template by name
+      const { data: existing } = await sb.from('wa_templates').select('id').eq('name', name).limit(1)
+      if (existing?.length) {
+        await sb.from('wa_templates').update(row).eq('name', name)
+        updated++
+      } else {
+        row.created_at = new Date().toISOString()
+        await sb.from('wa_templates').insert([row])
+        imported++
+      }
+    }
+
+    return json({ success:true, imported, updated, total: templates.length })
+  }
+
   // ── delete ────────────────────────────────────────────────────────────────
   if (action === 'delete') {
     if (!wabaId) return json({ error:'waba_id not configured' }, 400)
