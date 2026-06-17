@@ -176,6 +176,23 @@ function parseMetaFlowPickupFlag(input: unknown): boolean {
   return s.includes('pickup') || s === 'yes' || s === 'true' || s === '1'
 }
 
+// Multiple-choice fields from Meta Flows arrive as arrays — flatten to string
+function parseMetaFlowMultiChoice(input: unknown): string | null {
+  if (!input) return null
+  if (Array.isArray(input)) return (input as string[]).filter(Boolean).join(', ') || null
+  return String(input).trim() || null
+}
+
+// Map Meta Flow time label → SQL time string
+function parseMetaFlowTime(input: string | null | undefined): string | null {
+  if (!input) return null
+  const s = String(input).toLowerCase()
+  if (s.includes('morning'))   return 'Morning (9 AM – 11 AM)'
+  if (s.includes('afternoon')) return 'Afternoon (12 PM – 2 PM)'
+  if (s.includes('evening'))   return 'Evening (3 PM – 6 PM)'
+  return String(input).trim()
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -285,19 +302,26 @@ Deno.serve(async (req) => {
       const flowReply = (payload.reply_data || {}) as Record<string, unknown>
       const response = (flowReply.response_json || flowReply) as Record<string, unknown>
 
-      const dateRaw = (response.appointment_date || response.booking_date || response.date || response.service_date) as string | undefined
-      const timeRaw = (response.booking_time || response.time_slot || response.time) as string | undefined
-      const branchRaw = (response.branch || response.service_centre || response.service_center) as string | undefined
-      const pickupRaw = response.pickup_required || response.visit_mode || response.pickup_mode
-      const pickupAddress = (response.pickup_address || response.address || response.location_address || null) as string | null
+      // ── Single-screen form field extraction ─────────────────────────────────
+      // Field keys match the IDs set in Meta Flow Builder (snake_case of label)
+      const dateRaw    = (response.service_date || response.appointment_date || response.booking_date || response.date) as string | undefined
+      const timeLabel  = (response.preferred_time || response.booking_time || response.time_slot || response.time) as string | undefined
+      const serviceRaw = response.service_type || response.service_category || response.service
+      const pickupRaw  = response.type || response.visit_type || response.pickup_required || response.visit_mode
+      const pickupAddress = (response.pickup_address || response.address || null) as string | null
+      const issuesRaw  = (response.issues_with_vehicle || response.complaint || response.issue || response.notes || null) as string | null
 
-      const bookingDate = parseMetaFlowDate(dateRaw)
-      const branch = normalizeBranch(branchRaw)
+      const bookingDate    = parseMetaFlowDate(dateRaw)
+      const timeSlot       = parseMetaFlowTime(timeLabel)
+      const serviceType    = parseMetaFlowMultiChoice(serviceRaw)
       const pickupRequired = parseMetaFlowPickupFlag(pickupRaw)
 
-      if (!bookingDate || !timeRaw || !branch) {
+      // Default branch to first configured branch — form has no branch field
+      const defaultBranch  = ((cfg.available_branches as string[]) || [])[0] || null
+
+      if (!bookingDate) {
         await sendText(phoneId, token, phone,
-          'I could not read complete details from the form. Please continue with quick buttons below 👇'
+          'Ek problem aa gayi form mein 😅 Please continue with buttons below 👇'
         )
         const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
         const dayAfter = new Date(); dayAfter.setDate(dayAfter.getDate() + 2)
@@ -305,7 +329,7 @@ Deno.serve(async (req) => {
           `📅 Which date works for you?`,
           [
             { id: `date_tmr_${tomorrow.toISOString().split('T')[0]}`, title: `Tomorrow, ${fmtDate(tomorrow)}` },
-            { id: `date_da_${dayAfter.toISOString().split('T')[0]}`, title: `${fmtDate(dayAfter)}` },
+            { id: `date_da_${dayAfter.toISOString().split('T')[0]}`,  title: `${fmtDate(dayAfter)}` },
             { id: 'date_other', title: '📅 Choose Another Date' },
           ]
         )
@@ -313,13 +337,25 @@ Deno.serve(async (req) => {
         return Response.json({ success: true, step: 'date_sent' })
       }
 
+      // ── Update conversation with form-sourced fields ─────────────────────────
+      // reg_number, customer_name, customer_phone come from campaign contact (already on conv)
+      const convUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (serviceType)     convUpdates.service_type          = serviceType
+      if (issuesRaw)       convUpdates.complaint_description = issuesRaw
+      if (pickupRequired)  convUpdates.pickup_required       = pickupRequired
+      if (pickupAddress)   convUpdates.pickup_address        = pickupAddress
+      await sb.from('wa_conversations').update(convUpdates).eq('id', convId)
+      Object.assign(conv, convUpdates)
+
       const nextFlowData = {
         ...flowData,
-        booking_date: bookingDate,
-        time_slot: String(timeRaw),
-        branch,
-        pickup_required: pickupRequired,
-        pickup_address: pickupRequired ? pickupAddress : null,
+        booking_date:     bookingDate,
+        time_slot:        timeSlot || 'Morning (9 AM – 11 AM)',
+        branch:           defaultBranch,
+        service_type:     serviceType,
+        complaint:        issuesRaw,
+        pickup_required:  pickupRequired,
+        pickup_address:   pickupRequired ? pickupAddress : null,
       }
 
       await saveFlow('confirming', nextFlowData)
@@ -503,34 +539,38 @@ async function createBookingAndConfirm(
 
   const appointmentDate = flowData.booking_date as string
   const timeSlot    = flowData.time_slot as string
-  const branch      = flowData.branch as string
+  const branch      = (flowData.branch as string) || null
   const bookingTime = slotToSqlTime(timeSlot)
   const customerPhone = normalizeIndianPhone(phone)
+
+  // service_type and complaint may come directly from the Meta Flow form via flowData
+  const serviceType  = (flowData.service_type as string) || (conv.service_type as string) || null
+  const complaint    = (flowData.complaint as string) || (conv.complaint_description as string) || null
 
   // Generate lead number
   const leadNum = `TW-WA-${Date.now().toString().slice(-6)}`
 
   const bookingPayload = {
-    booking_source:       'WhatsApp',
-    lead_number:          leadNum,
-    booking_date:         new Date().toISOString().split('T')[0],
-    booking_time:         bookingTime,
-    appointment_date:     appointmentDate,
-    reg_number:           conv.reg_number || null,
-    model:                conv.model || null,
-    fuel_type:            conv.fuel_type || null,
-    customer_name:        conv.customer_name || null,
-    customer_phone:       customerPhone,
-    service_type:         conv.service_type || null,
-    complaint_description: conv.complaint_description || null,
-    pickup_required:      pickupRequired,
-    pickup_address:       pickupAddress,
-    branch:               branch,
-    status:               'Confirmed',
-    wa_conversation_id:   conv.id,
-    wa_opt_in:            true,
-    created_at:           new Date().toISOString(),
-    updated_at:           new Date().toISOString(),
+    booking_source:        'WhatsApp',
+    lead_number:           leadNum,
+    booking_date:          new Date().toISOString().split('T')[0],
+    booking_time:          bookingTime,
+    appointment_date:      appointmentDate,
+    reg_number:            conv.reg_number || null,
+    model:                 conv.model || null,
+    fuel_type:             conv.fuel_type || null,
+    customer_name:         conv.customer_name || null,
+    customer_phone:        customerPhone,
+    service_type:          serviceType,
+    complaint_description: complaint,
+    pickup_required:       pickupRequired,
+    pickup_address:        pickupAddress,
+    branch:                branch,
+    status:                'New',
+    wa_conversation_id:    String(conv.id),
+    wa_opt_in:             true,
+    created_at:            new Date().toISOString(),
+    updated_at:            new Date().toISOString(),
   }
 
   const { data: bk, error: bkErr } = await sb.from('service_bookings').insert([bookingPayload]).select().single()
