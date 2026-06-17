@@ -295,7 +295,7 @@ export default function ReceptionScreen() {
         .from('employee_master')
         .select('employee_code,employee_name,department,fuel_type,role')
         .order('employee_name'),
-      supabase.from('settings_models').select('model_name').order('model_name'),
+      supabase.from('settings_model_options').select('model_name').eq('is_active', true).order('sort_order', { ascending: true }).order('model_name', { ascending: true }),
     ])
     const enriched = await enrichEntries(entriesRaw)
     setEntries(enriched)
@@ -309,7 +309,7 @@ export default function ReceptionScreen() {
     ))
 
     if (modelsRes.data && modelsRes.data.length > 0)
-      setModelOptions((modelsRes.data as { model_name: string }[]).map(r => r.model_name))
+      setModelOptions([...new Set((modelsRes.data as { model_name: string }[]).map(r => String(r.model_name ?? '').trim()).filter(Boolean))])
 
     setLoading(false)
     setRefreshing(false)
