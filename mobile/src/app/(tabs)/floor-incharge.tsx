@@ -706,141 +706,192 @@ export default function FloorInchargeScreen() {
     const key = jc.assignment_key
     const a = assignments[key]
     const supportPeople = supportAssignments[key] ?? []
-    const scopedTechs = techniciansByJobCard[key] ?? []
     const isSaving = saving === key
     const isExpanded = expandedId === key
     const draft = stageDrafts[key] ?? { bay_no: a?.bay_no ?? '', work_status: a?.work_status ?? 'work_inprocess', remark: a?.remark ?? '' }
 
     const statusKey = normalizeStatusValue(a?.work_status)
-    const statusColor = STATUS_COLORS[statusKey] ?? STATUS_COLORS.work_inprocess
+    const sc = STATUS_COLORS[statusKey] ?? STATUS_COLORS.work_inprocess
     const timeDiff = calculateTimeDiff(a?.assigned_at, a?.out_ts) || formatTimeDiff(a?.time_diff)
+    const portal = getPortalLabel(jc.portal ?? jc.fuel_type)
+    const loc    = getLocationLabel(jc.location ?? jc.branch)
 
     const hasStageChanges = Boolean(a) && (
-      normalizeStageValue(draft.bay_no)    !== normalizeStageValue(a?.bay_no) ||
+      normalizeStageValue(draft.bay_no)       !== normalizeStageValue(a?.bay_no) ||
       normalizeStatusValue(draft.work_status) !== normalizeStatusValue(a?.work_status) ||
-      normalizeStageValue(draft.remark)    !== normalizeStageValue(a?.remark)
+      normalizeStageValue(draft.remark)       !== normalizeStageValue(a?.remark)
     )
 
     return (
       <View style={S.card}>
-        {/* Always-visible header row */}
-        <TouchableOpacity style={S.cardHeader} onPress={() => setExpandedId(isExpanded ? null : key)} activeOpacity={0.7}>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+
+        {/* ── Card header — always visible, large touch target ── */}
+        <TouchableOpacity style={S.cardHeader} onPress={() => setExpandedId(isExpanded ? null : key)} activeOpacity={0.75}>
+
+          {/* Left: status stripe */}
+          <View style={[S.statusStripe, { backgroundColor: a ? sc.text : '#ef4444' }]} />
+
+          {/* Center: info */}
+          <View style={{ flex: 1, paddingLeft: 12 }}>
+
+            {/* Row 1: JC + reg + status badge */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 5 }}>
               <Text style={S.jcNumber}>{jc.jc_number || key}</Text>
-              <Text style={S.regNo}>{jc.reg_number || '—'}</Text>
-              <View style={[S.statusBadge, { backgroundColor: a ? statusColor.bg : '#fef2f2', borderColor: a ? statusColor.border : '#ef444444' }]}>
-                <Text style={[S.statusBadgeText, { color: a ? statusColor.text : '#ef4444' }]}>
+              <View style={S.regPill}>
+                <Text style={S.regPillText}>{jc.reg_number || '—'}</Text>
+              </View>
+              <View style={[S.statusPill, { backgroundColor: a ? sc.bg : '#fef2f2', borderColor: a ? sc.text + '99' : '#ef444499' }]}>
+                <Text style={[S.statusPillText, { color: a ? sc.text : '#ef4444' }]}>
                   {a ? (STATUS_OPTIONS.find(o => o.value === statusKey)?.label ?? statusKey) : 'Unassigned'}
                 </Text>
               </View>
             </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              <Text style={S.cardMeta}>{jc.model || '—'}</Text>
-              <Text style={S.cardMeta}>·</Text>
-              <Text style={S.cardMeta}>{jc.service_type || '—'}</Text>
-              <Text style={S.cardMeta}>·</Text>
-              <Text style={S.cardMeta}>{getPortalLabel(jc.portal ?? jc.fuel_type)}</Text>
-              <Text style={S.cardMeta}>·</Text>
-              <Text style={S.cardMeta}>{getLocationLabel(jc.location ?? jc.branch)}</Text>
+
+            {/* Row 2: model · service type */}
+            <Text style={S.cardModel} numberOfLines={1}>{jc.model || '—'}  ·  {jc.service_type || '—'}</Text>
+
+            {/* Row 3: portal badge + location */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              {portal !== UNKNOWN_PORTAL && (
+                <View style={[S.portalBadge, { backgroundColor: portal === 'EV' ? '#f0fdf4' : '#eff6ff', borderColor: portal === 'EV' ? '#16a34a55' : '#2563eb55' }]}>
+                  <Text style={[S.portalBadgeText, { color: portal === 'EV' ? '#16a34a' : '#2563eb' }]}>{portal}</Text>
+                </View>
+              )}
+              <Text style={S.cardLoc} numberOfLines={1}>{loc}</Text>
             </View>
+
+            {/* Row 4: assigned technician (if any) */}
             {a?.technician_name && (
-              <Text style={{ fontSize: 12, color: '#2563eb', marginTop: 3, fontWeight: '500' }}>
-                🔧 {a.technician_name}
-              </Text>
+              <View style={S.techRow}>
+                <Text style={S.techIcon}>🔧</Text>
+                <Text style={S.techName} numberOfLines={1}>{a.technician_name}</Text>
+                {draft.bay_no ? <Text style={S.bayTag}>{draft.bay_no}</Text> : null}
+              </View>
             )}
           </View>
-          <Text style={{ color: '#94a3b8', fontSize: 16, paddingLeft: 8 }}>{isExpanded ? '▲' : '▼'}</Text>
+
+          {/* Right: expand arrow */}
+          <Text style={S.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
         </TouchableOpacity>
 
-        {/* Expanded section */}
+        {/* ── Expanded body ── */}
         {isExpanded && (
           <View style={S.cardBody}>
-            {/* Job info */}
-            <View style={S.infoGrid}>
-              <InfoRow label="Created" value={formatDate(jc.created_at)} />
-              <InfoRow label="KM"      value={jc.km_reading != null ? String(jc.km_reading) : '—'} />
-              <InfoRow label="SA"      value={jc.sa_name || '—'} />
-              <InfoRow label="Owner"   value={jc.owner_name || '—'} />
-              <InfoRow label="Phone"   value={jc.owner_phone || '—'} />
-              <InfoRow label="Source"  value={jc.source || '—'} />
+
+            {/* Info grid */}
+            <View style={S.infoBlock}>
+              <View style={S.infoRow2Col}>
+                <InfoCell label="Created" value={formatDate(jc.created_at)} />
+                <InfoCell label="KM"      value={jc.km_reading != null ? String(jc.km_reading) : '—'} />
+              </View>
+              <View style={S.infoRow2Col}>
+                <InfoCell label="SA"     value={jc.sa_name || '—'} />
+                <InfoCell label="Source" value={jc.source || '—'} />
+              </View>
+              <View style={S.infoRow2Col}>
+                <InfoCell label="Owner" value={jc.owner_name || '—'} />
+                <InfoCell label="Phone" value={jc.owner_phone || '—'} />
+              </View>
             </View>
 
             <View style={S.divider} />
 
             {/* Assign Technician */}
-            <Text style={S.sectionTitle}>🔧 Assign Technician</Text>
+            <Text style={S.sectionTitle}>🔧 Technician</Text>
             <TouchableOpacity
-              style={[S.selectRow, isSaving && { opacity: 0.5 }]}
+              style={[S.selectBtn, isSaving && { opacity: 0.5 }]}
               disabled={isSaving}
               onPress={() => { setTechPickerCard(jc); setTechPickerSearch('') }}>
-              <Text style={a?.technician_name ? S.selectVal : S.selectPlaceholder} numberOfLines={1}>
-                {a?.technician_name
-                  ? `${a.technician_name}${a.technician_code !== NOT_REQUIRED_TECHNICIAN_CODE ? ` (${a.technician_code})` : ''}`
-                  : '— Select Technician —'}
-              </Text>
-              {isSaving ? <ActivityIndicator size="small" color="#2563eb" /> : <Text style={S.chevron}>▼</Text>}
+              <View style={{ flex: 1 }}>
+                <Text style={a?.technician_name ? S.selectBtnVal : S.selectBtnPlaceholder} numberOfLines={1}>
+                  {a?.technician_name
+                    ? a.technician_name
+                    : 'Tap to assign technician'}
+                </Text>
+                {a?.technician_code && a.technician_code !== NOT_REQUIRED_TECHNICIAN_CODE && (
+                  <Text style={S.selectBtnSub}>{a.technician_code}</Text>
+                )}
+              </View>
+              {isSaving
+                ? <ActivityIndicator size="small" color="#2563eb" />
+                : <Text style={S.selectBtnArrow}>›</Text>
+              }
             </TouchableOpacity>
 
             {/* Support people */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-              <Text style={S.sectionTitle}>👥 Support People</Text>
-              <TouchableOpacity style={S.addSupportBtn} onPress={() => { setSupportModalCard(jc); setSupportModalRole(''); setSupportModalCode('') }}>
-                <Text style={S.addSupportBtnText}>+ Add</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 }}>
+              <Text style={S.sectionTitle}>👥 Support  <Text style={{ color: '#94a3b8', fontWeight: '400' }}>({supportPeople.length})</Text></Text>
+              <TouchableOpacity style={S.addSupportBtn}
+                onPress={() => { setSupportModalCard(jc); setSupportModalRole(''); setSupportModalCode('') }}>
+                <Text style={S.addSupportBtnText}>＋ Add</Text>
               </TouchableOpacity>
             </View>
-            {supportPeople.length > 0 ? (
-              <View style={{ gap: 4, marginTop: 4 }}>
-                {supportPeople.map(p => (
+            {supportPeople.length > 0
+              ? supportPeople.map(p => (
                   <View key={p.id ?? `${p.employee_code}-${p.assigned_at}`} style={S.supportPill}>
-                    <Text style={S.supportPillRole}>{supportRoleLabel(p.support_role)}</Text>
+                    <View style={S.supportRoleTag}>
+                      <Text style={S.supportRoleTagText}>{supportRoleLabel(p.support_role)}</Text>
+                    </View>
                     <Text style={S.supportPillName} numberOfLines={1}>{p.employee_name}</Text>
                   </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={S.emptyHint}>No support person assigned</Text>
-            )}
+                ))
+              : <Text style={S.emptyHint}>No support person assigned</Text>
+            }
 
             {/* Timestamps */}
             <View style={S.divider} />
-            <View style={S.infoGrid}>
-              <InfoRow label="IN TS"     value={formatTimestamp(a?.assigned_at)} />
-              <InfoRow label="OUT TS"    value={formatTimestamp(a?.out_ts)} />
-              <InfoRow label="Time Diff" value={timeDiff} />
+            <View style={S.tsRow}>
+              <View style={S.tsCell}>
+                <Text style={S.tsLabel}>IN</Text>
+                <Text style={S.tsVal}>{formatTimestamp(a?.assigned_at)}</Text>
+              </View>
+              <View style={S.tsDivider} />
+              <View style={S.tsCell}>
+                <Text style={S.tsLabel}>OUT</Text>
+                <Text style={S.tsVal}>{formatTimestamp(a?.out_ts)}</Text>
+              </View>
+              <View style={S.tsDivider} />
+              <View style={S.tsCell}>
+                <Text style={S.tsLabel}>TIME</Text>
+                <Text style={[S.tsVal, { color: '#16a34a', fontWeight: '700' }]}>{timeDiff}</Text>
+              </View>
             </View>
 
-            {/* Bay + Status + Remark */}
+            {/* Stage details */}
             <View style={S.divider} />
-            <Text style={S.sectionTitle}>📋 Stage Details</Text>
+            <Text style={S.sectionTitle}>📋 Stage</Text>
 
-            <Text style={S.fieldLabel}>Bay</Text>
-            <TouchableOpacity style={[S.selectRow, !a && { opacity: 0.4 }]} disabled={!a} onPress={() => a && setBayPickerCard(jc)}>
-              <Text style={draft.bay_no ? S.selectVal : S.selectPlaceholder}>{draft.bay_no || '— Select Bay —'}</Text>
-              <Text style={S.chevron}>▼</Text>
+            {/* Bay */}
+            <Text style={S.fieldLabel}>Bay No</Text>
+            <TouchableOpacity style={[S.selectBtn, !a && { opacity: 0.35 }]} disabled={!a} onPress={() => a && setBayPickerCard(jc)}>
+              <Text style={draft.bay_no ? S.selectBtnVal : S.selectBtnPlaceholder}>{draft.bay_no || 'Tap to select bay'}</Text>
+              <Text style={S.selectBtnArrow}>›</Text>
             </TouchableOpacity>
 
-            <Text style={[S.fieldLabel, { marginTop: 10 }]}>Status</Text>
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {/* Status chips */}
+            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Work Status</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
               {STATUS_OPTIONS.map(opt => {
-                const sc = STATUS_COLORS[opt.value]
+                const osc = STATUS_COLORS[opt.value]
                 const active = draft.work_status === opt.value
                 return (
-                  <TouchableOpacity key={opt.value} disabled={!a}
-                    style={[S.statusChip, active && { backgroundColor: sc.bg, borderColor: sc.text }]}
+                  <TouchableOpacity key={opt.value} disabled={!a} style={{ flex: 1 }}
                     onPress={() => a && patchStageDraft(key, { work_status: opt.value })}>
-                    <Text style={[S.statusChipText, active && { color: sc.text }]}>{opt.label}</Text>
+                    <View style={[S.statusBlock, active && { backgroundColor: osc.bg, borderColor: osc.text }]}>
+                      <Text style={[S.statusBlockText, active && { color: osc.text, fontWeight: '700' }]}>{opt.label}</Text>
+                    </View>
                   </TouchableOpacity>
                 )
               })}
             </View>
 
-            <Text style={[S.fieldLabel, { marginTop: 10 }]}>Remark</Text>
+            {/* Remark */}
+            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Remark</Text>
             <TextInput
-              style={[S.remarkInput, !a && { opacity: 0.4 }]}
+              style={[S.remarkInput, !a && { opacity: 0.35 }]}
               editable={Boolean(a)}
               multiline
-              placeholder="Optional remark"
+              placeholder="Optional remark..."
               placeholderTextColor="#94a3b8"
               value={draft.remark}
               onChangeText={t => a && patchStageDraft(key, { remark: t })}
@@ -848,12 +899,12 @@ export default function FloorInchargeScreen() {
 
             {hasStageChanges && (
               <TouchableOpacity
-                style={[S.saveBtn, isSaving && { opacity: 0.6 }]}
+                style={[S.saveBtn, isSaving && { opacity: 0.55 }]}
                 disabled={isSaving}
                 onPress={() => saveStage(key)}>
                 {isSaving
                   ? <ActivityIndicator color="#fff" />
-                  : <Text style={S.saveBtnText}>💾  Save Stage</Text>
+                  : <Text style={S.saveBtnText}>Save Stage</Text>
                 }
               </TouchableOpacity>
             )}
@@ -886,85 +937,96 @@ export default function FloorInchargeScreen() {
         </View>
       )}
 
-      {/* Header */}
+      {/* ── Header ── */}
       <View style={S.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={S.headerTitle}>🏭 Floor Incharge</Text>
           <Text style={S.headerSub}>{filtered.length} of {jobCards.length} job cards</Text>
         </View>
-        <TouchableOpacity style={S.refreshBtn} onPress={() => fetchAll(true)}>
+        <TouchableOpacity style={S.refreshBtn} onPress={() => fetchAll(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={S.refreshBtnText}>↻</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Search */}
+      {/* ── Search bar ── */}
       <View style={S.searchRow}>
-        <TextInput style={S.searchInput}
-          placeholder="🔍 Search JC / reg / model / SA / tech..."
-          placeholderTextColor="#94a3b8"
-          value={search} onChangeText={setSearch} clearButtonMode="while-editing"
-        />
+        <View style={S.searchWrap}>
+          <Text style={S.searchIcon}>🔍</Text>
+          <TextInput style={S.searchInput}
+            placeholder="JC / reg / model / SA / technician..."
+            placeholderTextColor="#94a3b8"
+            value={search} onChangeText={setSearch} clearButtonMode="while-editing"
+          />
+        </View>
       </View>
 
-      {/* Location filter */}
-      {branches.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.filterRow}>
-          {['all', ...branches].map(b => (
-            <TouchableOpacity key={b} style={[S.chip, branchFilter === b && S.chipActive]} onPress={() => setBranchFilter(b)}>
-              <Text style={[S.chipText, branchFilter === b && S.chipTextActive]}>
-                {b === 'all' ? `All Loc (${searchScopedRows.length})` : b}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Portal/Fuel filter */}
-      {fuelTypeOptions.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.filterRow}>
-          {['all', ...fuelTypeOptions].map(ft => (
-            <TouchableOpacity key={ft} style={[S.chip, fuelTypeFilter === ft && S.chipActive]} onPress={() => setFuelTypeFilter(ft)}>
-              <Text style={[S.chipText, fuelTypeFilter === ft && S.chipTextActive]}>
-                {ft === 'all' ? `All Portal (${statusScopedBranchRows.length})` : ft}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Technician filter */}
-      {technicianOptions.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.filterRow}>
-          <TouchableOpacity style={[S.chip, technicianFilter === 'all' && S.chipActive]} onPress={() => setTechnicianFilter('all')}>
-            <Text style={[S.chipText, technicianFilter === 'all' && S.chipTextActive]}>All Tech ({statusScopedFuelRows.length})</Text>
-          </TouchableOpacity>
-          {technicianOptions.map(opt => {
-            const cnt = statusScopedFuelRows.filter(jc => getTechnicianFilterKey(assignments[jc.assignment_key]) === opt.value).length
-            return (
-              <TouchableOpacity key={opt.value} style={[S.chip, technicianFilter === opt.value && S.chipActive]} onPress={() => setTechnicianFilter(opt.value)}>
-                <Text style={[S.chipText, technicianFilter === opt.value && S.chipTextActive]}>{opt.label} ({cnt})</Text>
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
-      )}
-
-      {/* Status tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[S.filterRow, { borderBottomWidth: 2, borderColor: '#e2e8f0' }]}>
+      {/* ── Status tabs — primary filter, full width ── */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}
+        contentContainerStyle={S.tabsContainer}
+        style={S.tabsRow}>
         {TAB_DEFS.map(tab => {
           const cnt = tabCounts[tab.key]
           const active = assignmentView === tab.key
           return (
             <TouchableOpacity key={tab.key} disabled={cnt === 0}
-              style={[S.tabChip, { borderColor: tab.color + '44', backgroundColor: active ? tab.color : tab.bg }, cnt === 0 && { opacity: 0.4 }]}
+              style={[S.tabPill, { backgroundColor: active ? tab.color : '#fff', borderColor: active ? tab.color : '#e2e8f0' }, cnt === 0 && { opacity: 0.35 }]}
               onPress={() => setAssignmentView(tab.key as AssignmentView)}>
-              <Text style={[S.tabChipText, { color: active ? '#fff' : tab.color }]}>
-                <Text style={{ fontWeight: '800' }}>{cnt}</Text>  {tab.label}
-              </Text>
+              <Text style={[S.tabPillCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+              <Text style={[S.tabPillLabel, { color: active ? 'rgba(255,255,255,0.9)' : '#64748b' }]}>{tab.label}</Text>
             </TouchableOpacity>
           )
         })}
       </ScrollView>
+
+      {/* ── Secondary filters row ── */}
+      <View style={S.filtersBar}>
+        {/* Location */}
+        {branches.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={S.filterLabel}>Loc</Text>
+              {['all', ...branches].map(b => (
+                <TouchableOpacity key={b} style={[S.filterChip, branchFilter === b && S.filterChipActive]} onPress={() => setBranchFilter(b)}>
+                  <Text style={[S.filterChipText, branchFilter === b && S.filterChipTextActive]}>
+                    {b === 'all' ? 'All' : b.split(' ')[0]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        )}
+
+        {/* Portal */}
+        {fuelTypeOptions.length > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={S.filterLabel}>Portal</Text>
+            {['all', ...fuelTypeOptions].map(ft => (
+              <TouchableOpacity key={ft} style={[S.filterChip, fuelTypeFilter === ft && S.filterChipActive]} onPress={() => setFuelTypeFilter(ft)}>
+                <Text style={[S.filterChipText, fuelTypeFilter === ft && S.filterChipTextActive]}>
+                  {ft === 'all' ? 'All' : ft}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Technician */}
+        {technicianOptions.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={S.filterLabel}>Tech</Text>
+              <TouchableOpacity style={[S.filterChip, technicianFilter === 'all' && S.filterChipActive]} onPress={() => setTechnicianFilter('all')}>
+                <Text style={[S.filterChipText, technicianFilter === 'all' && S.filterChipTextActive]}>All</Text>
+              </TouchableOpacity>
+              {technicianOptions.map(opt => (
+                <TouchableOpacity key={opt.value} style={[S.filterChip, technicianFilter === opt.value && S.filterChipActive]} onPress={() => setTechnicianFilter(opt.value)}>
+                  <Text style={[S.filterChipText, technicianFilter === opt.value && S.filterChipTextActive]} numberOfLines={1}>{opt.label.split(' ')[0]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        )}
+      </View>
 
       {/* List */}
       {loading ? (
@@ -1150,7 +1212,7 @@ export default function FloorInchargeScreen() {
   )
 }
 
-// ── Helper component ──────────────────────────────────────────────────────────
+// ── Helper components ─────────────────────────────────────────────────────────
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flexDirection: 'row', marginBottom: 5 }}>
@@ -1160,77 +1222,142 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+function InfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: 8, padding: 10, minWidth: 0 }}>
+      <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</Text>
+      <Text style={{ fontSize: 13, color: '#1e293b', fontWeight: '600' }} numberOfLines={2}>{value}</Text>
+    </View>
+  )
+}
+
 const S = {
-  root:              { flex: 1, backgroundColor: '#f8fafc' } as const,
-  toast:             { position: 'absolute' as const, top: 60, left: 16, right: 16, zIndex: 999, backgroundColor: '#166534', borderRadius: 10, padding: 12 },
+  // layout
+  root:              { flex: 1, backgroundColor: '#f1f5f9' } as const,
+
+  // toast
+  toast:             { position: 'absolute' as const, top: 56, left: 12, right: 12, zIndex: 999, backgroundColor: '#166534', borderRadius: 12, padding: 14, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
   toastError:        { backgroundColor: '#991b1b' } as const,
-  toastText:         { color: '#fff', fontWeight: '600' as const, fontSize: 13 },
-  header:            { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  headerTitle:       { fontSize: 18, fontWeight: '700' as const, color: '#1e293b' },
+  toastText:         { color: '#fff', fontWeight: '600' as const, fontSize: 14, flex: 1 },
+
+  // header
+  header:            { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', gap: 12 },
+  headerTitle:       { fontSize: 18, fontWeight: '800' as const, color: '#0f172a' },
   headerSub:         { fontSize: 12, color: '#64748b', marginTop: 2 },
-  refreshBtn:        { width: 36, height: 36, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center' as const, justifyContent: 'center' as const },
-  refreshBtnText:    { fontSize: 20, color: '#2563eb' },
-  searchRow:         { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff' },
-  searchInput:       { backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' },
-  filterRow:         { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#f1f5f9', maxHeight: 44 },
-  chip:              { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0', marginRight: 6, alignSelf: 'center' as const },
-  chipActive:        { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  chipText:          { fontSize: 12, fontWeight: '600' as const, color: '#64748b' },
-  chipTextActive:    { color: '#2563eb' } as const,
-  tabChip:           { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5, borderWidth: 1.5, marginRight: 6, alignSelf: 'center' as const },
-  tabChipText:       { fontSize: 12, fontWeight: '600' as const },
-  card:              { backgroundColor: '#fff', borderRadius: 12, marginBottom: 10, overflow: 'hidden' as const, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  cardHeader:        { flexDirection: 'row' as const, alignItems: 'center' as const, padding: 14 },
-  jcNumber:          { fontSize: 14, fontWeight: '800' as const, color: '#1e293b', letterSpacing: 0.3 },
-  regNo:             { fontSize: 13, fontWeight: '600' as const, color: '#2563eb' },
-  cardMeta:          { fontSize: 11, color: '#64748b' },
-  statusBadge:       { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1 },
-  statusBadgeText:   { fontSize: 10, fontWeight: '700' as const },
-  cardBody:          { padding: 14, paddingTop: 4, borderTopWidth: 1, borderColor: '#f1f5f9' },
-  infoGrid:          { marginTop: 8 },
-  divider:           { height: 1, backgroundColor: '#f1f5f9', marginVertical: 12 },
-  sectionTitle:      { fontSize: 13, fontWeight: '700' as const, color: '#475569', marginBottom: 8 },
-  fieldLabel:        { fontSize: 12, fontWeight: '600' as const, color: '#475569', marginBottom: 4 },
-  selectRow:         { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
-  selectVal:         { fontSize: 13, color: '#1e293b', flex: 1 },
-  selectPlaceholder: { fontSize: 13, color: '#94a3b8', flex: 1 },
-  chevron:           { fontSize: 10, color: '#94a3b8' },
-  statusChip:        { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
-  statusChipText:    { fontSize: 12, fontWeight: '600' as const, color: '#64748b' },
-  remarkInput:       { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 10, fontSize: 13, color: '#1e293b', minHeight: 56, textAlignVertical: 'top' as const },
-  saveBtn:           { backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' as const, marginTop: 12 },
-  saveBtnText:       { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
-  addSupportBtn:     { backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#2563eb44' },
-  addSupportBtnText: { fontSize: 12, fontWeight: '700' as const, color: '#2563eb' },
-  supportPill:       { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f8fafc', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#e2e8f0', gap: 8 },
-  supportPillRole:   { fontSize: 10, fontWeight: '700' as const, color: '#2563eb', backgroundColor: '#eff6ff', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
-  supportPillName:   { fontSize: 12, color: '#334155', flex: 1 },
-  emptyHint:         { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' as const, marginTop: 4 },
+  refreshBtn:        { width: 40, height: 40, borderRadius: 10, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
+  refreshBtnText:    { fontSize: 22, color: '#2563eb' },
+
+  // search
+  searchRow:         { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  searchWrap:        { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f1f5f9', borderRadius: 12, paddingHorizontal: 12, gap: 6 },
+  searchIcon:        { fontSize: 15 },
+  searchInput:       { flex: 1, paddingVertical: 10, fontSize: 14, color: '#1e293b' },
+
+  // status tabs
+  tabsRow:           { backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  tabsContainer:     { paddingHorizontal: 12, paddingVertical: 10, gap: 8, alignItems: 'center' as const },
+  tabPill:           { borderRadius: 24, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, alignItems: 'center' as const, minWidth: 72 },
+  tabPillCount:      { fontSize: 16, fontWeight: '800' as const, lineHeight: 20 },
+  tabPillLabel:      { fontSize: 10, fontWeight: '600' as const, marginTop: 1 },
+
+  // secondary filters
+  filtersBar:        { backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderColor: '#e2e8f0', gap: 6 },
+  filterLabel:       { fontSize: 11, fontWeight: '700' as const, color: '#94a3b8', minWidth: 28 },
+  filterChip:        { borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
+  filterChipActive:  { backgroundColor: '#2563eb', borderColor: '#2563eb' } as const,
+  filterChipText:    { fontSize: 12, fontWeight: '600' as const, color: '#475569' },
+  filterChipTextActive:{ color: '#fff' } as const,
+
+  // cards
+  card:              { backgroundColor: '#fff', borderRadius: 16, marginBottom: 10, overflow: 'hidden' as const, shadowColor: '#0f172a', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+  cardHeader:        { flexDirection: 'row' as const, alignItems: 'stretch' as const, minHeight: 80 },
+  statusStripe:      { width: 4, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
+  jcNumber:          { fontSize: 15, fontWeight: '800' as const, color: '#0f172a', letterSpacing: 0.2 },
+  regPill:           { backgroundColor: '#f1f5f9', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  regPillText:       { fontSize: 12, fontWeight: '700' as const, color: '#334155', letterSpacing: 0.5 },
+  statusPill:        { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
+  statusPillText:    { fontSize: 11, fontWeight: '700' as const },
+  cardModel:         { fontSize: 13, color: '#334155', fontWeight: '500' as const },
+  cardLoc:           { fontSize: 12, color: '#94a3b8', flex: 1 },
+  portalBadge:       { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1 },
+  portalBadgeText:   { fontSize: 11, fontWeight: '800' as const, letterSpacing: 0.5 },
+  techRow:           { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, marginTop: 6, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  techIcon:          { fontSize: 12 },
+  techName:          { fontSize: 12, color: '#1d4ed8', fontWeight: '600' as const, flex: 1 },
+  bayTag:            { backgroundColor: '#dbeafe', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+  bayTagText:        { fontSize: 11, color: '#1d4ed8', fontWeight: '700' as const },
+  expandArrow:       { paddingHorizontal: 14, fontSize: 13, color: '#cbd5e1', alignSelf: 'center' as const },
+
+  // expanded card body
+  cardBody:          { paddingHorizontal: 14, paddingBottom: 16, paddingTop: 12, borderTopWidth: 1, borderColor: '#f1f5f9' },
+  infoBlock:         { gap: 6 },
+  infoRow2Col:       { flexDirection: 'row' as const, gap: 6 },
+  divider:           { height: 1, backgroundColor: '#f1f5f9', marginVertical: 14 },
+  sectionTitle:      { fontSize: 13, fontWeight: '700' as const, color: '#475569', marginBottom: 10 },
+  fieldLabel:        { fontSize: 12, fontWeight: '600' as const, color: '#64748b', marginBottom: 6 },
+
+  // select button (replaces select row)
+  selectBtn:         { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row' as const, alignItems: 'center' as const, minHeight: 52 },
+  selectBtnVal:      { fontSize: 14, color: '#0f172a', fontWeight: '600' as const, flex: 1 },
+  selectBtnPlaceholder:{ fontSize: 14, color: '#94a3b8', flex: 1 },
+  selectBtnSub:      { fontSize: 11, color: '#64748b', marginTop: 2 },
+  selectBtnArrow:    { fontSize: 22, color: '#94a3b8', fontWeight: '300' as const },
+
+  // status blocks (full width)
+  statusBlock:       { borderRadius: 10, paddingVertical: 10, alignItems: 'center' as const, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  statusBlockText:   { fontSize: 12, fontWeight: '500' as const, color: '#64748b' },
+
+  // timestamps
+  tsRow:             { flexDirection: 'row' as const, backgroundColor: '#f8fafc', borderRadius: 12, overflow: 'hidden' as const },
+  tsCell:            { flex: 1, padding: 12, alignItems: 'center' as const },
+  tsDivider:         { width: 1, backgroundColor: '#e2e8f0' },
+  tsLabel:           { fontSize: 10, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.8, marginBottom: 3 },
+  tsVal:             { fontSize: 12, fontWeight: '600' as const, color: '#334155', textAlign: 'center' as const },
+
+  remarkInput:       { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, fontSize: 14, color: '#1e293b', minHeight: 64, textAlignVertical: 'top' as const },
+
+  saveBtn:           { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 14, alignItems: 'center' as const, marginTop: 14, shadowColor: '#2563eb', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  saveBtnText:       { color: '#fff', fontWeight: '700' as const, fontSize: 15 },
+
+  addSupportBtn:     { backgroundColor: '#eff6ff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#bfdbfe' },
+  addSupportBtnText: { fontSize: 13, fontWeight: '700' as const, color: '#2563eb' },
+  supportPill:       { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e2e8f0', gap: 8, marginBottom: 4 },
+  supportRoleTag:    { backgroundColor: '#dbeafe', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  supportRoleTagText:{ fontSize: 10, fontWeight: '800' as const, color: '#1d4ed8' },
+  supportPillName:   { fontSize: 13, color: '#334155', fontWeight: '500' as const, flex: 1 },
+  emptyHint:         { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' as const, marginTop: 2, marginBottom: 6 },
+
+  // picker modals
   pickerHeader:      { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  pickerTitle:       { fontSize: 16, fontWeight: '700' as const, color: '#1e293b', flex: 1 },
-  pickerSearch:      { backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' },
-  pickerItem:        { padding: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  pickerTitle:       { fontSize: 16, fontWeight: '700' as const, color: '#0f172a', flex: 1 },
+  pickerSearch:      { backgroundColor: '#f1f5f9', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#1e293b' },
+  pickerItem:        { paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#f1f5f9', minHeight: 52, justifyContent: 'center' as const },
   pickerItemText:    { fontSize: 15, color: '#1e293b', fontWeight: '500' as const },
-  pickerItemSub:     { fontSize: 12, color: '#64748b', marginTop: 2 },
-  pickerEmpty:       { textAlign: 'center' as const, color: '#94a3b8', marginTop: 40, padding: 16 },
-  bayChip:           { flex: 1, margin: 4, backgroundColor: '#f1f5f9', borderRadius: 8, padding: 12, alignItems: 'center' as const, borderWidth: 1, borderColor: '#e2e8f0' },
+  pickerItemSub:     { fontSize: 12, color: '#64748b', marginTop: 3 },
+  pickerEmpty:       { textAlign: 'center' as const, color: '#94a3b8', marginTop: 48, padding: 16 },
+
+  // bay grid
+  bayChip:           { flex: 1, margin: 4, backgroundColor: '#f1f5f9', borderRadius: 10, paddingVertical: 14, alignItems: 'center' as const, borderWidth: 1, borderColor: '#e2e8f0' },
   bayChipActive:     { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  bayChipText:       { fontSize: 13, fontWeight: '600' as const, color: '#475569' },
-  supportMeta:       { backgroundColor: '#f8fafc', borderRadius: 8, padding: 10, marginBottom: 14, borderWidth: 1, borderColor: '#e2e8f0' },
-  supportMetaText:   { fontSize: 12, color: '#475569' },
-  roleChip:          { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
+  bayChipText:       { fontSize: 14, fontWeight: '700' as const, color: '#475569' },
+
+  // support modal
+  supportMeta:       { backgroundColor: '#f8fafc', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+  supportMetaText:   { fontSize: 13, color: '#475569', fontWeight: '500' as const },
+  roleChip:          { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 11, backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0' },
   roleChipActive:    { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
   roleChipText:      { fontSize: 14, color: '#64748b', fontWeight: '500' as const },
   roleChipTextActive:{ color: '#2563eb', fontWeight: '700' as const } as const,
-  empRow:            { padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', marginBottom: 4 },
+  empRow:            { padding: 14, borderRadius: 10, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#fff', marginBottom: 5 },
   empRowActive:      { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  empRowText:        { fontSize: 13, color: '#1e293b' },
-  existingSupportRow:{ flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 8, borderBottomWidth: 1, borderColor: '#f1f5f9', gap: 8 },
-  removeBtn:         { backgroundColor: '#fef2f2', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  removeBtnText:     { fontSize: 12, fontWeight: '600' as const, color: '#dc2626' },
-  empty:             { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingTop: 60 },
-  emptyIcon:         { fontSize: 48, marginBottom: 12 },
-  emptyTitle:        { fontSize: 16, fontWeight: '700' as const, color: '#1e293b' },
-  emptySub:          { fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center' as const, paddingHorizontal: 24 },
+  empRowText:        { fontSize: 14, color: '#1e293b', fontWeight: '500' as const },
+  existingSupportRow:{ flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 10, borderBottomWidth: 1, borderColor: '#f1f5f9', gap: 10 },
+  removeBtn:         { backgroundColor: '#fef2f2', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  removeBtnText:     { fontSize: 13, fontWeight: '700' as const, color: '#dc2626' },
+
+  // empty state
+  empty:             { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingTop: 80 },
+  emptyIcon:         { fontSize: 52, marginBottom: 16 },
+  emptyTitle:        { fontSize: 17, fontWeight: '700' as const, color: '#1e293b' },
+  emptySub:          { fontSize: 14, color: '#94a3b8', marginTop: 6, textAlign: 'center' as const, paddingHorizontal: 32 },
 }
