@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { getJobCardSummary, type JobCardStatus } from '../../../lib/api/jobCards'
@@ -85,7 +86,7 @@ export default function DamageStageScreen() {
   const [panelSourceNote, setPanelSourceNote] = useState<string>('')
   const [jobStatus, setJobStatus] = useState<JobCardStatus>('draft')
 
-  const loadDamage = async () => {
+  const loadDamage = useCallback(async () => {
     if (!jobCardId) {
       setError('Missing job card id')
       setLoading(false)
@@ -173,11 +174,18 @@ export default function DamageStageScreen() {
     }
 
     setLoading(false)
-  }
+  }, [jobCardId, jobCardNumberHint, regNumberHint])
 
   useEffect(() => {
     void loadDamage()
   }, [jobCardId])
+
+  useFocusEffect(
+    useCallback(() => {
+        void loadDamage()
+        return undefined
+      }, [loadDamage])
+  )
 
   const selectedPanelRows = useMemo(() => {
     const selectedSet = new Set(selectedPanels.map((name) => name.toLowerCase()))

@@ -190,6 +190,16 @@ function isValidOwnerPhone(value: string | null | undefined): boolean {
   return /^\d{10}$/.test(normalizeOwnerPhoneInput(value))
 }
 
+function isAuthExpiredError(message: string | null | undefined): boolean {
+  const text = String(message ?? '').toLowerCase()
+  return (
+    text.includes('invalid refresh token')
+    || text.includes('refresh token')
+    || text.includes('jwt')
+    || text.includes('auth')
+  )
+}
+
 export default function CreateJobCardScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -211,6 +221,7 @@ export default function CreateJobCardScreen() {
   const [yearOptions, setYearOptions] = useState<string[]>(defaultYearOptions)
   const [cityCategoryOptions, setCityCategoryOptions] = useState<string[]>([])
   const [draftJobCardId, setDraftJobCardId] = useState<string | null>(null)
+  const [draftJcNumber, setDraftJcNumber] = useState('')
   const [uploadingWalkaround, setUploadingWalkaround] = useState(false)
   const [uploadingCarImage, setUploadingCarImage] = useState(false)
 
@@ -276,12 +287,11 @@ export default function CreateJobCardScreen() {
   const lookupReady = useMemo(() => {
     return Boolean(
       form.regNumber.trim()
-      && form.jcNumber.trim()
       && form.kmReading.trim()
       && walkaroundVideoName.trim()
       && carImageName.trim(),
     ) && !uploadingWalkaround && !uploadingCarImage
-  }, [carImageName, form.jcNumber, form.kmReading, form.regNumber, uploadingCarImage, uploadingWalkaround, walkaroundVideoName])
+  }, [carImageName, form.kmReading, form.regNumber, uploadingCarImage, uploadingWalkaround, walkaroundVideoName])
 
   const modelChipOptions = useMemo(() => {
     const base = modelOptions.length > 0 ? modelOptions : DEFAULT_MODEL_CHIP_OPTIONS
@@ -402,11 +412,10 @@ export default function CreateJobCardScreen() {
 
   const validateLookupPrerequisitesForUpload = (docLabel: 'walkaround video' | 'car image') => {
     const regNum = form.regNumber.trim()
-    const jcNum = form.jcNumber.trim()
     const kmNum = form.kmReading.trim()
 
-    if (!regNum || !jcNum || !kmNum) {
-      Alert.alert('Missing Required Fields', `Enter Registration No, Job Card Number, and KM Reading before uploading ${docLabel}.`)
+    if (!regNum || !kmNum) {
+      Alert.alert('Missing Required Fields', `Enter Registration No and KM Reading before uploading ${docLabel}.`)
       return false
     }
 
@@ -424,6 +433,7 @@ export default function CreateJobCardScreen() {
     const jcNum = form.jcNumber.trim()
     const kmNum = form.kmReading.trim()
     const kmReading = Number(kmNum)
+    const effectiveJcNumber = jcNum || draftJcNumber.trim() || `TEMP-${Date.now()}`
 
     const existingVehicleRes = await fetchVehicleByReg(regNum)
     if (existingVehicleRes.error) {
@@ -441,7 +451,7 @@ export default function CreateJobCardScreen() {
     if (draftJobCardId) {
       const updateResult = await updateJobCard(draftJobCardId, {
         regNumber: regNum,
-        jcNumber: jcNum,
+        jcNumber: effectiveJcNumber,
         complaintDate: form.complaintDate,
         kmReading,
         claimType: form.claimType,
@@ -453,12 +463,14 @@ export default function CreateJobCardScreen() {
         return null
       }
 
+      setDraftJcNumber(updateResult.data.jc_number)
+
       return updateResult.data.id
     }
 
     const autoSaveResult = await createJobCard({
       regNumber: regNum,
-      jcNumber: jcNum,
+      jcNumber: effectiveJcNumber,
       complaintDate: form.complaintDate,
       kmReading,
       claimType: form.claimType,
@@ -471,7 +483,8 @@ export default function CreateJobCardScreen() {
     }
 
     setDraftJobCardId(autoSaveResult.data.id)
-    logEvent('create_job_card_auto_saved_on_video_upload', { job_card_id: autoSaveResult.data.id, jc_number: jcNum }, 'autodoc-create')
+    setDraftJcNumber(autoSaveResult.data.jc_number)
+    logEvent('create_job_card_auto_saved_on_video_upload', { job_card_id: autoSaveResult.data.id, jc_number: autoSaveResult.data.jc_number }, 'autodoc-create')
     return autoSaveResult.data.id
   }
 
@@ -693,8 +706,8 @@ export default function CreateJobCardScreen() {
   }
 
   const onFetchFromDb = async () => {
-    if (!form.regNumber.trim() || !form.jcNumber.trim() || !form.kmReading.trim()) {
-      Alert.alert('Missing Required Fields', 'Enter Registration No, Job Card Number, and KM Reading before fetch.')
+    if (!form.regNumber.trim() || !form.kmReading.trim()) {
+      Alert.alert('Missing Required Fields', 'Enter Registration No and KM Reading before fetch.')
       return
     }
 
@@ -839,8 +852,14 @@ export default function CreateJobCardScreen() {
         })
 
         if (vehiclePersistRes.error) {
-          setVehicleLookupStatus('error')
-          Alert.alert('Fetch Failed', vehiclePersistRes.error)
+          if (isAuthExpiredError(vehiclePersistRes.error)) {
+            setVehicleLookupStatus('error')
+            Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry fetch.')
+          } else {
+            // Keep fetched data visible; user can still continue and save in next step.
+            setVehicleLookupStatus('found')
+            Alert.alert('Fetched with Warning', `Vehicle data loaded, but draft sync failed: ${vehiclePersistRes.error}`)
+          }
           logEvent('create_job_card_fetch_failed', { error_message: vehiclePersistRes.error, stage: 'persist_vehicle_after_fetch' }, 'autodoc-create')
           return
         }
@@ -855,15 +874,21 @@ export default function CreateJobCardScreen() {
         })
 
         if (updateAfterFetchRes.error || !updateAfterFetchRes.data) {
-          setVehicleLookupStatus('error')
-          Alert.alert('Fetch Failed', updateAfterFetchRes.error ?? 'Unable to sync fetched data into draft job card.')
+          if (isAuthExpiredError(updateAfterFetchRes.error)) {
+            setVehicleLookupStatus('error')
+            Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry fetch.')
+          } else {
+            // Keep fetched form state instead of showing contradictory fetch failure.
+            setVehicleLookupStatus('found')
+            Alert.alert('Fetched with Warning', updateAfterFetchRes.error ?? 'Unable to sync fetched data into draft job card.')
+          }
           logEvent('create_job_card_fetch_failed', { error_message: updateAfterFetchRes.error ?? 'draft sync failed', stage: 'persist_job_card_after_fetch' }, 'autodoc-create')
           return
         }
       }
 
       setVehicleLookupStatus('found')
-      logEvent('create_job_card_vehicle_found', { reg_number: resolvedReg, jc_number: form.jcNumber }, 'autodoc-create')
+      logEvent('create_job_card_vehicle_found', { reg_number: resolvedReg, jc_number: form.jcNumber || draftJcNumber || null }, 'autodoc-create')
     } finally {
       setLookupBusy(false)
     }
@@ -1096,22 +1121,11 @@ export default function CreateJobCardScreen() {
             onChangeText={(value) => {
               setForm((prev) => ({ ...prev, regNumber: value.toUpperCase() }))
               setDraftJobCardId(null)
+              setDraftJcNumber('')
             }}
             placeholder="MH12 KJ 4471"
             placeholderTextColor="#a7a99f"
             autoCapitalize="characters"
-            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
-          />
-
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Job card number<Text style={{ color: '#cf3858' }}>*</Text></Text>
-          <TextInput
-            value={form.jcNumber}
-            onChangeText={(value) => {
-              setForm((prev) => ({ ...prev, jcNumber: value }))
-              setDraftJobCardId(null)
-            }}
-            placeholder="JC-2026-0432"
-            placeholderTextColor="#a7a99f"
             style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
           />
 
@@ -1122,6 +1136,7 @@ export default function CreateJobCardScreen() {
               onChangeText={(value) => {
                 setForm((prev) => ({ ...prev, kmReading: value }))
                 setDraftJobCardId(null)
+                setDraftJcNumber('')
               }}
               placeholder="28450"
               placeholderTextColor="#a7a99f"
@@ -1199,7 +1214,7 @@ export default function CreateJobCardScreen() {
           <View style={{ marginTop: 10, borderRadius: 14, backgroundColor: '#f3f1eb', paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row' }}>
             <Icon name="info" size={16} color="#7d8090" strokeWidth={1.8} />
             <Text style={{ marginLeft: 8, flex: 1, fontSize: 11, color: '#7d8090', lineHeight: 18 }}>
-              Enter reg, JC & KM, then attach walkaround video and GPS-tagged car image.
+              Enter reg & KM, then attach walkaround video and GPS-tagged car image.
             </Text>
           </View>
 
@@ -1335,6 +1350,16 @@ export default function CreateJobCardScreen() {
           <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
             <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 8 }}>Job details</Text>
 
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Job card number<Text style={{ color: '#cf3858' }}>*</Text></Text>
+            <TextInput
+              value={form.jcNumber}
+              onChangeText={(value) => setForm((prev) => ({ ...prev, jcNumber: value.trim().toUpperCase() }))}
+              placeholder="Enter final JC number"
+              placeholderTextColor="#a7a99f"
+              autoCapitalize="characters"
+              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 12 }}
+            />
+
             <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Warranty claim type</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
               {claimTypeOptions.map((option) => {
@@ -1380,6 +1405,11 @@ export default function CreateJobCardScreen() {
               className={`rounded-lg py-4 items-center mt-4 ${saving ? 'bg-blue-300' : 'bg-blue-600'}`}
               disabled={saving}
               onPress={async () => {
+                if (!form.jcNumber.trim()) {
+                  Alert.alert('Missing Job Card Number', 'Enter final Job Card Number before continuing to damage stage.')
+                  return
+                }
+
                 if (!form.paintType.trim()) {
                   Alert.alert('Missing Paint Type', 'Select paint type before continuing to damage stage.')
                   return
@@ -1409,6 +1439,31 @@ export default function CreateJobCardScreen() {
                 try {
                   const kmReading = form.kmReading.trim() ? Number(form.kmReading) : null
 
+                  const year = form.year.trim() ? Number(form.year) : null
+                  const vehicleRes = await upsertVehicle({
+                    regNumber: form.regNumber,
+                    vin: form.vin,
+                    model: form.model,
+                    year,
+                    colour: form.colour,
+                    paintType: form.paintType,
+                    dealerCity: form.dealerCity,
+                    bpCityCategory: form.bpCityCategory,
+                    ownerName: form.ownerName,
+                    ownerPhone: form.ownerPhone,
+                    dateOfSale: form.dateOfSale || null,
+                  })
+
+                  if (vehicleRes.error) {
+                    if (isAuthExpiredError(vehicleRes.error)) {
+                      Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
+                    } else {
+                      Alert.alert('Error', vehicleRes.error)
+                    }
+                    logEvent('create_job_card_next_failed', { error_message: vehicleRes.error, stage: 'vehicle_upsert', job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+                    return
+                  }
+
                   const updateResult = await updateJobCard(draftJobCardId, {
                     regNumber: form.regNumber,
                     jcNumber: form.jcNumber,
@@ -1419,8 +1474,23 @@ export default function CreateJobCardScreen() {
                   })
 
                   if (updateResult.error || !updateResult.data) {
-                    Alert.alert('Error', updateResult.error ?? 'Unable to update job card')
+                    if (isAuthExpiredError(updateResult.error)) {
+                      Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
+                    } else {
+                      Alert.alert('Error', updateResult.error ?? 'Unable to update job card')
+                    }
                     logEvent('create_job_card_next_failed', { error_message: updateResult.error ?? undefined, job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+                    return
+                  }
+
+                  const statusRes = await updateJobCardStatus(draftJobCardId, 'in_work')
+                  if (statusRes.error) {
+                    if (isAuthExpiredError(statusRes.error)) {
+                      Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
+                    } else {
+                      Alert.alert('Error', statusRes.error)
+                    }
+                    logEvent('create_job_card_next_failed', { error_message: statusRes.error, stage: 'status_update', job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
                     return
                   }
 

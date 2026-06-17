@@ -1,22 +1,52 @@
 # MOBILE-009: Mobile App Redesign Parity Tracker (Reference-Locked + DB-Truth)
 
-**Status:** PHASE C IN PROGRESS: BP-02 (RV), BP-03 (RV), BP-04 DAMAGE NEXT  
+**Status:** PHASE C IN PROGRESS: BP-01 `/autodoc` PRIORITY PASS ACTIVE; BP-02 (RV), BP-03 (RV), BP-04 QUEUED  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-05-31 22:26 IST (Sequence updated per user: Job Card accepted for current pass; Damage is next focus; Estimate starts only after Damage pass.)  
+**Last Updated:** 2026-06-17 (BP-02 intake business-logic parity update applied from web audit: initial JC requirement removed; TEMP draft JC flow aligned.)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
-**Primary Goal:** Complete BP-03 through BP-08 screens one-at-a-time with documented visual parity audits. BP-02 (Create Job Card) is now closed for review in this cycle.
+**Primary Goal:** Execute BP-01 through BP-08 AutoDoc full-flow, device-specific UI parity audit against web baseline with documented evidence and no business-logic/functionality changes.
 **Program Reporting:** Reports upward to `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` (master authority)
 
 ---
 
 ## 0) Fresh Restart Baseline (2026-05-31)
 
+### 0.1) Immediate Program Priority Sync (2026-06-17)
+
+1. Highest priority now: mobile screen implementation/parity for web AutoDoc route: `http://localhost:5173/autodoc`.
+2. Execution anchor: MOBILE-009 redesign parity tracker (current active screen focus).
+3. Until this screen reaches Review/Done in child tracking, no lower-priority item should preempt active execution except production blockers.
+
+### 0.2) Device-Specific UI Parity Rules (Locked)
+
+1. This priority pass is a full-flow AutoDoc UI parity audit (BP-01..BP-08), not a business-logic rewrite.
+2. No business logic or functionality changes are allowed unless explicitly approved in chat.
+3. No duplication work is allowed: do not rebuild already-parity-complete screens unless a new gap is evidenced.
+4. Web and mobile UI may differ by device form factor (navigation patterns, spacing density, component ergonomics).
+5. Despite UI differences, flow intent, field semantics, interaction states, and stage progression must remain equivalent.
+6. Any identified logic defect must be logged as blocked/non-scope and escalated for separate approval.
+
+---
+
 1. All prior pass/fail claims are historical context only and are not sign-off.
 2. ✅ **COMPLETE:** AUTH screens (login, signup, reset) and home screen audited against current device screenshots; Home counters are now DB-backed.
-3. ⏳ **NEXT:** Start BP-04 (`mobile/src/app/job-cards/[id]/damage.tsx`) from fresh paired screenshots, then proceed to BP-07 (`mobile/src/app/job-cards/[id]/estimate.tsx`).
+3. ⏳ **NEXT (OVERRIDE):** Continue BP-01 (`mobile/src/app/(tabs)/autodoc.tsx`) priority parity pass against web `/autodoc` until `RV`/`DN`; then resume BP-04 (`mobile/src/app/job-cards/[id]/damage.tsx`) and BP-07 (`mobile/src/app/job-cards/[id]/estimate.tsx`).
 4. A screen can move to `RV` only with paired screenshots (reference vs app) and DB-truth checks.
 5. A screen can move to `DN` only after iOS + Android visual parity confirmation AND documented audit trail in this tracker.
 6. **Audit trail is mandatory:** Every screen must have before/after gaps documented before marking as complete.
+
+### 0.3) Full-Flow Audit Sequence (Current Pass)
+
+1. BP-01 Dashboard (`mobile/src/app/(tabs)/autodoc.tsx`)
+2. BP-02 Create (`mobile/src/app/job-cards/create.tsx`)
+3. BP-03 Job Card (`mobile/src/app/job-cards/[id]/jobcard.tsx`)
+4. BP-04 Damage (`mobile/src/app/job-cards/[id]/damage.tsx`)
+5. BP-05 Capture (`mobile/src/app/job-cards/[id]/capture-photo.tsx`)
+6. BP-06 Panel Photos (`mobile/src/app/job-cards/[id]/panel-photos.tsx`)
+7. BP-07 Estimate (`mobile/src/app/job-cards/[id]/estimate.tsx`)
+8. BP-08 Submit (`mobile/src/app/job-cards/[id]/submit.tsx`)
+
+Each screen audit must log: parity baseline, observed gaps, decision (keep/change), and evidence references.
 
 ---
 
@@ -88,7 +118,7 @@ Additional constraints added to this tracker from audit:
 - Already respects all RLS policies
 - Zero business logic changes needed for UI redesign
 
-✅ Web version parity confirmed: https://techwheels-service.vercel.app/autodoc uses same data sources
+✅ Web baseline parity source confirmed: http://localhost:5173/autodoc (equivalent deployed route) uses same data sources
 
 ✅ No schema conflicts or missing fields identified.
 
@@ -218,6 +248,8 @@ Note: Bundle README mentions 24 screens. The audited artboard list in the curren
 5. Validate workflow transitions and route params.
 6. Capture parity proof screenshots (iOS + Android).
 7. Mark activity tracker item complete only after data + visual parity both pass.
+8. Confirm device-specific adaptation rationale where mobile intentionally differs from web.
+9. Confirm no business-logic/functionality changes were introduced during UI parity updates.
 
 ### 5.3 Dependency and implementation guardrails (from bundle)
 
@@ -233,6 +265,21 @@ Note: Bundle README mentions 24 screens. The audited artboard list in the curren
 4. Keep all computed DB-backed values unchanged (for example `row_total`, `warranty_age_days`, `tml_share_percent`, `tml_share_amount`).
 5. For estimate UI, preserve full real field contract (do not simplify DB model to sample prototype fields).
 6. One screen = one focused commit for clean review and rollback safety.
+
+### 5.4 Mandatory End-of-Task Closeout Checklist (Strict)
+
+Do not mark a task handoff complete unless all checks pass in the same session:
+
+1. `MOBILE-009` updated with current screen audit delta: baseline, observed gaps, keep/change decision, and evidence references.
+2. Section 6 activity tracker row for active screen updated (`NS`/`IP`/`RV`/`DN`) with accurate next action.
+3. `MOBILE-010` updated in same session with matching program-level status and next action.
+4. Scope check passed: no business-logic/functionality changes made without explicit approval.
+5. Duplication check passed: no repeat rework unless a new parity gap was documented.
+6. Device-specific adaptation rationale captured for intentional mobile-vs-web UI differences.
+7. `Last Updated` refreshed in both `MOBILE-009` and `MOBILE-010` at closeout.
+8. Next screen in BP-01..BP-08 sequence explicitly set for restart continuity.
+
+If any check fails, retain status as In Progress and reopen the task in the next session.
 
 ---
 
@@ -254,10 +301,10 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | SHELL-04 | Shell | alerts | `mobile/src/app/(tabs)/alerts.tsx` | alerts/notifications source | NS | Mobile | |
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
-| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | RV | Mobile | ✅ Visual parity audit complete (2026-05-31): all 5 stage filters present, header/tabs/cards/FAB match reference exactly. DB-backed metrics wired. Approved for sign-off. |
-| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | RV | Mobile | ✅ User-approved for current cycle (2026-05-31). Header/stepper/layout parity implemented; post-fetch Date of Sale + Customer Complaint restored; Paint Type/Date of Sale/Owner Name/Owner Phone validations enforced; owner phone restricted to 10 digits. ⚠️ Per user directive (2026-05-31), business-logic/save-sequencing changes are locked and can only be modified after explicit approval. |
+| BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | IP | Mobile | 🔴 Program priority override (2026-06-17): immediate parity implementation/validation target for web `/autodoc` alignment per MOBILE-010. Keep as active focus until `RV`/`DN`. |
+| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | IP | Mobile | 🔄 Web parity business-logic update applied (2026-06-17, user-approved): initial intake no longer requires JC for upload/fetch, draft auto-saves with TEMP JC when final JC is blank, and final JC is now required at job-details continuation step. Pending device validation screenshots + flow verification before returning to `RV`. |
 | BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | RV | Mobile | ✅ User confirmed screen looks complete in current pass (2026-05-31). Keep business logic unchanged; only visual parity follow-ups if explicitly requested. |
-| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | IP | Mobile | 🔄 Active next screen per user sequence. Damage parity pass applied (design-only): custom detail header, icon tabs, 5-step strip, reference-style affected-panels chips with count badges, repair-stage cards, upload rows, and bottom CTA. Pending user screenshot sign-off. |
+| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | ⏸️ Queued behind BP-01 `/autodoc` priority override. Damage parity pass already applied (design-only): custom detail header, icon tabs, 5-step strip, reference-style affected-panels chips with count badges, repair-stage cards, upload rows, and bottom CTA. Resume after BP-01 reaches `RV`/`DN`. |
 | BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | NS | Mobile | Capture flow camera/gallery selection. |
 | BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | NS | Mobile | Review captured panel photos by repair stage. |
 | BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | NS | Mobile | Pending fresh audit; include OTA-safe hero rendering validation on existing binaries. |
@@ -270,6 +317,32 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 ---
 
 ## 7) Body & Paint Workflow: BP-01 Dashboard (FIRST SCREEN - FRESH START)
+
+### 7.0.0 Step-by-Step Execution Log (Current Session)
+
+Step 1 (Started: 2026-06-17)
+1. Screen in focus: BP-01 Dashboard (`mobile/src/app/(tabs)/autodoc.tsx`).
+2. Baseline source: web route `http://localhost:5173/autodoc` + BP reference artboard.
+3. Scope lock: UI parity audit only; no business logic/functionality changes.
+4. Required evidence to complete Step 1:
+   - iOS full-screen screenshot (header through FAB)
+   - Android full-screen screenshot (same scroll depth)
+   - Stage strip crop for 5-card visibility check
+5. Current Step 1 state: In Progress (evidence capture pending).
+6. Step 1 exit criteria:
+   - Gaps list updated in Section 7.0 table
+   - Keep/change decision recorded for each gap
+   - Section 6 BP-01 row note refreshed with current audit result
+
+Step 2 (Completed: 2026-06-17)
+1. Scope: BP-02 intake business-logic parity check against web AutoDoc (`http://localhost:5173/autodoc`).
+2. Web audit finding: pre-fetch upload/fetch requires Registration + KM + required media, not Job Card Number.
+3. Web audit finding: draft is created with TEMP JC when final JC is not yet entered; final JC is entered later in Job Details.
+4. Mobile parity changes applied:
+   - Removed initial JC prerequisite from upload and Fetch-from-DB enablement.
+   - Added TEMP JC fallback for draft creation/update during pre-fetch stage.
+   - Moved enforced final JC requirement to Job Details continuation (`Next: Document Damage`).
+5. Step 2 current state: Code complete, awaiting device parity validation evidence.
 
 ### 7.0 Fresh Gap Checklist (Next Device Audit Pass)
 
@@ -317,7 +390,7 @@ Status legend for this section: `OK` = matches reference, `GAP` = mismatch found
 4. ✅ Header, tabs, FAB all match reference design exactly
 5. ✅ Data-driven metrics (counts, status badges) update correctly from DB
 
-**Status: BP-01 → 🟢 RV (Ready for Review)**
+**Status (historical audit result): BP-01 → 🟢 RV (Ready for Review). Current execution priority status is tracked in Section 6 (Activity Tracker).**
 
 
 

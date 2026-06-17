@@ -45,9 +45,17 @@ If any child tracker conflicts with this file, this file wins until explicitly u
 
 ## 3.1) Immediate Program Priority (Override)
 
-1. Highest priority now: mobile screen implementation/parity for web AutoDoc route: `https://techwheels-service.vercel.app/autodoc`.
+1. Highest priority now: mobile screen implementation/parity for web AutoDoc route: `http://localhost:5173/autodoc`.
 2. Execution anchor: MOBILE-009 redesign parity tracker (current active screen focus).
 3. Until this screen reaches Review/Done in child tracking, no lower-priority item should preempt active execution except production blockers.
+
+## 3.2) AutoDoc Full-Flow Audit Directive (2026-06-17)
+
+1. Scope: audit full AutoDoc flow parity across BP-01 through BP-08 (dashboard, create, job card, damage, capture, photos, estimate, submit).
+2. Rule: no business logic or functionality changes are allowed under this priority task.
+3. Rule: no duplicate implementation work; reuse existing mobile flow and audit/refine UI only where parity gaps are confirmed.
+4. Device-specific parity standard: mobile UI does not need to be a web clone; layout and interaction can differ by form factor while preserving flow intent, information hierarchy, and state semantics.
+5. Child plan synchronization: all audit findings and status transitions must be recorded in MOBILE-009 in the same session.
 
 ---
 
@@ -58,11 +66,25 @@ Use: Not Started | In Progress | Blocked | Review | Done
 | Item ID | Program Workstream | Source Plan(s) | Status | Owner | Next Action |
 |---|---|---|---|---|---|
 | M10-001 | Establish canonical authority and cross-links | MOBILE-000, MOBILE-001, MOBILE-010 | Done | Mobile Team | Keep links current when new plans are added |
-| M10-002 | AutoDoc mobile screen parity (`/autodoc`) | MOBILE-009 | In Progress | Mobile Team | Implement and validate mobile parity against web `/autodoc` as immediate priority |
+| M10-002 | AutoDoc mobile screen parity (full flow audit) | MOBILE-009 | In Progress | Mobile Team | BP-02 parity business-logic alignment applied from web audit (initial intake no JC prerequisite + TEMP draft JC fallback). Next: validate BP-02 flow on device and continue BP-01 evidence capture. |
 | M10-003 | Platform home hardening phase | MOBILE-007 | In Progress | Mobile Team | Execute pending P4 tasks and verify end-to-end |
 | M10-004 | Processing-state UX rollout | MOBILE-008 | Not Started | Mobile Team | Start Sprint 1 critical items (M8-001/2/6/11) |
 | M10-005 | GPS stamp parity closure | MOBILE-005 | In Progress | Mobile Team | Complete remaining phases and QA gates |
 | M10-006 | Satellite hybrid provider rollout decision | MOBILE-006 | Pending | Product + Mobile | Confirm budget/quota and backend proxy readiness |
+
+### 4.1) Current Session Kickoff (2026-06-17)
+
+1. Active item: `M10-002` (AutoDoc full-flow parity audit).
+2. Immediate execution step: open MOBILE-009 and log BP-01 audit baseline for `mobile/src/app/(tabs)/autodoc.tsx`.
+3. Scope lock for this session: UI parity audit only, no business logic or functionality changes.
+4. Closeout requirement: complete strict checklist in both files before marking the session handoff complete.
+
+### 4.2) Step-by-Step Runtime State
+
+1. Step 1: BP-01 dashboard audit kickoff in MOBILE-009 - In Progress.
+2. Step 1 target outcome: complete BP-01 baseline gap log with fresh evidence (iOS, Android, stage-strip crop).
+3. Step 2: BP-02 intake business-logic parity update - Completed in code, pending device validation evidence.
+4. Next step: validate BP-02 on device (upload/fetch without initial JC, TEMP draft creation, final JC enforcement at Job Details), then resume BP-01 evidence closure.
 
 ---
 
@@ -73,6 +95,21 @@ Use: Not Started | In Progress | Blocked | Review | Done
 3. Do not mark a program item Done unless the child tracker has matching evidence.
 4. Append-only update behavior is recommended for activity logs.
 
+### 5.1) Mandatory End-of-Task Closeout Checklist (Strict)
+
+Mark a task session complete only when all items below are true:
+
+1. `MOBILE-010` updated: current active item status, blocker state, and next action refreshed.
+2. `MOBILE-009` updated in same session with screen-level audit/evidence details.
+3. Status sync check passed: program-level state in `MOBILE-010` matches child-tracker state in `MOBILE-009`.
+4. Scope check passed: no business-logic/functionality change introduced unless explicitly approved.
+5. Duplication check passed: no duplicate rework performed without a newly documented parity gap.
+6. Device-specific parity note captured where mobile intentionally differs from web.
+7. `Last Updated` fields refreshed in both files for the current task closeout.
+8. Restart continuity set: next exact screen/task is written in both files.
+
+If any checklist item is not satisfied, keep session state as In Progress.
+
 ---
 
 ## 6) Resume Protocol
@@ -80,7 +117,8 @@ Use: Not Started | In Progress | Blocked | Review | Done
 When restarting in a new chat:
 1. Open this file first.
 2. Continue from M10-002 first (AutoDoc mobile screen parity for `/autodoc`) until it is Review/Done.
-3. Update this file and the relevant child tracker together before ending the session.
+3. Complete the strict end-of-task closeout checklist (Section 5.1) before ending the session.
+4. Update this file and the relevant child tracker together before ending the session.
 
 Recommended restart prompt:
 
@@ -100,4 +138,4 @@ Program completion requires all to be true:
 
 ---
 
-Last Updated: 2026-06-17
+Last Updated: 2026-06-17 (BP-02 intake parity business-logic patch applied; device validation pending)
