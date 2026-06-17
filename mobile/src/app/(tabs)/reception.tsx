@@ -87,16 +87,16 @@ type FormState = {
   km_reading: string
   model: string
   service_type: string
+  fuel_type: 'EV' | 'PV' | ''
   sa_employee_code: string
   owner_name: string
   owner_phone: string
   source: string
-  remark: string
 }
 
 const EMPTY_FORM: FormState = {
   reg_number: '', km_reading: '', model: '', service_type: '',
-  sa_employee_code: '', owner_name: '', owner_phone: '', source: '', remark: '',
+  fuel_type: '', sa_employee_code: '', owner_name: '', owner_phone: '', source: '',
 }
 
 // ─── Pure helpers — exact same logic as web ──────────────────────────────────
@@ -388,30 +388,33 @@ export default function ReceptionScreen() {
     )
   }, [stFiltered, search])
 
-  // ── SA dropdown — exact web business rules ────────────────────────────────
+  // ── SA dropdown — fuel_type selector takes priority over model inference ────
   const filteredSAs = useMemo(() => {
     const reqDept = getRequiredDeptForServiceType(form.service_type)
     const useFuel = shouldApplyFuelFilter(form.service_type)
-    const reqFuel = inferFuelFromModel(form.model)
+    // If user explicitly picked EV/PV, use that; else fall back to model inference
+    const reqFuel: 'EV' | 'PV' = form.fuel_type || inferFuelFromModel(form.model)
     const hasServiceType = !!form.service_type.trim()
     return employees
       .filter(e => {
-        if (!hasServiceType) return true  // show all SAs when no service type chosen yet
+        if (!hasServiceType && !form.fuel_type) return true  // no filter yet
         const dept = normalizeDept(e.department)
-        if (dept !== reqDept) return false
-        if (!useFuel) return true  // Accident: show all BODY SHOP, no fuel filter
+        // If dept filter applies (service type chosen), enforce it
+        if (hasServiceType && dept !== reqDept) return false
+        if (!useFuel) return true  // Accident: no fuel filter
+        if (!form.fuel_type && !form.model) return true  // nothing chosen yet
         return normFuelBucket(e.fuel_type) === reqFuel
       })
       .sort((a, b) => a.employee_name.localeCompare(b.employee_name))
-  }, [employees, form.model, form.service_type])
+  }, [employees, form.model, form.service_type, form.fuel_type])
 
-  // Clear SA if no longer valid after service_type/model change (exact web behavior)
+  // Clear SA when it's no longer valid after service_type / fuel_type / model change
   useEffect(() => {
-    if (!form.sa_employee_code || !form.service_type) return
+    if (!form.sa_employee_code) return
     const code = form.sa_employee_code.trim().toUpperCase()
     const valid = filteredSAs.some(e => e.employee_code.trim().toUpperCase() === code)
     if (!valid) setForm(p => ({ ...p, sa_employee_code: '' }))
-  }, [form.sa_employee_code, form.service_type, filteredSAs])
+  }, [form.sa_employee_code, filteredSAs])
 
   // ── Form actions ──────────────────────────────────────────────────────────
   function openAdd() {
@@ -419,16 +422,22 @@ export default function ReceptionScreen() {
   }
 
   function openEdit(entry: ReceptionEntry) {
+    const entryFuel = (() => {
+      const raw = String(entry.portal ?? entry.fuel_type ?? '').trim().toUpperCase()
+      if (raw.includes('EV')) return 'EV' as const
+      if (raw.includes('PV')) return 'PV' as const
+      return '' as const
+    })()
     setForm({
       reg_number:       entry.reg_number ?? '',
       km_reading:       entry.km_reading != null ? String(entry.km_reading) : '',
       model:            entry.model ?? '',
       service_type:     entry.service_type ?? '',
+      fuel_type:        entryFuel,
       sa_employee_code: entry.sa_employee_code ?? '',
       owner_name:       entry.owner_name ?? '',
       owner_phone:      entry.owner_phone ?? '',
       source:           entry.source ?? '',
-      remark:           entry.remark ?? '',
     })
     setEditingId(entry.id); setFormError(null); setShowModal(true)
   }
@@ -454,7 +463,7 @@ export default function ReceptionScreen() {
 
     setSaving(true)
 
-    // Exact web normalizePayload
+    // normalizePayload — fuel_type stored in portal column
     const payload = {
       reg_number:       form.reg_number.trim().toUpperCase(),
       model:            form.model.trim() || null,
@@ -465,7 +474,7 @@ export default function ReceptionScreen() {
       km_reading:       normalizeKm(form.km_reading),
       source:           form.source.trim(),
       branch:           null as string | null,
-      remark:           form.remark.trim() || null,
+      portal:           form.fuel_type || null,
     }
 
     // Exact web: resolve sa_name from employee_master
@@ -594,9 +603,8 @@ export default function ReceptionScreen() {
     if (showPicker === 'sa') {
       const emp = employees.find(e => e.employee_code === item)
       if (!emp) return ''
-      const dept = normalizeDept(emp.department) || 'SERVICE'
-      const fuel = getFuelTypeLabel(emp.fuel_type)
-      return dept + '  ·  ' + fuel
+      // Only show dept — fuel is already filtered by the EV/PV selector
+      return normalizeDept(emp.department) || 'SERVICE'
     }
     return ''
   }
@@ -820,6 +828,23 @@ export default function ReceptionScreen() {
                 </TouchableOpacity>
               </FormField>
 
+              <FormField label="KM Reading">
+                <TextInput style={s.input}
+                  placeholder="e.g. 12500"
+                  placeholderTextColor="#94a3b8"
+                  value={form.km_reading}
+                  keyboardType="number-pad"
+                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/\D/g, '') }))}
+                />
+              </FormField>
+
+              <FormField label="Source *">
+                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('source'); setPickerSearch('') }}>
+                  <Text style={form.source ? s.selectText : s.selectPlaceholder}>{form.source || 'Select source'}</Text>
+                  <Text style={s.chevron}>▼</Text>
+                </TouchableOpacity>
+              </FormField>
+
               <FormField label="Service Type">
                 <TouchableOpacity style={s.select} onPress={() => { setShowPicker('service_type'); setPickerSearch('') }}>
                   <Text style={form.service_type ? s.selectText : s.selectPlaceholder}>{form.service_type || 'Select service type'}</Text>
@@ -827,7 +852,28 @@ export default function ReceptionScreen() {
                 </TouchableOpacity>
               </FormField>
 
-              <FormField label={`SA Name *  —  ${filteredSAs.length} ${getRequiredDeptForServiceType(form.service_type)}${shouldApplyFuelFilter(form.service_type) ? ' · ' + inferFuelFromModel(form.model) : ' · All fuel'} SA(s)`}>
+              <FormField label="Fuel Type *">
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {(['EV', 'PV'] as const).map(ft => (
+                    <TouchableOpacity
+                      key={ft}
+                      style={{
+                        flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center',
+                        borderWidth: 2,
+                        borderColor: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#e2e8f0',
+                        backgroundColor: form.fuel_type === ft ? (ft === 'EV' ? '#f0fdf4' : '#eff6ff') : '#fff',
+                      }}
+                      onPress={() => setForm(p => ({ ...p, fuel_type: p.fuel_type === ft ? '' : ft }))}>
+                      <Text style={{
+                        fontWeight: '700', fontSize: 16,
+                        color: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#94a3b8',
+                      }}>{ft}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </FormField>
+
+              <FormField label={`SA Name *  (${filteredSAs.length} available)`}>
                 <TouchableOpacity style={s.select} onPress={() => { setShowPicker('sa'); setPickerSearch('') }}>
                   <Text style={form.sa_employee_code ? s.selectText : s.selectPlaceholder}>{getFormSALabel() || 'Select SA'}</Text>
                   <Text style={s.chevron}>▼</Text>
@@ -851,33 +897,6 @@ export default function ReceptionScreen() {
                   keyboardType="phone-pad"
                   maxLength={10}
                   onChangeText={t => setForm(p => ({ ...p, owner_phone: t.replace(/\D/g, '') }))}
-                />
-              </FormField>
-
-              <FormField label="Source *">
-                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('source'); setPickerSearch('') }}>
-                  <Text style={form.source ? s.selectText : s.selectPlaceholder}>{form.source || 'Select source'}</Text>
-                  <Text style={s.chevron}>▼</Text>
-                </TouchableOpacity>
-              </FormField>
-
-              <FormField label="KM Reading">
-                <TextInput style={s.input}
-                  placeholder="e.g. 12500"
-                  placeholderTextColor="#94a3b8"
-                  value={form.km_reading}
-                  keyboardType="number-pad"
-                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/\D/g, '') }))}
-                />
-              </FormField>
-
-              <FormField label="Remark">
-                <TextInput style={[s.input, { height: 72, textAlignVertical: 'top' }]}
-                  placeholder="Optional note"
-                  placeholderTextColor="#94a3b8"
-                  value={form.remark}
-                  multiline
-                  onChangeText={t => setForm(p => ({ ...p, remark: t }))}
                 />
               </FormField>
 
