@@ -864,9 +864,10 @@ export default function CreateJobCardScreen() {
           return
         }
 
+        const effectiveJcForFetch = merged.jcNumber.trim() || draftJcNumber.trim() || `TEMP-${Date.now()}`
         const updateAfterFetchRes = await updateJobCard(ensuredDraftId, {
           regNumber: merged.regNumber,
-          jcNumber: merged.jcNumber,
+          jcNumber: effectiveJcForFetch,
           complaintDate: merged.complaintDate,
           kmReading,
           claimType: merged.claimType,
@@ -885,6 +886,8 @@ export default function CreateJobCardScreen() {
           logEvent('create_job_card_fetch_failed', { error_message: updateAfterFetchRes.error ?? 'draft sync failed', stage: 'persist_job_card_after_fetch' }, 'autodoc-create')
           return
         }
+
+        setDraftJcNumber(updateAfterFetchRes.data.jc_number)
       }
 
       setVehicleLookupStatus('found')

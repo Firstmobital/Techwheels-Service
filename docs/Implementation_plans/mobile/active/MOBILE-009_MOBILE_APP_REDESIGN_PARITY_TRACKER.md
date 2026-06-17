@@ -2,7 +2,7 @@
 
 **Status:** PHASE C IN PROGRESS: BP-01 `/autodoc` PRIORITY PASS ACTIVE; BP-02 (RV), BP-03 (RV), BP-04 QUEUED  
 **Priority:** CRITICAL  
-**Last Updated:** 2026-06-17 (BP-02 intake business-logic parity update applied from web audit: initial JC requirement removed; TEMP draft JC flow aligned.)  
+**Last Updated:** 2026-06-17 (BP-02/BP-04 live test fixes applied: fetch false-error resolved, draft persistence hardened, damage count auto-refresh added.)  
 **Owner:** Techwheels Product + Mobile Engineering + GitHub Copilot  
 **Primary Goal:** Execute BP-01 through BP-08 AutoDoc full-flow, device-specific UI parity audit against web baseline with documented evidence and no business-logic/functionality changes.
 **Program Reporting:** Reports upward to `docs/Implementation_plans/mobile/active/MOBILE-010_MOBILE_PROGRAM_MASTER_TRACKER.md` (master authority)
@@ -302,9 +302,9 @@ Legend: `NS` = Not Started, `IP` = In Progress, `BL` = Blocked, `RV` = Review, `
 | SHELL-05 | Shell | profile | `mobile/src/app/(tabs)/profile.tsx` | user profile + dealer metadata | NS | Mobile | |
 | SHELL-06 | Shell | settings | `mobile/src/app/(tabs)/settings.tsx` | settings state + profile metadata | NS | Mobile | |
 | BP-01 | Body & Paint | bp | `mobile/src/app/(tabs)/autodoc.tsx` | `job_card_summary` + fallback tables | IP | Mobile | 🔴 Program priority override (2026-06-17): immediate parity implementation/validation target for web `/autodoc` alignment per MOBILE-010. Keep as active focus until `RV`/`DN`. |
-| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | IP | Mobile | 🔄 Web parity business-logic update applied (2026-06-17, user-approved): initial intake no longer requires JC for upload/fetch, draft auto-saves with TEMP JC when final JC is blank, and final JC is now required at job-details continuation step. Pending device validation screenshots + flow verification before returning to `RV`. |
+| BP-02 | Body & Paint | create | `mobile/src/app/job-cards/create.tsx` | `job_cards`, `vehicles`, `documents`, lookup tables | IP | Mobile | 🔄 Regression fix pass applied from live device test (2026-06-17): fetch draft-sync now uses effective JC fallback (no blank-JC save failure), Next now persists vehicle/job-card/status in one path, and auth-expiry handling is clearer. Pending re-validation on device before returning to `RV`. |
 | BP-03 | Body & Paint | jobcard | `mobile/src/app/job-cards/[id]/jobcard.tsx` | `job_cards`, `vehicles` | RV | Mobile | ✅ User confirmed screen looks complete in current pass (2026-05-31). Keep business logic unchanged; only visual parity follow-ups if explicitly requested. |
-| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | NS | Mobile | ⏸️ Queued behind BP-01 `/autodoc` priority override. Damage parity pass already applied (design-only): custom detail header, icon tabs, 5-step strip, reference-style affected-panels chips with count badges, repair-stage cards, upload rows, and bottom CTA. Resume after BP-01 reaches `RV`/`DN`. |
+| BP-04 | Body & Paint | damage | `mobile/src/app/job-cards/[id]/damage.tsx` | `panels`, `panel_photos` | IP | Mobile | 🔄 Live test defect fix applied (2026-06-17): damage screen now reloads on focus so uploaded photo counts refresh immediately after returning from capture/photos. Pending confirmation of real-time counter behavior on device. |
 | BP-05 | Body & Paint | capture | `mobile/src/app/job-cards/[id]/capture-photo.tsx` | `panel_photos` GPS metadata | NS | Mobile | Capture flow camera/gallery selection. |
 | BP-06 | Body & Paint | photos | `mobile/src/app/job-cards/[id]/panel-photos.tsx` | `panel_photos`, `panels` | NS | Mobile | Review captured panel photos by repair stage. |
 | BP-07 | Body & Paint | estimate | `mobile/src/app/job-cards/[id]/estimate.tsx` | `estimate_rows`, `autodoc_rate_*` | NS | Mobile | Pending fresh audit; include OTA-safe hero rendering validation on existing binaries. |
@@ -343,6 +343,14 @@ Step 2 (Completed: 2026-06-17)
    - Added TEMP JC fallback for draft creation/update during pre-fetch stage.
    - Moved enforced final JC requirement to Job Details continuation (`Next: Document Damage`).
 5. Step 2 current state: Code complete, awaiting device parity validation evidence.
+
+Step 3 (Completed in code: 2026-06-17)
+1. Trigger: live device test showed three issues: fetch showed false error, Next progression did not reliably persist final values, and pre-repair photo count did not refresh in-place.
+2. Fix applied (BP-02): fetch draft sync now always uses effective JC fallback (final JC or stored TEMP JC) to avoid `Job card number is required` in `persist_job_card_after_fetch`.
+3. Fix applied (BP-02): Next path persists vehicle details + job card update + status transition with clearer auth-expiry messaging.
+4. Fix applied (BP-04): damage screen now refreshes on focus to show latest panel photo counts immediately after upload.
+5. Remaining known issue from logs: repeated `Invalid Refresh Token` toast indicates stale auth state on device; requires fresh sign-in before parity sign-off.
+6. Step 3 current state: code patched; re-test pending.
 
 ### 7.0 Fresh Gap Checklist (Next Device Audit Pass)
 

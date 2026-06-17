@@ -142,16 +142,16 @@ export default function AutoDocScreen() {
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
 
   const loadJobCards = useCallback(async () => {
-    const sessionRes = await supabase.auth.getSession()
-    const activeSession = session ?? sessionRes.data.session
-    if (!activeSession) {
-      setJobCards([])
-      setLoading(false)
-      setRefreshing(false)
-      return
-    }
-
     try {
+      const sessionRes = await supabase.auth.getSession()
+      const activeSession = session ?? sessionRes.data.session
+      if (!activeSession) {
+        setJobCards([])
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+
       setError(null)
 
       const result = await listJobCardSummaries()
@@ -201,7 +201,12 @@ export default function AutoDocScreen() {
 
       setJobCards(fallbackRows)
     } catch (err: any) {
-      setError(err.message || 'Failed to load Body & Paint')
+      const msg = String(err?.message ?? 'Failed to load Body & Paint')
+      if (/refresh token|invalid refresh token|auth/i.test(msg)) {
+        setError('Session expired. Please sign in again.')
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
