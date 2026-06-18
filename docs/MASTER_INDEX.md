@@ -55,9 +55,17 @@ Platform indexes:
 
 ---
 
+## Key Guidance Documents
+
+1. [STRUCTURE_GUIDE.md](STRUCTURE_GUIDE.md) - Complete placement authority and decision tree
+2. [Project_Instructions/reference/DOCS_PLACEMENT_GUIDE.md](Project_Instructions/reference/DOCS_PLACEMENT_GUIDE.md) - Human-friendly guide with examples for contributors
+3. [README.md](README.md) - Top-level docs overview
+
+---
+
 ## Notes
 
 1. Markdown files should not be left in `docs/` root except authority/index files.
 2. Every move should include link-fix and validation in the same change.
-3. For placement workflow, follow [STRUCTURE_GUIDE.md](STRUCTURE_GUIDE.md).
+3. For placement workflow, follow [STRUCTURE_GUIDE.md](STRUCTURE_GUIDE.md) or [DOCS_PLACEMENT_GUIDE.md](Project_Instructions/reference/DOCS_PLACEMENT_GUIDE.md).
 

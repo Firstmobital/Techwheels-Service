@@ -15,4 +15,15 @@ Use this category for:
 - `active/` (optional) for currently evolving instruction sets
 - `reference/` (optional) for stable instruction contracts
 
+## Key Documents
+
+- **[DOCS_PLACEMENT_GUIDE.md](reference/DOCS_PLACEMENT_GUIDE.md)** — How to organize and place markdown files in the docs/ hierarchy (11 primary categories, subcategory rules, decision tree)
+
+## Governance
+
+This category works with:
+- **docs/STRUCTURE_GUIDE.md** — Complete authority on placement rules
+- **docs/MASTER_INDEX.md** — Navigation hub for all docs
+- **docs/README.md** — Top-level docs overview
+
 This category is intentionally initialized now and can be expanded as instruction docs are formalized.
