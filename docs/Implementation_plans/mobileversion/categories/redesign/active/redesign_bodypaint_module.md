@@ -231,12 +231,24 @@ A screen can move to `DN` only if all are true:
 4. Verified high-priority forbidden color/utility drift is clean across all migrated files.
 5. Kept hero metric typography >20px only where intentional (dashboard stage counts, estimate totals, damage stage metrics, create step badge).
 
+### 2026-06-18 Dashboard Visual-Lock Accepted
+
+1. Dashboard resemblance accepted from latest iOS screenshot review (post polish pass).
+2. Locked dashboard polish pattern as baseline for remaining screen finalization.
+3. Required parity details to replicate screen-by-screen:
+   - stage summary cards use top color strips (not icon tiles)
+   - card workflow uses compact segmented pipeline bars with stage label
+   - status indicator dot color reflects live status state
+   - tightened spacing and type-weight hierarchy to match reference density
+4. This baseline now applies to all Body and Paint screens before `DN` promotion.
+
 ---
 
 ## 12) Immediate Next Action
 
-1. Run iOS + Android screenshot evidence capture for all `RV` screens.
-2. Promote qualifying screens from `RV` to `DN` after evidence review.
-3. Record evidence links and any residual deltas in this file.
-4. Sync high-level progress summary into `MOBILE-010` after evidence pass.
+1. Apply the dashboard-approved final polish pattern to each remaining `RV` screen in flow order: `create`, `jobcard`, `damage`, `panel-photos`, `capture-photo`, `estimate`, `submit`.
+2. For each screen, compare against reference HTML + latest device screenshot pair before status change.
+3. Record per-screen evidence and residual deltas in this file.
+4. Promote each screen from `RV` to `DN` only after parity checklist passes on both iOS and Android.
+5. Sync high-level progress summary into `MOBILE-010` after each screen-level `DN` promotion.
 
