@@ -579,7 +579,16 @@ export default function ReceptionScreen() {
   // ── Picker helpers ────────────────────────────────────────────────────────
   function pickerItems(): string[] {
     const q = pickerSearch.toLowerCase()
-    if (showPicker === 'model') return modelOptions.filter(m => m.toLowerCase().includes(q))
+    if (showPicker === 'model') {
+      // Filter models by selected fuel type: EV fuel → only EV models, PV → non-EV models
+      const fuelFiltered = form.fuel_type
+        ? modelOptions.filter(m => {
+            const isEV = m.toUpperCase().includes('EV')
+            return form.fuel_type === 'EV' ? isEV : !isEV
+          })
+        : modelOptions
+      return fuelFiltered.filter(m => m.toLowerCase().includes(q))
+    }
     if (showPicker === 'service_type') return RECEPTION_SERVICE_TYPE_OPTIONS.filter(s => s.toLowerCase().includes(q))
     if (showPicker === 'source') return SOURCE_OPTIONS.filter(s => s.toLowerCase().includes(q))
     if (showPicker === 'sa') return filteredSAs
@@ -591,21 +600,14 @@ export default function ReceptionScreen() {
   function pickerLabel(item: string): string {
     if (showPicker === 'sa') {
       const emp = employees.find(e => e.employee_code === item)
-      if (!emp) return item
-      // Format: "Employee Name (CODE)" — same as web option text
-      // Sub-label shows dept + fuel for clarity on mobile
-      return emp.employee_name + ' (' + emp.employee_code + ')'
+      // Show ONLY the employee name — no code, no dept
+      return emp ? emp.employee_name : item
     }
     return item
   }
 
-  function pickerSubLabel(item: string): string {
-    if (showPicker === 'sa') {
-      const emp = employees.find(e => e.employee_code === item)
-      if (!emp) return ''
-      // Only show dept — fuel is already filtered by the EV/PV selector
-      return normalizeDept(emp.department) || 'SERVICE'
-    }
+  function pickerSubLabel(_item: string): string {
+    // No sub-label for SA picker — name only
     return ''
   }
 
@@ -810,31 +812,20 @@ export default function ReceptionScreen() {
                 </View>
               )}
 
-              <FormField label="Registration No *">
-                <TextInput style={s.input}
-                  placeholder="e.g. RJ14AB1234"
-                  placeholderTextColor="#94a3b8"
-                  value={form.reg_number}
-                  maxLength={10}
-                  autoCapitalize="characters"
-                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))}
-                />
-              </FormField>
-
               <FormField label="Fuel Type *">
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   {(['EV', 'PV'] as const).map(ft => (
                     <TouchableOpacity
                       key={ft}
                       style={{
-                        flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center',
+                        flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center',
                         borderWidth: 2,
                         borderColor: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#e2e8f0',
                         backgroundColor: form.fuel_type === ft ? (ft === 'EV' ? '#f0fdf4' : '#eff6ff') : '#fff',
                       }}
-                      onPress={() => setForm(p => ({ ...p, fuel_type: p.fuel_type === ft ? '' : ft }))}>
+                      onPress={() => setForm(p => ({ ...p, fuel_type: p.fuel_type === ft ? '' : ft, model: '', sa_employee_code: '' }))}>
                       <Text style={{
-                        fontWeight: '700', fontSize: 16,
+                        fontWeight: '800', fontSize: 18,
                         color: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#94a3b8',
                       }}>{ft}</Text>
                     </TouchableOpacity>
@@ -847,6 +838,17 @@ export default function ReceptionScreen() {
                   <Text style={form.model ? s.selectText : s.selectPlaceholder}>{form.model || 'Select model'}</Text>
                   <Text style={s.chevron}>▼</Text>
                 </TouchableOpacity>
+              </FormField>
+
+              <FormField label="Registration No *">
+                <TextInput style={s.input}
+                  placeholder="e.g. RJ14AB1234"
+                  placeholderTextColor="#94a3b8"
+                  value={form.reg_number}
+                  maxLength={10}
+                  autoCapitalize="characters"
+                  onChangeText={t => setForm(p => ({ ...p, reg_number: t.toUpperCase() }))}
+                />
               </FormField>
 
               <FormField label="KM Reading">
