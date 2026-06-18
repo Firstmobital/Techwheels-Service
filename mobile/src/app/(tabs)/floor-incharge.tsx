@@ -971,31 +971,45 @@ export default function FloorInchargeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Status tabs — single horizontal scroll: All · Unassigned · Assigned · Hold · In-Process · Completed ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={S.tabsContainer}
-        style={S.tabsRow}>
-        {(['all', 'unassigned', 'assigned', 'hold', 'work_inprocess', 'completed'] as const).map(key => {
-          const tab = TAB_DEFS.find(t => t.key === key)!
-          const cnt = tabCounts[key]
-          const active = assignmentView === key
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[
-                S.tabPill,
-                { borderColor: active ? tab.color : '#e2e8f0',
-                  backgroundColor: active ? tab.color : '#fff' },
-              ]}
-              onPress={() => setAssignmentView(key as AssignmentView)}>
-              <Text style={[S.tabPillCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
-              <Text style={[S.tabPillLabel, { color: active ? '#fff' : '#64748b' }]}>{tab.label}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+      {/* ── Status tabs — 2-row grid, no scroll, no overlap ── */}
+      <View style={S.tabGrid}>
+        {/* Row 1: All · Unassigned · Hold */}
+        <View style={S.tabGridRow}>
+          {(['all', 'unassigned', 'hold'] as const).map(key => {
+            const tab = TAB_DEFS.find(t => t.key === key)!
+            const cnt = tabCounts[key]
+            const active = assignmentView === key
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[S.tabGridBtn, { borderColor: active ? tab.color : '#e2e8f0', backgroundColor: active ? tab.color : '#fff' }]}
+                onPress={() => setAssignmentView(key as AssignmentView)}
+                activeOpacity={0.75}>
+                <Text style={[S.tabGridCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+                <Text style={[S.tabGridLabel, { color: active ? '#fff' : '#64748b' }]}>{tab.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+        {/* Row 2: Assigned · In-Process · Completed */}
+        <View style={S.tabGridRow}>
+          {(['assigned', 'work_inprocess', 'completed'] as const).map(key => {
+            const tab = TAB_DEFS.find(t => t.key === key)!
+            const cnt = tabCounts[key]
+            const active = assignmentView === key
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[S.tabGridSmallBtn, { borderColor: active ? tab.color : '#e2e8f0', backgroundColor: active ? tab.color : '#fff' }]}
+                onPress={() => setAssignmentView(key as AssignmentView)}
+                activeOpacity={0.75}>
+                <Text style={[S.tabGridSmallCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+                <Text style={[S.tabGridSmallLabel, { color: active ? '#fff' : '#64748b' }]}>{tab.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      </View>
 
       {/* ── Dropdown filter bar — 3 dropdowns in one row ── */}
       <View style={S.dropdownBar}>
@@ -1365,6 +1379,17 @@ const S = {
   tabPill:           { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1.5, gap: 4 },
   tabPillCount:      { fontSize: 13, fontWeight: '800' as const },
   tabPillLabel:      { fontSize: 11, fontWeight: '600' as const },
+  // ── 2-row grid tab styles ──────────────────────────────────────
+  tabGrid:           { backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, gap: 5 } as const,
+  tabGridRow:        { flexDirection: 'row' as const, gap: 6 },
+  // Row 1 — larger pills (All / Unassigned / Hold)
+  tabGridBtn:        { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 6, borderWidth: 1.5, gap: 5 } as const,
+  tabGridCount:      { fontSize: 15, fontWeight: '800' as const, lineHeight: 18 },
+  tabGridLabel:      { fontSize: 12, fontWeight: '700' as const },
+  // Row 2 — smaller pills (Assigned / In-Process / Completed)
+  tabGridSmallBtn:   { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 4, borderWidth: 1, gap: 4 } as const,
+  tabGridSmallCount: { fontSize: 12, fontWeight: '700' as const, lineHeight: 15 },
+  tabGridSmallLabel: { fontSize: 10, fontWeight: '600' as const },
   cardCreatedAt:     { fontSize: 11, color: '#94a3b8', flexShrink: 1 },
   tabsGrid:          { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, gap: 6, borderBottomWidth: 1, borderColor: '#e2e8f0' },
   tabsRow1:          { flexDirection: 'row' as const, gap: 8 },
