@@ -1,26 +1,16 @@
-# RBAC Category
+# RBAC Docs
 
-**Purpose:** Role-based access control documentation and operational procedures.
+Scope: role access operations, validation evidence, and closure artifacts.
 
-## Structure
+## Operations Corpus
 
-- `runbooks/`: Operational procedures for admins and operators
-  - RBAC_OPERATIONS_RUNBOOK.md (procedures for user onboarding, permissions, troubleshooting)
+- `runbooks/RBAC_OPERATIONS_RUNBOOK.md`: operator/admin procedures.
+- `evidence/RBAC_ROLE_MATRIX_TESTING.md`: role matrix verification.
+- `evidence/RBAC_SECURITY_TESTING.md`: privilege-bypass and security testing.
+- `evidence/RBAC_TABLE_ACCESS_VALIDATION_TESTS.md`: table access contract verification.
+- `evidence/RBAC-001_IMPLEMENTATION_COMPLETE.md`: implementation closure evidence.
 
-- `evidence/`: Test plans, security validations, and audit documentation
-  - RBAC_ROLE_MATRIX_TESTING.md (QA test procedures for role access)
-  - RBAC_SECURITY_TESTING.md (security/bypass testing procedures)
-  - RBAC_TABLE_ACCESS_VALIDATION_TESTS.md (backend table access validation)
-  - RBAC-001_IMPLEMENTATION_COMPLETE.md (completion summary and closure evidence)
+## Delivery Separation Rule
 
-## Related Links
-
-- Implementation plan: [docs/Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md)
-- Daily standup: [docs/Implementation_plans/completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md](../Implementation_plans/completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md)
-
-## Adding New Docs to This Category
-
-- Test plan or validation suite? → `evidence/`
-- Operations or procedural guide? → `runbooks/`
-
-See [STRUCTURE_GUIDE.md](../STRUCTURE_GUIDE.md) for full classification rules.
+- Keep active delivery plans in `docs/Implementation_plans/.../rbac/...`.
+- Keep only runbooks/evidence here.

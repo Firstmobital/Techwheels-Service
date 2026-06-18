@@ -4,6 +4,10 @@ Last Updated: 2026-05-22
 Owner: Engineering Team
 Status: Living Document
 
+## De-dup Audit Artifact
+
+- Docs conflict matrix (non-Implementation_plans): `DOCS_DEDUP_CONFLICT_MATRIX_2026-06-18.md`
+
 ## 1. Purpose
 
 This handbook explains the real project state: architecture, business flows, functions, role/access model, database controls, and operational rules.

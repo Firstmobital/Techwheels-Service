@@ -1,251 +1,149 @@
 # Documentation Structure Guide
 
-**Purpose:** Keep all docs organized by category and function so nothing gets lost and links always work.
-
-**Last Updated:** 2026-06-08  
-**Owner:** Techwheels Development Team
-
----
-
-## Folder Structure (Both `docs/` and `docs/Implementation_plans/`)
-
-```
-docs/
-├── STRUCTURE_GUIDE.md              (This file)
-├── Project_Handbook/               (Design decisions, policies, contracts)
-│   ├── MODULE_ROUTE_CONTRACT.md
-│   ├── ROUTE_STRATEGY_DECISION.md
-│   ├── ONBOARDING_POLICY.md
-│   └── ... (no subfolders here)
-│
-├── Implementation_plans/           (Plans tied to specific projects/features)
-│   ├── INDEX.md
-│   ├── IMPLEMENTATION_TRACKER.md
-│   ├── TEMPLATE.md
-│   │
-│   ├── autodoc/
-│   │   ├── README.md
-│   │   ├── evidence/                (Audit reports, test results)
-│   │   ├── runbooks/                (Operation procedures, guides)
-│   │   └── active/                  (Active plans, masters)
-│   │
-│   ├── supabase/
-│   │   ├── README.md
-│   │   ├── active/                  (SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md)
-│   │   ├── evidence/                (Audit reports, analysis, verification)
-│   │   └── runbooks/                (Operational checklists)
-│   │
-│   ├── mobile/
-│   │   ├── README.md
-│   │   ├── active/                  (MOBILE-001, 005, 006, 007, 008, 009)
-│   │   ├── evidence/                (Checklists, architecture docs, feature maps)
-│   │   └── runbooks/
-│   │
-│   ├── rbac/
-│   │   ├── README.md
-│   │   ├── active/                  (RBAC_IMPLEMENTATION_MASTER_2026-06-01.md)
-│   │   ├── evidence/                (Test plans, audit docs)
-│   │   └── runbooks/
-│   │
-│   ├── warranty/
-│   │   ├── README.md
-│   │   ├── active/                  (WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md)
-│   │   └── evidence/
-│   │
-│   ├── completed/                   (Finished plans, archived)
-│   │   ├── autodoc/
-│   │   ├── supabase/
-│   │   ├── rbac/
-│   │   └── ... (mirrored category structure)
-│   │
-│   └── ... (other categories: bodyshop/, drive/, import/, operations/, reception/, redesign/)
-│
-├── uploads/                         (Next-day upload feature docs, root-level operation)
-│   ├── README.md
-│   ├── active/                      (INDEX_NEXT_DAY_UPLOADS.md, README_NEXT_DAY_UPLOADS.md, IMPLEMENTATION_ROADMAP.md)
-│   ├── runbooks/                    (NEXT_DAY_UPLOAD_GUIDE.md, COPY_PASTE_CODE.md)
-│   └── evidence/                    (VISUAL_GUIDE.md, UPLOAD_LOGIC_REFACTOR.md, VAS_DEDUPLICATION_FIX.md, UPLOAD_TEMPLATE_CODE.md)
-│
-├── rbac/                            (RBAC operation docs, root-level reference)
-│   ├── README.md
-│   ├── runbooks/                    (RBAC_OPERATIONS_RUNBOOK.md)
-│   └── evidence/                    (RBAC_ROLE_MATRIX_TESTING.md, RBAC_SECURITY_TESTING.md, RBAC_TABLE_ACCESS_VALIDATION_TESTS.md, RBAC-001_IMPLEMENTATION_COMPLETE.md)
-│
-├── autodoc/                         (AutoDoc operation docs, root-level reference)
-│   ├── README.md
-│   ├── evidence/                    (RC_LOOKUP_FORMAT_TEST_REPORT.md)
-│   └── runbooks/                    (WEB_AUTODOC_GPS_TESTING_GUIDE.md)
-│
-├── warranty/                        (Warranty operation docs, root-level reference)
-│   ├── README.md
-│   └── evidence/                    (CRITICAL_ALERTS_AUDIT_20260603.md, EARNINGS_ZERO_VALIDATION.md)
-│
-├── supabase/                        (Supabase operation docs, root-level reference)
-│   ├── README.md
-│   └── evidence/                    (MIGRATION_VERIFICATION_20260523.md)
-│
-├── security/                        (Security reference docs)
-│   ├── README.md
-│   └── reference/                   (SECURITY_REFACTOR_REFERENCE.md)
-│
-└── completed/                       (Completed operation docs, legacy archive)
-    ├── ... (mirrored structure to docs/ categories)
-    └── (Use sparingly; prefer keeping active docs in root)
-```
+Last Updated: 2026-06-18
+Owner: Techwheels Development Team
+Status: Active Authority for docs/ placement
 
 ---
 
-## How to Classify a New Document
+## 1) Purpose
 
-### Decision Tree
+This guide standardizes all markdown placement under `docs/` using a strict hierarchy:
 
-```
-1. Is this document tied to a specific implementation plan (e.g., MOBILE-001, SUPABASE-001)?
-   YES → Place in docs/Implementation_plans/<CATEGORY>/ ↓
-   NO  → Is this a standalone operation/reference doc? → Place in docs/<CATEGORY>/ ↓
+1. Primary category
+2. Subcategory
+3. Optional sub-subcategory
 
-2. What type of document is it?
-   ├─ Active Plan or Master Tracker       → <CATEGORY>/active/
-   ├─ Evidence, Audit, Test Report        → <CATEGORY>/evidence/
-   ├─ Runbook, Procedure, How-To Guide    → <CATEGORY>/runbooks/
-   ├─ Reference, Design Decision, Policy  → <CATEGORY>/reference/ (or Project_Handbook/)
-   └─ Completed/Archived Plan             → <CATEGORY>/completed/ or completed/<CATEGORY>/
-
-3. Is the category folder already defined?
-   NO → Create it with subfolders (active/, evidence/, runbooks/, README.md)
-   YES → Place doc in appropriate subfolder
-```
-
-### Document Type Definitions
-
-| Type | Purpose | Examples |
-|------|---------|----------|
-| **Active** | Current plan or master tracker being worked on | MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md, SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md |
-| **Evidence** | Audit reports, test results, analysis, verification | RBAC_ROLE_MATRIX_TESTING.md, MIGRATION_VERIFICATION_20260523.md, CRITICAL_ALERTS_AUDIT_20260603.md |
-| **Runbooks** | Operational procedures, how-to guides, checklists | RBAC_OPERATIONS_RUNBOOK.md, NEXT_DAY_UPLOAD_GUIDE.md, WEB_AUTODOC_GPS_TESTING_GUIDE.md |
-| **Reference** | Design decisions, policy documents, contracts | ROUTE_STRATEGY_DECISION.md, ONBOARDING_POLICY.md, MODULE_ROUTE_CONTRACT.md |
+Outcome:
+1. Every `.md` has one correct home.
+2. New docs are deterministic to place.
+3. Future re-org work stays minimal.
 
 ---
 
-## Naming Conventions
+## 2) Canonical Hierarchy
 
-1. **Use descriptive names**, not generic placeholders:
-   - ✅ `RBAC_OPERATIONS_RUNBOOK.md`
-   - ❌ `README.md` (unless it's a category index)
+### 2.1 Primary categories (level 1)
 
-2. **Include plan IDs when relevant:**
-   - ✅ `MOBILE-001_EXPO_IMPLEMENTATION_PLAN.md`
-   - ✅ `SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md`
+Allowed primary categories under `docs/`:
 
-3. **Use dates for time-sensitive docs:**
-   - ✅ `CRITICAL_ALERTS_AUDIT_20260603.md`
-   - ✅ `MIGRATION_VERIFICATION_20260523.md`
+1. `Implementation_plans`
+2. `Project_Handbook`
+3. `Project_Instructions`
+4. `autodoc`
+5. `complaints`
+6. `rbac`
+7. `security`
+8. `supabase`
+9. `uploads`
+10. `wa_templates`
+11. `warranty`
 
-4. **Use underscores, not hyphens, for word separation in filenames**
+Rule:
+- Root `docs/` should contain only authority/index files and primary category folders.
+- Non-index markdown files should not remain directly in `docs/` root.
 
----
+### 2.2 Standard subcategories (level 2)
 
-## Link Management
+Use these subfolders where applicable:
 
-### When Creating Links to Other Docs
+1. `active/` - live docs, trackers, current plans
+2. `evidence/` - audits, tests, verifications
+3. `runbooks/` - procedures and operational steps
+4. `reference/` - specs/authority material
+5. `catalog/` - reusable templates/library docs
 
-1. **Use relative paths** (not absolute) from the doc's location:
-   ```
-   docs/rbac/evidence/RBAC_ROLE_MATRIX_TESTING.md 
-     → to RBAC_OPERATIONS_RUNBOOK.md: `../runbooks/RBAC_OPERATIONS_RUNBOOK.md`
-     → to ROUTE_STRATEGY_DECISION.md: `../../Project_Handbook/ROUTE_STRATEGY_DECISION.md`
-   ```
+### 2.3 Optional sub-subcategories (level 3)
 
-2. **Include anchors and query params as-is:**
-   ```markdown
-   [Chapter 2](./IMPLEMENTATION_ROADMAP.md#phase-2-routing--navigation-setup)
-   ```
+Examples:
 
-3. **After moving a doc, update ALL references** to it across the codebase and docs.
+1. `evidence/runbooks/`
+2. `categories/<module>/active|evidence|inactive`
 
----
-
-## Category Reference
-
-### Implementation Plans Categories
-
-| Category | Purpose | Master Plan |
-|----------|---------|-------------|
-| `autodoc` | AutoDoc mobile/web feature implementation | (In planning) |
-| `bodyshop` | Bodyshop module end-to-end workflow | BODYSHOP-001 |
-| `drive` | Google Drive upload offload | DRIVE-001 |
-| `import` | CSV import and next-day upload features | (In planning) |
-| `mobile` | Techwheels Mobile App (Expo) | MOBILE-001, 005-009 |
-| `rbac` | Role-based access control hardening | RBAC_IMPLEMENTATION_MASTER_2026-06-01 |
-| `reception` | Reception module implementation | RECEPTION-001 |
-| `redesign` | Web redesign parity tracker | Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER |
-| `supabase` | Supabase production hardening | SUPABASE-001 |
-| `warranty` | Warranty import and reporting | WARRANTY-001 |
-
-### Root Docs Categories
-
-| Category | Purpose |
-|----------|---------|
-| `autodoc` | AutoDoc operation guides and test reports |
-| `rbac` | RBAC operation procedures and test plans |
-| `uploads` | Next-day upload feature guides and code samples |
-| `warranty` | Warranty audits and validation reports |
-| `supabase` | Supabase migration verification and evidence |
-| `security` | Security design and reference materials |
+Use only when needed for scale. Do not nest without purpose.
 
 ---
 
-## Template Checklist for New Docs
+## 3) Implementation Plans Contract (special primary category)
 
-```markdown
-# [Document Title]
+`docs/Implementation_plans/` uses platform-first governance:
 
-**Date Created:** YYYY-MM-DD  
-**Category:** [autodoc / mobile / rbac / supabase / warranty / etc.]  
-**Type:** [Active Plan / Evidence / Runbook / Reference]  
-**Status:** [In Progress / Complete / Review / Blocked]  
-**Owner:** [Name or Team]
+1. `mobileversion/`
+2. `webversion/`
+3. `completed/`
 
----
+Each platform contains category folders with lifecycle:
 
-## Overview
-[1-2 sentence description of document purpose]
+- `categories/<category>/active/`
+- `categories/<category>/evidence/`
+- `categories/<category>/inactive/`
 
----
-
-## Key Sections
-[Main content]
+Authority file:
+- `docs/Implementation_plans/STRUCTURE_AND_WORKFLOW.md`
 
 ---
 
-## Related Documentation
-- [Link to related doc](../path/to/doc.md)
-- [Link to plan](../../Implementation_plans/category/active/PLAN.md)
+## 4) Placement Decision Tree (for any new .md)
+
+1. Is this an execution plan/tracker tied to delivery?
+- Yes -> `docs/Implementation_plans/...`
+- No -> continue
+
+2. Is this durable project governance/architecture policy?
+- Yes -> `docs/Project_Handbook/`
+- No -> continue
+
+3. Is this an instruction/process contract for contributors/agents?
+- Yes -> `docs/Project_Instructions/`
+- No -> continue
+
+4. Is this module/domain operational content?
+- Place in matching primary category (for example `docs/supabase/`, `docs/rbac/`, `docs/warranty/`, etc.)
+
+5. Pick subcategory by document type:
+- live -> `active/`
+- validation -> `evidence/`
+- procedure -> `runbooks/`
+- authority/spec -> `reference/`
+- template library -> `catalog/`
 
 ---
 
-**Last Updated:** YYYY-MM-DD by [Author]  
-**Next Review:** YYYY-MM-DD
+## 5) Naming Rules
+
+1. Use descriptive, searchable names.
+2. Keep plan IDs for implementation docs (`MOBILE-`, `RBAC-`, `SUPABASE-`, etc.).
+3. Use date suffix for audit snapshots when needed (`_YYYY-MM-DD` or `_YYYYMMDD`).
+4. Avoid generic names (`notes.md`, `new.md`, `temp.md`).
+
+---
+
+## 6) Link Management Rules
+
+1. Use relative links.
+2. After moving files, update all references in same change.
+3. Validate moved-path references with ripgrep before closing:
+
+```bash
+rg -n "old/path/file.md|old/path/" docs
 ```
 
 ---
 
-## FAQ
+## 7) State and Structure Separation
 
-**Q: Should I put a completed plan in `Implementation_plans/completed/` right away?**  
-A: No. Keep active plans in `<category>/active/` until the plan itself is fully done. Only move to `completed/` when the entire project/phase is finished.
+This file governs markdown placement only.
 
-**Q: Can I create a doc outside these categories?**  
-A: Only if it's truly standalone (e.g., a global migration guide). Check with the team first. Prefer categorizing.
-
-**Q: What if a doc doesn't fit neatly?**  
-A: Choose the closest category and explain the decision in the doc header. Update this guide if a new category pattern emerges.
-
-**Q: Who updates the links when I move a doc?**  
-A: Whoever moves the doc must search for and update all references. Use `grep` or your editor's search-and-replace.
+- For runtime and schema facts, use `docs/Project_Handbook/CURRENT_STATE.md`.
+- Do not duplicate web/mobile/database state narratives in structure governance docs.
 
 ---
 
-**Maintained by:** Techwheels Development Team  
-**Version:** 1.0  
-**Adopted:** 2026-06-08
+## 8) Governance Rule for Future Work
+
+For every markdown create/move operation, do all three in same session:
+
+1. Place file in canonical path.
+2. Update nearest category `README.md` or index.
+3. Fix stale links and verify with search.
+

@@ -308,4 +308,4 @@ All planned work for RBAC-001 is complete. The implementation is production-read
 ---
 
 **Document Created:** 2026-05-23 by GitHub Copilot  
-**Related Plan:** [RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md)
+**Related Plan:** [RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../../Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md)

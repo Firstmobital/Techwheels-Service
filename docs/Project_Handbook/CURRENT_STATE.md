@@ -1,90 +1,184 @@
 # Current Project State Snapshot
 
-Snapshot Date: 2026-06-11
-Version Context: Techwheels Service v1.0 (current workspace state)
+Snapshot Date: 2026-06-18
+Snapshot Basis: Code and dump audit only (no inferred/assumed behavior)
 
-## Product Scope
+## Audit Source Set
 
-- Domains: Import, Reception, Reports, AutoDoc, Admin, Settings.
-- Backend platform: Supabase Auth + Postgres + Storage.
-- UI framework: React + TypeScript + Vite.
+- Web app runtime and route contract:
+	- `src/App.tsx`
+	- `package.json`
+- Mobile runtime and route contract:
+	- `mobile/src/app/_layout.tsx`
+	- `mobile/src/app/index.tsx`
+	- `mobile/src/app/(tabs)/_layout.tsx`
+	- `mobile/src/app/job-cards/_layout.tsx`
+	- `mobile/package.json`
+- Database authority:
+	- `local_folder/backups/full_database.sql` (authoritative schema + data dump)
+	- `local_folder/backups/chunks/full_database.sql.part_*` (access mirror for large-file reads)
 
-## Active Route Surface
+## Web Version (Audited)
 
+### Stack and Runtime
+
+- App framework: React 19 + TypeScript + Vite 8.
+- Router: react-router-dom 7.
+- Backend client: @supabase/supabase-js 2.103.3.
+
+### Auth and Access Model
+
+- App shell uses authenticated gating and permission loading before protected views.
+- Protected routes use module-gated checks through `RequireAccess` and `ROUTE_MODULE_MAP`.
+- Permission scope is evaluated per route module key.
+
+### Public and Auth-Flow Routes
+
+- `/` (login entry flow)
+- `/signup`
+- `/forgot-password`
+- `/auth/callback`
+- `/reset-password`
+- `/verify-preview`
+- `/c/:token` (complaint customer portal)
+
+### Protected Route Surface
+
+- `/home`
 - `/import`
-- `/reception`
+- `/reports`
+- `/reports/:categoryId`
 - `/reports/:categoryId/:reportId`
 - `/settings`
 - `/admin`
+- `/reception`
+- `/service-advisor`
+- `/floor-incharge`
+- `/sa-tracker`
+- `/bodyshop-tracker`
+- `/bodyshop-floor`
+- `/technician`
 - `/autodoc`
 - `/autodoc/:id`
-- `/auth/callback`
+- `/complaints`
+- `/bodyshop-repair`
+- `/ew-reminder`
+- `/service-booking`
+- `/wa-agent`
 
-## Reporting Surface
+### Module Keys Used by Web Route Gating
 
-- Report categories include labour/revenue, performance, revenue, parts.
-- Report registry is centrally managed under `src/pages/reports/`.
-- Query engines split by general service reports and parts-focused reports.
+- `job_cards`
+- `reports`
+- `employees`
+- `admin`
+- `autodoc`
+- `reception`
+- `service_advisor`
+- `floor_incharge`
+- `sa_tracker`
+- `bodyshop_tracker`
+- `bodyshop_floor`
+- `technician`
+- `complaints`
+- `bodyshop_repair`
+- `ew_reminder`
+- `service_booking`
+- `wa_agent`
 
-## Access Control State
+## Mobile Version (Audited)
 
-- Auth gate enforced at app shell level.
-- Frontend navigation and route access now use deny-by-default module permission checks.
-- Dealer code is resolved from user/app metadata in session JWT.
-- RLS policies enforce dealership row scoping for AutoDoc core data tables.
-- UI-level role labels exist (`admin`, `manager`, `staff`, `viewer`).
-- Module permissions are managed in admin workflow.
+### Stack and Runtime
 
-## DB Governance State
+- Expo SDK: 54.0.35.
+- React Native: 0.81.5.
+- Router: expo-router 6.
+- Backend client: @supabase/supabase-js 2.103.3.
 
-- Authoritative schema reference: `local_folder/backups/full_database.sql`.
-- Large-file access layer: `local_folder/backups/chunks/full_database.sql.part_*`.
-- Historical fallback reference (non-canonical): `supabase/backups/full_dump.sql`.
-- DB change tracking file introduced: `docs/Project_Handbook/DB_CHANGE_LEDGER.md`.
-- Mandatory DB workflow file introduced: `docs/Project_Handbook/DB_CHANGE_PROTOCOL.md`.
-- RBAC daily execution tracking file introduced: `docs/Implementation_plans/RBAC-001_DAILY_STANDUP_CHECKLIST.md`.
-- DBL-0002 helper permission functions migration is verified via read-only checks and archived under supabase/exec_success_migrations.
-- Reception branch mapping trigger contract has a new pending migration to prefer `employee_master.location` over SA-code fallback mapping on insert/update of `sa_employee_code`.
-- Pending migration file: `supabase/migrations/20260611123000_prefer_employee_master_location_in_reception_trigger.sql`.
+### Root Navigation Containers
 
-## Module-Route Contract
+- Auth stack: `mobile/src/app/(auth)/...`
+- Main tabs stack: `mobile/src/app/(tabs)/...`
+- Job cards stack: `mobile/src/app/job-cards/...`
 
-- Canonical module-route mapping defined in: `docs/Project_Handbook/MODULE_ROUTE_CONTRACT.md`.
-- Route strategy decision (explicit mapping vs. DB route migration) finalized in: `docs/Project_Handbook/ROUTE_STRATEGY_DECISION.md`.
-- **Strategy**: Frontend maintains explicit `ROUTE_MODULE_MAP` (not DB-synced) to enable semantic frontend workflows independent of DB data entity routes.
-- **Authority**: `public.modules` table is authoritative for module names; `ROUTE_MODULE_MAP` in `src/App.tsx` is authoritative for route assignments.
+### Session Redirect Logic
 
-## Import State
+- Authenticated users redirect from index to `/(tabs)/home`.
+- Unauthenticated users redirect from index to `/(auth)/login`.
 
-- Multi-file branch-wise ingest supported for core service and parts datasets.
-- Header mapping + row parse validation pipeline exists for each specialized source.
-- Duplicate-safe insertion and fallback conflict handling are implemented.
+### Visible Bottom Tabs
 
-## AutoDoc State
+- `home`
+- `search`
+- `new`
+- `alerts`
+- `profile`
 
-- Job card list and detail views active.
-- Vehicle lookup/upsert integrated.
-- Panel/photo/document/estimate subsystems active.
-- PPT and Excel generation features active.
+### Additional Registered Tab Screens (Hidden From Bottom Tab)
 
-## Admin State
+- `import`
+- `reports`
+- `autodoc`
+- `settings`
+- `admin`
+- `floor-incharge`
+- `reception`
 
-- User create/activate/deactivate features present.
-- Dealer assignment and metadata sync flow present.
-- Module and permission management flow present.
+### Job Card Flow Routes
 
-## Open Risk Notes
+- `job-cards/create`
+- `job-cards/[id]`
+- `job-cards/[id]/jobcard`
+- `job-cards/[id]/edit`
+- `job-cards/[id]/damage`
+- `job-cards/[id]/capture-photo`
+- `job-cards/[id]/panel-selector`
+- `job-cards/[id]/panel-photos`
+- `job-cards/[id]/estimate`
+- `job-cards/[id]/submit`
+- `job-cards/photos`
 
-- Ensure module permission schema consistency across all environments.
-- Keep role controls and DB enforcement assumptions aligned.
-- Keep dealer metadata and JWT refresh expectations clear to users.
+## Database Authority Snapshot (Audited From full_database.sql)
 
-## How to Update This Snapshot
+### Dump Authority and Access Mirror
 
-When state changes, update:
+- Canonical authority: `local_folder/backups/full_database.sql`.
+- Access mirror: `local_folder/backups/chunks/full_database.sql.part_*`.
+- Observed dump size: ~85 MB total (chunked into five parts).
 
-1. Route surface changes.
-2. Domain capability changes.
-3. Access control enforcement changes.
-4. Schema/report/import behavior changes.
-5. Risks and current assumptions.
+### Object Counts in Authority Dump
+
+- `CREATE TABLE`: 120
+- `CREATE VIEW`: 3
+- `CREATE FUNCTION`: 126
+- `CREATE TABLE public.*`: 78
+
+### Module and Navigation Seed Data
+
+- `public.modules` seeded rows: 21
+- `public.nav_groups` seeded rows: 5
+- Nav groups in seed data:
+	- Mechanical
+	- Bodyshop
+	- CRM
+	- Reports
+	- Admin
+
+### Confirmed Public Domain Tables (Key Surface)
+
+- Access and governance: `users`, `modules`, `nav_groups`, `user_module_permissions`, `user_employee_links`, `audit_logs`, `income_role_scope`.
+- Reception/service flow: `service_reception_entries`, `service_bookings`, `service_booking_followups`.
+- Core import/reporting data: `job_cards`, `open_job_cards`, `job_card_closed_data`, `service_invoice_data`, `service_invoice_order_data`, `service_vas_jc_data`.
+- Parts domain: `part_master`, `service_parts_order_data`, `service_parts_consumption_data`, `service_parts_stock_snapshot_data`, `service_jc_parts_data`.
+- AutoDoc domain: `vehicles`, `panels`, `panel_photos`, `documents`, `estimate_rows`, `autodoc_panel_master`, `autodoc_rate_cards`, `autodoc_rate_rows`.
+- Complaints domain: `complaint_tickets`, `complaint_activity`, `complaint_messages`, `complaint_attachments`, `complaint_notifications`, `complaint_access_links`, `complaint_sla_policies`.
+- Bodyshop domain: `bodyshop_repair_cards`, `bodyshop_assignments`, `bodyshop_floor_support_assignments`, `bodyshop_intake_vehicle_photos`, `bodyshop_repair_card_documents`, `settings_bodyshop_surveyors`.
+- Technician domain: `technician_assignments`, `technician_earnings_settings`, `sa_earnings_settings`.
+- Warranty domain: `warranty_amc_data`, `warranty_claim_settlement_report_data`, `warranty_fsb_data`, `warranty_goodwill_data`, `warranty_part_wc_data`, `warranty_updation_claim_data`, `warranty_wc_data`.
+- WhatsApp domain: `wa_templates`, `wa_messages`, `wa_campaigns`, `wa_campaign_contacts`, `wa_followup_queue`, `wa_followup_steps`, `wa_conversations`, `wa_agent_config`.
+
+## Change Control Notes
+
+- This file is the current-state snapshot authority for runtime surface and DB object baseline.
+- Do not infer behavior that is not visible in code or dump artifacts.
+- Keep detailed route/module/schema facts here; avoid duplicating them in docs root indexes.
