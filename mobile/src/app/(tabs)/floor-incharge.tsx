@@ -8,11 +8,13 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   ActivityIndicator, FlatList, Modal, Platform,
   RefreshControl, ScrollView, Text, TextInput,
-  TouchableOpacity, View, KeyboardAvoidingView,
-} from 'react-native'
+  TouchableOpacity, View, KeyboardAvoidingView,,
+  Dimensions} from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../../lib/supabase'
+
+const SCREEN_W = Dimensions.get('window').width
 
 // ─── Constants — exact web values ─────────────────────────────────────────────
 const FLOOR_INCHARGE_ALLOWED_SERVICE_TYPES = [
@@ -969,34 +971,32 @@ export default function FloorInchargeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Status tabs — horizontal slide, all 6 visible & clearly labelled ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={S.tabSlideContainer}
-        style={S.tabSlideRow}
-        decelerationRate="fast"
-        bounces={false}>
-        {(['all', 'unassigned', 'hold', 'assigned', 'work_inprocess', 'completed'] as const).map(key => {
-          const tab = TAB_DEFS.find(t => t.key === key)!
-          const cnt = tabCounts[key]
-          const active = assignmentView === key
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[S.tabSlideBtn, {
-                borderColor: active ? tab.color : '#e2e8f0',
-                backgroundColor: active ? tab.color : '#fff',
-                shadowColor: active ? tab.color : 'transparent',
-              }]}
-              onPress={() => setAssignmentView(key as AssignmentView)}
-              activeOpacity={0.75}>
-              <Text style={[S.tabSlideCnt, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
-              <Text style={[S.tabSlideLbl, { color: active ? '#fff' : '#475569' }]}>{tab.label}</Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+      {/* ── Status tabs — 2 fixed rows × 3 cols, pixel-perfect widths, zero overflow ── */}
+      {([
+        ['all', 'unassigned', 'hold'],
+        ['assigned', 'work_inprocess', 'completed'],
+      ] as const).map((rowKeys, rowIdx) => (
+        <View key={rowIdx} style={S.tabRow}>
+          {rowKeys.map(key => {
+            const tab = TAB_DEFS.find(t => t.key === key)!
+            const cnt  = tabCounts[key]
+            const active = assignmentView === key
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[S.tabCell, {
+                  borderColor: active ? tab.color : '#e2e8f0',
+                  backgroundColor: active ? tab.color : '#fff',
+                }]}
+                onPress={() => setAssignmentView(key as AssignmentView)}
+                activeOpacity={0.75}>
+                <Text style={[S.tabCellCnt, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+                <Text style={[S.tabCellLbl, { color: active ? '#fff' : '#475569' }]}>{tab.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      ))}
 
       {/* ── Dropdown filter bar — 3 dropdowns in one row ── */}
       <View style={S.dropdownBar}>
@@ -1360,12 +1360,11 @@ const S = {
   searchInput:       { flex: 1, fontSize: 13, color: '#1e293b', paddingVertical: 0 },
   refreshBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
   refreshBtnText:    { fontSize: 18, color: '#2563eb' },
-  // ── Slide tab styles ───────────────────────────────────────────
-  tabSlideRow:       { backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  tabSlideContainer: { paddingHorizontal: 10, paddingVertical: 8, gap: 7, alignItems: 'center' as const, flexDirection: 'row' as const },
-  tabSlideBtn:       { minWidth: 100, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1.5, gap: 5, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 } as const,
-  tabSlideCnt:       { fontSize: 16, fontWeight: '800' as const, lineHeight: 20 },
-  tabSlideLbl:       { fontSize: 12, fontWeight: '700' as const },
+  // ── 2-row × 3-col fixed tab grid ─────────────────────────────
+  tabRow:            { flexDirection: 'row' as const, paddingHorizontal: 8, paddingTop: 6, paddingBottom: 2, gap: 6, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' } as const,
+  tabCell:           { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 4, borderWidth: 1.5, gap: 4 } as const,
+  tabCellCnt:        { fontSize: 15, fontWeight: '800' as const, lineHeight: 18 },
+  tabCellLbl:        { fontSize: 11, fontWeight: '700' as const },
 
   // ── status tabs (single line) ──
   tabsRow:           { backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' },
@@ -1498,3 +1497,4 @@ const S = {
   emptyTitle:        { fontSize: 16, fontWeight: '700' as const, color: '#1e293b' },
   emptySub:          { fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center' as const, paddingHorizontal: 32 },
 }
+
