@@ -22,7 +22,8 @@ import { getDealerContext } from '../../../lib/api/auth'
 import { createPanelPhoto, deletePanelPhoto } from '../../../lib/api/photos'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 import { supabase } from '../../../lib/supabase'
-import { Icon } from '../../../components/ui'
+import { Icon, PrimaryButton, SecondaryButton } from '../../../components/ui'
+import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
 
 type Params = {
   jobCardId?: string | string[]
@@ -310,130 +311,181 @@ export default function CapturePhotoScreen() {
   }
 
   const stageLabel = stage.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+  const gpsReady = state.gpsLat !== null && state.gpsLng !== null
+
+  const stageTone =
+    stage === 'post-repair'
+      ? { bg: '#e4f4ec', line: '#bfe6d2', fg: '#1c8f63' }
+      : stage === 'under-repair'
+        ? { bg: '#e9f0fd', line: '#cadcf8', fg: '#2f63cf' }
+        : { bg: '#fbefdd', line: '#f1dcb8', fg: '#c9751b' }
 
   return (
     <>
       <Stack.Screen
         options={{
           title: 'Add Photo',
-          headerShown: true,
+          headerShown: false,
         }}
       />
 
-      <View className="flex-1 bg-[#e9e7e2]">
-        <ScrollView contentContainerStyle={{ padding: 16, flexGrow: 1 }}>
-          <Text className="text-[13px] uppercase tracking-[1.5px] text-[#7a7d89] font-semibold mb-1">
-            {`${panelName || 'Panel'} · ${stageLabel}`}
-          </Text>
-          <Text className="text-[34px] leading-[38px] font-bold text-[#1f2430] mb-4">Add Photo</Text>
+      <View style={{ flex: 1, backgroundColor: '#f4f2ec' }}>
+        <ScreenHeader
+          title="Add Photo"
+          eyebrow={`${panelName || 'Panel'} · ${stageLabel}`}
+          onBack={() => router.back()}
+        />
 
-          {/* Info card */}
-          <View className="bg-[#f5ead6] border border-[#e7cfa3] rounded-3xl p-4 mb-5 flex-row">
-            <View className="w-8 h-8 rounded-full border border-[#cc7a1f] items-center justify-center mr-3">
-              <Icon name="info" size={16} color="#cc7a1f" />
+        <ScrollView contentContainerStyle={{ padding: 16, flexGrow: 1, paddingBottom: 24 }}>
+          <View
+            style={{
+              backgroundColor: stageTone.bg,
+              borderColor: stageTone.line,
+              borderWidth: 1,
+              borderRadius: 16,
+              padding: 14,
+              marginBottom: 14,
+              flexDirection: 'row',
+            }}
+          >
+            <View
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: stageTone.fg,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 10,
+                marginTop: 1,
+              }}
+            >
+              <Icon name="info" size={14} color={stageTone.fg} />
             </View>
-            <Text className="text-[18px] leading-[29px] text-[#495063] flex-1">
-              A <Text className="font-bold">GPS location stamp</Text> is added automatically before upload. Shoot in open sky for an accurate lock.
+            <Text style={{ flex: 1, color: '#4b4e59', fontSize: 13, lineHeight: 20 }}>
+              A <Text style={{ fontWeight: '700' }}>GPS location stamp</Text> is added automatically before upload.
+              Shoot in open sky for an accurate lock.
             </Text>
           </View>
 
           {/* Image preview or capture buttons */}
           {state.imageUri ? (
-            <View className="mb-6">
+            <View style={{ marginBottom: 16 }}>
               <Image
                 source={{ uri: state.imageUri }}
-                className="w-full h-[360px] rounded-2xl bg-[#f5f3ef]"
+                style={{ width: '100%', height: 320, borderRadius: 16, backgroundColor: '#f6f4ee' }}
                 resizeMode="cover"
               />
-              <TouchableOpacity
-                className="mt-4 border border-[#cbc4b8] rounded-3xl py-4 items-center bg-white"
-                onPress={() => setState((s) => ({ ...s, imageUri: null }))}
-              >
-                <View className="flex-row items-center">
-                  <Icon name="rotate-cw" size={20} color="#1f2430" />
-                  <Text className="text-[#1f2430] font-semibold text-[34px] ml-3">Retake photo</Text>
-                </View>
-              </TouchableOpacity>
+              <View style={{ marginTop: 12 }}>
+                <SecondaryButton
+                  title="Retake Photo"
+                  iconName="rotate-cw"
+                  onPress={() => setState((s) => ({ ...s, imageUri: null }))}
+                />
+              </View>
             </View>
           ) : (
-            <View className="mb-6 gap-3">
-              <TouchableOpacity
+            <View style={{ marginBottom: 18, gap: 10 }}>
+              <PrimaryButton
+                title="Take Photo"
+                iconName="camera"
                 disabled={cameraPermission === false}
-                className="bg-[#3359d4] rounded-2xl py-4 items-center"
                 onPress={() => capturePhoto('camera')}
-              >
-                <View className="flex-row items-center">
-                  <Icon name="camera" size={20} color="#ffffff" />
-                  <Text className="text-white font-semibold text-[22px] ml-2">Take photo</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
+              />
+              <SecondaryButton
+                title="Choose From Gallery"
+                iconName="image"
                 disabled={libraryPermission === false}
-                className="bg-white border border-[#cbc4b8] rounded-2xl py-4 items-center"
                 onPress={() => capturePhoto('library')}
-              >
-                <View className="flex-row items-center">
-                  <Icon name="image" size={20} color="#1f2430" />
-                  <Text className="text-[#1f2430] font-semibold text-[22px] ml-2">Choose from gallery</Text>
-                </View>
-              </TouchableOpacity>
+              />
             </View>
           )}
 
           {/* GPS Status */}
           {state.imageUri && (
-            <View className="bg-white border border-[#d8d2c6] rounded-3xl p-4 mb-6">
-              <View className="flex-row items-center justify-between mb-3">
-                <View className="flex-row items-center">
-                  <View className="w-14 h-14 rounded-2xl bg-[#dcefe5] items-center justify-center">
-                    <Icon name="map-pin" size={24} color="#1f9466" />
+            <View
+              style={{
+                backgroundColor: '#ffffff',
+                borderColor: '#e7e3d9',
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 14,
+                marginBottom: 16,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#e4f4ec', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="map-pin" size={20} color="#1c8f63" />
                   </View>
-                  <View className="ml-3">
-                    <Text className="text-[22px] font-bold text-[#1f2430]">GPS location</Text>
-                    <Text className="text-[22px] font-semibold text-[#1f9466]">
-                      {state.gpsLat !== null && state.gpsLng !== null ? 'Locked' : 'Searching...'}
+                  <View style={{ marginLeft: 10 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21' }}>GPS Location</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: gpsReady ? '#1c8f63' : '#2f63cf' }}>
+                      {gpsReady ? 'Locked' : 'Searching...'}
                     </Text>
                   </View>
                 </View>
-                {state.gpsLat !== null && state.gpsLng !== null ? (
-                  <Icon name="check" size={26} color="#1f9466" />
+                {gpsReady ? (
+                  <Icon name="check" size={22} color="#1c8f63" />
                 ) : null}
               </View>
 
               {state.gpsProcessing ? (
-                <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex-row items-center">
-                  <ActivityIndicator size="small" color="#a16207" />
-                  <View className="ml-3 flex-1">
-                    <Text className="text-sm font-semibold text-yellow-800">GPS tagging in progress...</Text>
-                    <Text className="text-xs text-yellow-700 mt-1">Please wait. Location is being captured automatically.</Text>
+                <View
+                  style={{
+                    backgroundColor: '#e9f0fd',
+                    borderColor: '#cadcf8',
+                    borderWidth: 1,
+                    borderRadius: 10,
+                    padding: 12,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }}
+                >
+                  <ActivityIndicator size="small" color="#2f63cf" />
+                  <View style={{ marginLeft: 10, flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#2f63cf' }}>GPS tagging in progress...</Text>
+                    <Text style={{ fontSize: 12, color: '#4b4e59', marginTop: 2 }}>
+                      Please wait. Location is being captured automatically.
+                    </Text>
                   </View>
                 </View>
-              ) : state.gpsLat !== null && state.gpsLng !== null ? (
+              ) : gpsReady ? (
                 <>
-                  <View className="flex-row flex-wrap justify-between">
-                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3 mb-2">
-                      <Text className="text-[#7a7d89] text-[12px] uppercase">Latitude</Text>
-                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">{state.gpsLat.toFixed(6)}°</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                    <View style={{ width: '48.5%', borderRadius: 12, backgroundColor: '#f6f4ee', padding: 10, marginBottom: 8 }}>
+                      <Text style={{ color: '#82858f', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Latitude</Text>
+                      <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>{state.gpsLat.toFixed(6)}°</Text>
                     </View>
-                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3 mb-2">
-                      <Text className="text-[#7a7d89] text-[12px] uppercase">Longitude</Text>
-                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">{state.gpsLng.toFixed(6)}°</Text>
+                    <View style={{ width: '48.5%', borderRadius: 12, backgroundColor: '#f6f4ee', padding: 10, marginBottom: 8 }}>
+                      <Text style={{ color: '#82858f', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Longitude</Text>
+                      <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>{state.gpsLng.toFixed(6)}°</Text>
                     </View>
-                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3">
-                      <Text className="text-[#7a7d89] text-[12px] uppercase">Accuracy</Text>
-                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">±{(state.gpsAccuracy ?? 0).toFixed(0)} m</Text>
+                    <View style={{ width: '48.5%', borderRadius: 12, backgroundColor: '#f6f4ee', padding: 10 }}>
+                      <Text style={{ color: '#82858f', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Accuracy</Text>
+                      <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>±{(state.gpsAccuracy ?? 0).toFixed(0)} m</Text>
                     </View>
-                    <View className="w-[48.5%] rounded-2xl bg-[#f5f3ef] p-3">
-                      <Text className="text-[#7a7d89] text-[12px] uppercase">City</Text>
-                      <Text className="text-[#1f2430] font-bold text-[18px] mt-1">{state.gpsCity || '--'}</Text>
+                    <View style={{ width: '48.5%', borderRadius: 12, backgroundColor: '#f6f4ee', padding: 10 }}>
+                      <Text style={{ color: '#82858f', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>City</Text>
+                      <Text style={{ color: '#1a1b21', fontWeight: '700', fontSize: 13, marginTop: 2 }}>{state.gpsCity || '--'}</Text>
                     </View>
                   </View>
                 </>
               ) : (
-                <View className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <Text className="text-sm font-semibold text-yellow-800">Waiting for GPS lock...</Text>
-                  <Text className="text-xs text-yellow-700 mt-1">Location capture runs automatically in the background.</Text>
+                <View
+                  style={{
+                    backgroundColor: '#e9f0fd',
+                    borderColor: '#cadcf8',
+                    borderWidth: 1,
+                    borderRadius: 10,
+                    padding: 12,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#2f63cf' }}>Waiting for GPS lock...</Text>
+                  <Text style={{ fontSize: 12, color: '#4b4e59', marginTop: 2 }}>
+                    Location capture runs automatically in the background.
+                  </Text>
                 </View>
               )}
             </View>
@@ -441,42 +493,41 @@ export default function CapturePhotoScreen() {
 
           {/* Error message */}
           {state.error && (
-            <View className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <Text className="text-sm text-red-700 font-semibold">Error</Text>
-              <Text className="text-sm text-red-600 mt-1">{state.error}</Text>
+            <View
+              style={{
+                backgroundColor: '#fbe9ec',
+                borderColor: '#f3cdd4',
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 16,
+              }}
+            >
+              <Text style={{ fontSize: 13, color: '#c33b53', fontWeight: '700' }}>Error</Text>
+              <Text style={{ fontSize: 13, color: '#c33b53', marginTop: 2 }}>{state.error}</Text>
             </View>
           )}
 
           {/* Action buttons */}
           {state.imageUri ? (
-            <View className="gap-3 mt-auto">
-              <TouchableOpacity
-                disabled={state.uploading || state.gpsProcessing || state.gpsLat === null || state.gpsLng === null}
-                className={`${state.uploading || state.gpsProcessing || state.gpsLat === null || state.gpsLng === null ? 'bg-gray-400' : 'bg-[#3359d4]'} rounded-2xl py-5 items-center mt-2`}
+            <View style={{ gap: 10, marginTop: 'auto' }}>
+              <PrimaryButton
+                title={
+                  state.gpsProcessing || !gpsReady
+                    ? 'Processing Photo with GPS...'
+                    : 'Upload Photo'
+                }
+                iconName={state.gpsProcessing || !gpsReady ? undefined : 'arrow-up'}
                 onPress={handleUpload}
-              >
-                {state.uploading ? (
-                  <ActivityIndicator color="white" />
-                ) : state.gpsProcessing || state.gpsLat === null || state.gpsLng === null ? (
-                  <View className="flex-row items-center">
-                    <ActivityIndicator color="white" size="small" />
-                    <Text className="text-white font-semibold text-[18px] ml-2">Processing photo with GPS...</Text>
-                  </View>
-                ) : (
-                  <View className="flex-row items-center">
-                    <Icon name="arrow-up" size={20} color="#ffffff" />
-                    <Text className="text-white font-semibold text-[22px] ml-2">Upload photo</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+                loading={state.uploading}
+                disabled={state.gpsProcessing || !gpsReady}
+              />
 
-              <TouchableOpacity
-                disabled={state.uploading}
-                className="border border-[#cbc4b8] rounded-2xl py-4 items-center bg-white"
+              <SecondaryButton
+                title="Cancel"
                 onPress={() => router.back()}
-              >
-                <Text className="text-[#495063] font-semibold text-[22px]">Cancel</Text>
-              </TouchableOpacity>
+                disabled={state.uploading}
+              />
             </View>
           ) : null}
         </ScrollView>

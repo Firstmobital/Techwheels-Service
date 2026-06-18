@@ -18,7 +18,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useFocusEffect } from '@react-navigation/native'
 import { listPanelPhotos, createAutodocSignedUrlMap, deletePanelPhoto, type PanelPhotoRow } from '../../../lib/api'
 import { logEvent } from '../../../utils/logger'
-import { Icon } from '../../../components/ui'
+import { Icon, PrimaryButton, SecondaryButton } from '../../../components/ui'
+import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
 
 type Params = {
   jobCardId?: string | string[]
@@ -34,22 +35,22 @@ interface StagePhotos {
 
 const stageTheme = {
   'pre-repair': {
-    chipBg: '#f5ead6',
-    chipBorder: '#e7cfa3',
-    chipText: '#cc7a1f',
-    dot: '#cc7a1f',
+    chipBg: '#fbefdd',
+    chipBorder: '#f1dcb8',
+    chipText: '#c9751b',
+    dot: '#c9751b',
   },
   'under-repair': {
-    chipBg: '#e5ecfb',
-    chipBorder: '#b7c8f4',
-    chipText: '#3359d4',
-    dot: '#3359d4',
+    chipBg: '#e9f0fd',
+    chipBorder: '#cadcf8',
+    chipText: '#2f63cf',
+    dot: '#2f63cf',
   },
   'post-repair': {
     chipBg: '#e4f4ec',
-    chipBorder: '#b7e5cd',
-    chipText: '#1f9466',
-    dot: '#1f9466',
+    chipBorder: '#bfe6d2',
+    chipText: '#1c8f63',
+    dot: '#1c8f63',
   },
 } as const
 
@@ -225,43 +226,81 @@ export default function PanelPhotosScreen() {
     const resolvedUrl = (storagePath ? signedUrls[storagePath] : '') || driveUrl
 
     return (
-      <View key={photo.id} className="mb-3 rounded-3xl border border-gray-200 bg-white p-2" style={{ width: '48.7%' }}>
+      <View
+        key={photo.id}
+        style={{
+          width: '48.7%',
+          marginBottom: 10,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: '#e7e3d9',
+          backgroundColor: '#ffffff',
+          padding: 8,
+        }}
+      >
         {resolvedUrl ? (
           <Image
             source={{ uri: resolvedUrl }}
-            className="w-full h-40 rounded-2xl bg-gray-200"
+            style={{ width: '100%', height: 148, borderRadius: 12, backgroundColor: '#f6f4ee' }}
             resizeMode="cover"
           />
         ) : (
-          <View className="w-full h-40 rounded-2xl bg-[#f5f3ef] border border-[#e6e1d8] items-center justify-center">
-            <Text className="text-gray-500 text-xs">
+          <View
+            style={{
+              width: '100%',
+              height: 148,
+              borderRadius: 12,
+              backgroundColor: '#f6f4ee',
+              borderWidth: 1,
+              borderColor: '#e7e3d9',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#82858f', fontSize: 12 }}>
               {signedUrlLoading ? 'Loading...' : 'Preview unavailable'}
             </Text>
           </View>
         )}
 
-        <View className="px-1.5 pt-2 pb-1 flex-row items-center">
-          <Icon name="map-pin" size={14} color="#1f9466" />
-          <Text className="text-[11px] text-slate-600 ml-1" numberOfLines={1}>
+        <View style={{ paddingHorizontal: 4, paddingTop: 8, paddingBottom: 4, flexDirection: 'row', alignItems: 'center' }}>
+          <Icon name="map-pin" size={13} color="#1c8f63" />
+          <Text style={{ fontSize: 11, color: '#4b4e59', marginLeft: 4 }} numberOfLines={1}>
             {typeof (photo as any).gps_lat === 'number' ? (photo as any).gps_lat.toFixed(2) : '--'}, {typeof (photo as any).gps_lng === 'number' ? (photo as any).gps_lng.toFixed(2) : '--'}
           </Text>
         </View>
 
-        <View className="flex-row gap-2 mt-2">
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
           <TouchableOpacity
-            className="flex-1 bg-blue-100 border border-blue-300 rounded-xl py-2 items-center"
+            style={{
+              flex: 1,
+              borderRadius: 10,
+              paddingVertical: 8,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#b3c9f0',
+              backgroundColor: '#e9effe',
+            }}
             onPress={() =>
               handleReplacePhoto(photo.id, ((photo as any).repair_stage as any) || 'pre-repair')
             }
           >
-            <Text className="text-blue-700 text-sm font-semibold">Replace</Text>
+            <Text style={{ color: '#2a4cd0', fontSize: 12, fontWeight: '700' }}>Replace</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            className={`flex-1 rounded-xl py-2 items-center border ${deletingPhotoId === photo.id ? 'bg-red-200 border-red-300' : 'bg-red-100 border-red-300'}`}
+            style={{
+              flex: 1,
+              borderRadius: 10,
+              paddingVertical: 8,
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#f3cdd4',
+              backgroundColor: deletingPhotoId === photo.id ? '#f3cdd4' : '#fbe9ec',
+            }}
             onPress={() => handleRemovePhoto(photo.id)}
             disabled={deletingPhotoId === photo.id}
           >
-            <Text className="text-red-700 text-sm font-semibold">
+            <Text style={{ color: '#c33b53', fontSize: 12, fontWeight: '700' }}>
               {deletingPhotoId === photo.id ? 'Removing...' : 'Remove'}
             </Text>
           </TouchableOpacity>
@@ -271,41 +310,66 @@ export default function PanelPhotosScreen() {
   }
 
   const renderEmptyStage = () => (
-    <View className="rounded-3xl border-2 border-dashed border-[#d8d2c6] bg-[#f5f3ef] p-8 items-center justify-center">
+    <View
+      style={{
+        borderRadius: 16,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: '#d9d4c7',
+        backgroundColor: '#f6f4ee',
+        padding: 26,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
       <Icon name="camera" size={28} color="#a8a8a0" />
-      <Text className="text-[13px] text-[#7a7d89] mt-3 font-semibold">No photos yet · tap to capture</Text>
+      <Text style={{ fontSize: 12, color: '#82858f', marginTop: 8, fontWeight: '600' }}>
+        No photos yet · tap to capture
+      </Text>
     </View>
   )
 
   const renderStageSection = (stage: StagePhotos) => {
     const theme = stageTheme[stage.stage]
     return (
-    <View key={stage.stage} className="mb-6">
-      <View className="flex-row items-center justify-between mb-3">
-        <View className="flex-row items-center">
+    <View key={stage.stage} style={{ marginBottom: 20 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View
-            className="rounded-full border px-4 py-1.5 flex-row items-center"
-            style={{ backgroundColor: theme.chipBg, borderColor: theme.chipBorder }}
+            style={{
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: theme.chipBorder,
+              backgroundColor: theme.chipBg,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}
           >
-            <View className="w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: theme.dot }} />
-            <Text className="text-base font-semibold" style={{ color: theme.chipText }}>{stage.label}</Text>
+            <View style={{ width: 8, height: 8, borderRadius: 999, marginRight: 6, backgroundColor: theme.dot }} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.chipText }}>{stage.label}</Text>
           </View>
-          <Text className="text-[#7a7d89] text-base font-semibold ml-3">{stage.photos.length} photos</Text>
+          <Text style={{ color: '#82858f', fontSize: 12, fontWeight: '600', marginLeft: 8 }}>{stage.photos.length} photos</Text>
         </View>
 
-        <TouchableOpacity
-          className="rounded-2xl border border-[#9ab4f4] bg-[#dce8ff] px-4 py-2.5 flex-row items-center"
+        <SecondaryButton
+          title="Add"
+          iconName="plus"
+          fullWidth={false}
           onPress={() => handleAddPhoto(stage.stage)}
-        >
-          <Icon name="plus" size={18} color="#3359d4" />
-          <Text className="text-[#3359d4] font-bold text-lg ml-2">Add</Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {stage.photos.length === 0 ? (
-        renderEmptyStage()
+        <TouchableOpacity
+          style={{ borderRadius: 16 }}
+          onPress={() => handleAddPhoto(stage.stage)}
+        >
+          {renderEmptyStage()}
+        </TouchableOpacity>
       ) : (
-        <View className="flex-row flex-wrap justify-between">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
           {stage.photos.map((photo) => renderStageThumbnail(photo))}
         </View>
       )}
@@ -318,37 +382,34 @@ export default function PanelPhotosScreen() {
       <Stack.Screen
         options={{
           title: 'Damage Gallery',
-          headerShown: true,
+          headerShown: false,
         }}
       />
 
-      <View className="flex-1 bg-[#e9e7e2]">
+      <View style={{ flex: 1, backgroundColor: '#f4f2ec' }}>
+        <ScreenHeader
+          title={`${panelName || 'Panel'} Photos`}
+          eyebrow="Damage Gallery"
+          onBack={() => router.back()}
+        />
+
         {loading ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#2563eb" />
-            <Text className="text-sm text-gray-600 mt-3">Loading photos...</Text>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator size="large" color="#2a4cd0" />
+            <Text style={{ fontSize: 13, color: '#4b4e59', marginTop: 10 }}>Loading photos...</Text>
           </View>
         ) : error ? (
-          <View className="flex-1 p-4 items-center justify-center">
-            <View className="bg-white border border-red-200 rounded-xl p-5 w-full">
-              <Text className="text-lg font-semibold text-red-700">Unable to load photos</Text>
-              <Text className="text-sm text-red-600 mt-2">{error}</Text>
-              <TouchableOpacity
-                className="mt-4 bg-blue-600 rounded-lg py-3 items-center"
-                onPress={loadPhotos}
-              >
-                <Text className="text-white font-semibold">Retry</Text>
-              </TouchableOpacity>
+          <View style={{ flex: 1, padding: 16, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ backgroundColor: '#ffffff', borderColor: '#f3cdd4', borderWidth: 1, borderRadius: 12, padding: 16, width: '100%' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#c33b53' }}>Unable to load photos</Text>
+              <Text style={{ fontSize: 13, color: '#c33b53', marginTop: 6 }}>{error}</Text>
+              <View style={{ marginTop: 12 }}>
+                <PrimaryButton title="Retry" onPress={loadPhotos} />
+              </View>
             </View>
           </View>
         ) : (
           <ScrollView contentContainerStyle={{ padding: 16 }}>
-            <Text className="text-[13px] uppercase tracking-[1.5px] text-[#7a7d89] font-semibold mb-1">
-              Damage Gallery
-            </Text>
-            <Text className="text-[34px] leading-[38px] font-bold text-[#1f2430] mb-4">
-              {panelName || 'Panel'} Photos
-            </Text>
             {stagePhotos.map((stage) => renderStageSection(stage))}
           </ScrollView>
         )}

@@ -9,7 +9,6 @@ import {
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { getJobCardSummary, type JobCardStatus } from '../../../lib/api/jobCards'
 import { listActivePanelLabels } from '../../../lib/api/autodocRates'
 import { getActiveModelRates } from '../../../lib/api/autodocRates'
@@ -17,7 +16,10 @@ import { listPanels } from '../../../lib/api/panels'
 import { listPanelPhotos } from '../../../lib/api/photos'
 import { syncDamagePanels } from '../../../lib/api/panels'
 import { fetchVehicleByReg } from '../../../lib/api/vehicles'
-import { Icon } from '../../../components/ui/Icon'
+import { Icon, PrimaryButton, StatusPill } from '../../../components/ui'
+import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
+import { WorkflowTabs, type WorkflowTabKey } from '../../../components/autodoc/WorkflowTabs'
+import { WorkflowProgress } from '../../../components/autodoc/WorkflowProgress'
 
 type Params = {
   id?: string | string[]
@@ -71,7 +73,6 @@ function uniqueNonEmpty(values: string[]): string[] {
 
 export default function DamageStageScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { id, jcNumber, regNumber, stage } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
@@ -236,23 +237,29 @@ export default function DamageStageScreen() {
     return map
   }, [panelRows])
 
-  const statusLabel = useMemo(() => {
-    if (jobStatus === 'completed') return 'Submitted'
-    if (jobStatus === 'approved') return 'Approved'
-    if (jobStatus === 'submitted') return 'Submitted'
-    if (jobStatus === 'in_work') return 'In Work'
-    return 'Draft'
-  }, [jobStatus])
-
-  const statusAccent = useMemo(() => {
-    if (jobStatus === 'completed' || jobStatus === 'submitted') return '#1f9a6b'
-    if (jobStatus === 'approved') return '#7048cf'
-    if (jobStatus === 'in_work') return '#c9751b'
-    return '#7d8090'
-  }, [jobStatus])
-
   const stageLabels = ['Intake', 'Document', 'Estimate', 'Pre-Submit', 'Submit']
   const stageIndex = 1
+
+  const onWorkflowTabPress = (tab: WorkflowTabKey) => {
+    if (!jobCardId) return
+
+    const params = {
+      id: jobCardId,
+      jcNumber: jobCardNumberHint ?? '',
+      regNumber: regNumberHint ?? '',
+    }
+
+    if (tab === 'jobcard') {
+      router.push({ pathname: '/job-cards/[id]/jobcard', params })
+      return
+    }
+    if (tab === 'damage') return
+    if (tab === 'estimate') {
+      router.push({ pathname: '/job-cards/[id]/estimate', params })
+      return
+    }
+    router.push({ pathname: '/job-cards/[id]/submit', params })
+  }
 
   const stageCountForPanel = (panel: PanelDamageSummary, stage: DamageStage): number => {
     if (stage === 'pre-repair') return panel.preRepairCount
@@ -322,111 +329,31 @@ export default function DamageStageScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView style={{ flex: 1, backgroundColor: '#f6f4ee' }} contentContainerStyle={{ paddingBottom: 28 }}>
-        <SafeAreaView
-          edges={['top']}
-          style={{
-            backgroundColor: '#ffffff',
-            borderBottomWidth: 1,
-            borderBottomColor: '#e7e3d9',
-            paddingHorizontal: 16,
-            paddingTop: Math.max(insets.top > 0 ? 8 : 18, 8),
-            paddingBottom: 12,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <TouchableOpacity
-                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
-                onPress={() => router.push('/(tabs)/autodoc')}
-              >
-                <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
-              </TouchableOpacity>
-              <View style={{ minWidth: 0, flex: 1 }}>
-                <Text style={{ fontSize: 11, color: '#8b90a0', fontWeight: '700', letterSpacing: 0.12, textTransform: 'uppercase' }}>
-                  {jobCardNumberHint || 'Job Card'}
-                </Text>
-                <Text style={{ fontSize: 18, color: '#1a1b21', fontWeight: '700' }}>Damage Documentation</Text>
-              </View>
-            </View>
-            <View style={{ borderWidth: 1, borderColor: '#e3ceb0', backgroundColor: '#fbefdd', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: statusAccent, marginRight: 7 }} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: statusAccent }}>{statusLabel}</Text>
-            </View>
-          </View>
-        </SafeAreaView>
+      <ScrollView style={{ flex: 1, backgroundColor: '#f4f2ec' }} contentContainerStyle={{ paddingBottom: 28 }}>
+        <ScreenHeader
+          title="Damage Documentation"
+          eyebrow={jobCardNumberHint || 'Job Card'}
+          onBack={() => router.push('/(tabs)/autodoc')}
+          rightNode={<StatusPill status={jobStatus} />}
+        />
 
         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e7e3d9', backgroundColor: '#ffffff' }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/jobcard', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="file" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Job Card</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, borderRadius: 14, backgroundColor: '#2a4cd0', borderWidth: 1, borderColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}>
-              <Icon name="grid" size={18} color="#ffffff" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#ffffff' }}>Damage</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="file-text" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Estimate</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/submit', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="send" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Submit</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
-            {stageLabels.map((label, index) => {
-              const isDone = index < stageIndex
-              const isCurrent = index === stageIndex
-              return (
-                <View key={label} style={{ flex: 1, alignItems: 'center' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
-                    <View
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
-                        backgroundColor: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#ffffff',
-                        borderWidth: isDone || isCurrent ? 0 : 2,
-                        borderColor: '#d8d2c6',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {isDone ? <Text style={{ color: '#ffffff', fontWeight: '700' }}>✓</Text> : isCurrent ? <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#ffffff' }} /> : null}
-                    </View>
-                    {index < stageLabels.length - 1 ? <View style={{ height: 3, flex: 1, backgroundColor: isDone ? '#1f9a6b' : '#d8d2c6', marginHorizontal: 6, borderRadius: 2 }} /> : null}
-                  </View>
-                  <Text style={{ marginTop: 8, fontSize: 12, fontWeight: isCurrent ? '700' : '600', color: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#a7a99f' }}>{label}</Text>
-                </View>
-              )
-            })}
-          </View>
+          <WorkflowTabs activeTab="damage" onTabPress={onWorkflowTabPress} disabled={!jobCardId} />
+          <WorkflowProgress currentStep={stageIndex + 1} totalSteps={5} stageName={stageLabels[stageIndex]} />
         </View>
 
         {loading ? (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
-            <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Loading damage workflow...</Text>
+            <ActivityIndicator size="large" color="#2a4cd0" />
+            <Text style={{ fontSize: 13, color: '#4b4e59', marginTop: 10 }}>Loading damage workflow...</Text>
           </View>
         ) : error ? (
-          <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#fecaca', borderRadius: 14, padding: 16 }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: '#b91c1c' }}>Unable to load damage stage</Text>
-            <Text style={{ fontSize: 14, color: '#dc2626', marginTop: 4 }}>{error}</Text>
-            <TouchableOpacity style={{ marginTop: 12, backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }} onPress={loadDamage}>
-              <Text style={{ color: '#ffffff', fontWeight: '700' }}>Retry</Text>
-            </TouchableOpacity>
+          <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f3cdd4', borderRadius: 14, padding: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#c33b53' }}>Unable to load damage stage</Text>
+            <Text style={{ fontSize: 13, color: '#c33b53', marginTop: 4 }}>{error}</Text>
+            <View style={{ marginTop: 12 }}>
+              <PrimaryButton title="Retry" onPress={loadDamage} />
+            </View>
           </View>
         ) : (
           <>

@@ -19,7 +19,6 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
-  Dimensions,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import {
@@ -31,7 +30,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Icon } from '../../components/ui/Icon'
+import { Icon, PrimaryButton } from '../../components/ui'
 import { StatusPill } from '../../components/ui/StatusPill'
 import { Pipeline } from '../../components/ui/Pipeline'
 
@@ -101,17 +100,15 @@ function formatINR(amount: number | null | undefined): string {
 interface StageFilterConfig {
   key: DashboardCardFilter
   label: string
-  icon: string
-  iconColor: string
-  iconBgColor: string
+  stripColor: string
 }
 
 const STAGE_FILTERS: StageFilterConfig[] = [
-  { key: 'documentation_pre_repair', label: 'Documentation', icon: 'grid', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
-  { key: 'estimate', label: 'Estimate', icon: 'file-text', iconColor: '#7048cf', iconBgColor: '#f4edff' },
-  { key: 'pre_submit_pending', label: 'Pre-Submit', icon: 'square', iconColor: '#c9751b', iconBgColor: '#fbefdd' },
-  { key: 'post_repair_ppt', label: 'Post-Repair', icon: 'package', iconColor: '#2f63cf', iconBgColor: '#e9f0fd' },
-  { key: 'active_intake', label: 'Intake', icon: 'truck', iconColor: '#6b6e78', iconBgColor: '#f6f4ee' },
+  { key: 'documentation_pre_repair', label: 'Documentation', stripColor: '#ca771f' },
+  { key: 'estimate', label: 'Estimate', stripColor: '#6f49cb' },
+  { key: 'pre_submit_pending', label: 'Pre-Submit', stripColor: '#ca771f' },
+  { key: 'post_repair_ppt', label: 'Post-Repair', stripColor: '#2f63cf' },
+  { key: 'active_intake', label: 'Intake', stripColor: '#82858f' },
 ]
 
 // Color dots for vehicle colors
@@ -122,6 +119,14 @@ const COLOUR_DOTS: Record<string, string> = {
   'Pure Grey': '#9b9ea4',
   'Flame Red': '#c0392b',
   'Atlas Black': '#22232a',
+}
+
+function statusDotColor(status: JobCardStatus | null | undefined): string {
+  if (status === 'in_work') return '#cc3a2e'
+  if (status === 'approved') return '#1a1b21'
+  if (status === 'submitted') return '#9aa0ac'
+  if (status === 'completed') return '#8f96a3'
+  return '#cfc9bd'
 }
 
 export default function AutoDocScreen() {
@@ -484,10 +489,8 @@ export default function AutoDocScreen() {
     })
   }, [rowsWithStage, search, stageFilter])
 
-  const screenWidth = Dimensions.get('window').width
-
   return (
-    <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+    <View style={{ flex: 1, backgroundColor: '#f4f2ec' }}>
       {loading && !refreshing ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
           <ActivityIndicator size="large" color="#2a4cd0" />
@@ -497,9 +500,9 @@ export default function AutoDocScreen() {
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
           <Text style={{ fontSize: 18, fontWeight: '600', color: '#c33b53', marginBottom: 4 }}>Unable to load</Text>
           <Text style={{ fontSize: 14, color: '#c33b53', textAlign: 'center', marginBottom: 16 }}>{error}</Text>
-          <TouchableOpacity style={{ backgroundColor: '#2a4cd0', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 }} onPress={onRefresh}>
-            <Text style={{ color: '#ffffff', fontWeight: '600' }}>Retry</Text>
-          </TouchableOpacity>
+          <View style={{ width: 140 }}>
+            <PrimaryButton title="Retry" onPress={onRefresh} />
+          </View>
         </View>
       ) : (
         <FlatList
@@ -629,11 +632,12 @@ export default function AutoDocScreen() {
                         style={{
                           width: 116,
                           paddingHorizontal: 13,
-                          paddingVertical: 12,
+                          paddingTop: 12,
+                          paddingBottom: 11,
                           borderRadius: 14,
                           borderWidth: 1,
                           borderColor: isActive ? '#2a4cd0' : '#e7e3d9',
-                          backgroundColor: isActive ? '#e9effe' : '#ffffff',
+                          backgroundColor: '#ffffff',
                           gap: 0,
                         }}
                         onPress={() => setStageFilter(isActive ? 'active_vehicles' : filter.key)}
@@ -641,20 +645,16 @@ export default function AutoDocScreen() {
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                           <View
                             style={{
-                              width: 30,
-                              height: 30,
-                              borderRadius: 9,
-                              backgroundColor: filter.iconBgColor,
-                              justifyContent: 'center',
-                              alignItems: 'center',
+                              width: 36,
+                              height: 8,
+                              borderRadius: 999,
+                              backgroundColor: filter.stripColor,
                             }}
-                          >
-                            <Icon name={filter.icon as any} size={17} color={filter.iconColor} strokeWidth={1.5} />
-                          </View>
+                          />
                           <Icon name="chevron-right" size={15} color="#a7a99f" strokeWidth={1.5} />
                         </View>
-                        <Text style={{ fontSize: 24, fontWeight: '600', color: '#1a1b21', fontFamily: 'Space Grotesk' }}>{count}</Text>
-                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#82858f', marginTop: 1, fontFamily: 'Plus Jakarta Sans' }}>{filter.label}</Text>
+                        <Text style={{ fontSize: 24, fontWeight: '700', color: '#1a1b21', fontFamily: 'Space Grotesk' }}>{count}</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#7d8090', marginTop: 1, fontFamily: 'Plus Jakarta Sans' }}>{filter.label}</Text>
                       </TouchableOpacity>
                     )
                   })}
@@ -689,7 +689,8 @@ export default function AutoDocScreen() {
             const { row, stage } = item
             const modelLabel = row.model?.trim() ? row.model : 'Model'
             const yearLabel = row.vehicle_year ? String(row.vehicle_year) : ''
-            const colorDot = COLOUR_DOTS[row.colour ?? ''] || '#d9d4c7'
+            const vehicleColorDot = COLOUR_DOTS[row.colour ?? ''] || '#d9d4c7'
+            const cardStatusDot = statusDotColor(row.status)
             const hasEstimate = (row.total_estimate_amount ?? 0) > 0
 
             return (
@@ -700,7 +701,7 @@ export default function AutoDocScreen() {
                   backgroundColor: '#ffffff',
                   borderWidth: 1,
                   borderColor: '#e7e3d9',
-                  borderRadius: 14,
+                  borderRadius: 16,
                   padding: 15,
                   overflow: 'hidden',
                 }}
@@ -714,7 +715,7 @@ export default function AutoDocScreen() {
                 </View>
 
                 {/* Reg, Model, Color */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 13 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 11 }}>
                   <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#4b4e59', fontFamily: 'JetBrains Mono' }}>
                     {row.reg_number ?? 'Unknown reg'}
                   </Text>
@@ -727,7 +728,17 @@ export default function AutoDocScreen() {
                       width: 11,
                       height: 11,
                       borderRadius: 5.5,
-                      backgroundColor: colorDot,
+                      backgroundColor: vehicleColorDot,
+                      borderWidth: 1,
+                      borderColor: '#d9d4c7',
+                    }}
+                  />
+                  <View
+                    style={{
+                      width: 15,
+                      height: 15,
+                      borderRadius: 7.5,
+                      backgroundColor: cardStatusDot,
                       borderWidth: 1,
                       borderColor: '#d9d4c7',
                       marginLeft: 'auto',
@@ -736,8 +747,8 @@ export default function AutoDocScreen() {
                 </View>
 
                 {/* Pipeline */}
-                <View style={{ marginVertical: 14 }}>
-                  <Pipeline stage={stage} />
+                <View style={{ marginTop: 6, marginBottom: 8 }}>
+                  <Pipeline stage={stage} compact />
                 </View>
 
                 {/* Divider */}

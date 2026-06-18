@@ -23,9 +23,11 @@ import { getActiveModelRates, getAutoDocWorkflowOptions, type ModelPanelRate } f
 import NativeSelectField from '../../../components/common/NativeSelectField'
 import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
 import { uploadDocumentFile } from '../../../lib/api/documents'
-import { HeroBlock, Pill } from '../../../components/ui'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { HeroBlock, Pill, StatusPill, PrimaryButton } from '../../../components/ui'
 import { Icon } from '../../../components/ui/Icon'
+import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
+import { WorkflowTabs, type WorkflowTabKey } from '../../../components/autodoc/WorkflowTabs'
+import { WorkflowProgress } from '../../../components/autodoc/WorkflowProgress'
 
 type Params = {
   id?: string | string[]
@@ -178,7 +180,6 @@ function getStatusChipStyle(tone: 'green' | 'blue' | 'amber') {
 
 export default function JobCardEstimateScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
@@ -499,23 +500,28 @@ export default function JobCardEstimateScreen() {
 
   const grandTotal = estimateTotals.parts + estimateTotals.paint + estimateTotals.labour
 
-  const statusLabel = useMemo(() => {
-    if (jobStatus === 'completed') return 'Submitted'
-    if (jobStatus === 'approved') return 'Approved'
-    if (jobStatus === 'submitted') return 'Submitted'
-    if (jobStatus === 'in_work') return 'In Work'
-    return 'Draft'
-  }, [jobStatus])
-
-  const statusAccent = useMemo(() => {
-    if (jobStatus === 'completed' || jobStatus === 'submitted') return '#1f9a6b'
-    if (jobStatus === 'approved') return '#7048cf'
-    if (jobStatus === 'in_work') return '#c9751b'
-    return '#7d8090'
-  }, [jobStatus])
-
   const stageLabels = ['Intake', 'Document', 'Estimate', 'Pre-Submit', 'Submit']
   const stageIndex = 2
+
+  const onWorkflowTabPress = (tab: WorkflowTabKey) => {
+    if (!jobCardId) return
+    const params = {
+      id: jobCardId,
+      jcNumber: jobCardNumberHint ?? '',
+      regNumber: regNumberHint ?? '',
+    }
+
+    if (tab === 'jobcard') {
+      router.push({ pathname: '/job-cards/[id]/jobcard', params })
+      return
+    }
+    if (tab === 'damage') {
+      router.push({ pathname: '/job-cards/[id]/damage', params })
+      return
+    }
+    if (tab === 'estimate') return
+    router.push({ pathname: '/job-cards/[id]/submit', params })
+  }
 
   const onExportEstimate = async () => {
     if (!jobCardId) return
@@ -554,120 +560,36 @@ export default function JobCardEstimateScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView className="flex-1 bg-amber-50" contentContainerStyle={{ paddingBottom: 28 }}>
-        <SafeAreaView
-          edges={['top']}
-          style={{
-            backgroundColor: '#ffffff',
-            borderBottomWidth: 1,
-            borderBottomColor: '#e7e3d9',
-            paddingHorizontal: 16,
-            paddingTop: Math.max(insets.top > 0 ? 8 : 18, 8),
-            paddingBottom: 12,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <TouchableOpacity
-                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
-                onPress={() => router.push('/(tabs)/autodoc')}
-              >
-                <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
-              </TouchableOpacity>
-              <View style={{ minWidth: 0, flex: 1 }}>
-                <Text style={{ fontSize: 11, color: '#8b90a0', fontWeight: '700', letterSpacing: 0.12, textTransform: 'uppercase' }}>
-                  {jobCardNumberHint || 'Job Card'}
-                </Text>
-                <Text style={{ fontSize: 20, color: '#1a1b21', fontWeight: '700' }}>Estimate</Text>
-              </View>
-            </View>
-            <View style={{ borderWidth: 1, borderColor: '#e3ceb0', backgroundColor: '#fbefdd', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: statusAccent, marginRight: 7 }} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: statusAccent }}>{statusLabel}</Text>
-            </View>
-          </View>
-        </SafeAreaView>
+      <ScrollView style={{ flex: 1, backgroundColor: '#f4f2ec' }} contentContainerStyle={{ paddingBottom: 28 }}>
+        <ScreenHeader
+          title="Estimate"
+          eyebrow={jobCardNumberHint || 'Job Card'}
+          onBack={() => router.push('/(tabs)/autodoc')}
+          rightNode={<StatusPill status={jobStatus} />}
+        />
 
         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e7e3d9', backgroundColor: '#ffffff' }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/jobcard', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="file" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Job Card</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/damage', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="grid" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Damage</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, borderRadius: 14, backgroundColor: '#2a4cd0', borderWidth: 1, borderColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}>
-              <Icon name="file-text" size={18} color="#ffffff" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#ffffff' }}>Estimate</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/submit', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="send" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Submit</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center' }}>
-            {stageLabels.map((label, idx) => {
-              const active = idx <= stageIndex
-              const current = idx === stageIndex
-
-              return (
-                <View key={label} style={{ flex: idx === stageLabels.length - 1 ? 0 : 1, flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={{ alignItems: 'center' }}>
-                    <View
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
-                        borderWidth: 2,
-                        borderColor: active ? '#1f9a6b' : '#cfc8b8',
-                        backgroundColor: current ? '#2a4cd0' : active ? '#ffffff' : '#ffffff',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {active && !current ? <Icon name="check" size={12} color="#1f9a6b" strokeWidth={2.6} /> : <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: current ? '#ffffff' : '#cfc8b8' }} />}
-                    </View>
-                    <Text style={{ marginTop: 5, fontSize: 11, fontWeight: current ? '700' : '600', color: current ? '#2a4cd0' : active ? '#1f9a6b' : '#9a9ea9' }}>{label}</Text>
-                  </View>
-
-                  {idx < stageLabels.length - 1 ? (
-                    <View style={{ flex: 1, height: 2, marginHorizontal: 6, backgroundColor: idx < stageIndex ? '#1f9a6b' : '#e2ddcf' }} />
-                  ) : null}
-                </View>
-              )
-            })}
-          </View>
+          <WorkflowTabs activeTab="estimate" onTabPress={onWorkflowTabPress} disabled={!jobCardId} />
+          <WorkflowProgress currentStep={stageIndex + 1} totalSteps={5} stageName={stageLabels[stageIndex]} />
         </View>
 
         {loading ? (
-          <View className="items-center justify-center py-20 px-4">
-            <ActivityIndicator size="large" color="#1d4ed8" />
-            <Text className="text-sm text-slate-600 mt-3">Loading estimate data...</Text>
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 16 }}>
+            <ActivityIndicator size="large" color="#2a4cd0" />
+            <Text style={{ fontSize: 13, color: '#4b4e59', marginTop: 10 }}>Loading estimate data...</Text>
           </View>
         ) : error ? (
-          <View className="bg-white border border-red-200 rounded-2xl p-5 mt-3 mx-4">
-            <Text className="text-lg font-semibold text-red-700">Unable to load estimate</Text>
-            <Text className="text-sm text-red-600 mt-1">{error}</Text>
-            <TouchableOpacity className="mt-4 bg-blue-600 rounded-xl py-3 items-center" onPress={load}>
-              <Text className="text-white font-semibold">Retry</Text>
-            </TouchableOpacity>
+          <View style={{ backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f3cdd4', borderRadius: 16, padding: 16, marginTop: 12, marginHorizontal: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#c33b53' }}>Unable to load estimate</Text>
+            <Text style={{ fontSize: 13, color: '#c33b53', marginTop: 4 }}>{error}</Text>
+            <View style={{ marginTop: 12 }}>
+              <PrimaryButton title="Retry" onPress={load} />
+            </View>
           </View>
         ) : (
           <>
-            <View className="px-4 pt-3">
-              <View className="flex-row flex-wrap gap-2 mb-2">
+            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                 <Pill
                   label={resolvedModelName ? `Model: ${resolvedModelName}` : 'Model pending'}
                   variant={resolvedModelName ? 'post' : 'warning'}
@@ -686,21 +608,21 @@ export default function JobCardEstimateScreen() {
               </View>
             </View>
 
-            <View className="px-4">
+            <View style={{ paddingHorizontal: 16 }}>
               <HeroBlock
               title="Estimate Total"
               mainValue={formatCurrency(grandTotal)}
               subtitle={`${completedEstimatePanels.size} of ${panels.length} panels estimate-ready`}
               variant="brand"
             >
-              <View className="mt-3 flex-row gap-2">
+              <View style={{ marginTop: 12, flexDirection: 'row', gap: 8 }}>
                 <View style={{ flex: 1, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 12, paddingVertical: 10 }}>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: '#d5e3ff' }}>Parts</Text>
-                  <Text style={{ fontSize: 32, fontWeight: '700', color: '#ffffff', marginTop: 2 }}>{formatCurrency(estimateTotals.parts)}</Text>
+                  <Text style={{ fontSize: 30, fontWeight: '700', color: '#ffffff', marginTop: 2 }}>{formatCurrency(estimateTotals.parts)}</Text>
                 </View>
                 <View style={{ flex: 1, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)', paddingHorizontal: 12, paddingVertical: 10 }}>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: '#d5e3ff' }}>Paint + Labour</Text>
-                  <Text style={{ fontSize: 32, fontWeight: '700', color: '#ffffff', marginTop: 2 }}>{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
+                  <Text style={{ fontSize: 30, fontWeight: '700', color: '#ffffff', marginTop: 2 }}>{formatCurrency(estimateTotals.paint + estimateTotals.labour)}</Text>
                 </View>
               </View>
               <Text style={{ fontSize: 12, marginTop: 8, color: '#e4ecff' }}>
@@ -917,7 +839,7 @@ export default function JobCardEstimateScreen() {
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={{ fontSize: 17, color: '#1a1b21', fontWeight: '700' }}>Grand total</Text>
-                  <Text style={{ fontSize: 22, color: '#2a4cd0', fontWeight: '800' }}>{formatCurrency(grandTotal)}</Text>
+                  <Text style={{ fontSize: 20, color: '#2a4cd0', fontWeight: '800' }}>{formatCurrency(grandTotal)}</Text>
                 </View>
 
                 <TouchableOpacity
