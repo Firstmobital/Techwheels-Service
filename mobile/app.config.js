@@ -44,6 +44,8 @@ module.exports = ({ config }) => {
     },
     extra: {
       ...(merged.extra || {}),
+      supabaseUrl: envValue('EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'),
+      supabaseAnonKey: envValue('EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY'),
       awsRegion: envValue('EXPO_PUBLIC_AWS_REGION', 'AWS_REGION'),
       awsAccessKeyId: envValue('EXPO_PUBLIC_AWS_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID'),
       awsSecretAccessKey: envValue('EXPO_PUBLIC_AWS_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY'),

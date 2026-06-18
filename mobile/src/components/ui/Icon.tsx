@@ -136,6 +136,7 @@ export type IconName =
   | 'paperclip'
   | 'pause-circle'
   | 'phone'
+  | 'presentation'
   | 'plus'
   | 'plus-circle'
   | 'printer'
@@ -144,6 +145,7 @@ export type IconName =
   | 'search'
   | 'send'
   | 'settings'
+  | 'shield-check'
   | 'share-2'
   | 'shopping-cart'
   | 'sliders'
@@ -221,6 +223,7 @@ const iconMap: Record<IconName, React.ComponentType<LucideProps>> = {
   paperclip: Paperclip,
   'pause-circle': PauseCircle,
   phone: Phone,
+  presentation: FileText,
   plus: Plus,
   'plus-circle': PlusCircle,
   printer: Printer,
@@ -229,6 +232,7 @@ const iconMap: Record<IconName, React.ComponentType<LucideProps>> = {
   search: Search,
   send: Send,
   settings: Settings,
+  'shield-check': CheckCircle,
   'share-2': Share2,
   'shopping-cart': ShoppingCart,
   sliders: Sliders,
