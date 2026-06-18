@@ -447,8 +447,9 @@ export default function ReceptionScreen() {
     setFormError(null)
 
     // Exact web required-field check
-    if (!form.fuel_type.trim() || !form.reg_number.trim() || !form.model.trim() || !form.sa_employee_code.trim() || !form.service_type.trim()) {
-      setFormError('Please fill all required fields: Fuel Type, Model, Registration No, Service Type, SA Name')
+    if (!form.reg_number.trim() || !form.model.trim() || !form.sa_employee_code.trim() ||
+        !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
+      setFormError('Please fill all required fields: Registration No, Model, SA Name, Owner Name, Owner Phone, Source')
       return
     }
     if (form.reg_number.trim().length > 10) {
@@ -785,6 +786,43 @@ export default function ReceptionScreen() {
                   <Text style={form.sa_employee_code ? s.selectText : s.selectPlaceholder}>{getFormSALabel() || 'Select SA'}</Text>
                   <Text style={s.chevron}>▼</Text>
                 </TouchableOpacity>
+              </FormField>
+
+              <FormField label="KM Reading">
+                <TextInput style={s.input}
+                  placeholder="e.g. 12500"
+                  placeholderTextColor="#94a3b8"
+                  value={form.km_reading}
+                  keyboardType="number-pad"
+                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/\D/g, '') }))}
+                />
+              </FormField>
+
+              <FormField label="Source *">
+                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('source'); setPickerSearch('') }}>
+                  <Text style={form.source ? s.selectText : s.selectPlaceholder}>{form.source || 'Select source'}</Text>
+                  <Text style={s.chevron}>▼</Text>
+                </TouchableOpacity>
+              </FormField>
+
+              <FormField label="Owner Name *">
+                <TextInput style={s.input}
+                  placeholder="Customer name"
+                  placeholderTextColor="#94a3b8"
+                  value={form.owner_name}
+                  onChangeText={t => setForm(p => ({ ...p, owner_name: t }))}
+                />
+              </FormField>
+
+              <FormField label="Owner Phone *">
+                <TextInput style={s.input}
+                  placeholder="10-digit mobile number"
+                  placeholderTextColor="#94a3b8"
+                  value={form.owner_phone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  onChangeText={t => setForm(p => ({ ...p, owner_phone: t.replace(/\D/g, '') }))}
+                />
               </FormField>
 
               <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
