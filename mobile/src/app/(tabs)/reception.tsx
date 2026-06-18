@@ -692,6 +692,25 @@ export default function ReceptionScreen() {
         />
       </View>
 
+      {/* Fuel Type filter — All / EV / PV */}
+      <View style={s.fuelTabBar}>
+        {(['all', 'EV', 'PV'] as const).map(ft => (
+          <TouchableOpacity
+            key={ft}
+            style={[s.fuelTab, selectedFuelType === ft && (ft === 'EV' ? s.fuelTabEVActive : ft === 'PV' ? s.fuelTabPVActive : s.fuelTabAllActive)]}
+            onPress={() => setSelectedFuelType(ft)}
+          >
+            <Text style={[s.fuelTabText, selectedFuelType === ft && s.fuelTabTextActive]}>
+              {ft === 'all'
+                ? `All (${locFiltered.length})`
+                : ft === 'EV'
+                  ? `EV (${locFiltered.filter(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName) === 'EV').length})`
+                  : `PV (${locFiltered.filter(e => getEntryFuelLabel(e, empFuelByCode, empFuelByName) === 'PV').length})`}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* List */}
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#2563eb" />
@@ -894,6 +913,13 @@ const styles = {
   headerSub:          { fontSize: 12, color: '#64748b', marginTop: 2 },
   addBtn:             { backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   addBtnText:         { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
+  fuelTabBar:         { flexDirection: 'row' as const, backgroundColor: '#f1f5f9', marginHorizontal: 12, marginTop: 8, marginBottom: 4, borderRadius: 10, padding: 3 },
+  fuelTab:            { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' as const, justifyContent: 'center' as const },
+  fuelTabAllActive:   { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  fuelTabEVActive:    { backgroundColor: '#dcfce7', shadowColor: '#16a34a', shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
+  fuelTabPVActive:    { backgroundColor: '#dbeafe', shadowColor: '#2563eb', shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
+  fuelTabText:        { fontSize: 13, fontWeight: '600' as const, color: '#94a3b8' },
+  fuelTabTextActive:  { color: '#0f172a', fontWeight: '700' as const },
   toggleRow:          { flexDirection: 'row' as const, padding: 10, gap: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
   toggleBtn:          { borderRadius: 6, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: '#f1f5f9' },
   toggleBtnActive:    { backgroundColor: '#2563eb' },
