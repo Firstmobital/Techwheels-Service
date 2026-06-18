@@ -953,14 +953,9 @@ export default function FloorInchargeScreen() {
         </View>
       )}
 
-      {/* ── Top bar: [Floor Incharge + count] [search] [↻] ── */}
+      {/* ── Top bar: single row — [Floor Incharge] [──search──] [↻] ── */}
       <View style={S.topBar}>
-        {/* Left: title only — no duplicate subtitle */}
-        <View style={S.topBarLeft}>
-          <Text style={S.topBarTitle}>Floor Incharge</Text>
-          <Text style={S.topBarCount}>{filtered.length}/{jobCards.length}</Text>
-        </View>
-        {/* Centre-right: search box */}
+        <Text style={S.topBarTitle}>Floor Incharge</Text>
         <View style={S.searchWrap}>
           <Text style={S.searchIcon}>🔍</Text>
           <TextInput style={S.searchInput}
@@ -969,7 +964,6 @@ export default function FloorInchargeScreen() {
             value={search} onChangeText={setSearch} clearButtonMode="while-editing"
           />
         </View>
-        {/* Far right: refresh */}
         <TouchableOpacity style={S.refreshBtn} onPress={() => fetchAll(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={S.refreshBtnText}>↻</Text>
         </TouchableOpacity>
@@ -1359,7 +1353,7 @@ const S = {
   // ── compact top bar ──
   topBar:            { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', gap: 8 },
   topBarLeft:        { alignItems: 'flex-start' as const },
-  topBarTitle:       { fontSize: 16, fontWeight: '800' as const, color: '#0f172a' },
+  topBarTitle:       { fontSize: 15, fontWeight: '800' as const, color: '#0f172a', flexShrink: 0 },
   topBarCount:       { fontSize: 11, color: '#94a3b8', marginTop: 1 },
   searchWrap:        { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 10, height: 36, gap: 6 },
   searchIcon:        { fontSize: 13 },
