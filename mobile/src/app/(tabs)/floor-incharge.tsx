@@ -964,25 +964,42 @@ export default function FloorInchargeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Status tabs — single-line compact ── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        contentContainerStyle={S.tabsContainer}
-        style={S.tabsRow}>
-        {TAB_DEFS.map(tab => {
-          const cnt = tabCounts[tab.key]
-          const active = assignmentView === tab.key
-          return (
-            <TouchableOpacity key={tab.key} disabled={cnt === 0}
-              style={[S.tabPill, { backgroundColor: active ? tab.color : '#fff', borderColor: active ? tab.color : '#e2e8f0' }, cnt === 0 && { opacity: 0.35 }]}
-              onPress={() => setAssignmentView(tab.key as AssignmentView)}>
-              <Text style={[S.tabPillText, { color: active ? '#fff' : tab.color }]}>
-                <Text style={{ fontWeight: '800' }}>{cnt}</Text>
-                {'  '}{tab.label}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+      {/* ── Status tabs — Row 1: Unassigned + Hold (prominent), Row 2: rest ── */}
+      <View style={S.tabsGrid}>
+        {/* Row 1 — Action tabs */}
+        <View style={S.tabsRow1}>
+          {(['unassigned', 'hold'] as const).map(key => {
+            const tab = TAB_DEFS.find(t => t.key === key)!
+            const cnt = tabCounts[key]
+            const active = assignmentView === key
+            return (
+              <TouchableOpacity key={key}
+                style={[S.tabBig, { borderColor: tab.color, backgroundColor: active ? tab.color : tab.bg }]}
+                onPress={() => setAssignmentView(key as AssignmentView)}>
+                <Text style={[S.tabBigCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+                <Text style={[S.tabBigLabel, { color: active ? '#fff' : tab.color }]}>{tab.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+        {/* Row 2 — Status tabs */}
+        <View style={S.tabsRow2}>
+          {(['all', 'assigned', 'work_inprocess', 'completed'] as const).map(key => {
+            const tab = TAB_DEFS.find(t => t.key === key)!
+            const cnt = tabCounts[key]
+            const active = assignmentView === key
+            return (
+              <TouchableOpacity key={key}
+                style={[S.tabSmall, { borderColor: active ? tab.color : '#e2e8f0', backgroundColor: active ? tab.color : '#fff' }]}
+                onPress={() => setAssignmentView(key as AssignmentView)}>
+                <Text style={[S.tabSmallText, { color: active ? '#fff' : tab.color }]}>
+                  {tab.label} ({cnt})
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+      </View>
 
       {/* ── Dropdown filter bar — 3 dropdowns in one row ── */}
       <View style={S.dropdownBar}>
@@ -1347,6 +1364,14 @@ const S = {
   refreshBtnText:    { fontSize: 17, color: '#2563eb' },
 
   // ── status tabs (single line) ──
+  tabsGrid:          { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, gap: 6, borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  tabsRow1:          { flexDirection: 'row' as const, gap: 8 },
+  tabsRow2:          { flexDirection: 'row' as const, gap: 6 },
+  tabBig:            { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' as const, borderWidth: 2 },
+  tabBigCount:       { fontSize: 22, fontWeight: '800' as const, lineHeight: 26 },
+  tabBigLabel:       { fontSize: 12, fontWeight: '700' as const, marginTop: 1 },
+  tabSmall:          { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' as const, borderWidth: 1.5 },
+  tabSmallText:      { fontSize: 11, fontWeight: '600' as const },
   tabsRow:           { backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', maxHeight: 44 },
   tabsContainer:     { paddingHorizontal: 10, paddingVertical: 8, gap: 6, alignItems: 'center' as const },
   tabPill:           { borderRadius: 20, paddingHorizontal: 11, paddingVertical: 5, borderWidth: 1.5 },
