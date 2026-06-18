@@ -328,7 +328,7 @@ export default function FloorInchargeScreen() {
   const [branchFilter,     setBranchFilter]     = useState('all')
   const [fuelTypeFilter,   setFuelTypeFilter]   = useState('all')
   const [technicianFilter, setTechnicianFilter] = useState('all')
-  const [assignmentView,   setAssignmentView]   = useState<AssignmentView>('all')
+  const [assignmentView,   setAssignmentView]   = useState<AssignmentView>('unassigned')
 
   // Expanded card (replaces table row on mobile)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -723,56 +723,64 @@ export default function FloorInchargeScreen() {
       normalizeStageValue(draft.remark)       !== normalizeStageValue(a?.remark)
     )
 
+    // Portal badge color
+    const portalEV = portal === 'EV'
+    const assignBtnVisible = !a  // Unassigned — show quick assign CTA
+
     return (
-      <View style={S.card}>
+      <View style={[S.card, !a && S.cardUnassigned]}>
 
-        {/* ── Card header — always visible, large touch target ── */}
-        <TouchableOpacity style={S.cardHeader} onPress={() => setExpandedId(isExpanded ? null : key)} activeOpacity={0.75}>
+        {/* ── Collapsed row ── */}
+        <TouchableOpacity style={S.cardRow} onPress={() => setExpandedId(isExpanded ? null : key)} activeOpacity={0.78}>
 
-          {/* Left: status stripe */}
+          {/* Status stripe */}
           <View style={[S.statusStripe, { backgroundColor: a ? sc.text : '#ef4444' }]} />
 
-          {/* Center: info */}
-          <View style={{ flex: 1, paddingLeft: 12 }}>
+          {/* Main info */}
+          <View style={{ flex: 1, paddingHorizontal: 11, paddingVertical: 10 }}>
 
-            {/* Row 1: JC + reg + status badge */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 5 }}>
-              <Text style={S.jcNumber}>{jc.jc_number || key}</Text>
-              <View style={S.regPill}>
-                <Text style={S.regPillText}>{jc.reg_number || '—'}</Text>
+            {/* Line 1: reg + portal badge + status */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <Text style={S.regText}>{jc.reg_number || '—'}</Text>
+              <View style={[S.portalBadge, { backgroundColor: portalEV ? '#f0fdf4' : '#eff6ff', borderColor: portalEV ? '#16a34a66' : '#2563eb66' }]}>
+                <Text style={[S.portalBadgeText, { color: portalEV ? '#16a34a' : '#2563eb' }]}>{portal}</Text>
               </View>
-              <View style={[S.statusPill, { backgroundColor: a ? sc.bg : '#fef2f2', borderColor: a ? sc.text + '99' : '#ef444499' }]}>
+              <View style={{ flex: 1 }} />
+              <View style={[S.statusPill, { backgroundColor: a ? sc.bg : '#fef2f2', borderColor: a ? sc.text + 'aa' : '#ef4444aa' }]}>
                 <Text style={[S.statusPillText, { color: a ? sc.text : '#ef4444' }]}>
                   {a ? (STATUS_OPTIONS.find(o => o.value === statusKey)?.label ?? statusKey) : 'Unassigned'}
                 </Text>
               </View>
             </View>
 
-            {/* Row 2: model · service type */}
+            {/* Line 2: model + service type */}
             <Text style={S.cardModel} numberOfLines={1}>{jc.model || '—'}  ·  {jc.service_type || '—'}</Text>
 
-            {/* Row 3: portal badge + location */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-              {portal !== UNKNOWN_PORTAL && (
-                <View style={[S.portalBadge, { backgroundColor: portal === 'EV' ? '#f0fdf4' : '#eff6ff', borderColor: portal === 'EV' ? '#16a34a55' : '#2563eb55' }]}>
-                  <Text style={[S.portalBadgeText, { color: portal === 'EV' ? '#16a34a' : '#2563eb' }]}>{portal}</Text>
-                </View>
-              )}
-              <Text style={S.cardLoc} numberOfLines={1}>{loc}</Text>
-            </View>
-
-            {/* Row 4: assigned technician (if any) */}
-            {a?.technician_name && (
+            {/* Line 3: technician or assign prompt */}
+            {a?.technician_name ? (
               <View style={S.techRow}>
                 <Text style={S.techIcon}>🔧</Text>
                 <Text style={S.techName} numberOfLines={1}>{a.technician_name}</Text>
-                {draft.bay_no ? <Text style={S.bayTag}>{draft.bay_no}</Text> : null}
+                {draft.bay_no ? (
+                  <View style={S.bayTag}><Text style={S.bayTagText}>{draft.bay_no}</Text></View>
+                ) : null}
               </View>
+            ) : (
+              <Text style={S.unassignedHint}>Tap to assign technician</Text>
             )}
           </View>
 
-          {/* Right: expand arrow */}
-          <Text style={S.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+          {/* Right: assign button (unassigned) OR expand chevron */}
+          {assignBtnVisible ? (
+            <TouchableOpacity
+              style={S.assignCTA}
+              onPress={() => { setTechPickerCard(jc); setTechPickerSearch('') }}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+              <Text style={S.assignCTAText}>Assign</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={S.expandChevron}>{isExpanded ? '▲' : '▼'}</Text>
+          )}
         </TouchableOpacity>
 
         {/* ── Expanded body ── */}
@@ -938,30 +946,25 @@ export default function FloorInchargeScreen() {
         </View>
       )}
 
-      {/* ── Header ── */}
-      <View style={S.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={S.headerTitle}>🏭 Floor Incharge</Text>
-          <Text style={S.headerSub}>{filtered.length} of {jobCards.length} job cards</Text>
+      {/* ── Compact top bar: title + count + refresh + search ── */}
+      <View style={S.topBar}>
+        <View style={S.topBarLeft}>
+          <Text style={S.topBarTitle}>Floor Incharge</Text>
+          <Text style={S.topBarCount}>{filtered.length}/{jobCards.length}</Text>
+        </View>
+        <View style={S.searchWrap}>
+          <TextInput style={S.searchInput}
+            placeholder="Search JC / reg / model..."
+            placeholderTextColor="#94a3b8"
+            value={search} onChangeText={setSearch} clearButtonMode="while-editing"
+          />
         </View>
         <TouchableOpacity style={S.refreshBtn} onPress={() => fetchAll(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={S.refreshBtnText}>↻</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── Search bar ── */}
-      <View style={S.searchRow}>
-        <View style={S.searchWrap}>
-          <Text style={S.searchIcon}>🔍</Text>
-          <TextInput style={S.searchInput}
-            placeholder="JC / reg / model / SA / technician..."
-            placeholderTextColor="#94a3b8"
-            value={search} onChangeText={setSearch} clearButtonMode="while-editing"
-          />
-        </View>
-      </View>
-
-      {/* ── Status tabs ── */}
+      {/* ── Status tabs — single-line compact ── */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
         contentContainerStyle={S.tabsContainer}
         style={S.tabsRow}>
@@ -972,8 +975,10 @@ export default function FloorInchargeScreen() {
             <TouchableOpacity key={tab.key} disabled={cnt === 0}
               style={[S.tabPill, { backgroundColor: active ? tab.color : '#fff', borderColor: active ? tab.color : '#e2e8f0' }, cnt === 0 && { opacity: 0.35 }]}
               onPress={() => setAssignmentView(tab.key as AssignmentView)}>
-              <Text style={[S.tabPillCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
-              <Text style={[S.tabPillLabel, { color: active ? 'rgba(255,255,255,0.9)' : '#64748b' }]}>{tab.label}</Text>
+              <Text style={[S.tabPillText, { color: active ? '#fff' : tab.color }]}>
+                <Text style={{ fontWeight: '800' }}>{cnt}</Text>
+                {'  '}{tab.label}
+              </Text>
             </TouchableOpacity>
           )
         })}
@@ -1469,4 +1474,149 @@ const S = {
   emptyIcon:         { fontSize: 52, marginBottom: 16 },
   emptyTitle:        { fontSize: 17, fontWeight: '700' as const, color: '#1e293b' },
   emptySub:          { fontSize: 14, color: '#94a3b8', marginTop: 6, textAlign: 'center' as const, paddingHorizontal: 32 },
+}// ── Styles — compact mobile-first ────────────────────────────────────────────
+const S = {
+  root: { flex: 1, backgroundColor: '#f1f5f9' } as const,
+
+  // toast
+  toast:             { position: 'absolute' as const, top: 56, left: 12, right: 12, zIndex: 999, backgroundColor: '#166534', borderRadius: 12, padding: 12, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
+  toastError:        { backgroundColor: '#991b1b' } as const,
+  toastText:         { color: '#fff', fontWeight: '600' as const, fontSize: 14, flex: 1 },
+
+  // ── compact top bar ──
+  topBar:            { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', gap: 8 },
+  topBarLeft:        { alignItems: 'flex-start' as const, marginRight: 4 },
+  topBarTitle:       { fontSize: 14, fontWeight: '800' as const, color: '#0f172a' },
+  topBarCount:       { fontSize: 11, color: '#94a3b8', marginTop: 1 },
+  searchWrap:        { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 10, height: 36 },
+  searchInput:       { flex: 1, fontSize: 13, color: '#1e293b', paddingVertical: 0 },
+  refreshBtn:        { width: 34, height: 34, borderRadius: 8, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
+  refreshBtnText:    { fontSize: 18, color: '#2563eb' },
+
+  // ── status tabs ──
+  tabsRow:           { backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', maxHeight: 44 },
+  tabsContainer:     { paddingHorizontal: 10, paddingVertical: 8, gap: 6, alignItems: 'center' as const },
+  tabPill:           { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1.5 },
+  tabPillText:       { fontSize: 12, fontWeight: '600' as const },
+
+  // ── dropdown filter bar ──
+  dropdownBar:       { flexDirection: 'row' as const, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  dropdownBtn:       { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 10, paddingVertical: 7, minHeight: 44 },
+  dropdownLabel:     { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.6, textTransform: 'uppercase' as const, marginBottom: 1 },
+  dropdownVal:       { fontSize: 12, fontWeight: '600' as const, color: '#1e293b' },
+  dropdownArrow:     { fontSize: 12, color: '#cbd5e1', marginLeft: 3 },
+  dropdownArrowActive:{ color: '#2563eb' } as const,
+  dropdownDot:       { position: 'absolute' as const, top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: '#2563eb' },
+  dropdownDivider:   { width: 1, backgroundColor: '#e2e8f0', marginVertical: 8 },
+
+  // ── filter modal (bottom sheet) ──
+  filterModalOverlay:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' as const },
+  filterModalSheet:  { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34 },
+  filterModalHandle: { width: 36, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center' as const, marginTop: 10, marginBottom: 2 },
+  filterModalHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  filterModalTitle:  { fontSize: 15, fontWeight: '700' as const, color: '#0f172a' },
+  filterModalClose:  { fontSize: 18, color: '#94a3b8', fontWeight: '600' as const },
+  filterOptRow:      { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderColor: '#f8fafc', minHeight: 52 },
+  filterOptRowActive:{ backgroundColor: '#eff6ff' } as const,
+  filterOptLabel:    { fontSize: 15, fontWeight: '600' as const, color: '#1e293b' },
+  filterOptSub:      { fontSize: 12, color: '#94a3b8', marginTop: 1 },
+  filterOptCheck:    { fontSize: 16, color: '#2563eb', fontWeight: '700' as const, marginLeft: 8 },
+
+  // ── cards ──
+  card:              { backgroundColor: '#fff', borderRadius: 12, marginBottom: 7, overflow: 'hidden' as const, shadowColor: '#0f172a', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
+  cardUnassigned:    { borderWidth: 1.5, borderColor: '#fee2e2' } as const,
+  cardRow:           { flexDirection: 'row' as const, alignItems: 'stretch' as const, minHeight: 68 },
+  statusStripe:      { width: 4 },
+
+  // card text
+  regText:           { fontSize: 14, fontWeight: '800' as const, color: '#0f172a', letterSpacing: 0.3 },
+  cardModel:         { fontSize: 12, color: '#475569', fontWeight: '500' as const },
+  portalBadge:       { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1 },
+  portalBadgeText:   { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.4 },
+  statusPill:        { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1 },
+  statusPillText:    { fontSize: 10, fontWeight: '700' as const },
+  techRow:           { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginTop: 4 },
+  techIcon:          { fontSize: 11 },
+  techName:          { fontSize: 12, color: '#1d4ed8', fontWeight: '600' as const, flex: 1 },
+  bayTag:            { backgroundColor: '#dbeafe', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+  bayTagText:        { fontSize: 11, color: '#1d4ed8', fontWeight: '700' as const },
+  unassignedHint:    { fontSize: 11, color: '#f87171', fontStyle: 'italic' as const, marginTop: 3 },
+
+  // assign CTA (right side of unassigned card)
+  assignCTA:         { backgroundColor: '#ef4444', justifyContent: 'center' as const, alignItems: 'center' as const, paddingHorizontal: 14, borderTopRightRadius: 12, borderBottomRightRadius: 12 },
+  assignCTAText:     { color: '#fff', fontSize: 12, fontWeight: '800' as const, letterSpacing: 0.3 },
+  expandChevron:     { paddingHorizontal: 12, fontSize: 12, color: '#cbd5e1', alignSelf: 'center' as const },
+
+  // ── expanded card body ──
+  cardBody:          { paddingHorizontal: 12, paddingBottom: 14, paddingTop: 10, borderTopWidth: 1, borderColor: '#f1f5f9' },
+  infoBlock:         { gap: 5 },
+  infoRow2Col:       { flexDirection: 'row' as const, gap: 6 },
+  divider:           { height: 1, backgroundColor: '#f1f5f9', marginVertical: 12 },
+  sectionTitle:      { fontSize: 12, fontWeight: '700' as const, color: '#475569', marginBottom: 8 },
+  fieldLabel:        { fontSize: 11, fontWeight: '600' as const, color: '#64748b', marginBottom: 5 },
+
+  // select button
+  selectBtn:         { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, flexDirection: 'row' as const, alignItems: 'center' as const, minHeight: 48 },
+  selectBtnVal:      { fontSize: 14, color: '#0f172a', fontWeight: '600' as const, flex: 1 },
+  selectBtnPlaceholder:{ fontSize: 13, color: '#94a3b8', flex: 1 },
+  selectBtnSub:      { fontSize: 11, color: '#64748b', marginTop: 1 },
+  selectBtnArrow:    { fontSize: 20, color: '#94a3b8' },
+
+  // status blocks
+  statusBlock:       { borderRadius: 8, paddingVertical: 9, alignItems: 'center' as const, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  statusBlockText:   { fontSize: 11, fontWeight: '500' as const, color: '#64748b' },
+
+  // timestamps
+  tsRow:             { flexDirection: 'row' as const, backgroundColor: '#f8fafc', borderRadius: 10, overflow: 'hidden' as const },
+  tsCell:            { flex: 1, padding: 10, alignItems: 'center' as const },
+  tsDivider:         { width: 1, backgroundColor: '#e2e8f0' },
+  tsLabel:           { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.8, marginBottom: 2 },
+  tsVal:             { fontSize: 12, fontWeight: '600' as const, color: '#334155', textAlign: 'center' as const },
+
+  remarkInput:       { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 10, fontSize: 13, color: '#1e293b', minHeight: 56, textAlignVertical: 'top' as const },
+
+  saveBtn:           { backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 13, alignItems: 'center' as const, marginTop: 12, shadowColor: '#2563eb', shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
+  saveBtnText:       { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
+
+  addSupportBtn:     { backgroundColor: '#eff6ff', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#bfdbfe' },
+  addSupportBtnText: { fontSize: 12, fontWeight: '700' as const, color: '#2563eb' },
+  supportPill:       { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, borderWidth: 1, borderColor: '#e2e8f0', gap: 7, marginBottom: 4 },
+  supportRoleTag:    { backgroundColor: '#dbeafe', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
+  supportRoleTagText:{ fontSize: 10, fontWeight: '800' as const, color: '#1d4ed8' },
+  supportPillName:   { fontSize: 13, color: '#334155', fontWeight: '500' as const, flex: 1 },
+  emptyHint:         { fontSize: 11, color: '#94a3b8', fontStyle: 'italic' as const, marginTop: 2, marginBottom: 4 },
+
+  // picker modals
+  pickerHeader:      { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  pickerTitle:       { fontSize: 16, fontWeight: '700' as const, color: '#0f172a', flex: 1 },
+  pickerSearch:      { backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, fontSize: 14, color: '#1e293b' },
+  pickerItem:        { paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#f1f5f9', minHeight: 50, justifyContent: 'center' as const },
+  pickerItemText:    { fontSize: 15, color: '#1e293b', fontWeight: '500' as const },
+  pickerItemSub:     { fontSize: 12, color: '#64748b', marginTop: 2 },
+  pickerEmpty:       { textAlign: 'center' as const, color: '#94a3b8', marginTop: 48, padding: 16 },
+
+  bayChip:           { flex: 1, margin: 4, backgroundColor: '#f1f5f9', borderRadius: 8, paddingVertical: 12, alignItems: 'center' as const, borderWidth: 1, borderColor: '#e2e8f0' },
+  bayChipActive:     { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
+  bayChipText:       { fontSize: 14, fontWeight: '700' as const, color: '#475569' },
+
+  supportMeta:       { backgroundColor: '#f8fafc', borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  supportMetaText:   { fontSize: 13, color: '#475569', fontWeight: '500' as const },
+  roleChip:          { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0' },
+  roleChipActive:    { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
+  roleChipText:      { fontSize: 13, color: '#64748b', fontWeight: '500' as const },
+  roleChipTextActive:{ color: '#2563eb', fontWeight: '700' as const } as const,
+  empRow:            { padding: 12, borderRadius: 8, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#fff', marginBottom: 5 },
+  empRowActive:      { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
+  empRowText:        { fontSize: 14, color: '#1e293b', fontWeight: '500' as const },
+  existingSupportRow:{ flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 9, borderBottomWidth: 1, borderColor: '#f1f5f9', gap: 8 },
+  removeBtn:         { backgroundColor: '#fef2f2', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 5 },
+  removeBtnText:     { fontSize: 12, fontWeight: '700' as const, color: '#dc2626' },
+
+  empty:             { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingTop: 80 },
+  emptyIcon:         { fontSize: 44, marginBottom: 12 },
+  emptyTitle:        { fontSize: 16, fontWeight: '700' as const, color: '#1e293b' },
+  emptySub:          { fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center' as const, paddingHorizontal: 32 },
+
+  // infoGrid (legacy keep)
+  infoGrid:          { gap: 0 },
 }
