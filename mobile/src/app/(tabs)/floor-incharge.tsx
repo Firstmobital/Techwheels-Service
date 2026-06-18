@@ -737,31 +737,33 @@ export default function FloorInchargeScreen() {
           <View style={[S.statusStripe, { backgroundColor: a ? sc.text : '#ef4444' }]} />
 
           {/* Main info */}
-          <View style={{ flex: 1, paddingHorizontal: 11, paddingVertical: 10 }}>
+          <View style={S.cardInfo}>
 
-            {/* Line 1: reg + portal badge + status */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-              <Text style={S.regText}>{jc.reg_number || '—'}</Text>
+            {/* Line 1: reg + portal badge */}
+            <View style={S.cardLine1}>
+              <Text style={S.regText} numberOfLines={1}>{jc.reg_number || '—'}</Text>
               <View style={[S.portalBadge, { backgroundColor: portalEV ? '#f0fdf4' : '#eff6ff', borderColor: portalEV ? '#16a34a66' : '#2563eb66' }]}>
                 <Text style={[S.portalBadgeText, { color: portalEV ? '#16a34a' : '#2563eb' }]}>{portal}</Text>
               </View>
-              <View style={{ flex: 1 }} />
+            </View>
+
+            {/* Line 2: model · service type */}
+            <Text style={S.cardModel} numberOfLines={1}>{jc.model || '—'}  ·  {jc.service_type || '—'}</Text>
+
+            {/* Line 3: status pill */}
+            <View style={S.cardLine3}>
               <View style={[S.statusPill, { backgroundColor: a ? sc.bg : '#fef2f2', borderColor: a ? sc.text + 'aa' : '#ef4444aa' }]}>
                 <Text style={[S.statusPillText, { color: a ? sc.text : '#ef4444' }]}>
                   {a ? (STATUS_OPTIONS.find(o => o.value === statusKey)?.label ?? statusKey) : 'Unassigned'}
                 </Text>
               </View>
+              {/* Created timestamp — only for unassigned */}
+              {!a && jc.created_at ? (
+                <Text style={S.cardCreatedAt}>🕐 {formatDate(jc.created_at)}</Text>
+              ) : null}
             </View>
 
-            {/* Line 2: model + service type */}
-            <Text style={S.cardModel} numberOfLines={1}>{jc.model || '—'}  ·  {jc.service_type || '—'}</Text>
-
-            {/* Line 2b: created timestamp — only for unassigned */}
-            {!a && jc.created_at ? (
-              <Text style={S.cardCreatedAt}>🕐 {formatDate(jc.created_at)}</Text>
-            ) : null}
-
-            {/* Line 3: technician or assign prompt */}
+            {/* Line 4: technician or assign prompt */}
             {a?.technician_name ? (
               <View style={S.techRow}>
                 <Text style={S.techIcon}>🔧</Text>
@@ -1360,10 +1362,10 @@ const S = {
   // ── status tabs (single line) ──
   tabsRow:           { backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' },
   tabsContainer:     { paddingHorizontal: 10, paddingVertical: 8, gap: 7, alignItems: 'center' as const },
-  tabPill:           { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1.5, gap: 5 },
-  tabPillCount:      { fontSize: 14, fontWeight: '800' as const },
-  tabPillLabel:      { fontSize: 12, fontWeight: '600' as const },
-  cardCreatedAt:     { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  tabPill:           { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1.5, gap: 4 },
+  tabPillCount:      { fontSize: 13, fontWeight: '800' as const },
+  tabPillLabel:      { fontSize: 11, fontWeight: '600' as const },
+  cardCreatedAt:     { fontSize: 11, color: '#94a3b8', flexShrink: 1 },
   tabsGrid:          { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, gap: 6, borderBottomWidth: 1, borderColor: '#e2e8f0' },
   tabsRow1:          { flexDirection: 'row' as const, gap: 8 },
   tabsRow2:          { flexDirection: 'row' as const, gap: 6 },
@@ -1398,15 +1400,18 @@ const S = {
   filterOptCheck:    { fontSize: 16, color: '#2563eb', fontWeight: '700' as const, marginLeft: 8 },
 
   // ── cards ──
-  card:              { backgroundColor: '#fff', borderRadius: 12, marginBottom: 7, overflow: 'hidden' as const, shadowColor: '#0f172a', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
+  card:              { backgroundColor: '#fff', borderRadius: 12, marginBottom: 7, overflow: 'hidden' as const, shadowColor: '#0f172a', shadowOpacity: 0.06, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   cardUnassigned:    { borderWidth: 1.5, borderColor: '#fee2e2' } as const,
-  cardRow:           { flexDirection: 'row' as const, alignItems: 'stretch' as const, minHeight: 68 },
-  statusStripe:      { width: 4 },
-  regText:           { fontSize: 14, fontWeight: '800' as const, color: '#0f172a', letterSpacing: 0.3 },
+  cardRow:           { flexDirection: 'row' as const, alignItems: 'stretch' as const, minHeight: 72 },
+  statusStripe:      { width: 5 },
+  cardInfo:          { flex: 1, paddingHorizontal: 10, paddingVertical: 9, justifyContent: 'center' as const },
+  cardLine1:         { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginBottom: 2 },
+  cardLine3:         { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginTop: 3, flexWrap: 'wrap' as const },
+  regText:           { fontSize: 15, fontWeight: '800' as const, color: '#0f172a', letterSpacing: 0.4, flexShrink: 1 },
   cardModel:         { fontSize: 12, color: '#475569', fontWeight: '500' as const },
-  portalBadge:       { borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1 },
+  portalBadge:       { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, flexShrink: 0 },
   portalBadgeText:   { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.4 },
-  statusPill:        { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1 },
+  statusPill:        { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, flexShrink: 0 },
   statusPillText:    { fontSize: 10, fontWeight: '700' as const },
   techRow:           { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginTop: 4 },
   techIcon:          { fontSize: 11 },
