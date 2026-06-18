@@ -756,6 +756,11 @@ export default function FloorInchargeScreen() {
             {/* Line 2: model + service type */}
             <Text style={S.cardModel} numberOfLines={1}>{jc.model || '—'}  ·  {jc.service_type || '—'}</Text>
 
+            {/* Line 2b: created timestamp — only for unassigned */}
+            {!a && jc.created_at ? (
+              <Text style={S.cardCreatedAt}>🕐 {formatDate(jc.created_at)}</Text>
+            ) : null}
+
             {/* Line 3: technician or assign prompt */}
             {a?.technician_name ? (
               <View style={S.techRow}>
@@ -964,42 +969,31 @@ export default function FloorInchargeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Status tabs — Row 1: Unassigned + Hold (prominent), Row 2: rest ── */}
-      <View style={S.tabsGrid}>
-        {/* Row 1 — Action tabs */}
-        <View style={S.tabsRow1}>
-          {(['unassigned', 'hold'] as const).map(key => {
-            const tab = TAB_DEFS.find(t => t.key === key)!
-            const cnt = tabCounts[key]
-            const active = assignmentView === key
-            return (
-              <TouchableOpacity key={key}
-                style={[S.tabBig, { borderColor: tab.color, backgroundColor: active ? tab.color : tab.bg }]}
-                onPress={() => setAssignmentView(key as AssignmentView)}>
-                <Text style={[S.tabBigCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
-                <Text style={[S.tabBigLabel, { color: active ? '#fff' : tab.color }]}>{tab.label}</Text>
-              </TouchableOpacity>
-            )
-          })}
-        </View>
-        {/* Row 2 — Status tabs */}
-        <View style={S.tabsRow2}>
-          {(['all', 'assigned', 'work_inprocess', 'completed'] as const).map(key => {
-            const tab = TAB_DEFS.find(t => t.key === key)!
-            const cnt = tabCounts[key]
-            const active = assignmentView === key
-            return (
-              <TouchableOpacity key={key}
-                style={[S.tabSmall, { borderColor: active ? tab.color : '#e2e8f0', backgroundColor: active ? tab.color : '#fff' }]}
-                onPress={() => setAssignmentView(key as AssignmentView)}>
-                <Text style={[S.tabSmallText, { color: active ? '#fff' : tab.color }]}>
-                  {tab.label} ({cnt})
-                </Text>
-              </TouchableOpacity>
-            )
-          })}
-        </View>
-      </View>
+      {/* ── Status tabs — single horizontal scroll: All · Unassigned · Assigned · Hold · In-Process · Completed ── */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={S.tabsContainer}
+        style={S.tabsRow}>
+        {(['all', 'unassigned', 'assigned', 'hold', 'work_inprocess', 'completed'] as const).map(key => {
+          const tab = TAB_DEFS.find(t => t.key === key)!
+          const cnt = tabCounts[key]
+          const active = assignmentView === key
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[
+                S.tabPill,
+                { borderColor: active ? tab.color : '#e2e8f0',
+                  backgroundColor: active ? tab.color : '#fff' },
+              ]}
+              onPress={() => setAssignmentView(key as AssignmentView)}>
+              <Text style={[S.tabPillCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+              <Text style={[S.tabPillLabel, { color: active ? '#fff' : '#64748b' }]}>{tab.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
 
       {/* ── Dropdown filter bar — 3 dropdowns in one row ── */}
       <View style={S.dropdownBar}>
@@ -1364,6 +1358,12 @@ const S = {
   refreshBtnText:    { fontSize: 17, color: '#2563eb' },
 
   // ── status tabs (single line) ──
+  tabsRow:           { backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  tabsContainer:     { paddingHorizontal: 10, paddingVertical: 8, gap: 7, alignItems: 'center' as const },
+  tabPill:           { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1.5, gap: 5 },
+  tabPillCount:      { fontSize: 14, fontWeight: '800' as const },
+  tabPillLabel:      { fontSize: 12, fontWeight: '600' as const },
+  cardCreatedAt:     { fontSize: 11, color: '#94a3b8', marginTop: 2 },
   tabsGrid:          { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, gap: 6, borderBottomWidth: 1, borderColor: '#e2e8f0' },
   tabsRow1:          { flexDirection: 'row' as const, gap: 8 },
   tabsRow2:          { flexDirection: 'row' as const, gap: 6 },
@@ -1372,9 +1372,6 @@ const S = {
   tabBigLabel:       { fontSize: 12, fontWeight: '700' as const, marginTop: 1 },
   tabSmall:          { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center' as const, borderWidth: 1.5 },
   tabSmallText:      { fontSize: 11, fontWeight: '600' as const },
-  tabsRow:           { backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', maxHeight: 44 },
-  tabsContainer:     { paddingHorizontal: 10, paddingVertical: 8, gap: 6, alignItems: 'center' as const },
-  tabPill:           { borderRadius: 20, paddingHorizontal: 11, paddingVertical: 5, borderWidth: 1.5 },
   tabPillText:       { fontSize: 12, fontWeight: '600' as const },
 
   // ── dropdown filter bar ──
