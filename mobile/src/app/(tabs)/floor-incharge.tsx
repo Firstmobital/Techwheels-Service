@@ -332,6 +332,7 @@ export default function FloorInchargeScreen() {
 
   // Expanded card (replaces table row on mobile)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [filterModal, setFilterModal] = useState<'loc' | 'portal' | 'tech' | null>(null)
 
   // Technician picker modal
   const [techPickerCard,   setTechPickerCard]   = useState<JobCard | null>(null)
@@ -960,7 +961,7 @@ export default function FloorInchargeScreen() {
         </View>
       </View>
 
-      {/* ── Status tabs — primary filter, full width ── */}
+      {/* ── Status tabs ── */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
         contentContainerStyle={S.tabsContainer}
         style={S.tabsRow}>
@@ -978,55 +979,133 @@ export default function FloorInchargeScreen() {
         })}
       </ScrollView>
 
-      {/* ── Secondary filters row ── */}
-      <View style={S.filtersBar}>
-        {/* Location */}
-        {branches.length > 1 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={S.filterLabel}>Loc</Text>
-              {['all', ...branches].map(b => (
-                <TouchableOpacity key={b} style={[S.filterChip, branchFilter === b && S.filterChipActive]} onPress={() => setBranchFilter(b)}>
-                  <Text style={[S.filterChipText, branchFilter === b && S.filterChipTextActive]}>
-                    {b === 'all' ? 'All' : b.split(' ')[0]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        )}
-
-        {/* Portal */}
-        {fuelTypeOptions.length > 0 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={S.filterLabel}>Portal</Text>
-            {['all', ...fuelTypeOptions].map(ft => (
-              <TouchableOpacity key={ft} style={[S.filterChip, fuelTypeFilter === ft && S.filterChipActive]} onPress={() => setFuelTypeFilter(ft)}>
-                <Text style={[S.filterChipText, fuelTypeFilter === ft && S.filterChipTextActive]}>
-                  {ft === 'all' ? 'All' : ft}
-                </Text>
-              </TouchableOpacity>
-            ))}
+      {/* ── Dropdown filter bar — 3 dropdowns in one row ── */}
+      <View style={S.dropdownBar}>
+        {/* Location dropdown */}
+        <TouchableOpacity style={S.dropdownBtn} onPress={() => setFilterModal('loc')} activeOpacity={0.75}>
+          <View style={{ flex: 1 }}>
+            <Text style={S.dropdownLabel}>Location</Text>
+            <Text style={S.dropdownVal} numberOfLines={1}>
+              {branchFilter === 'all' ? `All (${searchScopedRows.length})` : branchFilter}
+            </Text>
           </View>
-        )}
+          <Text style={[S.dropdownArrow, branchFilter !== 'all' && S.dropdownArrowActive]}>▾</Text>
+          {branchFilter !== 'all' && <View style={S.dropdownDot} />}
+        </TouchableOpacity>
 
-        {/* Technician */}
-        {technicianOptions.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={S.filterLabel}>Tech</Text>
-              <TouchableOpacity style={[S.filterChip, technicianFilter === 'all' && S.filterChipActive]} onPress={() => setTechnicianFilter('all')}>
-                <Text style={[S.filterChipText, technicianFilter === 'all' && S.filterChipTextActive]}>All</Text>
-              </TouchableOpacity>
-              {technicianOptions.map(opt => (
-                <TouchableOpacity key={opt.value} style={[S.filterChip, technicianFilter === opt.value && S.filterChipActive]} onPress={() => setTechnicianFilter(opt.value)}>
-                  <Text style={[S.filterChipText, technicianFilter === opt.value && S.filterChipTextActive]} numberOfLines={1}>{opt.label.split(' ')[0]}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        )}
+        <View style={S.dropdownDivider} />
+
+        {/* Portal dropdown */}
+        <TouchableOpacity style={S.dropdownBtn} onPress={() => setFilterModal('portal')} activeOpacity={0.75}>
+          <View style={{ flex: 1 }}>
+            <Text style={S.dropdownLabel}>Portal</Text>
+            <Text style={[S.dropdownVal, fuelTypeFilter !== 'all' && { color: '#2563eb', fontWeight: '700' }]} numberOfLines={1}>
+              {fuelTypeFilter === 'all' ? 'All' : fuelTypeFilter}
+            </Text>
+          </View>
+          <Text style={[S.dropdownArrow, fuelTypeFilter !== 'all' && S.dropdownArrowActive]}>▾</Text>
+          {fuelTypeFilter !== 'all' && <View style={S.dropdownDot} />}
+        </TouchableOpacity>
+
+        <View style={S.dropdownDivider} />
+
+        {/* Technician dropdown */}
+        <TouchableOpacity style={S.dropdownBtn} onPress={() => setFilterModal('tech')} activeOpacity={0.75}>
+          <View style={{ flex: 1 }}>
+            <Text style={S.dropdownLabel}>Technician</Text>
+            <Text style={[S.dropdownVal, technicianFilter !== 'all' && { color: '#2563eb', fontWeight: '700' }]} numberOfLines={1}>
+              {technicianFilter === 'all'
+                ? 'All'
+                : technicianOptions.find(o => o.value === technicianFilter)?.label.split(' (')[0] ?? 'All'}
+            </Text>
+          </View>
+          <Text style={[S.dropdownArrow, technicianFilter !== 'all' && S.dropdownArrowActive]}>▾</Text>
+          {technicianFilter !== 'all' && <View style={S.dropdownDot} />}
+        </TouchableOpacity>
       </View>
+
+      {/* ── Filter dropdown modals ── */}
+      <Modal visible={filterModal !== null} animationType="slide" transparent presentationStyle="overFullScreen">
+        <TouchableOpacity style={S.filterModalOverlay} activeOpacity={1} onPress={() => setFilterModal(null)}>
+          <View style={S.filterModalSheet}>
+            {/* Handle */}
+            <View style={S.filterModalHandle} />
+
+            {/* Title */}
+            <View style={S.filterModalHeader}>
+              <Text style={S.filterModalTitle}>
+                {filterModal === 'loc' ? '📍 Location' : filterModal === 'portal' ? '⛽ Portal' : '🔧 Technician'}
+              </Text>
+              <TouchableOpacity onPress={() => setFilterModal(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Text style={S.filterModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Options */}
+            <ScrollView style={{ maxHeight: 380 }} bounces={false}>
+              {filterModal === 'loc' && (
+                <>
+                  <FilterOption
+                    label={`All Locations`}
+                    subLabel={`${searchScopedRows.length} job cards`}
+                    active={branchFilter === 'all'}
+                    onPress={() => { setBranchFilter('all'); setFilterModal(null) }}
+                  />
+                  {branches.map(b => (
+                    <FilterOption key={b}
+                      label={b}
+                      subLabel={`${searchScopedRows.filter(jc => getLocationLabel(jc.location ?? jc.branch) === b).length} job cards`}
+                      active={branchFilter === b}
+                      onPress={() => { setBranchFilter(b); setFilterModal(null) }}
+                    />
+                  ))}
+                </>
+              )}
+
+              {filterModal === 'portal' && (
+                <>
+                  <FilterOption
+                    label="All Portals"
+                    subLabel={`${statusScopedBranchRows.length} job cards`}
+                    active={fuelTypeFilter === 'all'}
+                    onPress={() => { setFuelTypeFilter('all'); setFilterModal(null) }}
+                  />
+                  {fuelTypeOptions.map(ft => (
+                    <FilterOption key={ft}
+                      label={ft}
+                      subLabel={`${statusScopedBranchRows.filter(jc => getPortalLabel(jc.portal ?? jc.fuel_type) === ft).length} job cards`}
+                      active={fuelTypeFilter === ft}
+                      onPress={() => { setFuelTypeFilter(ft); setFilterModal(null) }}
+                    />
+                  ))}
+                </>
+              )}
+
+              {filterModal === 'tech' && (
+                <>
+                  <FilterOption
+                    label="All Technicians"
+                    subLabel={`${statusScopedFuelRows.length} job cards`}
+                    active={technicianFilter === 'all'}
+                    onPress={() => { setTechnicianFilter('all'); setFilterModal(null) }}
+                  />
+                  {technicianOptions.map(opt => {
+                    const cnt = statusScopedFuelRows.filter(jc => getTechnicianFilterKey(assignments[jc.assignment_key]) === opt.value).length
+                    return (
+                      <FilterOption key={opt.value}
+                        label={opt.label}
+                        subLabel={`${cnt} job cards`}
+                        active={technicianFilter === opt.value}
+                        onPress={() => { setTechnicianFilter(opt.value); setFilterModal(null) }}
+                      />
+                    )
+                  })}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* List */}
       {loading ? (
@@ -1213,6 +1292,18 @@ export default function FloorInchargeScreen() {
 }
 
 // ── Helper components ─────────────────────────────────────────────────────────
+function FilterOption({ label, subLabel, active, onPress }: { label: string; subLabel: string; active: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={[S.filterOptRow, active && S.filterOptRowActive]} onPress={onPress} activeOpacity={0.7}>
+      <View style={{ flex: 1 }}>
+        <Text style={[S.filterOptLabel, active && { color: '#2563eb' }]}>{label}</Text>
+        <Text style={S.filterOptSub}>{subLabel}</Text>
+      </View>
+      {active && <Text style={S.filterOptCheck}>✓</Text>}
+    </TouchableOpacity>
+  )
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flexDirection: 'row', marginBottom: 5 }}>
@@ -1260,13 +1351,31 @@ const S = {
   tabPillCount:      { fontSize: 16, fontWeight: '800' as const, lineHeight: 20 },
   tabPillLabel:      { fontSize: 10, fontWeight: '600' as const, marginTop: 1 },
 
-  // secondary filters
-  filtersBar:        { backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderColor: '#e2e8f0', gap: 6 },
+  // dropdown filter bar
+  dropdownBar:       { flexDirection: 'row' as const, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+  dropdownBtn:       { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 12, paddingVertical: 10, minHeight: 52 },
+  dropdownLabel:     { fontSize: 10, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase' as const, marginBottom: 2 },
+  dropdownVal:       { fontSize: 13, fontWeight: '600' as const, color: '#1e293b' },
+  dropdownArrow:     { fontSize: 14, color: '#cbd5e1', marginLeft: 4 },
+  dropdownArrowActive:{ color: '#2563eb' } as const,
+  dropdownDot:       { position: 'absolute' as const, top: 8, right: 8, width: 6, height: 6, borderRadius: 3, backgroundColor: '#2563eb' },
+  dropdownDivider:   { width: 1, backgroundColor: '#e2e8f0', marginVertical: 8 },
+
+  // filter modal
+  filterModalOverlay:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' as const },
+  filterModalSheet:  { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 },
+  filterModalHandle: { width: 36, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center' as const, marginTop: 10, marginBottom: 4 },
+  filterModalHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  filterModalTitle:  { fontSize: 16, fontWeight: '700' as const, color: '#0f172a' },
+  filterModalClose:  { fontSize: 18, color: '#94a3b8', fontWeight: '600' as const },
+  filterOptRow:      { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderColor: '#f8fafc', minHeight: 56 },
+  filterOptRowActive:{ backgroundColor: '#eff6ff' } as const,
+  filterOptLabel:    { fontSize: 15, fontWeight: '600' as const, color: '#1e293b' },
+  filterOptSub:      { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+  filterOptCheck:    { fontSize: 16, color: '#2563eb', fontWeight: '700' as const, marginLeft: 8 },
+
+  // legacy (keep for portal badge + other uses)
   filterLabel:       { fontSize: 11, fontWeight: '700' as const, color: '#94a3b8', minWidth: 28 },
-  filterChip:        { borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
-  filterChipActive:  { backgroundColor: '#2563eb', borderColor: '#2563eb' } as const,
-  filterChipText:    { fontSize: 12, fontWeight: '600' as const, color: '#475569' },
-  filterChipTextActive:{ color: '#fff' } as const,
 
   // cards
   card:              { backgroundColor: '#fff', borderRadius: 16, marginBottom: 10, overflow: 'hidden' as const, shadowColor: '#0f172a', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
