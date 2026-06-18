@@ -29,8 +29,10 @@ import {
   type EmailAttachmentRef,
 } from '../../../lib/api/email'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Icon } from '../../../components/ui/Icon'
+import { Icon, PrimaryButton, StatusPill } from '../../../components/ui'
+import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
+import { WorkflowProgress } from '../../../components/autodoc/WorkflowProgress'
+import { WorkflowTabs, type WorkflowTabKey } from '../../../components/autodoc/WorkflowTabs'
 
 type Params = {
   id?: string | string[]
@@ -45,6 +47,17 @@ type BusyAction =
   | 'post-ppt'
   | 'submit-claim'
   | null
+
+type StatusPillValue = 'draft' | 'submitted' | 'approved' | 'in_work' | 'completed'
+
+function toPillStatus(value: string | null | undefined): StatusPillValue {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (normalized === 'submitted') return 'submitted'
+  if (normalized === 'approved') return 'approved'
+  if (normalized === 'in_work') return 'in_work'
+  if (normalized === 'completed') return 'completed'
+  return 'draft'
+}
 
 function storageFileName(path: string, fallback: string): string {
   const last = path.split('/').pop()?.trim()
@@ -63,7 +76,6 @@ function buildAttachment(doc: DocumentRow, fallbackName: string): EmailAttachmen
 
 export default function SubmitStageScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
@@ -235,12 +247,27 @@ export default function SubmitStageScreen() {
 
   const stageLabels = ['Intake', 'Document', 'Estimate', 'Pre-Submit', 'Submit']
 
-  const statusPill = useMemo(() => {
-    const status = String(jobCard?.status ?? '').trim().toLowerCase()
-    if (status === 'completed') return { text: 'Completed', bg: '#e4f4ec', border: '#bfe6d2', dot: '#1c8f63', textColor: '#1c8f63' }
-    if (status === 'submitted') return { text: 'Submitted', bg: '#e4f4ec', border: '#bfe6d2', dot: '#1c8f63', textColor: '#1c8f63' }
-    return { text: 'Awaiting Approval', bg: '#fbefdd', border: '#e3ceb0', dot: '#c9751b', textColor: '#c9751b' }
-  }, [jobCard?.status])
+  const onWorkflowTabPress = (tab: WorkflowTabKey) => {
+    if (!jobCardId) return
+    const params = {
+      id: jobCardId,
+      jcNumber: jobCardNumberHint ?? '',
+      regNumber: regNumberHint ?? '',
+    }
+
+    if (tab === 'jobcard') {
+      router.push({ pathname: '/job-cards/[id]/jobcard', params })
+      return
+    }
+    if (tab === 'damage') {
+      router.push({ pathname: '/job-cards/[id]/damage', params })
+      return
+    }
+    if (tab === 'estimate') {
+      router.push({ pathname: '/job-cards/[id]/estimate', params })
+      return
+    }
+  }
 
   const handleGeneratePpt = async (type: 'pre-repair' | 'post-repair') => {
     if (!jobCardId) return
@@ -441,138 +468,54 @@ export default function SubmitStageScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView className="flex-1" style={{ backgroundColor: '#f6f4ee' }} contentContainerStyle={{ paddingBottom: 32 }}>
-        <SafeAreaView
-          edges={['top']}
-          style={{
-            backgroundColor: '#ffffff',
-            borderBottomWidth: 1,
-            borderBottomColor: '#e7e3d9',
-            paddingHorizontal: 16,
-            paddingTop: Math.max(insets.top > 0 ? 8 : 18, 8),
-            paddingBottom: 12,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <TouchableOpacity
-                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
-                onPress={() => router.push('/(tabs)/autodoc')}
-              >
-                <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
-              </TouchableOpacity>
-              <View style={{ minWidth: 0, flex: 1 }}>
-                <Text style={{ fontSize: 11, color: '#8b90a0', fontWeight: '700', letterSpacing: 0.12, textTransform: 'uppercase' }}>
-                  {jobCardNumberHint || 'Job Card'}
-                </Text>
-                <Text style={{ fontSize: 20, color: '#1a1b21', fontWeight: '700' }}>Submit Claim</Text>
-              </View>
-            </View>
-            <View style={{ borderWidth: 1, borderColor: statusPill.border, backgroundColor: statusPill.bg, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: statusPill.dot, marginRight: 7 }} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: statusPill.textColor }}>{statusPill.text}</Text>
-            </View>
-          </View>
-        </SafeAreaView>
+      <ScrollView style={{ flex: 1, backgroundColor: '#f4f2ec' }} contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScreenHeader
+          title="Submit Claim"
+          eyebrow={jobCardNumberHint || 'Job Card'}
+          onBack={() => router.push('/(tabs)/autodoc')}
+          rightNode={<StatusPill status={toPillStatus(jobCard?.status)} />}
+        />
 
         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e7e3d9', backgroundColor: '#ffffff' }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/jobcard', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="file" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Job Card</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/damage', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="grid" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Damage</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: jobCardNumberHint ?? '', regNumber: regNumberHint ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="file-text" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Estimate</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, borderRadius: 14, backgroundColor: '#2a4cd0', borderWidth: 1, borderColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}>
-              <Icon name="send" size={18} color="#ffffff" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#ffffff' }}>Submit</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center' }}>
-            {stageLabels.map((label, idx) => {
-              const active = idx <= stageIndex
-              const current = idx === stageIndex
-
-              return (
-                <View key={label} style={{ flex: idx === stageLabels.length - 1 ? 0 : 1, flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={{ alignItems: 'center' }}>
-                    <View
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
-                        borderWidth: 2,
-                        borderColor: active ? '#1f9a6b' : '#cfc8b8',
-                        backgroundColor: current ? '#2a4cd0' : '#ffffff',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {active && !current ? <Icon name="check" size={12} color="#1f9a6b" strokeWidth={2.6} /> : <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: current ? '#ffffff' : '#cfc8b8' }} />}
-                    </View>
-                    <Text style={{ marginTop: 5, fontSize: 11, fontWeight: current ? '700' : '600', color: current ? '#2a4cd0' : active ? '#1f9a6b' : '#9a9ea9' }}>{label}</Text>
-                  </View>
-
-                  {idx < stageLabels.length - 1 ? (
-                    <View style={{ flex: 1, height: 2, marginHorizontal: 6, backgroundColor: idx < stageIndex ? '#1f9a6b' : '#e2ddcf' }} />
-                  ) : null}
-                </View>
-              )
-            })}
-          </View>
+          <WorkflowTabs activeTab="submit" onTabPress={onWorkflowTabPress} disabled={!jobCardId} />
+          <WorkflowProgress currentStep={stageIndex + 1} totalSteps={5} stageName={stageLabels[Math.min(stageIndex, stageLabels.length - 1)]} />
         </View>
 
         {loading ? (
-          <View className="items-center justify-center py-20 px-4">
-            <ActivityIndicator size="large" color="#2563eb" />
-            <Text className="text-sm text-gray-600 mt-3">Loading submit workflow...</Text>
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80, paddingHorizontal: 16 }}>
+            <ActivityIndicator size="large" color="#2a4cd0" />
+            <Text style={{ fontSize: 13, color: '#4b4e59', marginTop: 10 }}>Loading submit workflow...</Text>
           </View>
         ) : error ? (
-          <View className="bg-white border border-red-200 rounded-xl p-5 mx-4 mt-4">
-            <Text className="text-lg font-semibold text-red-700">Unable to load submit stage</Text>
-            <Text className="text-sm text-red-600 mt-1">{error}</Text>
-            <TouchableOpacity className="mt-4 bg-blue-600 rounded-lg py-3 items-center" onPress={loadSubmitData}>
-              <Text className="text-white font-semibold">Retry</Text>
-            </TouchableOpacity>
+          <View style={{ backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f3cdd4', borderRadius: 12, padding: 16, marginHorizontal: 16, marginTop: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#c33b53' }}>Unable to load submit stage</Text>
+            <Text style={{ fontSize: 13, color: '#c33b53', marginTop: 4 }}>{error}</Text>
+            <View style={{ marginTop: 12 }}>
+              <PrimaryButton title="Retry" onPress={loadSubmitData} />
+            </View>
           </View>
         ) : (
           <>
             {warning ? (
-              <View className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3 mx-4 mt-4">
-                <Text className="text-sm text-amber-800">{warning}</Text>
+              <View style={{ backgroundColor: '#fbefdd', borderWidth: 1, borderColor: '#f1dcb8', borderRadius: 12, padding: 14, marginBottom: 12, marginHorizontal: 16, marginTop: 16 }}>
+                <Text style={{ fontSize: 13, color: '#c9751b' }}>{warning}</Text>
               </View>
             ) : null}
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3 mx-4 mt-4">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Submission Checklist</Text>
-                <Text className="text-xs font-bold text-slate-700">{checklistReadyCount}/{checklistItems.length}</Text>
+            <View style={{ backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 16, padding: 14, marginBottom: 12, marginHorizontal: 16, marginTop: 16 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={{ fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: '#82858f', fontWeight: '700' }}>Submission Checklist</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#4b4e59' }}>{checklistReadyCount}/{checklistItems.length}</Text>
               </View>
-              <View className="gap-y-2">
+              <View style={{ gap: 8 }}>
                 {checklistItems.map((item) => {
                   const tone = item.ok
-                    ? { bg: '#e4f4ec', border: '#d4ebdf', dot: '#1f9a6b', text: '#1f9a6b', icon: 'check' as const }
+                    ? { bg: '#e4f4ec', border: '#bfe6d2', dot: '#1c8f63', text: '#1c8f63', icon: 'check' as const }
                     : { bg: '#fbefdd', border: '#f1dcb8', dot: '#c9751b', text: '#c9751b', icon: 'x' as const }
 
                   return (
-                    <View key={item.label} className="flex-row items-center justify-between py-2">
-                      <View className="flex-row items-center" style={{ minWidth: 0, flex: 1, marginRight: 10 }}>
+                    <View key={item.label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 }}>
+                      <View style={{ minWidth: 0, flex: 1, marginRight: 10, flexDirection: 'row', alignItems: 'center' }}>
                         <View
                           style={{
                             width: 34,
@@ -588,23 +531,23 @@ export default function SubmitStageScreen() {
                         >
                           <Icon name={tone.icon} size={17} color={tone.dot} strokeWidth={2.4} />
                         </View>
-                        <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>{item.label}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>{item.label}</Text>
                       </View>
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: item.ok ? '#7d8090' : '#c9751b' }}>{item.val}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: item.ok ? '#7d8090' : '#c9751b' }}>{item.val}</Text>
                     </View>
                   )
                 })}
               </View>
             </View>
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3 mx-4">
-              <View className="flex-row items-center mb-1">
+            <View style={{ backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 16, padding: 14, marginBottom: 12, marginHorizontal: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                 <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#dbe7fb', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-                  <Text style={{ color: '#2f63cf', fontSize: 21, fontWeight: '700' }}>1</Text>
+                  <Text style={{ color: '#2f63cf', fontSize: 18, fontWeight: '700' }}>1</Text>
                 </View>
-                <Text style={{ fontSize: 26, fontWeight: '700', color: '#1a1b21' }}>Pre-submit</Text>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1b21' }}>Pre-submit</Text>
               </View>
-              <Text style={{ fontSize: 12, color: '#7d8090', marginTop: 3 }}>Generate documents and send the initial claim.</Text>
+              <Text style={{ fontSize: 13, color: '#82858f', marginTop: 3 }}>Generate documents and send the initial claim.</Text>
 
               <View style={{ marginTop: 12, gap: 10 }}>
                 <TouchableOpacity
@@ -623,12 +566,12 @@ export default function SubmitStageScreen() {
                   onPress={() => void handleGeneratePpt('pre-repair')}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#1f9a6b', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#1c8f63', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                       <Icon name="check" size={24} color="#ffffff" strokeWidth={2.5} />
                     </View>
-                    <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>Generate Pre-Repair PPT</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>Generate Pre-Repair PPT</Text>
                   </View>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1f9a6b' }}>{busy === 'pre-ppt' ? 'Working...' : (prePptDoc ? 'Uploaded' : 'Required')}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1c8f63' }}>{busy === 'pre-ppt' ? 'Working...' : (prePptDoc ? 'Uploaded' : 'Required')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -647,12 +590,12 @@ export default function SubmitStageScreen() {
                   onPress={() => void handleExportEstimate()}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#1f9a6b', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#1c8f63', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                       <Icon name="check" size={24} color="#ffffff" strokeWidth={2.5} />
                     </View>
-                    <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>Export Estimate Excel</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>Export Estimate Excel</Text>
                   </View>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1f9a6b' }}>{busy === 'excel' ? 'Working...' : (excelDoc ? 'Uploaded' : 'Required')}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1c8f63' }}>{busy === 'excel' ? 'Working...' : (excelDoc ? 'Uploaded' : 'Required')}</Text>
                 </TouchableOpacity>
 
                 {!preSubmitSubmitted ? (
@@ -671,7 +614,7 @@ export default function SubmitStageScreen() {
                     onPress={() => void handleComposeAndSend()}
                   >
                     <Icon name="send" size={17} color={composeReady ? '#ffffff' : '#b1b4bd'} strokeWidth={2.2} />
-                    <Text style={{ color: composeReady ? '#ffffff' : '#b1b4bd', fontSize: 16, fontWeight: '700' }}>
+                    <Text style={{ color: composeReady ? '#ffffff' : '#b1b4bd', fontSize: 15, fontWeight: '700' }}>
                       {busy === 'compose-send' ? 'Sending...' : 'Compose & send · set Submitted'}
                     </Text>
                   </TouchableOpacity>
@@ -705,7 +648,7 @@ export default function SubmitStageScreen() {
                     })
                   }}
                 >
-                  <Text style={{ color: preSubmitFollowUpMode === 'done' ? '#a5a9b2' : '#ffffff', fontSize: 16, fontWeight: '700' }}>
+                  <Text style={{ color: preSubmitFollowUpMode === 'done' ? '#a5a9b2' : '#ffffff', fontSize: 15, fontWeight: '700' }}>
                     {preSubmitFollowUpMode === 'under-repair'
                       ? 'Upload Under Repair Photos'
                       : preSubmitFollowUpMode === 'post-repair'
@@ -716,18 +659,18 @@ export default function SubmitStageScreen() {
               ) : null}
 
               {!composeReady ? (
-                <Text className="text-xs text-amber-700 mt-3 px-1">Upload Pre-Repair PPT, Estimate Excel, and Walkaround Video first.</Text>
+                <Text style={{ fontSize: 12, color: '#c9751b', marginTop: 12, paddingHorizontal: 4 }}>Upload Pre-Repair PPT, Estimate Excel, and Walkaround Video first.</Text>
               ) : null}
             </View>
 
-            <View className="bg-white border border-slate-200 rounded-2xl p-4 mb-3 mx-4">
-              <View className="flex-row items-center mb-1">
+            <View style={{ backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e7e3d9', borderRadius: 16, padding: 14, marginBottom: 12, marginHorizontal: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                 <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#eef0f7', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-                  <Text style={{ color: '#55618f', fontSize: 21, fontWeight: '700' }}>2</Text>
+                  <Text style={{ color: '#55618f', fontSize: 18, fontWeight: '700' }}>2</Text>
                 </View>
-                <Text style={{ fontSize: 26, fontWeight: '700', color: '#1a1b21' }}>Final submit</Text>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1b21' }}>Final submit</Text>
               </View>
-              <Text style={{ fontSize: 12, color: '#7d8090', marginTop: 3 }}>After repair, document the result and submit the claim.</Text>
+              <Text style={{ fontSize: 13, color: '#82858f', marginTop: 3 }}>After repair, document the result and submit the claim.</Text>
 
               <View style={{ marginTop: 12, gap: 10 }}>
                 <TouchableOpacity
@@ -750,7 +693,7 @@ export default function SubmitStageScreen() {
                     <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#f3f2ef', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                       <Icon name="file-image" size={21} color="#8b90a0" strokeWidth={2} />
                     </View>
-                    <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>
                       {busy === 'post-ppt' ? 'Generating Post-Repair PPT...' : 'Generate Post-Repair PPT'}
                     </Text>
                   </View>
@@ -771,14 +714,14 @@ export default function SubmitStageScreen() {
                   onPress={() => void handleSubmitClaim()}
                 >
                   <Icon name="check-circle" size={17} color={submitReady ? '#ffffff' : '#a5a9b2'} strokeWidth={2.2} />
-                  <Text style={{ color: submitReady ? '#ffffff' : '#a5a9b2', fontSize: 16, fontWeight: '700' }}>
+                  <Text style={{ color: submitReady ? '#ffffff' : '#a5a9b2', fontSize: 15, fontWeight: '700' }}>
                     {busy === 'submit-claim' ? 'Submitting...' : 'Submit claim · set Completed'}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               {!finalPhotoStagesReady ? (
-                <Text className="text-xs text-amber-700 mt-3 px-1">
+                <Text style={{ fontSize: 12, color: '#c9751b', marginTop: 12, paddingHorizontal: 4 }}>
                   {selectedPanelIds.length === 0
                     ? 'Select and upload panels in Damage stage before generating Post-Repair PPT.'
                     : `${missingUnderRepairPanelsCount} panel${missingUnderRepairPanelsCount === 1 ? '' : 's'} missing under-repair and ${missingPostRepairPanelsCount} panel${missingPostRepairPanelsCount === 1 ? '' : 's'} missing post-repair photos.`}

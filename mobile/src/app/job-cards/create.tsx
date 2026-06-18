@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -12,11 +11,11 @@ import {
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
 import { Stack, useRouter } from 'expo-router'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import DatePickerField from '../../components/common/DatePickerField'
 import ModelChipSelector from '../../components/common/ModelChipSelector'
 import NativeSelectField from '../../components/common/NativeSelectField'
-import { Icon } from '../../components/ui/Icon'
+import { ScreenHeader } from '../../components/autodoc/ScreenHeader'
+import { Icon, PrimaryButton, SecondaryButton } from '../../components/ui'
 import { uploadDocumentFile } from '../../lib/api/documents'
 import { createJobCard, updateJobCard, updateJobCardStatus, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
@@ -202,7 +201,6 @@ function isAuthExpiredError(message: string | null | undefined): boolean {
 
 export default function CreateJobCardScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
 
   const goToDashboard = () => {
     router.replace('/(tabs)/autodoc')
@@ -1067,39 +1065,8 @@ export default function CreateJobCardScreen() {
           headerShown: false,
         }}
       />
-      <ScrollView style={{ flex: 1, backgroundColor: '#f6f4ee' }} contentContainerStyle={{ paddingBottom: 24 }}>
-        <View
-          style={{
-            backgroundColor: '#ffffff',
-            borderBottomWidth: 1,
-            borderBottomColor: '#e7e3d9',
-            paddingTop: Math.max(insets.top + 8, 18),
-            paddingHorizontal: 20,
-            paddingBottom: 14,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            <Pressable
-              onPress={goToDashboard}
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 28,
-                borderWidth: 1,
-                borderColor: '#d8d2c6',
-                justifyContent: 'center',
-                alignItems: 'center',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              <Icon name="chevron-left" size={24} color="#4b4e59" strokeWidth={2} />
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#2a4cd0', textTransform: 'uppercase', marginBottom: 2 }}>Intake</Text>
-              <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1b21' }}>New Job Card</Text>
-            </View>
-          </View>
-        </View>
+      <ScrollView style={{ flex: 1, backgroundColor: '#f4f2ec' }} contentContainerStyle={{ paddingBottom: 24 }}>
+        <ScreenHeader title="New Job Card" eyebrow="Intake" onBack={goToDashboard} />
 
         <View style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e7e3d9' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -1222,7 +1189,7 @@ export default function CreateJobCardScreen() {
           </View>
 
           {vehicleLookupStatus === 'found' ? (
-            <Text style={{ fontSize: 12, color: '#1f9a6b', marginTop: 10, fontWeight: '600' }}>Vehicle found. Continue creating draft job card.</Text>
+            <Text style={{ fontSize: 12, color: '#1c8f63', marginTop: 10, fontWeight: '600' }}>Vehicle found. Continue creating draft job card.</Text>
           ) : null}
 
           {vehicleLookupStatus === 'not_found' ? (
@@ -1404,112 +1371,112 @@ export default function CreateJobCardScreen() {
 
         {showVehicleDetailsForm && draftJobCardId ? (
           <>
-            <TouchableOpacity
-              className={`rounded-lg py-4 items-center mt-4 ${saving ? 'bg-blue-300' : 'bg-blue-600'}`}
-              disabled={saving}
-              onPress={async () => {
-                if (!form.jcNumber.trim()) {
-                  Alert.alert('Missing Job Card Number', 'Enter final Job Card Number before continuing to damage stage.')
-                  return
-                }
-
-                if (!form.paintType.trim()) {
-                  Alert.alert('Missing Paint Type', 'Select paint type before continuing to damage stage.')
-                  return
-                }
-
-                if (!form.dateOfSale.trim()) {
-                  Alert.alert('Missing Date of Sale', 'Select Date of Sale to calculate car ageing before continuing.')
-                  return
-                }
-
-                if (!form.ownerName.trim()) {
-                  Alert.alert('Missing Owner Name', 'Enter owner name before continuing to damage stage.')
-                  return
-                }
-
-                if (!form.ownerPhone.trim()) {
-                  Alert.alert('Missing Owner Phone', 'Enter owner phone before continuing to damage stage.')
-                  return
-                }
-
-                if (!isValidOwnerPhone(form.ownerPhone)) {
-                  Alert.alert('Invalid Owner Phone', 'Owner phone must be exactly 10 digits.')
-                  return
-                }
-
-                setSaving(true)
-                try {
-                  const kmReading = form.kmReading.trim() ? Number(form.kmReading) : null
-
-                  const year = form.year.trim() ? Number(form.year) : null
-                  const vehicleRes = await upsertVehicle({
-                    regNumber: form.regNumber,
-                    vin: form.vin,
-                    model: form.model,
-                    year,
-                    colour: form.colour,
-                    paintType: form.paintType,
-                    dealerCity: form.dealerCity,
-                    bpCityCategory: form.bpCityCategory,
-                    ownerName: form.ownerName,
-                    ownerPhone: form.ownerPhone,
-                    dateOfSale: form.dateOfSale || null,
-                  })
-
-                  if (vehicleRes.error) {
-                    if (isAuthExpiredError(vehicleRes.error)) {
-                      Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
-                    } else {
-                      Alert.alert('Error', vehicleRes.error)
-                    }
-                    logEvent('create_job_card_next_failed', { error_message: vehicleRes.error, stage: 'vehicle_upsert', job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+            <View style={{ marginHorizontal: 20, marginTop: 14 }}>
+              <PrimaryButton
+                title={saving ? 'Saving...' : 'Next: Document Damage'}
+                disabled={saving}
+                onPress={async () => {
+                  if (!form.jcNumber.trim()) {
+                    Alert.alert('Missing Job Card Number', 'Enter final Job Card Number before continuing to damage stage.')
                     return
                   }
 
-                  const updateResult = await updateJobCard(draftJobCardId, {
-                    regNumber: form.regNumber,
-                    jcNumber: form.jcNumber,
-                    complaintDate: form.complaintDate,
-                    kmReading,
-                    claimType: form.claimType,
-                    complaintText: form.complaintText,
-                  })
-
-                  if (updateResult.error || !updateResult.data) {
-                    if (isAuthExpiredError(updateResult.error)) {
-                      Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
-                    } else {
-                      Alert.alert('Error', updateResult.error ?? 'Unable to update job card')
-                    }
-                    logEvent('create_job_card_next_failed', { error_message: updateResult.error ?? undefined, job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+                  if (!form.paintType.trim()) {
+                    Alert.alert('Missing Paint Type', 'Select paint type before continuing to damage stage.')
                     return
                   }
 
-                  const statusRes = await updateJobCardStatus(draftJobCardId, 'in_work')
-                  if (statusRes.error) {
-                    if (isAuthExpiredError(statusRes.error)) {
-                      Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
-                    } else {
-                      Alert.alert('Error', statusRes.error)
-                    }
-                    logEvent('create_job_card_next_failed', { error_message: statusRes.error, stage: 'status_update', job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+                  if (!form.dateOfSale.trim()) {
+                    Alert.alert('Missing Date of Sale', 'Select Date of Sale to calculate car ageing before continuing.')
                     return
                   }
 
-                  logEvent('create_job_card_next_success', { job_card_id: draftJobCardId }, 'autodoc-create')
-                  router.replace(`/job-cards/${draftJobCardId}/damage`)
-                } finally {
-                  setSaving(false)
-                }
-              }}
-            >
-              <Text className="text-white font-semibold">{saving ? 'Saving...' : 'Next: Document Damage'}</Text>
-            </TouchableOpacity>
+                  if (!form.ownerName.trim()) {
+                    Alert.alert('Missing Owner Name', 'Enter owner name before continuing to damage stage.')
+                    return
+                  }
 
-            <TouchableOpacity className="mt-3 py-3 items-center" onPress={goToDashboard}>
-              <Text className="text-blue-600 font-semibold">Cancel</Text>
-            </TouchableOpacity>
+                  if (!form.ownerPhone.trim()) {
+                    Alert.alert('Missing Owner Phone', 'Enter owner phone before continuing to damage stage.')
+                    return
+                  }
+
+                  if (!isValidOwnerPhone(form.ownerPhone)) {
+                    Alert.alert('Invalid Owner Phone', 'Owner phone must be exactly 10 digits.')
+                    return
+                  }
+
+                  setSaving(true)
+                  try {
+                    const kmReading = form.kmReading.trim() ? Number(form.kmReading) : null
+
+                    const year = form.year.trim() ? Number(form.year) : null
+                    const vehicleRes = await upsertVehicle({
+                      regNumber: form.regNumber,
+                      vin: form.vin,
+                      model: form.model,
+                      year,
+                      colour: form.colour,
+                      paintType: form.paintType,
+                      dealerCity: form.dealerCity,
+                      bpCityCategory: form.bpCityCategory,
+                      ownerName: form.ownerName,
+                      ownerPhone: form.ownerPhone,
+                      dateOfSale: form.dateOfSale || null,
+                    })
+
+                    if (vehicleRes.error) {
+                      if (isAuthExpiredError(vehicleRes.error)) {
+                        Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
+                      } else {
+                        Alert.alert('Error', vehicleRes.error)
+                      }
+                      logEvent('create_job_card_next_failed', { error_message: vehicleRes.error, stage: 'vehicle_upsert', job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+                      return
+                    }
+
+                    const updateResult = await updateJobCard(draftJobCardId, {
+                      regNumber: form.regNumber,
+                      jcNumber: form.jcNumber,
+                      complaintDate: form.complaintDate,
+                      kmReading,
+                      claimType: form.claimType,
+                      complaintText: form.complaintText,
+                    })
+
+                    if (updateResult.error || !updateResult.data) {
+                      if (isAuthExpiredError(updateResult.error)) {
+                        Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
+                      } else {
+                        Alert.alert('Error', updateResult.error ?? 'Unable to update job card')
+                      }
+                      logEvent('create_job_card_next_failed', { error_message: updateResult.error ?? undefined, job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+                      return
+                    }
+
+                    const statusRes = await updateJobCardStatus(draftJobCardId, 'in_work')
+                    if (statusRes.error) {
+                      if (isAuthExpiredError(statusRes.error)) {
+                        Alert.alert('Session Expired', 'Your login session has expired. Please sign in again and retry.')
+                      } else {
+                        Alert.alert('Error', statusRes.error)
+                      }
+                      logEvent('create_job_card_next_failed', { error_message: statusRes.error, stage: 'status_update', job_card_id: draftJobCardId ?? undefined }, 'autodoc-create')
+                      return
+                    }
+
+                    logEvent('create_job_card_next_success', { job_card_id: draftJobCardId }, 'autodoc-create')
+                    router.replace(`/job-cards/${draftJobCardId}/damage`)
+                  } finally {
+                    setSaving(false)
+                  }
+                }}
+              />
+            </View>
+
+            <View style={{ marginHorizontal: 20, marginTop: 10 }}>
+              <SecondaryButton title="Cancel" onPress={goToDashboard} />
+            </View>
           </>
         ) : null}
 

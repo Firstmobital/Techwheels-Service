@@ -9,14 +9,16 @@ import {
   View,
 } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import DatePickerField from '../../../components/common/DatePickerField'
 import ModelChipSelector from '../../../components/common/ModelChipSelector'
 import NativeSelectField from '../../../components/common/NativeSelectField'
 import { getJobCardSummary, type JobCardStatus, updateJobCard, updateJobCardStatus } from '../../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../../lib/api/autodocRates'
 import { fetchVehicleByReg, upsertVehicle } from '../../../lib/api/vehicles'
-import { Icon } from '../../../components/ui/Icon'
+import { PrimaryButton, StatusPill } from '../../../components/ui'
+import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
+import { WorkflowProgress } from '../../../components/autodoc/WorkflowProgress'
+import { WorkflowTabs, type WorkflowTabKey } from '../../../components/autodoc/WorkflowTabs'
 
 type Params = {
   id?: string | string[]
@@ -142,7 +144,6 @@ function toForm(data: any, vehicle: any | null): FormState {
 
 export default function JobCardStageScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
@@ -337,21 +338,6 @@ export default function JobCardStageScreen() {
     Alert.alert('Saved', 'Job card details updated successfully.')
   }
 
-  const statusLabel = useMemo(() => {
-    if (jobStatus === 'completed') return 'Submitted'
-    if (jobStatus === 'approved') return 'Approved'
-    if (jobStatus === 'submitted') return 'Submitted'
-    if (jobStatus === 'in_work') return 'In Work'
-    return 'Draft'
-  }, [jobStatus])
-
-  const statusAccent = useMemo(() => {
-    if (jobStatus === 'completed' || jobStatus === 'submitted') return '#1f9a6b'
-    if (jobStatus === 'approved') return '#7048cf'
-    if (jobStatus === 'in_work') return '#c9751b'
-    return '#7d8090'
-  }, [jobStatus])
-
   const stageIndex = useMemo(() => {
     if (jobStatus === 'draft') return 0
     if (jobStatus === 'in_work') return 1
@@ -363,158 +349,99 @@ export default function JobCardStageScreen() {
 
   const stageLabels = ['Intake', 'Document', 'Estimate', 'Pre-Submit', 'Submit']
 
+  const onWorkflowTabPress = (tab: WorkflowTabKey) => {
+    if (!jobCardId) return
+
+    const params = {
+      id: jobCardId,
+      jcNumber: form?.jcNumber ?? jobCardNumberHint ?? '',
+      regNumber: form?.regNumber ?? regNumberHint ?? '',
+    }
+
+    if (tab === 'jobcard') return
+    if (tab === 'damage') {
+      router.push({ pathname: '/job-cards/[id]/damage', params })
+      return
+    }
+    if (tab === 'estimate') {
+      router.push({ pathname: '/job-cards/[id]/estimate', params })
+      return
+    }
+    router.push({ pathname: '/job-cards/[id]/submit', params })
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView style={{ flex: 1, backgroundColor: '#f6f4ee' }} contentContainerStyle={{ paddingBottom: 28 }}>
-        <SafeAreaView
-          edges={['top']}
-          style={{
-            backgroundColor: '#ffffff',
-            borderBottomWidth: 1,
-            borderBottomColor: '#e7e3d9',
-            paddingHorizontal: 16,
-            paddingTop: Math.max(insets.top > 0 ? 8 : 18, 8),
-            paddingBottom: 12,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <TouchableOpacity
-                style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#d8d2c6', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}
-                onPress={() => router.push('/(tabs)/autodoc')}
-              >
-                <Icon name="chevron-left" size={22} color="#4b4e59" strokeWidth={2} />
-              </TouchableOpacity>
-              <View style={{ minWidth: 0, flex: 1 }}>
-                <Text style={{ fontSize: 11, color: '#8b90a0', fontWeight: '700', letterSpacing: 0.12, textTransform: 'uppercase' }}>
-                  {form?.jcNumber || jobCardNumberHint || 'Job Card'}
-                </Text>
-                <Text style={{ fontSize: 18, color: '#1a1b21', fontWeight: '700' }}>Job Card</Text>
-              </View>
-            </View>
-            <View style={{ borderWidth: 1, borderColor: '#e3ceb0', backgroundColor: '#fbefdd', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: statusAccent, marginRight: 7 }} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: statusAccent }}>{statusLabel}</Text>
-            </View>
-          </View>
-        </SafeAreaView>
+      <ScrollView style={{ flex: 1, backgroundColor: '#f4f2ec' }} contentContainerStyle={{ paddingBottom: 28 }}>
+        <ScreenHeader
+          title="Job Card"
+          eyebrow={form?.jcNumber || jobCardNumberHint || 'Job Card'}
+          onBack={() => router.push('/(tabs)/autodoc')}
+          rightNode={<StatusPill status={jobStatus} />}
+        />
 
         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#e7e3d9', backgroundColor: '#ffffff' }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity style={{ flex: 1, borderRadius: 14, backgroundColor: '#2a4cd0', borderWidth: 1, borderColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center' }}>
-              <Icon name="file" size={18} color="#ffffff" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#ffffff' }}>Job Card</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/damage', params: { id: jobCardId, jcNumber: form?.jcNumber ?? '', regNumber: form?.regNumber ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="grid" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Damage</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/estimate', params: { id: jobCardId, jcNumber: form?.jcNumber ?? '', regNumber: form?.regNumber ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="file-text" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Estimate</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/job-cards/[id]/submit', params: { id: jobCardId, jcNumber: form?.jcNumber ?? '', regNumber: form?.regNumber ?? '' } })}
-              style={{ flex: 1, borderRadius: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Icon name="send" size={18} color="#8b90a0" strokeWidth={1.8} />
-              <Text style={{ marginTop: 6, fontSize: 15, fontWeight: '700', color: '#737786' }}>Submit</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
-            {stageLabels.map((label, index) => {
-              const isDone = index < stageIndex
-              const isCurrent = index === stageIndex
-              return (
-                <View key={label} style={{ flex: 1, alignItems: 'center' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
-                    <View
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
-                        backgroundColor: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#ffffff',
-                        borderWidth: isDone || isCurrent ? 0 : 2,
-                        borderColor: '#d8d2c6',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {isDone ? <Text style={{ color: '#ffffff', fontWeight: '700' }}>✓</Text> : isCurrent ? <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#ffffff' }} /> : null}
-                    </View>
-                    {index < stageLabels.length - 1 ? <View style={{ height: 3, flex: 1, backgroundColor: isDone ? '#1f9a6b' : '#d8d2c6', marginHorizontal: 6, borderRadius: 2 }} /> : null}
-                  </View>
-                  <Text style={{ marginTop: 8, fontSize: 12, fontWeight: isCurrent ? '700' : '600', color: isDone ? '#1f9a6b' : isCurrent ? '#2f63cf' : '#a7a99f' }}>{label}</Text>
-                </View>
-              )
-            })}
-          </View>
+          <WorkflowTabs activeTab="jobcard" onTabPress={onWorkflowTabPress} disabled={!jobCardId} />
+          <WorkflowProgress currentStep={stageIndex + 1} totalSteps={5} stageName={stageLabels[Math.min(stageIndex, stageLabels.length - 1)]} />
         </View>
 
         {loading ? (
           <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
-            <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={{ fontSize: 14, color: '#6b7280', marginTop: 12 }}>Loading job card...</Text>
+            <ActivityIndicator size="large" color="#2a4cd0" />
+            <Text style={{ fontSize: 14, color: '#4b4e59', marginTop: 12 }}>Loading job card...</Text>
           </View>
         ) : error ? (
-          <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#fecaca', borderRadius: 14, padding: 16 }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: '#b91c1c' }}>Unable to load job card</Text>
-            <Text style={{ fontSize: 14, color: '#dc2626', marginTop: 4 }}>{error}</Text>
-            <TouchableOpacity style={{ marginTop: 12, backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }} onPress={loadData}>
-              <Text style={{ color: '#ffffff', fontWeight: '700' }}>Retry</Text>
-            </TouchableOpacity>
+          <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#f3cdd4', borderRadius: 14, padding: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#c33b53' }}>Unable to load job card</Text>
+            <Text style={{ fontSize: 13, color: '#c33b53', marginTop: 4 }}>{error}</Text>
+            <View style={{ marginTop: 12 }}>
+              <PrimaryButton title="Retry" onPress={loadData} />
+            </View>
           </View>
         ) : form ? (
           <>
             {warning ? (
-              <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 8, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 12, padding: 14 }}>
-                <Text style={{ fontSize: 13, color: '#92400e' }}>{warning}</Text>
+              <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 8, backgroundColor: '#fbefdd', borderWidth: 1, borderColor: '#f1dcb8', borderRadius: 12, padding: 14 }}>
+                <Text style={{ fontSize: 13, color: '#c9751b' }}>{warning}</Text>
               </View>
             ) : null}
 
-            <View style={{ marginHorizontal: 16, marginTop: 8, marginBottom: 8, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 14 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#7d8090', marginBottom: 2, textTransform: 'uppercase' }}>Job Card Details</Text>
+            <View style={{ marginHorizontal: 16, marginTop: 10, marginBottom: 10, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#82858f', marginBottom: 2, letterSpacing: 0.6, textTransform: 'uppercase' }}>Job Card Details</Text>
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Registration number</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Registration number</Text>
               <TextInput
                 value={form.regNumber}
                 editable={false}
-                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 14, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#f6f4ee', color: '#82858f', fontSize: 14, fontWeight: '500' }}
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Job card number</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Job card number</Text>
               <TextInput
                 value={form.jcNumber}
                 editable={false}
-                style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#f1efea', color: '#7d8090', fontSize: 14, fontWeight: '500' }}
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#f6f4ee', color: '#82858f', fontSize: 14, fontWeight: '500' }}
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Complaint date</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Complaint date</Text>
               <TextInput
                 value={form.complaintDate}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintDate: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
-                placeholderTextColor="#9ca3af"
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
+                placeholderTextColor="#a7a99f"
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>KM reading</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>KM reading</Text>
               <TextInput
                 value={form.kmReading}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, kmReading: value } : prev))}
                 keyboardType="number-pad"
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
-                placeholderTextColor="#9ca3af"
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
+                placeholderTextColor="#a7a99f"
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Claim type</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Claim type</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {claimTypeOptions.map((option) => {
                   const active = form.claimType === option
@@ -526,43 +453,43 @@ export default function JobCardStageScreen() {
                         marginBottom: 8,
                         borderRadius: 999,
                         borderWidth: 1,
-                        borderColor: active ? '#2a4cd0' : '#1a1b21',
+                        borderColor: active ? '#2a4cd0' : '#d9d4c7',
                         backgroundColor: active ? '#2a4cd0' : '#ffffff',
                         paddingHorizontal: 16,
                         paddingVertical: 10,
                       }}
                       onPress={() => setForm((prev) => (prev ? { ...prev, claimType: option } : prev))}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#ffffff' : '#1a1b21' }}>{option}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#ffffff' : '#1a1b21' }}>{option}</Text>
                     </TouchableOpacity>
                   )
                 })}
               </View>
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Complaint notes</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Complaint notes</Text>
               <TextInput
                 value={form.complaintText}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, complaintText: value } : prev))}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 24, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500', minHeight: 130 }}
-                placeholderTextColor="#9ca3af"
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500', minHeight: 130 }}
+                placeholderTextColor="#a7a99f"
               />
             </View>
 
-            <View style={{ marginHorizontal: 16, marginBottom: 8, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 14 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#7d8090', marginBottom: 2, textTransform: 'uppercase' }}>Vehicle Details</Text>
+            <View style={{ marginHorizontal: 16, marginBottom: 10, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#82858f', marginBottom: 2, letterSpacing: 0.6, textTransform: 'uppercase' }}>Vehicle Details</Text>
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>VIN / Chassis no.</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>VIN / Chassis no.</Text>
               <TextInput
                 value={form.vin}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, vin: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
-                placeholderTextColor="#9ca3af"
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
+                placeholderTextColor="#a7a99f"
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Model</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Model</Text>
               <ModelChipSelector
                 value={form.model}
                 options={modelChipOptions}
@@ -571,7 +498,7 @@ export default function JobCardStageScreen() {
 
               <View style={{ flexDirection: 'row', marginTop: 10, columnGap: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginBottom: 6 }}>Year</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginBottom: 6 }}>Year</Text>
                   <NativeSelectField
                     value={form.year}
                     placeholder="Select year"
@@ -581,7 +508,7 @@ export default function JobCardStageScreen() {
                 </View>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginBottom: 6 }}>Colour</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginBottom: 6 }}>Colour</Text>
                   <NativeSelectField
                     value={form.colour}
                     placeholder="Select colour"
@@ -591,7 +518,7 @@ export default function JobCardStageScreen() {
                 </View>
               </View>
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Paint type</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Paint type</Text>
               <NativeSelectField
                 value={form.paintType}
                 placeholder="Select paint type"
@@ -599,47 +526,47 @@ export default function JobCardStageScreen() {
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, paintType: value } : prev))}
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Date of Sale</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Date of Sale</Text>
               <DatePickerField
                 value={form.dateOfSale}
                 placeholder="YYYY-MM-DD"
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, dateOfSale: value } : prev))}
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Car Ageing (auto-calc)</Text>
-              <View style={{ borderRadius: 999, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 18, paddingVertical: 12 }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Car Ageing (auto-calc)</Text>
+              <View style={{ borderRadius: 12, backgroundColor: '#e9effe', borderWidth: 1, borderColor: '#b3c9f0', paddingHorizontal: 14, paddingVertical: 12 }}>
                 <Text style={{ fontSize: 15, fontWeight: '700', color: '#2a4cd0' }}>
                   {calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'} days
                 </Text>
               </View>
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Owner name</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Owner name</Text>
               <TextInput
                 value={form.ownerName}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerName: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
-                placeholderTextColor="#9ca3af"
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
+                placeholderTextColor="#a7a99f"
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Owner phone</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Owner phone</Text>
               <TextInput
                 value={form.ownerPhone}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, ownerPhone: normalizeOwnerPhoneInput(value) } : prev))}
                 keyboardType="phone-pad"
                 maxLength={10}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
-                placeholderTextColor="#9ca3af"
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
+                placeholderTextColor="#a7a99f"
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>Dealer city</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Dealer city</Text>
               <TextInput
                 value={form.dealerCity}
                 onChangeText={(value) => setForm((prev) => (prev ? { ...prev, dealerCity: value } : prev))}
-                style={{ borderWidth: 1, borderColor: '#1a1b21', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
-                placeholderTextColor="#9ca3af"
+                style={{ borderWidth: 1, borderColor: '#d9d4c7', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#ffffff', color: '#1a1b21', fontSize: 14, fontWeight: '500' }}
+                placeholderTextColor="#a7a99f"
               />
 
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#1a1b21', marginTop: 10, marginBottom: 6 }}>BP category</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>BP category</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).map((option) => {
                   const active = form.bpCityCategory === option
@@ -651,23 +578,28 @@ export default function JobCardStageScreen() {
                         marginBottom: 8,
                         borderRadius: 999,
                         borderWidth: 1,
-                        borderColor: active ? '#2a4cd0' : '#1a1b21',
+                        borderColor: active ? '#2a4cd0' : '#d9d4c7',
                         backgroundColor: active ? '#ffffff' : '#ffffff',
                         paddingHorizontal: 16,
                         paddingVertical: 10,
                       }}
                       onPress={() => setForm((prev) => (prev ? { ...prev, bpCityCategory: option } : prev))}
                     >
-                      <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#2a4cd0' : '#1a1b21' }}>{option}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#2a4cd0' : '#4b4e59' }}>{option}</Text>
                     </TouchableOpacity>
                   )
                 })}
               </View>
             </View>
 
-            <TouchableOpacity style={{ marginHorizontal: 16, marginTop: 4, borderRadius: 999, paddingVertical: 18, alignItems: 'center', backgroundColor: '#4a43df' }} onPress={() => onSave(true)}>
-              <Text style={{ color: '#ffffff', fontSize: 19, fontWeight: '700' }}>{saving ? 'Saving...' : 'Next: Damage Stage'}</Text>
-            </TouchableOpacity>
+            <View style={{ marginHorizontal: 16, marginTop: 4 }}>
+              <PrimaryButton
+                title={saving ? 'Saving...' : 'Next: Damage Stage'}
+                onPress={() => onSave(true)}
+                disabled={saving}
+                loading={saving}
+              />
+            </View>
           </>
         ) : null}
       </ScrollView>

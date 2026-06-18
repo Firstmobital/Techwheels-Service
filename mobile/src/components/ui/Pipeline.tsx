@@ -86,7 +86,7 @@ function getStageConfig(stage: WorkflowStage | null | undefined): {
 
 export const Pipeline: React.FC<PipelineProps> = ({ stage, compact = false }) => {
   const config = getStageConfig(stage)
-  const DONE_COLOR = '#1f9a6b'
+  const DONE_COLOR = '#1c8f63'
   const CURRENT_COLOR = '#2f63cf'
   const UPCOMING_COLOR = '#ffffff'
   const UPCOMING_BORDER = '#d9d4c7'
@@ -95,22 +95,29 @@ export const Pipeline: React.FC<PipelineProps> = ({ stage, compact = false }) =>
 
   if (compact) {
     return (
-      <View
-        style={{
-          backgroundColor: config.bgColor,
-          borderColor: '#9ea4b0',
-          borderWidth: 1,
-          borderRadius: 6,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          alignSelf: 'flex-start',
-        }}
-      >
+      <View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, width: '100%' }}>
+          {config.steps.map((step, index) => {
+            const filled = index <= currentIndex
+            return (
+              <View
+                key={step.name}
+                style={{
+                  flex: 1,
+                  height: 7,
+                  borderRadius: 999,
+                  backgroundColor: filled ? '#2f63cf' : '#d9d4c7',
+                }}
+              />
+            )
+          })}
+        </View>
         <Text
           style={{
-            fontSize: 12,
-            fontWeight: '600',
-            color: '#4b4e59',
+            marginTop: 8,
+            fontSize: 11.5,
+            fontWeight: '700',
+            color: '#7d8090',
           }}
         >
           {config.label}
