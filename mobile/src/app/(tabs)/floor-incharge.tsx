@@ -1327,154 +1327,7 @@ function InfoCell({ label, value }: { label: string; value: string }) {
   )
 }
 
-const S = {
-  // layout
-  root:              { flex: 1, backgroundColor: '#f1f5f9' } as const,
-
-  // toast
-  toast:             { position: 'absolute' as const, top: 56, left: 12, right: 12, zIndex: 999, backgroundColor: '#166534', borderRadius: 12, padding: 14, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
-  toastError:        { backgroundColor: '#991b1b' } as const,
-  toastText:         { color: '#fff', fontWeight: '600' as const, fontSize: 14, flex: 1 },
-
-  // header
-  header:            { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', gap: 12 },
-  headerTitle:       { fontSize: 18, fontWeight: '800' as const, color: '#0f172a' },
-  headerSub:         { fontSize: 12, color: '#64748b', marginTop: 2 },
-  refreshBtn:        { width: 40, height: 40, borderRadius: 10, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
-  refreshBtnText:    { fontSize: 22, color: '#2563eb' },
-
-  // search
-  searchRow:         { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#f1f5f9' },
-  searchWrap:        { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f1f5f9', borderRadius: 12, paddingHorizontal: 12, gap: 6 },
-  searchIcon:        { fontSize: 15 },
-  searchInput:       { flex: 1, paddingVertical: 10, fontSize: 14, color: '#1e293b' },
-
-  // status tabs
-  tabsRow:           { backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  tabsContainer:     { paddingHorizontal: 12, paddingVertical: 10, gap: 8, alignItems: 'center' as const },
-  tabPill:           { borderRadius: 24, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, alignItems: 'center' as const, minWidth: 72 },
-  tabPillCount:      { fontSize: 16, fontWeight: '800' as const, lineHeight: 20 },
-  tabPillLabel:      { fontSize: 10, fontWeight: '600' as const, marginTop: 1 },
-
-  // dropdown filter bar
-  dropdownBar:       { flexDirection: 'row' as const, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  dropdownBtn:       { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 12, paddingVertical: 10, minHeight: 52 },
-  dropdownLabel:     { fontSize: 10, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase' as const, marginBottom: 2 },
-  dropdownVal:       { fontSize: 13, fontWeight: '600' as const, color: '#1e293b' },
-  dropdownArrow:     { fontSize: 14, color: '#cbd5e1', marginLeft: 4 },
-  dropdownArrowActive:{ color: '#2563eb' } as const,
-  dropdownDot:       { position: 'absolute' as const, top: 8, right: 8, width: 6, height: 6, borderRadius: 3, backgroundColor: '#2563eb' },
-  dropdownDivider:   { width: 1, backgroundColor: '#e2e8f0', marginVertical: 8 },
-
-  // filter modal
-  filterModalOverlay:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' as const },
-  filterModalSheet:  { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 },
-  filterModalHandle: { width: 36, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center' as const, marginTop: 10, marginBottom: 4 },
-  filterModalHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderColor: '#f1f5f9' },
-  filterModalTitle:  { fontSize: 16, fontWeight: '700' as const, color: '#0f172a' },
-  filterModalClose:  { fontSize: 18, color: '#94a3b8', fontWeight: '600' as const },
-  filterOptRow:      { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderColor: '#f8fafc', minHeight: 56 },
-  filterOptRowActive:{ backgroundColor: '#eff6ff' } as const,
-  filterOptLabel:    { fontSize: 15, fontWeight: '600' as const, color: '#1e293b' },
-  filterOptSub:      { fontSize: 12, color: '#94a3b8', marginTop: 2 },
-  filterOptCheck:    { fontSize: 16, color: '#2563eb', fontWeight: '700' as const, marginLeft: 8 },
-
-  // legacy (keep for portal badge + other uses)
-  filterLabel:       { fontSize: 11, fontWeight: '700' as const, color: '#94a3b8', minWidth: 28 },
-
-  // cards
-  card:              { backgroundColor: '#fff', borderRadius: 16, marginBottom: 10, overflow: 'hidden' as const, shadowColor: '#0f172a', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
-  cardHeader:        { flexDirection: 'row' as const, alignItems: 'stretch' as const, minHeight: 80 },
-  statusStripe:      { width: 4, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
-  jcNumber:          { fontSize: 15, fontWeight: '800' as const, color: '#0f172a', letterSpacing: 0.2 },
-  regPill:           { backgroundColor: '#f1f5f9', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  regPillText:       { fontSize: 12, fontWeight: '700' as const, color: '#334155', letterSpacing: 0.5 },
-  statusPill:        { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
-  statusPillText:    { fontSize: 11, fontWeight: '700' as const },
-  cardModel:         { fontSize: 13, color: '#334155', fontWeight: '500' as const },
-  cardLoc:           { fontSize: 12, color: '#94a3b8', flex: 1 },
-  portalBadge:       { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1 },
-  portalBadgeText:   { fontSize: 11, fontWeight: '800' as const, letterSpacing: 0.5 },
-  techRow:           { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, marginTop: 6, backgroundColor: '#f8fafc', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  techIcon:          { fontSize: 12 },
-  techName:          { fontSize: 12, color: '#1d4ed8', fontWeight: '600' as const, flex: 1 },
-  bayTag:            { backgroundColor: '#dbeafe', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
-  bayTagText:        { fontSize: 11, color: '#1d4ed8', fontWeight: '700' as const },
-  expandArrow:       { paddingHorizontal: 14, fontSize: 13, color: '#cbd5e1', alignSelf: 'center' as const },
-
-  // expanded card body
-  cardBody:          { paddingHorizontal: 14, paddingBottom: 16, paddingTop: 12, borderTopWidth: 1, borderColor: '#f1f5f9' },
-  infoBlock:         { gap: 6 },
-  infoRow2Col:       { flexDirection: 'row' as const, gap: 6 },
-  divider:           { height: 1, backgroundColor: '#f1f5f9', marginVertical: 14 },
-  sectionTitle:      { fontSize: 13, fontWeight: '700' as const, color: '#475569', marginBottom: 10 },
-  fieldLabel:        { fontSize: 12, fontWeight: '600' as const, color: '#64748b', marginBottom: 6 },
-
-  // select button (replaces select row)
-  selectBtn:         { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row' as const, alignItems: 'center' as const, minHeight: 52 },
-  selectBtnVal:      { fontSize: 14, color: '#0f172a', fontWeight: '600' as const, flex: 1 },
-  selectBtnPlaceholder:{ fontSize: 14, color: '#94a3b8', flex: 1 },
-  selectBtnSub:      { fontSize: 11, color: '#64748b', marginTop: 2 },
-  selectBtnArrow:    { fontSize: 22, color: '#94a3b8', fontWeight: '300' as const },
-
-  // status blocks (full width)
-  statusBlock:       { borderRadius: 10, paddingVertical: 10, alignItems: 'center' as const, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
-  statusBlockText:   { fontSize: 12, fontWeight: '500' as const, color: '#64748b' },
-
-  // timestamps
-  tsRow:             { flexDirection: 'row' as const, backgroundColor: '#f8fafc', borderRadius: 12, overflow: 'hidden' as const },
-  tsCell:            { flex: 1, padding: 12, alignItems: 'center' as const },
-  tsDivider:         { width: 1, backgroundColor: '#e2e8f0' },
-  tsLabel:           { fontSize: 10, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.8, marginBottom: 3 },
-  tsVal:             { fontSize: 12, fontWeight: '600' as const, color: '#334155', textAlign: 'center' as const },
-
-  remarkInput:       { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, fontSize: 14, color: '#1e293b', minHeight: 64, textAlignVertical: 'top' as const },
-
-  saveBtn:           { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 14, alignItems: 'center' as const, marginTop: 14, shadowColor: '#2563eb', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  saveBtnText:       { color: '#fff', fontWeight: '700' as const, fontSize: 15 },
-
-  addSupportBtn:     { backgroundColor: '#eff6ff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#bfdbfe' },
-  addSupportBtnText: { fontSize: 13, fontWeight: '700' as const, color: '#2563eb' },
-  supportPill:       { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#e2e8f0', gap: 8, marginBottom: 4 },
-  supportRoleTag:    { backgroundColor: '#dbeafe', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  supportRoleTagText:{ fontSize: 10, fontWeight: '800' as const, color: '#1d4ed8' },
-  supportPillName:   { fontSize: 13, color: '#334155', fontWeight: '500' as const, flex: 1 },
-  emptyHint:         { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' as const, marginTop: 2, marginBottom: 6 },
-
-  // picker modals
-  pickerHeader:      { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  pickerTitle:       { fontSize: 16, fontWeight: '700' as const, color: '#0f172a', flex: 1 },
-  pickerSearch:      { backgroundColor: '#f1f5f9', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#1e293b' },
-  pickerItem:        { paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: '#f1f5f9', minHeight: 52, justifyContent: 'center' as const },
-  pickerItemText:    { fontSize: 15, color: '#1e293b', fontWeight: '500' as const },
-  pickerItemSub:     { fontSize: 12, color: '#64748b', marginTop: 3 },
-  pickerEmpty:       { textAlign: 'center' as const, color: '#94a3b8', marginTop: 48, padding: 16 },
-
-  // bay grid
-  bayChip:           { flex: 1, margin: 4, backgroundColor: '#f1f5f9', borderRadius: 10, paddingVertical: 14, alignItems: 'center' as const, borderWidth: 1, borderColor: '#e2e8f0' },
-  bayChipActive:     { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  bayChipText:       { fontSize: 14, fontWeight: '700' as const, color: '#475569' },
-
-  // support modal
-  supportMeta:       { backgroundColor: '#f8fafc', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
-  supportMetaText:   { fontSize: 13, color: '#475569', fontWeight: '500' as const },
-  roleChip:          { borderRadius: 10, paddingHorizontal: 16, paddingVertical: 11, backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0' },
-  roleChipActive:    { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  roleChipText:      { fontSize: 14, color: '#64748b', fontWeight: '500' as const },
-  roleChipTextActive:{ color: '#2563eb', fontWeight: '700' as const } as const,
-  empRow:            { padding: 14, borderRadius: 10, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#fff', marginBottom: 5 },
-  empRowActive:      { backgroundColor: '#eff6ff', borderColor: '#2563eb' } as const,
-  empRowText:        { fontSize: 14, color: '#1e293b', fontWeight: '500' as const },
-  existingSupportRow:{ flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: 10, borderBottomWidth: 1, borderColor: '#f1f5f9', gap: 10 },
-  removeBtn:         { backgroundColor: '#fef2f2', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  removeBtnText:     { fontSize: 13, fontWeight: '700' as const, color: '#dc2626' },
-
-  // empty state
-  empty:             { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingTop: 80 },
-  emptyIcon:         { fontSize: 52, marginBottom: 16 },
-  emptyTitle:        { fontSize: 17, fontWeight: '700' as const, color: '#1e293b' },
-  emptySub:          { fontSize: 14, color: '#94a3b8', marginTop: 6, textAlign: 'center' as const, paddingHorizontal: 32 },
-}// ── Styles — compact mobile-first ────────────────────────────────────────────
+// ── Styles — compact mobile-first ────────────────────────────────────────────
 const S = {
   root: { flex: 1, backgroundColor: '#f1f5f9' } as const,
 
@@ -1485,38 +1338,38 @@ const S = {
 
   // ── compact top bar ──
   topBar:            { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', gap: 8 },
-  topBarLeft:        { alignItems: 'flex-start' as const, marginRight: 4 },
-  topBarTitle:       { fontSize: 14, fontWeight: '800' as const, color: '#0f172a' },
-  topBarCount:       { fontSize: 11, color: '#94a3b8', marginTop: 1 },
-  searchWrap:        { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 10, height: 36 },
+  topBarLeft:        { alignItems: 'flex-start' as const, marginRight: 2 },
+  topBarTitle:       { fontSize: 13, fontWeight: '800' as const, color: '#0f172a' },
+  topBarCount:       { fontSize: 10, color: '#94a3b8', marginTop: 1 },
+  searchWrap:        { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 10, height: 34 },
   searchInput:       { flex: 1, fontSize: 13, color: '#1e293b', paddingVertical: 0 },
-  refreshBtn:        { width: 34, height: 34, borderRadius: 8, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
-  refreshBtnText:    { fontSize: 18, color: '#2563eb' },
+  refreshBtn:        { width: 32, height: 32, borderRadius: 8, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
+  refreshBtnText:    { fontSize: 17, color: '#2563eb' },
 
-  // ── status tabs ──
+  // ── status tabs (single line) ──
   tabsRow:           { backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0', maxHeight: 44 },
   tabsContainer:     { paddingHorizontal: 10, paddingVertical: 8, gap: 6, alignItems: 'center' as const },
-  tabPill:           { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1.5 },
+  tabPill:           { borderRadius: 20, paddingHorizontal: 11, paddingVertical: 5, borderWidth: 1.5 },
   tabPillText:       { fontSize: 12, fontWeight: '600' as const },
 
   // ── dropdown filter bar ──
   dropdownBar:       { flexDirection: 'row' as const, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
   dropdownBtn:       { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 10, paddingVertical: 7, minHeight: 44 },
-  dropdownLabel:     { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.6, textTransform: 'uppercase' as const, marginBottom: 1 },
+  dropdownLabel:     { fontSize: 9, fontWeight: '700' as const, color: '#94a3b8', letterSpacing: 0.5, textTransform: 'uppercase' as const, marginBottom: 1 },
   dropdownVal:       { fontSize: 12, fontWeight: '600' as const, color: '#1e293b' },
   dropdownArrow:     { fontSize: 12, color: '#cbd5e1', marginLeft: 3 },
   dropdownArrowActive:{ color: '#2563eb' } as const,
   dropdownDot:       { position: 'absolute' as const, top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: '#2563eb' },
   dropdownDivider:   { width: 1, backgroundColor: '#e2e8f0', marginVertical: 8 },
 
-  // ── filter modal (bottom sheet) ──
+  // ── filter modal ──
   filterModalOverlay:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' as const },
   filterModalSheet:  { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34 },
   filterModalHandle: { width: 36, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center' as const, marginTop: 10, marginBottom: 2 },
   filterModalHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' },
   filterModalTitle:  { fontSize: 15, fontWeight: '700' as const, color: '#0f172a' },
   filterModalClose:  { fontSize: 18, color: '#94a3b8', fontWeight: '600' as const },
-  filterOptRow:      { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderColor: '#f8fafc', minHeight: 52 },
+  filterOptRow:      { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 20, paddingVertical: 13, borderBottomWidth: 1, borderColor: '#f8fafc', minHeight: 52 },
   filterOptRowActive:{ backgroundColor: '#eff6ff' } as const,
   filterOptLabel:    { fontSize: 15, fontWeight: '600' as const, color: '#1e293b' },
   filterOptSub:      { fontSize: 12, color: '#94a3b8', marginTop: 1 },
@@ -1527,13 +1380,11 @@ const S = {
   cardUnassigned:    { borderWidth: 1.5, borderColor: '#fee2e2' } as const,
   cardRow:           { flexDirection: 'row' as const, alignItems: 'stretch' as const, minHeight: 68 },
   statusStripe:      { width: 4 },
-
-  // card text
   regText:           { fontSize: 14, fontWeight: '800' as const, color: '#0f172a', letterSpacing: 0.3 },
   cardModel:         { fontSize: 12, color: '#475569', fontWeight: '500' as const },
-  portalBadge:       { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1 },
+  portalBadge:       { borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1 },
   portalBadgeText:   { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.4 },
-  statusPill:        { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1 },
+  statusPill:        { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1 },
   statusPillText:    { fontSize: 10, fontWeight: '700' as const },
   techRow:           { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginTop: 4 },
   techIcon:          { fontSize: 11 },
@@ -1541,32 +1392,28 @@ const S = {
   bayTag:            { backgroundColor: '#dbeafe', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   bayTagText:        { fontSize: 11, color: '#1d4ed8', fontWeight: '700' as const },
   unassignedHint:    { fontSize: 11, color: '#f87171', fontStyle: 'italic' as const, marginTop: 3 },
-
-  // assign CTA (right side of unassigned card)
   assignCTA:         { backgroundColor: '#ef4444', justifyContent: 'center' as const, alignItems: 'center' as const, paddingHorizontal: 14, borderTopRightRadius: 12, borderBottomRightRadius: 12 },
   assignCTAText:     { color: '#fff', fontSize: 12, fontWeight: '800' as const, letterSpacing: 0.3 },
   expandChevron:     { paddingHorizontal: 12, fontSize: 12, color: '#cbd5e1', alignSelf: 'center' as const },
 
   // ── expanded card body ──
   cardBody:          { paddingHorizontal: 12, paddingBottom: 14, paddingTop: 10, borderTopWidth: 1, borderColor: '#f1f5f9' },
+  infoGrid:          { gap: 0 },
   infoBlock:         { gap: 5 },
   infoRow2Col:       { flexDirection: 'row' as const, gap: 6 },
   divider:           { height: 1, backgroundColor: '#f1f5f9', marginVertical: 12 },
   sectionTitle:      { fontSize: 12, fontWeight: '700' as const, color: '#475569', marginBottom: 8 },
   fieldLabel:        { fontSize: 11, fontWeight: '600' as const, color: '#64748b', marginBottom: 5 },
 
-  // select button
   selectBtn:         { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, flexDirection: 'row' as const, alignItems: 'center' as const, minHeight: 48 },
   selectBtnVal:      { fontSize: 14, color: '#0f172a', fontWeight: '600' as const, flex: 1 },
   selectBtnPlaceholder:{ fontSize: 13, color: '#94a3b8', flex: 1 },
   selectBtnSub:      { fontSize: 11, color: '#64748b', marginTop: 1 },
   selectBtnArrow:    { fontSize: 20, color: '#94a3b8' },
 
-  // status blocks
   statusBlock:       { borderRadius: 8, paddingVertical: 9, alignItems: 'center' as const, borderWidth: 1.5, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
   statusBlockText:   { fontSize: 11, fontWeight: '500' as const, color: '#64748b' },
 
-  // timestamps
   tsRow:             { flexDirection: 'row' as const, backgroundColor: '#f8fafc', borderRadius: 10, overflow: 'hidden' as const },
   tsCell:            { flex: 1, padding: 10, alignItems: 'center' as const },
   tsDivider:         { width: 1, backgroundColor: '#e2e8f0' },
@@ -1574,7 +1421,6 @@ const S = {
   tsVal:             { fontSize: 12, fontWeight: '600' as const, color: '#334155', textAlign: 'center' as const },
 
   remarkInput:       { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 10, fontSize: 13, color: '#1e293b', minHeight: 56, textAlignVertical: 'top' as const },
-
   saveBtn:           { backgroundColor: '#2563eb', borderRadius: 10, paddingVertical: 13, alignItems: 'center' as const, marginTop: 12, shadowColor: '#2563eb', shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
   saveBtnText:       { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
 
@@ -1586,7 +1432,6 @@ const S = {
   supportPillName:   { fontSize: 13, color: '#334155', fontWeight: '500' as const, flex: 1 },
   emptyHint:         { fontSize: 11, color: '#94a3b8', fontStyle: 'italic' as const, marginTop: 2, marginBottom: 4 },
 
-  // picker modals
   pickerHeader:      { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0' },
   pickerTitle:       { fontSize: 16, fontWeight: '700' as const, color: '#0f172a', flex: 1 },
   pickerSearch:      { backgroundColor: '#f1f5f9', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, fontSize: 14, color: '#1e293b' },
@@ -1616,7 +1461,4 @@ const S = {
   emptyIcon:         { fontSize: 44, marginBottom: 12 },
   emptyTitle:        { fontSize: 16, fontWeight: '700' as const, color: '#1e293b' },
   emptySub:          { fontSize: 13, color: '#94a3b8', marginTop: 4, textAlign: 'center' as const, paddingHorizontal: 32 },
-
-  // infoGrid (legacy keep)
-  infoGrid:          { gap: 0 },
 }
