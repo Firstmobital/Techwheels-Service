@@ -222,7 +222,7 @@ export default function TabsLayout() {
         name="floor-incharge"
         options={{
           title: 'Floor Incharge',
-          headerShown: true,
+          headerShown: false,
           href: null,
         }}
       />
