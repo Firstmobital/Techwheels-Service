@@ -388,25 +388,26 @@ export default function ReceptionScreen() {
     )
   }, [stFiltered, search])
 
-  // ── SA dropdown — fuel_type selector takes priority over model inference ────
+  // ── SA dropdown — STRICT fuel_type filter: EV shows EV SAs only, PV shows PV SAs only ────
+  // Rule: fuel_type MUST be selected first; model inference never overrides explicit fuel selection
   const filteredSAs = useMemo(() => {
+    // If no fuel type selected, return empty — user must pick EV or PV first
+    if (!form.fuel_type) return []
     const reqDept = getRequiredDeptForServiceType(form.service_type)
     const useFuel = shouldApplyFuelFilter(form.service_type)
-    // If user explicitly picked EV/PV, use that; else fall back to model inference
-    const reqFuel: 'EV' | 'PV' = form.fuel_type || inferFuelFromModel(form.model)
     const hasServiceType = !!form.service_type.trim()
     return employees
       .filter(e => {
-        if (!hasServiceType && !form.fuel_type) return true  // no filter yet
         const dept = normalizeDept(e.department)
-        // If dept filter applies (service type chosen), enforce it
+        // Department filter (service type driven)
         if (hasServiceType && dept !== reqDept) return false
-        if (!useFuel) return true  // Accident: no fuel filter
-        if (!form.fuel_type && !form.model) return true  // nothing chosen yet
-        return normFuelBucket(e.fuel_type) === reqFuel
+        // Accident: skip fuel filter
+        if (!useFuel) return true
+        // Strict: EV fuel → EV SAs only, PV fuel → PV SAs only
+        return normFuelBucket(e.fuel_type) === (form.fuel_type as 'EV' | 'PV')
       })
       .sort((a, b) => a.employee_name.localeCompare(b.employee_name))
-  }, [employees, form.model, form.service_type, form.fuel_type])
+  }, [employees, form.service_type, form.fuel_type])
 
   // Clear SA when it's no longer valid after service_type / fuel_type / model change
   useEffect(() => {
@@ -580,8 +581,14 @@ export default function ReceptionScreen() {
   function pickerItems(): string[] {
     const q = pickerSearch.toLowerCase()
     if (showPicker === 'model') {
-      // Show all active models (no fuel-type filtering — matches web behaviour)
-      return modelOptions.filter(m => m.toLowerCase().includes(q))
+      // Filter by fuel_type if selected (EV → EV models, PV → non-EV models)
+      const fuelFiltered = form.fuel_type
+        ? modelOptions.filter(m => {
+            const isEV = m.toUpperCase().includes('EV')
+            return form.fuel_type === 'EV' ? isEV : !isEV
+          })
+        : modelOptions  // no fuel selected → show all
+      return fuelFiltered.filter(m => m.toLowerCase().includes(q))
     }
     if (showPicker === 'service_type') return RECEPTION_SERVICE_TYPE_OPTIONS.filter(s => s.toLowerCase().includes(q))
     if (showPicker === 'source') return SOURCE_OPTIONS.filter(s => s.toLowerCase().includes(q))
@@ -799,16 +806,6 @@ export default function ReceptionScreen() {
                   <Text style={form.sa_employee_code ? s.selectText : s.selectPlaceholder}>{getFormSALabel() || 'Select SA'}</Text>
                   <Text style={s.chevron}>▼</Text>
                 </TouchableOpacity>
-              </FormField>
-
-              <FormField label="KM Reading">
-                <TextInput style={s.input}
-                  placeholder="e.g. 12500"
-                  placeholderTextColor="#94a3b8"
-                  value={form.km_reading}
-                  keyboardType="number-pad"
-                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/\D/g, '') }))}
-                />
               </FormField>
 
               <FormField label="Source *">
