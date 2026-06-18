@@ -14,9 +14,9 @@
     "build:prod:ios:internal": "eas build -p ios --profile production-internal-ios",
     "build:preview:apk": "eas build -p android --profile preview",
     "build:preview:ios": "eas build -p ios --profile preview",
-    "ota:prod:all": "CI=1 eas update --branch production --platform all --message \"prod ota $(date +%Y-%m-%d_%H-%M-%S)\"",
+    "ota:prod:all": "CI=1 eas update --environment production --branch production --platform all --message \"prod ota $(date +%Y-%m-%d_%H-%M-%S)\"",
     "ota:prod": "npm run ota:prod:all",
-    "ota:prod:ios": "CI=1 eas update --branch production --platform ios --message \"prod ota ios $(date +%Y-%m-%d_%H-%M-%S)\"",
+    "ota:prod:ios": "CI=1 eas update --environment production --branch production --platform ios --message \"prod ota ios $(date +%Y-%m-%d_%H-%M-%S)\"",
     "ota:preview": "CI=1 eas update --branch preview --platform all --message \"preview ota $(date +%Y-%m-%d_%H-%M-%S)\"",
     "check:native-deps": "node scripts/check-native-deps.js",
     "postinstall": "patch-package"

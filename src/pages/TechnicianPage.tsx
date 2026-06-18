@@ -1010,6 +1010,7 @@ export default function TechnicianPage() {
 
       // Fetch assignment timestamps and status for those job cards in batches (Supabase .in() limit ~100 items)
       const assignmentsByJc = new Map<string, TechnicianAssignmentRow[]>()
+      const notRequiredJcSet = new Set<string>()
       const BATCH_SIZE = 100
       for (let i = 0; i < sourceJcNumbers.length; i += BATCH_SIZE) {
         const batch = sourceJcNumbers.slice(i, i + BATCH_SIZE)
@@ -1030,6 +1031,30 @@ export default function TechnicianPage() {
           const list = assignmentsByJc.get(key) ?? []
           list.push(candidate)
           assignmentsByJc.set(key, list)
+        })
+
+        // Export source view may omit Not Required assignments; query base table to detect and exclude them.
+        const baseAssignRes = await supabase
+          .from('technician_assignments')
+          .select('job_card_number, technician_code, technician_name')
+          .in('job_card_number', batch)
+
+        if (baseAssignRes.error) {
+          alert('Failed to validate Not Required assignments: ' + baseAssignRes.error.message)
+          return
+        }
+
+        ;(baseAssignRes.data ?? []).forEach((row: any) => {
+          const key = normalizeJobCardNumber(row.job_card_number)
+          if (!key) return
+
+          const isNotRequired =
+            String(row.technician_code ?? '').trim().toUpperCase() === NOT_REQUIRED_TECHNICIAN_CODE ||
+            String(row.technician_name ?? '').trim().toUpperCase().replace(/\s+/g, ' ') === 'NOT REQUIRED'
+
+          if (isNotRequired) {
+            notRequiredJcSet.add(key)
+          }
         })
       }
 
@@ -1071,7 +1096,9 @@ export default function TechnicianPage() {
         .flatMap((row: any) => {
           const jc = normalizeJobCardNumber(row.job_card_number)
           const allAssignments = assignmentsByJc.get(jc) ?? []
-          const hasNotRequiredAssignment = allAssignments.some((assignment) => isNotRequiredAssignment(assignment))
+          const hasNotRequiredAssignment =
+            notRequiredJcSet.has(jc) ||
+            allAssignments.some((assignment) => isNotRequiredAssignment(assignment))
           const assignments = allAssignments.filter((assignment) => !isNotRequiredAssignment(assignment))
 
           if (assignments.length === 0) {
