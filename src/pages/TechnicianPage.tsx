@@ -90,6 +90,7 @@ const DEFAULT_EV_SHARE_PERCENT = 25
 const UNKNOWN_FUEL_TYPE = 'Unknown'
 const UNKNOWN_LOCATION = 'Unknown location'
 const TECHNICIAN_INCOME_ASSIGNMENTS_SOURCE = 'vw_technician_income_assignments'
+const NOT_REQUIRED_TECHNICIAN_CODE = '__NOT_REQUIRED__'
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
@@ -127,6 +128,14 @@ function normalizeStatus(status: string | null | undefined): string {
   if (!normalized) return 'work_inprocess'
   if (normalized === 'work inprocess') return 'work_inprocess'
   return normalized
+}
+
+function isNotRequiredAssignment(row: TechnicianAssignmentRow): boolean {
+  const technicianCode = String(row.technician_code ?? '').trim().toUpperCase()
+  if (technicianCode === NOT_REQUIRED_TECHNICIAN_CODE) return true
+
+  const technicianName = String(row.technician_name ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
+  return technicianName === 'NOT REQUIRED'
 }
 
 function statusLabel(status: string | null | undefined): string {
@@ -1061,9 +1070,16 @@ export default function TechnicianPage() {
       const issues = jccRecords
         .flatMap((row: any) => {
           const jc = normalizeJobCardNumber(row.job_card_number)
-          const assignments = assignmentsByJc.get(jc) ?? []
+          const allAssignments = assignmentsByJc.get(jc) ?? []
+          const hasNotRequiredAssignment = allAssignments.some((assignment) => isNotRequiredAssignment(assignment))
+          const assignments = allAssignments.filter((assignment) => !isNotRequiredAssignment(assignment))
 
           if (assignments.length === 0) {
+            if (hasNotRequiredAssignment) {
+              // Not Required is an intentional assignment state; do not export it as an issue.
+              return []
+            }
+
             return [{
               job_card_number: row.job_card_number ?? '',
               service_type: row.sr_type ?? '',

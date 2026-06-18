@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import { hasSupabaseEnv, supabase } from '../lib/supabase'
+
+const SIGN_IN_TIMEOUT_MS = 20000
 
 interface AuthContextType {
   session: Session | null
@@ -83,8 +85,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
+      if (!hasSupabaseEnv) {
+        return { error: new Error('App configuration missing. Please contact support and retry after next update.') }
+      }
+
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+        const signInRequest = supabase.auth.signInWithPassword({ email, password })
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          const timer = setTimeout(() => {
+            clearTimeout(timer)
+            reject(new Error('Sign in timed out. Please check internet and try again.'))
+          }, SIGN_IN_TIMEOUT_MS)
+        })
+
+        const { data, error } = await Promise.race([signInRequest, timeoutPromise])
         if (error) {
           return { error }
         }
