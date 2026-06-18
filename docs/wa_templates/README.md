@@ -2,10 +2,10 @@
 
 This category stores WhatsApp template definitions and catalog entries.
 
-## Structure
+## Template Registry Layout
 
 - `catalog/` - approved template markdown entries
 
-## Current catalog
+## Catalog Snapshot
 
 - `catalog/sa_floor_completed_wa.md`

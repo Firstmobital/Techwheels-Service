@@ -130,22 +130,12 @@ rg -n "old/path/file.md|old/path/" docs
 
 ---
 
-## 7) Current Baseline (2026-06-18)
+## 7) State and Structure Separation
 
-Applied reorganization updates:
+This file governs markdown placement only.
 
-1. Root complaint docs moved to:
-- `docs/complaints/reference/COMPLAINTS_SCHEMA_AUTHORITY.md`
-- `docs/complaints/reference/COMPLAINTS_TEST_EXECUTION_GUIDE.md`
-
-2. Supabase comparison doc moved to:
-- `docs/supabase/evidence/DB_CODE_COMPARISON_9JUNE_VS_CURRENT_2026-06-11.md`
-
-3. WhatsApp template entry moved to:
-- `docs/wa_templates/catalog/sa_floor_completed_wa.md`
-
-4. New primary category initialized:
-- `docs/Project_Instructions/`
+- For runtime and schema facts, use `docs/Project_Handbook/CURRENT_STATE.md`.
+- Do not duplicate web/mobile/database state narratives in structure governance docs.
 
 ---
 

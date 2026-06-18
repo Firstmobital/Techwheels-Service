@@ -2,14 +2,16 @@
 
 This primary category stores complaints documentation that is not an execution plan.
 
-## Structure
+## Reference Topology
 
 - `reference/` - authority and execution guides
 
-## Current documents
+## Active Reference Set
 
 - `reference/COMPLAINTS_SCHEMA_AUTHORITY.md`
 - `reference/COMPLAINTS_TEST_EXECUTION_GUIDE.md`
+
+## Planning Path
 
 For implementation plans, use:
 - `docs/Implementation_plans/webversion/categories/complaints/`

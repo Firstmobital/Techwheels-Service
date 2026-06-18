@@ -1,23 +1,13 @@
-# AutoDoc Category
+# AutoDoc Docs
 
-**Purpose:** AutoDoc feature testing guides, format validation, and operational documentation.
+Scope: AutoDoc validation artifacts and operation runbooks.
 
-## Structure
+## Evidence Ledger
 
-- `evidence/`: Test reports and format validation documentation
-  - RC_LOOKUP_FORMAT_TEST_REPORT.md (registration number format testing results)
+- `evidence/RC_LOOKUP_FORMAT_TEST_REPORT.md`: RC format verification evidence.
+- `runbooks/WEB_AUTODOC_GPS_TESTING_GUIDE.md`: web AutoDoc GPS and photo testing procedure.
 
-- `runbooks/`: Operation and testing guides
-  - WEB_AUTODOC_GPS_TESTING_GUIDE.md (web AutoDoc GPS and damage photo testing)
+## Planning Cutline
 
-## Related Links
-
-- Implementation plan: [docs/Implementation_plans/webversion/categories/autodoc/active/](../Implementation_plans/webversion/categories/autodoc/active/)
-- Audit: [docs/Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md](../Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md)
-
-## Adding New Docs to This Category
-
-- Test result or format validation? → `evidence/`
-- Testing guide or procedure? → `runbooks/`
-
-See [STRUCTURE_GUIDE.md](../STRUCTURE_GUIDE.md) for full classification rules.
+- Keep execution plans in `docs/Implementation_plans/.../autodoc/...`.
+- Keep only completed evidence and runbooks in this category.

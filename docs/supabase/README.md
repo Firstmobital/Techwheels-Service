@@ -1,21 +1,13 @@
-# Supabase Category
+# Supabase Docs
 
-**Purpose:** Supabase production hardening, migration verification, and operational evidence.
+Scope: post-change verification evidence and DB operations references.
 
-## Structure
+## Verification Inventory
 
-- `evidence/`: Migration verification reports and audits
-  - MIGRATION_VERIFICATION_20260523.md (migration execution and validation evidence)
+- `evidence/MIGRATION_VERIFICATION_20260523.md`: migration verification report.
+- `evidence/DB_CODE_COMPARISON_9JUNE_VS_CURRENT_2026-06-11.md`: DB/code drift comparison evidence.
 
-## Related Links
+## Database Authority Contract
 
-- Implementation plan: [docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md](../Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md)
-- Evidence folder: [docs/Implementation_plans/webversion/categories/supabase/evidence/](../Implementation_plans/webversion/categories/supabase/evidence/) (audits, slow query analysis, connection pooling)
-- Runbooks: [docs/Implementation_plans/webversion/categories/supabase/evidence/runbooks/](../Implementation_plans/webversion/categories/supabase/evidence/runbooks/) (deployment checklists)
-
-## Adding New Docs to This Category
-
-- Migration verification or performance audit? → `evidence/`
-- Deployment checklist or runbook? → `runbooks/` (create if needed)
-
-See [STRUCTURE_GUIDE.md](../STRUCTURE_GUIDE.md) for full classification rules.
+- Use `local_folder/backups/full_database.sql` as schema/data authority.
+- Keep implementation plans in `docs/Implementation_plans/.../supabase/...`.

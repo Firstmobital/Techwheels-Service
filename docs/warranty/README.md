@@ -1,20 +1,13 @@
-# Warranty Category
+# Warranty Docs
 
-**Purpose:** Warranty feature audits, validation reports, and operational evidence.
+Scope: warranty verification evidence and audit records.
 
-## Structure
+## Audit Evidence Set
 
-- `evidence/`: Audit reports and validation documentation
-  - CRITICAL_ALERTS_AUDIT_20260603.md (warranty alert threshold audit)
-  - EARNINGS_ZERO_VALIDATION.md (earnings calculation validation)
+- `evidence/CRITICAL_ALERTS_AUDIT_20260603.md`
+- `evidence/EARNINGS_ZERO_VALIDATION.md`
 
-## Related Links
+## Lifecycle Separation Rule
 
-- Implementation plan: [docs/Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md](../Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md)
-
-## Adding New Docs to This Category
-
-- Audit, validation, or test report? → `evidence/`
-- Operations guide or checklist? → `runbooks/` (create if needed)
-
-See [STRUCTURE_GUIDE.md](../STRUCTURE_GUIDE.md) for full classification rules.
+- Keep active implementation tracking under `docs/Implementation_plans/.../warranty/...`.
+- Keep completed audits and validations in this category.
