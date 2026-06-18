@@ -580,14 +580,8 @@ export default function ReceptionScreen() {
   function pickerItems(): string[] {
     const q = pickerSearch.toLowerCase()
     if (showPicker === 'model') {
-      // Filter models by selected fuel type: EV fuel → only EV models, PV → non-EV models
-      const fuelFiltered = form.fuel_type
-        ? modelOptions.filter(m => {
-            const isEV = m.toUpperCase().includes('EV')
-            return form.fuel_type === 'EV' ? isEV : !isEV
-          })
-        : modelOptions
-      return fuelFiltered.filter(m => m.toLowerCase().includes(q))
+      // Show all active models (no fuel-type filtering — matches web behaviour)
+      return modelOptions.filter(m => m.toLowerCase().includes(q))
     }
     if (showPicker === 'service_type') return RECEPTION_SERVICE_TYPE_OPTIONS.filter(s => s.toLowerCase().includes(q))
     if (showPicker === 'source') return SOURCE_OPTIONS.filter(s => s.toLowerCase().includes(q))

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { useAuth } from '../../context/AuthContext'
+import { supabase } from '../../lib/supabase'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { getHomeDashboardMetrics, type HomeDashboardMetrics } from '../../lib/api/homeDashboard'
 
@@ -101,6 +102,31 @@ const ACTIVITY_FEED = [
 export default function PlatformHomeScreen() {
   const router = useRouter()
   const { user } = useAuth()
+  const [allowedModules, setAllowedModules] = useState<Set<string>>(new Set())
+
+  // Load module permissions from Supabase
+  useEffect(() => {
+    let mounted = true
+    async function loadPermissions() {
+      if (!user) return
+      const [{ data: profile }, { data: permissionRows }] = await Promise.all([
+        supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
+        supabase.rpc('get_all_my_permissions'),
+      ])
+      const mods = new Set<string>(
+        ((permissionRows ?? []) as Array<{ module_name?: string }>)
+          .map(r => String(r.module_name ?? '').trim().toLowerCase())
+          .filter(Boolean)
+      )
+      // Admins get everything
+      if ((profile as { role?: string } | null)?.role === 'admin') {
+        ;['reception','floor_incharge','service_advisor','reports','import','admin','settings','autodoc'].forEach(m => mods.add(m))
+      }
+      if (mounted) setAllowedModules(mods)
+    }
+    void loadPermissions()
+    return () => { mounted = false }
+  }, [user])
   const [metrics, setMetrics] = useState<HomeDashboardMetrics>(DEFAULT_METRICS)
 
   const displayName = useMemo(() => {
@@ -139,6 +165,17 @@ export default function PlatformHomeScreen() {
     }, [loadDashboard])
   )
 
+  // Map mobile module key → DB module_name (from modules table)
+  const MODULE_KEY_TO_DB: Record<string, string> = {
+    autodoc:        'bodyshop_tracker',
+    reports:        'reports',
+    import:         'import',
+    admin:          'admin',
+    settings:       'settings',
+    reception:      'reception',
+    'floor-incharge': 'floor_incharge',
+  }
+
   const modulesWithStatus = useMemo(() => {
     const statusByKey: Record<string, string> = {
       autodoc: `${metrics.openJobCards} active`,
@@ -148,11 +185,20 @@ export default function PlatformHomeScreen() {
       settings: '',
     }
 
-    return MODULES.map((module) => ({
-      ...module,
-      status: statusByKey[module.key] ?? '',
-    }))
-  }, [metrics.activeUsers, metrics.importDatasets, metrics.latestImportUpdatedAt, metrics.openJobCards])
+    return MODULES
+      .filter(module => {
+        // If permissions not loaded yet, show nothing (avoid flash)
+        if (allowedModules.size === 0) return false
+        // Admin always sees everything
+        if (allowedModules.has('admin')) return true
+        const dbName = MODULE_KEY_TO_DB[module.key]
+        return dbName ? allowedModules.has(dbName) : false
+      })
+      .map((module) => ({
+        ...module,
+        status: statusByKey[module.key] ?? '',
+      }))
+  }, [metrics.activeUsers, metrics.importDatasets, metrics.latestImportUpdatedAt, metrics.openJobCards, allowedModules])
 
   const openModule = (tile: ModuleRow) => {
     if (!tile.route) {
