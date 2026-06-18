@@ -82,7 +82,7 @@ For Dealer 3000840 (matching UI user), the differences are:
 
 ## Implementation Plan Reference
 
-From [WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md](../../Implementation_plans/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md#audit-summary):
+From [WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md](../../Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md#audit-summary):
 
 **Documented Expected Alert Counts (as of 2026-06-02 Audit):**
 - Not submitted > 24 hours: **8 claims**
@@ -123,7 +123,7 @@ From [WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md](../../Implement
 
 2. **Re-audit with Fresh Dump:** Take a new authoritative dump snapshot after current date closes, then re-validate all 5 alerts against exact cutoff times.
 
-3. **Lock Alert Definitions:** Document each alert's SLA thresholds as frozen per [TR-003](../../Implementation_plans/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md#tr-003) to prevent drift.
+3. **Lock Alert Definitions:** Document each alert's SLA thresholds as frozen per [TR-003](../../Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md#tr-003) to prevent drift.
 
 4. **Add Audit Trail:** Log each alert's compute timestamp and record sample (first/last record, count proof) for future disputes.
 

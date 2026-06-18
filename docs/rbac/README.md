@@ -15,7 +15,7 @@
 
 ## Related Links
 
-- Implementation plan: [docs/Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md)
+- Implementation plan: [docs/Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md)
 - Daily standup: [docs/Implementation_plans/completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md](../Implementation_plans/completed/RBAC-001_DAILY_STANDUP_CHECKLIST.md)
 
 ## Adding New Docs to This Category

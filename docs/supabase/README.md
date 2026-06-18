@@ -9,9 +9,9 @@
 
 ## Related Links
 
-- Implementation plan: [docs/Implementation_plans/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md](../Implementation_plans/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md)
-- Evidence folder: [docs/Implementation_plans/supabase/evidence/](../Implementation_plans/supabase/evidence/) (audits, slow query analysis, connection pooling)
-- Runbooks: [docs/Implementation_plans/supabase/runbooks/](../Implementation_plans/supabase/runbooks/) (deployment checklists)
+- Implementation plan: [docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md](../Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md)
+- Evidence folder: [docs/Implementation_plans/webversion/categories/supabase/evidence/](../Implementation_plans/webversion/categories/supabase/evidence/) (audits, slow query analysis, connection pooling)
+- Runbooks: [docs/Implementation_plans/webversion/categories/supabase/evidence/runbooks/](../Implementation_plans/webversion/categories/supabase/evidence/runbooks/) (deployment checklists)
 
 ## Adding New Docs to This Category
 

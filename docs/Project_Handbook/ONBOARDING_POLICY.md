@@ -156,7 +156,7 @@ Administrator: Use the Admin Panel to assign module permissions."
 
 ## Related Documentation
 
-- [RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall RBAC plan
+- [RBAC_IMPLEMENTATION_MASTER_2026-06-01.md](../Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall RBAC plan
 - [src/App.tsx](../../src/App.tsx) — AccessDenied component
 - [src/pages/SignUpPage.tsx](../../src/pages/SignUpPage.tsx) — Signup flow
 - [src/pages/AdminPage.tsx](../../src/pages/AdminPage.tsx) — Module assignment UI

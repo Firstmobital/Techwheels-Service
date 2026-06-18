@@ -332,7 +332,7 @@ curl -X GET "http://localhost:3000/rest/v1/open_job_cards" \
 
 ## Related Documentation
 
-- [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](../../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall plan
+- [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](../../Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall plan
 - [RBAC_TABLE_ACCESS_VALIDATION_TESTS.md](RBAC_TABLE_ACCESS_VALIDATION_TESTS.md) — Backend validation
 - [RBAC_ROLE_MATRIX_TESTING.md](RBAC_ROLE_MATRIX_TESTING.md) — Role matrix tests
 

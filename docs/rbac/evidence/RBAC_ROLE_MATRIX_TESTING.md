@@ -257,7 +257,7 @@ test('new user sees helpful AccessDenied message', async ({ page }) => {
 
 ## Related Documentation
 
-- [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](../../Implementation_plans/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall plan
+- [RBAC-001_DYNAMIC_RBAC_AND_MODULE_WIRING.md](../../Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md) — Overall plan
 - [MODULE_ROUTE_CONTRACT.md](../../Project_Handbook/MODULE_ROUTE_CONTRACT.md) — Module/route mapping
 - [ROUTE_STRATEGY_DECISION.md](../../Project_Handbook/ROUTE_STRATEGY_DECISION.md) — Route design
 - [ONBOARDING_POLICY.md](../../Project_Handbook/ONBOARDING_POLICY.md) — New user behavior

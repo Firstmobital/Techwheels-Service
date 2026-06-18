@@ -12,8 +12,8 @@
 
 ## Related Links
 
-- Implementation plan: [docs/Implementation_plans/autodoc/active/](../Implementation_plans/autodoc/active/)
-- Audit: [docs/Implementation_plans/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md](../Implementation_plans/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md)
+- Implementation plan: [docs/Implementation_plans/webversion/categories/autodoc/active/](../Implementation_plans/webversion/categories/autodoc/active/)
+- Audit: [docs/Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md](../Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md)
 
 ## Adding New Docs to This Category
 

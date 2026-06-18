@@ -34,7 +34,7 @@ The highest-risk issue is migration truth drift: current deployed bodyshop schem
 
 ## Context and Background
 
-Comparison report: docs/supabase/DB_CODE_COMPARISON_9JUNE_VS_CURRENT_2026-06-11.md.
+Comparison report: docs/supabase/evidence/DB_CODE_COMPARISON_9JUNE_VS_CURRENT_2026-06-11.md.
 
 Key findings requiring corrective implementation:
 
@@ -98,7 +98,7 @@ Key findings requiring corrective implementation:
 
 DONE | 1.1 | Freeze bodyshop schema contract from authoritative dump | Team | 2026-06-11 | 2026-06-11 | Evidence: supabase/evidence/2026-06-11_supabase-002_bodyshop_authoritative_contract_snapshot.md
 DONE | 1.2 | Supersede incompatible migration chain safely | Team | 2026-06-11 | 2026-06-11 | superseded migration marker added in 20260610230000_bodyshop_repair_tracker.sql
-DONE | 1.3 | Contract mismatch decision note for modules and permissions | Team | 2026-06-11 | 2026-06-11 | Decision: docs/Implementation_plans/supabase/active/SUPABASE-002_DECISION_MODULE_PERMISSION_CONTRACT_2026-06-11.md
+DONE | 1.3 | Contract mismatch decision note for modules and permissions | Team | 2026-06-11 | 2026-06-11 | Decision: docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-002_DECISION_MODULE_PERMISSION_CONTRACT_2026-06-11.md
 DONE | 1.4 | Add bodyshop object signature SQL check pack | Team | 2026-06-11 | 2026-06-11 | Check pack: supabase/sql_checks/20260611170000_supabase_002_bodyshop_authoritative_alignment_checks.sql
 
 ### Phase 2
@@ -354,10 +354,10 @@ DONE | 5.4 | Final sign-off and archive transition | Team | 2026-06-11 | 2026-06
 
 ## Related Documentation
 
-- docs/supabase/DB_CODE_COMPARISON_9JUNE_VS_CURRENT_2026-06-11.md
+- docs/supabase/evidence/DB_CODE_COMPARISON_9JUNE_VS_CURRENT_2026-06-11.md
 - docs/Implementation_plans/TEMPLATE.md
-- docs/Implementation_plans/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md
-- docs/Implementation_plans/supabase/README.md
+- docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md
+- docs/Implementation_plans/webversion/categories/supabase/README.md
 
 ---
 

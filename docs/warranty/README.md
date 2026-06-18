@@ -10,7 +10,7 @@
 
 ## Related Links
 
-- Implementation plan: [docs/Implementation_plans/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md](../Implementation_plans/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md)
+- Implementation plan: [docs/Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md](../Implementation_plans/webversion/categories/warranty/active/WARRANTY-001_WARRANTY_REPORT_IMPORT_AND_REPORTING_PLAN.md)
 
 ## Adding New Docs to This Category
 
