@@ -480,6 +480,11 @@ export default function JobCardEstimateScreen() {
 
   const missingEstimatePanels = panelReadiness.filter((item) => item.hasPreRepair && !item.hasCompleteEstimate)
 
+  const canProceedToSubmit = useMemo(() => {
+    if (panels.length === 0 || panelReadiness.length === 0) return false
+    return panelReadiness.every((item) => item.hasPreRepair && item.hasCompleteEstimate)
+  }, [panelReadiness, panels.length])
+
   const estimateTotals = useMemo(() => {
     return rows.reduce((acc, row) => {
       const parts = Number(row.ndpValue || '0') || 0
@@ -925,9 +930,17 @@ export default function JobCardEstimateScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={{ marginTop: 12, borderRadius: 12, backgroundColor: '#2a4cd0', paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  style={{ marginTop: 12, borderRadius: 12, backgroundColor: canProceedToSubmit ? '#2a4cd0' : '#a8b6f1', paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  disabled={!canProceedToSubmit}
                   onPress={() => {
                     if (!jobCardId) return
+                    if (!canProceedToSubmit) {
+                      const preview = missingEstimatePanels.slice(0, 3).map((item) => item.panelName).join(', ')
+                      const suffix = missingEstimatePanels.length > 3 ? '...' : ''
+                      const details = preview ? ` Missing: ${preview}${suffix}` : ''
+                      Alert.alert('Estimate Incomplete', `Complete estimate rows for all selected panels before proceeding to Submit.${details}`)
+                      return
+                    }
                     router.push(`/job-cards/${jobCardId}/submit`)
                   }}
                 >

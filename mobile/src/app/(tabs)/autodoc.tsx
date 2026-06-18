@@ -52,23 +52,19 @@ function isTodayComplaintDate(dateStr: string | null | undefined): boolean {
   return dateStr === today
 }
 
-function canonicalizeEstimateAction(value: string): string {
-  const normalized = value.trim().toLowerCase()
-  if (!normalized) return ''
-  if (normalized === 'parts replacement' || normalized === 'part replacement') return 'replace'
-  if (normalized === 'repair') return 'repaint'
-  return normalized
-}
-
 function deriveWorkflowStage(
   row: JobDashboardSummaryRow,
   postRepairReadyJobIds: Set<string>,
-  estimatePendingJobIds: Set<string>
+  estimatePendingJobIds: Set<string>,
+  preSubmitReadyJobIds: Set<string>
 ): WorkflowStage {
   const jobCardId = row.job_card_id ?? ''
   if (row.status === 'completed') return 'claim_submitted'
   if (jobCardId && postRepairReadyJobIds.has(jobCardId)) return 'post_repair_ppt'
   if (row.status === 'submitted') return 'pre_submit_done'
+  if ((row.status === 'in_work' || row.status === 'approved') && jobCardId && preSubmitReadyJobIds.has(jobCardId)) {
+    return 'pre_submit_pending'
+  }
   if ((row.status === 'in_work' || row.status === 'approved') && jobCardId && estimatePendingJobIds.has(jobCardId)) {
     return 'estimate'
   }
@@ -140,6 +136,7 @@ export default function AutoDocScreen() {
   const [error, setError] = useState<string | null>(null)
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
+  const [preSubmitReadyJobIds, setPreSubmitReadyJobIds] = useState<Set<string>>(new Set())
 
   const loadJobCards = useCallback(async () => {
     try {
@@ -292,60 +289,108 @@ export default function AutoDocScreen() {
     let cancelled = false
 
     async function computeEstimatePendingJobs() {
-      const jobCardIds = jobCards
+      const estimateCandidateJobCardIds = jobCards
+        .filter((row) => row.status === 'in_work' || row.status === 'approved')
         .map((row) => row.job_card_id)
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
 
-      if (jobCardIds.length === 0) {
+      if (estimateCandidateJobCardIds.length === 0) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
+        if (!cancelled) setPreSubmitReadyJobIds(new Set())
         return
       }
 
-      // Get all panels for these jobs
-      const [panelsRes, photosRes] = await Promise.all([
-        supabase.from('panels').select('id, job_card_id').in('job_card_id', jobCardIds),
+      const [panelsRes, preRepairPhotosRes, estimateRowsRes] = await Promise.all([
+        supabase
+          .from('panels')
+          .select('id, job_card_id, panel_name')
+          .in('job_card_id', estimateCandidateJobCardIds),
         supabase
           .from('panel_photos')
           .select('job_card_id, panel_id')
-          .in('job_card_id', jobCardIds)
-          .eq('stage', 'pre-repair'),
+          .in('job_card_id', estimateCandidateJobCardIds)
+          .eq('repair_stage', 'pre-repair'),
+        supabase
+          .from('estimate_rows')
+          .select('job_card_id, panel_name, action, defect, part_number')
+          .in('job_card_id', estimateCandidateJobCardIds),
       ])
 
-      if (cancelled || panelsRes.error || photosRes.error) {
+      if (cancelled || panelsRes.error || preRepairPhotosRes.error || estimateRowsRes.error) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
+        if (!cancelled) setPreSubmitReadyJobIds(new Set())
         return
       }
 
-      // Map selected panels by job
       const selectedPanelIdsByJob = new Map<string, Set<string>>()
+      const selectedPanelNamesByJob = new Map<string, Set<string>>()
+
       for (const panel of panelsRes.data ?? []) {
         if (!panel.job_card_id || !panel.id) continue
-        const existing = selectedPanelIdsByJob.get(panel.job_card_id) ?? new Set<string>()
-        existing.add(panel.id)
-        selectedPanelIdsByJob.set(panel.job_card_id, existing)
+        const panelIds = selectedPanelIdsByJob.get(panel.job_card_id) ?? new Set<string>()
+        panelIds.add(panel.id)
+        selectedPanelIdsByJob.set(panel.job_card_id, panelIds)
+
+        const panelName = panel.panel_name?.trim().toLowerCase()
+        if (!panelName) continue
+        const panelNames = selectedPanelNamesByJob.get(panel.job_card_id) ?? new Set<string>()
+        panelNames.add(panelName)
+        selectedPanelNamesByJob.set(panel.job_card_id, panelNames)
       }
 
-      // Map pre-repair photos by job
       const preRepairPanelIdsByJob = new Map<string, Set<string>>()
-      for (const photo of photosRes.data ?? []) {
+      for (const photo of preRepairPhotosRes.data ?? []) {
         if (!photo.job_card_id || !photo.panel_id) continue
-        const existing = preRepairPanelIdsByJob.get(photo.job_card_id) ?? new Set<string>()
-        existing.add(photo.panel_id)
-        preRepairPanelIdsByJob.set(photo.job_card_id, existing)
+        const panelIds = preRepairPanelIdsByJob.get(photo.job_card_id) ?? new Set<string>()
+        panelIds.add(photo.panel_id)
+        preRepairPanelIdsByJob.set(photo.job_card_id, panelIds)
       }
 
-      // Jobs ready for estimate: all selected panels must have pre-repair photos
-      const readySet = new Set<string>()
-      for (const [jobCardId, selectedPanelsSet] of selectedPanelIdsByJob.entries()) {
-        if (selectedPanelsSet.size === 0) continue
-        const preRepairPanelsSet = preRepairPanelIdsByJob.get(jobCardId) ?? new Set<string>()
-        const hasAllPanels = Array.from(selectedPanelsSet).every((panelId) =>
-          preRepairPanelsSet.has(panelId)
-        )
-        if (hasAllPanels) readySet.add(jobCardId)
+      const completedEstimatePanelsByJob = new Map<string, Set<string>>()
+      for (const row of estimateRowsRes.data ?? []) {
+        const jobCardId = row.job_card_id
+        const panelName = row.panel_name?.trim().toLowerCase()
+        if (!jobCardId || !panelName) continue
+
+        const action = String(row.action ?? '').trim().toLowerCase()
+        const defect = String(row.defect ?? '').trim()
+        const partNumber = String(row.part_number ?? '').trim()
+        const hasBaseRequiredFields = Boolean(action && defect)
+        const needsPartNumber = action === 'replace' || action === 'parts replacement' || action === 'part replacement'
+        const hasPartNumber = !needsPartNumber || Boolean(partNumber)
+        const isComplete = hasBaseRequiredFields && hasPartNumber
+        if (!isComplete) continue
+
+        const completedPanels = completedEstimatePanelsByJob.get(jobCardId) ?? new Set<string>()
+        completedPanels.add(panelName)
+        completedEstimatePanelsByJob.set(jobCardId, completedPanels)
       }
 
-      if (!cancelled) setEstimatePendingJobIds(readySet)
+      const pendingSet = new Set<string>()
+      const preSubmitReadySet = new Set<string>()
+      for (const jobCardId of estimateCandidateJobCardIds) {
+        const selectedPanelIds = selectedPanelIdsByJob.get(jobCardId) ?? new Set<string>()
+        if (selectedPanelIds.size === 0) continue
+
+        const preRepairPanelIds = preRepairPanelIdsByJob.get(jobCardId) ?? new Set<string>()
+        const hasAllPreRepairPanels = Array.from(selectedPanelIds).every((panelId) => preRepairPanelIds.has(panelId))
+        if (!hasAllPreRepairPanels) continue
+
+        pendingSet.add(jobCardId)
+
+        const selectedPanelNames = selectedPanelNamesByJob.get(jobCardId) ?? new Set<string>()
+        if (selectedPanelNames.size === 0) continue
+
+        const completedEstimatePanels = completedEstimatePanelsByJob.get(jobCardId) ?? new Set<string>()
+        const hasCompleteEstimateForAllPanels = Array.from(selectedPanelNames).every((panelName) => completedEstimatePanels.has(panelName))
+
+        if (hasCompleteEstimateForAllPanels) {
+          preSubmitReadySet.add(jobCardId)
+        }
+      }
+
+      if (!cancelled) setEstimatePendingJobIds(pendingSet)
+      if (!cancelled) setPreSubmitReadyJobIds(preSubmitReadySet)
     }
 
     void computeEstimatePendingJobs()
@@ -390,8 +435,8 @@ export default function AutoDocScreen() {
   }
 
   const rowsWithStage = useMemo(
-    () => jobCards.map((row) => ({ row, stage: deriveWorkflowStage(row, postRepairReadyJobIds, estimatePendingJobIds) })),
-    [jobCards, postRepairReadyJobIds, estimatePendingJobIds]
+    () => jobCards.map((row) => ({ row, stage: deriveWorkflowStage(row, postRepairReadyJobIds, estimatePendingJobIds, preSubmitReadyJobIds) })),
+    [jobCards, postRepairReadyJobIds, estimatePendingJobIds, preSubmitReadyJobIds]
   )
 
   const stageCounts = useMemo(() => {

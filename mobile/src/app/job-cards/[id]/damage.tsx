@@ -23,6 +23,7 @@ type Params = {
   id?: string | string[]
   jcNumber?: string | string[]
   regNumber?: string | string[]
+  stage?: string | string[]
 }
 
 type PanelDamageSummary = {
@@ -71,10 +72,18 @@ function uniqueNonEmpty(values: string[]): string[] {
 export default function DamageStageScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { id, jcNumber, regNumber } = useLocalSearchParams<Params>()
+  const { id, jcNumber, regNumber, stage } = useLocalSearchParams<Params>()
   const jobCardId = useMemo(() => (Array.isArray(id) ? id[0] : id), [id])
   const jobCardNumberHint = useMemo(() => (Array.isArray(jcNumber) ? jcNumber[0] : jcNumber), [jcNumber])
   const regNumberHint = useMemo(() => (Array.isArray(regNumber) ? regNumber[0] : regNumber), [regNumber])
+  const preferredStage = useMemo<DamageStage | null>(() => {
+    const raw = Array.isArray(stage) ? stage[0] : stage
+    const value = String(raw ?? '').trim().toLowerCase()
+    if (value === 'under-repair') return 'under-repair'
+    if (value === 'post-repair') return 'post-repair'
+    if (value === 'pre-repair') return 'pre-repair'
+    return null
+  }, [stage])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -168,13 +177,17 @@ export default function DamageStageScreen() {
     setPanelOptions(effectiveOptions)
 
     if (selectedFiltered.length > 0) {
-      setActiveStage((prev) => prev ?? 'pre-repair')
+      if (preferredStage) {
+        setActiveStage(preferredStage)
+      } else {
+        setActiveStage((prev) => prev ?? 'pre-repair')
+      }
     } else {
       setActiveStage(null)
     }
 
     setLoading(false)
-  }, [jobCardId, jobCardNumberHint, regNumberHint])
+  }, [jobCardId, jobCardNumberHint, preferredStage, regNumberHint])
 
   useEffect(() => {
     void loadDamage()

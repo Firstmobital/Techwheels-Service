@@ -382,6 +382,7 @@ export default function AutoDocPage() {
   const [dashboardCardFilter, setDashboardCardFilter] = useState<DashboardCardFilter>('active_vehicles')
   const [postRepairReadyJobIds, setPostRepairReadyJobIds] = useState<Set<string>>(new Set())
   const [estimatePendingJobIds, setEstimatePendingJobIds] = useState<Set<string>>(new Set())
+  const [preSubmitReadyJobIds, setPreSubmitReadyJobIds] = useState<Set<string>>(new Set())
   const [form, setForm] = useState<CreateJobCardForm>(() => {
     const initial = createInitialForm()
     const draft = readSessionJSON<CreateJobCardForm>(SESSION_KEYS.formDraft, initial)
@@ -1092,6 +1093,7 @@ export default function AutoDocPage() {
 
       if (estimateCandidateJobCardIds.length === 0) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
+        if (!cancelled) setPreSubmitReadyJobIds(new Set())
         return
       }
 
@@ -1113,6 +1115,7 @@ export default function AutoDocPage() {
 
       if (cancelled || panelsRes.error || preRepairPhotosRes.error || estimateRowsRes.error) {
         if (!cancelled) setEstimatePendingJobIds(new Set())
+        if (!cancelled) setPreSubmitReadyJobIds(new Set())
         return
       }
 
@@ -1161,6 +1164,7 @@ export default function AutoDocPage() {
       }
 
       const pendingSet = new Set<string>()
+      const preSubmitReadySet = new Set<string>()
       for (const jobCardId of estimateCandidateJobCardIds) {
         const selectedPanelIds = selectedPanelIdsByJob.get(jobCardId) ?? new Set<string>()
         if (selectedPanelIds.size === 0) continue
@@ -1169,18 +1173,20 @@ export default function AutoDocPage() {
         const hasAllPreRepairPanels = Array.from(selectedPanelIds).every((panelId) => preRepairPanelIds.has(panelId))
         if (!hasAllPreRepairPanels) continue
 
+        pendingSet.add(jobCardId)
+
         const selectedPanelNames = selectedPanelNamesByJob.get(jobCardId) ?? new Set<string>()
         if (selectedPanelNames.size === 0) continue
 
         const completedEstimatePanels = completedEstimatePanelsByJob.get(jobCardId) ?? new Set<string>()
         const hasCompleteEstimateForAllPanels = Array.from(selectedPanelNames).every((panelName) => completedEstimatePanels.has(panelName))
-
-        if (!hasCompleteEstimateForAllPanels) {
-          pendingSet.add(jobCardId)
+        if (hasCompleteEstimateForAllPanels) {
+          preSubmitReadySet.add(jobCardId)
         }
       }
 
       if (!cancelled) setEstimatePendingJobIds(pendingSet)
+      if (!cancelled) setPreSubmitReadyJobIds(preSubmitReadySet)
     }
 
     void computeEstimatePendingJobs()
@@ -1893,6 +1899,7 @@ export default function AutoDocPage() {
       if (row.status === 'completed') return 'claim_submitted'
       if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
       if (row.status === 'submitted') return 'pre_submit_done'
+      if ((row.status === 'in_work' || row.status === 'approved') && preSubmitReadyJobIds.has(row.job_card_id)) return 'pre_submit_pending'
       if ((row.status === 'in_work' || row.status === 'approved') && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
       if (row.status === 'approved') return 'pre_submit_pending'
       if (row.status === 'in_work') return 'documentation_pre_repair'
@@ -1918,7 +1925,7 @@ export default function AutoDocPage() {
       postRepairPpt,
       claimSubmitted,
     })
-  }, [estimatePendingJobIds, postRepairReadyJobIds, rows])
+  }, [estimatePendingJobIds, postRepairReadyJobIds, preSubmitReadyJobIds, rows])
 
   function pickFirstText(...values: Array<string | null | undefined>): string {
     for (const value of values) {
@@ -2969,6 +2976,7 @@ export default function AutoDocPage() {
     if (row.status === 'completed') return 'claim_submitted'
     if (postRepairReadyJobIds.has(row.job_card_id)) return 'post_repair_ppt'
     if (row.status === 'submitted') return 'pre_submit_done'
+    if ((row.status === 'in_work' || row.status === 'approved') && preSubmitReadyJobIds.has(row.job_card_id)) return 'pre_submit_pending'
     if ((row.status === 'in_work' || row.status === 'approved') && estimatePendingJobIds.has(row.job_card_id)) return 'estimate'
     if (row.status === 'approved') return 'pre_submit_pending'
     if (row.status === 'in_work') return 'documentation_pre_repair'
