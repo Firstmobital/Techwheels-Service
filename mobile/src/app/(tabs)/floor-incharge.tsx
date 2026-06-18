@@ -8,7 +8,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   ActivityIndicator, FlatList, Modal, Platform,
   RefreshControl, ScrollView, Text, TextInput,
-  TouchableOpacity, View, KeyboardAvoidingView,,
+  TouchableOpacity, View, KeyboardAvoidingView,
   Dimensions} from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
