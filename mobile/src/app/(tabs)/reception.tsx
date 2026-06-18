@@ -447,9 +447,8 @@ export default function ReceptionScreen() {
     setFormError(null)
 
     // Exact web required-field check
-    if (!form.reg_number.trim() || !form.model.trim() || !form.sa_employee_code.trim() ||
-        !form.owner_name.trim() || !form.owner_phone.trim() || !form.source.trim()) {
-      setFormError('Please fill all required fields: Registration No, Model, SA Name, Owner Name, Owner Phone, Source')
+    if (!form.fuel_type.trim() || !form.reg_number.trim() || !form.model.trim() || !form.sa_employee_code.trim() || !form.service_type.trim()) {
+      setFormError('Please fill all required fields: Fuel Type, Model, Registration No, Service Type, SA Name')
       return
     }
     if (form.reg_number.trim().length > 10) {
@@ -636,48 +635,26 @@ export default function ReceptionScreen() {
     const fuelLabel = getEntryFuelLabel(entry, empFuelByCode, empFuelByName)
     return (
       <View style={s.card}>
+        {/* Row 1: Reg No + Service Type chip */}
         <View style={s.cardHeader}>
           <Text style={s.regNo}>{entry.reg_number}</Text>
           <View style={[s.stChip, { backgroundColor: col.bg }]}>
             <Text style={[s.stChipText, { color: col.text }]}>{abbr}</Text>
           </View>
         </View>
+        {/* Row 2: Model + Fuel */}
         <View style={s.cardRow}>
           <Text style={s.cardLabel}>Model</Text>
           <Text style={s.cardValue}>{entry.model ?? '—'}</Text>
           <Text style={[s.cardLabel, { marginLeft: 12 }]}>Fuel</Text>
           <Text style={s.cardValue}>{fuelLabel}</Text>
         </View>
+        {/* Row 3: SA Name */}
         <View style={s.cardRow}>
           <Text style={s.cardLabel}>SA</Text>
           <Text style={s.cardValue}>{entry.sa_display_name ?? entry.sa_name ?? '—'}</Text>
         </View>
-        <View style={s.cardRow}>
-          <Text style={s.cardLabel}>Owner</Text>
-          <Text style={s.cardValue}>{entry.owner_name ?? '—'}</Text>
-          {entry.owner_phone ? (
-            <><Text style={[s.cardLabel, { marginLeft: 8 }]}>Ph</Text>
-            <Text style={s.cardValue}>{entry.owner_phone}</Text></>
-          ) : null}
-        </View>
-        <View style={s.cardRow}>
-          <Text style={s.cardLabel}>JC</Text>
-          <Text style={s.cardValue}>{entry.jc_number ?? '—'}</Text>
-        </View>
-        <View style={s.cardRow}>
-          <Text style={s.cardLabel}>Source</Text>
-          <Text style={s.cardValue}>{entry.source}</Text>
-          {entry.km_reading != null ? (
-            <><Text style={[s.cardLabel, { marginLeft: 12 }]}>KM</Text>
-            <Text style={s.cardValue}>{entry.km_reading.toLocaleString()}</Text></>
-          ) : null}
-        </View>
-        {entry.remark ? (
-          <View style={s.cardRow}>
-            <Text style={s.cardLabel}>Remark</Text>
-            <Text style={s.cardValue}>{entry.remark}</Text>
-          </View>
-        ) : null}
+        {/* Actions */}
         <View style={s.cardActions}>
           <TouchableOpacity style={s.editBtn} onPress={() => openEdit(entry)}>
             <Text style={s.editBtnText}>✏️  Edit</Text>
@@ -796,23 +773,6 @@ export default function ReceptionScreen() {
                 />
               </FormField>
 
-              <FormField label="KM Reading">
-                <TextInput style={s.input}
-                  placeholder="e.g. 12500"
-                  placeholderTextColor="#94a3b8"
-                  value={form.km_reading}
-                  keyboardType="number-pad"
-                  onChangeText={t => setForm(p => ({ ...p, km_reading: t.replace(/\D/g, '') }))}
-                />
-              </FormField>
-
-              <FormField label="Source *">
-                <TouchableOpacity style={s.select} onPress={() => { setShowPicker('source'); setPickerSearch('') }}>
-                  <Text style={form.source ? s.selectText : s.selectPlaceholder}>{form.source || 'Select source'}</Text>
-                  <Text style={s.chevron}>▼</Text>
-                </TouchableOpacity>
-              </FormField>
-
               <FormField label="Service Type">
                 <TouchableOpacity style={s.select} onPress={() => { setShowPicker('service_type'); setPickerSearch('') }}>
                   <Text style={form.service_type ? s.selectText : s.selectPlaceholder}>{form.service_type || 'Select service type'}</Text>
@@ -825,26 +785,6 @@ export default function ReceptionScreen() {
                   <Text style={form.sa_employee_code ? s.selectText : s.selectPlaceholder}>{getFormSALabel() || 'Select SA'}</Text>
                   <Text style={s.chevron}>▼</Text>
                 </TouchableOpacity>
-              </FormField>
-
-              <FormField label="Owner Name *">
-                <TextInput style={s.input}
-                  placeholder="Customer name"
-                  placeholderTextColor="#94a3b8"
-                  value={form.owner_name}
-                  onChangeText={t => setForm(p => ({ ...p, owner_name: t }))}
-                />
-              </FormField>
-
-              <FormField label="Owner Phone *">
-                <TextInput style={s.input}
-                  placeholder="10-digit mobile number"
-                  placeholderTextColor="#94a3b8"
-                  value={form.owner_phone}
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  onChangeText={t => setForm(p => ({ ...p, owner_phone: t.replace(/\D/g, '') }))}
-                />
               </FormField>
 
               <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
