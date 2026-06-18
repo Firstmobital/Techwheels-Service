@@ -821,6 +821,27 @@ export default function ReceptionScreen() {
                 />
               </FormField>
 
+              <FormField label="Fuel Type *">
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {(['EV', 'PV'] as const).map(ft => (
+                    <TouchableOpacity
+                      key={ft}
+                      style={{
+                        flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center',
+                        borderWidth: 2,
+                        borderColor: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#e2e8f0',
+                        backgroundColor: form.fuel_type === ft ? (ft === 'EV' ? '#f0fdf4' : '#eff6ff') : '#fff',
+                      }}
+                      onPress={() => setForm(p => ({ ...p, fuel_type: p.fuel_type === ft ? '' : ft }))}>
+                      <Text style={{
+                        fontWeight: '700', fontSize: 16,
+                        color: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#94a3b8',
+                      }}>{ft}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </FormField>
+
               <FormField label="Model *">
                 <TouchableOpacity style={s.select} onPress={() => { setShowPicker('model'); setPickerSearch('') }}>
                   <Text style={form.model ? s.selectText : s.selectPlaceholder}>{form.model || 'Select model'}</Text>
@@ -852,28 +873,7 @@ export default function ReceptionScreen() {
                 </TouchableOpacity>
               </FormField>
 
-              <FormField label="Fuel Type *">
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  {(['EV', 'PV'] as const).map(ft => (
-                    <TouchableOpacity
-                      key={ft}
-                      style={{
-                        flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center',
-                        borderWidth: 2,
-                        borderColor: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#e2e8f0',
-                        backgroundColor: form.fuel_type === ft ? (ft === 'EV' ? '#f0fdf4' : '#eff6ff') : '#fff',
-                      }}
-                      onPress={() => setForm(p => ({ ...p, fuel_type: p.fuel_type === ft ? '' : ft }))}>
-                      <Text style={{
-                        fontWeight: '700', fontSize: 16,
-                        color: form.fuel_type === ft ? (ft === 'EV' ? '#16a34a' : '#2563eb') : '#94a3b8',
-                      }}>{ft}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </FormField>
-
-              <FormField label={`SA Name *  (${filteredSAs.length} available)`}>
+              <FormField label="SA Name *">
                 <TouchableOpacity style={s.select} onPress={() => { setShowPicker('sa'); setPickerSearch('') }}>
                   <Text style={form.sa_employee_code ? s.selectText : s.selectPlaceholder}>{getFormSALabel() || 'Select SA'}</Text>
                   <Text style={s.chevron}>▼</Text>
