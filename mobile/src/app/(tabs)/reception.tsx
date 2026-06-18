@@ -332,7 +332,7 @@ export default function ReceptionScreen() {
   const todayEntries = useMemo(() =>
     entries.filter(e => getEntryDateKey(e.created_at) === todayKey), [entries, todayKey])
   const baseEntries = useMemo(() =>
-    listMode === 'today' ? todayEntries : entries, [listMode, todayEntries, entries])
+    todayEntries, [todayEntries])  // Always show today's entries only
 
   const empFuelByCode = useMemo(() =>
     new Map(employees.map(e => [String(e.employee_code ?? '').trim().toUpperCase(), getFuelTypeLabel(e.fuel_type)])),
@@ -693,26 +693,16 @@ export default function ReceptionScreen() {
   return (
     <SafeAreaView style={s.root}>
 
-      {/* Header */}
+      {/* ── Compact header: Today Entry | Reception | + New Entry ── */}
       <View style={s.header}>
-        <View>
-          <Text style={s.headerTitle}>🏢 Reception</Text>
-          <Text style={s.headerSub}>{displayEntries.length} records · {listMode === 'today' ? 'Today' : 'This Month'}</Text>
+        <View style={s.headerLeft}>
+          <Text style={s.headerLeftLabel}>Today Entry</Text>
+          <Text style={s.headerLeftCount}>{todayEntries.length}</Text>
         </View>
+        <Text style={s.headerTitle}>Reception</Text>
         <TouchableOpacity style={s.addBtn} onPress={openAdd}>
           <Text style={s.addBtnText}>+ New Entry</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Today / Month toggle */}
-      <View style={s.toggleRow}>
-        {(['today', 'month'] as const).map(m => (
-          <TouchableOpacity key={m} style={[s.toggleBtn, listMode === m && s.toggleBtnActive]} onPress={() => setListMode(m)}>
-            <Text style={[s.toggleBtnText, listMode === m && s.toggleBtnTextActive]}>
-              {m === 'today' ? `Today (${todayEntries.length})` : `This Month (${entries.length})`}
-            </Text>
-          </TouchableOpacity>
-        ))}
       </View>
 
       {/* Search */}
@@ -723,51 +713,6 @@ export default function ReceptionScreen() {
           value={search} onChangeText={setSearch} clearButtonMode="while-editing"
         />
       </View>
-
-      {/* Location filter */}
-      {locationOptions.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow}>
-          {['all', ...locationOptions].map(loc => (
-            <TouchableOpacity key={loc} style={[s.chip, selectedLocation === loc && s.chipActive]} onPress={() => setSelectedLocation(loc)}>
-              <Text style={[s.chipText, selectedLocation === loc && s.chipTextActive]}>
-                {loc === 'all' ? `All (${baseEntries.length})` : loc}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Fuel filter */}
-      {fuelTypeOptions.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow}>
-          {['all', ...fuelTypeOptions].map(ft => (
-            <TouchableOpacity key={ft} style={[s.chip, selectedFuelType === ft && s.chipActive]} onPress={() => setSelectedFuelType(ft)}>
-              <Text style={[s.chipText, selectedFuelType === ft && s.chipTextActive]}>
-                {ft === 'all' ? `All (${locFiltered.length})` : ft}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Service type filter */}
-      {serviceTypeCounts.size > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow}>
-          <TouchableOpacity style={[s.chip, selectedServiceType === 'all' && s.chipActive]} onPress={() => setSelectedServiceType('all')}>
-            <Text style={[s.chipText, selectedServiceType === 'all' && s.chipTextActive]}>All ({fuelFiltered.length})</Text>
-          </TouchableOpacity>
-          {[...serviceTypeCounts.entries()].map(([st, cnt]) => {
-            const abbr = getServiceTypeAbbr(st)
-            const col = ST_COLOR[abbr] ?? ST_COLOR['NULL']
-            const active = selectedServiceType === st
-            return (
-              <TouchableOpacity key={st} style={[s.chip, active && { backgroundColor: col.bg, borderColor: col.text }]} onPress={() => setSelectedServiceType(st)}>
-                <Text style={[s.chipText, active && { color: col.text }]}>{abbr} ({cnt})</Text>
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
-      )}
 
       {/* List */}
       {loading ? (
@@ -964,7 +909,10 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 const styles = {
   root:               { flex: 1, backgroundColor: '#f8fafc' } as const,
   header:             { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  headerTitle:        { fontSize: 18, fontWeight: '700' as const, color: '#1e293b' },
+  headerLeft:         { alignItems: 'flex-start' as const },
+  headerLeftLabel:    { fontSize: 10, fontWeight: '700' as const, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+  headerLeftCount:    { fontSize: 22, fontWeight: '800' as const, color: '#2563eb', lineHeight: 26 },
+  headerTitle:        { fontSize: 17, fontWeight: '800' as const, color: '#0f172a', flex: 1, textAlign: 'center' as const },
   headerSub:          { fontSize: 12, color: '#64748b', marginTop: 2 },
   addBtn:             { backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   addBtnText:         { color: '#fff', fontWeight: '700' as const, fontSize: 14 },
