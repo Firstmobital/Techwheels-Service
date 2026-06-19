@@ -610,95 +610,108 @@ export default function SATrackerPage() {
         background: '#fff',
         border: '1px solid #e2e8f0',
         borderRadius: '10px',
-        padding: '0.6rem 0.85rem',
+        padding: '0.55rem 0.85rem',
         marginBottom: '0.6rem',
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
-        gap: '0.5rem',
+        gap: '0.45rem',
       }}>
         {/* Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.25rem' }}>
           <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>🧑‍💼 SA Tracker</span>
           <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 400 }}>
             {totals.jcCount.toLocaleString('en-IN')} JCs
           </span>
         </div>
 
-        {/* Period filter */}
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        {/* Period filter — kept as DateRangeFilter (already compact) */}
         <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
 
-        {/* Divider */}
         <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        {/* Location filter */}
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Loc:</span>
-        <button type="button" onClick={() => setBranchFilter('all')}
-          className={`btn btn--sm ${branchFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({dateScopedRows.length})
-        </button>
-        {branches.map((b) => (
-          <button key={b} type="button" onClick={() => setBranchFilter(b)}
-            className={`btn btn--sm ${branchFilter === b ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {b} ({dateScopedRows.filter((r) => getBranchLabel(r.location ?? r.branch) === b).length})
-          </button>
-        ))}
+        {/* Location dropdown */}
+        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', marginRight: '2px' }}>Loc:</label>
+        <select
+          value={branchFilter}
+          onChange={e => setBranchFilter(e.target.value)}
+          style={{
+            fontSize: '0.78rem', fontWeight: branchFilter !== 'all' ? 600 : 400,
+            color: branchFilter !== 'all' ? '#0f172a' : '#475569',
+            border: `1.5px solid ${branchFilter !== 'all' ? '#3b82f6' : '#cbd5e1'}`,
+            borderRadius: '6px', padding: '0.22rem 1.6rem 0.22rem 0.5rem',
+            background: branchFilter !== 'all' ? '#eff6ff' : '#f8fafc',
+            outline: 'none', cursor: 'pointer', appearance: 'auto',
+          }}>
+          <option value="all">All ({dateScopedRows.length})</option>
+          {branches.map(b => (
+            <option key={b} value={b}>
+              {b} ({dateScopedRows.filter(r => getBranchLabel(r.location ?? r.branch) === b).length})
+            </option>
+          ))}
+        </select>
 
-        {/* Divider */}
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+        {/* Portal dropdown */}
+        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', marginRight: '2px' }}>Portal:</label>
+        <select
+          value={portalFilter}
+          onChange={e => setPortalFilter(e.target.value)}
+          style={{
+            fontSize: '0.78rem', fontWeight: portalFilter !== 'all' ? 600 : 400,
+            color: portalFilter !== 'all' ? '#0f172a' : '#475569',
+            border: `1.5px solid ${portalFilter !== 'all' ? '#3b82f6' : '#cbd5e1'}`,
+            borderRadius: '6px', padding: '0.22rem 1.6rem 0.22rem 0.5rem',
+            background: portalFilter !== 'all' ? '#eff6ff' : '#f8fafc',
+            outline: 'none', cursor: 'pointer', appearance: 'auto',
+          }}>
+          <option value="all">All ({branchFilteredRows.length})</option>
+          {portalOptions.map(portal => (
+            <option key={portal} value={portal}>
+              {portal} ({branchFilteredRows.filter(r => getPortalLabel(r.portal) === portal).length})
+            </option>
+          ))}
+        </select>
 
-        {/* Portal filter */}
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Portal:</span>
-        <button type="button" onClick={() => setPortalFilter('all')}
-          className={`btn btn--sm ${portalFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({branchFilteredRows.length})
-        </button>
-        {portalOptions.map((portal) => (
-          <button key={portal} type="button" onClick={() => setPortalFilter(portal)}
-            className={`btn btn--sm ${portalFilter === portal ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {portal} ({branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portal).length})
-          </button>
-        ))}
+        {/* Department dropdown */}
+        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', marginRight: '2px' }}>Dept:</label>
+        <select
+          value={deptFilter}
+          onChange={e => setDeptFilter(e.target.value)}
+          style={{
+            fontSize: '0.78rem', fontWeight: deptFilter !== 'all' ? 600 : 400,
+            color: deptFilter !== 'all' ? '#0f172a' : '#475569',
+            border: `1.5px solid ${deptFilter !== 'all' ? '#8b5cf6' : '#cbd5e1'}`,
+            borderRadius: '6px', padding: '0.22rem 1.6rem 0.22rem 0.5rem',
+            background: deptFilter !== 'all' ? '#f5f3ff' : '#f8fafc',
+            outline: 'none', cursor: 'pointer', appearance: 'auto',
+          }}>
+          <option value="all">All ({filteredRows.length})</option>
+          {deptOptions.map(dept => (
+            <option key={dept} value={dept}>
+              {dept} ({filteredRows.filter(r => (saNameToDept.get(String(r.sr_assigned_to ?? '').trim().toUpperCase()) ?? '').toLowerCase() === dept.toLowerCase()).length})
+            </option>
+          ))}
+        </select>
 
-        {/* Divider */}
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
-
-        {/* Department filter */}
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Dept:</span>
-        <button type="button" onClick={() => setDeptFilter('all')}
-          className={`btn btn--sm ${deptFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
-          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-          All ({filteredRows.length})
-        </button>
-        {deptOptions.map((dept) => (
-          <button key={dept} type="button" onClick={() => setDeptFilter(dept)}
-            className={`btn btn--sm ${deptFilter === dept ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-            {dept} ({filteredRows.filter(r => (saNameToDept.get(String(r.sr_assigned_to ?? '').trim().toUpperCase()) ?? '').toLowerCase() === dept.toLowerCase()).length})
-          </button>
-        ))}
-
-        {/* Divider */}
         <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
         {/* Date range fine-filter */}
-        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Range:</span>
-        <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>From:</label>
+        <input type="date" className="inp" style={{ padding: '0.22rem 0.4rem', fontSize: '0.75rem', width: '126px', borderRadius: '6px' }}
           value={fromDate}
           onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v && v > toDate) setToDate(v) }}
         />
-        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</span>
-        <input type="date" className="inp" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', width: '130px' }}
+        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>To:</label>
+        <input type="date" className="inp" style={{ padding: '0.22rem 0.4rem', fontSize: '0.75rem', width: '126px', borderRadius: '6px' }}
           value={toDate}
           onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v && v < fromDate) setFromDate(v) }}
         />
         {(fromDate || toDate) && (
           <button type="button" className="btn btn--ghost btn--sm"
-            style={{ padding: '0.2rem 0.55rem', fontSize: '0.72rem' }}
+            title="Clear date range"
+            style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
             onClick={() => { setFromDate(''); setToDate('') }}>
             ✕
           </button>
