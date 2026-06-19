@@ -547,6 +547,11 @@ export default function SATrackerPage() {
     return String(raw ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
   }
 
+  // Helper: normalize fuel type string to EV or PV bucket
+  function normFuelBucket(v: string | null | undefined): 'EV' | 'PV' {
+    return String(v ?? '').trim().toUpperCase().includes('EV') ? 'EV' : 'PV'
+  }
+
   // Full employee detail map: normalized name → SaEmployee (for payout report)
   const empDetailMap = useMemo(() => {
     const map = new Map<string, SaEmployee>()
