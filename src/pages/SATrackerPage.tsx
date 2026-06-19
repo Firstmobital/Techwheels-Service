@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
-import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
@@ -180,6 +180,7 @@ function buildSAWAText(rows: YesterdaySARow[], date: string, saSharePct: number)
 export default function SATrackerPage() {
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
+  const [periodPreset, setPeriodPreset] = useState<string>('this-month')
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<ClosedJCRow[]>([])
 
@@ -205,6 +206,36 @@ export default function SATrackerPage() {
   const [selectedDayKey, setSelectedDayKey] = useState('')
 
   // ── Load ───────────────────────────────────────────────────────────────────
+
+  // ── Period preset handler ────────────────────────────────────────────────
+  function handlePeriodPreset(preset: string) {
+    setPeriodPreset(preset)
+    const now = new Date()
+    const toIST = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const today = toIST(now)
+    if (preset === 'this-month') {
+      const y = today.slice(0, 4), m = today.slice(5, 7)
+      const last = new Date(Number(y), Number(m), 0).getDate()
+      setDateRange({ from: `${y}-${m}-01`, to: `${y}-${m}-${String(last).padStart(2, '0')}` })
+    } else if (preset === 'last-month') {
+      const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const y = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 4)
+      const m = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(5, 7)
+      const last = new Date(Number(y), Number(m), 0).getDate()
+      setDateRange({ from: `${y}-${m}-01`, to: `${y}-${m}-${String(last).padStart(2, '0')}` })
+    } else if (preset === 'this-week') {
+      const day = now.getDay()
+      const mon = new Date(now); mon.setDate(now.getDate() - ((day + 6) % 7))
+      setDateRange({ from: toIST(mon), to: today })
+    } else if (preset === 'last-7') {
+      const d = new Date(now); d.setDate(now.getDate() - 6)
+      setDateRange({ from: toIST(d), to: today })
+    } else if (preset === 'last-30') {
+      const d = new Date(now); d.setDate(now.getDate() - 29)
+      setDateRange({ from: toIST(d), to: today })
+    }
+    // 'custom' → user will pick dates below, don't change dateRange
+  }
 
   // ── Load settings + role ONCE on mount ─────────────────────────────────
   async function loadSettings() {
@@ -627,8 +658,41 @@ export default function SATrackerPage() {
 
         <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
-        {/* Period filter — kept as DateRangeFilter (already compact) */}
-        <DateRangeFilter range={dateRange} onChange={setDateRange} label="Period:" />
+        {/* Period dropdown */}
+        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', marginRight: '2px' }}>Period:</label>
+        <select
+          value={periodPreset}
+          onChange={e => handlePeriodPreset(e.target.value)}
+          style={{
+            fontSize: '0.78rem', fontWeight: 600,
+            color: '#0f172a',
+            border: '1.5px solid #3b82f6',
+            borderRadius: '6px', padding: '0.22rem 1.6rem 0.22rem 0.5rem',
+            background: '#eff6ff',
+            outline: 'none', cursor: 'pointer', appearance: 'auto',
+          }}>
+          <option value="this-month">This Month</option>
+          <option value="last-month">Last Month</option>
+          <option value="this-week">This Week</option>
+          <option value="last-7">Last 7 Days</option>
+          <option value="last-30">Last 30 Days</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        {periodPreset === 'custom' && (
+          <>
+            <input type="date" className="inp"
+              style={{ padding: '0.22rem 0.4rem', fontSize: '0.75rem', width: '126px', borderRadius: '6px' }}
+              value={dateRange.from}
+              onChange={e => setDateRange(r => ({ ...r, from: e.target.value }))}
+            />
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</span>
+            <input type="date" className="inp"
+              style={{ padding: '0.22rem 0.4rem', fontSize: '0.75rem', width: '126px', borderRadius: '6px' }}
+              value={dateRange.to}
+              onChange={e => setDateRange(r => ({ ...r, to: e.target.value }))}
+            />
+          </>
+        )}
 
         <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
 
@@ -694,28 +758,6 @@ export default function SATrackerPage() {
             </option>
           ))}
         </select>
-
-        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
-
-        {/* Date range fine-filter */}
-        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>From:</label>
-        <input type="date" className="inp" style={{ padding: '0.22rem 0.4rem', fontSize: '0.75rem', width: '126px', borderRadius: '6px' }}
-          value={fromDate}
-          onChange={(e) => { const v = e.target.value; setFromDate(v); if (toDate && v && v > toDate) setToDate(v) }}
-        />
-        <label style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>To:</label>
-        <input type="date" className="inp" style={{ padding: '0.22rem 0.4rem', fontSize: '0.75rem', width: '126px', borderRadius: '6px' }}
-          value={toDate}
-          onChange={(e) => { const v = e.target.value; setToDate(v); if (fromDate && v && v < fromDate) setFromDate(v) }}
-        />
-        {(fromDate || toDate) && (
-          <button type="button" className="btn btn--ghost btn--sm"
-            title="Clear date range"
-            style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}
-            onClick={() => { setFromDate(''); setToDate('') }}>
-            ✕
-          </button>
-        )}
 
         {/* Spacer */}
         <span style={{ flex: 1 }} />
