@@ -986,32 +986,32 @@ export default function FloorInchargeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Status tabs — 2 fixed rows × 3 cols, pixel-perfect widths, zero overflow ── */}
-      {([
-        ['all', 'unassigned', 'hold'],
-        ['assigned', 'work_inprocess', 'completed'],
-      ] as const).map((rowKeys, rowIdx) => (
-        <View key={rowIdx} style={S.tabRow}>
-          {rowKeys.map(key => {
-            const tab = TAB_DEFS.find(t => t.key === key)!
-            const cnt  = tabCounts[key]
-            const active = assignmentView === key
-            return (
-              <TouchableOpacity
-                key={key}
-                style={[S.tabCell, {
-                  borderColor: active ? tab.color : '#e2e8f0',
-                  backgroundColor: active ? tab.color : '#fff',
-                }]}
-                onPress={() => setAssignmentView(key as AssignmentView)}
-                activeOpacity={0.75}>
-                <Text style={[S.tabCellCnt, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
-                <Text style={[S.tabCellLbl, { color: active ? '#fff' : '#475569' }]}>{tab.label}</Text>
-              </TouchableOpacity>
-            )
-          })}
-        </View>
-      ))}
+      {/* ── Status tabs — horizontal scroll, 5 statuses clearly visible ── */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={S.slideTabBar}
+        contentContainerStyle={S.slideTabContent}
+      >
+        {(['unassigned', 'hold', 'assigned', 'work_inprocess', 'completed'] as const).map(key => {
+          const tab = TAB_DEFS.find(t => t.key === key)!
+          const cnt  = tabCounts[key]
+          const active = assignmentView === key
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[S.slideTab, {
+                borderColor: active ? tab.color : '#e2e8f0',
+                backgroundColor: active ? tab.color : '#fff',
+              }]}
+              onPress={() => setAssignmentView(key as AssignmentView)}
+              activeOpacity={0.75}>
+              <Text style={[S.slideTabCount, { color: active ? '#fff' : tab.color }]}>{cnt}</Text>
+              <Text style={[S.slideTabLabel, { color: active ? '#fff' : '#475569' }]}>{tab.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
 
       {/* ── Dropdown filter bar — 3 dropdowns in one row ── */}
       <View style={S.dropdownBar}>
@@ -1375,11 +1375,12 @@ const S = {
   searchInput:       { flex: 1, fontSize: 13, color: '#1e293b', paddingVertical: 0 },
   refreshBtn:        { width: 36, height: 36, borderRadius: 10, backgroundColor: '#eff6ff', alignItems: 'center' as const, justifyContent: 'center' as const, borderWidth: 1, borderColor: '#bfdbfe' },
   refreshBtnText:    { fontSize: 18, color: '#2563eb' },
-  // ── 2-row × 3-col fixed tab grid ─────────────────────────────
-  tabRow:            { flexDirection: 'row' as const, paddingHorizontal: 8, paddingTop: 6, paddingBottom: 2, gap: 6, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' } as const,
-  tabCell:           { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 4, borderWidth: 1.5, gap: 4 } as const,
-  tabCellCnt:        { fontSize: 15, fontWeight: '800' as const, lineHeight: 18 },
-  tabCellLbl:        { fontSize: 11, fontWeight: '700' as const },
+  // ── horizontal slide tab bar (5 statuses) ──────────────────
+  slideTabBar:       { backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0', flexGrow: 0 } as const,
+  slideTabContent:   { paddingHorizontal: 10, paddingVertical: 8, gap: 8, flexDirection: 'row' as const, alignItems: 'center' as const } as const,
+  slideTab:          { flexDirection: 'column' as const, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 2, minWidth: 88, gap: 2 } as const,
+  slideTabCount:     { fontSize: 18, fontWeight: '800' as const, lineHeight: 22 },
+  slideTabLabel:     { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.2 },
 
   // ── status tabs (single line) ──
   tabsRow:           { backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e2e8f0' },
