@@ -185,8 +185,8 @@ export default function SATrackerPage() {
   const [rows, setRows] = useState<ClosedJCRow[]>([])
 
   // Filters
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  const fromDate = ''   // fine-filter retired; kept for dateScopedRows guard
+  const toDate = ''
   const [branchFilter, setBranchFilter] = useState('all')
   const [portalFilter, setPortalFilter] = useState('all')
   const [deptFilter, setDeptFilter] = useState('all')         // 'all' | 'Service' | 'Bodyshop'
