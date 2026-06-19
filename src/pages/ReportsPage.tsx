@@ -421,52 +421,52 @@ export default function ReportsPage() {
           ))}
 
         {!isMasterDataCategory && (
-              <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
-                {REPORT_CATEGORIES.map((category) => {
-                  const isActive = resolvedCategoryId === category.id
-                const isActive = selectedReport?.id === report.id
+          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
+              {REPORT_CATEGORIES.map((category) => {
+                const isActive = resolvedCategoryId === category.id
                 return (
-                      key={category.id}
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => navigate(`/reports/${category.id}`)}
+                    className={[
+                      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-slate-900 text-white'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                    ].join(' ')}
+                  >
+                    {category.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {reportsInCategory.map((report) => {
+                const isActive = activeReport?.id === report.id
+                return (
+                  <button
                     key={report.id}
-                      onClick={() => navigate(`/reports/${category.id}`)}
+                    type="button"
                     onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
                     className={[
                       'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                          ? 'bg-slate-900 text-white'
+                      isActive
                         ? 'bg-blue-600 text-white'
                         : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
                     ].join(' ')}
-                      {category.label}
+                  >
                     {report.label}
                   </button>
                 )
               })}
-
-              <div className="flex flex-wrap gap-2">
-                {reportsInCategory.map((report) => {
-                  const isActive = activeReport?.id === report.id
-                  return (
-                    <button
-                      key={report.id}
-                      type="button"
-                      onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
-                      className={[
-                        'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                      ].join(' ')}
-                    >
-                      {report.label}
-                    </button>
-                  )
-                })}
-              </div>
             </div>
-          )}
+          </section>
         )}
-          {!isMasterDataCategory && resolvedCategoryId !== 'parts' && (
-        {!isMasterDataCategory && (
+
+        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && (
           <ReportFiltersPanel
             branch={branch}
             onBranchChange={setBranch}
