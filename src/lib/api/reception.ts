@@ -62,6 +62,7 @@ export interface ReceptionEmployeeOption {
   employee_name: string
   department: string | null
   fuel_type: string | null
+  location: string | null
 }
 
 export interface ServiceAdvisorEntryUpdateInput {
@@ -489,7 +490,7 @@ export async function bulkCreateReceptionEntries(rows: ReceptionEntryInput[]): P
 export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmployeeOption[]>> {
   const { data, error } = await supabase
     .from('employee_master')
-    .select('employee_code, employee_name, role, department, fuel_type')
+    .select('employee_code, employee_name, role, department, fuel_type, location')
     .order('employee_name', { ascending: true })
 
   if (error) return fail(error)
@@ -503,6 +504,7 @@ export async function listReceptionEmployees(): Promise<ApiResult<ReceptionEmplo
       employee_name: String(row.employee_name ?? '').trim(),
       department: String((row as { department?: string | null }).department ?? '').trim() || null,
       fuel_type: String((row as { fuel_type?: string | null }).fuel_type ?? '').trim() || null,
+      location: String((row as { location?: string | null }).location ?? '').trim() || null,
     }))
     .filter((row) => row.employee_code.length > 0)
 
