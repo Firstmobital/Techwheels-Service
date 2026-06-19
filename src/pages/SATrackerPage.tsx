@@ -213,7 +213,13 @@ export default function SATrackerPage() {
     const now = new Date()
     const toIST = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     const today = toIST(now)
-    if (preset === 'this-month') {
+    if (preset === 'today') {
+      setDateRange({ from: today, to: today })
+    } else if (preset === 'yesterday') {
+      const d = new Date(now); d.setDate(now.getDate() - 1)
+      const yest = toIST(d)
+      setDateRange({ from: yest, to: yest })
+    } else if (preset === 'this-month') {
       const y = today.slice(0, 4), m = today.slice(5, 7)
       const last = new Date(Number(y), Number(m), 0).getDate()
       setDateRange({ from: `${y}-${m}-01`, to: `${y}-${m}-${String(last).padStart(2, '0')}` })
@@ -556,7 +562,7 @@ export default function SATrackerPage() {
   const selectedSARows = useMemo(() => {
     if (!selectedSA) return []
     return deptFilteredRows.filter((r) => String(r.sr_assigned_to ?? '').trim() === selectedSA)
-  }, [filteredRows, selectedSA])
+  }, [deptFilteredRows, selectedSA])
 
   const dayCards = useMemo<DayWiseCard[]>(() => {
     const map = new Map<string, DayWiseCard>()
@@ -590,12 +596,12 @@ export default function SATrackerPage() {
   // ── Totals ────────────────────────────────────────────────────────────────
 
   const totals = useMemo(() => ({
-    labour: filteredRows.reduce((s, r) => s + r.labourAmt, 0),
-    spares: filteredRows.reduce((s, r) => s + r.sparesAmt, 0),
-    invoice: filteredRows.reduce((s, r) => s + r.invoiceAmt, 0),
-    jcCount: filteredRows.length,
+    labour: deptFilteredRows.reduce((s, r) => s + r.labourAmt, 0),
+    spares: deptFilteredRows.reduce((s, r) => s + r.sparesAmt, 0),
+    invoice: deptFilteredRows.reduce((s, r) => s + r.invoiceAmt, 0),
+    jcCount: deptFilteredRows.length,
     saCount: saCards.length,
-  }), [filteredRows, saCards])
+  }), [deptFilteredRows, saCards])
 
 
   const parsedDraftSaShare = useMemo(
@@ -671,11 +677,11 @@ export default function SATrackerPage() {
             background: '#eff6ff',
             outline: 'none', cursor: 'pointer', appearance: 'auto',
           }}>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="this-week">This Week</option>
           <option value="this-month">This Month</option>
           <option value="last-month">Last Month</option>
-          <option value="this-week">This Week</option>
-          <option value="last-7">Last 7 Days</option>
-          <option value="last-30">Last 30 Days</option>
           <option value="custom">Custom Range</option>
         </select>
         {periodPreset === 'custom' && (
