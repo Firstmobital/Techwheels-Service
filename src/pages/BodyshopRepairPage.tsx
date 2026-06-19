@@ -2742,6 +2742,49 @@ export default function BodyshopRepairPage() {
     return (parsedDraft ?? '') !== current
   }
 
+  async function handleSaveKmDraftOnBlur() {
+    if (!selected || !selectedReception?.id || savingReceiving) return
+
+    const kmDirty = isKmDirty()
+    if (!kmDirty) return
+
+    const parsedKm = parseKmDraftValue(kmDraft)
+    if (parsedKm === 'invalid') {
+      const message = 'KM Reading must be a non-negative number'
+      setReceivingSaveError(message)
+      toast_(message, false)
+      return
+    }
+
+    setSavingReceiving(true)
+    try {
+      const { error } = await supabase
+        .from('service_reception_entries')
+        .update({ km_reading: parsedKm })
+        .eq('id', selectedReception.id)
+
+      if (error) {
+        setReceivingSaveError(error.message)
+        toast_(error.message, false)
+        return
+      }
+
+      setSelectedReception((prev) => prev
+        ? { ...prev, km_reading: parsedKm }
+        : prev)
+      setKmPresentByReceptionId((prev) => ({
+        ...prev,
+        [selectedReception.id]: parsedKm != null,
+      }))
+      setReceivingSaveError(null)
+    } catch (e: any) {
+      setReceivingSaveError(e.message ?? 'Unable to save KM Reading')
+      toast_(e.message, false)
+    } finally {
+      setSavingReceiving(false)
+    }
+  }
+
   async function handleSaveReceivingDraft() {
     if (!selected) return
 
@@ -4356,6 +4399,14 @@ export default function BodyshopRepairPage() {
                                   onChange={(event) => {
                                     setKmDraft(event.target.value)
                                     setReceivingSaveError(null)
+                                  }}
+                                  onBlur={() => {
+                                    void handleSaveKmDraftOnBlur()
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.currentTarget.blur()
+                                    }
                                   }}
                                   placeholder="Enter KM"
                                   className="inp brx-sa-km"
