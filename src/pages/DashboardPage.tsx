@@ -25,14 +25,6 @@ type ReceptionRow = {
   service_type: string | null
 }
 
-type ActivityRow = {
-  id: string
-  icon: string
-  title: string
-  message: string
-  time: string
-}
-
 type ModuleMetaRow = {
   name: string | null
   label: string | null
@@ -103,7 +95,6 @@ export default function DashboardPage({
   const [loading, setLoading] = useState(true)
   const [kpis, setKpis] = useState<DashboardKpi[]>([])
   const [receptionRows, setReceptionRows] = useState<ReceptionRow[]>([])
-  const [activityRows, setActivityRows] = useState<ActivityRow[]>([])
   const [receptionTotal, setReceptionTotal] = useState<number | null>(null)
   const [userFirstName, setUserFirstName] = useState('User')
   const [moduleMetaByRoute, setModuleMetaByRoute] = useState<Record<string, ModuleMetaRow>>({})
@@ -261,16 +252,6 @@ export default function DashboardPage({
       } else {
         setUserFirstName('User')
       }
-
-      setActivityRows(
-        receptionData.slice(0, 6).map((row) => ({
-          id: `intake-${row.id}`,
-          icon: 'reception',
-          title: 'New intake captured',
-          message: `${row.reg_number}${row.model ? ` · ${row.model}` : ''}${row.sa_name ? ` · ${row.sa_name}` : ''}`,
-          time: formatDateTime(row.created_at),
-        })),
-      )
 
       setStatusRows(nextStatusRows)
       setFloorStatusRows(nextFloorStatusRows)
@@ -709,34 +690,6 @@ export default function DashboardPage({
           </div>
         </div>
 
-        <div className="card">
-          <div className="card__head">
-            <div>
-              <h3>Activity</h3>
-              <div className="sub">Across all modules</div>
-            </div>
-          </div>
-          <div className="card__body card__body--feed-tight">
-            <div className="feed">
-              {activityRows.map((activity) => (
-                <div className="feed__row" key={activity.id}>
-                  <span className="feed__ic"><Icon name={activity.icon} size={16} /></span>
-                  <div className="feed__main">
-                    <div className="feed__t">{activity.title}</div>
-                    <div className="feed__m">{activity.message}</div>
-                  </div>
-                  <span className="feed__time">{activity.time}</span>
-                </div>
-              ))}
-              {!loading && activityRows.length === 0 && (
-                <div className="feed__row">
-                  <span className="feed__ic"><Icon name="clock" size={16} /></span>
-                  <div className="feed__m">No recent activity found.</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="card card--mt-gap">
