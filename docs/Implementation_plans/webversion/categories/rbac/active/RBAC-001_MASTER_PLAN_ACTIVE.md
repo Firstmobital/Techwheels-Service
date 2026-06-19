@@ -3,16 +3,32 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-19 17:05 UTC  
+**Last Updated**: 2026-06-19 17:28 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 > **Note**: RBAC-001 initial closure was recorded on 2026-05-23 ([closure evidence](../../rbac/evidence/RBAC-001_IMPLEMENTATION_COMPLETE.md)). This master plan continues execution with post-closure hardening and ongoing extensions (Phase 1C onward).
+
+### Execution Update (2026-06-19 - Bodyshop Tab Gating + Stage Queue Consistency Fix)
+
+- Bodyshop tab-gating bug fixed:
+  - Root cause: SA access flag incorrectly treated `SSA` as `SA`, causing SSA users to see the `SA` tab.
+  - Fix: SA tab visibility now depends only on true SA business-role resolution.
+  - Contract after fix:
+    - `sa` tab: BODY SHOP + SA only
+    - `approval` tab: BODY SHOP + SSA only
+    - users mapped to both roles may see both tabs.
+- Bodyshop Stage Queue/worklist consistency fixed for scoped users:
+  - Root cause: Stage 1-4 completion relied on intake evidence lookups (KM/photos). Under scoped visibility, missing/blocked lookup hydration could incorrectly collapse advanced cards into early-stage pending buckets.
+  - Fix: Stage 1-4 completion now trusts persisted progression (`effectiveCurrentStage`) for advanced cards.
+  - Impact: Stage counts (including Stage 7 Estimation Approval) remain consistent with card progression for SSA scoped views.
+- Status: ✓ COMPLETE — tab contract and stage worklist behavior now match business expectation.
 
 ### Execution Update (2026-06-19 - Bodyshop Role Scope Hardening via RPC)
 
 - Long-term fix applied for Bodyshop role detection reliability:
   - Replaced frontend direct-read dependency on `employee_master` for role detection with authoritative RPC scope resolution.
   - New function/migration: `supabase/migrations/20260619165000_add_get_my_bodyshop_employee_scope_rpc.sql`.
+  - Execution status: migration executed successfully in Supabase SQL Editor (2026-06-19).
   - Function contract: `public.get_my_bodyshop_employee_scope()` returns active linked employee scope fields (`employee_code`, `department`, `role`, `location`, `fuel_type`) using `user_employee_links -> employee_master` join.
   - Security posture: function is `SECURITY DEFINER`, granted to `authenticated`, and dealer-scoped via `uel.dealer_code = public.my_dealer_code()`.
 - Governance contract update:
