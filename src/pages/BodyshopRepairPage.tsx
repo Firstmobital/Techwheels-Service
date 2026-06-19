@@ -1991,16 +1991,7 @@ export default function BodyshopRepairPage() {
     try {
       console.log('[BodyshopIntakeUpload] fetching dealer scope context', { uploadDebugId })
       const dealerScopeCtx = await getDealerScopeContext()
-      const dealerCode = dealerScopeCtx.data?.dealerCode?.trim() || 'unknown'
-      const folder = `${dealerCode}/service-advisor-bodyshop-intake/${receptionEntryId}`
-      console.log('[BodyshopIntakeUpload] dealer context ready', {
-        uploadDebugId,
-        dealerCode,
-        folder,
-        dealerSource: dealerScopeCtx.data?.source ?? null,
-        dealerCodes: dealerScopeCtx.data?.dealerCodes ?? [],
-        dealerScopeError: dealerScopeCtx.error ?? null,
-      })
+      const dealerCodeFromScope = dealerScopeCtx.data?.dealerCode?.trim().toUpperCase() || 'unknown'
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
       console.log('[BodyshopIntakeUpload] fetching auth session', { uploadDebugId })
@@ -2039,13 +2030,27 @@ export default function BodyshopRepairPage() {
 
       const myDealerCodeRpc = await supabase.rpc('my_dealer_code')
       const myDealerCodeValue = String(myDealerCodeRpc.data ?? '').trim().toUpperCase()
+      const effectiveDealerCode = myDealerCodeValue || dealerCodeFromScope
+      const folder = `${effectiveDealerCode}/service-advisor-bodyshop-intake/${receptionEntryId}`
+
+      console.log('[BodyshopIntakeUpload] dealer context ready', {
+        uploadDebugId,
+        dealerCodeFromScope,
+        effectiveDealerCode,
+        folder,
+        effectiveDealerSource: myDealerCodeValue ? 'rpc:my_dealer_code' : 'scope-context',
+        dealerSource: dealerScopeCtx.data?.source ?? null,
+        dealerCodes: dealerScopeCtx.data?.dealerCodes ?? [],
+        dealerScopeError: dealerScopeCtx.error ?? null,
+      })
 
       console.log('[BodyshopIntakeUpload] rls preflight', {
         uploadDebugId,
         sessionUserId,
         storageBucket: AUTODOC_BUCKET,
-        storagePathPrefix: dealerCode,
-        dealerCodeFromScope: dealerCode,
+        storagePathPrefix: effectiveDealerCode,
+        dealerCodeFromScope,
+        effectiveDealerCode,
         dealerScopeSource: dealerScopeCtx.data?.source ?? null,
         dealerCodesFromScope: dealerScopeCtx.data?.dealerCodes ?? [],
         jwtDealerUserMeta,
@@ -2054,9 +2059,9 @@ export default function BodyshopRepairPage() {
         myDealerCodeRpc: myDealerCodeValue || null,
         myDealerCodeRpcError: myDealerCodeRpc.error?.message ?? null,
         mappingLookupError,
-        prefixMatchesJwtUserMeta: Boolean(jwtDealerUserMeta) && dealerCode === jwtDealerUserMeta,
-        prefixMatchesJwtAppMeta: Boolean(jwtDealerAppMeta) && dealerCode === jwtDealerAppMeta,
-        prefixMatchesMyDealerCodeRpc: Boolean(myDealerCodeValue) && dealerCode === myDealerCodeValue,
+        prefixMatchesJwtUserMeta: Boolean(jwtDealerUserMeta) && effectiveDealerCode === jwtDealerUserMeta,
+        prefixMatchesJwtAppMeta: Boolean(jwtDealerAppMeta) && effectiveDealerCode === jwtDealerAppMeta,
+        prefixMatchesMyDealerCodeRpc: Boolean(myDealerCodeValue) && effectiveDealerCode === myDealerCodeValue,
       })
 
       for (let index = 0; index < selectedFiles.length; index += 1) {
@@ -2092,7 +2097,7 @@ export default function BodyshopRepairPage() {
             error: uploadRes.error,
             storageBucket: AUTODOC_BUCKET,
             storagePath,
-            storagePrefix: dealerCode,
+            storagePrefix: effectiveDealerCode,
           })
           toast_(uploadRes.error.message, false)
           return
@@ -2114,7 +2119,7 @@ export default function BodyshopRepairPage() {
           supabase
             .from('bodyshop_intake_vehicle_photos')
             .insert({
-              dealer_code: dealerCode,
+              dealer_code: effectiveDealerCode,
               repair_card_id: repairCardId,
               reception_entry_id: receptionEntryId,
               job_card_no: jobCardNo,
