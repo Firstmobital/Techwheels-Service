@@ -51,10 +51,39 @@ type JCDetailRow = ClosedJCRow & {
   dateKey: string | null
 }
 
-// SA employee → department mapping (from employee_master)
+// SA employee → department + bank detail mapping (from employee_master)
 type SaEmployee = {
   employee_name: string
   department: string | null
+  fuel_type: string | null
+  bank_name: string | null
+  account_number: string | null
+  ifsc: string | null
+}
+
+// Payout report types
+type PayoutReportRow = {
+  saName: string
+  department: string
+  location: string
+  portal: string
+  jcCount: number
+  totalLabour: number
+  payoutPercent: number
+  payoutAmount: number
+  bankName: string
+  accountNumber: string
+  ifsc: string
+}
+
+type PayoutReportState = {
+  open: boolean
+  payoutDate: string
+  selectedLocations: string[]
+  selectedPortals: string[]
+  selectedDepts: string[]
+  generating: boolean
+  rows: PayoutReportRow[] | null
 }
 
 const QUERY_PAGE_SIZE = 1000
@@ -191,6 +220,10 @@ export default function SATrackerPage() {
   const [portalFilter, setPortalFilter] = useState('all')
   const [deptFilter, setDeptFilter] = useState('all')         // 'all' | 'Service' | 'Bodyshop'
   const [saEmployees, setSaEmployees] = useState<SaEmployee[]>([])
+  const [payoutReport, setPayoutReport] = useState<PayoutReportState>({
+    open: false, payoutDate: '', selectedLocations: [], selectedPortals: [],
+    selectedDepts: [], generating: false, rows: null,
+  })
 
   // Share % settings
   const [canEditSharePercent, setCanEditSharePercent] = useState(false)
@@ -413,7 +446,7 @@ export default function SATrackerPage() {
     try {
       const { data, error: err } = await supabase
         .from('employee_master')
-        .select('employee_name, department')
+        .select('employee_name, department, fuel_type, bank_name, account_number, ifsc')
         .not('employee_name', 'is', null)
         .limit(1000)
       if (!err && data) {
@@ -513,6 +546,28 @@ export default function SATrackerPage() {
   function normSAName(raw: string | null | undefined): string {
     return String(raw ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
   }
+
+  // Full employee detail map: normalized name → SaEmployee (for payout report)
+  const empDetailMap = useMemo(() => {
+    const map = new Map<string, SaEmployee>()
+    saEmployees.forEach(e => {
+      if (e.employee_name) map.set(normSAName(e.employee_name), e)
+    })
+    return map
+  }, [saEmployees])
+
+  // All distinct locations / portals / depts for payout multi-select
+  const allLocations = useMemo(() => Array.from(new Set(
+    enrichedRows.map(r => getBranchLabel(r.location ?? r.branch)).filter(Boolean)
+  )).sort(), [enrichedRows])
+
+  const allPortals = useMemo(() => Array.from(new Set(
+    enrichedRows.map(r => getPortalLabel(r.portal)).filter(Boolean)
+  )).sort(), [enrichedRows])
+
+  const allDepts = useMemo(() => Array.from(new Set(
+    enrichedRows.map(r => saNameToDept.get(normSAName(r.sr_assigned_to)) ?? '').filter(Boolean)
+  )).sort(), [enrichedRows, saNameToDept])
 
   // Collect distinct departments present in current filteredRows
   const deptOptions = useMemo(() => {
@@ -621,6 +676,87 @@ export default function SATrackerPage() {
     [draftEvShare, evSharePercent],
   )
   const hasPendingShareChanges = parsedDraftSaShare !== saSharePercent || parsedDraftEvShare !== evSharePercent
+
+  // ── Payout Report generator ──────────────────────────────────────────────
+  function generatePayoutReport() {
+    const { selectedLocations, selectedPortals, selectedDepts } = payoutReport
+    // Filter enrichedRows by selected criteria (empty = all)
+    const rows = enrichedRows.filter(r => {
+      const loc  = getBranchLabel(r.location ?? r.branch)
+      const por  = getPortalLabel(r.portal)
+      const dept = saNameToDept.get(normSAName(r.sr_assigned_to)) ?? ''
+      if (selectedLocations.length > 0 && !selectedLocations.includes(loc)) return false
+      if (selectedPortals.length > 0   && !selectedPortals.includes(por))  return false
+      if (selectedDepts.length > 0     && !selectedDepts.includes(dept))    return false
+      return true
+    })
+
+    // Aggregate by SA name
+    const saMap = new Map<string, { labour: number; loc: Set<string>; por: Set<string>; dept: string }>()
+    rows.forEach(r => {
+      const name = String(r.sr_assigned_to ?? '').trim()
+      if (!name) return
+      const existing = saMap.get(name) ?? { labour: 0, loc: new Set(), por: new Set(), dept: '' }
+      existing.labour += r.labourAmt
+      existing.loc.add(getBranchLabel(r.location ?? r.branch))
+      existing.por.add(getPortalLabel(r.portal))
+      existing.dept = saNameToDept.get(normSAName(name)) ?? existing.dept
+      saMap.set(name, existing)
+    })
+
+    const reportRows: PayoutReportRow[] = []
+    saMap.forEach((data, name) => {
+      const emp = empDetailMap.get(normSAName(name))
+      // Determine payout % based on fuel type
+      const fuel = normFuelBucket(emp?.fuel_type)
+      const pct  = fuel === 'EV' ? evSharePercent : saSharePercent
+      reportRows.push({
+        saName:        name,
+        department:    data.dept || '—',
+        location:      Array.from(data.loc).join(', ') || '—',
+        portal:        Array.from(data.por).join(', ') || '—',
+        jcCount:       rows.filter(r => String(r.sr_assigned_to ?? '').trim() === name).length,
+        totalLabour:   data.labour,
+        payoutPercent: pct,
+        payoutAmount:  data.labour * (pct / 100),
+        bankName:      emp?.bank_name ?? '—',
+        accountNumber: emp?.account_number ?? '—',
+        ifsc:          emp?.ifsc ?? '—',
+      })
+    })
+
+    reportRows.sort((a, b) => b.payoutAmount - a.payoutAmount)
+    setPayoutReport(s => ({ ...s, rows: reportRows, generating: false }))
+  }
+
+  function downloadPayoutExcel() {
+    if (!payoutReport.rows) return
+    const { payoutDate, rows } = payoutReport
+    const header = [
+      'SA Name', 'Department', 'Location', 'Portal',
+      'JC Count', 'Total Labour (₹)', 'Payout %', 'Payout Amount (₹)',
+      'Bank Name', 'Account Number', 'IFSC Code',
+    ]
+    const dataRows = rows.map(r => [
+      r.saName, r.department, r.location, r.portal,
+      r.jcCount, r.totalLabour, r.payoutPercent, r.payoutAmount,
+      r.bankName, r.accountNumber, r.ifsc,
+    ])
+    const totalLabour  = rows.reduce((s, r) => s + r.totalLabour, 0)
+    const totalPayout  = rows.reduce((s, r) => s + r.payoutAmount, 0)
+    const totalRow = ['TOTAL', '', '', '', rows.reduce((s, r) => s + r.jcCount, 0), totalLabour, '', totalPayout, '', '', '']
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows, totalRow])
+    // Column widths
+    ws['!cols'] = [
+      { wch: 28 }, { wch: 14 }, { wch: 18 }, { wch: 12 },
+      { wch: 9 },  { wch: 18 }, { wch: 10 }, { wch: 18 },
+      { wch: 20 }, { wch: 20 }, { wch: 14 },
+    ]
+    XLSX.utils.book_append_sheet(wb, ws, 'Payout Report')
+    const date = payoutDate || new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `SA_Payout_Report_${date}.xlsx`)
+  }
 
   // Reset drill-down when SA list changes
   useEffect(() => {
@@ -784,6 +920,10 @@ export default function SATrackerPage() {
         <button type="button" onClick={() => setShowPivotReport(true)}
           style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer' }}>
           📊 Pivot
+        </button>
+        <button type="button" onClick={() => setPayoutReport(s => ({ ...s, open: true, rows: null }))}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.75rem', background: '#0f766e', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer' }}>
+          💰 Payout Report
         </button>
       </div>
 
@@ -1233,6 +1373,202 @@ export default function SATrackerPage() {
                       </tr>
                     </tfoot>
                   </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── PAYOUT REPORT MODAL ─────────────────────────────────────────── */}
+      {payoutReport.open && (() => {
+        const pr = payoutReport
+        const setPR = (patch: Partial<PayoutReportState>) =>
+          setPayoutReport(s => ({ ...s, ...patch }))
+
+        const toggleItem = (key: 'selectedLocations' | 'selectedPortals' | 'selectedDepts', val: string) => {
+          setPayoutReport(s => {
+            const cur = s[key]
+            return { ...s, [key]: cur.includes(val) ? cur.filter(x => x !== val) : [...cur, val] }
+          })
+        }
+
+        const canGenerate = pr.payoutDate.trim() !== ''
+        const totalPayout  = (pr.rows ?? []).reduce((s, r) => s + r.payoutAmount, 0)
+        const totalLabour  = (pr.rows ?? []).reduce((s, r) => s + r.totalLabour, 0)
+
+        const MultiSelect = ({ label, options, selected, keyName }: {
+          label: string
+          options: string[]
+          selected: string[]
+          keyName: 'selectedLocations' | 'selectedPortals' | 'selectedDepts'
+        }) => (
+          <div style={{ flex: '1 1 200px' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: '0.35rem' }}>
+              {label}
+              <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: '6px' }}>
+                {selected.length === 0 ? '(All)' : `${selected.length} selected`}
+              </span>
+            </div>
+            <div style={{
+              border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem',
+              maxHeight: '130px', overflowY: 'auto', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '0.25rem',
+            }}>
+              {options.length === 0 && (
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No options</span>
+              )}
+              {options.map(opt => (
+                <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', color: '#1e293b' }}>
+                  <input type="checkbox" checked={selected.includes(opt)}
+                    onChange={() => toggleItem(keyName, opt)}
+                    style={{ accentColor: '#0f766e', cursor: 'pointer' }} />
+                  {opt}
+                </label>
+              ))}
+            </div>
+            {selected.length > 0 && (
+              <button type="button" onClick={() => setPR({ [keyName]: [] })}
+                style={{ marginTop: '0.3rem', fontSize: '0.72rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                ✕ Clear selection
+              </button>
+            )}
+          </div>
+        )
+
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: '1rem',
+          }}>
+            <div style={{
+              background: '#fff', borderRadius: '14px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+              width: '100%', maxWidth: '860px', maxHeight: '92vh',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            }}>
+              {/* Modal header */}
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdfa' }}>
+                <div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f766e' }}>💰 SA Payout Report</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>Select parameters and generate payout details with bank info</div>
+                </div>
+                <button onClick={() => setPR({ open: false, rows: null })}
+                  style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+              </div>
+
+              {/* Modal body */}
+              <div style={{ flex: 1, overflow: 'auto', padding: '1.25rem' }}>
+
+                {/* Payout Date — required */}
+                <div style={{ marginBottom: '1.1rem' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
+                    📅 Payout Date <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input type="date" value={pr.payoutDate}
+                    onChange={e => setPR({ payoutDate: e.target.value, rows: null })}
+                    style={{
+                      padding: '0.45rem 0.75rem', fontSize: '0.88rem', fontWeight: 600,
+                      border: '2px solid #0f766e', borderRadius: '8px',
+                      outline: 'none', color: '#0f172a', background: '#f0fdfa',
+                    }} />
+                </div>
+
+                {/* Multi-select filters */}
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.1rem' }}>
+                  <MultiSelect label="📍 Location" options={allLocations} selected={pr.selectedLocations} keyName="selectedLocations" />
+                  <MultiSelect label="🔗 Portal"   options={allPortals}   selected={pr.selectedPortals}   keyName="selectedPortals" />
+                  <MultiSelect label="🏢 Department" options={allDepts}   selected={pr.selectedDepts}     keyName="selectedDepts" />
+                </div>
+
+                {/* Generate button */}
+                <button type="button"
+                  disabled={!canGenerate}
+                  onClick={() => { setPR({ generating: true }); setTimeout(() => generatePayoutReport(), 50) }}
+                  style={{
+                    padding: '0.5rem 1.5rem', fontSize: '0.88rem', fontWeight: 700,
+                    background: canGenerate ? '#0f766e' : '#94a3b8',
+                    color: '#fff', border: 'none', borderRadius: '8px',
+                    cursor: canGenerate ? 'pointer' : 'not-allowed',
+                    marginBottom: '1.25rem',
+                  }}>
+                  {pr.generating ? '⏳ Generating…' : '⚡ Generate Report'}
+                </button>
+
+                {/* Results table */}
+                {pr.rows !== null && (
+                  <div>
+                    {/* Summary strip */}
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                      {[
+                        { label: 'SAs', val: pr.rows.length, color: '#0f766e' },
+                        { label: 'Total Labour', val: `₹${totalLabour.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: '#1d4ed8' },
+                        { label: 'Total Payout', val: `₹${totalPayout.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: '#7c3aed' },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.5rem 1rem' }}>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{s.label}</div>
+                          <div style={{ fontSize: '1rem', fontWeight: 800, color: s.color }}>{s.val}</div>
+                        </div>
+                      ))}
+                      <button type="button" onClick={downloadPayoutExcel}
+                        style={{
+                          marginLeft: 'auto', padding: '0.45rem 1.1rem', background: '#16a34a', color: '#fff',
+                          border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        }}>
+                        📥 Download Excel
+                      </button>
+                    </div>
+
+                    {pr.rows.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                        No data found for selected filters.
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ borderCollapse: 'collapse', fontSize: '0.8rem', width: '100%' }}>
+                          <thead>
+                            <tr style={{ background: '#f0fdfa' }}>
+                              {['#', 'SA Name', 'Dept', 'Location', 'Portal', 'JCs', 'Total Labour', 'Payout %', 'Payout Amount', 'Bank Name', 'Account No.', 'IFSC'].map(h => (
+                                <th key={h} style={{
+                                  padding: '0.6rem 0.75rem', textAlign: h === '#' || h === 'JCs' || h === 'Payout %' ? 'center' : 'left',
+                                  fontWeight: 700, color: '#0f766e', borderBottom: '2px solid #99f6e4',
+                                  whiteSpace: 'nowrap', fontSize: '0.75rem',
+                                }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pr.rows.map((r, i) => (
+                              <tr key={r.saName} style={{ background: i % 2 === 0 ? '#fff' : '#f0fdfa', borderBottom: '1px solid #e2e8f0' }}>
+                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.72rem' }}>{i + 1}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>🧑‍💼 {r.saName}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', color: '#475569' }}>{r.department}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', color: '#475569' }}>{r.location}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', color: '#475569' }}>{r.portal}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', fontWeight: 600, color: '#1e293b' }}>{r.jcCount}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 600, color: '#1d4ed8' }}>₹{r.totalLabour.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', color: '#7c3aed', fontWeight: 700 }}>{r.payoutPercent}%</td>
+                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#0f766e', fontSize: '0.85rem' }}>₹{r.payoutAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', color: '#475569' }}>{r.bankName}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', color: '#334155', fontWeight: 600 }}>{r.accountNumber}</td>
+                                <td style={{ padding: '0.5rem 0.75rem', color: '#475569' }}>{r.ifsc}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ background: '#f0fdf4', borderTop: '2px solid #16a34a' }}>
+                              <td colSpan={5} style={{ padding: '0.6rem 0.75rem', fontWeight: 800, color: '#15803d', fontSize: '0.82rem' }}>🏆 TOTAL</td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', fontWeight: 800, color: '#15803d' }}>{pr.rows.reduce((s, r) => s + r.jcCount, 0)}</td>
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#1d4ed8' }}>₹{totalLabour.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                              <td />
+                              <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontWeight: 800, color: '#0f766e', fontSize: '0.9rem' }}>₹{totalPayout.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                              <td colSpan={3} />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
