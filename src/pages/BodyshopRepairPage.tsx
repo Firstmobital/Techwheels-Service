@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
-import { getDealerContext } from '../lib/api'
+import { getDealerContext, getDealerScopeContext } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
@@ -34,6 +34,24 @@ function sanitizeFileNamePart(raw: string): string {
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
   return cleaned || 'upload'
+}
+
+function parseJwtClaims(token: string | null | undefined): Record<string, unknown> | null {
+  if (!token) return null
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+
+  const payload = parts[1]
+  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+
+  try {
+    const decoded = atob(padded)
+    const parsed = JSON.parse(decoded) as Record<string, unknown>
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
 }
 
 function normalizeRegForLookup(value: string | null | undefined): string {
@@ -1971,11 +1989,9 @@ export default function BodyshopRepairPage() {
 
     setUploadingIntakePhotos(true)
     try {
-      console.log('[BodyshopIntakeUpload] fetching dealer context', { uploadDebugId })
-      const dealerCtx = await getDealerContext()
-      const dealerCode = dealerCtx.data?.dealerCode?.trim() || 'unknown'
-      const folder = `${dealerCode}/service-advisor-bodyshop-intake/${receptionEntryId}`
-      console.log('[BodyshopIntakeUpload] dealer context ready', { uploadDebugId, dealerCode, folder })
+      console.log('[BodyshopIntakeUpload] fetching dealer scope context', { uploadDebugId })
+      const dealerScopeCtx = await getDealerScopeContext()
+      const dealerCodeFromScope = dealerScopeCtx.data?.dealerCode?.trim().toUpperCase() || 'unknown'
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
       console.log('[BodyshopIntakeUpload] fetching auth session', { uploadDebugId })
@@ -1988,6 +2004,97 @@ export default function BodyshopRepairPage() {
       }
 
       console.log('[BodyshopIntakeUpload] session ready', { uploadDebugId, hasToken: Boolean(token) })
+
+      const claims = parseJwtClaims(token)
+      const userMetadata = (claims?.user_metadata ?? null) as Record<string, unknown> | null
+      const appMetadata = (claims?.app_metadata ?? null) as Record<string, unknown> | null
+      const jwtDealerUserMeta = String(userMetadata?.dealer_code ?? '').trim().toUpperCase()
+      const jwtDealerAppMeta = String(appMetadata?.dealer_code ?? '').trim().toUpperCase()
+      const sessionUserId = sessionRes.data.session?.user?.id ?? null
+
+      let mappingPrimaryDealerCode: string | null = null
+      let mappingLookupError: string | null = null
+      if (sessionUserId) {
+        const mappingRes = await supabase
+          .from('user_employee_links')
+          .select('dealer_code, is_primary, is_active, updated_at')
+          .eq('user_id', sessionUserId)
+          .eq('is_active', true)
+          .order('is_primary', { ascending: false })
+          .order('updated_at', { ascending: false })
+          .limit(1)
+
+        mappingPrimaryDealerCode = String((mappingRes.data ?? [])[0]?.dealer_code ?? '').trim().toUpperCase() || null
+        mappingLookupError = mappingRes.error?.message ?? null
+      }
+
+      const myDealerCodeRpc = await supabase.rpc('my_dealer_code')
+      const myDealerCodeValue = String(myDealerCodeRpc.data ?? '').trim().toUpperCase()
+      const effectiveDealerCode = myDealerCodeValue || dealerCodeFromScope
+      const folder = `${effectiveDealerCode}/service-advisor-bodyshop-intake/${receptionEntryId}`
+
+      let metadataDealerCode = effectiveDealerCode
+      let receptionDealerLookupError: string | null = null
+      if (Number.isFinite(receptionEntryId)) {
+        const receptionDealerRes = await supabase
+          .from('service_reception_entries')
+          .select('dealer_code')
+          .eq('id', receptionEntryId)
+          .maybeSingle()
+
+        const receptionDealerCode = String((receptionDealerRes.data as { dealer_code?: string | null } | null)?.dealer_code ?? '').trim().toUpperCase()
+        if (receptionDealerCode) {
+          metadataDealerCode = receptionDealerCode
+        }
+        receptionDealerLookupError = receptionDealerRes.error?.message ?? null
+      }
+
+      const [canModifyServiceAdvisorRes, canModifyReceptionRes, canModifyBodyshopRepairRes] = await Promise.all([
+        supabase.rpc('has_module_modify', { p_module: 'service_advisor' }),
+        supabase.rpc('has_module_modify', { p_module: 'reception' }),
+        supabase.rpc('has_module_modify', { p_module: 'bodyshop_repair' }),
+      ])
+
+      console.log('[BodyshopIntakeUpload] dealer context ready', {
+        uploadDebugId,
+        dealerCodeFromScope,
+        effectiveDealerCode,
+        metadataDealerCode,
+        folder,
+        effectiveDealerSource: myDealerCodeValue ? 'rpc:my_dealer_code' : 'scope-context',
+        dealerSource: dealerScopeCtx.data?.source ?? null,
+        dealerCodes: dealerScopeCtx.data?.dealerCodes ?? [],
+        dealerScopeError: dealerScopeCtx.error ?? null,
+        receptionDealerLookupError,
+      })
+
+      console.log('[BodyshopIntakeUpload] rls preflight', {
+        uploadDebugId,
+        sessionUserId,
+        storageBucket: AUTODOC_BUCKET,
+        storagePathPrefix: effectiveDealerCode,
+        dealerCodeFromScope,
+        effectiveDealerCode,
+        dealerScopeSource: dealerScopeCtx.data?.source ?? null,
+        dealerCodesFromScope: dealerScopeCtx.data?.dealerCodes ?? [],
+        jwtDealerUserMeta,
+        jwtDealerAppMeta,
+        mappingPrimaryDealerCode,
+        myDealerCodeRpc: myDealerCodeValue || null,
+        myDealerCodeRpcError: myDealerCodeRpc.error?.message ?? null,
+        mappingLookupError,
+        receptionDealerLookupError,
+        metadataDealerCode,
+        canModifyServiceAdvisor: canModifyServiceAdvisorRes.data ?? null,
+        canModifyServiceAdvisorError: canModifyServiceAdvisorRes.error?.message ?? null,
+        canModifyReception: canModifyReceptionRes.data ?? null,
+        canModifyReceptionError: canModifyReceptionRes.error?.message ?? null,
+        canModifyBodyshopRepair: canModifyBodyshopRepairRes.data ?? null,
+        canModifyBodyshopRepairError: canModifyBodyshopRepairRes.error?.message ?? null,
+        prefixMatchesJwtUserMeta: Boolean(jwtDealerUserMeta) && effectiveDealerCode === jwtDealerUserMeta,
+        prefixMatchesJwtAppMeta: Boolean(jwtDealerAppMeta) && effectiveDealerCode === jwtDealerAppMeta,
+        prefixMatchesMyDealerCodeRpc: Boolean(myDealerCodeValue) && effectiveDealerCode === myDealerCodeValue,
+      })
 
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index]
@@ -2019,6 +2126,10 @@ export default function BodyshopRepairPage() {
             index: index + 1,
             fileName: file.name,
             message: uploadRes.error.message,
+            error: uploadRes.error,
+            storageBucket: AUTODOC_BUCKET,
+            storagePath,
+            storagePrefix: effectiveDealerCode,
           })
           toast_(uploadRes.error.message, false)
           return
@@ -2040,7 +2151,7 @@ export default function BodyshopRepairPage() {
           supabase
             .from('bodyshop_intake_vehicle_photos')
             .insert({
-              dealer_code: dealerCode,
+              dealer_code: metadataDealerCode,
               repair_card_id: repairCardId,
               reception_entry_id: receptionEntryId,
               job_card_no: jobCardNo,
