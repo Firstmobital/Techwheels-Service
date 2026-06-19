@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import { normalizeDepartmentDisplay } from '../lib/department'
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import {
@@ -120,6 +121,11 @@ function deriveLocationAndFuelType(employeeCode: string): { location: string; fu
   return { location: match.location, fuel_type: match.fuel_type }
 }
 
+function normalizeDepartmentForStorage(value: string | null | undefined): string | null {
+  const normalized = normalizeDepartmentDisplay(value)
+  return normalized || null
+}
+
 function isMissingBodyshopSurveyorTableError(message: string | null | undefined): boolean {
   if (!message) return false
   const normalized = message.toLowerCase()
@@ -201,7 +207,7 @@ function parseEmployeeWorkbook(file: File): Promise<EmployeeUploadRow[]> {
               employee_code: code,
               employee_name: name,
               location: location || derived?.location || null,
-              department: department || null,
+              department: normalizeDepartmentForStorage(department),
               fuel_type: derived?.fuel_type ?? (fuelType || null),
               role: role || null,
               bank_name: bankName || null,
@@ -1205,7 +1211,7 @@ export default function SettingsPage() {
     const updatePayload: Partial<EmployeeRow> & { employee_name: string } = {
       employee_name: employee.employee_name.trim(),
       location: employee.location?.trim() || null,
-      department: employee.department?.trim() || null,
+      department: normalizeDepartmentForStorage(employee.department),
       fuel_type: employee.fuel_type?.trim() || null,
       role: employee.role?.trim() || null,
       bank_name: employee.bank_name?.trim() || null,
@@ -1257,7 +1263,7 @@ export default function SettingsPage() {
       employee_code: newEmployee.employee_code.trim(),
       employee_name: newEmployee.employee_name.trim(),
       location: newEmployee.location.trim() || derived?.location || null,
-      department: newEmployee.department.trim() || null,
+      department: normalizeDepartmentForStorage(newEmployee.department),
       fuel_type: newEmployee.fuel_type.trim() || derived?.fuel_type || null,
       role: newEmployee.role.trim() || null,
       bank_name: newEmployee.bank_name.trim() || null,

@@ -3,6 +3,7 @@ import DateRangeFilter, { currentMonthRange, type DateRange } from '../component
 import { supabase } from '../lib/supabase'
 import Icon from '../components/Icon'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
+import { isBodyshopDepartment, isServiceDepartment } from '../lib/department'
 import { getDealerContext } from '../lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -271,9 +272,6 @@ const STATUS_OPTIONS = [
   { value: 'completed',      label: 'Completed'      },
 ]
 
-const BS_DEPTS = new Set(['BODY SHOP', 'BODYSHOP'])
-const SERVICE_DEPTS = new Set(['SERVICE'])
-
 function fmtDate(v: string | null | undefined) {
   if (!v) return '—'
   return new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -463,16 +461,11 @@ function jcKey(car: AccidentCar): string {
   return (car.jc_number ?? '').trim().toUpperCase()
 }
 
-function deptKey(v: string | null | undefined): string {
-  return String(v ?? '').trim().toUpperCase()
-}
-
 function isEmployeeEligibleForRole(role: BSRole, department: string | null): boolean {
-  const d = deptKey(department)
   if (role === 'ELECTRICIAN' || role === 'DET') {
-    return SERVICE_DEPTS.has(d)
+    return isServiceDepartment(department)
   }
-  return BS_DEPTS.has(d)
+  return isBodyshopDepartment(department)
 }
 
 function emptyRoleMap() {

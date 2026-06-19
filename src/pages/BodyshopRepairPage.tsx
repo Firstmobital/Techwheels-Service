@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { getDealerContext, getDealerScopeContext } from '../lib/api'
 import { AUTODOC_BUCKET } from '../lib/autodocStorage'
+import { isBodyshopDepartment } from '../lib/department'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
 import { fetchVehicleFromRcLookup } from '../lib/api/rcLookup'
 import {
@@ -109,11 +110,6 @@ const INSURANCE_TYPE_OPTIONS = ['TMI', 'Non-TMI'] as const
 
 function normalizeAccessToken(value: string | null | undefined): string {
   return String(value ?? '').trim().toUpperCase().replace(/[_\s]+/g, ' ')
-}
-
-function isBodyshopDepartment(value: string | null | undefined): boolean {
-  const normalized = normalizeAccessToken(value)
-  return normalized === 'BODY SHOP' || normalized === 'BODYSHOP'
 }
 
 function isBodyshopSaRole(value: string | null | undefined): boolean {
@@ -1031,10 +1027,21 @@ export default function BodyshopRepairPage() {
       if (cancelled) return
 
       if (error || !data) {
+        console.warn('[BodyshopSA:KM] reception-load failed', {
+          receptionEntryId,
+          errorMessage: error?.message ?? null,
+          hasData: Boolean(data),
+        })
         setSelectedReception(null)
         setLoadingSelectedReception(false)
         return
       }
+
+      console.debug('[BodyshopSA:KM] reception-load success', {
+        receptionEntryId,
+        km_reading: (data as ReceptionVehicleSnapshot).km_reading ?? null,
+        jc_number: (data as ReceptionVehicleSnapshot).jc_number ?? null,
+      })
 
       setSelectedReception(data as ReceptionVehicleSnapshot)
       setKmDraft(data.km_reading == null ? '' : String(data.km_reading))
@@ -1290,11 +1297,12 @@ export default function BodyshopRepairPage() {
   async function load() {
     setLoading(true)
     try {
-      // For SA role: use sa_employee_code filtering
-      const scopedSaCodes = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && !hasBodyshopSurveyAccess
+      // For SA role: always include SA-code visibility for mapped users.
+      // Some users may have mixed SA + SSA/SURVEY mappings; do not disable SA scope in that case.
+      const scopedSaCodes = !isAdminLikeUser && hasBodyshopSaAccess
         ? Array.from(new Set(bodyshopSaCodesForUser.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)))
         : null
-      const scopedSaNames = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && !hasBodyshopSurveyAccess
+      const scopedSaNames = !isAdminLikeUser && hasBodyshopSaAccess
         ? Array.from(new Set([String(currentUserDisplayName ?? '').trim()].filter(Boolean)))
         : null
 
@@ -1311,15 +1319,16 @@ export default function BodyshopRepairPage() {
         ...(scopedSurveyBranches ?? []),
       ]))
 
-      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0) && scopedBranches.length === 0) {
-        setCards([])
-        setFloorWorkStartedLookup({})
-        setFloorStageCompletedLookup({})
-        setPhotoCountByReceptionId({})
-        setKmPresentByReceptionId({})
-        setBranches([])
-        setLoading(false)
-        return
+      const hasNoDerivedScope =
+        !isAdminLikeUser
+        && (!scopedSaCodes || scopedSaCodes.length === 0)
+        && (!scopedSaNames || scopedSaNames.length === 0)
+        && scopedBranches.length === 0
+
+      if (hasNoDerivedScope) {
+        // Fallback to server-side RLS visibility instead of hard-empty UI.
+        // This prevents false 0-row states when scope RPC data is temporarily incomplete.
+        console.warn('[BodyshopRepair] No derived scope from employee links; falling back to RLS-scoped query')
       }
 
       let accidentQuery = supabase
@@ -1356,8 +1365,28 @@ export default function BodyshopRepairPage() {
         accidentQuery,
       ])
 
-      const accidentRows = ((accidentRes.data ?? []) as AccidentReceptionRow[])
+      let accidentRows = ((accidentRes.data ?? []) as AccidentReceptionRow[])
         .filter((row) => Boolean(intakeKey(row)))
+
+      if (accidentRows.length === 0 && !isAdminLikeUser && hasBodyshopSaAccess) {
+        // Fallback: rely on server-side RLS for SA visibility when local SA filters are too strict.
+        let accidentRlsQuery = supabase
+          .from('service_reception_entries')
+          .select('id, jc_number, reg_number, owner_name, owner_phone, sa_employee_code, sa_name, sa_display_name, branch, created_at')
+          .eq('service_type', 'Accident')
+          .gte('created_at', dateRange.from + 'T00:00:00+05:30')
+          .lte('created_at', dateRange.to + 'T23:59:59+05:30')
+          .order('created_at', { ascending: false })
+
+        if (scopedBranches.length > 0) {
+          accidentRlsQuery = accidentRlsQuery.in('branch', scopedBranches)
+        }
+
+        const accidentRlsRes = await accidentRlsQuery
+        accidentRows = ((accidentRlsRes.data ?? []) as AccidentReceptionRow[])
+          .filter((row) => Boolean(intakeKey(row)))
+      }
+
       const accidentByReceptionId = new Map<number, AccidentReceptionRow>()
       accidentRows.forEach((row) => {
         const id = Number(row.id)
@@ -1472,7 +1501,7 @@ export default function BodyshopRepairPage() {
         }))
       }
 
-      const mergedData = (toInsert.length > 0 || rowsToHeal.length > 0)
+      let mergedData = (toInsert.length > 0 || rowsToHeal.length > 0)
         ? await listRepairCards({
             from: dateRange.from,
             to: dateRange.to,
@@ -1481,6 +1510,18 @@ export default function BodyshopRepairPage() {
             branches: scopedBranches.length > 0 ? scopedBranches : undefined,
           })
         : data
+
+      if (mergedData.length === 0 && receptionIds.length > 0) {
+        // Final fallback: cards can be correctly linked to reception entries but stale in SA name/code fields.
+        // Fetch by reception_entry_id to preserve visibility for the same scoped Accident rows.
+        const fallbackCardsRes = await supabase
+          .from('bodyshop_repair_cards')
+          .select('*')
+          .in('reception_entry_id', receptionIds)
+          .order('created_at', { ascending: false })
+
+        mergedData = ((fallbackCardsRes.data ?? []) as RepairCard[])
+      }
 
       const nextCards = dedupeCards(mergedData)
       setCards(nextCards)
@@ -2749,8 +2790,19 @@ export default function BodyshopRepairPage() {
     if (!kmDirty) return
 
     const parsedKm = parseKmDraftValue(kmDraft)
+    console.debug('[BodyshopSA:KM] blur-save start', {
+      receptionEntryId: selectedReception.id,
+      rawDraft: kmDraft,
+      parsedKm,
+      previousKm: selectedReception.km_reading ?? null,
+    })
+
     if (parsedKm === 'invalid') {
       const message = 'KM Reading must be a non-negative number'
+      console.warn('[BodyshopSA:KM] blur-save validation failed', {
+        receptionEntryId: selectedReception.id,
+        rawDraft: kmDraft,
+      })
       setReceivingSaveError(message)
       toast_(message, false)
       return
@@ -2758,16 +2810,43 @@ export default function BodyshopRepairPage() {
 
     setSavingReceiving(true)
     try {
-      const { error } = await supabase
+      const { data: updatedReceptionRow, error } = await supabase
         .from('service_reception_entries')
         .update({ km_reading: parsedKm })
         .eq('id', selectedReception.id)
+        .select('id, km_reading')
+        .maybeSingle()
 
       if (error) {
+        console.error('[BodyshopSA:KM] blur-save db update failed', {
+          receptionEntryId: selectedReception.id,
+          payloadKm: parsedKm,
+          errorMessage: error.message,
+          errorCode: (error as any)?.code ?? null,
+          errorDetails: (error as any)?.details ?? null,
+          errorHint: (error as any)?.hint ?? null,
+        })
         setReceivingSaveError(error.message)
         toast_(error.message, false)
         return
       }
+
+      if (!updatedReceptionRow) {
+        const message = 'KM save skipped: no matching reception row updated (scope/RLS).'
+        console.error('[BodyshopSA:KM] blur-save no rows updated', {
+          receptionEntryId: selectedReception.id,
+          payloadKm: parsedKm,
+        })
+        setReceivingSaveError(message)
+        toast_(message, false)
+        return
+      }
+
+      console.debug('[BodyshopSA:KM] blur-save db update success', {
+        receptionEntryId: selectedReception.id,
+        payloadKm: parsedKm,
+        persistedKm: updatedReceptionRow.km_reading,
+      })
 
       setSelectedReception((prev) => prev
         ? { ...prev, km_reading: parsedKm }
@@ -2778,6 +2857,10 @@ export default function BodyshopRepairPage() {
       }))
       setReceivingSaveError(null)
     } catch (e: any) {
+      console.error('[BodyshopSA:KM] blur-save exception', {
+        receptionEntryId: selectedReception.id,
+        errorMessage: e?.message ?? 'Unknown error',
+      })
       setReceivingSaveError(e.message ?? 'Unable to save KM Reading')
       toast_(e.message, false)
     } finally {
@@ -2806,6 +2889,15 @@ export default function BodyshopRepairPage() {
     }
 
     const parsedKm = parseKmDraftValue(kmDraft)
+    console.debug('[BodyshopSA:KM] manual-save start', {
+      receptionEntryId: selectedReception?.id ?? null,
+      rawKmDraft: kmDraft,
+      parsedKm,
+      kmDirty,
+      jcDirty,
+      patchDirty,
+    })
+
     if (kmDirty && parsedKm === 'invalid') {
       failReceivingSave('KM Reading must be a non-negative number')
       return
@@ -2830,15 +2922,44 @@ export default function BodyshopRepairPage() {
         if (kmDirty) receptionPatch.km_reading = kmValue
         if (jcDirty) receptionPatch.jc_number = jcValue
 
-        const { error: kmError } = await supabase
+        const { data: updatedReceptionRow, error: kmError } = await supabase
           .from('service_reception_entries')
           .update(receptionPatch)
           .eq('id', selectedReception.id)
+          .select('id, km_reading, jc_number')
+          .maybeSingle()
 
         if (kmError) {
+          console.error('[BodyshopSA:KM] manual-save db update failed', {
+            receptionEntryId: selectedReception.id,
+            receptionPatch,
+            errorMessage: kmError.message,
+            errorCode: (kmError as any)?.code ?? null,
+            errorDetails: (kmError as any)?.details ?? null,
+            errorHint: (kmError as any)?.hint ?? null,
+          })
           failReceivingSave(kmError.message)
           return
         }
+
+        if (!updatedReceptionRow) {
+          const message = 'Save skipped: no matching reception row updated (scope/RLS).'
+          console.error('[BodyshopSA:KM] manual-save no rows updated', {
+            receptionEntryId: selectedReception.id,
+            receptionPatch,
+          })
+          failReceivingSave(message)
+          return
+        }
+
+        console.debug('[BodyshopSA:KM] manual-save db update success', {
+          receptionEntryId: selectedReception.id,
+          receptionPatch,
+          persisted: {
+            km_reading: updatedReceptionRow.km_reading,
+            jc_number: updatedReceptionRow.jc_number,
+          },
+        })
 
         setSelectedReception((prev) => prev
           ? {

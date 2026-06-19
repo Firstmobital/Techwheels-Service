@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
 import DateRangeFilter, { currentMonthRange, type DateRange } from '../components/DateRangeFilter'
+import { isBodyshopDepartment } from '../lib/department'
 import { supabase } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -70,8 +71,6 @@ const TABS: TabMeta[] = [
   { key: 'TECHNICIAN', label: 'Technician', icon: '🔧', defaultPct: 4, mode: 'tech' },
 ]
 
-// Bodyshop departments (both spellings)
-const BS_DEPTS = new Set(['BODY SHOP', 'BODYSHOP'])
 const QUERY_PAGE = 1000
 const UNKNOWN_BRANCH = 'Unknown'
 
@@ -161,7 +160,7 @@ export default function BodyshopTrackerPage() {
       // Bodyshop employee codes by role
       const bsCodes: Record<string, Set<string>> = { DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set() }
       emps.forEach((e) => {
-        if (!BS_DEPTS.has(String(e.department ?? '').trim().toUpperCase())) return
+        if (!isBodyshopDepartment(e.department)) return
         const role = String(e.role ?? '').trim().toUpperCase()
         if (role === 'DENTOR') bsCodes.DENTOR.add(e.employee_code)
         else if (role === 'PAINTER') bsCodes.PAINTER.add(e.employee_code)
@@ -233,7 +232,7 @@ export default function BodyshopTrackerPage() {
   const bsCodesByRole = useMemo<Record<TabKey, Set<string>>>(() => {
     const map: Record<TabKey, Set<string>> = { SA: new Set(), DENTOR: new Set(), PAINTER: new Set(), TECHNICIAN: new Set() }
     employees.forEach((e) => {
-      if (!BS_DEPTS.has(String(e.department ?? '').trim().toUpperCase())) return
+      if (!isBodyshopDepartment(e.department)) return
       const role = String(e.role ?? '').trim().toUpperCase()
       if (role === 'SA') map.SA.add(e.employee_code)
       else if (role === 'DENTOR') map.DENTOR.add(e.employee_code)
