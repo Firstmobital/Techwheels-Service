@@ -6,6 +6,8 @@
 **Last Updated**: 2026-06-19 14:30 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
+> **Note**: RBAC-001 initial closure was recorded on 2026-05-23 ([closure evidence](../../rbac/evidence/RBAC-001_IMPLEMENTATION_COMPLETE.md)). This master plan continues execution with post-closure hardening and ongoing extensions (Phase 1C onward).
+
 ### Execution Update (2026-06-19 - Bodyshop SSA Branch-Based Row Visibility)
 
 - Bodyshop Repair SSA (Senior Service Advisor) row visibility implemented for `/bodyshop-repair`:
