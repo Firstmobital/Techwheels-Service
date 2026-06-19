@@ -51,7 +51,7 @@ type JCDetailRow = ClosedJCRow & {
   dateKey: string | null
 }
 
-// SA employee → department mapping (from settings_employees)
+// SA employee → department mapping (from employee_master)
 type SaEmployee = {
   employee_name: string
   department: string | null
@@ -408,15 +408,18 @@ export default function SATrackerPage() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // ── Load SA department mapping from settings_employees ──────────────
+  // ── Load SA department mapping from employee_master ──────────────
   async function loadEmployees() {
     try {
       const { data, error: err } = await supabase
-        .from('settings_employees')
+        .from('employee_master')
         .select('employee_name, department')
         .not('employee_name', 'is', null)
+        .limit(1000)
       if (!err && data) {
         setSaEmployees((data as SaEmployee[]).filter(e => e.employee_name?.trim()))
+      } else if (err) {
+        console.error('employee_master fetch error:', err.message)
       }
     } catch (e) {
       console.error('loadEmployees error:', e)
@@ -493,23 +496,29 @@ export default function SATrackerPage() {
   [branchFilteredRows, portalFilter])
 
   // ── Department filter ──────────────────────────────────────────────────────
-  // Build a map of SA name → department (case-insensitive match)
+  // Build a map of SA name → department (case-insensitive, trim-safe match)
   const saNameToDept = useMemo(() => {
     const map = new Map<string, string>()
     saEmployees.forEach(e => {
       if (e.employee_name && e.department) {
-        map.set(e.employee_name.trim().toUpperCase(), e.department.trim())
+        // Normalize: uppercase + collapse multiple spaces
+        const key = e.employee_name.trim().replace(/\s+/g, ' ').toUpperCase()
+        map.set(key, e.department.trim())
       }
     })
     return map
   }, [saEmployees])
 
+  // Helper: normalize SA name for map lookup
+  function normSAName(raw: string | null | undefined): string {
+    return String(raw ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+  }
+
   // Collect distinct departments present in current filteredRows
   const deptOptions = useMemo(() => {
     const depts = new Set<string>()
     filteredRows.forEach(r => {
-      const name = String(r.sr_assigned_to ?? '').trim().toUpperCase()
-      const dept = saNameToDept.get(name)
+      const dept = saNameToDept.get(normSAName(r.sr_assigned_to))
       if (dept) depts.add(dept)
     })
     return Array.from(depts).sort()
@@ -518,8 +527,7 @@ export default function SATrackerPage() {
   const deptFilteredRows = useMemo(() => {
     if (deptFilter === 'all') return filteredRows
     return filteredRows.filter(r => {
-      const name = String(r.sr_assigned_to ?? '').trim().toUpperCase()
-      const dept = saNameToDept.get(name) ?? ''
+      const dept = saNameToDept.get(normSAName(r.sr_assigned_to)) ?? ''
       return dept.toLowerCase() === deptFilter.toLowerCase()
     })
   }, [filteredRows, deptFilter, saNameToDept])
@@ -555,7 +563,7 @@ export default function SATrackerPage() {
         totalIncome: calculateSAIncome(card.totalLabour, saSharePercent),
       }))
       .sort((a, b) => b.totalInvoice - a.totalInvoice || b.jcCount - a.jcCount)
-  }, [filteredRows, saSharePercent])
+  }, [deptFilteredRows, saSharePercent])
 
   // ── Day cards for selected SA ─────────────────────────────────────────────
 
@@ -760,7 +768,7 @@ export default function SATrackerPage() {
           <option value="all">All ({filteredRows.length})</option>
           {deptOptions.map(dept => (
             <option key={dept} value={dept}>
-              {dept} ({filteredRows.filter(r => (saNameToDept.get(String(r.sr_assigned_to ?? '').trim().toUpperCase()) ?? '').toLowerCase() === dept.toLowerCase()).length})
+              {dept} ({filteredRows.filter(r => (saNameToDept.get(normSAName(r.sr_assigned_to)) ?? '').toLowerCase() === dept.toLowerCase()).length})
             </option>
           ))}
         </select>
@@ -1139,7 +1147,7 @@ export default function SATrackerPage() {
         const rowTotals = new Map<string, number>()
         let grandTotal  = 0
 
-        filteredRows.forEach(r => {
+        deptFilteredRows.forEach(r => {
           const dateKey = r.dateKey
           if (!dateKey) return
           const saName  = String(r.sr_assigned_to ?? '').trim()
