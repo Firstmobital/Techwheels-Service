@@ -51,6 +51,12 @@ type JCDetailRow = ClosedJCRow & {
   dateKey: string | null
 }
 
+// SA employee → department mapping (from settings_employees)
+type SaEmployee = {
+  employee_name: string
+  department: string | null
+}
+
 const QUERY_PAGE_SIZE = 1000
 const UNKNOWN_BRANCH = 'Unknown location'
 const UNKNOWN_PORTAL = 'Unknown portal'
@@ -182,6 +188,8 @@ export default function SATrackerPage() {
   const [toDate, setToDate] = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
   const [portalFilter, setPortalFilter] = useState('all')
+  const [deptFilter, setDeptFilter] = useState('all')         // 'all' | 'Service' | 'Bodyshop'
+  const [saEmployees, setSaEmployees] = useState<SaEmployee[]>([])
 
   // Share % settings
   const [canEditSharePercent, setCanEditSharePercent] = useState(false)
@@ -363,7 +371,22 @@ export default function SATrackerPage() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void loadSettings() }, [])  // run once on mount
+  // ── Load SA department mapping from settings_employees ──────────────
+  async function loadEmployees() {
+    try {
+      const { data, error: err } = await supabase
+        .from('settings_employees')
+        .select('employee_name, department')
+        .not('employee_name', 'is', null)
+      if (!err && data) {
+        setSaEmployees((data as SaEmployee[]).filter(e => e.employee_name?.trim()))
+      }
+    } catch (e) {
+      console.error('loadEmployees error:', e)
+    }
+  }
+
+  useEffect(() => { void loadSettings(); void loadEmployees() }, [])  // run once on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadData() }, [dateRange])
 
@@ -432,12 +455,44 @@ export default function SATrackerPage() {
       : branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portalFilter),
   [branchFilteredRows, portalFilter])
 
+  // ── Department filter ──────────────────────────────────────────────────────
+  // Build a map of SA name → department (case-insensitive match)
+  const saNameToDept = useMemo(() => {
+    const map = new Map<string, string>()
+    saEmployees.forEach(e => {
+      if (e.employee_name && e.department) {
+        map.set(e.employee_name.trim().toUpperCase(), e.department.trim())
+      }
+    })
+    return map
+  }, [saEmployees])
+
+  // Collect distinct departments present in current filteredRows
+  const deptOptions = useMemo(() => {
+    const depts = new Set<string>()
+    filteredRows.forEach(r => {
+      const name = String(r.sr_assigned_to ?? '').trim().toUpperCase()
+      const dept = saNameToDept.get(name)
+      if (dept) depts.add(dept)
+    })
+    return Array.from(depts).sort()
+  }, [filteredRows, saNameToDept])
+
+  const deptFilteredRows = useMemo(() => {
+    if (deptFilter === 'all') return filteredRows
+    return filteredRows.filter(r => {
+      const name = String(r.sr_assigned_to ?? '').trim().toUpperCase()
+      const dept = saNameToDept.get(name) ?? ''
+      return dept.toLowerCase() === deptFilter.toLowerCase()
+    })
+  }, [filteredRows, deptFilter, saNameToDept])
+
   // ── SA summary cards ──────────────────────────────────────────────────────
 
   const saCards = useMemo<SASummaryCard[]>(() => {
     const map = new Map<string, SASummaryCard & { days: Set<string> }>()
 
-    filteredRows.forEach((r) => {
+    deptFilteredRows.forEach((r) => {
       const name = String(r.sr_assigned_to ?? '').trim()
       if (!name) return
       const dateKey = r.dateKey ?? 'unknown'
@@ -469,7 +524,7 @@ export default function SATrackerPage() {
 
   const selectedSARows = useMemo(() => {
     if (!selectedSA) return []
-    return filteredRows.filter((r) => String(r.sr_assigned_to ?? '').trim() === selectedSA)
+    return deptFilteredRows.filter((r) => String(r.sr_assigned_to ?? '').trim() === selectedSA)
   }, [filteredRows, selectedSA])
 
   const dayCards = useMemo<DayWiseCard[]>(() => {
@@ -606,6 +661,24 @@ export default function SATrackerPage() {
             className={`btn btn--sm ${portalFilter === portal ? 'btn--primary' : 'btn--ghost'}`}
             style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
             {portal} ({branchFilteredRows.filter((r) => getPortalLabel(r.portal) === portal).length})
+          </button>
+        ))}
+
+        {/* Divider */}
+        <span style={{ width: '1px', height: '22px', background: '#e2e8f0', flexShrink: 0 }} />
+
+        {/* Department filter */}
+        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b' }}>Dept:</span>
+        <button type="button" onClick={() => setDeptFilter('all')}
+          className={`btn btn--sm ${deptFilter === 'all' ? 'btn--primary' : 'btn--ghost'}`}
+          style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+          All ({filteredRows.length})
+        </button>
+        {deptOptions.map((dept) => (
+          <button key={dept} type="button" onClick={() => setDeptFilter(dept)}
+            className={`btn btn--sm ${deptFilter === dept ? 'btn--primary' : 'btn--ghost'}`}
+            style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+            {dept} ({filteredRows.filter(r => (saNameToDept.get(String(r.sr_assigned_to ?? '').trim().toUpperCase()) ?? '').toLowerCase() === dept.toLowerCase()).length})
           </button>
         ))}
 
