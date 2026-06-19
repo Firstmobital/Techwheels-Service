@@ -134,6 +134,7 @@ export async function listRepairCards(opts: {
   to?: string
   saCodes?: string[]
   saNames?: string[]
+  branches?: string[]
 } = {}): Promise<RepairCard[]> {
   const scopedSaCodes = Array.isArray(opts.saCodes)
     ? opts.saCodes.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)
@@ -141,11 +142,15 @@ export async function listRepairCards(opts: {
   const scopedSaNames = Array.isArray(opts.saNames)
     ? opts.saNames.map((name) => String(name ?? '').trim()).filter(Boolean)
     : null
+  const scopedBranches = Array.isArray(opts.branches)
+    ? opts.branches.map((b) => String(b ?? '').trim()).filter(Boolean)
+    : null
 
   if (
-    (Array.isArray(opts.saCodes) || Array.isArray(opts.saNames))
+    (Array.isArray(opts.saCodes) || Array.isArray(opts.saNames) || Array.isArray(opts.branches))
     && (scopedSaCodes?.length ?? 0) === 0
     && (scopedSaNames?.length ?? 0) === 0
+    && (scopedBranches?.length ?? 0) === 0
   ) {
     return []
   }
@@ -160,6 +165,7 @@ export async function listRepairCards(opts: {
   if (opts.from) q = q.gte('received_at', opts.from)
   if (opts.to)   q = q.lte('received_at', opts.to)
 
+  // For SA: filter by sa_employee_code
   if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
     const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
     const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
@@ -168,6 +174,10 @@ export async function listRepairCards(opts: {
     q = q.in('sa_employee_code', scopedSaCodes)
   } else if (scopedSaNames && scopedSaNames.length > 0) {
     q = q.in('sa_name', scopedSaNames)
+  }
+  // For SSA: filter by branch
+  if (scopedBranches && scopedBranches.length > 0) {
+    q = q.in('branch', scopedBranches)
   }
 
   const { data, error } = await q

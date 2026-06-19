@@ -4,6 +4,8 @@
 **Status:** ✅ COMPLETE  
 **Progress:** 100% (5/5 phases, 22/22 tasks)  
 
+> **Note**: This document records the closure snapshot for Phase 1-5 completion (2026-05-23). Post-closure hardening, extensions, and ongoing execution are tracked in the [active master plan](../../Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md).
+
 ---
 
 ## Overview

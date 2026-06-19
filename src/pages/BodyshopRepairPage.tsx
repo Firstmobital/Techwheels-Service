@@ -796,6 +796,7 @@ export default function BodyshopRepairPage() {
   const [kmDraft, setKmDraft] = useState('')
   const [jcDraft, setJcDraft] = useState('')
   const [savingReceiving, setSavingReceiving] = useState(false)
+  const [receivingSaveError, setReceivingSaveError] = useState<string | null>(null)
   const [fetchingInsurance, setFetchingInsurance] = useState(false)
   const [insuranceFetched, setInsuranceFetched] = useState(false)
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
@@ -821,6 +822,7 @@ export default function BodyshopRepairPage() {
   const [hasBodyshopSurveyAccess, setHasBodyshopSurveyAccess] = useState(false)
   const [hasBodyshopFloorAccess, setHasBodyshopFloorAccess] = useState(false)
   const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
+  const [bodyshopSsaBranchesForUser, setBodyshopSsaBranchesForUser] = useState<string[]>([])
   const [currentUserDisplayName, setCurrentUserDisplayName] = useState('')
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
@@ -852,7 +854,7 @@ export default function BodyshopRepairPage() {
   useEffect(() => {
     if (!userScopeResolved) return
     void load()
-  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser])
+  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser])
 
   useEffect(() => {
     let cancelled = false
@@ -870,6 +872,7 @@ export default function BodyshopRepairPage() {
           setHasBodyshopSurveyAccess(false)
           setHasBodyshopFloorAccess(false)
           setBodyshopSaCodesForUser([])
+          setBodyshopSsaBranchesForUser([])
           setCurrentUserDisplayName('')
           setUserScopeResolved(true)
           return
@@ -908,15 +911,15 @@ export default function BodyshopRepairPage() {
           .map((row) => String(row.employee_code ?? '').trim().toUpperCase())
           .filter(Boolean)
 
-        let employeeRows: Array<{ employee_code?: string | null; department?: string | null; role?: string | null }> = []
+        let employeeRows: Array<{ employee_code?: string | null; department?: string | null; role?: string | null; location?: string | null; fuel_type?: string | null }> = []
         if (linkedCodes.length > 0) {
           const empRes = await supabase
             .from('employee_master')
-            .select('employee_code, department, role')
+            .select('employee_code, department, role, location, fuel_type')
             .in('employee_code', linkedCodes)
 
           if (!empRes.error) {
-            employeeRows = (empRes.data ?? []) as Array<{ employee_code?: string | null; department?: string | null; role?: string | null }>
+            employeeRows = (empRes.data ?? []) as Array<{ employee_code?: string | null; department?: string | null; role?: string | null; location?: string | null; fuel_type?: string | null }>
           }
         }
 
@@ -928,6 +931,16 @@ export default function BodyshopRepairPage() {
         const hasSsaRoleFromMaster = bodyshopRows.some((row) => isBodyshopSsaRole(row.role))
         const hasSurveyRoleFromMaster = bodyshopRows.some((row) => isBodyshopSurveyRole(row.role))
         const hasFloorRoleFromMaster = bodyshopRows.some((row) => isBodyshopFloorInchargeRole(row.role))
+
+        // For SSA, extract assigned branches from location field
+        const ssaBranches = Array.from(
+          new Set(
+            bodyshopRows
+              .filter((row) => isBodyshopSsaRole(row.role))
+              .map((row) => String(row.location ?? '').trim())
+              .filter(Boolean),
+          ),
+        )
 
         const hasSaRole = employeeRows.length > 0 ? (hasSaRoleFromMaster || hasSsaRoleFromMaster) : saCodes.length > 0
         const hasSsaRole = employeeRows.length > 0 ? hasSsaRoleFromMaster : false
@@ -941,6 +954,7 @@ export default function BodyshopRepairPage() {
         setHasBodyshopSurveyAccess(hasSurveyRole)
         setHasBodyshopFloorAccess(hasFloorRole)
         setBodyshopSaCodesForUser(saCodes)
+        setBodyshopSsaBranchesForUser(ssaBranches)
         setCurrentUserDisplayName(displayName)
         setUserScopeResolved(true)
       } catch {
@@ -951,6 +965,7 @@ export default function BodyshopRepairPage() {
         setHasBodyshopSurveyAccess(false)
         setHasBodyshopFloorAccess(false)
         setBodyshopSaCodesForUser([])
+        setBodyshopSsaBranchesForUser([])
         setCurrentUserDisplayName('')
         setUserScopeResolved(true)
       }
@@ -983,6 +998,7 @@ export default function BodyshopRepairPage() {
     const receptionEntryId = Number(selected?.reception_entry_id)
     if (!selected || !Number.isFinite(receptionEntryId) || receptionEntryId <= 0) {
       setSelectedReception(null)
+      setReceivingSaveError(null)
       return
     }
 
@@ -1007,6 +1023,7 @@ export default function BodyshopRepairPage() {
       setSelectedReception(data as ReceptionVehicleSnapshot)
       setKmDraft(data.km_reading == null ? '' : String(data.km_reading))
       setJcDraft(String(data.jc_number ?? '').trim().toUpperCase())
+      setReceivingSaveError(null)
       setLoadingSelectedReception(false)
     })()
 
@@ -1257,14 +1274,20 @@ export default function BodyshopRepairPage() {
   async function load() {
     setLoading(true)
     try {
-      const scopedSaCodes = !isAdminLikeUser
+      // For SA role: use sa_employee_code filtering
+      const scopedSaCodes = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess
         ? Array.from(new Set(bodyshopSaCodesForUser.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)))
         : null
-      const scopedSaNames = !isAdminLikeUser
+      const scopedSaNames = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess
         ? Array.from(new Set([String(currentUserDisplayName ?? '').trim()].filter(Boolean)))
         : null
 
-      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0)) {
+      // For SSA role: use branch filtering
+      const scopedSsaBranches = !isAdminLikeUser && hasBodyshopSsaAccess
+        ? Array.from(new Set(bodyshopSsaBranchesForUser.map((b) => String(b ?? '').trim()).filter(Boolean)))
+        : null
+
+      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0) && (!scopedSsaBranches || scopedSsaBranches.length === 0)) {
         setCards([])
         setFloorWorkStartedLookup({})
         setFloorStageCompletedLookup({})
@@ -1283,6 +1306,7 @@ export default function BodyshopRepairPage() {
         .lte('created_at', dateRange.to + 'T23:59:59+05:30')
         .order('created_at', { ascending: false })
 
+      // For SA role: filter by sa_employee_code
       if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
         const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
         const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
@@ -1292,9 +1316,19 @@ export default function BodyshopRepairPage() {
       } else if (scopedSaNames && scopedSaNames.length > 0) {
         accidentQuery = accidentQuery.in('sa_name', scopedSaNames)
       }
+      // For SSA role: filter by branch
+      if (scopedSsaBranches && scopedSsaBranches.length > 0) {
+        accidentQuery = accidentQuery.in('branch', scopedSsaBranches)
+      }
 
       const [data, accidentRes] = await Promise.all([
-        listRepairCards({ from: dateRange.from, to: dateRange.to, saCodes: scopedSaCodes ?? undefined, saNames: scopedSaNames ?? undefined }),
+        listRepairCards({
+          from: dateRange.from,
+          to: dateRange.to,
+          saCodes: scopedSaCodes ?? undefined,
+          saNames: scopedSaNames ?? undefined,
+          branches: scopedSsaBranches ?? undefined,
+        }),
         accidentQuery,
       ])
 
@@ -2669,31 +2703,38 @@ export default function BodyshopRepairPage() {
   async function handleSaveReceivingDraft() {
     if (!selected) return
 
+    setReceivingSaveError(null)
+
     const patchDirty = Object.keys(editPatch).length > 0
     const kmDirty = isKmDirty()
     const jcDirty = isJcDirty()
     if (!patchDirty && !kmDirty && !jcDirty) return
 
+    const failReceivingSave = (message: string) => {
+      setReceivingSaveError(message)
+      toast_(message, false)
+    }
+
     if ((kmDirty || jcDirty) && !selectedReception?.id) {
-      toast_('Reception entry not loaded', false)
+      failReceivingSave('Reception entry not loaded')
       return
     }
 
     const parsedKm = parseKmDraftValue(kmDraft)
     if (kmDirty && parsedKm === 'invalid') {
-      toast_('KM Reading must be a non-negative number', false)
+      failReceivingSave('KM Reading must be a non-negative number')
       return
     }
     const kmValue: number | null = parsedKm === 'invalid' ? null : parsedKm
 
     const parsedJc = parseJcDraftValue(jcDraft)
     if (jcDirty && parsedJc === 'invalid') {
-      toast_('Job Card must be at least 25 characters', false)
+      failReceivingSave('Job Card must be at least 25 characters')
       return
     }
     const jcValue: string | null = parsedJc === 'invalid' ? null : parsedJc
     if (jcDirty && !jcValue) {
-      toast_('Job Card is required', false)
+      failReceivingSave('Job Card is required')
       return
     }
 
@@ -2710,7 +2751,7 @@ export default function BodyshopRepairPage() {
           .eq('id', selectedReception.id)
 
         if (kmError) {
-          toast_(kmError.message, false)
+          failReceivingSave(kmError.message)
           return
         }
 
@@ -2748,8 +2789,10 @@ export default function BodyshopRepairPage() {
         jcDirty ? 'Job Card' : '',
         patchDirty ? 'Receiving details' : '',
       ].filter(Boolean)
+      setReceivingSaveError(null)
       toast_(`Saved ${saveParts.join(' + ')} ✅`)
     } catch (e: any) {
+      setReceivingSaveError(e.message ?? 'Unable to save receiving details')
       toast_(e.message, false)
     } finally {
       setSavingReceiving(false)
@@ -4184,7 +4227,10 @@ export default function BodyshopRepairPage() {
                                   className="inp"
                                   type="text"
                                   value={jcDraft}
-                                  onChange={(event) => setJcDraft(event.target.value.toUpperCase())}
+                                  onChange={(event) => {
+                                    setJcDraft(event.target.value.toUpperCase())
+                                    setReceivingSaveError(null)
+                                  }}
                                   placeholder="Enter Job Card"
                                   autoComplete="off"
                                 />
@@ -4209,7 +4255,10 @@ export default function BodyshopRepairPage() {
                                   min={0}
                                   step={1}
                                   value={kmDraft}
-                                  onChange={(event) => setKmDraft(event.target.value)}
+                                  onChange={(event) => {
+                                    setKmDraft(event.target.value)
+                                    setReceivingSaveError(null)
+                                  }}
                                   placeholder="Enter KM"
                                   className="inp brx-sa-km"
                                 />
@@ -4296,9 +4345,16 @@ export default function BodyshopRepairPage() {
                             </div>
 
                             {(Object.keys(editPatch).length > 0 || isKmDirty() || isJcDirty()) && (
-                              <button className="btn btn--primary brx-sa-save" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}>
-                                {savingReceiving ? 'Saving…' : 'Save Receiving'}
-                              </button>
+                              <>
+                                <button className="btn btn--primary brx-sa-save" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}>
+                                  {savingReceiving ? 'Saving…' : 'Save Receiving'}
+                                </button>
+                                {receivingSaveError && (
+                                  <div className="brx-sa-note" style={{ color: '#b42318', marginTop: 8 }}>
+                                    {receivingSaveError}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </>
                         )}

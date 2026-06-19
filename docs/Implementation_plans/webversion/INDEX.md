@@ -47,7 +47,7 @@ Use this file as daily command center:
 | TECH-EARNINGS-001 | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/TECH-EARNINGS-001_TECHNICIAN_DAILY_EARNINGS_EMAIL_AUTOMATION_PLAN_2026-06-09.md` |
 | OPS-WA-GROUP | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/WA_GROUP_CREATION_IMPLEMENTATION_PLAN.md` |
 | OPS-INCOME-LEGACY | operations | Active | Operations Team | `docs/Implementation_plans/webversion/categories/operations/active/income_technician.md` |
-| RBAC-001 | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md` |
+| RBAC-001 | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md` |
 | RBAC-HOME | rbac | Active | RBAC Team | `docs/Implementation_plans/webversion/categories/rbac/active/RBAC_HOME_DYNAMIC_ROLE_VISIBILITY_PLAN_2026-06-05.md` |
 | RECEPTION-001 | reception | Active | Reception Team | `docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-001_RECEPTION_MODULE_PLAN.md` |
 | WEBREDESIGN-MASTER | redesign | In Progress | Web UX Team | `docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md` |
