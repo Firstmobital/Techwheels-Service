@@ -822,6 +822,7 @@ export default function BodyshopRepairPage() {
   const [hasBodyshopSurveyAccess, setHasBodyshopSurveyAccess] = useState(false)
   const [hasBodyshopFloorAccess, setHasBodyshopFloorAccess] = useState(false)
   const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
+  const [bodyshopSsaBranchesForUser, setBodyshopSsaBranchesForUser] = useState<string[]>([])
   const [currentUserDisplayName, setCurrentUserDisplayName] = useState('')
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
@@ -853,7 +854,7 @@ export default function BodyshopRepairPage() {
   useEffect(() => {
     if (!userScopeResolved) return
     void load()
-  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser])
+  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser])
 
   useEffect(() => {
     let cancelled = false
@@ -871,6 +872,7 @@ export default function BodyshopRepairPage() {
           setHasBodyshopSurveyAccess(false)
           setHasBodyshopFloorAccess(false)
           setBodyshopSaCodesForUser([])
+          setBodyshopSsaBranchesForUser([])
           setCurrentUserDisplayName('')
           setUserScopeResolved(true)
           return
@@ -909,15 +911,15 @@ export default function BodyshopRepairPage() {
           .map((row) => String(row.employee_code ?? '').trim().toUpperCase())
           .filter(Boolean)
 
-        let employeeRows: Array<{ employee_code?: string | null; department?: string | null; role?: string | null }> = []
+        let employeeRows: Array<{ employee_code?: string | null; department?: string | null; role?: string | null; location?: string | null; fuel_type?: string | null }> = []
         if (linkedCodes.length > 0) {
           const empRes = await supabase
             .from('employee_master')
-            .select('employee_code, department, role')
+            .select('employee_code, department, role, location, fuel_type')
             .in('employee_code', linkedCodes)
 
           if (!empRes.error) {
-            employeeRows = (empRes.data ?? []) as Array<{ employee_code?: string | null; department?: string | null; role?: string | null }>
+            employeeRows = (empRes.data ?? []) as Array<{ employee_code?: string | null; department?: string | null; role?: string | null; location?: string | null; fuel_type?: string | null }>
           }
         }
 
@@ -929,6 +931,16 @@ export default function BodyshopRepairPage() {
         const hasSsaRoleFromMaster = bodyshopRows.some((row) => isBodyshopSsaRole(row.role))
         const hasSurveyRoleFromMaster = bodyshopRows.some((row) => isBodyshopSurveyRole(row.role))
         const hasFloorRoleFromMaster = bodyshopRows.some((row) => isBodyshopFloorInchargeRole(row.role))
+
+        // For SSA, extract assigned branches from location field
+        const ssaBranches = Array.from(
+          new Set(
+            bodyshopRows
+              .filter((row) => isBodyshopSsaRole(row.role))
+              .map((row) => String(row.location ?? '').trim())
+              .filter(Boolean),
+          ),
+        )
 
         const hasSaRole = employeeRows.length > 0 ? (hasSaRoleFromMaster || hasSsaRoleFromMaster) : saCodes.length > 0
         const hasSsaRole = employeeRows.length > 0 ? hasSsaRoleFromMaster : false
@@ -942,6 +954,7 @@ export default function BodyshopRepairPage() {
         setHasBodyshopSurveyAccess(hasSurveyRole)
         setHasBodyshopFloorAccess(hasFloorRole)
         setBodyshopSaCodesForUser(saCodes)
+        setBodyshopSsaBranchesForUser(ssaBranches)
         setCurrentUserDisplayName(displayName)
         setUserScopeResolved(true)
       } catch {
@@ -952,6 +965,7 @@ export default function BodyshopRepairPage() {
         setHasBodyshopSurveyAccess(false)
         setHasBodyshopFloorAccess(false)
         setBodyshopSaCodesForUser([])
+        setBodyshopSsaBranchesForUser([])
         setCurrentUserDisplayName('')
         setUserScopeResolved(true)
       }
@@ -1260,14 +1274,20 @@ export default function BodyshopRepairPage() {
   async function load() {
     setLoading(true)
     try {
-      const scopedSaCodes = !isAdminLikeUser
+      // For SA role: use sa_employee_code filtering
+      const scopedSaCodes = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess
         ? Array.from(new Set(bodyshopSaCodesForUser.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)))
         : null
-      const scopedSaNames = !isAdminLikeUser
+      const scopedSaNames = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess
         ? Array.from(new Set([String(currentUserDisplayName ?? '').trim()].filter(Boolean)))
         : null
 
-      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0)) {
+      // For SSA role: use branch filtering
+      const scopedSsaBranches = !isAdminLikeUser && hasBodyshopSsaAccess
+        ? Array.from(new Set(bodyshopSsaBranchesForUser.map((b) => String(b ?? '').trim()).filter(Boolean)))
+        : null
+
+      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0) && (!scopedSsaBranches || scopedSsaBranches.length === 0)) {
         setCards([])
         setFloorWorkStartedLookup({})
         setFloorStageCompletedLookup({})
@@ -1286,6 +1306,7 @@ export default function BodyshopRepairPage() {
         .lte('created_at', dateRange.to + 'T23:59:59+05:30')
         .order('created_at', { ascending: false })
 
+      // For SA role: filter by sa_employee_code
       if (scopedSaCodes && scopedSaCodes.length > 0 && scopedSaNames && scopedSaNames.length > 0) {
         const codeCsv = scopedSaCodes.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
         const nameCsv = scopedSaNames.map((v) => `"${v.replace(/"/g, '')}"`).join(',')
@@ -1295,9 +1316,19 @@ export default function BodyshopRepairPage() {
       } else if (scopedSaNames && scopedSaNames.length > 0) {
         accidentQuery = accidentQuery.in('sa_name', scopedSaNames)
       }
+      // For SSA role: filter by branch
+      if (scopedSsaBranches && scopedSsaBranches.length > 0) {
+        accidentQuery = accidentQuery.in('branch', scopedSsaBranches)
+      }
 
       const [data, accidentRes] = await Promise.all([
-        listRepairCards({ from: dateRange.from, to: dateRange.to, saCodes: scopedSaCodes ?? undefined, saNames: scopedSaNames ?? undefined }),
+        listRepairCards({
+          from: dateRange.from,
+          to: dateRange.to,
+          saCodes: scopedSaCodes ?? undefined,
+          saNames: scopedSaNames ?? undefined,
+          branches: scopedSsaBranches ?? undefined,
+        }),
         accidentQuery,
       ])
 

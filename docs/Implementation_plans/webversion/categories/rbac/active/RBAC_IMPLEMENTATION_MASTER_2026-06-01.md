@@ -3,8 +3,35 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-16 13:05 UTC  
+**Last Updated**: 2026-06-19 14:30 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-06-19 - Bodyshop SSA Branch-Based Row Visibility)
+
+- Bodyshop Repair SSA (Senior Service Advisor) row visibility implemented for `/bodyshop-repair`:
+  - Non-admin BODY SHOP users with business role `SSA` are now row-scoped by assigned **branch** (location), not SA code ownership.
+  - Identity path used for scope resolution: `auth user -> user_employee_links.employee_code -> employee_master(department, role, location, fuel_type)`.
+  - **Effective SSA row visibility contract**: Show all rows where `bodyshop_repair_cards.branch` matches any of the SSA's assigned branches (extracted from Employee Master `location` field).
+  - **Multiple branch support**: SSA can be assigned to multiple branches (e.g., Sitapura, Ajmer Road) and sees all repair cards from all assigned branches.
+  - **Difference from SA role**: SA sees only rows they created (`sa_employee_code` match); SSA sees all rows from supervisory branches (branch match).
+  - If no active linked BODY SHOP SSA code exists, UI shows explicit guidance (deny-by-default).
+- Frontend implementation changes:
+  - Added state: `bodyshopSsaBranchesForUser` to store SSA's assigned branches.
+  - Updated employee_master query to fetch `location` and `fuel_type` fields alongside existing department/role.
+  - Modified `load()` function to:
+    - Create `scopedSsaBranches` for SSA users (separate from SA code filtering).
+    - Pass branches to `listRepairCards()` API when user has SSA role + `hasBodyshopSsaAccess`.
+    - Filter both `bodyshop_repair_cards` and `service_reception_entries` (accident source) by branch for SSA users.
+  - Updated dependency tracking: added `bodyshopSsaBranchesForUser` to data-load useEffect.
+- Backend API implementation changes:
+  - Enhanced `listRepairCards()` function to accept optional `branches?: string[]` parameter.
+  - When branches provided, applies `.in('branch', scopedBranches)` filter to query.
+  - Ensures SSA users see all cards from assigned branches, regardless of SA code.
+- Tab visibility and governance:
+  - "Approval" tab already gated by `hasBodyshopSsaAccess` (existing implementation).
+  - SSA users get approval-stage visibility + branch-scoped row access automatically.
+- Build validation passed (TypeScript + Vite successful).
+- Status: ✓ COMPLETE — SSA branch-based row visibility enabled; same tab-gating contract maintained.
 
 ### Execution Update (2026-06-16 - Bodyshop Policy Hardening + Permissions Page Audit)
 
@@ -26,12 +53,17 @@
 
 ### Execution Update (2026-06-16)
 
-- Bodyshop Repair RBAC/UI contract alignment added for `/bodyshop-repair` to mirror existing SA ownership principles:
-  - Non-admin BODY SHOP users with business role `SA` are row-scoped by SA code ownership only.
-  - Identity path used for scope resolution: `auth user -> user_employee_links.employee_code -> employee_master(department, role)`.
-  - Effective SA row visibility contract: show only rows where `bodyshop_repair_cards.sa_employee_code` belongs to active linked BODY SHOP SA employee codes.
-  - If no active linked BODY SHOP SA code exists, UI must show explicit guidance (deny-by-default), never fallback to all rows.
-- Bodyshop tab visibility contract added (role-gated, deny-by-default):
+- Bodyshop Repair RBAC/UI contract alignment added for `/bodyshop-repair` with role-based row scoping:
+  - **SA (Service Advisor) row visibility**: Non-admin BODY SHOP users with business role `SA` are row-scoped by SA code ownership only.
+    - Identity path: `auth user -> user_employee_links.employee_code -> employee_master(department, role)`.
+    - Contract: Show only rows where `bodyshop_repair_cards.sa_employee_code` belongs to active linked BODY SHOP SA employee codes.
+    - Deny-by-default: If no active linked BODY SHOP SA code exists, UI shows explicit guidance (never fallback to all rows).
+  - **SSA (Senior Service Advisor) row visibility**: Non-admin BODY SHOP users with business role `SSA` are row-scoped by assigned branch (supervisory scope).
+    - Identity path: `auth user -> user_employee_links.employee_code -> employee_master(department, role, location, fuel_type)`.
+    - Contract: Show all rows where `bodyshop_repair_cards.branch` matches any of the SSA's assigned branches (extracted from Employee Master `location` field).
+    - Multiple branches: SSA can supervise multiple branches (e.g., Sitapura + Ajmer Road) and sees all rows from all assigned branches.
+    - Deny-by-default: If no active linked BODY SHOP SSA code exists, UI shows explicit guidance (never fallback to all rows).
+- Bodyshop tab visibility contract (role-gated, deny-by-default):
   - `overview`: visible to any authenticated user with module access
   - `sa`: BODY SHOP + SA
   - `approval`: BODY SHOP + SSA
