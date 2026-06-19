@@ -145,6 +145,7 @@ export default function ReportsPage() {
   }, [dateFieldType, forceInvoiceDateFilter])
 
   const showDateFieldTypeFilter = !forceInvoiceDateFilter
+  const isMasterDataCategory = resolvedCategoryId === 'master-data'
 
   const dateFilter = useMemo<DateRangeFilter>(
     () => ({
@@ -377,12 +378,14 @@ export default function ReportsPage() {
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
-        </div>
+        {!isMasterDataCategory && (
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
+          </div>
+        )}
 
-        {resolvedCategoryId !== 'parts' && (
-          headerStatsLoading ? (
+        {!isMasterDataCategory && resolvedCategoryId !== 'parts' &&
+          (headerStatsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {Array.from({ length: 4 }).map((_, idx) => (
                 <div key={idx} className="animate-pulse bg-gray-100 rounded h-24" />
@@ -415,54 +418,55 @@ export default function ReportsPage() {
                 </p>
               </div>
             </div>
-          )
+          ))}
+
+        {!isMasterDataCategory && (
+              <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
+                {REPORT_CATEGORIES.map((category) => {
+                  const isActive = resolvedCategoryId === category.id
+                const isActive = selectedReport?.id === report.id
+                return (
+                      key={category.id}
+                    key={report.id}
+                      onClick={() => navigate(`/reports/${category.id}`)}
+                    onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
+                    className={[
+                      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                          ? 'bg-slate-900 text-white'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                    ].join(' ')}
+                      {category.label}
+                    {report.label}
+                  </button>
+                )
+              })}
+
+              <div className="flex flex-wrap gap-2">
+                {reportsInCategory.map((report) => {
+                  const isActive = activeReport?.id === report.id
+                  return (
+                    <button
+                      key={report.id}
+                      type="button"
+                      onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
+                      className={[
+                        'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                      ].join(' ')}
+                    >
+                      {report.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         )}
-
-        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
-            {REPORT_CATEGORIES.map((category) => {
-              const isActive = resolvedCategoryId === category.id
-              return (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => navigate(`/reports/${category.id}`)}
-                  className={[
-                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-slate-900 text-white'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  ].join(' ')}
-                >
-                  {category.label}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {reportsInCategory.map((report) => {
-              const isActive = activeReport?.id === report.id
-              return (
-                <button
-                  key={report.id}
-                  type="button"
-                  onClick={() => navigate(`/reports/${resolvedCategoryId}/${report.id}`)}
-                  className={[
-                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  ].join(' ')}
-                >
-                  {report.label}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
-        {resolvedCategoryId !== 'parts' && (
+          {!isMasterDataCategory && resolvedCategoryId !== 'parts' && (
+        {!isMasterDataCategory && (
           <ReportFiltersPanel
             branch={branch}
             onBranchChange={setBranch}
@@ -472,7 +476,7 @@ export default function ReportsPage() {
             onFuelTypeChange={setFuelType}
             disableFuelType={!canApplyFuelTypeFilter}
             showServiceTypeFilter={shouldShowServiceTypeFilter}
-            showManpowerFilters={shouldShowManpowerWiseFilter}
+            showManpowerFilters={isManpowerReportSelected}
             serviceTypeFilter={serviceTypeFilter}
             onServiceTypeFilterChange={setServiceTypeFilter}
             serviceTypeOptions={serviceTypeOptions}
@@ -497,7 +501,7 @@ export default function ReportsPage() {
           />
         )}
 
-        {customDateError ? (
+        {!isMasterDataCategory && resolvedCategoryId !== 'parts' && customDateError ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-700 shadow-sm">
             Fix the date range validation to view the selected report.
           </div>

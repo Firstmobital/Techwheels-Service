@@ -1,5 +1,6 @@
 import { DASHBOARD_CATEGORY, DASHBOARD_REPORTS } from './dashboard'
 import { LABOUR_REVENUE_CATEGORY, LABOUR_REVENUE_REPORTS } from './labour-revenue'
+import { MASTER_DATA_CATEGORY, MASTER_DATA_REPORTS } from './master-data'
 import { PARTS_CATEGORY, PARTS_REPORTS } from './parts'
 import { REVENUE_CATEGORY, REVENUE_REPORTS } from './revenue'
 import { WARRANTY_CATEGORY, WARRANTY_REPORTS } from './warranty'
@@ -11,6 +12,7 @@ export const REPORT_CATEGORIES: ReportCategoryDefinition[] = [
   REVENUE_CATEGORY,
   PARTS_CATEGORY,
   WARRANTY_CATEGORY,
+  MASTER_DATA_CATEGORY,
 ]
 
 export const REPORT_DEFINITIONS: ReportDefinition[] = [
@@ -19,6 +21,7 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
   ...REVENUE_REPORTS,
   ...PARTS_REPORTS,
   ...WARRANTY_REPORTS,
+  ...MASTER_DATA_REPORTS,
 ]
 
 export function isCategoryId(value: string | undefined): value is ReportCategoryId {
