@@ -3,10 +3,25 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-19 14:30 UTC  
+**Last Updated**: 2026-06-19 17:05 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
 
 > **Note**: RBAC-001 initial closure was recorded on 2026-05-23 ([closure evidence](../../rbac/evidence/RBAC-001_IMPLEMENTATION_COMPLETE.md)). This master plan continues execution with post-closure hardening and ongoing extensions (Phase 1C onward).
+
+### Execution Update (2026-06-19 - Bodyshop Role Scope Hardening via RPC)
+
+- Long-term fix applied for Bodyshop role detection reliability:
+  - Replaced frontend direct-read dependency on `employee_master` for role detection with authoritative RPC scope resolution.
+  - New function/migration: `supabase/migrations/20260619165000_add_get_my_bodyshop_employee_scope_rpc.sql`.
+  - Function contract: `public.get_my_bodyshop_employee_scope()` returns active linked employee scope fields (`employee_code`, `department`, `role`, `location`, `fuel_type`) using `user_employee_links -> employee_master` join.
+  - Security posture: function is `SECURITY DEFINER`, granted to `authenticated`, and dealer-scoped via `uel.dealer_code = public.my_dealer_code()`.
+- Governance contract update:
+  - Bodyshop SA/SSA role/tab/row scope resolution must come from this RPC-backed Employee Master scope.
+  - Temporary fallback heuristics are explicitly disallowed for role detection (no dealer-token fallback for role inference).
+- Frontend alignment:
+  - `/bodyshop-repair` now calls `supabase.rpc('get_my_bodyshop_employee_scope')` for role and branch scope resolution.
+  - SSA branch row visibility and SA employee-code visibility remain unchanged in business behavior; only source-of-truth retrieval path changed.
+- Status: ✓ COMPLETE — durable role resolution path established.
 
 ### Execution Update (2026-06-19 - Bodyshop SSA Branch-Based Row Visibility)
 
@@ -19,7 +34,7 @@
   - If no active linked BODY SHOP SSA code exists, UI shows explicit guidance (deny-by-default).
 - Frontend implementation changes:
   - Added state: `bodyshopSsaBranchesForUser` to store SSA's assigned branches.
-  - Updated employee_master query to fetch `location` and `fuel_type` fields alongside existing department/role.
+  - Role scope source changed to RPC-backed employee scope resolution via `get_my_bodyshop_employee_scope()`.
   - Modified `load()` function to:
     - Create `scopedSsaBranches` for SSA users (separate from SA code filtering).
     - Pass branches to `listRepairCards()` API when user has SSA role + `hasBodyshopSsaAccess`.

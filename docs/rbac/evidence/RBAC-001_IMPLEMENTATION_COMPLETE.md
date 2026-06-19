@@ -5,6 +5,8 @@
 **Progress:** 100% (5/5 phases, 22/22 tasks)  
 
 > **Note**: This document records the closure snapshot for Phase 1-5 completion (2026-05-23). Post-closure hardening, extensions, and ongoing execution are tracked in the [active master plan](../../Implementation_plans/webversion/categories/rbac/active/RBAC-001_MASTER_PLAN_ACTIVE.md).
+>
+> **Post-closure RBAC hardening (2026-06-19):** Bodyshop role scope resolution now uses authoritative RPC-backed Employee Master scope retrieval (`get_my_bodyshop_employee_scope`) instead of frontend direct table-read dependency. This change is tracked in the active master plan execution updates.
 
 ---
 
