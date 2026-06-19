@@ -922,7 +922,7 @@ export default function BodyshopRepairPage() {
           ),
         )
 
-        const hasSaRole = hasSaRoleFromMaster || hasSsaRoleFromMaster
+        const hasSaRole = hasSaRoleFromMaster
         const hasSsaRole = hasSsaRoleFromMaster
         const hasSurveyRole = hasSurveyRoleFromMaster
         const hasFloorRole = hasFloorRoleFromMaster
@@ -2838,10 +2838,12 @@ export default function BodyshopRepairPage() {
         ? BODYSHOP_DOCS.filter((d) => d.mandatoryFor.includes(customerType as CustomerType)).map((d) => d.k)
         : []
 
-    const stage1Done = milestones.stage1Done
-    const stage2Done = milestones.stage2Done
-    const stage3Done = milestones.stage3Done
-    const stage4Done = milestones.stage4Done
+    // Trust recorded stage progression for advanced cards even if intake evidence
+    // (KM/photos) is not readable for the current scoped user.
+    const stage1Done = milestones.stage1Done || effectiveCurrentStage > 1
+    const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
+    const stage3Done = milestones.stage3Done || effectiveCurrentStage > 3
+    const stage4Done = milestones.stage4Done || effectiveCurrentStage > 4
     const stage5Done = noDocsRequired
       || mandatoryDocs.every((docKey) => Boolean((card as unknown as Record<string, unknown>)[docKey]))
       || effectiveCurrentStage > 5
@@ -3260,23 +3262,43 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  const restrictRowsToSaCodes = useMemo(() => {
-    return !isAdminLikeUser
-  }, [isAdminLikeUser])
-
   const bodyshopSaCodeSetForUser = useMemo(() => {
     return new Set(bodyshopSaCodesForUser.map((code) => code.trim().toUpperCase()).filter(Boolean))
   }, [bodyshopSaCodesForUser])
 
-  const roleScopedCards = useMemo(() => {
-    if (!restrictRowsToSaCodes) return cards
-    if (bodyshopSaCodeSetForUser.size === 0) return []
+  const bodyshopSsaBranchSetForUser = useMemo(() => {
+    return new Set(bodyshopSsaBranchesForUser.map((branch) => branch.trim().toUpperCase()).filter(Boolean))
+  }, [bodyshopSsaBranchesForUser])
 
-    return cards.filter((card) => {
-      const rowSaCode = String(card.sa_employee_code ?? '').trim().toUpperCase()
-      return rowSaCode ? bodyshopSaCodeSetForUser.has(rowSaCode) : false
-    })
-  }, [cards, restrictRowsToSaCodes, bodyshopSaCodeSetForUser])
+  const roleScopedCards = useMemo(() => {
+    if (isAdminLikeUser) return cards
+
+    // SSA scope is branch-based and must take precedence over SA-code scope.
+    if (hasBodyshopSsaAccess) {
+      if (bodyshopSsaBranchSetForUser.size === 0) return []
+      return cards.filter((card) => {
+        const rowBranch = String(card.branch ?? '').trim().toUpperCase()
+        return rowBranch ? bodyshopSsaBranchSetForUser.has(rowBranch) : false
+      })
+    }
+
+    if (hasBodyshopSaAccess) {
+      if (bodyshopSaCodeSetForUser.size === 0) return []
+      return cards.filter((card) => {
+        const rowSaCode = String(card.sa_employee_code ?? '').trim().toUpperCase()
+        return rowSaCode ? bodyshopSaCodeSetForUser.has(rowSaCode) : false
+      })
+    }
+
+    return []
+  }, [
+    cards,
+    isAdminLikeUser,
+    hasBodyshopSsaAccess,
+    hasBodyshopSaAccess,
+    bodyshopSsaBranchSetForUser,
+    bodyshopSaCodeSetForUser,
+  ])
 
   const scopeFilteredCards = useMemo(() => roleScopedCards.filter((c) => {
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false
@@ -3553,7 +3575,9 @@ export default function BodyshopRepairPage() {
           <div className="empty-state">Resolving role access…</div>
         ) : loading ? (
           <div className="empty-state">Loading…</div>
-        ) : restrictRowsToSaCodes && bodyshopSaCodeSetForUser.size === 0 ? (
+        ) : !isAdminLikeUser && hasBodyshopSsaAccess && bodyshopSsaBranchSetForUser.size === 0 ? (
+          <div className="empty-state">No BODY SHOP SSA branch scope is linked to this login. Please map SSA role with location in Employee Master and User-Employee Links.</div>
+        ) : !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && bodyshopSaCodeSetForUser.size === 0 ? (
           <div className="empty-state">No BODY SHOP SA code is linked to this login. Please map this user in Employee Master and User-Employee Links.</div>
         ) : filtered.length === 0 ? (
           <div className="empty-state">No repair cards found</div>
