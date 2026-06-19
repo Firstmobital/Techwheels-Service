@@ -796,6 +796,7 @@ export default function BodyshopRepairPage() {
   const [kmDraft, setKmDraft] = useState('')
   const [jcDraft, setJcDraft] = useState('')
   const [savingReceiving, setSavingReceiving] = useState(false)
+  const [receivingSaveError, setReceivingSaveError] = useState<string | null>(null)
   const [fetchingInsurance, setFetchingInsurance] = useState(false)
   const [insuranceFetched, setInsuranceFetched] = useState(false)
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
@@ -983,6 +984,7 @@ export default function BodyshopRepairPage() {
     const receptionEntryId = Number(selected?.reception_entry_id)
     if (!selected || !Number.isFinite(receptionEntryId) || receptionEntryId <= 0) {
       setSelectedReception(null)
+      setReceivingSaveError(null)
       return
     }
 
@@ -1007,6 +1009,7 @@ export default function BodyshopRepairPage() {
       setSelectedReception(data as ReceptionVehicleSnapshot)
       setKmDraft(data.km_reading == null ? '' : String(data.km_reading))
       setJcDraft(String(data.jc_number ?? '').trim().toUpperCase())
+      setReceivingSaveError(null)
       setLoadingSelectedReception(false)
     })()
 
@@ -2669,31 +2672,38 @@ export default function BodyshopRepairPage() {
   async function handleSaveReceivingDraft() {
     if (!selected) return
 
+    setReceivingSaveError(null)
+
     const patchDirty = Object.keys(editPatch).length > 0
     const kmDirty = isKmDirty()
     const jcDirty = isJcDirty()
     if (!patchDirty && !kmDirty && !jcDirty) return
 
+    const failReceivingSave = (message: string) => {
+      setReceivingSaveError(message)
+      toast_(message, false)
+    }
+
     if ((kmDirty || jcDirty) && !selectedReception?.id) {
-      toast_('Reception entry not loaded', false)
+      failReceivingSave('Reception entry not loaded')
       return
     }
 
     const parsedKm = parseKmDraftValue(kmDraft)
     if (kmDirty && parsedKm === 'invalid') {
-      toast_('KM Reading must be a non-negative number', false)
+      failReceivingSave('KM Reading must be a non-negative number')
       return
     }
     const kmValue: number | null = parsedKm === 'invalid' ? null : parsedKm
 
     const parsedJc = parseJcDraftValue(jcDraft)
     if (jcDirty && parsedJc === 'invalid') {
-      toast_('Job Card must be at least 25 characters', false)
+      failReceivingSave('Job Card must be at least 25 characters')
       return
     }
     const jcValue: string | null = parsedJc === 'invalid' ? null : parsedJc
     if (jcDirty && !jcValue) {
-      toast_('Job Card is required', false)
+      failReceivingSave('Job Card is required')
       return
     }
 
@@ -2710,7 +2720,7 @@ export default function BodyshopRepairPage() {
           .eq('id', selectedReception.id)
 
         if (kmError) {
-          toast_(kmError.message, false)
+          failReceivingSave(kmError.message)
           return
         }
 
@@ -2748,8 +2758,10 @@ export default function BodyshopRepairPage() {
         jcDirty ? 'Job Card' : '',
         patchDirty ? 'Receiving details' : '',
       ].filter(Boolean)
+      setReceivingSaveError(null)
       toast_(`Saved ${saveParts.join(' + ')} ✅`)
     } catch (e: any) {
+      setReceivingSaveError(e.message ?? 'Unable to save receiving details')
       toast_(e.message, false)
     } finally {
       setSavingReceiving(false)
@@ -4184,7 +4196,10 @@ export default function BodyshopRepairPage() {
                                   className="inp"
                                   type="text"
                                   value={jcDraft}
-                                  onChange={(event) => setJcDraft(event.target.value.toUpperCase())}
+                                  onChange={(event) => {
+                                    setJcDraft(event.target.value.toUpperCase())
+                                    setReceivingSaveError(null)
+                                  }}
                                   placeholder="Enter Job Card"
                                   autoComplete="off"
                                 />
@@ -4209,7 +4224,10 @@ export default function BodyshopRepairPage() {
                                   min={0}
                                   step={1}
                                   value={kmDraft}
-                                  onChange={(event) => setKmDraft(event.target.value)}
+                                  onChange={(event) => {
+                                    setKmDraft(event.target.value)
+                                    setReceivingSaveError(null)
+                                  }}
                                   placeholder="Enter KM"
                                   className="inp brx-sa-km"
                                 />
@@ -4296,9 +4314,16 @@ export default function BodyshopRepairPage() {
                             </div>
 
                             {(Object.keys(editPatch).length > 0 || isKmDirty() || isJcDirty()) && (
-                              <button className="btn btn--primary brx-sa-save" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}>
-                                {savingReceiving ? 'Saving…' : 'Save Receiving'}
-                              </button>
+                              <>
+                                <button className="btn btn--primary brx-sa-save" onClick={() => void handleSaveReceivingDraft()} disabled={savingReceiving}>
+                                  {savingReceiving ? 'Saving…' : 'Save Receiving'}
+                                </button>
+                                {receivingSaveError && (
+                                  <div className="brx-sa-note" style={{ color: '#b42318', marginTop: 8 }}>
+                                    {receivingSaveError}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </>
                         )}
