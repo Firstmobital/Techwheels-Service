@@ -121,8 +121,22 @@ export async function listBodyshopSurveyors(): Promise<ApiResult<BodyshopSurveyo
     .select('id, surveyor_name, surveyor_contact_number, surveyor_email, created_at, updated_at')
     .order('surveyor_name', { ascending: true })
 
-  if (error) return fail(error)
-  return ok((data ?? []) as BodyshopSurveyor[])
+  const directRows = (data ?? []) as BodyshopSurveyor[]
+  if (!error && directRows.length > 0) return ok(directRows)
+
+  const rpcResult = await supabase.rpc('get_bodyshop_surveyor_options')
+  if (rpcResult.error) {
+    if (error) return fail(error)
+    return ok(directRows)
+  }
+
+  const rpcRows = ((rpcResult.data ?? []) as BodyshopSurveyor[]).map((row) => ({
+    ...row,
+    id: Number(row.id),
+  }))
+
+  if (rpcRows.length > 0) return ok(rpcRows)
+  return ok(directRows)
 }
 
 export async function createBodyshopSurveyor(input: {

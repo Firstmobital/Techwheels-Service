@@ -8,7 +8,9 @@
 >
 > **Post-closure RBAC hardening (2026-06-19):** Bodyshop role scope resolution now uses authoritative RPC-backed Employee Master scope retrieval (`get_my_bodyshop_employee_scope`) instead of frontend direct table-read dependency. This change is tracked in the active master plan execution updates.
 >
-> **Post-closure UI/RBAC consistency fixes (2026-06-19):** Bodyshop SA/SSA tab gating and Stage Queue worklist progression behavior were corrected for scoped users; details are tracked in the active master plan.
+> **Post-closure UI/RBAC consistency fixes (2026-06-19):** Bodyshop SA/SSA tab gating, SURVEY branch-scope parity (Overview + Survey contract), and Stage Queue/detail-stage progression rendering behavior were corrected for scoped users; details are tracked in the active master plan.
+>
+> **Post-closure catalog visibility fix (2026-06-19):** Bodyshop surveyor catalog SELECT was finalized as dealer-agnostic for authorized users (`settings_bodyshop_surveyors_select_v10`) to match business contract and restore SURVEY-role surveyor dropdown visibility.
 
 ---
 

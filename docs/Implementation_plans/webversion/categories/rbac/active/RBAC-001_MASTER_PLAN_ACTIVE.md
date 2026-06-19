@@ -3,8 +3,23 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-19 17:28 UTC  
+**Last Updated**: 2026-06-19 23:40 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-06-19 - Bodyshop Surveyor Catalog Dealer-Agnostic Visibility)
+
+- Final root-cause resolution for SURVEY user "Surveyor Name" list on `/bodyshop-repair`:
+  - Investigation outcome: SURVEY tab visibility (role gate) was correct, but surveyor catalog rows were dealer-scoped while business contract requires dealer-agnostic catalog visibility across configured dealer codes.
+  - This mismatch caused non-admin SURVEY users to receive empty surveyor lists despite valid role access.
+- Durable fix executed:
+  - Migration: `supabase/migrations/20260619234000_make_bodyshop_surveyor_catalog_dealer_agnostic_select.sql`.
+  - New selector function: `public.can_view_bodyshop_surveyor_catalog()` (authorized users: admin, settings/bodyshop module access, or BODYSHOP SA/SSA/SURVEY role scope).
+  - New policy: `settings_bodyshop_surveyors_select_v10` using dealer-agnostic catalog visibility.
+  - RPC alignment: `public.get_bodyshop_surveyor_options()` now returns dealer-agnostic, de-duplicated options (`surveyor_name`, `surveyor_contact_number`).
+- Frontend contract:
+  - Surveyor field remains searchable input + datalist behavior (original UX retained).
+  - Loading flow retries after scope resolution; no role/tab contract changes were required.
+- Status: ✓ COMPLETE — SURVEY users now see surveyor options consistently under the intended shared-catalog model.
 
 > **Note**: RBAC-001 initial closure was recorded on 2026-05-23 ([closure evidence](../../rbac/evidence/RBAC-001_IMPLEMENTATION_COMPLETE.md)). This master plan continues execution with post-closure hardening and ongoing extensions (Phase 1C onward).
 
@@ -20,8 +35,24 @@
 - Bodyshop Stage Queue/worklist consistency fixed for scoped users:
   - Root cause: Stage 1-4 completion relied on intake evidence lookups (KM/photos). Under scoped visibility, missing/blocked lookup hydration could incorrectly collapse advanced cards into early-stage pending buckets.
   - Fix: Stage 1-4 completion now trusts persisted progression (`effectiveCurrentStage`) for advanced cards.
-  - Impact: Stage counts (including Stage 7 Estimation Approval) remain consistent with card progression for SSA scoped views.
+  - Impact: Stage counts (including Stage 7 Estimation Approval) remain consistent with card progression for scoped views.
+- Detail-view consistency follow-up applied:
+  - Same persisted-progression rule was aligned in both detail renderers (left stage panel and overview checklist), so Stage 1 no longer appears grey when card is already at later stages.
 - Status: ✓ COMPLETE — tab contract and stage worklist behavior now match business expectation.
+
+### Execution Update (2026-06-19 - Bodyshop SURVEY Branch Scope + Overview/Survey Tab Contract)
+
+- SURVEY role now follows the same branch-scoped row visibility model as SSA on `/bodyshop-repair`.
+  - Scope source: `get_my_bodyshop_employee_scope()` (Employee Master role + location).
+  - Effective row contract for SURVEY: show all cards whose `branch` belongs to mapped SURVEY locations.
+- Tab contract refined for pure SURVEY users:
+  - Visible tabs: `overview`, `survey` only.
+  - SA/Approval/Floor tabs are not shown unless corresponding role access is also present.
+- Frontend alignment:
+  - Added SURVEY branch scope state and merged supervisory branch scope (SSA + SURVEY) for role-scoped card filtering.
+  - Applied branch filtering in both load and merged refresh query paths.
+  - Updated empty-state guidance for missing supervisory branch scope mappings.
+- Status: ✓ COMPLETE — SURVEY role visibility and tab gating aligned with business rules.
 
 ### Execution Update (2026-06-19 - Bodyshop Role Scope Hardening via RPC)
 

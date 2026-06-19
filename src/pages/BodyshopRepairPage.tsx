@@ -823,6 +823,7 @@ export default function BodyshopRepairPage() {
   const [hasBodyshopFloorAccess, setHasBodyshopFloorAccess] = useState(false)
   const [bodyshopSaCodesForUser, setBodyshopSaCodesForUser] = useState<string[]>([])
   const [bodyshopSsaBranchesForUser, setBodyshopSsaBranchesForUser] = useState<string[]>([])
+  const [bodyshopSurveyBranchesForUser, setBodyshopSurveyBranchesForUser] = useState<string[]>([])
   const [currentUserDisplayName, setCurrentUserDisplayName] = useState('')
   const intakePhotoInputRef = useRef<HTMLInputElement | null>(null)
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
@@ -854,7 +855,7 @@ export default function BodyshopRepairPage() {
   useEffect(() => {
     if (!userScopeResolved) return
     void load()
-  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser])
+  }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser, bodyshopSurveyBranchesForUser])
 
   useEffect(() => {
     let cancelled = false
@@ -873,6 +874,7 @@ export default function BodyshopRepairPage() {
           setHasBodyshopFloorAccess(false)
           setBodyshopSaCodesForUser([])
           setBodyshopSsaBranchesForUser([])
+          setBodyshopSurveyBranchesForUser([])
           setCurrentUserDisplayName('')
           setUserScopeResolved(true)
           return
@@ -921,6 +923,14 @@ export default function BodyshopRepairPage() {
               .filter(Boolean),
           ),
         )
+        const surveyBranches = Array.from(
+          new Set(
+            bodyshopRows
+              .filter((row) => isBodyshopSurveyRole(row.role))
+              .map((row) => String(row.location ?? '').trim())
+              .filter(Boolean),
+          ),
+        )
 
         const hasSaRole = hasSaRoleFromMaster
         const hasSsaRole = hasSsaRoleFromMaster
@@ -935,6 +945,7 @@ export default function BodyshopRepairPage() {
         setHasBodyshopFloorAccess(hasFloorRole)
         setBodyshopSaCodesForUser(saCodes)
         setBodyshopSsaBranchesForUser(ssaBranches)
+        setBodyshopSurveyBranchesForUser(surveyBranches)
         setCurrentUserDisplayName(displayName)
         setUserScopeResolved(true)
       } catch {
@@ -946,6 +957,7 @@ export default function BodyshopRepairPage() {
         setHasBodyshopFloorAccess(false)
         setBodyshopSaCodesForUser([])
         setBodyshopSsaBranchesForUser([])
+        setBodyshopSurveyBranchesForUser([])
         setCurrentUserDisplayName('')
         setUserScopeResolved(true)
       }
@@ -957,22 +969,46 @@ export default function BodyshopRepairPage() {
   }, [])
 
   useEffect(() => {
+    if (!userScopeResolved) return
+
     let cancelled = false
 
     ;(async () => {
-      const result = await listBodyshopSurveyors()
-      if (cancelled) return
-      if (result.error || !result.data) {
+      const shouldHaveSurveyorAccess = isAdminLikeUser || hasBodyshopSurveyAccess || hasBodyshopSaAccess || hasBodyshopSsaAccess
+      if (!shouldHaveSurveyorAccess) {
         setBodyshopSurveyors([])
         return
       }
-      setBodyshopSurveyors(result.data)
+
+      const maxAttempts = 3
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const result = await listBodyshopSurveyors()
+        if (cancelled) return
+
+        if (result.error || !result.data) {
+          if (attempt === maxAttempts) {
+            setBodyshopSurveyors([])
+            return
+          }
+          await new Promise((resolve) => setTimeout(resolve, 350 * attempt))
+          continue
+        }
+
+        const nextRows = result.data
+
+        if (nextRows.length > 0 || attempt === maxAttempts) {
+          setBodyshopSurveyors(nextRows)
+          return
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 350 * attempt))
+      }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [userScopeResolved, isAdminLikeUser, hasBodyshopSurveyAccess, hasBodyshopSaAccess, hasBodyshopSsaAccess])
 
   useEffect(() => {
     const receptionEntryId = Number(selected?.reception_entry_id)
@@ -1255,10 +1291,10 @@ export default function BodyshopRepairPage() {
     setLoading(true)
     try {
       // For SA role: use sa_employee_code filtering
-      const scopedSaCodes = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess
+      const scopedSaCodes = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && !hasBodyshopSurveyAccess
         ? Array.from(new Set(bodyshopSaCodesForUser.map((code) => String(code ?? '').trim().toUpperCase()).filter(Boolean)))
         : null
-      const scopedSaNames = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess
+      const scopedSaNames = !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && !hasBodyshopSurveyAccess
         ? Array.from(new Set([String(currentUserDisplayName ?? '').trim()].filter(Boolean)))
         : null
 
@@ -1266,8 +1302,16 @@ export default function BodyshopRepairPage() {
       const scopedSsaBranches = !isAdminLikeUser && hasBodyshopSsaAccess
         ? Array.from(new Set(bodyshopSsaBranchesForUser.map((b) => String(b ?? '').trim()).filter(Boolean)))
         : null
+      // For SURVEY role: same branch-based visibility as SSA
+      const scopedSurveyBranches = !isAdminLikeUser && hasBodyshopSurveyAccess
+        ? Array.from(new Set(bodyshopSurveyBranchesForUser.map((b) => String(b ?? '').trim()).filter(Boolean)))
+        : null
+      const scopedBranches = Array.from(new Set([
+        ...(scopedSsaBranches ?? []),
+        ...(scopedSurveyBranches ?? []),
+      ]))
 
-      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0) && (!scopedSsaBranches || scopedSsaBranches.length === 0)) {
+      if (!isAdminLikeUser && (!scopedSaCodes || scopedSaCodes.length === 0) && (!scopedSaNames || scopedSaNames.length === 0) && scopedBranches.length === 0) {
         setCards([])
         setFloorWorkStartedLookup({})
         setFloorStageCompletedLookup({})
@@ -1296,9 +1340,9 @@ export default function BodyshopRepairPage() {
       } else if (scopedSaNames && scopedSaNames.length > 0) {
         accidentQuery = accidentQuery.in('sa_name', scopedSaNames)
       }
-      // For SSA role: filter by branch
-      if (scopedSsaBranches && scopedSsaBranches.length > 0) {
-        accidentQuery = accidentQuery.in('branch', scopedSsaBranches)
+      // For SSA/SURVEY role: filter by branch
+      if (scopedBranches.length > 0) {
+        accidentQuery = accidentQuery.in('branch', scopedBranches)
       }
 
       const [data, accidentRes] = await Promise.all([
@@ -1307,7 +1351,7 @@ export default function BodyshopRepairPage() {
           to: dateRange.to,
           saCodes: scopedSaCodes ?? undefined,
           saNames: scopedSaNames ?? undefined,
-          branches: scopedSsaBranches ?? undefined,
+          branches: scopedBranches.length > 0 ? scopedBranches : undefined,
         }),
         accidentQuery,
       ])
@@ -1434,7 +1478,7 @@ export default function BodyshopRepairPage() {
             to: dateRange.to,
             saCodes: scopedSaCodes ?? undefined,
             saNames: scopedSaNames ?? undefined,
-            branches: scopedSsaBranches ?? undefined,
+            branches: scopedBranches.length > 0 ? scopedBranches : undefined,
           })
         : data
 
@@ -1668,9 +1712,21 @@ export default function BodyshopRepairPage() {
   async function handleSaveSurveyInfo() {
     if (!selected || !Object.keys(editPatch).length) return
 
+    const claimNo = String(selected.claim_intimation_no ?? '').trim()
+    if (!claimNo) {
+      toast_('Claim Intimation No. is required', false)
+      return
+    }
+
     const surveyDate = String(selected.survey_date ?? '').trim()
     if (!surveyDate) {
       toast_('Survey Date is required', false)
+      return
+    }
+
+    const surveyorName = String(selected.surveyor_name ?? '').trim()
+    if (!surveyorName) {
+      toast_('Surveyor Name is required', false)
       return
     }
 
@@ -3270,15 +3326,26 @@ export default function BodyshopRepairPage() {
     return new Set(bodyshopSsaBranchesForUser.map((branch) => branch.trim().toUpperCase()).filter(Boolean))
   }, [bodyshopSsaBranchesForUser])
 
+  const bodyshopSurveyBranchSetForUser = useMemo(() => {
+    return new Set(bodyshopSurveyBranchesForUser.map((branch) => branch.trim().toUpperCase()).filter(Boolean))
+  }, [bodyshopSurveyBranchesForUser])
+
+  const supervisoryBranchSetForUser = useMemo(() => {
+    return new Set([
+      ...Array.from(bodyshopSsaBranchSetForUser),
+      ...Array.from(bodyshopSurveyBranchSetForUser),
+    ])
+  }, [bodyshopSsaBranchSetForUser, bodyshopSurveyBranchSetForUser])
+
   const roleScopedCards = useMemo(() => {
     if (isAdminLikeUser) return cards
 
-    // SSA scope is branch-based and must take precedence over SA-code scope.
-    if (hasBodyshopSsaAccess) {
-      if (bodyshopSsaBranchSetForUser.size === 0) return []
+    // SSA/SURVEY scopes are branch-based and must take precedence over SA-code scope.
+    if (hasBodyshopSsaAccess || hasBodyshopSurveyAccess) {
+      if (supervisoryBranchSetForUser.size === 0) return []
       return cards.filter((card) => {
         const rowBranch = String(card.branch ?? '').trim().toUpperCase()
-        return rowBranch ? bodyshopSsaBranchSetForUser.has(rowBranch) : false
+        return rowBranch ? supervisoryBranchSetForUser.has(rowBranch) : false
       })
     }
 
@@ -3295,8 +3362,9 @@ export default function BodyshopRepairPage() {
     cards,
     isAdminLikeUser,
     hasBodyshopSsaAccess,
+    hasBodyshopSurveyAccess,
     hasBodyshopSaAccess,
-    bodyshopSsaBranchSetForUser,
+    supervisoryBranchSetForUser,
     bodyshopSaCodeSetForUser,
   ])
 
@@ -3416,6 +3484,16 @@ export default function BodyshopRepairPage() {
   const pipelineSelected = pipelineFilter !== 'all'
 
   const tabs = useMemo<DetailTab[]>(() => {
+    const isSurveyOnlyRole = !isAdminLikeUser
+      && hasBodyshopSurveyAccess
+      && !hasBodyshopSaAccess
+      && !hasBodyshopSsaAccess
+      && !hasBodyshopFloorAccess
+
+    if (isSurveyOnlyRole) {
+      return ['overview', 'survey']
+    }
+
     const nextTabs: DetailTab[] = ['overview']
 
     if (isAdminLikeUser || hasBodyshopSaAccess) {
@@ -3575,9 +3653,9 @@ export default function BodyshopRepairPage() {
           <div className="empty-state">Resolving role access…</div>
         ) : loading ? (
           <div className="empty-state">Loading…</div>
-        ) : !isAdminLikeUser && hasBodyshopSsaAccess && bodyshopSsaBranchSetForUser.size === 0 ? (
-          <div className="empty-state">No BODY SHOP SSA branch scope is linked to this login. Please map SSA role with location in Employee Master and User-Employee Links.</div>
-        ) : !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && bodyshopSaCodeSetForUser.size === 0 ? (
+        ) : !isAdminLikeUser && (hasBodyshopSsaAccess || hasBodyshopSurveyAccess) && supervisoryBranchSetForUser.size === 0 ? (
+          <div className="empty-state">No BODY SHOP branch scope is linked to this login. Please map SSA/SURVEY role with location in Employee Master and User-Employee Links.</div>
+        ) : !isAdminLikeUser && hasBodyshopSaAccess && !hasBodyshopSsaAccess && !hasBodyshopSurveyAccess && bodyshopSaCodeSetForUser.size === 0 ? (
           <div className="empty-state">No BODY SHOP SA code is linked to this login. Please map this user in Employee Master and User-Employee Links.</div>
         ) : filtered.length === 0 ? (
           <div className="empty-state">No repair cards found</div>
@@ -3790,10 +3868,15 @@ export default function BodyshopRepairPage() {
                     || effectiveCurrentStage > 12
                   )
                   const stage11Done = floorStageCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
-                  const stage10And11Ready = milestones.stage1Done
-                    && milestones.stage2Done
-                    && milestones.stage3Done
-                    && milestones.stage4Done
+                  // Trust persisted progression for early intake milestones on advanced cards.
+                  const stage1Done = milestones.stage1Done || effectiveCurrentStage > 1
+                  const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
+                  const stage3Done = milestones.stage3Done || effectiveCurrentStage > 3
+                  const stage4Done = milestones.stage4Done || effectiveCurrentStage > 4
+                  const stage10And11Ready = stage1Done
+                    && stage2Done
+                    && stage3Done
+                    && stage4Done
                     && stage5Done
                     && stage6Done
                     && stage7Done
@@ -3804,12 +3887,12 @@ export default function BodyshopRepairPage() {
                   const num    = Number(numStr)
                   const isDone = num <= 4
                     ? num === 1
-                      ? milestones.stage1Done
+                      ? stage1Done
                       : num === 2
-                        ? milestones.stage2Done
+                        ? stage2Done
                         : num === 3
-                          ? milestones.stage3Done
-                          : milestones.stage4Done
+                          ? stage3Done
+                          : stage4Done
                     : num === 5
                       ? docsDone || effectiveCurrentStage > num
                       : num === 10
@@ -4030,10 +4113,15 @@ export default function BodyshopRepairPage() {
                         || effectiveCurrentStage > 12
                       )
                       const stage11Done = floorStageCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
-                      const stage10And11Ready = milestones.stage1Done
-                        && milestones.stage2Done
-                        && milestones.stage3Done
-                        && milestones.stage4Done
+                      // Trust persisted progression for early intake milestones on advanced cards.
+                      const stage1Done = milestones.stage1Done || effectiveCurrentStage > 1
+                      const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
+                      const stage3Done = milestones.stage3Done || effectiveCurrentStage > 3
+                      const stage4Done = milestones.stage4Done || effectiveCurrentStage > 4
+                      const stage10And11Ready = stage1Done
+                        && stage2Done
+                        && stage3Done
+                        && stage4Done
                         && stage5Done
                         && stage6Done
                         && stage7Done
@@ -4044,12 +4132,12 @@ export default function BodyshopRepairPage() {
                       const num     = Number(numStr)
                       const isDone  = num <= 4
                         ? num === 1
-                          ? milestones.stage1Done
+                          ? stage1Done
                           : num === 2
-                            ? milestones.stage2Done
+                            ? stage2Done
                             : num === 3
-                              ? milestones.stage3Done
-                              : milestones.stage4Done
+                              ? stage3Done
+                              : stage4Done
                         : num === 10
                           ? stage10Done
                           : num === 11
@@ -4783,6 +4871,10 @@ export default function BodyshopRepairPage() {
                 const surveyApprovalDoc = bodyshopDocsByKey.doc_survey_approval
                 const surveyApprovalDocBusy = uploadingDocKey === 'doc_survey_approval'
                 const surveyApprovalFeedback = docUploadFeedbackByKey.doc_survey_approval
+                const hasClaimNo = Boolean(String(selected.claim_intimation_no ?? '').trim())
+                const hasSurveyDate = Boolean(String(selected.survey_date ?? '').trim())
+                const hasSurveyorName = Boolean(String(selected.surveyor_name ?? '').trim())
+                const canSaveSurveyRequiredFields = hasClaimNo && hasSurveyDate && hasSurveyorName
 
                 return (
                   <div className="brx-survey-wrap">
@@ -5170,7 +5262,12 @@ export default function BodyshopRepairPage() {
 
                     {Object.keys(editPatch).length > 0 && (
                       <div className="brx-grid-full">
-                        <button className="btn btn--primary" onClick={() => void handleSaveSurveyInfo()} disabled={saving}>
+                        <button
+                          className="btn btn--primary"
+                          onClick={() => void handleSaveSurveyInfo()}
+                          disabled={saving || !canSaveSurveyRequiredFields}
+                          title={!canSaveSurveyRequiredFields ? 'Claim Intimation No., Survey Date, and Surveyor Name are required' : undefined}
+                        >
                           {saving ? 'Saving…' : 'Save Survey'}
                         </button>
                       </div>
