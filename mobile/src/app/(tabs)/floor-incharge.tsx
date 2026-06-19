@@ -209,6 +209,13 @@ function formatDate(v: string | null): string {
   if (isNaN(d.getTime())) return v
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
+function ageingDays(v: string | null | undefined): number {
+  if (!v) return 0
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return 0
+  const diffMs = Date.now() - d.getTime()
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+}
 function formatTimestamp(v: string | null | undefined): string {
   if (!v) return '—'
   const d = new Date(v)
@@ -752,7 +759,7 @@ export default function FloorInchargeScreen() {
             {/* Line 2: model · service type */}
             <Text style={S.cardModel} numberOfLines={1}>{jc.model || '—'}  ·  {jc.service_type || '—'}</Text>
 
-            {/* Line 3: status pill */}
+            {/* Line 3: status pill + ageing badge for Hold & In-Process */}
             <View style={S.cardLine3}>
               <View style={[S.statusPill, { backgroundColor: a ? sc.bg : '#fef2f2', borderColor: a ? sc.text + 'aa' : '#ef4444aa' }]}>
                 <Text style={[S.statusPillText, { color: a ? sc.text : '#ef4444' }]}>
@@ -762,6 +769,14 @@ export default function FloorInchargeScreen() {
               {/* Created timestamp — only for unassigned */}
               {!a && jc.created_at ? (
                 <Text style={S.cardCreatedAt}>🕐 {formatDate(jc.created_at)}</Text>
+              ) : null}
+              {/* Ageing badge — for Hold and In-Process */}
+              {a && (statusKey === 'hold' || statusKey === 'work_inprocess') && jc.created_at ? (
+                <View style={[S.ageingBadge, statusKey === 'hold' ? S.ageingBadgeHold : S.ageingBadgeInProcess]}>
+                  <Text style={[S.ageingBadgeText, statusKey === 'hold' ? S.ageingBadgeTextHold : S.ageingBadgeTextInProcess]}>
+                    {`⏱ ${ageingDays(jc.created_at)}d · ${formatDate(jc.created_at)}`}
+                  </Text>
+                </View>
               ) : null}
             </View>
 
@@ -799,7 +814,7 @@ export default function FloorInchargeScreen() {
             {/* Info grid */}
             <View style={S.infoBlock}>
               <View style={S.infoRow2Col}>
-                <InfoCell label="Created" value={formatDate(jc.created_at)} />
+                <InfoCell label="Created" value={`${formatDate(jc.created_at)}  (${ageingDays(jc.created_at)}d old)`} />
                 <InfoCell label="KM"      value={jc.km_reading != null ? String(jc.km_reading) : '—'} />
               </View>
               <View style={S.infoRow2Col}>
@@ -1374,6 +1389,13 @@ const S = {
   tabPillLabel:      { fontSize: 11, fontWeight: '600' as const },
 
   cardCreatedAt:     { fontSize: 11, color: '#94a3b8', flexShrink: 1 },
+  // Ageing badge
+  ageingBadge:              { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginLeft: 6, borderWidth: 1 } as const,
+  ageingBadgeHold:          { backgroundColor: '#fff7ed', borderColor: '#f9731688' } as const,
+  ageingBadgeInProcess:     { backgroundColor: '#f0f9ff', borderColor: '#0ea5e988' } as const,
+  ageingBadgeText:          { fontSize: 11, fontWeight: '700' as const },
+  ageingBadgeTextHold:      { color: '#c2410c' },
+  ageingBadgeTextInProcess: { color: '#0369a1' },
   tabsGrid:          { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, gap: 6, borderBottomWidth: 1, borderColor: '#e2e8f0' },
   tabsRow1:          { flexDirection: 'row' as const, gap: 8 },
   tabsRow2:          { flexDirection: 'row' as const, gap: 6 },
