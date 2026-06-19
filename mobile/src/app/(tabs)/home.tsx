@@ -64,40 +64,6 @@ function formatRelativeUpdateTime(isoDate: string | null): string {
   return `Updated ${days}d ago`
 }
 
-const ACTIVITY_FEED = [
-  {
-    id: '1',
-    icon: 'edit' as IconName,
-    iconBg: 'bg-orange-100',
-    title: 'JC-2026-0428 awaiting pre-repair ...',
-    meta: 'Body & Paint · Harrier · MH12 KJ 4471',
-    time: '12m',
-  },
-  {
-    id: '2',
-    icon: 'check-circle' as IconName,
-    iconBg: 'bg-purple-100',
-    title: 'Estimate pending approval',
-    meta: 'JC-2026-0426 · ₹21,700 · Nexon',
-    time: '1h',
-  },
-  {
-    id: '3',
-    icon: 'check-circle' as IconName,
-    iconBg: 'bg-emerald-100',
-    title: 'Claim submitted successfully',
-    meta: 'JC-2026-0405 · Tiago · marked completed',
-    time: '3h',
-  },
-  {
-    id: '4',
-    icon: 'alert-circle' as IconName,
-    iconBg: 'bg-red-100',
-    title: '3 parts on backorder for 5+ days',
-    meta: 'Parts · review stock planning report',
-    time: '5h',
-  },
-]
 
 export default function PlatformHomeScreen() {
   const router = useRouter()
@@ -318,28 +284,6 @@ export default function PlatformHomeScreen() {
           ))}
         </View>
 
-        {/* Recent Activity Section */}
-        <View className="px-4">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-slate-600 text-xs font-bold tracking-wide uppercase">Recent Activity</Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/alerts')}>
-              <Text className="text-blue-600 font-semibold text-xs">See all →</Text>
-            </TouchableOpacity>
-          </View>
-
-          {ACTIVITY_FEED.map((item) => (
-            <View key={item.id} className="bg-white rounded-xl border border-slate-100 flex-row items-start p-3 mb-2">
-              <View className={`h-11 w-11 rounded-full ${item.iconBg} items-center justify-center mr-3 flex-shrink-0`}>
-                <Icon name={item.icon} size={20} color="#1e293b" strokeWidth={1.8} />
-              </View>
-              <View className="flex-1 mr-2">
-                <Text className="text-slate-900 font-semibold text-sm">{item.title}</Text>
-                <Text className="text-slate-500 text-xs mt-0.5 leading-4">{item.meta}</Text>
-              </View>
-              <Text className="text-slate-400 text-xs flex-shrink-0">{item.time}</Text>
-            </View>
-          ))}
-        </View>
       </ScrollView>
     </SafeAreaView>
   )
