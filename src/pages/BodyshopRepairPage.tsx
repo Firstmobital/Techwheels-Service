@@ -878,55 +878,35 @@ export default function BodyshopRepairPage() {
           return
         }
 
-        const [profileRes, linksRes] = await Promise.all([
+        const [profileRes, scopeRes] = await Promise.all([
           supabase
             .from('users')
             .select('role, is_active, full_name')
             .eq('id', userId)
             .maybeSingle(),
-          supabase
-            .from('user_employee_links')
-            .select('employee_code')
-            .eq('user_id', userId)
-            .eq('is_active', true),
+          supabase.rpc('get_my_bodyshop_employee_scope'),
         ])
 
-        // Keep compatibility with environments that may still have legacy soft-delete columns.
-        const linkRows = linksRes.error
-          ? (await supabase
-              .from('user_employee_links')
-              .select('employee_code')
-              .eq('user_id', userId)
-              .eq('is_active', true)).data
-          : linksRes.data
-
         const profile = profileRes.data
+        const scopeRows = (scopeRes.data ?? []) as Array<{
+          employee_code?: string | null
+          department?: string | null
+          role?: string | null
+          location?: string | null
+          fuel_type?: string | null
+        }>
 
         const userRole = normalizeAccessToken((profile as { role?: string | null } | null)?.role)
         const userIsActive = (profile as { is_active?: boolean | null } | null)?.is_active === true
         const displayName = String((profile as { full_name?: string | null } | null)?.full_name ?? '').trim()
         const nextIsAdminLike = (userRole === 'ADMIN' || userRole === 'SUPER ADMIN') && userIsActive
 
-        const linkedCodes = ((linkRows ?? []) as Array<{ employee_code?: string | null }>)
+        const linkedCodes = scopeRows
           .map((row) => String(row.employee_code ?? '').trim().toUpperCase())
           .filter(Boolean)
 
-        let employeeRows: Array<{ employee_code?: string | null; department?: string | null; role?: string | null; location?: string | null; fuel_type?: string | null }> = []
-        if (linkedCodes.length > 0) {
-          const empRes = await supabase
-            .from('employee_master')
-            .select('employee_code, department, role, location, fuel_type')
-            .in('employee_code', linkedCodes)
-
-          if (!empRes.error) {
-            employeeRows = (empRes.data ?? []) as Array<{ employee_code?: string | null; department?: string | null; role?: string | null; location?: string | null; fuel_type?: string | null }>
-          }
-        }
-
-        // Non-admin users may not have direct employee_master read access via RLS.
-        // Use active linked employee codes as the canonical scoped SA-code set.
         const saCodes = Array.from(new Set(linkedCodes))
-        const bodyshopRows = employeeRows.filter((row) => isBodyshopDepartment(row.department))
+        const bodyshopRows = scopeRows.filter((row) => isBodyshopDepartment(row.department))
         const hasSaRoleFromMaster = bodyshopRows.some((row) => isBodyshopSaRole(row.role))
         const hasSsaRoleFromMaster = bodyshopRows.some((row) => isBodyshopSsaRole(row.role))
         const hasSurveyRoleFromMaster = bodyshopRows.some((row) => isBodyshopSurveyRole(row.role))
@@ -942,10 +922,10 @@ export default function BodyshopRepairPage() {
           ),
         )
 
-        const hasSaRole = employeeRows.length > 0 ? (hasSaRoleFromMaster || hasSsaRoleFromMaster) : saCodes.length > 0
-        const hasSsaRole = employeeRows.length > 0 ? hasSsaRoleFromMaster : false
-        const hasSurveyRole = employeeRows.length > 0 ? hasSurveyRoleFromMaster : false
-        const hasFloorRole = employeeRows.length > 0 ? hasFloorRoleFromMaster : false
+        const hasSaRole = hasSaRoleFromMaster || hasSsaRoleFromMaster
+        const hasSsaRole = hasSsaRoleFromMaster
+        const hasSurveyRole = hasSurveyRoleFromMaster
+        const hasFloorRole = hasFloorRoleFromMaster
 
         if (cancelled) return
         setIsAdminLikeUser(nextIsAdminLike)
@@ -1449,7 +1429,13 @@ export default function BodyshopRepairPage() {
       }
 
       const mergedData = (toInsert.length > 0 || rowsToHeal.length > 0)
-        ? await listRepairCards({ from: dateRange.from, to: dateRange.to, saCodes: scopedSaCodes ?? undefined, saNames: scopedSaNames ?? undefined })
+        ? await listRepairCards({
+            from: dateRange.from,
+            to: dateRange.to,
+            saCodes: scopedSaCodes ?? undefined,
+            saNames: scopedSaNames ?? undefined,
+            branches: scopedSsaBranches ?? undefined,
+          })
         : data
 
       const nextCards = dedupeCards(mergedData)
