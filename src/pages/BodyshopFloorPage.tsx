@@ -77,8 +77,11 @@ type AdditionalApprovalPartRowState = {
   part_image_path: string | null
   part_image_file_name: string | null
   status: AdditionalApprovalDecisionStatus
+  decidedAt: string | null
+  decidedBy: string | null
   approvalPhotoBucket: string | null
   approvalPhotoPath: string | null
+  approvalPhotoFileName: string | null
 }
 
 type AdditionalApprovalRowState = {
@@ -95,9 +98,33 @@ type AdditionalApprovalRowState = {
   requestImageBucket: string | null
   requestImagePath: string | null
   requestImageFileName: string | null
+  decidedAt: string | null
+  decidedBy: string | null
   approvalPhotoBucket: string | null
   approvalPhotoPath: string | null
   approvalPhotoFileName: string | null
+}
+
+function getAdditionalApprovalPartSignature(part: {
+  part_no?: string | null
+  part_description?: string | null
+  reason?: string | null
+  part_image_path?: string | null
+}): string {
+  const partNo = String(part.part_no ?? '').trim().toUpperCase()
+  const partDesc = String(part.part_description ?? '').trim().toUpperCase()
+  const reason = String(part.reason ?? '').trim().toUpperCase()
+  const imagePath = String(part.part_image_path ?? '').trim()
+  return `${partNo}__${partDesc}__${reason}__${imagePath}`
+}
+
+function getLegacyDecisionStatusFromParts(parts: AdditionalApprovalDecisionPart[]): AdditionalApprovalDecisionStatus {
+  if (!parts.length) return 'pending'
+  const approvedCount = parts.filter((part) => part.status === 'approved').length
+  const rejectedCount = parts.filter((part) => part.status === 'rejected').length
+  if (approvedCount === parts.length) return 'approved'
+  if (rejectedCount === parts.length) return 'rejected'
+  return 'pending'
 }
 
 function getAggregateAdditionalApprovalStatus(parts: AdditionalApprovalPartRowState[]): AdditionalApprovalAggregateStatus {
@@ -300,6 +327,8 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
     requestImageBucket: null,
     requestImagePath: null,
     requestImageFileName: null,
+    decidedAt: null,
+    decidedBy: null,
     approvalPhotoBucket: null,
     approvalPhotoPath: null,
     approvalPhotoFileName: null,
@@ -365,8 +394,11 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
         part_image_path: part.part_image_path,
         part_image_file_name: part.part_image_file_name,
         status: explicit?.status ?? legacyDecisionStatus,
+        decidedAt: explicit?.decided_at ?? parsed?.decision?.decided_at ?? null,
+        decidedBy: explicit?.decided_by ?? parsed?.decision?.decided_by ?? null,
         approvalPhotoBucket: explicit?.approval_photo_bucket ?? parsed?.decision?.approval_photo_bucket ?? null,
         approvalPhotoPath: explicit?.approval_photo_path ?? parsed?.decision?.approval_photo_path ?? null,
+        approvalPhotoFileName: explicit?.approval_photo_file_name ?? parsed?.decision?.approval_photo_file_name ?? null,
       }
     })
     const approvedCount = partStates.filter((part) => part.status === 'approved').length
@@ -391,6 +423,8 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
       requestImageBucket: first?.part_image_bucket ?? null,
       requestImagePath: first?.part_image_path ?? null,
       requestImageFileName: first?.part_image_file_name ?? null,
+      decidedAt: parsed?.decision?.decided_at ?? null,
+      decidedBy: parsed?.decision?.decided_by ?? null,
       approvalPhotoBucket: firstApprovalPart?.approvalPhotoBucket ?? parsed?.decision?.approval_photo_bucket ?? null,
       approvalPhotoPath: firstApprovalPart?.approvalPhotoPath ?? parsed?.decision?.approval_photo_path ?? null,
       approvalPhotoFileName: parsed?.decision?.approval_photo_file_name ?? null,
@@ -417,8 +451,11 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
         part_image_path: null,
         part_image_file_name: null,
         status: 'pending',
+        decidedAt: null,
+        decidedBy: null,
         approvalPhotoBucket: null,
         approvalPhotoPath: null,
+        approvalPhotoFileName: null,
       }],
       requestReason: text,
     }
@@ -1382,6 +1419,36 @@ export default function BodyshopFloorPage() {
       }
 
       const firstPart = uploadedParts[0]
+      const currentState = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
+      const previousDecisionBySignature = new Map<string, AdditionalApprovalPartRowState>()
+      currentState.partStates.forEach((part) => {
+        previousDecisionBySignature.set(getAdditionalApprovalPartSignature(part), part)
+      })
+
+      const mergedDecisionParts: AdditionalApprovalDecisionPart[] = uploadedParts.map((part, partIndex) => {
+        const previous = previousDecisionBySignature.get(getAdditionalApprovalPartSignature(part))
+        if (!previous) {
+          return {
+            part_index: partIndex,
+            status: 'pending',
+            decided_at: null,
+            decided_by: null,
+            approval_photo_bucket: null,
+            approval_photo_path: null,
+            approval_photo_file_name: null,
+          }
+        }
+
+        return {
+          part_index: partIndex,
+          status: previous.status,
+          decided_at: previous.decidedAt,
+          decided_by: previous.decidedBy,
+          approval_photo_bucket: previous.approvalPhotoBucket,
+          approval_photo_path: previous.approvalPhotoPath,
+          approval_photo_file_name: previous.approvalPhotoFileName,
+        }
+      })
 
       const payload: AdditionalApprovalPayload = {
         version: 1,
@@ -1397,21 +1464,13 @@ export default function BodyshopFloorPage() {
           requested_by: typeof actor === 'string' ? actor : null,
         },
         decision: {
-          status: 'pending',
-          parts: uploadedParts.map((_, partIndex) => ({
-            part_index: partIndex,
-            status: 'pending',
-            decided_at: null,
-            decided_by: null,
-            approval_photo_bucket: null,
-            approval_photo_path: null,
-            approval_photo_file_name: null,
-          })),
-          decided_at: null,
-          decided_by: null,
-          approval_photo_bucket: null,
-          approval_photo_path: null,
-          approval_photo_file_name: null,
+          status: getLegacyDecisionStatusFromParts(mergedDecisionParts),
+          parts: mergedDecisionParts,
+          decided_at: currentState.decidedAt,
+          decided_by: currentState.decidedBy,
+          approval_photo_bucket: currentState.approvalPhotoBucket,
+          approval_photo_path: currentState.approvalPhotoPath,
+          approval_photo_file_name: currentState.approvalPhotoFileName,
         },
       }
 
