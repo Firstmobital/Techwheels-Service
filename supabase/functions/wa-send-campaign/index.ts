@@ -71,7 +71,7 @@ function buildTemplateBodyParams(
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
-  const { campaign_id, batch_size = 20, delay_ms = 800 } = await req.json()
+  const { campaign_id, batch_size = 20, delay_ms = 800, test_numbers } = await req.json()
   if (!campaign_id) return Response.json({ error: 'campaign_id required' }, { status: 400 })
 
   const { data: cfgArr } = await sb.from('wa_agent_config').select('*').eq('id', 1).limit(1)
@@ -98,14 +98,34 @@ Deno.serve(async (req) => {
     }
   }
 
-  await sb.from('wa_campaigns').update({ status: 'Running', started_at: new Date().toISOString() }).eq('id', campaign_id)
+  // ── TEST MODE: send to specific numbers instead of campaign contacts ─────────
+  const isTest = Array.isArray(test_numbers) && test_numbers.length > 0
 
-  const { data: contacts } = await sb.from('wa_campaign_contacts')
-    .select('*').eq('campaign_id', campaign_id).eq('status', 'Pending').limit(batch_size)
+  if (!isTest) {
+    await sb.from('wa_campaigns').update({ status: 'Running', started_at: new Date().toISOString() }).eq('id', campaign_id)
+  }
+
+  // Build contact list: either test numbers or pending campaign contacts
+  let contacts: Array<Record<string, unknown>>
+
+  if (isTest) {
+    contacts = test_numbers.map((num: string) => ({
+      phone: num,
+      customer_name: 'Test Customer',
+      reg_number: 'TEST-001',
+      model: 'Test Model',
+      service_due_date: '',
+      status: 'Pending',
+    }))
+  } else {
+    const { data: dbContacts } = await sb.from('wa_campaign_contacts')
+      .select('*').eq('campaign_id', campaign_id).eq('status', 'Pending').limit(batch_size)
+    contacts = (dbContacts || []) as unknown as Array<Record<string, unknown>>
+  }
 
   let sent = 0, failed = 0
 
-  for (const contact of (contacts || [])) {
+  for (const contact of contacts) {
     const rawPhone = (contact.phone as string).replace(/\D/g, '')
     const e164 = rawPhone.startsWith('91') ? `+${rawPhone}` : `+91${rawPhone}`
     const local10 = rawPhone.slice(-10)
@@ -186,15 +206,19 @@ Deno.serve(async (req) => {
           }])
         }
 
-        await sb.from('wa_campaign_contacts').update({
-          status: 'Sent',
-          sent_at: new Date().toISOString(),
-          conversation_id: convId,
-        }).eq('id', contact.id)
+        if (!isTest && contact.id) {
+          await sb.from('wa_campaign_contacts').update({
+            status: 'Sent',
+            sent_at: new Date().toISOString(),
+            conversation_id: convId,
+          }).eq('id', contact.id)
+        }
         sent++
       } else {
         console.error('WA send failed for', e164, ':', JSON.stringify(waRes))
-        await sb.from('wa_campaign_contacts').update({ status: 'Failed' }).eq('id', contact.id)
+        if (!isTest && contact.id) {
+          await sb.from('wa_campaign_contacts').update({ status: 'Failed' }).eq('id', contact.id)
+        }
         failed++
       }
     } catch (e) {
@@ -205,11 +229,14 @@ Deno.serve(async (req) => {
     await new Promise(r => setTimeout(r, delay_ms))
   }
 
-  await sb.from('wa_campaigns').update({
-    sent_count: ((campaign.sent_count as number) || 0) + sent,
-    status: (contacts?.length || 0) < batch_size ? 'Completed' : 'Running',
-    ...((contacts?.length || 0) < batch_size ? { completed_at: new Date().toISOString() } : {}),
-  }).eq('id', campaign_id)
+  // Only update campaign stats/status for real sends (not test mode)
+  if (!isTest) {
+    await sb.from('wa_campaigns').update({
+      sent_count: ((campaign.sent_count as number) || 0) + sent,
+      status: (contacts.length) < batch_size ? 'Completed' : 'Running',
+      ...(contacts.length < batch_size ? { completed_at: new Date().toISOString() } : {}),
+    }).eq('id', campaign_id)
+  }
 
-  return Response.json({ ok: true, sent, failed, total: contacts?.length || 0, mode: isFlow ? 'flow' : 'blast' })
+  return Response.json({ ok: true, sent, failed, total: contacts.length, mode: isFlow ? 'flow' : 'blast', test: isTest })
 })

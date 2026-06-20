@@ -165,6 +165,10 @@ export default function WAAgentPage() {
   const [previewContacts, setPreviewContacts] = useState<ServiceDataRow[]>([])
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [sendingCampaign, setSendingCampaign] = useState<number | null>(null)
+  const [sendingTest, setSendingTest] = useState<number | null>(null)
+  const [testNumbers, setTestNumbers] = useState('')   // comma-separated test numbers in campaign form
+  const [testModalCampaign, setTestModalCampaign] = useState<number | null>(null)  // campaign id for test modal
+  const [testModalNumbers, setTestModalNumbers] = useState('')  // numbers entered in test modal
   const [manualMsg, setManualMsg] = useState('')
   const [sendingManual, setSendingManual] = useState(false)
   const [convFilter, setConvFilter] = useState('all')
@@ -348,6 +352,39 @@ export default function WAAgentPage() {
     setCampaignForm({ name: '', description: '', target_segment: 'DueForService', template_message: DEFAULT_TEMPLATE, scheduled_at: '', flow_type: 'blast', template_id: null })
     await loadAll()
     setSaving(false)
+  }
+
+  // ── Send campaign as TEST to specific numbers ──────────────────────────────
+  async function sendTestCampaign(campaignId: number, numbersRaw: string) {
+    // Parse comma/newline separated numbers, clean them
+    const numbers = numbersRaw
+      .split(/[\n,]/)
+      .map(n => n.replace(/\D/g, '').slice(-10))
+      .filter(n => n.length === 10)
+
+    if (numbers.length === 0) {
+      setError('Enter at least one valid 10-digit number')
+      return
+    }
+
+    setSendingTest(campaignId)
+    setError('')
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('wa-send-campaign', {
+        body: { campaign_id: campaignId, batch_size: 50, delay_ms: 500, test_numbers: numbers },
+      })
+      if (fnErr) setError(fnErr.message || 'Test send failed')
+      else if (data?.ok) {
+        showToast(`🧪 Test sent to ${data.sent} number(s)${data.failed ? `, ${data.failed} failed` : ''}`)
+        setTestModalCampaign(null)
+        setTestModalNumbers('')
+      }
+      else setError(data?.error || 'Test send failed')
+    } catch (e) {
+      setError('Network error. Check edge function deployment.')
+    }
+    await loadAll()
+    setSendingTest(null)
   }
 
   // ── Send campaign batch ─────────────────────────────────────────────────────
@@ -720,10 +757,16 @@ export default function WAAgentPage() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0 }}>
                         {(camp.status === 'Draft' || camp.status === 'Paused') && (
-                          <button className="btn btn--sm" style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
-                            onClick={() => sendCampaignBatch(camp.id)} disabled={sendingCampaign === camp.id}>
-                            {sendingCampaign === camp.id ? '⏳ Sending…' : '▶ Send Batch'}
-                          </button>
+                          <>
+                            <button className="btn btn--sm" style={{ background: '#25D366', color: '#fff', border: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+                              onClick={() => sendCampaignBatch(camp.id)} disabled={sendingCampaign === camp.id}>
+                              {sendingCampaign === camp.id ? '⏳ Sending…' : '▶ Send Batch'}
+                            </button>
+                            <button className="btn btn--sm" style={{ background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', fontWeight: 700, whiteSpace: 'nowrap' }}
+                              onClick={() => { setTestModalCampaign(camp.id); setTestModalNumbers('') }}>
+                              🧪 Test Send
+                            </button>
+                          </>
                         )}
                         {camp.status === 'Running' && (
                           <button className="btn btn--sm" style={{ background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', fontWeight: 700 }}
@@ -737,6 +780,34 @@ export default function WAAgentPage() {
                 )
               })}
             </div>
+
+            {/* ══ TEST SEND MODAL ══ */}
+            {testModalCampaign && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+                onClick={() => setTestModalCampaign(null)}>
+                <div style={{ background: '#fff', borderRadius: '12px', padding: '1.5rem', width: '420px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+                  onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+                    <span style={{ fontWeight: 800, fontSize: '1rem' }}>🧪 Test Campaign Send</span>
+                    <button style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.2rem' }} onClick={() => setTestModalCampaign(null)}>✕</button>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem', background: '#f0f9ff', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                    Send this campaign's message to specific test numbers instead of all contacts.
+                    Enter one or more 10-digit numbers (comma or newline separated).
+                  </div>
+                  <textarea className="inp" rows={4} placeholder="e.g. 9876543210, 9123456780" value={testModalNumbers}
+                    onChange={e => setTestModalNumbers(e.target.value)}
+                    style={{ fontFamily: 'monospace', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }} />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+                    <button className="btn btn--ghost btn--sm" onClick={() => setTestModalCampaign(null)}>Cancel</button>
+                    <button className="btn btn--primary btn--sm" disabled={sendingTest === testModalCampaign || !testModalNumbers.trim()}
+                      onClick={() => sendTestCampaign(testModalCampaign, testModalNumbers)}>
+                      {sendingTest === testModalCampaign ? '⏳ Sending…' : '🧪 Send Test'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
