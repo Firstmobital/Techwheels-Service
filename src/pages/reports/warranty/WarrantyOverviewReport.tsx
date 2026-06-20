@@ -17,6 +17,7 @@ interface SplCodeRow {
   code_label: string
   part_number: string
   description: string
+  ndp: number
   list_price: number
   misc_chgs: number
   labour_chgs: number
@@ -702,9 +703,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   // ── SPL Codes tab state ────────────────────────────────────────────────────
   const [splCodes, setSplCodes] = useState<SplCodeRow[]>([])
   const [splLoading, setSplLoading] = useState(false)
-  const [splCodeFilter, setSplCodeFilter] = useState<string>('ALL')
-  const [splYearFilter, setSplYearFilter] = useState<string>('ALL')
-  const [splMonthFilter, setSplMonthFilter] = useState<string>('ALL')
+  const [splCodeFilters, setSplCodeFilters] = useState<string[]>([])      // empty = ALL
+  const [splMonthFilters, setSplMonthFilters] = useState<string[]>([])    // empty = ALL, values = 'YYYY-MM'
   const [splPortalFilter, setSplPortalFilter] = useState<string>('ALL')
 
   useEffect(() => {
@@ -882,7 +882,7 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         while (true) {
           const { data, error: pageErr } = await supabase
             .from('warranty_spl_codes_data')
-            .select('id,dealer_code,portal,job_card_number,prowac_no,sap_claim,job_code,code_label,part_number,description,list_price,misc_chgs,labour_chgs,spl_labour_chgs,dealer_invc_no,invc_date,posting_document_number,posting_date')
+            .select('id,dealer_code,portal,job_card_number,prowac_no,sap_claim,job_code,code_label,part_number,description,ndp,list_price,misc_chgs,labour_chgs,spl_labour_chgs,dealer_invc_no,invc_date,posting_document_number,posting_date')
             .order('invc_date', { ascending: true })
             .range(from, from + pageSize - 1)
           if (pageErr) break
@@ -1771,25 +1771,17 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [viewerDealerCodes])
 
   // ── SPL Codes computed data ───────────────────────────────────────────────
-  const splAvailableYears = useMemo(() => {
-    const yrs = new Set<string>()
-    for (const r of splCodes) {
-      if (!r.invc_date) continue
-      const yr = r.invc_date.slice(0, 4)
-      if (yr) yrs.add(yr)
-    }
-    return Array.from(yrs).sort().reverse()
-  }, [splCodes])
+  // splAvailableYears removed — months now shown directly as chips
 
+  // All YYYY-MM combinations available in the data
   const splAvailableMonths = useMemo(() => {
-    if (splYearFilter === 'ALL') return []
     const months = new Set<string>()
     for (const r of splCodes) {
-      if (!r.invc_date || !r.invc_date.startsWith(splYearFilter)) continue
-      months.add(r.invc_date.slice(5, 7))
+      if (!r.invc_date) continue
+      months.add(r.invc_date.slice(0, 7)) // YYYY-MM
     }
     return Array.from(months).sort()
-  }, [splCodes, splYearFilter])
+  }, [splCodes])
 
   const splUniqueCodes = useMemo(() => {
     return Array.from(new Set(splCodes.map(r => r.job_code))).sort()
@@ -1797,37 +1789,47 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
   const splFiltered = useMemo(() => {
     return splCodes.filter(r => {
-      if (splCodeFilter !== 'ALL' && r.job_code !== splCodeFilter) return false
+      // Code multi-select (empty = ALL)
+      if (splCodeFilters.length > 0 && !splCodeFilters.includes(r.job_code)) return false
+      // Portal
       if (splPortalFilter !== 'ALL' && r.portal !== splPortalFilter) return false
-      if (splYearFilter !== 'ALL') {
-        if (!r.invc_date || !r.invc_date.startsWith(splYearFilter)) return false
-        if (splMonthFilter !== 'ALL' && r.invc_date.slice(5, 7) !== splMonthFilter) return false
+      // Month multi-select (empty = ALL), value is YYYY-MM
+      if (splMonthFilters.length > 0) {
+        const ym = r.invc_date ? r.invc_date.slice(0, 7) : ''
+        if (!splMonthFilters.includes(ym)) return false
       }
       return true
     })
-  }, [splCodes, splCodeFilter, splPortalFilter, splYearFilter, splMonthFilter])
+  }, [splCodes, splCodeFilters, splPortalFilter, splMonthFilters])
 
   // Month-wise pivot: rows = months, cols = codes
+  // Revenue = SPL Labour Chgs ONLY (matches KPI card and source column O)
+  // Separate NDP pivot for parts tracking
   const splMonthlyPivot = useMemo(() => {
-    const codes = splCodeFilter !== 'ALL' ? [splCodeFilter] : splUniqueCodes
-    const monthMap = new Map<string, Record<string, number>>()
+    const activeCodes = splCodeFilters.length > 0 ? splCodeFilters : splUniqueCodes
+    const splMap  = new Map<string, Record<string, number>>() // SPL Labour
+    const ndpMap  = new Map<string, Record<string, number>>() // Parts NDP
 
     for (const r of splFiltered) {
       if (!r.invc_date) continue
-      const yr = r.invc_date.slice(0, 4)
-      const mm = r.invc_date.slice(5, 7)
-      const monthKey = `${yr}-${mm}`
-      const rev = (r.spl_labour_chgs || 0) + (r.misc_chgs || 0) + (r.list_price || 0)
+      const monthKey = r.invc_date.slice(0, 7) // YYYY-MM
+      const spl = r.spl_labour_chgs || 0
+      const ndp = r.ndp || 0
 
-      if (!monthMap.has(monthKey)) {
+      if (!splMap.has(monthKey)) {
         const empty: Record<string, number> = { _total: 0 }
-        for (const c of codes) empty[c] = 0
-        monthMap.set(monthKey, empty)
+        const empNdp: Record<string, number> = { _total: 0 }
+        for (const c of activeCodes) { empty[c] = 0; empNdp[c] = 0 }
+        splMap.set(monthKey, empty)
+        ndpMap.set(monthKey, empNdp)
       }
-      const entry = monthMap.get(monthKey)!
+      const splEntry = splMap.get(monthKey)!
+      const ndpEntry = ndpMap.get(monthKey)!
       const code = r.job_code
-      if (code in entry) entry[code] = (entry[code] || 0) + rev
-      entry._total = (entry._total || 0) + rev
+      if (code in splEntry) splEntry[code] = (splEntry[code] || 0) + spl
+      splEntry._total = (splEntry._total || 0) + spl
+      if (code in ndpEntry) ndpEntry[code] = (ndpEntry[code] || 0) + ndp
+      ndpEntry._total = (ndpEntry._total || 0) + ndp
     }
 
     const monthNames: Record<string, string> = {
@@ -1835,17 +1837,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       '07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'
     }
 
-    return Array.from(monthMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, vals]) => ({
+    return Array.from(splMap.keys())
+      .sort()
+      .map(key => ({
         monthKey: key,
         monthLabel: `${monthNames[key.slice(5,7)] || key.slice(5,7)} ${key.slice(0,4)}`,
-        codes: codes,
-        values: vals,
+        codes: activeCodes,
+        splValues: splMap.get(key)!,
+        ndpValues: ndpMap.get(key)!,
       }))
-  }, [splFiltered, splUniqueCodes, splCodeFilter])
+  }, [splFiltered, splUniqueCodes, splCodeFilters])
 
-  // Detail table: each row in splFiltered with all fields
+  // Detail table: sorted by date
   const splDetailRows = useMemo(() => {
     return splFiltered.slice().sort((a, b) => (a.invc_date || '').localeCompare(b.invc_date || ''))
   }, [splFiltered])
@@ -3144,64 +3147,95 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
 
           {/* ── Filter Bar ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginRight: 4 }}>FILTERS</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginRight: 4 }}>FILTERS</span>
 
-            {/* Code Dropdown */}
-            <select value={splCodeFilter} onChange={e => setSplCodeFilter(e.target.value)}
-              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splCodeFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
-              <option value="ALL">All 9800xx codes</option>
-              {splUniqueCodes.map(c => (
-                <option key={c} value={c}>{c} — {SPL_CODE_LABELS[c] || c}</option>
-              ))}
-            </select>
-
-            {/* Portal */}
-            <select value={splPortalFilter} onChange={e => setSplPortalFilter(e.target.value)}
-              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splPortalFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
-              <option value="ALL">PV + EV</option>
-              <option value="PV">PV only</option>
-              <option value="EV">EV only</option>
-            </select>
-
-            {/* Year */}
-            <select value={splYearFilter} onChange={e => { setSplYearFilter(e.target.value); setSplMonthFilter('ALL') }}
-              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splYearFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
-              <option value="ALL">All years</option>
-              {splAvailableYears.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-
-            {/* Month (only when year selected) */}
-            {splYearFilter !== 'ALL' && (
-              <select value={splMonthFilter} onChange={e => setSplMonthFilter(e.target.value)}
-                style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splMonthFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
+              {/* Portal */}
+              <select value={splPortalFilter} onChange={e => setSplPortalFilter(e.target.value)}
+                style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splPortalFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
                   backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
-                <option value="ALL">All months</option>
-                {splAvailableMonths.map(m => {
-                  const mLabel = new Date(2000, parseInt(m)-1, 1).toLocaleString('en-IN', { month: 'long' })
-                  return <option key={m} value={m}>{mLabel}</option>
-                })}
+                <option value="ALL">PV + EV</option>
+                <option value="PV">PV only</option>
+                <option value="EV">EV only</option>
               </select>
-            )}
 
-            {/* Reset */}
-            {(splCodeFilter !== 'ALL' || splPortalFilter !== 'ALL' || splYearFilter !== 'ALL') && (
-              <button onClick={() => { setSplCodeFilter('ALL'); setSplPortalFilter('ALL'); setSplYearFilter('ALL'); setSplMonthFilter('ALL') }}
-                style={{ padding: '6px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', background: '#fff', cursor: 'pointer' }}>
-                ✕ Clear
-              </button>
-            )}
+              {/* Reset */}
+              {(splCodeFilters.length > 0 || splPortalFilter !== 'ALL' || splMonthFilters.length > 0) && (
+                <button onClick={() => { setSplCodeFilters([]); setSplPortalFilter('ALL'); setSplMonthFilters([]) }}
+                  style={{ padding: '6px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', background: '#fff', cursor: 'pointer' }}>
+                  ✕ Clear all
+                </button>
+              )}
 
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)' }}>
-              {splLoading ? 'Loading…' : `${splDetailRows.length} of ${splCodes.length} rows`}
-            </span>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)' }}>
+                {splLoading ? 'Loading…' : `${splDetailRows.length} of ${splCodes.length} rows`}
+              </span>
+            </div>
+
+            {/* Code multi-select chips */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>JOB CODE (multi-select — click to toggle)</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setSplCodeFilters([])}
+                  style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: splCodeFilters.length === 0 ? 700 : 400,
+                    border: '1px solid var(--border)', cursor: 'pointer',
+                    background: splCodeFilters.length === 0 ? 'var(--accent)' : '#fff',
+                    color: splCodeFilters.length === 0 ? '#fff' : 'var(--ink-2)' }}>
+                  All codes
+                </button>
+                {splUniqueCodes.map(c => {
+                  const active = splCodeFilters.includes(c)
+                  const toggle = () => setSplCodeFilters(prev =>
+                    active ? prev.filter(x => x !== c) : [...prev, c]
+                  )
+                  return (
+                    <button key={c} onClick={toggle}
+                      style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: active ? 700 : 400,
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer',
+                        background: active ? 'var(--accent-soft)' : '#fff',
+                        color: active ? 'var(--accent)' : 'var(--ink-2)' }}>
+                      {c} <span style={{ fontSize: 10, opacity: 0.75 }}>— {SPL_CODE_LABELS[c] || ''}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Month multi-select chips */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6 }}>MONTH (multi-select — click to toggle)</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setSplMonthFilters([])}
+                  style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: splMonthFilters.length === 0 ? 700 : 400,
+                    border: '1px solid var(--border)', cursor: 'pointer',
+                    background: splMonthFilters.length === 0 ? 'var(--accent)' : '#fff',
+                    color: splMonthFilters.length === 0 ? '#fff' : 'var(--ink-2)' }}>
+                  All months
+                </button>
+                {splAvailableMonths.map(ym => {
+                  const [yr, mm] = ym.split('-')
+                  const MNAMES: Record<string,string> = { '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec' }
+                  const label = `${MNAMES[mm] || mm} ${yr}`
+                  const active = splMonthFilters.includes(ym)
+                  const toggle = () => setSplMonthFilters(prev =>
+                    active ? prev.filter(x => x !== ym) : [...prev, ym]
+                  )
+                  return (
+                    <button key={ym} onClick={toggle}
+                      style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: active ? 700 : 400,
+                        border: `1px solid ${active ? '#4F46E5' : 'var(--border)'}`, cursor: 'pointer',
+                        background: active ? '#EEF2FF' : '#fff',
+                        color: active ? '#4F46E5' : 'var(--ink-2)' }}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
 
           {splLoading ? (
@@ -3213,11 +3247,11 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               {/* ── KPI Summary Cards ── */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
                 {[
-                  { label: 'Total rows', value: splDetailRows.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
-                  { label: 'SPL labour revenue', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.spl_labour_chgs || 0), 0)), tone: 'var(--danger)' },
-                  { label: 'List price', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.list_price || 0), 0)), tone: '#4F46E5' },
+                  { label: 'Total transactions', value: splDetailRows.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
+                  { label: 'SPL Labour revenue', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.spl_labour_chgs || 0), 0)), tone: 'var(--danger)' },
+                  { label: 'Parts (NDP)', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.ndp || 0), 0)), tone: '#4F46E5' },
                   { label: 'Misc charges', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.misc_chgs || 0), 0)), tone: 'var(--warn)' },
-                  { label: 'Grand total revenue', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.spl_labour_chgs || 0) + (r.misc_chgs || 0) + (r.list_price || 0), 0)), tone: 'var(--success)' },
+                  { label: 'Grand total revenue', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.spl_labour_chgs || 0) + (r.ndp || 0) + (r.misc_chgs || 0), 0)), tone: 'var(--success)' },
                 ].map((k, i) => (
                   <div key={i} style={{ border: '1px solid var(--border)', borderTop: `3px solid ${k.tone}`, borderRadius: 'var(--r-sm)', padding: '12px 14px', background: 'var(--panel)' }}>
                     <div style={{ fontSize: 20, fontWeight: 700, color: k.tone }}>{k.value}</div>
@@ -3226,9 +3260,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 ))}
               </div>
 
-              {/* ── Month-wise Revenue Pivot ── */}
+              {/* ── Month-wise SPL Labour Revenue Pivot ── */}
               {splMonthlyPivot.length > 0 && (
-                <Card title="Month-wise Revenue — 9800xx Special Codes" sub={`SPL Labour + Misc + List Price · ${splCodeFilter !== 'ALL' ? `code ${splCodeFilter}` : 'all 9800xx codes'} · ${splPortalFilter !== 'ALL' ? splPortalFilter : 'PV + EV'}`}>
+                <Card
+                  title="Month-wise SPL Labour Revenue — 9800xx Special Codes"
+                  sub={`Revenue = SPL Labour Chgs (Col O) only · ${splCodeFilters.length > 0 ? splCodeFilters.join(', ') : 'all 9800xx codes'} · ${splPortalFilter !== 'ALL' ? splPortalFilter : 'PV + EV'}`}
+                >
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
@@ -3236,7 +3273,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                           <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 700, fontSize: 12, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>Month</th>
                           {splMonthlyPivot[0].codes.map(c => (
                             <th key={c} style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontSize: 12, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
-                              {c}<div style={{ fontWeight: 400, fontSize: 10, color: 'var(--muted)' }}>{SPL_CODE_LABELS[c] || ''}</div>
+                              {c}
+                              <div style={{ fontWeight: 400, fontSize: 10, color: 'var(--muted)' }}>{SPL_CODE_LABELS[c] || ''}</div>
                             </th>
                           ))}
                           <th style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap' }}>TOTAL</th>
@@ -3248,11 +3286,11 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                             <td style={{ padding: '8px 14px', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>{row.monthLabel}</td>
                             {row.codes.map(c => (
                               <td key={c} style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
-                                {row.values[c] > 0 ? `₹${Math.round(row.values[c]).toLocaleString('en-IN')}` : '—'}
+                                {(row.splValues[c] || 0) > 0 ? `₹${Math.round(row.splValues[c]).toLocaleString('en-IN')}` : '—'}
                               </td>
                             ))}
                             <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 13 }}>
-                              ₹{Math.round(row.values._total || 0).toLocaleString('en-IN')}
+                              ₹{Math.round(row.splValues._total || 0).toLocaleString('en-IN')}
                             </td>
                           </tr>
                         ))}
@@ -3261,13 +3299,71 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                         <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--canvas)' }}>
                           <td style={{ padding: '8px 14px', fontWeight: 700, fontSize: 12 }}>GRAND TOTAL</td>
                           {(splMonthlyPivot[0]?.codes || []).map(c => {
-                            const total = splMonthlyPivot.reduce((s, r) => s + (r.values[c] || 0), 0)
-                            return <td key={c} style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', fontSize: 12 }}>
-                              {total > 0 ? `₹${Math.round(total).toLocaleString('en-IN')}` : '—'}
-                            </td>
+                            const total = splMonthlyPivot.reduce((s, r) => s + (r.splValues[c] || 0), 0)
+                            return (
+                              <td key={c} style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', fontSize: 12 }}>
+                                {total > 0 ? `₹${Math.round(total).toLocaleString('en-IN')}` : '—'}
+                              </td>
+                            )
                           })}
                           <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 13 }}>
-                            ₹{Math.round(splMonthlyPivot.reduce((s, r) => s + (r.values._total || 0), 0)).toLocaleString('en-IN')}
+                            ₹{Math.round(splMonthlyPivot.reduce((s, r) => s + (r.splValues._total || 0), 0)).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {/* ── Month-wise Parts (NDP) Pivot ── */}
+              {splMonthlyPivot.length > 0 && splMonthlyPivot.some(r => (r.ndpValues._total || 0) > 0) && (
+                <Card
+                  title="Month-wise Parts Consumption (NDP) — 9800xx Special Codes"
+                  sub={`Parts Name = Col J (NDP — Net Dealer Price after discount) · ${splCodeFilters.length > 0 ? splCodeFilters.join(', ') : 'all 9800xx codes'} · ${splPortalFilter !== 'ALL' ? splPortalFilter : 'PV + EV'}`}
+                >
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: 'var(--canvas)', borderBottom: '2px solid var(--border)' }}>
+                          <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 700, fontSize: 12, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>Month</th>
+                          {splMonthlyPivot[0].codes.map(c => (
+                            <th key={c} style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontSize: 12, color: '#4F46E5', whiteSpace: 'nowrap' }}>
+                              {c}
+                              <div style={{ fontWeight: 400, fontSize: 10, color: 'var(--muted)' }}>{SPL_CODE_LABELS[c] || ''}</div>
+                            </th>
+                          ))}
+                          <th style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontSize: 12, color: '#4F46E5', whiteSpace: 'nowrap' }}>TOTAL NDP</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {splMonthlyPivot.map((row, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'var(--panel)' : '#fff' }}>
+                            <td style={{ padding: '8px 14px', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>{row.monthLabel}</td>
+                            {row.codes.map(c => (
+                              <td key={c} style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                {(row.ndpValues[c] || 0) > 0 ? `₹${Math.round(row.ndpValues[c]).toLocaleString('en-IN')}` : '—'}
+                              </td>
+                            ))}
+                            <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: '#4F46E5', fontFamily: 'monospace', fontSize: 13 }}>
+                              {(row.ndpValues._total || 0) > 0 ? `₹${Math.round(row.ndpValues._total).toLocaleString('en-IN')}` : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--canvas)' }}>
+                          <td style={{ padding: '8px 14px', fontWeight: 700, fontSize: 12 }}>GRAND TOTAL</td>
+                          {(splMonthlyPivot[0]?.codes || []).map(c => {
+                            const total = splMonthlyPivot.reduce((s, r) => s + (r.ndpValues[c] || 0), 0)
+                            return (
+                              <td key={c} style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', fontSize: 12 }}>
+                                {total > 0 ? `₹${Math.round(total).toLocaleString('en-IN')}` : '—'}
+                              </td>
+                            )
+                          })}
+                          <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: '#4F46E5', fontFamily: 'monospace', fontSize: 13 }}>
+                            ₹{Math.round(splMonthlyPivot.reduce((s, r) => s + (r.ndpValues._total || 0), 0)).toLocaleString('en-IN')}
                           </td>
                         </tr>
                       </tfoot>
@@ -3277,57 +3373,54 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               )}
 
               {/* ── Detail Table ── */}
-              <Card title="Transaction Detail" sub={`All 9800xx code rows · filtered · SPL Labour Chgs is the primary revenue column`} pad={false}>
+              <Card title="Transaction Detail" sub="All 9800xx rows · SPL Labour Chgs = primary revenue column · Parts Name = NDP (Col J)" pad={false}>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: 'var(--canvas)', borderBottom: '2px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
-                        {['#', 'Job Code', 'Code Name', 'Portal', 'Job Card', 'Prowac No', 'SAP Claim', 'Invoice Date', 'Dealer Invc', 'List Price', 'Misc', 'Labour', 'SPL Labour', 'Total Rev'].map((h, i) => (
-                          <th key={i} style={{ padding: '8px 10px', textAlign: i >= 9 ? 'right' : 'left', fontWeight: 700, color: 'var(--ink-2)', fontSize: 11, whiteSpace: 'nowrap', background: 'var(--canvas)' }}>{h}</th>
+                        {['#', 'Job Code', 'Code Name', 'Portal', 'Job Card', 'Prowac No', 'SAP Claim', 'Invoice Date', 'Dealer Invc', 'Part No', 'Description', 'Parts (NDP)', 'Misc', 'Labour', 'SPL Labour'].map((h, i) => (
+                          <th key={i} style={{ padding: '8px 10px', textAlign: i >= 11 ? 'right' : 'left', fontWeight: 700, color: 'var(--ink-2)', fontSize: 11, whiteSpace: 'nowrap', background: 'var(--canvas)' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {splDetailRows.map((row, idx) => {
-                        const totalRev = (row.spl_labour_chgs || 0) + (row.misc_chgs || 0) + (row.list_price || 0)
-                        return (
-                          <tr key={row.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'var(--panel)' : '#fff' }}>
-                            <td style={{ padding: '6px 10px', color: 'var(--muted)', fontSize: 10 }}>{idx + 1}</td>
-                            <td style={{ padding: '6px 10px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>{row.job_code}</td>
-                            <td style={{ padding: '6px 10px', fontSize: 11.5 }}>{row.code_label || SPL_CODE_LABELS[row.job_code] || '—'}</td>
-                            <td style={{ padding: '6px 10px' }}>
-                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, fontWeight: 600,
-                                background: row.portal === 'EV' ? '#dcfce7' : '#eff6ff',
-                                color: row.portal === 'EV' ? '#16a34a' : '#2563eb' }}>{row.portal}</span>
-                            </td>
-                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.job_card_number}>{row.job_card_number}</td>
-                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.prowac_no || '—'}</td>
-                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.sap_claim || '—'}</td>
-                            <td style={{ padding: '6px 10px', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>{row.invc_date ? new Date(row.invc_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</td>
-                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.dealer_invc_no || '—'}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{row.list_price > 0 ? money(row.list_price) : '—'}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{row.misc_chgs > 0 ? money(row.misc_chgs) : '—'}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{row.labour_chgs > 0 ? money(row.labour_chgs) : '—'}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', fontSize: 12, color: totalRev > 50000 ? 'var(--danger)' : 'var(--ink)' }}>
-                              {row.spl_labour_chgs > 0 ? `₹${money(row.spl_labour_chgs)}` : '—'}
-                            </td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>
-                              {totalRev > 0 ? `₹${money(totalRev)}` : '—'}
-                            </td>
-                          </tr>
-                        )
-                      })}
+                      {splDetailRows.map((row, idx) => (
+                        <tr key={row.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'var(--panel)' : '#fff' }}>
+                          <td style={{ padding: '6px 10px', color: 'var(--muted)', fontSize: 10 }}>{idx + 1}</td>
+                          <td style={{ padding: '6px 10px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>{row.job_code}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11.5 }}>{row.code_label || SPL_CODE_LABELS[row.job_code] || '—'}</td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, fontWeight: 600,
+                              background: row.portal === 'EV' ? '#dcfce7' : '#eff6ff',
+                              color: row.portal === 'EV' ? '#16a34a' : '#2563eb' }}>{row.portal}</span>
+                          </td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.job_card_number}>{row.job_card_number}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.prowac_no || '—'}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.sap_claim || '—'}</td>
+                          <td style={{ padding: '6px 10px', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
+                            {row.invc_date ? new Date(row.invc_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
+                          </td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.dealer_invc_no || '—'}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.part_number || ''}>{row.part_number || '—'}</td>
+                          <td style={{ padding: '6px 10px', fontSize: 11, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.description || ''}>{row.description || '—'}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600, fontFamily: 'monospace', fontSize: 12, color: (row.ndp||0) > 0 ? '#4F46E5' : 'var(--muted)' }}>
+                            {(row.ndp || 0) > 0 ? `₹${money(row.ndp)}` : '—'}
+                          </td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{(row.misc_chgs||0) > 0 ? `₹${money(row.misc_chgs)}` : '—'}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{(row.labour_chgs||0) > 0 ? `₹${money(row.labour_chgs)}` : '—'}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', fontSize: 12, color: (row.spl_labour_chgs||0) > 50000 ? 'var(--danger)' : 'var(--ink)' }}>
+                            {(row.spl_labour_chgs||0) > 0 ? `₹${money(row.spl_labour_chgs)}` : '—'}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                     <tfoot>
                       <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--canvas)' }}>
-                        <td colSpan={9} style={{ padding: '8px 10px', fontWeight: 700, fontSize: 12 }}>TOTAL ({splDetailRows.length} rows)</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.list_price||0), 0))}</td>
+                        <td colSpan={11} style={{ padding: '8px 10px', fontWeight: 700, fontSize: 12 }}>TOTAL ({splDetailRows.length} rows)</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', color: '#4F46E5' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.ndp||0), 0))}</td>
                         <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.misc_chgs||0), 0))}</td>
                         <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.labour_chgs||0), 0))}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.spl_labour_chgs||0), 0))}</td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace' }}>
-                          ₹{money(splDetailRows.reduce((s,r) => s+(r.spl_labour_chgs||0)+(r.misc_chgs||0)+(r.list_price||0), 0))}
-                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--danger)', fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.spl_labour_chgs||0), 0))}</td>
                       </tr>
                     </tfoot>
                   </table>
