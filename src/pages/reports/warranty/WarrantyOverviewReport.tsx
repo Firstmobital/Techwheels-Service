@@ -6,6 +6,39 @@ import Icon from '../../../components/Icon'
 
 type DashboardTab = 'overview' | 'alerts' | 'financial' | 'operations' | 'codes'
 
+interface SplCodeRow {
+  id: number
+  dealer_code: string
+  portal: string
+  job_card_number: string
+  prowac_no: string
+  sap_claim: string
+  job_code: string
+  code_label: string
+  part_number: string
+  description: string
+  list_price: number
+  misc_chgs: number
+  labour_chgs: number
+  spl_labour_chgs: number
+  dealer_invc_no: string
+  invc_date: string | null
+  posting_document_number: string
+  posting_date: string
+}
+
+const SPL_CODE_LABELS: Record<string, string> = {
+  '980001': 'Loading / Unloading',
+  '980002': 'Crane Charges',
+  '980003': 'Towing Charges',
+  '980004': 'PDI Charges',
+  '980009': 'Body Repair SPL',
+  '980011': 'Misc SPL',
+  '980016': 'Rusting / Body SPL',
+  '980019': 'Loaner Car',
+  '980025': 'Special Misc',
+}
+
 interface WarrantyAlertRow {
   jc: string
   model: string
@@ -666,6 +699,13 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   // ── Date filter ────────────────────────────────────────────────────────────
   const [selectedYear, setSelectedYear] = useState<string>('ALL')
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL')
+  // ── SPL Codes tab state ────────────────────────────────────────────────────
+  const [splCodes, setSplCodes] = useState<SplCodeRow[]>([])
+  const [splLoading, setSplLoading] = useState(false)
+  const [splCodeFilter, setSplCodeFilter] = useState<string>('ALL')
+  const [splYearFilter, setSplYearFilter] = useState<string>('ALL')
+  const [splMonthFilter, setSplMonthFilter] = useState<string>('ALL')
+  const [splPortalFilter, setSplPortalFilter] = useState<string>('ALL')
 
   useEffect(() => {
     let active = true
@@ -828,6 +868,38 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     return () => {
       active = false
     }
+  }, [])
+
+  // ── Load SPL Codes from warranty_spl_codes_data ──────────────────────────
+  useEffect(() => {
+    let active = true
+    const loadSplCodes = async () => {
+      setSplLoading(true)
+      try {
+        const pageSize = 1000
+        let from = 0
+        const all: SplCodeRow[] = []
+        while (true) {
+          const { data, error: pageErr } = await supabase
+            .from('warranty_spl_codes_data')
+            .select('id,dealer_code,portal,job_card_number,prowac_no,sap_claim,job_code,code_label,part_number,description,list_price,misc_chgs,labour_chgs,spl_labour_chgs,dealer_invc_no,invc_date,posting_document_number,posting_date')
+            .order('invc_date', { ascending: true })
+            .range(from, from + pageSize - 1)
+          if (pageErr) break
+          const rows = (data as SplCodeRow[] | null) ?? []
+          all.push(...rows)
+          if (rows.length < pageSize) break
+          from += pageSize
+        }
+        if (!active) return
+        setSplCodes(all)
+      } finally {
+        if (!active) return
+        setSplLoading(false)
+      }
+    }
+    void loadSplCodes()
+    return () => { active = false }
   }, [])
 
   const scopedDealerRules = useMemo(() => {
@@ -1692,58 +1764,91 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     return Array.from(years).sort().reverse()
   }, [records])
 
-  // ── Aggregated codes report from Claim Settlement data ─────────────────────
-  const codesReport = useMemo(() => {
-    // For the codes report we use ALL records (not date-filtered) — show full uploaded picture
-    // but respect location/fuel filter
-    const settlementRows = filteredRecords.filter(r => r.category === 'Claim Settlement')
-    const codeMap = new Map<string, {
-      jobCode: string; partNo: string; description: string;
-      listPrice: number; labour: number; miscChgs: number; splLabour: number; total: number;
-      count: number; portal: string; location: string;
-    }>()
 
-    for (const record of settlementRows) {
-      const src = record as unknown as { tableName: string; category: string }
-      void src // suppress lint
-      // Pull from source_row_data via our record fields + extra extraction
-      const jobCode = record.jobCardNumber || 'UNKNOWN'
-      const partNo  = record.dealerInvoiceNo || '—'
-      const desc    = record.vcmComments || record.model || '—'
-      const listPriceAmt = record.partsAmount
-      const labourAmt    = record.labourAmount
-      const miscAmt      = record.miscAmount
-      const splLabAmt    = record.specialAmount
-      const total        = listPriceAmt + labourAmt + miscAmt + splLabAmt
-
-      const key = `${jobCode}||${partNo}||${record.portal}||${record.location}`
-      if (codeMap.has(key)) {
-        const e = codeMap.get(key)!
-        e.listPrice += listPriceAmt
-        e.labour    += labourAmt
-        e.miscChgs  += miscAmt
-        e.splLabour += splLabAmt
-        e.total     += total
-        e.count     += 1
-      } else {
-        codeMap.set(key, {
-          jobCode, partNo, description: desc,
-          listPrice: listPriceAmt, labour: labourAmt,
-          miscChgs: miscAmt, splLabour: splLabAmt,
-          total, count: 1,
-          portal: record.portal, location: record.location,
-        })
-      }
-    }
-
-    return Array.from(codeMap.values())
-      .filter(r => r.total > 0 || r.count > 0)
-      .sort((a, b) => b.total - a.total)
-  }, [filteredRecords])
 
   const hasMissingDealerScope = useMemo(() => {
     return viewerDealerCodes.length === 0
   }, [viewerDealerCodes])
+
+  // ── SPL Codes computed data ───────────────────────────────────────────────
+  const splAvailableYears = useMemo(() => {
+    const yrs = new Set<string>()
+    for (const r of splCodes) {
+      if (!r.invc_date) continue
+      const yr = r.invc_date.slice(0, 4)
+      if (yr) yrs.add(yr)
+    }
+    return Array.from(yrs).sort().reverse()
+  }, [splCodes])
+
+  const splAvailableMonths = useMemo(() => {
+    if (splYearFilter === 'ALL') return []
+    const months = new Set<string>()
+    for (const r of splCodes) {
+      if (!r.invc_date || !r.invc_date.startsWith(splYearFilter)) continue
+      months.add(r.invc_date.slice(5, 7))
+    }
+    return Array.from(months).sort()
+  }, [splCodes, splYearFilter])
+
+  const splUniqueCodes = useMemo(() => {
+    return Array.from(new Set(splCodes.map(r => r.job_code))).sort()
+  }, [splCodes])
+
+  const splFiltered = useMemo(() => {
+    return splCodes.filter(r => {
+      if (splCodeFilter !== 'ALL' && r.job_code !== splCodeFilter) return false
+      if (splPortalFilter !== 'ALL' && r.portal !== splPortalFilter) return false
+      if (splYearFilter !== 'ALL') {
+        if (!r.invc_date || !r.invc_date.startsWith(splYearFilter)) return false
+        if (splMonthFilter !== 'ALL' && r.invc_date.slice(5, 7) !== splMonthFilter) return false
+      }
+      return true
+    })
+  }, [splCodes, splCodeFilter, splPortalFilter, splYearFilter, splMonthFilter])
+
+  // Month-wise pivot: rows = months, cols = codes
+  const splMonthlyPivot = useMemo(() => {
+    const codes = splCodeFilter !== 'ALL' ? [splCodeFilter] : splUniqueCodes
+    const monthMap = new Map<string, Record<string, number>>()
+
+    for (const r of splFiltered) {
+      if (!r.invc_date) continue
+      const yr = r.invc_date.slice(0, 4)
+      const mm = r.invc_date.slice(5, 7)
+      const monthKey = `${yr}-${mm}`
+      const rev = (r.spl_labour_chgs || 0) + (r.misc_chgs || 0) + (r.list_price || 0)
+
+      if (!monthMap.has(monthKey)) {
+        const empty: Record<string, number> = { _total: 0 }
+        for (const c of codes) empty[c] = 0
+        monthMap.set(monthKey, empty)
+      }
+      const entry = monthMap.get(monthKey)!
+      const code = r.job_code
+      if (code in entry) entry[code] = (entry[code] || 0) + rev
+      entry._total = (entry._total || 0) + rev
+    }
+
+    const monthNames: Record<string, string> = {
+      '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun',
+      '07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'
+    }
+
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, vals]) => ({
+        monthKey: key,
+        monthLabel: `${monthNames[key.slice(5,7)] || key.slice(5,7)} ${key.slice(0,4)}`,
+        codes: codes,
+        values: vals,
+      }))
+  }, [splFiltered, splUniqueCodes, splCodeFilter])
+
+  // Detail table: each row in splFiltered with all fields
+  const splDetailRows = useMemo(() => {
+    return splFiltered.slice().sort((a, b) => (a.invc_date || '').localeCompare(b.invc_date || ''))
+  }, [splFiltered])
 
   if (isLoading) {
     return (
@@ -3036,77 +3141,200 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
 
       {/* ══ DATA CODES TAB ══ */}
       {activeTab === 'codes' && (
-        <div>
-          <Card
-            title="Uploaded Data Codes — Claim Settlement"
-            sub={`Special / job codes applied in the system from warranty_claim_settlement_report_data · ${codesReport.length} unique code entries`}
-          >
-            {codesReport.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
-                No claim settlement data found for the current filters.
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                {/* Summary KPIs */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-                  {[
-                    { label: 'Total codes', value: codesReport.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
-                    { label: 'Total list price', value: formatAmountShort(codesReport.reduce((s,r) => s+r.listPrice, 0)), tone: '#4F46E5' },
-                    { label: 'Total labour', value: formatAmountShort(codesReport.reduce((s,r) => s+r.labour, 0)), tone: 'var(--success)' },
-                    { label: 'Grand total', value: formatAmountShort(codesReport.reduce((s,r) => s+r.total, 0)), tone: 'var(--danger)' },
-                  ].map((k,i) => (
-                    <div key={i} style={{ border: '1px solid var(--border)', borderTop: `3px solid ${k.tone}`, borderRadius: 'var(--r-sm)', padding: '12px 14px', background: 'var(--panel)' }}>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: k.tone }}>{k.value}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>{k.label}</div>
-                    </div>
-                  ))}
-                </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: 'var(--canvas)', borderBottom: '2px solid var(--border)' }}>
-                      {['#', 'Job Code', 'Part / Invoice No', 'Description / Model', 'Portal', 'Location', 'List Price', 'Labour', 'Misc', 'SPL Labour', 'Total', 'Count'].map((h, i) => (
-                        <th key={i} style={{ padding: '8px 12px', textAlign: i >= 6 ? 'right' : 'left', fontWeight: 700, color: 'var(--ink-2)', fontSize: 12, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {codesReport.map((row, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'var(--panel)' : '#fff' }}>
-                        <td style={{ padding: '7px 12px', color: 'var(--muted)', fontSize: 11 }}>{idx + 1}</td>
-                        <td style={{ padding: '7px 12px', fontWeight: 600, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>{row.jobCode}</td>
-                        <td style={{ padding: '7px 12px', fontFamily: 'monospace', fontSize: 11.5, color: 'var(--ink-2)' }}>{row.partNo}</td>
-                        <td style={{ padding: '7px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.description}>{row.description || '—'}</td>
-                        <td style={{ padding: '7px 12px' }}>
-                          <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 600,
-                            background: row.portal === 'EV' ? '#dcfce7' : '#eff6ff',
-                            color: row.portal === 'EV' ? '#16a34a' : '#2563eb' }}>{row.portal}</span>
-                        </td>
-                        <td style={{ padding: '7px 12px', fontSize: 12, color: 'var(--ink-2)' }}>{row.location || '—'}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.listPrice > 0 ? money(row.listPrice) : '—'}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.labour > 0 ? money(row.labour) : '—'}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.miscChgs > 0 ? money(row.miscChgs) : '—'}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.splLabour > 0 ? money(row.splLabour) : '—'}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>₹{money(row.total)}</td>
-                        <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--muted)', fontSize: 11.5 }}>{row.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--canvas)' }}>
-                      <td colSpan={6} style={{ padding: '8px 12px', fontWeight: 700, fontSize: 12 }}>TOTAL</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.listPrice, 0))}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.labour, 0))}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.miscChgs, 0))}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.splLabour, 0))}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>₹{money(codesReport.reduce((s,r) => s+r.total, 0))}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>{codesReport.reduce((s,r) => s+r.count, 0)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+          {/* ── Filter Bar ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginRight: 4 }}>FILTERS</span>
+
+            {/* Code Dropdown */}
+            <select value={splCodeFilter} onChange={e => setSplCodeFilter(e.target.value)}
+              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splCodeFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
+              <option value="ALL">All 9800xx codes</option>
+              {splUniqueCodes.map(c => (
+                <option key={c} value={c}>{c} — {SPL_CODE_LABELS[c] || c}</option>
+              ))}
+            </select>
+
+            {/* Portal */}
+            <select value={splPortalFilter} onChange={e => setSplPortalFilter(e.target.value)}
+              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splPortalFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
+              <option value="ALL">PV + EV</option>
+              <option value="PV">PV only</option>
+              <option value="EV">EV only</option>
+            </select>
+
+            {/* Year */}
+            <select value={splYearFilter} onChange={e => { setSplYearFilter(e.target.value); setSplMonthFilter('ALL') }}
+              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splYearFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
+              <option value="ALL">All years</option>
+              {splAvailableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+
+            {/* Month (only when year selected) */}
+            {splYearFilter !== 'ALL' && (
+              <select value={splMonthFilter} onChange={e => setSplMonthFilter(e.target.value)}
+                style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: splMonthFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
+                <option value="ALL">All months</option>
+                {splAvailableMonths.map(m => {
+                  const mLabel = new Date(2000, parseInt(m)-1, 1).toLocaleString('en-IN', { month: 'long' })
+                  return <option key={m} value={m}>{mLabel}</option>
+                })}
+              </select>
             )}
-          </Card>
+
+            {/* Reset */}
+            {(splCodeFilter !== 'ALL' || splPortalFilter !== 'ALL' || splYearFilter !== 'ALL') && (
+              <button onClick={() => { setSplCodeFilter('ALL'); setSplPortalFilter('ALL'); setSplYearFilter('ALL'); setSplMonthFilter('ALL') }}
+                style={{ padding: '6px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', background: '#fff', cursor: 'pointer' }}>
+                ✕ Clear
+              </button>
+            )}
+
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)' }}>
+              {splLoading ? 'Loading…' : `${splDetailRows.length} of ${splCodes.length} rows`}
+            </span>
+          </div>
+
+          {splLoading ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading SPL codes data…</div>
+          ) : splCodes.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No SPL code data uploaded yet.</div>
+          ) : (
+            <>
+              {/* ── KPI Summary Cards ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+                {[
+                  { label: 'Total rows', value: splDetailRows.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
+                  { label: 'SPL labour revenue', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.spl_labour_chgs || 0), 0)), tone: 'var(--danger)' },
+                  { label: 'List price', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.list_price || 0), 0)), tone: '#4F46E5' },
+                  { label: 'Misc charges', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.misc_chgs || 0), 0)), tone: 'var(--warn)' },
+                  { label: 'Grand total revenue', value: formatAmountShort(splDetailRows.reduce((s,r) => s + (r.spl_labour_chgs || 0) + (r.misc_chgs || 0) + (r.list_price || 0), 0)), tone: 'var(--success)' },
+                ].map((k, i) => (
+                  <div key={i} style={{ border: '1px solid var(--border)', borderTop: `3px solid ${k.tone}`, borderRadius: 'var(--r-sm)', padding: '12px 14px', background: 'var(--panel)' }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: k.tone }}>{k.value}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{k.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Month-wise Revenue Pivot ── */}
+              {splMonthlyPivot.length > 0 && (
+                <Card title="Month-wise Revenue — 9800xx Special Codes" sub={`SPL Labour + Misc + List Price · ${splCodeFilter !== 'ALL' ? `code ${splCodeFilter}` : 'all 9800xx codes'} · ${splPortalFilter !== 'ALL' ? splPortalFilter : 'PV + EV'}`}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: 'var(--canvas)', borderBottom: '2px solid var(--border)' }}>
+                          <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 700, fontSize: 12, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>Month</th>
+                          {splMonthlyPivot[0].codes.map(c => (
+                            <th key={c} style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontSize: 12, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                              {c}<div style={{ fontWeight: 400, fontSize: 10, color: 'var(--muted)' }}>{SPL_CODE_LABELS[c] || ''}</div>
+                            </th>
+                          ))}
+                          <th style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap' }}>TOTAL</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {splMonthlyPivot.map((row, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'var(--panel)' : '#fff' }}>
+                            <td style={{ padding: '8px 14px', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>{row.monthLabel}</td>
+                            {row.codes.map(c => (
+                              <td key={c} style={{ padding: '8px 14px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                {row.values[c] > 0 ? `₹${Math.round(row.values[c]).toLocaleString('en-IN')}` : '—'}
+                              </td>
+                            ))}
+                            <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 13 }}>
+                              ₹{Math.round(row.values._total || 0).toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--canvas)' }}>
+                          <td style={{ padding: '8px 14px', fontWeight: 700, fontSize: 12 }}>GRAND TOTAL</td>
+                          {(splMonthlyPivot[0]?.codes || []).map(c => {
+                            const total = splMonthlyPivot.reduce((s, r) => s + (r.values[c] || 0), 0)
+                            return <td key={c} style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', fontSize: 12 }}>
+                              {total > 0 ? `₹${Math.round(total).toLocaleString('en-IN')}` : '—'}
+                            </td>
+                          })}
+                          <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 13 }}>
+                            ₹{Math.round(splMonthlyPivot.reduce((s, r) => s + (r.values._total || 0), 0)).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {/* ── Detail Table ── */}
+              <Card title="Transaction Detail" sub={`All 9800xx code rows · filtered · SPL Labour Chgs is the primary revenue column`} pad={false}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--canvas)', borderBottom: '2px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
+                        {['#', 'Job Code', 'Code Name', 'Portal', 'Job Card', 'Prowac No', 'SAP Claim', 'Invoice Date', 'Dealer Invc', 'List Price', 'Misc', 'Labour', 'SPL Labour', 'Total Rev'].map((h, i) => (
+                          <th key={i} style={{ padding: '8px 10px', textAlign: i >= 9 ? 'right' : 'left', fontWeight: 700, color: 'var(--ink-2)', fontSize: 11, whiteSpace: 'nowrap', background: 'var(--canvas)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {splDetailRows.map((row, idx) => {
+                        const totalRev = (row.spl_labour_chgs || 0) + (row.misc_chgs || 0) + (row.list_price || 0)
+                        return (
+                          <tr key={row.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'var(--panel)' : '#fff' }}>
+                            <td style={{ padding: '6px 10px', color: 'var(--muted)', fontSize: 10 }}>{idx + 1}</td>
+                            <td style={{ padding: '6px 10px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>{row.job_code}</td>
+                            <td style={{ padding: '6px 10px', fontSize: 11.5 }}>{row.code_label || SPL_CODE_LABELS[row.job_code] || '—'}</td>
+                            <td style={{ padding: '6px 10px' }}>
+                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, fontWeight: 600,
+                                background: row.portal === 'EV' ? '#dcfce7' : '#eff6ff',
+                                color: row.portal === 'EV' ? '#16a34a' : '#2563eb' }}>{row.portal}</span>
+                            </td>
+                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.job_card_number}>{row.job_card_number}</td>
+                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.prowac_no || '—'}</td>
+                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.sap_claim || '—'}</td>
+                            <td style={{ padding: '6px 10px', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>{row.invc_date ? new Date(row.invc_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}</td>
+                            <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'monospace' }}>{row.dealer_invc_no || '—'}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{row.list_price > 0 ? money(row.list_price) : '—'}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{row.misc_chgs > 0 ? money(row.misc_chgs) : '—'}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{row.labour_chgs > 0 ? money(row.labour_chgs) : '—'}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace', fontSize: 12, color: totalRev > 50000 ? 'var(--danger)' : 'var(--ink)' }}>
+                              {row.spl_labour_chgs > 0 ? `₹${money(row.spl_labour_chgs)}` : '—'}
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>
+                              {totalRev > 0 ? `₹${money(totalRev)}` : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--canvas)' }}>
+                        <td colSpan={9} style={{ padding: '8px 10px', fontWeight: 700, fontSize: 12 }}>TOTAL ({splDetailRows.length} rows)</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.list_price||0), 0))}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.misc_chgs||0), 0))}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.labour_chgs||0), 0))}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>₹{money(splDetailRows.reduce((s,r) => s+(r.spl_labour_chgs||0), 0))}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace' }}>
+                          ₹{money(splDetailRows.reduce((s,r) => s+(r.spl_labour_chgs||0)+(r.misc_chgs||0)+(r.list_price||0), 0))}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </Card>
+            </>
+          )}
         </div>
       )}
     </div>
