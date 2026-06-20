@@ -19,6 +19,11 @@ interface ServiceTypeReportProps {
 type SortKey = 'serviceType' | 'totalLabourRevenue' | 'jobCardCount' | 'avgLabourRevenue'
 const GST_DIVISOR = 1.18
 
+function includeGst(value: number): number {
+  if (!Number.isFinite(value) || value === 0) return 0
+  return Math.round(value * GST_DIVISOR)
+}
+
 export default function ServiceTypeLabourRevenueReport({
   branch,
   dateFilter,
@@ -122,24 +127,24 @@ export default function ServiceTypeLabourRevenueReport({
     [filteredRows],
   )
 
-  const totalLabourRevenueExcludingGst = useMemo(
-    () => totals.totalLabourRevenue / GST_DIVISOR,
+  const totalLabourRevenueIncludingGst = useMemo(
+    () => includeGst(totals.totalLabourRevenue),
     [totals.totalLabourRevenue],
   )
 
-  const totalSparesRevenueExcludingGst = useMemo(
-    () => totals.totalSparesRevenue / GST_DIVISOR,
+  const totalSparesRevenueIncludingGst = useMemo(
+    () => includeGst(totals.totalSparesRevenue),
     [totals.totalSparesRevenue],
   )
 
-  const totalVasRevenueExcludingGst = useMemo(
-    () => totalVasRevenue / GST_DIVISOR,
+  const totalVasRevenueIncludingGst = useMemo(
+    () => includeGst(totalVasRevenue),
     [totalVasRevenue],
   )
 
   const totalRevenueFromLabourAndSpares = useMemo(
-    () => totalLabourRevenueExcludingGst + totalSparesRevenueExcludingGst,
-    [totalLabourRevenueExcludingGst, totalSparesRevenueExcludingGst],
+    () => totalLabourRevenueIncludingGst + totalSparesRevenueIncludingGst,
+    [totalLabourRevenueIncludingGst, totalSparesRevenueIncludingGst],
   )
 
   const topServiceType = useMemo(() => {
@@ -163,8 +168,8 @@ export default function ServiceTypeLabourRevenueReport({
 
   const overallAvgLabourPerJob = useMemo(() => {
     if (totals.totalJobs <= 0) return 0
-    return totalLabourRevenueExcludingGst / totals.totalJobs
-  }, [totals.totalJobs, totalLabourRevenueExcludingGst])
+    return totalLabourRevenueIncludingGst / totals.totalJobs
+  }, [totals.totalJobs, totalLabourRevenueIncludingGst])
 
   const sparesToLabourRatio = useMemo(() => {
     if (totals.totalLabourRevenue <= 0) return 0
@@ -184,11 +189,11 @@ export default function ServiceTypeLabourRevenueReport({
     const exportData = filteredRows.map((row, index) => ({
       Rank: index + 1,
       'Service Type': row.serviceType,
-      'Labour Revenue': formatCurrencyForExport(row.totalLabourRevenue),
-      'Spares Revenue': formatCurrencyForExport(row.totalSparesRevenue),
-      'Total Revenue': formatCurrencyForExport(row.totalRevenue),
+      'Labour Revenue': formatCurrencyForExport(includeGst(row.totalLabourRevenue)),
+      'Spares Revenue': formatCurrencyForExport(includeGst(row.totalSparesRevenue)),
+      'Total Revenue': formatCurrencyForExport(includeGst(row.totalRevenue)),
       'Job Cards': row.jobCardCount.toString(),
-      'Avg Revenue Per Job': formatCurrencyForExport(row.avgLabourRevenue),
+      'Avg Revenue Per Job': formatCurrencyForExport(includeGst(row.avgLabourRevenue)),
       'Labour Revenue Share %':
         totals.totalLabourRevenue > 0
           ? ((row.totalLabourRevenue / totals.totalLabourRevenue) * 100).toFixed(2)
@@ -208,10 +213,10 @@ export default function ServiceTypeLabourRevenueReport({
       'Service Type': row.serviceType,
       'Assigned To': row.assignedTo,
       'Service Advisor Name': row.serviceAdvisorName,
-      'Labour Revenue': formatCurrencyForExport(row.labourRevenue),
-      'Spares Revenue': formatCurrencyForExport(row.sparesRevenue),
-      'Total Revenue': formatCurrencyForExport(row.totalRevenue),
-      Invoice: formatCurrencyForExport(row.invoiceAmount),
+      'Labour Revenue': formatCurrencyForExport(includeGst(row.labourRevenue)),
+      'Spares Revenue': formatCurrencyForExport(includeGst(row.sparesRevenue)),
+      'Total Revenue': formatCurrencyForExport(includeGst(row.totalRevenue)),
+      Invoice: formatCurrencyForExport(includeGst(row.invoiceAmount)),
       'Job Card Number': row.jobCardNumber,
       'Chassis Number': row.chassisNumber,
     }))
@@ -257,13 +262,13 @@ export default function ServiceTypeLabourRevenueReport({
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">Total Labour Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-blue-900">
-              Rs. {Math.round(totalLabourRevenueExcludingGst).toLocaleString('en-IN')}
+              Rs. {totalLabourRevenueIncludingGst.toLocaleString('en-IN')}
             </p>
           </div>
           <div className="rounded-lg border border-violet-100 bg-violet-50 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-violet-600">Total Spares Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-violet-900">
-              Rs. {totalSparesRevenueExcludingGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              Rs. {totalSparesRevenueIncludingGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
@@ -283,7 +288,7 @@ export default function ServiceTypeLabourRevenueReport({
           <div className="rounded-lg border border-cyan-100 bg-cyan-50 px-4 py-3 sm:col-span-2 lg:col-span-4">
             <p className="text-xs font-medium uppercase tracking-wide text-cyan-600">Total Labour + VAS Revenue</p>
             <p className="mt-1 text-2xl font-semibold text-cyan-900">
-              Rs. {(totalLabourRevenueExcludingGst + totalVasRevenueExcludingGst).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              Rs. {(totalLabourRevenueIncludingGst + totalVasRevenueIncludingGst).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 sm:col-span-2 lg:col-span-2">
@@ -292,7 +297,7 @@ export default function ServiceTypeLabourRevenueReport({
               {topServiceType?.serviceType ?? 'N/A'}
             </p>
             <p className="mt-1 text-sm text-rose-700">
-              Rs. {Math.round((topServiceType?.totalLabourRevenue ?? 0) / GST_DIVISOR).toLocaleString('en-IN')}
+              Rs. {includeGst(topServiceType?.totalLabourRevenue ?? 0).toLocaleString('en-IN')}
             </p>
           </div>
           <div className="rounded-lg border border-fuchsia-100 bg-fuchsia-50 px-4 py-3 sm:col-span-2 lg:col-span-2">
@@ -381,7 +386,7 @@ export default function ServiceTypeLabourRevenueReport({
                     <div className="mb-1 flex items-center justify-between gap-3 text-xs text-gray-600">
                       <span className="truncate font-medium text-gray-700">{row.serviceType}</span>
                       <span className="text-right">
-                        Rs. {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · {share.toFixed(1)}%
+                        Rs. {includeGst(row.totalLabourRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · {share.toFixed(1)}%
                       </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-gray-100">
@@ -456,19 +461,19 @@ export default function ServiceTypeLabourRevenueReport({
                       <td className="px-3 py-2 text-right font-medium text-gray-600">{index + 1}</td>
                       <td className="px-3 py-2 text-gray-700">{row.serviceType}</td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        {includeGst(row.totalLabourRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalSparesRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        {includeGst(row.totalSparesRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        {includeGst(row.totalRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {row.jobCardCount.toLocaleString()}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
-                        {row.avgLabourRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        {includeGst(row.avgLabourRevenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-gray-900">
                         {share.toLocaleString('en-IN', { maximumFractionDigits: 1 })}%

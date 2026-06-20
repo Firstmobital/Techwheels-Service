@@ -8,11 +8,12 @@ import {
   Pie,
   PieChart,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 import {
+  type DateRangeFilter,
+  type DateRangePreset,
   getBranchLabourRevenueComparison,
   getFilteredJcChassisRows,
   getLabourKpiSummary,
@@ -26,12 +27,27 @@ import {
   type ServiceTypeLabourRevenue,
   type VasRevenueReportData,
 } from '../../../lib/reportQueries'
+import { REPORT_BRANCH_OPTIONS } from '../../../lib/branches'
 import type { ReportViewProps } from '../types'
 
 const PIE_COLORS = ['#2563eb', '#7c3aed', '#f59e0b']
 const LABOUR_BAR_COLORS = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#38bdf8', '#0ea5e9', '#0284c7', '#0369a1']
 const SPARES_BAR_COLORS = ['#6d28d9', '#7c3aed', '#8b5cf6', '#a78bfa', '#c084fc', '#d946ef', '#a21caf', '#86198f']
 const GST_DIVISOR = 1.18
+
+interface ServiceTypeBarDataPoint {
+  serviceType: string
+  totalLabourRevenue: number
+  totalSparesRevenue: number
+  totalRevenue: number
+  jobCardCount: number
+  labourShareInType: number
+}
+
+interface RevenueMixDataPoint {
+  name: string
+  value: number
+}
 
 function formatCurrency(value: number): string {
   return `₹${Math.round(value).toLocaleString('en-IN')}`
@@ -42,9 +58,26 @@ function pickColorByIndex(index: number, palette: string[]): string {
   return palette[index % palette.length]
 }
 
+function resolveFuelBranchFilter(branch: string, fuelType: 'ALL' | 'PV' | 'EV'): string {
+  if (fuelType === 'ALL') return branch
+
+  const normalized = String(branch ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  if (normalized.startsWith('sitapura')) {
+    return `Sitapura ${fuelType}`
+  }
+
+  if (normalized.startsWith('ajmer road')) {
+    return `Ajmer Road ${fuelType}`
+  }
+
+  return fuelType === 'PV' ? 'ALL_PV' : 'ALL_EV'
+}
+
 export default function LabourRevenueExecutiveSummaryReport({
   branch,
   dateFilter,
+  fuelType = 'ALL',
   serviceTypeFilter = 'ALL',
 }: ReportViewProps) {
   const [serviceTypeRows, setServiceTypeRows] = useState<ServiceTypeLabourRevenue[]>([])
@@ -63,9 +96,43 @@ export default function LabourRevenueExecutiveSummaryReport({
     totalVasCount: 0,
   })
   const [jcRows, setJcRows] = useState<FilteredJcChassisRow[]>([])
-  const [activeServiceTypeName, setActiveServiceTypeName] = useState<string>('')
+  const [selectedManpower, setSelectedManpower] = useState<ManpowerLabourRevenue | null>(null)
+  const [selectedServiceTypeDetail, setSelectedServiceTypeDetail] = useState<ServiceTypeBarDataPoint | null>(null)
+  const [selectedRevenueMixDetail, setSelectedRevenueMixDetail] = useState<RevenueMixDataPoint | null>(null)
+  const [selectedFuelType, setSelectedFuelType] = useState<'ALL' | 'PV' | 'EV'>(fuelType)
+  const [selectedBranch, setSelectedBranch] = useState<string>(branch)
+  const [selectedDatePreset, setSelectedDatePreset] = useState<DateRangePreset>(dateFilter.preset)
+  const [selectedManpowerFilter, setSelectedManpowerFilter] = useState<string>('ALL')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const effectiveDateFilter = useMemo<DateRangeFilter>(() => {
+    if (selectedDatePreset === 'custom') {
+      return dateFilter
+    }
+
+    return {
+      ...dateFilter,
+      preset: selectedDatePreset,
+    }
+  }, [dateFilter, selectedDatePreset])
+
+  const effectiveBranch = useMemo(
+    () => resolveFuelBranchFilter(selectedBranch, selectedFuelType),
+    [selectedBranch, selectedFuelType],
+  )
+
+  useEffect(() => {
+    setSelectedFuelType(fuelType)
+  }, [fuelType])
+
+  useEffect(() => {
+    setSelectedBranch(branch)
+  }, [branch])
+
+  useEffect(() => {
+    setSelectedDatePreset(dateFilter.preset)
+  }, [dateFilter.preset])
 
   useEffect(() => {
     let active = true
@@ -74,15 +141,15 @@ export default function LabourRevenueExecutiveSummaryReport({
     setError(null)
 
     Promise.all([
-      getServiceTypeLabourRevenue(branch, dateFilter, serviceTypeFilter),
-      getBranchLabourRevenueComparison(branch, dateFilter, serviceTypeFilter),
-      getManpowerWiseLabourRevenue(branch, dateFilter, {
+      getServiceTypeLabourRevenue(effectiveBranch, effectiveDateFilter, serviceTypeFilter),
+      getBranchLabourRevenueComparison(effectiveBranch, effectiveDateFilter, serviceTypeFilter),
+      getManpowerWiseLabourRevenue(effectiveBranch, effectiveDateFilter, {
         serviceType: serviceTypeFilter,
         parentProductLine: 'ALL',
       }),
-      getVasRevenueReport(branch, dateFilter, serviceTypeFilter),
-      getLabourKpiSummary(branch, dateFilter, serviceTypeFilter),
-      getFilteredJcChassisRows(branch, dateFilter, {
+      getVasRevenueReport(effectiveBranch, effectiveDateFilter, serviceTypeFilter),
+      getLabourKpiSummary(effectiveBranch, effectiveDateFilter, serviceTypeFilter),
+      getFilteredJcChassisRows(effectiveBranch, effectiveDateFilter, {
         serviceType: serviceTypeFilter,
         parentProductLine: 'ALL',
       }),
@@ -108,7 +175,7 @@ export default function LabourRevenueExecutiveSummaryReport({
     return () => {
       active = false
     }
-  }, [branch, dateFilter, serviceTypeFilter])
+  }, [effectiveBranch, effectiveDateFilter, serviceTypeFilter])
 
   const totals = useMemo(() => {
     const labourRevenue = serviceTypeRows.reduce((sum, row) => sum + row.totalLabourRevenue, 0)
@@ -174,18 +241,6 @@ export default function LabourRevenueExecutiveSummaryReport({
     [serviceTypeRows],
   )
 
-  useEffect(() => {
-    if (serviceTypeBarData.length === 0) {
-      setActiveServiceTypeName('')
-      return
-    }
-
-    setActiveServiceTypeName((prev) => {
-      if (prev && serviceTypeBarData.some((row) => row.serviceType === prev)) return prev
-      return serviceTypeBarData[0].serviceType
-    })
-  }, [serviceTypeBarData])
-
   const revenueMixData = useMemo(
     () => [
       { name: 'Labour', value: displayTotals.labourRevenue },
@@ -195,9 +250,28 @@ export default function LabourRevenueExecutiveSummaryReport({
     [displayTotals.labourRevenue, displayTotals.sparesRevenue, displayTotals.vasRevenue],
   )
 
+  const manpowerOptions = useMemo(() => {
+    const labels = Array.from(new Set(manpowerRows.map((row) => row.manpowerLabel).filter(Boolean)))
+    return labels.sort((a, b) => a.localeCompare(b))
+  }, [manpowerRows])
+
+  useEffect(() => {
+    if (selectedManpowerFilter === 'ALL') return
+    if (!manpowerOptions.includes(selectedManpowerFilter)) {
+      setSelectedManpowerFilter('ALL')
+    }
+  }, [manpowerOptions, selectedManpowerFilter])
+
   const topManpowerRows = useMemo(
-    () => [...manpowerRows].sort((a, b) => b.totalLabourRevenue - a.totalLabourRevenue).slice(0, 5),
-    [manpowerRows],
+    () => {
+      const filtered =
+        selectedManpowerFilter === 'ALL'
+          ? manpowerRows
+          : manpowerRows.filter((row) => row.manpowerLabel === selectedManpowerFilter)
+
+      return [...filtered].sort((a, b) => b.totalLabourRevenue - a.totalLabourRevenue).slice(0, 10)
+    },
+    [manpowerRows, selectedManpowerFilter],
   )
 
   const topBranchGrowth = useMemo(
@@ -231,14 +305,6 @@ export default function LabourRevenueExecutiveSummaryReport({
     return value > max ? value : max
   }, 0)
 
-  const activeServiceTypeRow =
-    serviceTypeBarData.find((row) => row.serviceType === activeServiceTypeName) ?? serviceTypeBarData[0] ?? null
-
-  const serviceTypeGlobalShare =
-    displayTotals.grandRevenue > 0 && activeServiceTypeRow
-      ? (activeServiceTypeRow.totalRevenue / displayTotals.grandRevenue) * 100
-      : 0
-
   return (
     <div className="space-y-5 rounded-2xl bg-gradient-to-b from-sky-50 via-blue-50 to-violet-50 p-2">
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 p-6 text-white shadow-sm">
@@ -249,10 +315,72 @@ export default function LabourRevenueExecutiveSummaryReport({
               Executive overview for labour, spares, VAS, branch momentum and manpower performance.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1">GST Excluded View</span>
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1">{totals.branchCount} Branches</span>
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1">{totals.manpowerCount} Manpower</span>
+          <div className="flex flex-col items-end gap-2">
+            <div className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 p-1 text-xs">
+              {(['ALL', 'PV', 'EV'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setSelectedFuelType(option)}
+                  className={[
+                    'rounded-full px-3 py-1 font-medium transition',
+                    selectedFuelType === option
+                      ? 'bg-white text-slate-900'
+                      : 'text-blue-100 hover:bg-white/20 hover:text-white',
+                  ].join(' ')}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            <div className="grid w-full gap-2 sm:grid-cols-3">
+              <label className="text-xs text-blue-100/90">
+                Branch
+                <select
+                  value={selectedBranch}
+                  onChange={(event) => setSelectedBranch(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-white/30 bg-white/10 px-2 py-1 text-xs text-white outline-none"
+                >
+                  <option value="ALL" className="text-slate-900">All Branches</option>
+                  {REPORT_BRANCH_OPTIONS.map((branchOption) => (
+                    <option key={branchOption} value={branchOption} className="text-slate-900">
+                      {branchOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-xs text-blue-100/90">
+                Date Range
+                <select
+                  value={selectedDatePreset}
+                  onChange={(event) => setSelectedDatePreset(event.target.value as DateRangePreset)}
+                  className="mt-1 w-full rounded-md border border-white/30 bg-white/10 px-2 py-1 text-xs text-white outline-none"
+                >
+                  <option value="today" className="text-slate-900">Today</option>
+                  <option value="this-week" className="text-slate-900">This Week</option>
+                  <option value="this-month" className="text-slate-900">This Month</option>
+                  <option value="last-month" className="text-slate-900">Last Month</option>
+                  <option value="custom" className="text-slate-900">Custom</option>
+                </select>
+              </label>
+
+              <label className="text-xs text-blue-100/90">
+                Manpower
+                <select
+                  value={selectedManpowerFilter}
+                  onChange={(event) => setSelectedManpowerFilter(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-white/30 bg-white/10 px-2 py-1 text-xs text-white outline-none"
+                >
+                  <option value="ALL" className="text-slate-900">All Manpower</option>
+                  {manpowerOptions.map((label) => (
+                    <option key={label} value={label} className="text-slate-900">
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -325,49 +453,35 @@ export default function LabourRevenueExecutiveSummaryReport({
                       data={serviceTypeBarData}
                       layout="vertical"
                       margin={{ top: 6, right: 12, left: 8, bottom: 6 }}
-                      onMouseMove={(state: { activeLabel?: string | number }) => {
-                        const label = state?.activeLabel
-                        if (typeof label === 'string' && label) {
-                          setActiveServiceTypeName(label)
-                        }
-                      }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis type="number" tickFormatter={(value: number) => `₹${Math.round(value / 1000)}k`} />
                       <YAxis dataKey="serviceType" type="category" width={0} hide />
-                      <Tooltip
-                        cursor={{ fill: '#eff6ff' }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload || payload.length === 0) return null
-
-                          const row = payload[0]?.payload as {
-                            serviceType: string
-                            totalLabourRevenue: number
-                            totalSparesRevenue: number
-                            totalRevenue: number
-                            jobCardCount: number
-                          }
-
-                          if (!row) return null
-
-                          return (
-                            <div className="rounded-xl border border-blue-100 bg-white p-3 shadow-lg">
-                              <p className="text-sm font-semibold text-slate-900">{row.serviceType}</p>
-                              <p className="mt-1 text-xs text-slate-600">Labour: {formatCurrency(row.totalLabourRevenue)}</p>
-                              <p className="text-xs text-slate-600">Spares: {formatCurrency(row.totalSparesRevenue)}</p>
-                              <p className="text-xs text-slate-600">Total: {formatCurrency(row.totalRevenue)}</p>
-                              <p className="text-xs text-slate-600">Job Cards: {row.jobCardCount.toLocaleString('en-IN')}</p>
-                            </div>
-                          )
-                        }}
-                      />
                       <Legend />
-                      <Bar dataKey="totalLabourRevenue" name="Labour" stackId="st" radius={[8, 0, 0, 8]}>
+                      <Bar
+                        dataKey="totalLabourRevenue"
+                        name="Labour"
+                        stackId="st"
+                        radius={[8, 0, 0, 8]}
+                        onClick={(data: unknown) => {
+                          const row = (data as { payload?: ServiceTypeBarDataPoint })?.payload
+                          if (row) setSelectedServiceTypeDetail(row)
+                        }}
+                      >
                         {serviceTypeBarData.map((row, index) => (
                           <Cell key={`labour-${row.serviceType}`} fill={pickColorByIndex(index, LABOUR_BAR_COLORS)} />
                         ))}
                       </Bar>
-                      <Bar dataKey="totalSparesRevenue" name="Spares" stackId="st" radius={[0, 8, 8, 0]}>
+                      <Bar
+                        dataKey="totalSparesRevenue"
+                        name="Spares"
+                        stackId="st"
+                        radius={[0, 8, 8, 0]}
+                        onClick={(data: unknown) => {
+                          const row = (data as { payload?: ServiceTypeBarDataPoint })?.payload
+                          if (row) setSelectedServiceTypeDetail(row)
+                        }}
+                      >
                         {serviceTypeBarData.map((row, index) => (
                           <Cell key={`spares-${row.serviceType}`} fill={pickColorByIndex(index, SPARES_BAR_COLORS)} />
                         ))}
@@ -376,29 +490,11 @@ export default function LabourRevenueExecutiveSummaryReport({
                   </ResponsiveContainer>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-3 lg:col-span-2">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Hovered Service Type</p>
-                  <p className="mt-1 truncate text-base font-semibold text-slate-900">
-                    {activeServiceTypeRow?.serviceType ?? 'N/A'}
+                <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-3 text-left lg:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Detailed view</p>
+                  <p className="mt-1 text-sm text-slate-700">
+                    Click any service-type bar to open the detailed report popup.
                   </p>
-
-                  <div className="mt-3 space-y-2 text-sm">
-                    <div className="rounded-lg bg-blue-50 px-3 py-2 text-blue-900">
-                      Labour: <span className="font-semibold">{formatCurrency(activeServiceTypeRow?.totalLabourRevenue ?? 0)}</span>
-                    </div>
-                    <div className="rounded-lg bg-violet-50 px-3 py-2 text-violet-900">
-                      Spares: <span className="font-semibold">{formatCurrency(activeServiceTypeRow?.totalSparesRevenue ?? 0)}</span>
-                    </div>
-                    <div className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
-                      Combined: <span className="font-semibold">{formatCurrency(activeServiceTypeRow?.totalRevenue ?? 0)}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 text-xs text-slate-600">
-                    <p>Contribution in dashboard: <span className="font-semibold">{serviceTypeGlobalShare.toFixed(1)}%</span></p>
-                    <p className="mt-1">Labour share in this type: <span className="font-semibold">{(activeServiceTypeRow?.labourShareInType ?? 0).toFixed(1)}%</span></p>
-                    <p className="mt-1">Job Cards: <span className="font-semibold">{(activeServiceTypeRow?.jobCardCount ?? 0).toLocaleString('en-IN')}</span></p>
-                  </div>
                 </div>
               </div>
             </div>
@@ -419,28 +515,15 @@ export default function LabourRevenueExecutiveSummaryReport({
                       outerRadius={100}
                       paddingAngle={2}
                       label={({ name, percent }) => `${name} ${(typeof percent === 'number' ? percent * 100 : 0).toFixed(1)}%`}
+                      onClick={(data: unknown) => {
+                        const row = data as RevenueMixDataPoint
+                        if (row?.name) setSelectedRevenueMixDetail(row)
+                      }}
                     >
                       {revenueMixData.map((entry, index) => (
                         <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload || payload.length === 0) return null
-                        const row = payload[0]?.payload as { name: string; value: number }
-                        if (!row) return null
-                        const share = displayTotals.grandRevenue > 0 ? (row.value / displayTotals.grandRevenue) * 100 : 0
-
-                        return (
-                          <div className="rounded-xl border border-violet-100 bg-white p-3 shadow-lg">
-                            <p className="text-sm font-semibold text-slate-900">{row.name}</p>
-                            <p className="mt-1 text-xs text-slate-600">Value: {formatCurrency(row.value)}</p>
-                            <p className="text-xs text-slate-600">Share: {share.toFixed(1)}%</p>
-                            <p className="text-xs text-slate-600">Total Base: {formatCurrency(displayTotals.grandRevenue)}</p>
-                          </div>
-                        )
-                      }}
-                    />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -485,55 +568,221 @@ export default function LabourRevenueExecutiveSummaryReport({
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/50 p-5 shadow-sm">
-              <h3 className="mb-3 text-sm font-semibold text-gray-900">Top Manpower Contribution</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Manpower</th>
-                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Revenue</th>
-                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Job Cards</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {topManpowerRows.map((row, index) => (
-                      <tr key={`${row.employeeCode}-${row.manpowerLabel}`} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-700">
-                          <span className="inline-flex items-center gap-2">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600">
-                              {index + 1}
-                            </span>
-                            {row.manpowerLabel}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium text-gray-900">{formatCurrency(row.totalLabourRevenue / GST_DIVISOR)}</td>
-                        <td className="px-3 py-2 text-right text-gray-700">{row.jobCardCount.toLocaleString('en-IN')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="mt-3 space-y-2">
-                  {topManpowerRows.map((row) => {
-                    const width = topManpowerRevenueMax > 0 ? (row.totalLabourRevenue / topManpowerRevenueMax) * 100 : 0
-                    return (
-                      <div key={`bar-${row.employeeCode}-${row.manpowerLabel}`}>
-                        <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-                          <span className="truncate">{row.manpowerLabel}</span>
-                          <span>{Math.round(width)}%</span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-500 via-violet-500 to-fuchsia-500"
-                            style={{ width: `${Math.max(width, 3)}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+              <h3 className="mb-3 text-sm font-semibold text-gray-900">Top Manpower Contribution (Top 10 Funnel)</h3>
+              <div className="mt-2 space-y-2">
+                {topManpowerRows.map((row, index) => {
+                  const width = topManpowerRevenueMax > 0 ? (row.totalLabourRevenue / topManpowerRevenueMax) * 100 : 0
+                  const startColor = pickColorByIndex(index, LABOUR_BAR_COLORS)
+                  const endColor = pickColorByIndex(index, SPARES_BAR_COLORS)
+                  return (
+                    <div key={`bar-${row.employeeCode}-${row.manpowerLabel}`} className="px-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedManpower(row)}
+                        className="mx-auto flex h-8 w-full items-center rounded-md px-3 text-left text-[11px] font-medium text-white shadow-sm transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                        style={{
+                          width: `${Math.max(28, width)}%`,
+                          background: `linear-gradient(90deg, ${startColor}, ${endColor})`,
+                        }}
+                      >
+                        <span className="truncate">{row.manpowerLabel}</span>
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
+
+          {selectedManpower ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setSelectedManpower(null)}>
+              <div
+                className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-semibold text-slate-900">{selectedManpower.manpowerLabel}</h4>
+                    <p className="mt-1 text-xs text-slate-500">Employee Code: {selectedManpower.employeeCode}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedManpower(null)}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Labour Revenue</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {formatCurrency(selectedManpower.totalLabourRevenue / GST_DIVISOR)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Job Cards</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {selectedManpower.jobCardCount.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Average Labour Revenue</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {formatCurrency(selectedManpower.avgLabourRevenue / GST_DIVISOR)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Location</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{selectedManpower.location || 'N/A'}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <p className="mb-2 text-xs uppercase text-slate-500">Service Type Breakup</p>
+                  <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200">
+                    <table className="min-w-full divide-y divide-slate-200 text-xs">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Service Type</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-600">Revenue</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-600">Job Cards</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedManpower.serviceTypeBreakup.length > 0 ? (
+                          selectedManpower.serviceTypeBreakup.map((item) => (
+                            <tr key={`${selectedManpower.employeeCode}-${item.serviceType}`}>
+                              <td className="px-3 py-2 text-slate-700">{item.serviceType}</td>
+                              <td className="px-3 py-2 text-right text-slate-900">
+                                {formatCurrency(item.totalLabourRevenue / GST_DIVISOR)}
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-700">{item.jobCardCount.toLocaleString('en-IN')}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} className="px-3 py-3 text-center text-slate-500">
+                              No service type breakup available.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedServiceTypeDetail ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setSelectedServiceTypeDetail(null)}>
+              <div
+                className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-semibold text-slate-900">{selectedServiceTypeDetail.serviceType}</h4>
+                    <p className="mt-1 text-xs text-slate-500">Service Type Detailed Report</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedServiceTypeDetail(null)}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg bg-blue-50 px-3 py-2">
+                    <p className="text-xs uppercase text-blue-700">Labour Revenue</p>
+                    <p className="mt-1 text-sm font-semibold text-blue-900">{formatCurrency(selectedServiceTypeDetail.totalLabourRevenue)}</p>
+                  </div>
+                  <div className="rounded-lg bg-violet-50 px-3 py-2">
+                    <p className="text-xs uppercase text-violet-700">Spares Revenue</p>
+                    <p className="mt-1 text-sm font-semibold text-violet-900">{formatCurrency(selectedServiceTypeDetail.totalSparesRevenue)}</p>
+                  </div>
+                  <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                    <p className="text-xs uppercase text-emerald-700">Combined Revenue</p>
+                    <p className="mt-1 text-sm font-semibold text-emerald-900">{formatCurrency(selectedServiceTypeDetail.totalRevenue)}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Job Cards</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {selectedServiceTypeDetail.jobCardCount.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                  <p>
+                    Contribution in dashboard:{' '}
+                    <span className="font-semibold">
+                      {displayTotals.grandRevenue > 0
+                        ? ((selectedServiceTypeDetail.totalRevenue / displayTotals.grandRevenue) * 100).toFixed(1)
+                        : '0.0'}
+                      %
+                    </span>
+                  </p>
+                  <p className="mt-1">
+                    Labour share in service type: <span className="font-semibold">{selectedServiceTypeDetail.labourShareInType.toFixed(1)}%</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedRevenueMixDetail ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setSelectedRevenueMixDetail(null)}>
+              <div
+                className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-semibold text-slate-900">{selectedRevenueMixDetail.name} - Detailed Report</h4>
+                    <p className="mt-1 text-xs text-slate-500">Revenue Mix Drilldown</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRevenueMixDetail(null)}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Segment Value</p>
+                    <p className="mt-1 font-semibold text-slate-900">{formatCurrency(selectedRevenueMixDetail.value)}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Share of Grand Revenue</p>
+                    <p className="mt-1 font-semibold text-slate-900">
+                      {displayTotals.grandRevenue > 0
+                        ? ((selectedRevenueMixDetail.value / displayTotals.grandRevenue) * 100).toFixed(1)
+                        : '0.0'}
+                      %
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-500">Grand Revenue Base</p>
+                    <p className="mt-1 font-semibold text-slate-900">{formatCurrency(displayTotals.grandRevenue)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-5 lg:grid-cols-3">
             <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/60 via-white to-indigo-50/60 p-5 shadow-sm lg:col-span-2">
