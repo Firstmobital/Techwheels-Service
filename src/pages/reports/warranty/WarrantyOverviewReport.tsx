@@ -3434,6 +3434,177 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 </Card>
               )}
 
+
+
+          {/* ══════════════════════════════════════════════════════════════════
+              SECTION B — NON-9800xx LABOUR CONSOLIDATION
+          ══════════════════════════════════════════════════════════════════ */}
+          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--ink)', borderBottom: '2px solid var(--border)', paddingBottom: 8, marginTop: 8 }}>
+            🔧 Section B — All Other Job Codes (Labour Consolidation)
+          </div>
+
+          {/* Labour Filter Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginRight: 4 }}>FILTERS</span>
+
+            {/* Job Code multi-select dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setLabourCodeDropOpen(v => !v); setLabourMonthDropOpen(false) }}
+                style={{ padding: '7px 28px 7px 10px', borderRadius: 'var(--r-sm)', border: `1px solid ${labourCodeFilters.length > 0 ? 'var(--accent)' : 'var(--border)'}`, fontSize: 13, cursor: 'pointer', background: labourCodeFilters.length > 0 ? 'var(--accent-soft)' : '#fff', color: labourCodeFilters.length > 0 ? 'var(--accent)' : 'var(--ink-2)', fontWeight: labourCodeFilters.length > 0 ? 600 : 400, whiteSpace: 'nowrap',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}>
+                {labourCodeFilters.length === 0 ? 'All job codes' : `${labourCodeFilters.length} code${labourCodeFilters.length > 1 ? 's' : ''} selected`}
+              </button>
+              {labourCodeDropOpen && (
+                <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: 220, maxHeight: 300, overflowY: 'auto', padding: '6px 0' }}>
+                  <div
+                    onClick={() => setLabourCodeFilters([])}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 13, background: labourCodeFilters.length === 0 ? 'var(--accent-soft)' : '#fff', color: labourCodeFilters.length === 0 ? 'var(--accent)' : 'var(--ink-2)' }}>
+                    <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${labourCodeFilters.length === 0 ? 'var(--accent)' : '#ccc'}`, background: labourCodeFilters.length === 0 ? 'var(--accent)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>
+                      {labourCodeFilters.length === 0 ? '✓' : ''}
+                    </span>
+                    All job codes ({labourUniqueCodes.length} total)
+                  </div>
+                  {labourUniqueCodes.map(c => {
+                    const active = labourCodeFilters.includes(c)
+                    return (
+                      <div key={c}
+                        onClick={() => setLabourCodeFilters(prev => active ? prev.filter(x => x !== c) : [...prev, c])}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', cursor: 'pointer', fontSize: 12, background: active ? '#f0f9ff' : '#fff', color: active ? '#1e40af' : 'var(--ink-2)' }}>
+                        <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? 'var(--accent)' : '#ccc'}`, background: active ? 'var(--accent)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', flexShrink: 0 }}>
+                          {active ? '✓' : ''}
+                        </span>
+                        <span style={{ fontFamily: 'monospace' }}>{c}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Month multi-select dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setLabourMonthDropOpen(v => !v); setLabourCodeDropOpen(false) }}
+                style={{ padding: '7px 28px 7px 10px', borderRadius: 'var(--r-sm)', border: `1px solid ${labourMonthFilters.length > 0 ? '#4F46E5' : 'var(--border)'}`, fontSize: 13, cursor: 'pointer', background: labourMonthFilters.length > 0 ? '#EEF2FF' : '#fff', color: labourMonthFilters.length > 0 ? '#4F46E5' : 'var(--ink-2)', fontWeight: labourMonthFilters.length > 0 ? 600 : 400, whiteSpace: 'nowrap',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}>
+                {labourMonthFilters.length === 0 ? 'All months' : `${labourMonthFilters.length} month${labourMonthFilters.length > 1 ? 's' : ''} selected`}
+              </button>
+              {labourMonthDropOpen && (
+                <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: 180, maxHeight: 300, overflowY: 'auto', padding: '6px 0' }}>
+                  <div
+                    onClick={() => setLabourMonthFilters([])}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 13, background: labourMonthFilters.length === 0 ? '#EEF2FF' : '#fff', color: labourMonthFilters.length === 0 ? '#4F46E5' : 'var(--ink-2)' }}>
+                    <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${labourMonthFilters.length === 0 ? '#4F46E5' : '#ccc'}`, background: labourMonthFilters.length === 0 ? '#4F46E5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>
+                      {labourMonthFilters.length === 0 ? '✓' : ''}
+                    </span>
+                    All months
+                  </div>
+                  {labourAvailableMonths.map(ym => {
+                    const [yr, mm] = ym.split('-')
+                    const MN: Record<string,string> = { '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec' }
+                    const active = labourMonthFilters.includes(ym)
+                    return (
+                      <div key={ym}
+                        onClick={() => setLabourMonthFilters(prev => active ? prev.filter(x => x !== ym) : [...prev, ym])}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', fontSize: 13, background: active ? '#EEF2FF' : '#fff', color: active ? '#4F46E5' : 'var(--ink-2)' }}>
+                        <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? '#4F46E5' : '#ccc'}`, background: active ? '#4F46E5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', flexShrink: 0 }}>
+                          {active ? '✓' : ''}
+                        </span>
+                        {`${MN[mm]||mm} ${yr}`}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Portal */}
+            <select value={labourPortalFilter} onChange={e => setLabourPortalFilter(e.target.value)}
+              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: labourPortalFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
+              <option value="ALL">PV + EV</option>
+              <option value="PV">PV only</option>
+              <option value="EV">EV only</option>
+            </select>
+
+            {(labourCodeFilters.length > 0 || labourPortalFilter !== 'ALL' || labourMonthFilters.length > 0) && (
+              <button onClick={() => { setLabourCodeFilters([]); setLabourPortalFilter('ALL'); setLabourMonthFilters([]); setLabourCodeDropOpen(false); setLabourMonthDropOpen(false) }}
+                style={{ padding: '6px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', background: '#fff', cursor: 'pointer' }}>
+                ✕ Clear
+              </button>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)' }}>
+              {labourLoading ? 'Loading…' : `${labourFiltered.length.toLocaleString('en-IN')} of ${labourData.length.toLocaleString('en-IN')} rows`}
+            </span>
+          </div>
+
+          {labourLoading ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading labour data…</div>
+          ) : (
+            <>
+              {/* Labour KPI Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+                {[
+                  { label: 'Total rows', value: labourFiltered.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
+                  { label: 'Labour charges', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.labour_chgs||0),0)), tone: 'var(--success)' },
+                  { label: 'Parts NDP', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.ndp||0),0)), tone: '#4F46E5' },
+                  { label: 'Unique job codes', value: new Set(labourFiltered.map(r=>r.job_code)).size.toLocaleString('en-IN'), tone: 'var(--warn)' },
+                ].map((k,i) => (
+                  <div key={i} style={{ border:'1px solid var(--border)',borderTop:`3px solid ${k.tone}`,borderRadius:'var(--r-sm)',padding:'12px 14px',background:'var(--panel)' }}>
+                    <div style={{ fontSize:20,fontWeight:700,color:k.tone }}>{k.value}</div>
+                    <div style={{ fontSize:11,color:'var(--muted)',marginTop:4 }}>{k.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Month-wise Labour Pivot */}
+              {labourMonthlyPivot.length > 0 && (
+                <Card title="Month-wise Labour Consolidation — All Non-9800xx Codes"
+                  sub={`Labour Chgs + Parts NDP · ${labourCodeFilters.length>0?`${labourCodeFilters.length} codes selected`:'all job codes ('+labourUniqueCodes.length+')'} · ${labourPortalFilter!=='ALL'?labourPortalFilter:'PV + EV'}`}>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
+                      <thead>
+                        <tr style={{ background:'var(--canvas)',borderBottom:'2px solid var(--border)' }}>
+                          {['Month','Rows','Labour Charges','Parts (NDP)','List Price','Misc Chgs','Total Labour + NDP'].map((h,i) => (
+                            <th key={i} style={{ padding:'8px 14px',textAlign:i===0||i===1?'left':'right',fontWeight:700,fontSize:12,color:i===6?'var(--success)':'var(--ink-2)',whiteSpace:'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {labourMonthlyPivot.map((row,idx) => (
+                          <tr key={idx} style={{ borderBottom:'1px solid var(--border)',background:idx%2===0?'var(--panel)':'#fff' }}>
+                            <td style={{ padding:'8px 14px',fontWeight:600,fontSize:13,whiteSpace:'nowrap' }}>{row.label}</td>
+                            <td style={{ padding:'8px 14px',fontSize:12,color:'var(--muted)' }}>{row.rows.toLocaleString('en-IN')}</td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,fontWeight:600 }}>₹{Math.round(row.labour).toLocaleString('en-IN')}</td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,color:'#4F46E5' }}>₹{Math.round(row.ndp).toLocaleString('en-IN')}</td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12,color:'var(--muted)' }}>₹{Math.round(row.listPrice).toLocaleString('en-IN')}</td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12,color:'var(--muted)' }}>₹{Math.round(row.misc).toLocaleString('en-IN')}</td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:13,color:'var(--success)' }}>₹{Math.round(row.labour+row.ndp).toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop:'2px solid var(--border)',background:'var(--canvas)' }}>
+                          <td style={{ padding:'8px 14px',fontWeight:700,fontSize:12 }}>GRAND TOTAL</td>
+                          <td style={{ padding:'8px 14px',fontWeight:700,fontSize:12 }}>{labourFiltered.length.toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labour,0)).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'#4F46E5' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.ndp,0)).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--muted)' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.listPrice,0)).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--muted)' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.misc,0)).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--success)',fontSize:13 }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labour+r.ndp,0)).toLocaleString('en-IN')}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+
               {/* ── Month-wise Parts Consumption: NDP (Col J) + Labour Col N + SPL Labour Col O ── */}
               {splMonthlyPivot.length > 0 && splMonthlyPivot.some(r=>(r.ndpValues._total||0)>0) && (
                 <Card
@@ -3603,175 +3774,6 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                   </table>
                 </div>
               </Card>
-            </>
-          )}
-
-          {/* ══════════════════════════════════════════════════════════════════
-              SECTION B — NON-9800xx LABOUR CONSOLIDATION
-          ══════════════════════════════════════════════════════════════════ */}
-          <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--ink)', borderBottom: '2px solid var(--border)', paddingBottom: 8, marginTop: 8 }}>
-            🔧 Section B — All Other Job Codes (Labour Consolidation)
-          </div>
-
-          {/* Labour Filter Bar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginRight: 4 }}>FILTERS</span>
-
-            {/* Job Code multi-select dropdown */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => { setLabourCodeDropOpen(v => !v); setLabourMonthDropOpen(false) }}
-                style={{ padding: '7px 28px 7px 10px', borderRadius: 'var(--r-sm)', border: `1px solid ${labourCodeFilters.length > 0 ? 'var(--accent)' : 'var(--border)'}`, fontSize: 13, cursor: 'pointer', background: labourCodeFilters.length > 0 ? 'var(--accent-soft)' : '#fff', color: labourCodeFilters.length > 0 ? 'var(--accent)' : 'var(--ink-2)', fontWeight: labourCodeFilters.length > 0 ? 600 : 400, whiteSpace: 'nowrap',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}>
-                {labourCodeFilters.length === 0 ? 'All job codes' : `${labourCodeFilters.length} code${labourCodeFilters.length > 1 ? 's' : ''} selected`}
-              </button>
-              {labourCodeDropOpen && (
-                <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: 220, maxHeight: 300, overflowY: 'auto', padding: '6px 0' }}>
-                  <div
-                    onClick={() => setLabourCodeFilters([])}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 13, background: labourCodeFilters.length === 0 ? 'var(--accent-soft)' : '#fff', color: labourCodeFilters.length === 0 ? 'var(--accent)' : 'var(--ink-2)' }}>
-                    <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${labourCodeFilters.length === 0 ? 'var(--accent)' : '#ccc'}`, background: labourCodeFilters.length === 0 ? 'var(--accent)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>
-                      {labourCodeFilters.length === 0 ? '✓' : ''}
-                    </span>
-                    All job codes ({labourUniqueCodes.length} total)
-                  </div>
-                  {labourUniqueCodes.map(c => {
-                    const active = labourCodeFilters.includes(c)
-                    return (
-                      <div key={c}
-                        onClick={() => setLabourCodeFilters(prev => active ? prev.filter(x => x !== c) : [...prev, c])}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', cursor: 'pointer', fontSize: 12, background: active ? '#f0f9ff' : '#fff', color: active ? '#1e40af' : 'var(--ink-2)' }}>
-                        <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? 'var(--accent)' : '#ccc'}`, background: active ? 'var(--accent)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', flexShrink: 0 }}>
-                          {active ? '✓' : ''}
-                        </span>
-                        <span style={{ fontFamily: 'monospace' }}>{c}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Month multi-select dropdown */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => { setLabourMonthDropOpen(v => !v); setLabourCodeDropOpen(false) }}
-                style={{ padding: '7px 28px 7px 10px', borderRadius: 'var(--r-sm)', border: `1px solid ${labourMonthFilters.length > 0 ? '#4F46E5' : 'var(--border)'}`, fontSize: 13, cursor: 'pointer', background: labourMonthFilters.length > 0 ? '#EEF2FF' : '#fff', color: labourMonthFilters.length > 0 ? '#4F46E5' : 'var(--ink-2)', fontWeight: labourMonthFilters.length > 0 ? 600 : 400, whiteSpace: 'nowrap',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}>
-                {labourMonthFilters.length === 0 ? 'All months' : `${labourMonthFilters.length} month${labourMonthFilters.length > 1 ? 's' : ''} selected`}
-              </button>
-              {labourMonthDropOpen && (
-                <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 100, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: 180, maxHeight: 300, overflowY: 'auto', padding: '6px 0' }}>
-                  <div
-                    onClick={() => setLabourMonthFilters([])}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 13, background: labourMonthFilters.length === 0 ? '#EEF2FF' : '#fff', color: labourMonthFilters.length === 0 ? '#4F46E5' : 'var(--ink-2)' }}>
-                    <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${labourMonthFilters.length === 0 ? '#4F46E5' : '#ccc'}`, background: labourMonthFilters.length === 0 ? '#4F46E5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff' }}>
-                      {labourMonthFilters.length === 0 ? '✓' : ''}
-                    </span>
-                    All months
-                  </div>
-                  {labourAvailableMonths.map(ym => {
-                    const [yr, mm] = ym.split('-')
-                    const MN: Record<string,string> = { '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec' }
-                    const active = labourMonthFilters.includes(ym)
-                    return (
-                      <div key={ym}
-                        onClick={() => setLabourMonthFilters(prev => active ? prev.filter(x => x !== ym) : [...prev, ym])}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', cursor: 'pointer', fontSize: 13, background: active ? '#EEF2FF' : '#fff', color: active ? '#4F46E5' : 'var(--ink-2)' }}>
-                        <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? '#4F46E5' : '#ccc'}`, background: active ? '#4F46E5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', flexShrink: 0 }}>
-                          {active ? '✓' : ''}
-                        </span>
-                        {`${MN[mm]||mm} ${yr}`}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Portal */}
-            <select value={labourPortalFilter} onChange={e => setLabourPortalFilter(e.target.value)}
-              style={{ padding: '7px 24px 7px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 13, color: 'var(--ink-2)', background: labourPortalFilter !== 'ALL' ? 'var(--accent-soft)' : '#fff', cursor: 'pointer', appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M0 0l5 7 5-7z'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center' }}>
-              <option value="ALL">PV + EV</option>
-              <option value="PV">PV only</option>
-              <option value="EV">EV only</option>
-            </select>
-
-            {(labourCodeFilters.length > 0 || labourPortalFilter !== 'ALL' || labourMonthFilters.length > 0) && (
-              <button onClick={() => { setLabourCodeFilters([]); setLabourPortalFilter('ALL'); setLabourMonthFilters([]); setLabourCodeDropOpen(false); setLabourMonthDropOpen(false) }}
-                style={{ padding: '6px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--muted)', background: '#fff', cursor: 'pointer' }}>
-                ✕ Clear
-              </button>
-            )}
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)' }}>
-              {labourLoading ? 'Loading…' : `${labourFiltered.length.toLocaleString('en-IN')} of ${labourData.length.toLocaleString('en-IN')} rows`}
-            </span>
-          </div>
-
-          {labourLoading ? (
-            <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading labour data…</div>
-          ) : (
-            <>
-              {/* Labour KPI Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
-                {[
-                  { label: 'Total rows', value: labourFiltered.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
-                  { label: 'Labour charges', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.labour_chgs||0),0)), tone: 'var(--success)' },
-                  { label: 'Parts NDP', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.ndp||0),0)), tone: '#4F46E5' },
-                  { label: 'Unique job codes', value: new Set(labourFiltered.map(r=>r.job_code)).size.toLocaleString('en-IN'), tone: 'var(--warn)' },
-                ].map((k,i) => (
-                  <div key={i} style={{ border:'1px solid var(--border)',borderTop:`3px solid ${k.tone}`,borderRadius:'var(--r-sm)',padding:'12px 14px',background:'var(--panel)' }}>
-                    <div style={{ fontSize:20,fontWeight:700,color:k.tone }}>{k.value}</div>
-                    <div style={{ fontSize:11,color:'var(--muted)',marginTop:4 }}>{k.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Month-wise Labour Pivot */}
-              {labourMonthlyPivot.length > 0 && (
-                <Card title="Month-wise Labour Consolidation — All Non-9800xx Codes"
-                  sub={`Labour Chgs + Parts NDP · ${labourCodeFilters.length>0?`${labourCodeFilters.length} codes selected`:'all job codes ('+labourUniqueCodes.length+')'} · ${labourPortalFilter!=='ALL'?labourPortalFilter:'PV + EV'}`}>
-                  <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
-                      <thead>
-                        <tr style={{ background:'var(--canvas)',borderBottom:'2px solid var(--border)' }}>
-                          {['Month','Rows','Labour Charges','Parts (NDP)','List Price','Misc Chgs','Total Labour + NDP'].map((h,i) => (
-                            <th key={i} style={{ padding:'8px 14px',textAlign:i===0||i===1?'left':'right',fontWeight:700,fontSize:12,color:i===6?'var(--success)':'var(--ink-2)',whiteSpace:'nowrap' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {labourMonthlyPivot.map((row,idx) => (
-                          <tr key={idx} style={{ borderBottom:'1px solid var(--border)',background:idx%2===0?'var(--panel)':'#fff' }}>
-                            <td style={{ padding:'8px 14px',fontWeight:600,fontSize:13,whiteSpace:'nowrap' }}>{row.label}</td>
-                            <td style={{ padding:'8px 14px',fontSize:12,color:'var(--muted)' }}>{row.rows.toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,fontWeight:600 }}>₹{Math.round(row.labour).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,color:'#4F46E5' }}>₹{Math.round(row.ndp).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12,color:'var(--muted)' }}>₹{Math.round(row.listPrice).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12,color:'var(--muted)' }}>₹{Math.round(row.misc).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:13,color:'var(--success)' }}>₹{Math.round(row.labour+row.ndp).toLocaleString('en-IN')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr style={{ borderTop:'2px solid var(--border)',background:'var(--canvas)' }}>
-                          <td style={{ padding:'8px 14px',fontWeight:700,fontSize:12 }}>GRAND TOTAL</td>
-                          <td style={{ padding:'8px 14px',fontWeight:700,fontSize:12 }}>{labourFiltered.length.toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labour,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'#4F46E5' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.ndp,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--muted)' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.listPrice,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--muted)' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.misc,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--success)',fontSize:13 }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labour+r.ndp,0)).toLocaleString('en-IN')}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </Card>
-              )}
             </>
           )}
         </div>
