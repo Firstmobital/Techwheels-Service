@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getTableColumns } from '../../../lib/getTableColumns'
 import { supabase } from '../../../lib/supabase'
 import type { ReportViewProps } from '../types'
+import { MasterDataUploadSection } from './MasterDataUploadSection'
 
 interface ColumnNullCountRow {
   columnName: string
@@ -67,6 +68,7 @@ export default function MasterDataNullCountsReport(_props: ReportViewProps) {
   const [totalRows, setTotalRows] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -94,7 +96,7 @@ export default function MasterDataNullCountsReport(_props: ReportViewProps) {
     return () => {
       active = false
     }
-  }, [])
+  }, [reloadKey])
 
   const summary = useMemo(() => {
     const totalNullCells = rows.reduce((sum, row) => sum + row.nullCount, 0)
@@ -135,6 +137,9 @@ export default function MasterDataNullCountsReport(_props: ReportViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Upload section */}
+      <MasterDataUploadSection onUploadComplete={() => setReloadKey((k) => k + 1)} />
 
       {isLoading ? (
         <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 shadow-sm">
