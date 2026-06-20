@@ -376,8 +376,11 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
           .map((part, idx) => ({
             part_index: Number.isFinite(Number(part?.part_index)) ? Number(part.part_index) : idx,
             status: part?.status === 'approved' || part?.status === 'rejected' || part?.status === 'pending' ? part.status : 'pending',
+            decided_at: part?.decided_at ?? null,
+            decided_by: part?.decided_by ?? null,
             approval_photo_bucket: part?.approval_photo_bucket ?? null,
             approval_photo_path: part?.approval_photo_path ?? null,
+            approval_photo_file_name: part?.approval_photo_file_name ?? null,
           }))
       : []
     const legacyDecisionStatus: AdditionalApprovalDecisionStatus = legacyStatus === 'approved' || legacyStatus === 'rejected' || legacyStatus === 'pending'

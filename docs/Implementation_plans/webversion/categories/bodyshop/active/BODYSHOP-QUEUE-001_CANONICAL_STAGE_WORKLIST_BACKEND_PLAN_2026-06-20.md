@@ -284,7 +284,7 @@ Stage 11 (Floor Assignment / Floor Work Completion Gate):
 1. additional_approval_requested from additional_approval parser.
 2. done(S12) from additional approval resolution predicate.
 3. floor_completed from floor-stage completion lookup.
-4. done(S11) = floor_completed AND done(S10) AND (not additional_approval_requested OR done(S12)).
+4. done(S11) = floor_completed AND (not additional_approval_requested OR done(S12)).
 5. pending(S11) = ready_10_11 and not done(S11).
 
 Stage 12 (Additional Approval):

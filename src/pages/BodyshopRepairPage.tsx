@@ -1842,12 +1842,31 @@ export default function BodyshopRepairPage() {
         }
       }
 
-      const updated = flow.effectiveCurrentStage <= 4
-        ? await updateRepairCard(selected.id, {
-            current_stage: flow.effectiveNextStage,
-            current_stage_name: STAGE_LABELS[flow.effectiveNextStage] ?? '',
-          })
-        : await advanceStage(selected.id, selected)
+      if (flow.effectiveCurrentStage === 11 && !floorStageCompleted) {
+        toast_('Mark BS Floor Completed on Bodyshop Floor before advancing from Stage 11', false)
+        return
+      }
+
+      let updated: RepairCard
+      if (flow.effectiveCurrentStage <= 4) {
+        updated = await updateRepairCard(selected.id, {
+          current_stage: flow.effectiveNextStage,
+          current_stage_name: STAGE_LABELS[flow.effectiveNextStage] ?? '',
+        })
+      } else if (selected.current_stage === 11) {
+        const stage12Done = (
+          (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
+          || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
+          || selected.current_stage > 12
+        )
+        const targetStage = (!additionalApprovalRequested || stage12Done) ? 13 : 12
+        updated = await updateRepairCard(selected.id, {
+          current_stage: targetStage,
+          current_stage_name: STAGE_LABELS[targetStage] ?? '',
+        })
+      } else {
+        updated = await advanceStage(selected.id, selected)
+      }
 
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
@@ -3276,7 +3295,7 @@ export default function BodyshopRepairPage() {
       || effectiveCurrentStage > 12
     )
     // Stage 11 completes only when floor is completed and all required upstream gates are complete.
-    const stage11Done = floorCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
+    const stage11Done = floorCompleted && (!additionalApprovalRequested || stage12Done)
 
     const stage10Ready = stage1Done
       && stage2Done
@@ -4212,7 +4231,7 @@ export default function BodyshopRepairPage() {
                     || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
                     || effectiveCurrentStage > 12
                   )
-                  const stage11Done = floorStageCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
+                  const stage11Done = floorStageCompleted && (!additionalApprovalRequested || stage12Done)
                   // Trust persisted progression for early intake milestones on advanced cards.
                   const stage1Done = milestones.stage1Done || effectiveCurrentStage > 1
                   const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
@@ -4354,13 +4373,25 @@ export default function BodyshopRepairPage() {
                     const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                     const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                     const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
+                    const stage12Done = (
+                      (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
+                      || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
+                      || flow.effectiveCurrentStage > 12
+                    )
+                    const stage11AdvanceTarget = flow.effectiveCurrentStage === 11
+                      ? (floorStageCompleted
+                          ? ((!additionalApprovalRequested || stage12Done) ? 13 : 12)
+                          : 11)
+                      : flow.effectiveNextStage
                     return (
                   <button className="btn btn--primary brx-stp-advance" onClick={() => void handleAdvance()} disabled={saving}>
                       {saving
                         ? 'Saving…'
+                        : flow.effectiveCurrentStage === 11 && !floorStageCompleted
+                          ? '✓ Mark BS Floor Completed first'
                         : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
                           ? '✓ Mark Stage 10 Done (Floor already active)'
-                          : `✓ Stage ${flow.effectiveCurrentStage} Done → Stage ${flow.effectiveNextStage}`}
+                          : `✓ Stage ${flow.effectiveCurrentStage} Done → Stage ${stage11AdvanceTarget}`}
                   </button>
                     )
                   })()}
@@ -4456,7 +4487,7 @@ export default function BodyshopRepairPage() {
                         || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
                         || effectiveCurrentStage > 12
                       )
-                      const stage11Done = floorStageCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
+                      const stage11Done = floorStageCompleted && (!additionalApprovalRequested || stage12Done)
                       // Trust persisted progression for early intake milestones on advanced cards.
                       const stage1Done = milestones.stage1Done || effectiveCurrentStage > 1
                       const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
@@ -4519,13 +4550,25 @@ export default function BodyshopRepairPage() {
                       const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                       const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                       const flow = getEffectiveStageFlow(selected, intakePhotoCount, hasKmReading)
+                      const stage12Done = (
+                        (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
+                        || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
+                        || flow.effectiveCurrentStage > 12
+                      )
+                      const stage11AdvanceTarget = flow.effectiveCurrentStage === 11
+                        ? (floorStageCompleted
+                            ? ((!additionalApprovalRequested || stage12Done) ? 13 : 12)
+                            : 11)
+                        : flow.effectiveNextStage
                       return (
                     <button className="btn btn--primary brx-overview-advance" onClick={() => void handleAdvance()} disabled={saving}>
                       {saving
                         ? 'Saving…'
+                        : flow.effectiveCurrentStage === 11 && !floorStageCompleted
+                          ? '✓ Mark BS Floor Completed first'
                         : flow.effectiveCurrentStage === 10 && floorWorkStarted && !floorStageCompleted
                           ? '✓ Mark Stage 10 Done (Floor already active)'
-                          : `✓ Mark Stage ${flow.effectiveCurrentStage} Done → Move to Stage ${flow.effectiveNextStage}`}
+                            : `✓ Mark Stage ${flow.effectiveCurrentStage} Done → Move to Stage ${stage11AdvanceTarget}`}
                     </button>
                       )
                     })()
