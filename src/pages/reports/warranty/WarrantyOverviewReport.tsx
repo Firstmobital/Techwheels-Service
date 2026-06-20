@@ -1938,22 +1938,24 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [labourData, labourCodeFilters, labourPortalFilter, labourMonthFilters])
 
   // Month-wise labour pivot
+  // Labour = Labour Chgs + Misc Chgs combined (ALL rows)
+  // Parts  = NDP (Col J) only
   const labourMonthlyPivot = useMemo(() => {
     const MNAMES: Record<string,string> = {
       '01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun',
       '07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'
     }
-    const monthMap = new Map<string, { labour: number; ndp: number; listPrice: number; misc: number; rows: number }>()
+    const monthMap = new Map<string, { labourTotal: number; ndp: number; rows: number }>()
     for (const r of labourFiltered) {
       if (!r.invc_date) continue
       const ym = r.invc_date.slice(0, 7)
-      if (!monthMap.has(ym)) monthMap.set(ym, { labour: 0, ndp: 0, listPrice: 0, misc: 0, rows: 0 })
+      if (!monthMap.has(ym)) monthMap.set(ym, { labourTotal: 0, ndp: 0, rows: 0 })
       const e = monthMap.get(ym)!
-      e.labour    += r.labour_chgs    || 0
-      e.ndp       += r.ndp            || 0
-      e.listPrice += r.list_price     || 0
-      e.misc      += r.misc_chgs      || 0
-      e.rows      += 1
+      // Labour = Labour Chgs + Misc Chgs (whether or not part number exists)
+      e.labourTotal += (r.labour_chgs || 0) + (r.misc_chgs || 0)
+      // Parts = NDP only
+      e.ndp         += r.ndp || 0
+      e.rows        += 1
     }
     return Array.from(monthMap.keys()).sort().map(ym => ({
       ym,
@@ -3550,8 +3552,8 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
                 {[
                   { label: 'Total rows', value: labourFiltered.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
-                  { label: 'Labour charges', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.labour_chgs||0),0)), tone: 'var(--success)' },
-                  { label: 'Parts NDP', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.ndp||0),0)), tone: '#4F46E5' },
+                  { label: 'Labour (Chgs + Misc)', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.labour_chgs||0)+(r.misc_chgs||0),0)), tone: 'var(--success)' },
+                  { label: 'Parts (NDP)', value: formatAmountShort(labourFiltered.reduce((s,r)=>s+(r.ndp||0),0)), tone: '#4F46E5' },
                   { label: 'Unique job codes', value: new Set(labourFiltered.map(r=>r.job_code)).size.toLocaleString('en-IN'), tone: 'var(--warn)' },
                 ].map((k,i) => (
                   <div key={i} style={{ border:'1px solid var(--border)',borderTop:`3px solid ${k.tone}`,borderRadius:'var(--r-sm)',padding:'12px 14px',background:'var(--panel)' }}>
@@ -3564,14 +3566,16 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               {/* Month-wise Labour Pivot */}
               {labourMonthlyPivot.length > 0 && (
                 <Card title="Month-wise Labour Consolidation — All Non-9800xx Codes"
-                  sub={`Labour Chgs + Parts NDP · ${labourCodeFilters.length>0?`${labourCodeFilters.length} codes selected`:'all job codes ('+labourUniqueCodes.length+')'} · ${labourPortalFilter!=='ALL'?labourPortalFilter:'PV + EV'}`}>
+                  sub={`Labour = Labour Chgs + Misc Chgs · Parts = NDP · ${labourCodeFilters.length>0?`${labourCodeFilters.length} codes selected`:'all job codes ('+labourUniqueCodes.length+')'} · ${labourPortalFilter!=='ALL'?labourPortalFilter:'PV + EV'}`}>
                   <div style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
                       <thead>
                         <tr style={{ background:'var(--canvas)',borderBottom:'2px solid var(--border)' }}>
-                          {['Month','Rows','Labour Charges','Parts (NDP)','List Price','Misc Chgs','Total Labour + NDP'].map((h,i) => (
-                            <th key={i} style={{ padding:'8px 14px',textAlign:i===0||i===1?'left':'right',fontWeight:700,fontSize:12,color:i===6?'var(--success)':'var(--ink-2)',whiteSpace:'nowrap' }}>{h}</th>
-                          ))}
+                          <th style={{ padding:'8px 14px',textAlign:'left',fontWeight:700,fontSize:12,color:'var(--ink-2)',whiteSpace:'nowrap' }}>Month</th>
+                          <th style={{ padding:'8px 14px',textAlign:'left',fontWeight:700,fontSize:12,color:'var(--muted)',whiteSpace:'nowrap' }}>Rows</th>
+                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'var(--success)',whiteSpace:'nowrap' }}>Labour (Chgs + Misc)</th>
+                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'#4F46E5',whiteSpace:'nowrap' }}>Parts (NDP)</th>
+                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'var(--accent)',whiteSpace:'nowrap' }}>Total</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3579,11 +3583,15 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                           <tr key={idx} style={{ borderBottom:'1px solid var(--border)',background:idx%2===0?'var(--panel)':'#fff' }}>
                             <td style={{ padding:'8px 14px',fontWeight:600,fontSize:13,whiteSpace:'nowrap' }}>{row.label}</td>
                             <td style={{ padding:'8px 14px',fontSize:12,color:'var(--muted)' }}>{row.rows.toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,fontWeight:600 }}>₹{Math.round(row.labour).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,color:'#4F46E5' }}>₹{Math.round(row.ndp).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12,color:'var(--muted)' }}>₹{Math.round(row.listPrice).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12,color:'var(--muted)' }}>₹{Math.round(row.misc).toLocaleString('en-IN')}</td>
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:13,color:'var(--success)' }}>₹{Math.round(row.labour+row.ndp).toLocaleString('en-IN')}</td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,fontWeight:600,color:'var(--success)' }}>
+                              ₹{Math.round(row.labourTotal).toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,fontWeight:600,color:'#4F46E5' }}>
+                              ₹{Math.round(row.ndp).toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:13,color:'var(--accent)' }}>
+                              ₹{Math.round(row.labourTotal+row.ndp).toLocaleString('en-IN')}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -3591,11 +3599,15 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                         <tr style={{ borderTop:'2px solid var(--border)',background:'var(--canvas)' }}>
                           <td style={{ padding:'8px 14px',fontWeight:700,fontSize:12 }}>GRAND TOTAL</td>
                           <td style={{ padding:'8px 14px',fontWeight:700,fontSize:12 }}>{labourFiltered.length.toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labour,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'#4F46E5' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.ndp,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--muted)' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.listPrice,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--muted)' }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.misc,0)).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--success)',fontSize:13 }}>₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labour+r.ndp,0)).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--success)',fontSize:13 }}>
+                            ₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labourTotal,0)).toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'#4F46E5',fontSize:13 }}>
+                            ₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.ndp,0)).toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--accent)',fontSize:14 }}>
+                            ₹{Math.round(labourMonthlyPivot.reduce((s,r)=>s+r.labourTotal+r.ndp,0)).toLocaleString('en-IN')}
+                          </td>
                         </tr>
                       </tfoot>
                     </table>
