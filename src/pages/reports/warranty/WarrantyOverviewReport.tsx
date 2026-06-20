@@ -1845,35 +1845,43 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   }, [splCodes, splCodeFilters, splPortalFilter, splMonthFilters])
 
   // Month-wise pivot: rows = months, cols = codes
-  // Revenue = SPL Labour Chgs ONLY (matches KPI card and source column O)
-  // Separate NDP pivot for parts tracking
+  // splValues  = SPL Labour Chgs (ALL 9800xx rows)
+  // ndpValues  = NDP (Col J) — only rows that have a Part Number in Col E
+  // partSplValues = SPL Labour (Col O) for those same part-rows only
+  // partLabourValues = Labour (Col N) for part-rows (currently 0 in source data)
   const splMonthlyPivot = useMemo(() => {
     const activeCodes = splCodeFilters.length > 0 ? splCodeFilters : splUniqueCodes
-    const splMap  = new Map<string, Record<string, number>>() // SPL Labour
-    const ndpMap  = new Map<string, Record<string, number>>() // Parts NDP
+    const splMap      = new Map<string, Record<string, number>>() // ALL SPL Labour
+    const ndpMap      = new Map<string, Record<string, number>>() // NDP for part-rows
+    const partSplMap  = new Map<string, Record<string, number>>() // SPL Labour for part-rows
+    const partLabMap  = new Map<string, Record<string, number>>() // Labour (N) for part-rows
 
     for (const r of splFiltered) {
       if (!r.invc_date) continue
-      const monthKey = r.invc_date.slice(0, 7) // YYYY-MM
-      const spl = r.spl_labour_chgs || 0
-      // NDP total: use NDP (col J) as primary; if part_number exists use list_price as fallback
-      // to capture all parts consumption accurately
-      const ndp = (r.ndp || 0) > 0 ? (r.ndp || 0) : (r.part_number ? (r.list_price || 0) : 0)
+      const monthKey   = r.invc_date.slice(0, 7)
+      const spl        = r.spl_labour_chgs || 0
+      const hasPart    = !!(r.part_number && r.part_number.trim().length > 0)
+      const ndp        = hasPart ? (r.ndp || 0) : 0
+      const partSpl    = hasPart ? spl : 0
+      const partLabour = hasPart ? (r.labour_chgs || 0) : 0
 
-      if (!splMap.has(monthKey)) {
-        const empty: Record<string, number> = { _total: 0 }
-        const empNdp: Record<string, number> = { _total: 0 }
-        for (const c of activeCodes) { empty[c] = 0; empNdp[c] = 0 }
-        splMap.set(monthKey, empty)
-        ndpMap.set(monthKey, empNdp)
+      const initEntry = () => {
+        const e: Record<string, number> = { _total: 0 }
+        for (const c of activeCodes) e[c] = 0
+        return e
       }
-      const splEntry = splMap.get(monthKey)!
-      const ndpEntry = ndpMap.get(monthKey)!
+      if (!splMap.has(monthKey))     { splMap.set(monthKey, initEntry()); ndpMap.set(monthKey, initEntry()); partSplMap.set(monthKey, initEntry()); partLabMap.set(monthKey, initEntry()) }
+
+      const se  = splMap.get(monthKey)!
+      const ne  = ndpMap.get(monthKey)!
+      const pse = partSplMap.get(monthKey)!
+      const ple = partLabMap.get(monthKey)!
       const code = r.job_code
-      if (code in splEntry) splEntry[code] = (splEntry[code] || 0) + spl
-      splEntry._total = (splEntry._total || 0) + spl
-      if (code in ndpEntry) ndpEntry[code] = (ndpEntry[code] || 0) + ndp
-      ndpEntry._total = (ndpEntry._total || 0) + ndp
+
+      if (code in se)  { se[code]  = (se[code]  || 0) + spl;        se._total  = (se._total  || 0) + spl }
+      if (code in ne)  { ne[code]  = (ne[code]  || 0) + ndp;        ne._total  = (ne._total  || 0) + ndp }
+      if (code in pse) { pse[code] = (pse[code] || 0) + partSpl;    pse._total = (pse._total || 0) + partSpl }
+      if (code in ple) { ple[code] = (ple[code] || 0) + partLabour; ple._total = (ple._total || 0) + partLabour }
     }
 
     const monthNames: Record<string, string> = {
@@ -1887,15 +1895,24 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
         monthKey: key,
         monthLabel: `${monthNames[key.slice(5,7)] || key.slice(5,7)} ${key.slice(0,4)}`,
         codes: activeCodes,
-        splValues: splMap.get(key)!,
-        ndpValues: ndpMap.get(key)!,
+        splValues:     splMap.get(key)!,
+        ndpValues:     ndpMap.get(key)!,
+        partSplValues: partSplMap.get(key)!,
+        partLabValues: partLabMap.get(key)!,
       }))
   }, [splFiltered, splUniqueCodes, splCodeFilters])
+
+
 
   // Detail table: sorted by date
   const splDetailRows = useMemo(() => {
     return splFiltered.slice().sort((a, b) => (a.invc_date || '').localeCompare(b.invc_date || ''))
   }, [splFiltered])
+
+  // Part-rows: 9800xx rows that have a Part Number in Col E
+  const splPartRows = useMemo(() => {
+    return splDetailRows.filter(r => !!(r.part_number && r.part_number.trim().length > 0))
+  }, [splDetailRows])
 
   // ── Non-9800xx Labour computed data ──────────────────────────────────────
   const labourAvailableMonths = useMemo(() => {
@@ -3417,47 +3434,117 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
                 </Card>
               )}
 
-              {/* ── Month-wise Parts (NDP) Pivot — includes rows with Part Numbers (Col E) ── */}
+              {/* ── Month-wise Parts Consumption: NDP (Col J) + Labour Col N + SPL Labour Col O ── */}
               {splMonthlyPivot.length > 0 && splMonthlyPivot.some(r=>(r.ndpValues._total||0)>0) && (
-                <Card title="Month-wise Parts Consumption (NDP) — 9800xx Codes"
-                  sub={`NDP = Col J (Net Dealer Price) · Rows with Part Number (Col E) included · ${splCodeFilters.length>0?splCodeFilters.join(', '):'all codes'} · ${splPortalFilter!=='ALL'?splPortalFilter:'PV + EV'}`}>
+                <Card
+                  title="Month-wise Parts Consumption (NDP) — Rows with Part Number (Col E)"
+                  sub={`Only the ${splPartRows.length} rows that have a Part Number · NDP (Col J) + Labour Col N + SPL Labour Col O · ${splCodeFilters.length>0?splCodeFilters.join(', '):'all codes'} · ${splPortalFilter!=='ALL'?splPortalFilter:'PV + EV'}`}
+                >
                   <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
+                    {/* ── Month-wise summary pivot ── */}
+                    <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13,marginBottom:20 }}>
                       <thead>
                         <tr style={{ background:'var(--canvas)',borderBottom:'2px solid var(--border)' }}>
-                          <th style={{ padding:'8px 14px',textAlign:'left',fontWeight:700,fontSize:12,color:'#4F46E5',whiteSpace:'nowrap' }}>Month</th>
-                          {splMonthlyPivot[0].codes.map(c => (
-                            <th key={c} style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'#4F46E5',whiteSpace:'nowrap' }}>
-                              {c}<div style={{ fontWeight:400,fontSize:10,color:'var(--muted)' }}>{SPL_CODE_LABELS[c]||''}</div>
-                            </th>
-                          ))}
-                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'#4F46E5' }}>TOTAL NDP</th>
+                          <th style={{ padding:'8px 14px',textAlign:'left',fontWeight:700,fontSize:12,color:'var(--ink-2)',whiteSpace:'nowrap' }}>Month</th>
+                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'#4F46E5',whiteSpace:'nowrap' }}>Parts NDP (Col J)</th>
+                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'var(--success)',whiteSpace:'nowrap' }}>Labour Col N</th>
+                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'var(--danger)',whiteSpace:'nowrap' }}>SPL Labour Col O</th>
+                          <th style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontSize:12,color:'var(--accent)',whiteSpace:'nowrap' }}>TOTAL (NDP+N+O)</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {splMonthlyPivot.map((row,idx) => (
-                          <tr key={idx} style={{ borderBottom:'1px solid var(--border)',background:idx%2===0?'var(--panel)':'#fff' }}>
-                            <td style={{ padding:'8px 14px',fontWeight:600,fontSize:13,whiteSpace:'nowrap' }}>{row.monthLabel}</td>
-                            {row.codes.map(c => (
-                              <td key={c} style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12 }}>
-                                {(row.ndpValues[c]||0)>0?`₹${Math.round(row.ndpValues[c]).toLocaleString('en-IN')}`:'—'}
+                        {splMonthlyPivot.filter(row=>(row.ndpValues._total||0)>0||(row.partSplValues._total||0)>0||(row.partLabValues._total||0)>0).map((row,idx) => {
+                          const rowTotal = (row.ndpValues._total||0) + (row.partLabValues._total||0) + (row.partSplValues._total||0)
+                          return (
+                            <tr key={idx} style={{ borderBottom:'1px solid var(--border)',background:idx%2===0?'var(--panel)':'#fff' }}>
+                              <td style={{ padding:'8px 14px',fontWeight:600,fontSize:13,whiteSpace:'nowrap' }}>{row.monthLabel}</td>
+                              <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,fontWeight:600,color:'#4F46E5' }}>
+                                {(row.ndpValues._total||0)>0?`₹${Math.round(row.ndpValues._total).toLocaleString('en-IN')}`:'—'}
                               </td>
-                            ))}
-                            <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,color:'#4F46E5',fontFamily:'monospace',fontSize:13 }}>
-                              {(row.ndpValues._total||0)>0?`₹${Math.round(row.ndpValues._total).toLocaleString('en-IN')}`:'—'}
-                            </td>
-                          </tr>
-                        ))}
+                              <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,color:'var(--success)' }}>
+                                {(row.partLabValues._total||0)>0?`₹${Math.round(row.partLabValues._total).toLocaleString('en-IN')}`:'—'}
+                              </td>
+                              <td style={{ padding:'8px 14px',textAlign:'right',fontFamily:'monospace',fontSize:13,color:'var(--danger)' }}>
+                                {(row.partSplValues._total||0)>0?`₹${Math.round(row.partSplValues._total).toLocaleString('en-IN')}`:'—'}
+                              </td>
+                              <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:13,color:'var(--accent)' }}>
+                                ₹{Math.round(rowTotal).toLocaleString('en-IN')}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                       <tfoot>
                         <tr style={{ borderTop:'2px solid var(--border)',background:'var(--canvas)' }}>
                           <td style={{ padding:'8px 14px',fontWeight:700,fontSize:12 }}>GRAND TOTAL</td>
-                          {(splMonthlyPivot[0]?.codes||[]).map(c => {
-                            const t = splMonthlyPivot.reduce((s,r)=>s+(r.ndpValues[c]||0),0)
-                            return <td key={c} style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:12 }}>{t>0?`₹${Math.round(t).toLocaleString('en-IN')}`:'—'}</td>
-                          })}
-                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,color:'#4F46E5',fontFamily:'monospace',fontSize:13 }}>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'#4F46E5' }}>
                             ₹{Math.round(splMonthlyPivot.reduce((s,r)=>s+(r.ndpValues._total||0),0)).toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--success)' }}>
+                            ₹{Math.round(splMonthlyPivot.reduce((s,r)=>s+(r.partLabValues._total||0),0)).toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--danger)' }}>
+                            ₹{Math.round(splMonthlyPivot.reduce((s,r)=>s+(r.partSplValues._total||0),0)).toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding:'8px 14px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--accent)',fontSize:13 }}>
+                            ₹{Math.round(splMonthlyPivot.reduce((s,r)=>s+(r.ndpValues._total||0)+(r.partLabValues._total||0)+(r.partSplValues._total||0),0)).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+
+                    {/* ── Per-row detail for part rows ── */}
+                    <div style={{ fontSize:12,fontWeight:700,color:'var(--ink-2)',marginBottom:8,paddingTop:4,borderTop:'1px solid var(--border)' }}>
+                      Transaction detail — all rows with Part Number (Col E)
+                    </div>
+                    <table style={{ width:'100%',borderCollapse:'collapse',fontSize:12 }}>
+                      <thead>
+                        <tr style={{ background:'var(--canvas)',borderBottom:'2px solid var(--border)' }}>
+                          {['#','Month','Code','Portal','Job Card','Part No (Col E)','Description','NDP (Col J)','Labour N','SPL Labour O','Total'].map((h,i) => (
+                            <th key={i} style={{ padding:'7px 10px',textAlign:i>=7?'right':'left',fontWeight:700,color:'var(--ink-2)',fontSize:11,whiteSpace:'nowrap',background:'var(--canvas)' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {splPartRows.map((row,idx) => {
+                          const rowTotal = (row.ndp||0)+(row.labour_chgs||0)+(row.spl_labour_chgs||0)
+                          return (
+                            <tr key={row.id} style={{ borderBottom:'1px solid var(--border)',background:idx%2===0?'var(--panel)':'#fff' }}>
+                              <td style={{ padding:'6px 10px',color:'var(--muted)',fontSize:10 }}>{idx+1}</td>
+                              <td style={{ padding:'6px 10px',fontWeight:600,fontSize:12,whiteSpace:'nowrap' }}>
+                                {row.invc_date?new Date(row.invc_date).toLocaleDateString('en-IN',{month:'short',year:'numeric'}):'—'}
+                              </td>
+                              <td style={{ padding:'6px 10px',fontFamily:'monospace',fontWeight:700,fontSize:12,color:'var(--accent)' }}>{row.job_code}</td>
+                              <td style={{ padding:'6px 10px' }}>
+                                <span style={{ fontSize:10,padding:'2px 6px',borderRadius:8,fontWeight:600,background:row.portal==='EV'?'#dcfce7':'#eff6ff',color:row.portal==='EV'?'#16a34a':'#2563eb' }}>{row.portal}</span>
+                              </td>
+                              <td style={{ padding:'6px 10px',fontSize:11,fontFamily:'monospace',maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }} title={row.job_card_number}>{row.job_card_number}</td>
+                              <td style={{ padding:'6px 10px',fontSize:11,fontFamily:'monospace',fontWeight:600 }}>{row.part_number}</td>
+                              <td style={{ padding:'6px 10px',fontSize:11,maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }} title={row.description||''}>{row.description||'—'}</td>
+                              <td style={{ padding:'6px 10px',textAlign:'right',fontFamily:'monospace',fontSize:12,fontWeight:600,color:'#4F46E5' }}>
+                                {(row.ndp||0)>0?`₹${money(row.ndp)}`:'—'}
+                              </td>
+                              <td style={{ padding:'6px 10px',textAlign:'right',fontFamily:'monospace',fontSize:12,color:'var(--success)' }}>
+                                {(row.labour_chgs||0)>0?`₹${money(row.labour_chgs)}`:'—'}
+                              </td>
+                              <td style={{ padding:'6px 10px',textAlign:'right',fontFamily:'monospace',fontSize:12,fontWeight:700,color:'var(--danger)' }}>
+                                {(row.spl_labour_chgs||0)>0?`₹${money(row.spl_labour_chgs)}`:'—'}
+                              </td>
+                              <td style={{ padding:'6px 10px',textAlign:'right',fontFamily:'monospace',fontSize:13,fontWeight:700,color:'var(--accent)' }}>
+                                ₹{money(rowTotal)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop:'2px solid var(--border)',background:'var(--canvas)' }}>
+                          <td colSpan={7} style={{ padding:'7px 10px',fontWeight:700,fontSize:12 }}>TOTAL ({splPartRows.length} rows)</td>
+                          <td style={{ padding:'7px 10px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'#4F46E5' }}>₹{money(splPartRows.reduce((s,r)=>s+(r.ndp||0),0))}</td>
+                          <td style={{ padding:'7px 10px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--success)' }}>₹{money(splPartRows.reduce((s,r)=>s+(r.labour_chgs||0),0))}</td>
+                          <td style={{ padding:'7px 10px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--danger)' }}>₹{money(splPartRows.reduce((s,r)=>s+(r.spl_labour_chgs||0),0))}</td>
+                          <td style={{ padding:'7px 10px',textAlign:'right',fontWeight:700,fontFamily:'monospace',color:'var(--accent)',fontSize:13 }}>
+                            ₹{money(splPartRows.reduce((s,r)=>s+(r.ndp||0)+(r.labour_chgs||0)+(r.spl_labour_chgs||0),0))}
                           </td>
                         </tr>
                       </tfoot>
