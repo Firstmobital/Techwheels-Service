@@ -76,6 +76,14 @@ Authoritative schema audit confirms there is no existing database function/view 
 - [ ] **Task 6.2:** Lock rule docs, reason-code dictionary, and operational runbook.
 - [ ] **Task 6.3:** Complete sign-off and move plan to completed archive path.
 
+### Phase 7: Bodyshop Floor QC Queue Wiring (Web)
+- [x] **Task 7.1:** Add `QC` clickable queue card after `Completed` on Bodyshop Floor.
+- [x] **Task 7.2:** Filter QC queue to floor-completed vehicles only.
+- [x] **Task 7.3:** Render QC section (instead of Floor workflow) with vehicle identity + workforce status snapshot.
+- [x] **Task 7.4:** Capture and persist QC fields to `bodyshop_repair_cards`: `qc_status`, `qc_fail_reason`, `qc_checked_by`, `qc_checked_at`.
+- [ ] **Task 7.5:** Add backend projection/read-model parity for QC queue counts and audit reason codes.
+- [ ] **Task 7.6:** Add regression tests for QC save, validation, and queue filter behavior.
+
 ---
 
 ## Activity Tracker
@@ -133,6 +141,16 @@ Authoritative schema audit confirms there is no existing database function/view 
 ⏳ 6.1 | Retire duplicated client rule engine | Web + Mobile Team | - | - | Pending stable cycle
 ⏳ 6.2 | Finalize runbook and rule documentation | Platform Team | - | - | Pending stable cycle
 ⏳ 6.3 | Sign-off and archive plan | Product + Ops + Eng | - | - | Pending final review
+```
+
+### Phase 7
+```text
+✅ 7.1 | Add QC queue card after Completed | Web Team | 2026-06-20 | 2026-06-20 | Added in BodyshopFloorPage KPI strip
+✅ 7.2 | Filter QC queue by floor-completed vehicles | Web Team | 2026-06-20 | 2026-06-20 | QC queue mapped to BS floor completed set
+✅ 7.3 | Render QC section replacing floor workflow | Web Team | 2026-06-20 | 2026-06-20 | QC panel includes workforce snapshot + form fields
+✅ 7.4 | Persist QC fields to bodyshop_repair_cards | Web Team | 2026-06-20 | 2026-06-20 | Save flow writes qc_status/fail_reason/checked_by/checked_at
+⏳ 7.5 | Backend projection parity for QC queue | Platform Team | - | - | Pending backend contract extension
+⏳ 7.6 | Add automated tests for QC queue + save | Web Team | - | - | Pending test implementation window
 ```
 
 ---
@@ -212,6 +230,29 @@ Authoritative schema audit confirms there is no existing database function/view 
 - This is a presentation/grouping change only; canonical per-stage backend predicates and projection contract remain unchanged.
 - Delivery, Billing, QC, and Delivered group behavior remains unchanged.
 
+### 2026-06-20 - Stage 11 Projection Audit And Durable Fix
+- Verified mismatch: Stage 11 projection used `bodyshop_repair_cards.floor_status` as floor completion source, while operational completion is persisted in `bodyshop_assignments.bs_floor_completed_at`.
+- Impact observed: cards could show pointer/current stage 13 while projection still marked stage 11 pending with reason `floor_not_completed`.
+- Applied and validated fixes:
+	- `scripts/23_fix_stage11_done_projection_rule.sql` (remove S10 dependency from `done(S11)`)
+	- `scripts/24_recompute_projection_on_bodyshop_assignments_change.sql` (trigger projection recompute on assignment floor-completion updates)
+	- `scripts/25_fix_stage11_floor_completed_source_in_projection.sql` (projection function patch to read floor completion from active assignment rows)
+- Post-fix validation for card `id=376` confirmed:
+	- `current_stage = 13`
+	- `s11_done = true`
+	- `s11_pending = false`
+	- no `floor_not_completed` reason.
+
+### 2026-06-20 - Bodyshop Floor QC Queue UX Integration
+- Added new `QC` queue card in Bodyshop Floor after `Completed`, using floor-complete vehicles as source set.
+- Clicking `QC` now renders a QC-focused section for each vehicle and hides Floor workflow controls for that view.
+- QC panel includes:
+	- Vehicle identity/context block (reg/model/JC/customer/SA/IN-OUT inherited from card header)
+	- Workforce snapshot across Denter/Painter/Technician/Electrician/DET including status and remarks
+	- Form fields: `QC Status`, `Fail Reason`, `QC Checked By`, `QC Checked At`
+- Save action persists QC payload directly to `bodyshop_repair_cards` and sets stage context to stage 13 (`Quality Check`).
+- Design kept in current Bodyshop Floor visual language (same cards, spacing, typography, chip/button conventions).
+
 ---
 
 ## Embedded Rule Specification (v1)
@@ -229,7 +270,7 @@ Auxiliary inputs used in existing frontend behavior:
 1. Intake photo presence by reception entry.
 2. KM reading presence by reception entry.
 3. Floor work started lookup.
-4. Floor stage completed lookup.
+4. Floor stage completed lookup (source of truth: `bodyshop_assignments.bs_floor_completed_at` on active rows, with job-card fallback).
 
 Output scope:
 1. Active cards only (overall_status = active).
@@ -283,7 +324,7 @@ Stage 10 (Parts Status):
 Stage 11 (Floor Assignment / Floor Work Completion Gate):
 1. additional_approval_requested from additional_approval parser.
 2. done(S12) from additional approval resolution predicate.
-3. floor_completed from floor-stage completion lookup.
+3. floor_completed from assignment completion source (`bodyshop_assignments.bs_floor_completed_at` on active rows; card floor_status is compatibility fallback only).
 4. done(S11) = floor_completed AND (not additional_approval_requested OR done(S12)).
 5. pending(S11) = ready_10_11 and not done(S11).
 

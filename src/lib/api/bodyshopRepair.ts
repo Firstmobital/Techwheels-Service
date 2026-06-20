@@ -105,6 +105,8 @@ export interface RepairCard {
   qc_status: string | null
   qc_checked_by: string | null
   qc_checked_at: string | null
+  qc_passed_by: string | null
+  qc_passed_at: string | null
   qc_fail_reason: string | null
   reinspection_type: string | null
   reinspection_by: string | null

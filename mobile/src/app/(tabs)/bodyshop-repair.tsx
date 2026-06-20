@@ -37,6 +37,7 @@ interface RepairCard {
   floor_status: string | null
   // qc
   qc_status: string | null; qc_checked_by: string | null
+  qc_checked_at: string | null; qc_passed_by: string | null; qc_passed_at: string | null
   delivery_status: string | null
   // billing
   billed_amount: number | null; do_amount: number | null
@@ -108,9 +109,36 @@ export default function BodyshopRepairScreen() {
   async function savePatch() {
     if (!selected || !Object.keys(patch).length) return
     setSaving(true)
+    const qcKeysTouched = ['qc_status', 'qc_checked_by', 'qc_checked_at', 'qc_fail_reason'].some((k) => k in patch)
+    let patchToSave: Partial<RepairCard> = patch
+
+    if (qcKeysTouched) {
+      const actor = user?.email || user?.id || null
+      const nowIso = new Date().toISOString()
+      const nextStatus = String((patch.qc_status ?? selected.qc_status ?? 'pending')).trim().toLowerCase()
+      const nextCheckedBy = String((patch.qc_checked_by ?? selected.qc_checked_by ?? actor ?? '')).trim()
+      const nextCheckedAt = String((patch.qc_checked_at ?? selected.qc_checked_at ?? nowIso)).trim()
+
+      if (nextStatus === 'pass') {
+        patchToSave = {
+          ...patch,
+          qc_checked_by: nextCheckedBy || actor,
+          qc_checked_at: nextCheckedAt || nowIso,
+          qc_passed_by: nextCheckedBy || actor,
+          qc_passed_at: nextCheckedAt || nowIso,
+        }
+      } else {
+        patchToSave = {
+          ...patch,
+          qc_passed_by: null,
+          qc_passed_at: null,
+        }
+      }
+    }
+
     const { data, error } = await supabase
       .from('bodyshop_repair_cards')
-      .update({ ...patch, updated_at: new Date().toISOString() })
+      .update({ ...patchToSave, updated_at: new Date().toISOString() })
       .eq('id', selected.id)
       .select().single()
     setSaving(false)

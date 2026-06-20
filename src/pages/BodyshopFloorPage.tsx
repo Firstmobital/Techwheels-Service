@@ -198,6 +198,14 @@ interface DBPrimaryAssignmentRow {
   bs_floor_completed_by: string | null
 }
 
+type QcEntryState = {
+  repairCardId: number | null
+  qc_status: string
+  qc_fail_reason: string
+  qc_checked_by: string
+  qc_checked_at: string
+}
+
 interface BSAssignment {
   id: number
   job_card_number: string
@@ -225,7 +233,7 @@ interface SupportAssignment {
   updated_at?: string
 }
 
-type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed' | 'approvals'
+type AssignmentView = 'all' | 'unassigned' | 'assigned' | 'work_inprocess' | 'hold' | 'completed' | 'qc' | 'approvals'
 
 const ROLE_META: Record<BSRole, { label: string; icon: string }> = {
   DENTOR:      { label: 'Dentor',      icon: '🔨' },
@@ -302,6 +310,44 @@ const STATUS_OPTIONS = [
 function fmtDate(v: string | null | undefined) {
   if (!v) return '—'
   return new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function toLocalDateTimeInput(v: string | null | undefined) {
+  if (!v) return ''
+  const d = new Date(v)
+  if (!Number.isFinite(d.getTime())) return ''
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+}
+
+function toIsoFromLocalDateTimeInput(v: string | null | undefined): string | null {
+  const raw = String(v ?? '').trim()
+  if (!raw) return null
+  const d = new Date(raw)
+  if (!Number.isFinite(d.getTime())) return null
+  return d.toISOString()
+}
+
+function emptyQcEntryState(): QcEntryState {
+  return {
+    repairCardId: null,
+    qc_status: 'pending',
+    qc_fail_reason: '',
+    qc_checked_by: '',
+    qc_checked_at: '',
+  }
+}
+
+function labelForWorkStatus(status: string | null | undefined) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  if (normalized === 'completed') return 'Completed'
+  if (normalized === 'hold') return 'Hold'
+  if (normalized === 'work_inprocess') return 'Work Inprocess'
+  return 'Pending'
 }
 
 function safeFileName(raw: string): string {
@@ -577,6 +623,7 @@ export default function BodyshopFloorPage() {
   >({})
   const [saving, setSaving]   = useState<string | null>(null) // jcKey being saved
   const [bsFloorStatus, setBsFloorStatus] = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
+  const [qcByJc, setQcByJc] = useState<Record<string, QcEntryState>>({})
   const [additionalApprovalByJc, setAdditionalApprovalByJc] = useState<Record<string, AdditionalApprovalRowState>>({})
   const [additionalApprovalModal, setAdditionalApprovalModal] = useState<{
     car: AccidentCar | null
@@ -594,7 +641,7 @@ export default function BodyshopFloorPage() {
       // 1. Vehicles explicitly sent to bodyshop floor from survey stage
       const { data: sentCards, error: sentErr } = await supabase
         .from('bodyshop_repair_cards')
-        .select('reception_entry_id, job_card_no, bodyshop_floor, current_stage, additional_approval, updated_at, created_at')
+        .select('id, reception_entry_id, job_card_no, bodyshop_floor, current_stage, additional_approval, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at, updated_at, created_at')
         .in('bodyshop_floor', ['Floor 2', 'Floor 3'])
         .gte('current_stage', 10)
 
@@ -603,16 +650,26 @@ export default function BodyshopFloorPage() {
       const sentByJc = new Map<string, 'Floor 2' | 'Floor 3'>()
       const additionalByJc: Record<string, AdditionalApprovalRowState> = {}
       const latestByJc = new Map<string, {
+        repairCardId: number | null
         floor: 'Floor 2' | 'Floor 3'
         additionalApproval: string | null
+        qcStatus: string | null
+        qcFailReason: string | null
+        qcCheckedBy: string | null
+        qcCheckedAt: string | null
         updatedAtMs: number
       }>()
 
       ;((sentCards ?? []) as Array<{
+        id: number | null
         reception_entry_id: number | null
         job_card_no: string | null
         bodyshop_floor: 'Floor 2' | 'Floor 3' | null
         additional_approval: string | null
+        qc_status: string | null
+        qc_fail_reason: string | null
+        qc_checked_by: string | null
+        qc_checked_at: string | null
         updated_at: string | null
         created_at: string | null
       }>).forEach((row) => {
@@ -631,19 +688,33 @@ export default function BodyshopFloorPage() {
         const existing = latestByJc.get(jc)
         if (!existing || updatedAtMs >= existing.updatedAtMs) {
           latestByJc.set(jc, {
+            repairCardId: Number.isFinite(Number(row.id)) ? Number(row.id) : null,
             floor,
             additionalApproval: row.additional_approval,
+            qcStatus: row.qc_status,
+            qcFailReason: row.qc_fail_reason,
+            qcCheckedBy: row.qc_checked_by,
+            qcCheckedAt: row.qc_checked_at,
             updatedAtMs,
           })
         }
       })
 
+      const nextQcByJc: Record<string, QcEntryState> = {}
       latestByJc.forEach((row, jc) => {
         sentByJc.set(jc, row.floor)
         additionalByJc[jc] = parseAdditionalApprovalState(row.additionalApproval)
+        nextQcByJc[jc] = {
+          repairCardId: row.repairCardId,
+          qc_status: String(row.qcStatus ?? 'pending').trim().toLowerCase() || 'pending',
+          qc_fail_reason: String(row.qcFailReason ?? ''),
+          qc_checked_by: String(row.qcCheckedBy ?? ''),
+          qc_checked_at: toLocalDateTimeInput(row.qcCheckedAt),
+        }
       })
 
       setAdditionalApprovalByJc(additionalByJc)
+      setQcByJc(nextQcByJc)
 
       if (sentByJc.size === 0) {
         setCars([])
@@ -821,6 +892,7 @@ export default function BodyshopFloorPage() {
     work_inprocess: cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess')).length,
     hold:           cars.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold')).length,
     completed:      cars.filter((c) => isBsFloorCompleted(c)).length,
+    qc:             cars.filter((c) => isBsFloorCompleted(c)).length,
     approvals:      cars.filter((c) => {
       const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
       return state.status !== 'none' && state.pendingCount > 0
@@ -858,6 +930,7 @@ export default function BodyshopFloorPage() {
     if (assignmentView === 'work_inprocess') return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'work_inprocess'))
     if (assignmentView === 'hold')           return list.filter((c) => !isBsFloorCompleted(c) && hasStatus(c, 'hold'))
     if (assignmentView === 'completed')      return list.filter((c) => isBsFloorCompleted(c))
+    if (assignmentView === 'qc')             return list.filter((c) => isBsFloorCompleted(c))
     if (assignmentView === 'approvals')      return list.filter((c) => {
       const state = additionalApprovalByJc[jcKey(c)] ?? parseAdditionalApprovalState(null)
       return state.status !== 'none' && state.pendingCount > 0
@@ -1139,6 +1212,71 @@ export default function BodyshopFloorPage() {
   function showToast(msg: string, type: 'success' | 'error') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
+  }
+
+  function patchQcDraft(k: string, patch: Partial<QcEntryState>) {
+    setQcByJc((prev) => ({
+      ...prev,
+      [k]: { ...(prev[k] ?? emptyQcEntryState()), ...patch },
+    }))
+  }
+
+  async function saveQcDetails(car: AccidentCar) {
+    const k = jcKey(car)
+    const draft = qcByJc[k] ?? emptyQcEntryState()
+    const failReason = draft.qc_fail_reason.trim()
+
+    if (draft.qc_status === 'fail' && !failReason) {
+      showToast('Fail Reason is required when QC Status is Fail', 'error')
+      return
+    }
+
+    setSaving(`${k}-qc`)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const actor = String(user?.email ?? user?.id ?? '').trim()
+      if (!actor) throw new Error('Unable to resolve signed-in user for QC capture')
+      const checkedAtIso = new Date().toISOString()
+      const repairCardId = draft.repairCardId ?? await findOrCreateRepairCard(car, user?.email ?? null)
+      if (!repairCardId) throw new Error('Unable to resolve bodyshop repair card for QC')
+
+      const payload = {
+        qc_status: draft.qc_status || 'pending',
+        qc_fail_reason: draft.qc_status === 'fail' ? failReason : null,
+        qc_checked_by: actor,
+        qc_checked_at: checkedAtIso,
+        qc_passed_by: draft.qc_status === 'pass' ? actor : null,
+        qc_passed_at: draft.qc_status === 'pass' ? checkedAtIso : null,
+        current_stage: 13,
+        current_stage_name: 'Quality Check',
+      }
+
+      const result = await supabase
+        .from('bodyshop_repair_cards')
+        .update(payload)
+        .eq('id', repairCardId)
+        .select('id, qc_status, qc_fail_reason, qc_checked_by, qc_checked_at')
+        .single()
+
+      if (result.error) throw result.error
+
+      setQcByJc((prev) => ({
+        ...prev,
+        [k]: {
+          repairCardId: Number(result.data?.id ?? repairCardId),
+          qc_status: String(result.data?.qc_status ?? draft.qc_status ?? 'pending'),
+          qc_fail_reason: String(result.data?.qc_fail_reason ?? ''),
+          qc_checked_by: String(result.data?.qc_checked_by ?? actor),
+          qc_checked_at: toLocalDateTimeInput(result.data?.qc_checked_at ?? checkedAtIso),
+        },
+      }))
+
+      showToast('QC details saved', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to save QC details', 'error')
+    } finally {
+      setSaving(null)
+    }
   }
 
   async function markBsFloorCompleted(car: AccidentCar) {
@@ -1539,6 +1677,7 @@ export default function BodyshopFloorPage() {
           { key: 'work_inprocess', label: 'In-Process', count: counts.work_inprocess },
           { key: 'hold', label: 'On Hold', count: counts.hold },
           { key: 'completed', label: 'Completed', count: counts.completed },
+          { key: 'qc', label: 'QC', count: counts.qc },
           { key: 'approvals', label: 'Approvals Pending', count: counts.approvals },
         ] as { key: AssignmentView; label: string; count: number }[]).map(({ key, label, count }) => (
           <button
@@ -1629,10 +1768,13 @@ export default function BodyshopFloorPage() {
             {filtered.map((car) => {
               const k = jcKey(car)
               const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
+              const qcDraft = qcByJc[k] ?? emptyQcEntryState()
               const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
               const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
               const isFloorCompleted = Boolean(floorStatus.completedAt)
               const isSavingFloorStatus = saving === `${k}-bs-floor`
+              const isSavingQc = saving === `${k}-qc`
+              const qcFailReasonRequired = qcDraft.qc_status === 'fail' && !qcDraft.qc_fail_reason.trim()
               const additionalApproval = additionalApprovalByJc[k] ?? parseAdditionalApprovalState(null)
               const additionalApprovalResolved = additionalApproval.status === 'none' || additionalApproval.pendingCount === 0
               const hasActiveRoleWork = ALL_ROLES.some((role) => {
@@ -1697,146 +1839,222 @@ export default function BodyshopFloorPage() {
                       </div>
                     </div>
 
-                    <div className="bsf-summary">
-                      <div className="bsf-summary-row">
-                        <div className="bsf-tags">
-                          <span className={`badge ${overallToneClass} nodot`}>{overallLabel}</span>
-                          <span className="bsf-floor-badge">{car.bodyshop_floor ?? '—'}</span>
-                          {additionalApproval.status !== 'none' && (
-                            <span className={`badge ${approvalToneClass} nodot`}>
-                              {additionalApproval.pendingCount > 0 ? 'Approval Pending' : additionalApprovalLabel}
-                            </span>
-                          )}
-                        </div>
-                        <span className="ts">Received {fmtDate(car.created_at)}</span>
-                      </div>
-                      <div className="bsf-summary-row">
-                        <span className="bsf-assigned-count"><strong>{assignedCount}/5</strong> roles assigned</span>
-                        <span className="ts">
-                          IN {fmtDate(inTs)}{isFloorCompleted ? ` · OUT ${fmtDate(floorStatus.completedAt)}` : ''}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                    {assignmentView === 'qc' ? (
+                      <div className="bsf-summary bsf-summary--qc">
+                        <div className="bsf-qc-inline">
+                          <div className="bsf-qc-inline__title">Quality Check</div>
+                          <div className="bsf-qc-inline__controls">
+                            <label className="bsf-qc-inline__field">
+                              <span className="bsf-label">QC Status</span>
+                              <select
+                                className="sel"
+                                value={qcDraft.qc_status}
+                                onChange={(e) => patchQcDraft(k, { qc_status: e.target.value })}
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="pass">Pass</option>
+                                <option value="fail">Fail</option>
+                              </select>
+                            </label>
 
-                  <div className="bsf-lanes">
-                    {ALL_ROLES.map((role) => {
-                      const ass = carMap[role]
-                      const supportList = supportMap[role] ?? []
-                      const draft = stageDrafts[k]?.[role] ?? { work_status: ass?.work_status ?? 'work_inprocess', remark: '' }
-                      const isSavingThis = saving === `${k}-${role}` || saving === `${k}-${role}-stage`
-                      const isSavingSupport = saving === `${k}-${role}-support`
-                      const changed = hasDraftChanges(k, role)
-                      const statusTone = draft.work_status === 'completed'
-                        ? 'is-completed'
-                        : draft.work_status === 'hold'
-                          ? 'is-hold'
-                          : 'is-work'
-                      const holdRemarkMissing = draft.work_status === 'hold' && !draft.remark.trim()
-                      const pickerKey = `${k}-${role}-support`
-                      const showPicker = inlinePickerOpen[pickerKey]
-                      const pickerValue = inlinePickerValue[pickerKey] ?? ''
-                      const roleClass = `bsf-lane bsf-lane--${role.toLowerCase()} ${ass ? 'is-assigned' : ''}`
+                            <label className={`bsf-qc-inline__field bsf-qc-inline__field--wide ${qcDraft.qc_status === 'fail' ? '' : 'is-hidden-slot'}`}>
+                              <span className="bsf-label">Fail Reason</span>
+                              <input
+                                className={`inp ${qcFailReasonRequired ? 'is-required' : ''}`}
+                                value={qcDraft.qc_fail_reason}
+                                onChange={(e) => patchQcDraft(k, { qc_fail_reason: e.target.value })}
+                                placeholder="Enter fail reason"
+                                disabled={qcDraft.qc_status !== 'fail'}
+                              />
+                            </label>
 
-                      return (
-                        <div key={role} className={roleClass}>
-                          <div className="bsf-lane__head">
-                            <span className="bsf-lane__role">{ROLE_META[role].label}</span>
                             <button
                               type="button"
-                              className="bsf-role-plus"
-                              onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
-                              disabled={isSavingSupport}
+                              className={`btn btn--primary btn--sm bsf-qc-inline__save ${isSavingQc ? 'btn--dim' : ''}`}
+                              onClick={() => void saveQcDetails(car)}
+                              disabled={isSavingQc}
                             >
-                              +
+                              {isSavingQc ? 'Saving…' : 'Save QC'}
                             </button>
                           </div>
+                          <div className={`bsf-stage-hint bsf-qc-inline__hint-slot ${qcFailReasonRequired ? 'is-visible' : ''}`}>
+                            {qcFailReasonRequired ? 'Fail Reason is required when QC Status is Fail.' : ' '}
+                          </div>
+                        </div>
+                        <div className="bsf-summary-row">
+                          <span className="ts">Received {fmtDate(car.created_at)}</span>
+                          <span className="ts">
+                            IN {fmtDate(inTs)}{isFloorCompleted ? ` · OUT ${fmtDate(floorStatus.completedAt)}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bsf-summary">
+                        <div className="bsf-summary-row">
+                          <div className="bsf-tags">
+                            <span className={`badge ${overallToneClass} nodot`}>{overallLabel}</span>
+                            <span className="bsf-floor-badge">{car.bodyshop_floor ?? '—'}</span>
+                            {additionalApproval.status !== 'none' && (
+                              <span className={`badge ${approvalToneClass} nodot`}>
+                                {additionalApproval.pendingCount > 0 ? 'Approval Pending' : additionalApprovalLabel}
+                              </span>
+                            )}
+                          </div>
+                          <span className="ts">Received {fmtDate(car.created_at)}</span>
+                        </div>
+                        <div className="bsf-summary-row">
+                          <span className="bsf-assigned-count"><strong>{assignedCount}/5</strong> roles assigned</span>
+                          <span className="ts">
+                            IN {fmtDate(inTs)}{isFloorCompleted ? ` · OUT ${fmtDate(floorStatus.completedAt)}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                          <select
-                            className="sel sel-md bsf-role-select"
-                            value={ass?.employee_code ?? ''}
-                            disabled={isSavingThis}
-                            onChange={(e) => void assignRole(car, role, e.target.value)}
-                          >
-                            <option value="">— Select {ROLE_META[role].label} —</option>
-                            {empByRole[role].map((emp) => (
-                              <option key={emp.employee_code} value={emp.employee_code}>
-                                {emp.employee_name}
-                              </option>
-                            ))}
-                          </select>
-
-                          {supportList.length > 0 && (
-                            <div className="fi-support-list bsf-support-list">
-                              {supportList.map((sp) => (
-                                <div key={sp.id} className="fi-support-pill bsf-support-pill">
-                                  {sp.employee_name}
-                                </div>
-                              ))}
+                  {assignmentView === 'qc' ? (
+                    <div className="bsf-qc-shell">
+                      <div className="bsf-qc-workers">
+                        {ALL_ROLES.map((role) => {
+                          const ass = carMap[role]
+                          return (
+                            <div key={`qc-worker-${k}-${role}`} className={`bsf-qc-worker bsf-lane--${role.toLowerCase()}`}>
+                              <div className="bsf-qc-worker__head">{ROLE_META[role].label}</div>
+                              {ass ? (
+                                <>
+                                  <div className="bsf-qc-worker__name">{ass.employee_name}</div>
+                                  <div className="bsf-qc-worker__meta">Status: {labelForWorkStatus(ass.work_status)}</div>
+                                  <div className="bsf-qc-worker__meta">Remark: {ass.remark?.trim() || '—'}</div>
+                                  <div className="bsf-qc-worker__meta">Out: {fmtDate(ass.out_ts)}</div>
+                                </>
+                              ) : (
+                                <div className="bsf-qc-worker__meta">Not assigned</div>
+                              )}
                             </div>
-                          )}
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="bsf-lanes">
+                        {ALL_ROLES.map((role) => {
+                          const ass = carMap[role]
+                          const supportList = supportMap[role] ?? []
+                          const draft = stageDrafts[k]?.[role] ?? { work_status: ass?.work_status ?? 'work_inprocess', remark: '' }
+                          const isSavingThis = saving === `${k}-${role}` || saving === `${k}-${role}-stage`
+                          const isSavingSupport = saving === `${k}-${role}-support`
+                          const changed = hasDraftChanges(k, role)
+                          const statusTone = draft.work_status === 'completed'
+                            ? 'is-completed'
+                            : draft.work_status === 'hold'
+                              ? 'is-hold'
+                              : 'is-work'
+                          const holdRemarkMissing = draft.work_status === 'hold' && !draft.remark.trim()
+                          const pickerKey = `${k}-${role}-support`
+                          const showPicker = inlinePickerOpen[pickerKey]
+                          const pickerValue = inlinePickerValue[pickerKey] ?? ''
+                          const roleClass = `bsf-lane bsf-lane--${role.toLowerCase()} ${ass ? 'is-assigned' : ''}`
 
-                          {showPicker && (
-                            <div className="bsf-inline-picker bsf-inline-picker--boxed">
+                          return (
+                            <div key={role} className={roleClass}>
+                              <div className="bsf-lane__head">
+                                <span className="bsf-lane__role">{ROLE_META[role].label}</span>
+                                <button
+                                  type="button"
+                                  className="bsf-role-plus"
+                                  onClick={() => setInlinePickerOpen((prev) => ({ ...prev, [pickerKey]: !showPicker }))}
+                                  disabled={isSavingSupport}
+                                >
+                                  +
+                                </button>
+                              </div>
+
                               <select
-                                className="sel sel-sm"
-                                value={pickerValue}
-                                onChange={(e) => setInlinePickerValue((prev) => ({ ...prev, [pickerKey]: e.target.value }))}
-                                disabled={isSavingSupport}
+                                className="sel sel-md bsf-role-select"
+                                value={ass?.employee_code ?? ''}
+                                disabled={isSavingThis}
+                                onChange={(e) => void assignRole(car, role, e.target.value)}
                               >
                                 <option value="">— Select {ROLE_META[role].label} —</option>
-                                {empBySupportRole[role].map((emp) => (
+                                {empByRole[role].map((emp) => (
                                   <option key={emp.employee_code} value={emp.employee_code}>
                                     {emp.employee_name}
                                   </option>
                                 ))}
                               </select>
-                              <button
-                                className={`btn btn--primary btn--xs ${isSavingSupport ? 'btn--dim' : ''}`}
-                                disabled={isSavingSupport}
-                                onClick={() => void addSupportAssignment(car, role)}
-                              >
-                                {isSavingSupport ? 'Adding…' : 'Add support'}
-                              </button>
-                            </div>
-                          )}
 
-                          {ass ? (
-                            <div className={`bsf-stage-editor ${statusTone}`}>
-                              <span className={`bsf-statpill ${statusTone}`}>{draft.work_status === 'work_inprocess' ? 'In Process' : draft.work_status === 'hold' ? 'Hold' : 'Completed'}</span>
-                              <select
-                                className={`sel sel-sm bsf-stage-status ${statusTone}`}
-                                value={draft.work_status}
-                                onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
-                              >
-                                {STATUS_OPTIONS.map((s) => (
-                                  <option key={s.value} value={s.value}>{s.label}</option>
-                                ))}
-                              </select>
-                              <input
-                                className={`inp inp-md bsf-stage-remark ${holdRemarkMissing ? 'is-required' : ''}`}
-                                placeholder="Add remark"
-                                value={draft.remark}
-                                onChange={(e) => patchDraft(k, role, { remark: e.target.value })}
-                              />
-                              {holdRemarkMissing && <div className="bsf-stage-hint">Remark is required when status is Hold.</div>}
-                              <button
-                                className={`btn btn--primary btn--xs bsf-stage-save ${!changed || isSavingThis ? 'btn--dim' : ''}`}
-                                disabled={!changed || isSavingThis}
-                                onClick={() => void saveStage(car, role)}
-                              >
-                                {isSavingThis ? 'Saving…' : 'Save stage'}
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="bsf-lane-empty">Not assigned</div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
+                              {supportList.length > 0 && (
+                                <div className="fi-support-list bsf-support-list">
+                                  {supportList.map((sp) => (
+                                    <div key={sp.id} className="fi-support-pill bsf-support-pill">
+                                      {sp.employee_name}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
 
-                  <div className="bsf-foot">
+                              {showPicker && (
+                                <div className="bsf-inline-picker bsf-inline-picker--boxed">
+                                  <select
+                                    className="sel sel-sm"
+                                    value={pickerValue}
+                                    onChange={(e) => setInlinePickerValue((prev) => ({ ...prev, [pickerKey]: e.target.value }))}
+                                    disabled={isSavingSupport}
+                                  >
+                                    <option value="">— Select {ROLE_META[role].label} —</option>
+                                    {empBySupportRole[role].map((emp) => (
+                                      <option key={emp.employee_code} value={emp.employee_code}>
+                                        {emp.employee_name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    className={`btn btn--primary btn--xs ${isSavingSupport ? 'btn--dim' : ''}`}
+                                    disabled={isSavingSupport}
+                                    onClick={() => void addSupportAssignment(car, role)}
+                                  >
+                                    {isSavingSupport ? 'Adding…' : 'Add support'}
+                                  </button>
+                                </div>
+                              )}
+
+                              {ass ? (
+                                <div className={`bsf-stage-editor ${statusTone}`}>
+                                  <span className={`bsf-statpill ${statusTone}`}>{draft.work_status === 'work_inprocess' ? 'In Process' : draft.work_status === 'hold' ? 'Hold' : 'Completed'}</span>
+                                  <select
+                                    className={`sel sel-sm bsf-stage-status ${statusTone}`}
+                                    value={draft.work_status}
+                                    onChange={(e) => patchDraft(k, role, { work_status: e.target.value })}
+                                  >
+                                    {STATUS_OPTIONS.map((s) => (
+                                      <option key={s.value} value={s.value}>{s.label}</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    className={`inp inp-md bsf-stage-remark ${holdRemarkMissing ? 'is-required' : ''}`}
+                                    placeholder="Add remark"
+                                    value={draft.remark}
+                                    onChange={(e) => patchDraft(k, role, { remark: e.target.value })}
+                                  />
+                                  {holdRemarkMissing && <div className="bsf-stage-hint">Remark is required when status is Hold.</div>}
+                                  <button
+                                    className={`btn btn--primary btn--xs bsf-stage-save ${!changed || isSavingThis ? 'btn--dim' : ''}`}
+                                    disabled={!changed || isSavingThis}
+                                    onClick={() => void saveStage(car, role)}
+                                  >
+                                    {isSavingThis ? 'Saving…' : 'Save stage'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="bsf-lane-empty">Not assigned</div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="bsf-foot">
                     <div className="bsf-foot-block">
                       <div className="bsf-foot-title">BS Floor Status</div>
                       <div>
@@ -1918,7 +2136,9 @@ export default function BodyshopFloorPage() {
                         </>
                       )}
                     </div>
-                  </div>
+                      </div>
+                    </>
+                  )}
                 </article>
               )
             })}

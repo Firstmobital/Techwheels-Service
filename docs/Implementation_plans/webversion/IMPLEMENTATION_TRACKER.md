@@ -23,6 +23,7 @@ Legend:
 | IMPORT-001 | import | Import upload governing plan | IP | Import Team | docs/Implementation_plans/webversion/categories/import/active/IMPORT_UPLOAD_GOVERNING_PLAN_2026-06-06.md | 2026-06-18 |
 | TECH-EARNINGS-001 | operations | Technician daily earnings email automation | IP | Operations Team | docs/Implementation_plans/webversion/categories/operations/active/TECH-EARNINGS-001_TECHNICIAN_DAILY_EARNINGS_EMAIL_AUTOMATION_PLAN_2026-06-09.md | 2026-06-18 |
 | RBAC-001 | rbac | RBAC implementation master | IP | RBAC Team | docs/Implementation_plans/webversion/categories/rbac/active/RBAC_IMPLEMENTATION_MASTER_2026-06-01.md | 2026-06-18 |
+| RBAC-002 | rbac | Bodyshop standalone reception RBAC decoupling | NS | RBAC Team + Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/rbac/active/RBAC-002_BODYSHOP_STANDALONE_RECEPTION_RBAC_PLAN_2026-06-20.md | 2026-06-20 |
 | RECEPTION-001 | reception | Reception module plan | IP | Reception Team | docs/Implementation_plans/webversion/categories/reception/active/RECEPTION-001_RECEPTION_MODULE_PLAN.md | 2026-06-18 |
 | WEBREDESIGN-MASTER | redesign | Web redesign master tracker | IP | Web UX Team | docs/Implementation_plans/webversion/categories/redesign/active/Webredesign_IMPLEMENTATION_PLAN_MASTER_TRACKER.md | 2026-06-18 |
 | SUPABASE-001 | supabase | Supabase production hardening master plan | IP | Platform Team | docs/Implementation_plans/webversion/categories/supabase/active/SUPABASE-001_PRODUCTION_HARDENING_MASTER_PLAN.md | 2026-06-18 |

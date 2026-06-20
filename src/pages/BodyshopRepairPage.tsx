@@ -886,6 +886,7 @@ export default function BodyshopRepairPage() {
   const bodyshopDocInputRef = useRef<HTMLInputElement | null>(null)
   const additionalApprovalPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const autoAdvanceDocsLockRef = useRef(false)
+  const autoAdvanceStage11LockRef = useRef<Record<number, boolean>>({})
   const floorRoleRowRefs = useRef<Record<FloorRole, HTMLTableRowElement | null>>({
     DENTOR: null,
     PAINTER: null,
@@ -1371,6 +1372,44 @@ export default function BodyshopRepairPage() {
   const selectedApprovedParts = useMemo(() => {
     return parseApprovedPartsState(selected?.approved_parts)
   }, [selected?.approved_parts])
+
+  useEffect(() => {
+    if (!selected) return
+    if (selected.current_stage !== 11) return
+
+    const stage12Done = (
+      (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
+      || (selectedAdditionalApproval.partStates.length === 0 && (selectedAdditionalApproval.status === 'approved' || selectedAdditionalApproval.status === 'rejected'))
+      || selected.current_stage > 12
+    )
+
+    const canAutoAdvanceStage11 = floorStageCompleted && (!additionalApprovalRequested || stage12Done)
+    if (!canAutoAdvanceStage11) return
+
+    const cardId = Number(selected.id)
+    if (!Number.isFinite(cardId) || cardId <= 0) return
+    if (autoAdvanceStage11LockRef.current[cardId]) return
+
+    autoAdvanceStage11LockRef.current[cardId] = true
+
+    void (async () => {
+      try {
+        const updated = await updateRepairCard(cardId, {
+          current_stage: 13,
+          current_stage_name: STAGE_LABELS[13] ?? 'Quality Check',
+        })
+
+        setSelected(updated)
+        setCards((prev) => prev.map((card) => card.id === updated.id ? updated : card))
+        toast_('Stage 11 completed. Auto-moved to Stage 13 ✅')
+        void load()
+      } catch (e: any) {
+        // Allow retry if the update fails due to transient network or policy issues.
+        delete autoAdvanceStage11LockRef.current[cardId]
+        toast_(e?.message ?? 'Unable to auto-advance from Stage 11', false)
+      }
+    })()
+  }, [selected, floorStageCompleted, additionalApprovalRequested, selectedAdditionalApproval])
 
   useEffect(() => {
     if (!selected) return
@@ -1871,6 +1910,7 @@ export default function BodyshopRepairPage() {
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       toast_(`Advanced to Stage ${updated.current_stage}`)
+      void load()
     } catch (e: any) { toast_(e.message, false) }
     setSaving(false)
   }
@@ -1896,7 +1936,35 @@ export default function BodyshopRepairPage() {
     if (!selected || !Object.keys(editPatch).length) return
     setSaving(true)
     try {
-      const updated = await updateRepairCard(selected.id, editPatch)
+      const qcKeysTouched = ['qc_status', 'qc_checked_by', 'qc_checked_at', 'qc_fail_reason'].some((key) => key in editPatch)
+      let patchToSave: Partial<RepairCard> = editPatch
+
+      if (qcKeysTouched) {
+        const authRes = await supabase.auth.getUser()
+        const actor = authRes.data.user?.email || authRes.data.user?.id || null
+        const nowIso = new Date().toISOString()
+        const nextStatus = String((editPatch.qc_status ?? selected.qc_status ?? 'pending')).trim().toLowerCase()
+        const nextCheckedBy = String((editPatch.qc_checked_by ?? selected.qc_checked_by ?? actor ?? '')).trim()
+        const nextCheckedAt = String((editPatch.qc_checked_at ?? selected.qc_checked_at ?? nowIso)).trim()
+
+        if (nextStatus === 'pass') {
+          patchToSave = {
+            ...editPatch,
+            qc_checked_by: nextCheckedBy || actor,
+            qc_checked_at: nextCheckedAt || nowIso,
+            qc_passed_by: nextCheckedBy || actor,
+            qc_passed_at: nextCheckedAt || nowIso,
+          }
+        } else {
+          patchToSave = {
+            ...editPatch,
+            qc_passed_by: null,
+            qc_passed_at: null,
+          }
+        }
+      }
+
+      const updated = await updateRepairCard(selected.id, patchToSave)
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
       setEditPatch({})
@@ -3217,7 +3285,9 @@ export default function BodyshopRepairPage() {
     if (projectionPendingLoaded) {
       const pendingStages = projectionPendingStagesByCard[card.id] ?? []
       if (pendingStages.length > 0) {
-        return Math.min(...pendingStages)
+        // Projection can contain earlier pending worklist stages; keep current-stage
+        // display anchored to persisted pointer stage to avoid visual regressions.
+        return Math.max(Number(card.current_stage ?? 1), Math.min(...pendingStages))
       }
     }
 
@@ -3706,35 +3776,10 @@ export default function BodyshopRepairPage() {
   }, [bodyshopSsaBranchSetForUser, bodyshopSurveyBranchSetForUser])
 
   const roleScopedCards = useMemo(() => {
-    if (isAdminLikeUser) return cards
-
-    // SSA/SURVEY scopes are branch-based and must take precedence over SA-code scope.
-    if (hasBodyshopSsaAccess || hasBodyshopSurveyAccess) {
-      if (supervisoryBranchSetForUser.size === 0) return []
-      return cards.filter((card) => {
-        const rowBranch = String(card.branch ?? '').trim().toUpperCase()
-        return rowBranch ? supervisoryBranchSetForUser.has(rowBranch) : false
-      })
-    }
-
-    if (hasBodyshopSaAccess) {
-      if (bodyshopSaCodeSetForUser.size === 0) return []
-      return cards.filter((card) => {
-        const rowSaCode = String(card.sa_employee_code ?? '').trim().toUpperCase()
-        return rowSaCode ? bodyshopSaCodeSetForUser.has(rowSaCode) : false
-      })
-    }
-
-    return []
-  }, [
-    cards,
-    isAdminLikeUser,
-    hasBodyshopSsaAccess,
-    hasBodyshopSurveyAccess,
-    hasBodyshopSaAccess,
-    supervisoryBranchSetForUser,
-    bodyshopSaCodeSetForUser,
-  ])
+    // Dashboard and stage queue are global for any user who has route access.
+    // Role-based visibility is applied to tabs/actions, not to card list scope.
+    return cards
+  }, [cards])
 
   const scopeFilteredCards = useMemo(() => roleScopedCards.filter((c) => {
     if (branchFilter !== 'all' && c.branch !== branchFilter) return false

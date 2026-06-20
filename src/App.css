@@ -1992,7 +1992,7 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 
 .bsf-kpis {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -2054,6 +2054,9 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .bsf-kpi--completed .bsf-kpi__count,
 .bsf-kpi--completed { border-color: var(--border); }
 .bsf-kpi--completed .bsf-kpi__count { color: var(--success); }
+.bsf-kpi--qc .bsf-kpi__count,
+.bsf-kpi--qc { border-color: var(--border); }
+.bsf-kpi--qc .bsf-kpi__count { color: #b45309; }
 .bsf-kpi--approvals .bsf-kpi__count,
 .bsf-kpi--approvals { border-color: var(--border); }
 .bsf-kpi--approvals .bsf-kpi__count { color: #6d28d9; }
@@ -2609,6 +2612,66 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   gap: 10px;
 }
 
+.bsf-summary--qc {
+  gap: 8px;
+}
+
+.bsf-qc-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bsf-qc-inline__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--faint);
+}
+
+.bsf-qc-inline__controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) minmax(220px, 1fr) 140px;
+  gap: 9px;
+  align-items: end;
+}
+
+.bsf-qc-inline__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bsf-qc-inline__field--wide {
+  min-width: 0;
+}
+
+.bsf-qc-inline__field.is-hidden-slot {
+  visibility: hidden;
+}
+
+.bsf-qc-inline__field.is-hidden-slot .inp {
+  pointer-events: none;
+}
+
+.bsf-qc-inline__save {
+  width: 100%;
+}
+
+.bsf-qc-inline__hint-slot {
+  min-height: 16px;
+  visibility: hidden;
+}
+
+.bsf-qc-inline__hint-slot.is-visible {
+  visibility: visible;
+}
+
+.bsf-qc-inline__controls .btn {
+  white-space: nowrap;
+}
+
 .bsf-summary-row {
   display: flex;
   align-items: center;
@@ -2776,12 +2839,106 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   flex-wrap: wrap;
 }
 
+.bsf-qc-shell {
+  padding: 10px 18px 14px;
+  display: block;
+  border-top: 1px solid var(--border);
+  background: var(--raised);
+}
+
+.bsf-qc-workers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.bsf-qc-worker {
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--lane-accent, var(--border-strong));
+  border-radius: var(--r);
+  background: var(--surface);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bsf-qc-worker__head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.bsf-qc-worker__name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.bsf-qc-worker__meta {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.bsf-qc-form {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bsf-qc-form__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--faint);
+}
+
+.bsf-qc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.bsf-qc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bsf-qc-field .inp,
+.bsf-qc-field .sel {
+  height: 36px;
+}
+
+.bsf-qc-field textarea.inp {
+  min-height: 66px;
+  height: auto;
+  resize: vertical;
+}
+
+.bsf-qc-field--wide {
+  grid-column: 1 / -1;
+}
+
+.bsf-qc-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 @media (max-width: 1240px) {
   .bsf-lanes {
     grid-template-columns: repeat(3, 1fr);
   }
   .bsf-kpis {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -2803,6 +2960,22 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   .bsf-top-actions,
   .bsf-top-actions .toolbar {
     flex-wrap: wrap;
+  }
+  .bsf-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .bsf-qc-inline__controls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .bsf-qc-inline__controls .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .bsf-kpis {
+    grid-template-columns: 1fr;
   }
 }
 
