@@ -4,7 +4,7 @@ import { getDealerScopeContext } from '../../../lib/api/auth'
 import type { ReportViewProps } from '../types'
 import Icon from '../../../components/Icon'
 
-type DashboardTab = 'overview' | 'alerts' | 'financial' | 'operations'
+type DashboardTab = 'overview' | 'alerts' | 'financial' | 'operations' | 'codes'
 
 interface WarrantyAlertRow {
   jc: string
@@ -400,6 +400,17 @@ const SPECIAL_AMOUNT_KEYS = ['980016', '980019', '980025', 'special', 'loaner', 
 const MISC_AMOUNT_KEYS = ['misc', 'misc_chgs', '980001', '980002', '980003', '980004']
 const MODEL_KEYS = ['parent_product_line_name', 'model', 'product', 'product_line', 'vehicle_model', 'model_name', 'chassis_type']
 const JC_KEYS = ['job_card_number', 'job_card_no', 'jc_no', 'jc_number']
+function recordMatchesDateFilter(record: WarrantyRecord, year: string, month: string): boolean {
+  if (year === 'ALL') return true
+  // Prefer invoiceDate, fall back to createdAt
+  const dateStr = record.invoiceDate || record.createdAt
+  if (!dateStr) return false
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return false
+  if (year !== 'ALL' && String(d.getFullYear()) !== year) return false
+  if (month !== 'ALL' && String(d.getMonth() + 1).padStart(2, '0') !== month) return false
+  return true
+}
 const CLAIM_CATEGORY_KEYS = ['claim_category']
 const SERVICE_TYPE_KEYS = ['service_type', 'stype']
 const INVOICE_DATE_KEYS = ['invoice_date', 'invoice_dt', 'invoice date', 'inv_date']
@@ -652,6 +663,9 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
   const [activeAlertStatus, setActiveAlertStatus] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // ── Date filter ────────────────────────────────────────────────────────────
+  const [selectedYear, setSelectedYear] = useState<string>('ALL')
+  const [selectedMonth, setSelectedMonth] = useState<string>('ALL')
 
   useEffect(() => {
     let active = true
@@ -873,9 +887,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
       if (parentFuelType !== 'ALL' && portal !== parentFuelType) return false
       if (selectedFuelType !== 'ALL' && portal !== selectedFuelType) return false
 
+      // Date filter
+      if (!recordMatchesDateFilter(record, selectedYear, selectedMonth)) return false
+
       return true
     })
-  }, [allowedLocationFuelPairs, branch, records, selectedFuelType, selectedLocation, viewerDealerCodes.length])
+  }, [allowedLocationFuelPairs, branch, records, selectedFuelType, selectedLocation, viewerDealerCodes.length, selectedYear, selectedMonth])
 
   const workflowStatusRecords = useMemo(() => {
     return filteredRecords.filter(isWorkflowAlertEligible)
@@ -1663,6 +1680,67 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
     return 'No dealer mapping assigned'
   }, [viewerDealerCodes])
 
+  // ── Available years for date filter ────────────────────────────────────────
+  const availableYears = useMemo(() => {
+    const years = new Set<string>()
+    for (const r of records) {
+      const dateStr = r.invoiceDate || r.createdAt
+      if (!dateStr) continue
+      const d = new Date(dateStr)
+      if (!isNaN(d.getTime())) years.add(String(d.getFullYear()))
+    }
+    return Array.from(years).sort().reverse()
+  }, [records])
+
+  // ── Aggregated codes report from Claim Settlement data ─────────────────────
+  const codesReport = useMemo(() => {
+    // For the codes report we use ALL records (not date-filtered) — show full uploaded picture
+    // but respect location/fuel filter
+    const settlementRows = filteredRecords.filter(r => r.category === 'Claim Settlement')
+    const codeMap = new Map<string, {
+      jobCode: string; partNo: string; description: string;
+      listPrice: number; labour: number; miscChgs: number; splLabour: number; total: number;
+      count: number; portal: string; location: string;
+    }>()
+
+    for (const record of settlementRows) {
+      const src = record as unknown as { tableName: string; category: string }
+      void src // suppress lint
+      // Pull from source_row_data via our record fields + extra extraction
+      const jobCode = record.jobCardNumber || 'UNKNOWN'
+      const partNo  = record.dealerInvoiceNo || '—'
+      const desc    = record.vcmComments || record.model || '—'
+      const listPriceAmt = record.partsAmount
+      const labourAmt    = record.labourAmount
+      const miscAmt      = record.miscAmount
+      const splLabAmt    = record.specialAmount
+      const total        = listPriceAmt + labourAmt + miscAmt + splLabAmt
+
+      const key = `${jobCode}||${partNo}||${record.portal}||${record.location}`
+      if (codeMap.has(key)) {
+        const e = codeMap.get(key)!
+        e.listPrice += listPriceAmt
+        e.labour    += labourAmt
+        e.miscChgs  += miscAmt
+        e.splLabour += splLabAmt
+        e.total     += total
+        e.count     += 1
+      } else {
+        codeMap.set(key, {
+          jobCode, partNo, description: desc,
+          listPrice: listPriceAmt, labour: labourAmt,
+          miscChgs: miscAmt, splLabour: splLabAmt,
+          total, count: 1,
+          portal: record.portal, location: record.location,
+        })
+      }
+    }
+
+    return Array.from(codeMap.values())
+      .filter(r => r.total > 0 || r.count > 0)
+      .sort((a, b) => b.total - a.total)
+  }, [filteredRecords])
+
   const hasMissingDealerScope = useMemo(() => {
     return viewerDealerCodes.length === 0
   }, [viewerDealerCodes])
@@ -1744,6 +1822,45 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </select>
           </div>
 
+          {/* Date Filter — Year */}
+          <select
+            value={selectedYear}
+            onChange={e => { setSelectedYear(e.target.value); setSelectedMonth('ALL') }}
+            style={{
+              padding: '8px 28px 8px 12px', borderRadius: 'var(--r-sm)',
+              border: '1px solid var(--border)', fontSize: '14px',
+              color: 'var(--ink-2)', backgroundColor: selectedYear !== 'ALL' ? 'var(--accent-soft)' : '#fff',
+              cursor: 'pointer', appearance: 'none',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23666' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center',
+            }}
+          >
+            <option value="ALL">All years</option>
+            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+
+          {/* Date Filter — Month */}
+          {selectedYear !== 'ALL' && (
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              style={{
+                padding: '8px 28px 8px 12px', borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--border)', fontSize: '14px',
+                color: 'var(--ink-2)', backgroundColor: selectedMonth !== 'ALL' ? 'var(--accent-soft)' : '#fff',
+                cursor: 'pointer', appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23666' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center',
+              }}
+            >
+              <option value="ALL">All months</option>
+              {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => {
+                const label = new Date(2000, parseInt(m)-1, 1).toLocaleString('en-IN', { month: 'long' })
+                return <option key={m} value={m}>{label}</option>
+              })}
+            </select>
+          )}
+
           {/* Fuel Type Filter */}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
@@ -1797,6 +1914,18 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             </button>
           </div>
         </div>
+        {/* Active date filter badge */}
+        {selectedYear !== 'ALL' && (
+          <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, background: 'var(--accent-soft)', color: 'var(--accent)', borderRadius: 20, padding: '3px 10px', fontWeight: 600 }}>
+              📅 {selectedYear}{selectedMonth !== 'ALL' ? ` · ${new Date(2000, parseInt(selectedMonth)-1, 1).toLocaleString('en-IN', { month: 'long' })}` : ''}
+            </span>
+            <button onClick={() => { setSelectedYear('ALL'); setSelectedMonth('ALL') }}
+              style={{ fontSize: 11, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+              Clear filter
+            </button>
+          </div>
+        )}
       </div>
 
       {hasMissingDealerScope && (
@@ -1832,6 +1961,12 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
             <Icon name="floor" size={16} />
           </span>
           Operations
+        </button>
+        <button className={`tab${activeTab === 'codes' ? ' is-active' : ''}`} onClick={() => setActiveTab('codes')}>
+          <span className="ic">
+            <Icon name="doc" size={16} />
+          </span>
+          Data Codes
         </button>
       </div>
 
@@ -2896,6 +3031,82 @@ export default function WarrantyOverviewReport({ branch, dateFilter }: ReportVie
               </div>
             </Card>
           </div>
+        </div>
+      )}
+
+      {/* ══ DATA CODES TAB ══ */}
+      {activeTab === 'codes' && (
+        <div>
+          <Card
+            title="Uploaded Data Codes — Claim Settlement"
+            sub={`Special / job codes applied in the system from warranty_claim_settlement_report_data · ${codesReport.length} unique code entries`}
+          >
+            {codesReport.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+                No claim settlement data found for the current filters.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                {/* Summary KPIs */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+                  {[
+                    { label: 'Total codes', value: codesReport.length.toLocaleString('en-IN'), tone: 'var(--accent)' },
+                    { label: 'Total list price', value: formatAmountShort(codesReport.reduce((s,r) => s+r.listPrice, 0)), tone: '#4F46E5' },
+                    { label: 'Total labour', value: formatAmountShort(codesReport.reduce((s,r) => s+r.labour, 0)), tone: 'var(--success)' },
+                    { label: 'Grand total', value: formatAmountShort(codesReport.reduce((s,r) => s+r.total, 0)), tone: 'var(--danger)' },
+                  ].map((k,i) => (
+                    <div key={i} style={{ border: '1px solid var(--border)', borderTop: `3px solid ${k.tone}`, borderRadius: 'var(--r-sm)', padding: '12px 14px', background: 'var(--panel)' }}>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: k.tone }}>{k.value}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>{k.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--canvas)', borderBottom: '2px solid var(--border)' }}>
+                      {['#', 'Job Code', 'Part / Invoice No', 'Description / Model', 'Portal', 'Location', 'List Price', 'Labour', 'Misc', 'SPL Labour', 'Total', 'Count'].map((h, i) => (
+                        <th key={i} style={{ padding: '8px 12px', textAlign: i >= 6 ? 'right' : 'left', fontWeight: 700, color: 'var(--ink-2)', fontSize: 12, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {codesReport.map((row, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'var(--panel)' : '#fff' }}>
+                        <td style={{ padding: '7px 12px', color: 'var(--muted)', fontSize: 11 }}>{idx + 1}</td>
+                        <td style={{ padding: '7px 12px', fontWeight: 600, color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>{row.jobCode}</td>
+                        <td style={{ padding: '7px 12px', fontFamily: 'monospace', fontSize: 11.5, color: 'var(--ink-2)' }}>{row.partNo}</td>
+                        <td style={{ padding: '7px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.description}>{row.description || '—'}</td>
+                        <td style={{ padding: '7px 12px' }}>
+                          <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 600,
+                            background: row.portal === 'EV' ? '#dcfce7' : '#eff6ff',
+                            color: row.portal === 'EV' ? '#16a34a' : '#2563eb' }}>{row.portal}</span>
+                        </td>
+                        <td style={{ padding: '7px 12px', fontSize: 12, color: 'var(--ink-2)' }}>{row.location || '—'}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.listPrice > 0 ? money(row.listPrice) : '—'}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.labour > 0 ? money(row.labour) : '—'}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.miscChgs > 0 ? money(row.miscChgs) : '—'}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{row.splLabour > 0 ? money(row.splLabour) : '—'}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>₹{money(row.total)}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--muted)', fontSize: 11.5 }}>{row.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--canvas)' }}>
+                      <td colSpan={6} style={{ padding: '8px 12px', fontWeight: 700, fontSize: 12 }}>TOTAL</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.listPrice, 0))}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.labour, 0))}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.miscChgs, 0))}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>₹{money(codesReport.reduce((s,r) => s+r.splLabour, 0))}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>₹{money(codesReport.reduce((s,r) => s+r.total, 0))}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>{codesReport.reduce((s,r) => s+r.count, 0)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </Card>
         </div>
       )}
     </div>
