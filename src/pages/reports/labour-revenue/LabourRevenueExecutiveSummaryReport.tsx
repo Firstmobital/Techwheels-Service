@@ -53,6 +53,11 @@ function formatCurrency(value: number): string {
   return `₹${Math.round(value).toLocaleString('en-IN')}`
 }
 
+function includeGst(value: number): number {
+  if (!Number.isFinite(value) || value === 0) return 0
+  return Math.round(value * GST_DIVISOR)
+}
+
 function pickColorByIndex(index: number, palette: string[]): string {
   if (palette.length === 0) return '#2563eb'
   return palette[index % palette.length]
@@ -208,9 +213,9 @@ export default function LabourRevenueExecutiveSummaryReport({
   }, [branchRows, jcRows, manpowerRows.length, serviceTypeRows, vasData.totalVasRevenue])
 
   const displayTotals = useMemo(() => {
-    const labourRevenue = totals.labourRevenue / GST_DIVISOR
-    const sparesRevenue = totals.sparesRevenue / GST_DIVISOR
-    const vasRevenue = totals.vasRevenue / GST_DIVISOR
+    const labourRevenue = includeGst(totals.labourRevenue)
+    const sparesRevenue = includeGst(totals.sparesRevenue)
+    const vasRevenue = includeGst(totals.vasRevenue)
     const grandRevenue = labourRevenue + sparesRevenue + vasRevenue
     const averageTicketSize = totals.jobCards > 0 ? (labourRevenue + sparesRevenue) / totals.jobCards : 0
 
@@ -230,9 +235,9 @@ export default function LabourRevenueExecutiveSummaryReport({
         .slice(0, 8)
         .map((row) => ({
           ...row,
-          totalLabourRevenue: row.totalLabourRevenue / GST_DIVISOR,
-          totalSparesRevenue: row.totalSparesRevenue / GST_DIVISOR,
-          totalRevenue: (row.totalLabourRevenue + row.totalSparesRevenue) / GST_DIVISOR,
+          totalLabourRevenue: includeGst(row.totalLabourRevenue),
+          totalSparesRevenue: includeGst(row.totalSparesRevenue),
+          totalRevenue: includeGst(row.totalLabourRevenue + row.totalSparesRevenue),
           labourShareInType:
             row.totalLabourRevenue + row.totalSparesRevenue > 0
               ? (row.totalLabourRevenue / (row.totalLabourRevenue + row.totalSparesRevenue)) * 100
@@ -550,7 +555,7 @@ export default function LabourRevenueExecutiveSummaryReport({
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium text-gray-800">{row.branch}</span>
                       <span className={row.absoluteChange >= 0 ? 'font-semibold text-emerald-700' : 'font-semibold text-red-700'}>
-                        {row.absoluteChange >= 0 ? '+' : ''}{formatCurrency(row.absoluteChange / GST_DIVISOR)}
+                        {row.absoluteChange >= 0 ? '+' : ''}{formatCurrency(includeGst(row.absoluteChange))}
                       </span>
                     </div>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
@@ -560,7 +565,7 @@ export default function LabourRevenueExecutiveSummaryReport({
                       />
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
-                      Selected: {formatCurrency(row.selectedRevenue / GST_DIVISOR)} • Previous: {formatCurrency(row.previousRevenue / GST_DIVISOR)}
+                      Selected: {formatCurrency(includeGst(row.selectedRevenue))} • Previous: {formatCurrency(includeGst(row.previousRevenue))}
                     </p>
                   </div>
                 )})}
@@ -620,7 +625,7 @@ export default function LabourRevenueExecutiveSummaryReport({
                   <div className="rounded-lg bg-slate-50 px-3 py-2">
                     <p className="text-xs uppercase text-slate-500">Labour Revenue</p>
                     <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {formatCurrency(selectedManpower.totalLabourRevenue / GST_DIVISOR)}
+                      {formatCurrency(includeGst(selectedManpower.totalLabourRevenue))}
                     </p>
                   </div>
                   <div className="rounded-lg bg-slate-50 px-3 py-2">
@@ -632,7 +637,7 @@ export default function LabourRevenueExecutiveSummaryReport({
                   <div className="rounded-lg bg-slate-50 px-3 py-2">
                     <p className="text-xs uppercase text-slate-500">Average Labour Revenue</p>
                     <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {formatCurrency(selectedManpower.avgLabourRevenue / GST_DIVISOR)}
+                      {formatCurrency(includeGst(selectedManpower.avgLabourRevenue))}
                     </p>
                   </div>
                   <div className="rounded-lg bg-slate-50 px-3 py-2">
@@ -658,7 +663,7 @@ export default function LabourRevenueExecutiveSummaryReport({
                             <tr key={`${selectedManpower.employeeCode}-${item.serviceType}`}>
                               <td className="px-3 py-2 text-slate-700">{item.serviceType}</td>
                               <td className="px-3 py-2 text-right text-slate-900">
-                                {formatCurrency(item.totalLabourRevenue / GST_DIVISOR)}
+                                {formatCurrency(includeGst(item.totalLabourRevenue))}
                               </td>
                               <td className="px-3 py-2 text-right text-slate-700">{item.jobCardCount.toLocaleString('en-IN')}</td>
                             </tr>
@@ -819,7 +824,7 @@ export default function LabourRevenueExecutiveSummaryReport({
                 </div>
                 <div className="rounded-lg bg-slate-50 px-3 py-2">
                   <p className="text-xs uppercase text-slate-500">Monthly Revenue (Cross-check)</p>
-                  <p className="mt-1 font-semibold text-slate-900">{formatCurrency(headerKpis.monthlyRevenue / GST_DIVISOR)}</p>
+                  <p className="mt-1 font-semibold text-slate-900">{formatCurrency(includeGst(headerKpis.monthlyRevenue))}</p>
                 </div>
               </div>
             </div>
@@ -827,7 +832,7 @@ export default function LabourRevenueExecutiveSummaryReport({
 
           <div className="rounded-xl border border-sky-100 bg-gradient-to-r from-sky-50 via-white to-blue-50 p-4 text-xs text-gray-500 shadow-sm">
             Cross-check KPIs: {headerKpis.monthlyJobCards.toLocaleString('en-IN')} monthly job cards,{' '}
-            {formatCurrency(headerKpis.monthlyRevenue / GST_DIVISOR)} monthly revenue and {headerKpis.totalVasCount.toLocaleString('en-IN')} VAS jobs.
+            {formatCurrency(includeGst(headerKpis.monthlyRevenue))} monthly revenue and {headerKpis.totalVasCount.toLocaleString('en-IN')} VAS jobs.
           </div>
         </>
       )}

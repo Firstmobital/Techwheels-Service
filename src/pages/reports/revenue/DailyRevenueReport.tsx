@@ -16,6 +16,11 @@ type SortKey =
 
 const GST_DIVISOR = 1.18
 
+function includeGst(value: number): number {
+  if (!Number.isFinite(value) || value === 0) return 0
+  return Math.round(value * GST_DIVISOR)
+}
+
 export default function DailyRevenueReportComponent({
   branch,
   dateFilter,
@@ -58,14 +63,18 @@ export default function DailyRevenueReportComponent({
 
   const transformedRows = useMemo(() => {
     return rows.map((row) => {
-      const netLabourRevenue = row.labourRevenue / GST_DIVISOR
-      const netTotalRevenue = netLabourRevenue + row.partsRevenue
+      const grossLabourRevenue = includeGst(row.labourRevenue)
+      const grossPartsRevenue = includeGst(row.partsRevenue)
+      const grossVasRevenue = includeGst(row.vasRevenue)
+      const grossTotalRevenue = grossLabourRevenue + grossPartsRevenue
 
       return {
         ...row,
-        labourRevenue: netLabourRevenue,
-        totalRevenue: netTotalRevenue,
-        avgBillingPerVehicle: row.vehicleCount > 0 ? netTotalRevenue / row.vehicleCount : 0,
+        labourRevenue: grossLabourRevenue,
+        partsRevenue: grossPartsRevenue,
+        vasRevenue: grossVasRevenue,
+        totalRevenue: grossTotalRevenue,
+        avgBillingPerVehicle: row.vehicleCount > 0 ? grossTotalRevenue / row.vehicleCount : 0,
       }
     })
   }, [rows])
