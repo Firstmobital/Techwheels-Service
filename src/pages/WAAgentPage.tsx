@@ -166,7 +166,6 @@ export default function WAAgentPage() {
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [sendingCampaign, setSendingCampaign] = useState<number | null>(null)
   const [sendingTest, setSendingTest] = useState<number | null>(null)
-  const [testNumbers, setTestNumbers] = useState('')   // comma-separated test numbers in campaign form
   const [testModalCampaign, setTestModalCampaign] = useState<number | null>(null)  // campaign id for test modal
   const [testModalNumbers, setTestModalNumbers] = useState('')  // numbers entered in test modal
   const [manualMsg, setManualMsg] = useState('')

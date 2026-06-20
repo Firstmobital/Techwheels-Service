@@ -324,13 +324,6 @@ function toLocalDateTimeInput(v: string | null | undefined) {
   return `${yyyy}-${mm}-${dd}T${hh}:${min}`
 }
 
-function toIsoFromLocalDateTimeInput(v: string | null | undefined): string | null {
-  const raw = String(v ?? '').trim()
-  if (!raw) return null
-  const d = new Date(raw)
-  if (!Number.isFinite(d.getTime())) return null
-  return d.toISOString()
-}
 
 function emptyQcEntryState(): QcEntryState {
   return {
