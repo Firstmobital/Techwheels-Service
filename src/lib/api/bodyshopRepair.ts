@@ -27,8 +27,10 @@ export const STAGE_LABELS: Record<number, string> = {
 }
 
 export const STAGE_GROUPS = [
-  { label: 'SA Intake',    stages: [1,2,3,4,5,6,7,8,9,10], color: '#3b82f6' },
-  { label: 'Floor Work',   stages: [11,12],                  color: '#8b5cf6' },
+  { label: 'SA Intake',    stages: [1,2,3,4,5,6,8],          color: '#3b82f6' },
+  { label: 'SSA',          stages: [7],                      color: '#6366f1' },
+  { label: 'Survey',       stages: [9,12],                   color: '#a855f7' },
+  { label: 'Floor Work',   stages: [11],                     color: '#8b5cf6' },
   { label: 'QC',           stages: [13,14],                  color: '#f59e0b' },
   { label: 'Billing',      stages: [15,16],                  color: '#10b981' },
   { label: 'Delivery',     stages: [17,18],                  color: '#6b7280' },

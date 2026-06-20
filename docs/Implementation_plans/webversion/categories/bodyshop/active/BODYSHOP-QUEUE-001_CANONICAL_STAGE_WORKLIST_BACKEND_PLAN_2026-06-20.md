@@ -203,6 +203,15 @@ Authoritative schema audit confirms there is no existing database function/view 
 - Card 382 snapshot validated with 18 stage rows and rule_version BODYSHOP-QUEUE-RULES-v1.
 - Observed behavior is expected for draft logic: pointer-aligned pending states are active; full canonical stage computation remains Phase 3.1 implementation scope.
 
+### 2026-06-20 - Web Pipeline Grouping Alignment (UI)
+- Updated web pipeline group mapping to align role ownership and stage-worklist visibility:
+	- SA Intake -> stages 1,2,3,4,5,6,8
+	- SSA -> stage 7
+	- Survey -> stages 9 and 12
+	- Floor Work -> stage 11
+- This is a presentation/grouping change only; canonical per-stage backend predicates and projection contract remain unchanged.
+- Delivery, Billing, QC, and Delivered group behavior remains unchanged.
+
 ---
 
 ## Embedded Rule Specification (v1)

@@ -18,6 +18,29 @@ function fmt(v: string | null | undefined) {
   if (!v) return '—'
   return new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
+function formatStageRangeLabel(stages: number[]): string {
+  const sorted = Array.from(new Set(stages)).sort((a, b) => a - b)
+  if (sorted.length === 0) return ''
+
+  const chunks: string[] = []
+  let start = sorted[0]
+  let prev = sorted[0]
+
+  for (let i = 1; i < sorted.length; i += 1) {
+    const stage = sorted[i]
+    if (stage === prev + 1) {
+      prev = stage
+      continue
+    }
+    chunks.push(start === prev ? `${start}` : `${start}-${prev}`)
+    start = stage
+    prev = stage
+  }
+
+  chunks.push(start === prev ? `${start}` : `${start}-${prev}`)
+  return chunks.join(' & ')
+}
 function inr(v: number | null | undefined) {
   if (v == null) return '—'
   return '₹' + v.toLocaleString('en-IN')
@@ -444,6 +467,7 @@ function getAdvisorFilterLabel(card: RepairCard): string {
 }
 
 type DetailTab = 'overview' | 'sa' | 'approval' | 'survey' | 'floor' | 'qc' | 'billing'
+type PipelineFilter = 'all' | 'SA Intake' | 'SSA' | 'Survey' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery' | 'Delivered'
 
 type AdditionalApprovalDecisionStatus = 'pending' | 'approved' | 'rejected'
 type AdditionalApprovalAggregateStatus = AdditionalApprovalDecisionStatus | 'none' | 'mixed'
@@ -808,7 +832,7 @@ export default function BodyshopRepairPage() {
   const [advisorFilter, setAdvisorFilter] = useState('all')
   const [statusFilter, setStatusFilter]   = useState('active')
   const [stageFilter, setStageFilter] = useState<number | 'all'>('all')
-  const [pipelineFilter, setPipelineFilter] = useState<'all' | 'SA Intake' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery' | 'Delivered'>('all')
+  const [pipelineFilter, setPipelineFilter] = useState<PipelineFilter>('all')
   const [photoCountByReceptionId, setPhotoCountByReceptionId] = useState<Record<number, number>>({})
   const [kmPresentByReceptionId, setKmPresentByReceptionId] = useState<Record<number, boolean>>({})
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
@@ -3759,7 +3783,7 @@ export default function BodyshopRepairPage() {
 
     const selectedGroup = STAGE_GROUPS.find((g) => g.label === pipelineFilter)
     if (!selectedGroup) return baseFiltered
-    const filterStages = selectedGroup.label === 'SA Intake' ? [1, 2, 3, 4, 5, 6, 8] : selectedGroup.stages
+    const filterStages = selectedGroup.stages
 
     return baseFiltered.filter((card) => {
       if (card.overall_status !== 'active') return false
@@ -3785,7 +3809,7 @@ export default function BodyshopRepairPage() {
   // Pipeline counts should follow the same toolbar/advisor scope as Stage Queue.
   const pipeline = useMemo(() =>
     STAGE_GROUPS.map((g) => {
-      const filterStages = g.label === 'SA Intake' ? [1, 2, 3, 4, 5, 6, 8] : g.stages
+      const filterStages = g.stages
       const count = advisorScopedCards.reduce((acc, card) => {
         if (card.overall_status !== 'active') return acc
         return filterStages.some((stage) => isCardInStageQueue(card, stage)) ? acc + 1 : acc
@@ -3873,7 +3897,7 @@ export default function BodyshopRepairPage() {
             className={`brx-pipe-pill ${pipelineFilter === g.label ? 'is-active' : ''}`}
             style={{ ['--pc' as any]: g.color }}
             onClick={() => {
-              const label = g.label as 'SA Intake' | 'Floor Work' | 'QC' | 'Billing' | 'Delivery'
+              const label = g.label as Exclude<PipelineFilter, 'all' | 'Delivered'>
               setPipelineFilter((prev) => prev === label ? 'all' : label)
               setStageFilter('all')
             }}
@@ -3882,7 +3906,7 @@ export default function BodyshopRepairPage() {
             <span className="brx-pipe-pill__l">
               {g.label}
               <small>
-                stage {g.label === 'SA Intake' ? '1-6 & 8' : `${g.minStage}${g.maxStage > g.minStage ? `-${g.maxStage}` : ''}`}
+                stage {formatStageRangeLabel(g.filterStages)}
               </small>
             </span>
           </button>
@@ -5594,7 +5618,7 @@ export default function BodyshopRepairPage() {
                                   <button
                                     type="button"
                                     className="btn btn--primary btn--xs"
-                                    disabled={saving || part.status === 'approved'}
+                                    disabled={saving || part.status !== 'pending'}
                                     onClick={() => void handleAdditionalApprovalDecision(idx, 'approved')}
                                   >
                                     Approve
@@ -5602,7 +5626,7 @@ export default function BodyshopRepairPage() {
                                   <button
                                     type="button"
                                     className="btn btn--xs"
-                                    disabled={saving || part.status === 'rejected'}
+                                    disabled={saving || part.status !== 'pending'}
                                     onClick={() => void handleAdditionalApprovalDecision(idx, 'rejected')}
                                   >
                                     Reject
