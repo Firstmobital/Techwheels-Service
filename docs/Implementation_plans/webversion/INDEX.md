@@ -1,6 +1,6 @@
 # Web Version Plans Index
 
-Last Updated: 2026-06-18
+Last Updated: 2026-06-20
 Scope: Web project implementation plans only
 Authority: This index is the routing source for webversion plans
 
@@ -38,6 +38,7 @@ Use this file as daily command center:
 | Plan ID | Category | Status | Owner | File |
 |---|---|---|---|---|
 | BODYSHOP-FLOW | bodyshop | In Progress | Bodyshop Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md` |
+| BODYSHOP-QUEUE-001 | bodyshop | Active | Bodyshop Team + Platform Team | `docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md` |
 | CMP-00 | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/00_INDEX.md` |
 | CMP-01 | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/01_COMPREHENSIVE_PLAN.md` |
 | CMP-CHECKLIST | complaints | Active | Complaints Team | `docs/Implementation_plans/webversion/categories/complaints/active/CHECKLIST.md` |
@@ -62,6 +63,7 @@ Use this file as daily command center:
 |---|---|
 | autodoc | `docs/Implementation_plans/webversion/categories/autodoc/evidence/AUTODOC_EXECUTION_STATUS_2026-05-22.md` |
 | bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BP-01_DASHBOARD_DEEP_AUDIT.md` |
+| bodyshop | `docs/Implementation_plans/webversion/categories/bodyshop/evidence/BODYSHOP-QUEUE-001_PARITY_CHECKLIST_2026-06-20.md` |
 | rbac | `docs/Implementation_plans/webversion/categories/rbac/evidence/runbooks/ADMIN_BYPASS_RLS_GOVERNANCE.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_01_CONNECTION_POOLING_AUDIT.md` |
 | supabase | `docs/Implementation_plans/webversion/categories/supabase/evidence/P1_03_SLOW_QUERY_ANALYSIS.md` |

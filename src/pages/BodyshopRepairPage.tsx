@@ -210,6 +210,7 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
   try {
     const parsed = JSON.parse(text) as AdditionalApprovalPayload
     const legacyStatus = parsed?.decision?.status
+
     const parsedParts = Array.isArray(parsed?.request?.parts)
       ? parsed.request.parts
           .map((part) => ({
@@ -222,6 +223,7 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
           }))
           .filter((part) => Boolean(part.part_no || part.part_description || part.reason || part.part_image_path))
       : []
+
     const fallbackPart: AdditionalApprovalRequestPart | null = parsedParts.length > 0
       ? null
       : (
@@ -239,26 +241,47 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
             part_image_file_name: parsed?.request?.part_image_file_name ?? null,
           }
         : null
+
     const allParts = fallbackPart ? [fallbackPart] : parsedParts
     const first = allParts[0] ?? null
+
     const parsedDecisionParts = Array.isArray(parsed?.decision?.parts)
       ? parsed.decision.parts
-          .map((part, idx) => ({
-            part_index: Number.isFinite(Number(part?.part_index)) ? Number(part.part_index) : idx,
-            status: part?.status === 'approved' || part?.status === 'rejected' || part?.status === 'pending' ? part.status : 'pending',
+          .map((part) => ({
+            part_index: Number(part?.part_index ?? -1),
+            status: part?.status,
             decided_at: part?.decided_at ?? null,
             decided_by: part?.decided_by ?? null,
             approval_photo_bucket: part?.approval_photo_bucket ?? null,
             approval_photo_path: part?.approval_photo_path ?? null,
             approval_photo_file_name: part?.approval_photo_file_name ?? null,
           }))
+          .filter((part) => Number.isInteger(part.part_index) && part.part_index >= 0)
       : []
-    const legacyDecisionStatus: AdditionalApprovalDecisionStatus = legacyStatus === 'pending' || legacyStatus === 'approved' || legacyStatus === 'rejected'
-      ? legacyStatus
-      : 'pending'
+
+    const decisionPartByIndex = new Map<number, {
+      status: AdditionalApprovalDecisionStatus | undefined
+      decided_at: string | null
+      decided_by: string | null
+      approval_photo_bucket: string | null
+      approval_photo_path: string | null
+      approval_photo_file_name: string | null
+    }>()
+
+    parsedDecisionParts.forEach((part) => {
+      decisionPartByIndex.set(part.part_index, part)
+    })
+
+    const legacyDecisionStatus: AdditionalApprovalDecisionStatus = (
+      legacyStatus === 'pending' || legacyStatus === 'approved' || legacyStatus === 'rejected'
+    ) ? legacyStatus : 'pending'
+
     const partStates: AdditionalApprovalPartState[] = allParts.map((part, idx) => {
-      const explicit = parsedDecisionParts.find((item) => item.part_index === idx) ?? parsedDecisionParts[idx] ?? null
-      const status = explicit?.status ?? legacyDecisionStatus
+      const explicit = decisionPartByIndex.get(idx)
+      const status: AdditionalApprovalDecisionStatus = (
+        explicit?.status === 'pending' || explicit?.status === 'approved' || explicit?.status === 'rejected'
+      ) ? explicit.status : legacyDecisionStatus
+
       const approvalPhotoBucket = explicit?.approval_photo_bucket ?? parsed?.decision?.approval_photo_bucket ?? null
       const approvalPhotoPath = explicit?.approval_photo_path ?? parsed?.decision?.approval_photo_path ?? null
       const approvalPhotoFileName = explicit?.approval_photo_file_name ?? parsed?.decision?.approval_photo_file_name ?? null
@@ -279,12 +302,14 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
         approvalPhotoFileName,
       }
     })
+
+    const aggregateStatus: AdditionalApprovalAggregateStatus = partStates.length > 0
+      ? getAggregateAdditionalApprovalStatus(partStates)
+      : (legacyStatus === 'pending' || legacyStatus === 'approved' || legacyStatus === 'rejected' ? legacyStatus : 'pending')
+
     const pendingCount = partStates.filter((part) => part.status === 'pending').length
     const approvedCount = partStates.filter((part) => part.status === 'approved').length
     const rejectedCount = partStates.filter((part) => part.status === 'rejected').length
-    const aggregateStatus = partStates.length > 0
-      ? getAggregateAdditionalApprovalStatus(partStates)
-      : (legacyStatus === 'pending' || legacyStatus === 'approved' || legacyStatus === 'rejected' ? legacyStatus : 'pending')
 
     return {
       ...base,
@@ -336,6 +361,8 @@ function parseAdditionalApprovalState(raw: string | null | undefined): Additiona
         approvalPhotoFileName: null,
       }],
       pendingCount: 1,
+      approvedCount: 0,
+      rejectedCount: 0,
       requestReason: text,
     }
   }
@@ -740,6 +767,12 @@ type BodyshopRepairCardDocumentRow = {
   updated_at: string
 }
 
+type BodyshopStageWorklistProjectionRow = {
+  repair_card_id: number
+  stage_no: number
+  is_pending: boolean
+}
+
 type DocUploadFeedback = {
   tone: 'ok' | 'error' | 'info'
   text: string
@@ -766,6 +799,8 @@ const isLegacyBooleanDocKey = (docKey: BodyshopDocKey): docKey is Exclude<Bodysh
 export default function BodyshopRepairPage() {
   const [dateRange, setDateRange] = useState<DateRange>(currentMonthRange())
   const [cards, setCards]         = useState<RepairCard[]>([])
+  const [projectionPendingStagesByCard, setProjectionPendingStagesByCard] = useState<Record<number, number[]>>({})
+  const [projectionPendingLoaded, setProjectionPendingLoaded] = useState(false)
   const [loading, setLoading]     = useState(true)
   const [branches, setBranches]   = useState<string[]>([])
   const [search, setSearch]       = useState('')
@@ -796,6 +831,7 @@ export default function BodyshopRepairPage() {
   const [fetchingInsurance, setFetchingInsurance] = useState(false)
   const [insuranceFetched, setInsuranceFetched] = useState(false)
   const [bodyshopDocsByKey, setBodyshopDocsByKey] = useState<Partial<Record<BodyshopDocKey, BodyshopRepairCardDocumentRow>>>({})
+  const [bodyshopDocsLoadError, setBodyshopDocsLoadError] = useState<string | null>(null)
   const [uploadingDocKey, setUploadingDocKey] = useState<BodyshopDocKey | null>(null)
   const [pendingDocAction, setPendingDocAction] = useState<{ docKey: BodyshopDocKey; mode: 'upload' | 'replace' } | null>(null)
   const [docUploadFeedbackByKey, setDocUploadFeedbackByKey] = useState<Partial<Record<BodyshopDocKey, DocUploadFeedback>>>({})
@@ -803,6 +839,7 @@ export default function BodyshopRepairPage() {
   const [floorWorkStartedLookup, setFloorWorkStartedLookup] = useState<Record<string, boolean>>({})
   const [floorStageCompletedLookup, setFloorStageCompletedLookup] = useState<Record<string, boolean>>({})
   const [floorPrimaryRow, setFloorPrimaryRow] = useState<BodyshopFloorPrimaryRow | null>(null)
+  const [initialFloorByCardId, setInitialFloorByCardId] = useState<Record<number, 'Floor 2' | 'Floor 3'>>({})
   const [loadingFloorPrimary, setLoadingFloorPrimary] = useState(false)
   const [pendingFloorScrollRole, setPendingFloorScrollRole] = useState<FloorRole | null>(null)
   const [highlightedFloorRole, setHighlightedFloorRole] = useState<FloorRole | null>(null)
@@ -852,6 +889,67 @@ export default function BodyshopRepairPage() {
     if (!userScopeResolved) return
     void load()
   }, [dateRange, userScopeResolved, isAdminLikeUser, bodyshopSaCodesForUser, bodyshopSsaBranchesForUser, bodyshopSurveyBranchesForUser])
+
+  useEffect(() => {
+    let cancelled = false
+
+    ;(async () => {
+      const ids = Array.from(new Set(
+        cards
+          .map((card) => Number(card.id))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      ))
+
+      if (ids.length === 0) {
+        if (!cancelled) {
+          setProjectionPendingStagesByCard({})
+          setProjectionPendingLoaded(true)
+        }
+        return
+      }
+
+      const nextMap: Record<number, Set<number>> = {}
+
+      try {
+        for (let i = 0; i < ids.length; i += 500) {
+          const chunk = ids.slice(i, i + 500)
+          const { data, error } = await supabase
+            .from('bodyshop_stage_worklist_projection')
+            .select('repair_card_id, stage_no, is_pending')
+            .eq('is_pending', true)
+            .in('repair_card_id', chunk)
+
+          if (error) throw error
+
+          ;((data ?? []) as BodyshopStageWorklistProjectionRow[]).forEach((row) => {
+            const cardId = Number(row.repair_card_id)
+            const stageNo = Number(row.stage_no)
+            if (!Number.isFinite(cardId) || cardId <= 0) return
+            if (!Number.isFinite(stageNo) || stageNo < 1 || stageNo > 18) return
+            if (!nextMap[cardId]) nextMap[cardId] = new Set<number>()
+            if (row.is_pending) nextMap[cardId].add(stageNo)
+          })
+        }
+
+        if (cancelled) return
+        const normalized: Record<number, number[]> = {}
+        Object.entries(nextMap).forEach(([cardIdText, stagesSet]) => {
+          normalized[Number(cardIdText)] = Array.from(stagesSet.values()).sort((a, b) => a - b)
+        })
+        setProjectionPendingStagesByCard(normalized)
+        setProjectionPendingLoaded(true)
+      } catch {
+        if (cancelled) return
+        // Keep legacy stage logic active if projection objects are unavailable.
+        setProjectionPendingStagesByCard({})
+        setProjectionPendingLoaded(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [cards])
 
   useEffect(() => {
     let cancelled = false
@@ -1058,12 +1156,13 @@ export default function BodyshopRepairPage() {
   useEffect(() => {
     if (!selected?.id) {
       setBodyshopDocsByKey({})
+      setBodyshopDocsLoadError(null)
       setInsuranceFetched(false)
       return
     }
 
-    void loadBodyshopDocuments(selected.id)
-  }, [selected?.id])
+    void loadBodyshopDocuments(selected.id, selected.reception_entry_id)
+  }, [selected?.id, selected?.reception_entry_id])
 
   useEffect(() => {
     if (!selected?.id || selected.current_stage !== 5 || autoAdvanceDocsLockRef.current) return
@@ -1248,6 +1347,19 @@ export default function BodyshopRepairPage() {
   const selectedApprovedParts = useMemo(() => {
     return parseApprovedPartsState(selected?.approved_parts)
   }, [selected?.approved_parts])
+
+  useEffect(() => {
+    if (!selected) return
+    const cardId = Number(selected.id)
+    if (!Number.isFinite(cardId) || cardId <= 0) return
+    const currentFloor = String(selected.bodyshop_floor ?? '').trim()
+    if (currentFloor !== 'Floor 2' && currentFloor !== 'Floor 3') return
+
+    setInitialFloorByCardId((prev) => {
+      if (prev[cardId]) return prev
+      return { ...prev, [cardId]: currentFloor }
+    })
+  }, [selected])
 
   useEffect(() => {
     if (detailTab !== 'floor' || !pendingFloorScrollRole || loadingFloorPrimary) return
@@ -1820,6 +1932,19 @@ export default function BodyshopRepairPage() {
 
   async function handleSendToBodyshopFloor(floorValue: 'Floor 2' | 'Floor 3') {
     if (!selected) return
+
+    const currentFloor = String(selected.bodyshop_floor ?? '').trim()
+    if (currentFloor === floorValue) {
+      toast_(`Vehicle is already on ${floorValue}`)
+      return
+    }
+
+    const floorChangeLocked = floorRoleSnapshots.some((role) => role.assigned)
+    if (floorChangeLocked && (currentFloor === 'Floor 2' || currentFloor === 'Floor 3')) {
+      toast_('Floor cannot be changed once technician/support assignment starts in Bodyshop Floor', false)
+      return
+    }
+
     if (!bodyshopDocsByKey.doc_survey_approval) {
       toast_('Upload Survey Approval Photo first', false)
       return
@@ -1876,6 +2001,10 @@ export default function BodyshopRepairPage() {
       const updated = await updateRepairCard(selected.id, patch)
       setSelected(updated)
       setCards((prev) => prev.map((c) => c.id === updated.id ? updated : c))
+      setInitialFloorByCardId((prev) => {
+        if (prev[updated.id]) return prev
+        return { ...prev, [updated.id]: floorValue }
+      })
       setEditPatch({})
       toast_(selected.current_stage === 9
         ? `Sent to ${floorValue}. Stage moved to Parts Status ✅`
@@ -2372,13 +2501,14 @@ export default function BodyshopRepairPage() {
     }
   }
 
-  async function loadBodyshopDocuments(repairCardId: number) {
+  async function loadBodyshopDocuments(repairCardId: number, receptionEntryId?: number | null) {
     const { data, error } = await supabase
       .from('bodyshop_repair_card_documents')
       .select('id, repair_card_id, reception_entry_id, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_at, created_at, updated_at')
       .eq('repair_card_id', repairCardId)
 
     if (error) {
+      setBodyshopDocsLoadError(error.message ?? 'Unable to load uploaded documents')
       return
     }
 
@@ -2386,6 +2516,22 @@ export default function BodyshopRepairPage() {
     ;((data ?? []) as BodyshopRepairCardDocumentRow[]).forEach((row) => {
       nextMap[row.doc_key] = row
     })
+
+    const normalizedReceptionId = Number(receptionEntryId)
+    if ((data?.length ?? 0) === 0 && Number.isFinite(normalizedReceptionId) && normalizedReceptionId > 0) {
+      const byReception = await supabase
+        .from('bodyshop_repair_card_documents')
+        .select('id, repair_card_id, reception_entry_id, doc_key, storage_bucket, storage_path, file_name, content_type, file_size_bytes, drive_url, drive_file_id, uploaded_at, created_at, updated_at')
+        .eq('reception_entry_id', normalizedReceptionId)
+
+      if (!byReception.error) {
+        ;((byReception.data ?? []) as BodyshopRepairCardDocumentRow[]).forEach((row) => {
+          if (!nextMap[row.doc_key]) nextMap[row.doc_key] = row
+        })
+      }
+    }
+
+    setBodyshopDocsLoadError(null)
     setBodyshopDocsByKey(nextMap)
   }
 
@@ -2570,7 +2716,7 @@ export default function BodyshopRepairPage() {
         }))
         toast_(`Document uploaded, but Drive sync failed: ${drivePayload?.error || `HTTP ${driveRes.status}`}`, false)
       } else {
-        await loadBodyshopDocuments(selected.id)
+        await loadBodyshopDocuments(selected.id, selected.reception_entry_id)
       }
 
       if (isLegacyBooleanDocKey(docKey)) {
@@ -3025,6 +3171,13 @@ export default function BodyshopRepairPage() {
   }
 
   function getEffectiveStageForCard(card: RepairCard): number {
+    if (projectionPendingLoaded) {
+      const pendingStages = projectionPendingStagesByCard[card.id] ?? []
+      if (pendingStages.length > 0) {
+        return Math.min(...pendingStages)
+      }
+    }
+
     const intakePhotoCount = photoCountByReceptionId[Number(card.reception_entry_id)] ?? 0
     const hasKmReading = kmPresentByReceptionId[Number(card.reception_entry_id)] ?? false
     return getEffectiveStageFlow(card, intakePhotoCount, hasKmReading).effectiveCurrentStage
@@ -3074,9 +3227,11 @@ export default function BodyshopRepairPage() {
     const surveyDate = String(card.survey_date ?? '').trim()
     const surveyStatus = String(card.survey_status ?? '').trim().toLowerCase()
     const surveyHoldReason = String(card.survey_hold_reason ?? '').trim()
+    const floorAssigned = ['floor 2', 'floor 3'].includes(String(card.bodyshop_floor ?? '').trim().toLowerCase())
     const stage9Done = (Boolean(surveyDate)
       && (surveyStatus === 'hold' || surveyStatus === 'approved')
-      && (surveyStatus !== 'hold' || Boolean(surveyHoldReason)))
+      && (surveyStatus !== 'hold' || Boolean(surveyHoldReason))
+      && floorAssigned)
       || effectiveCurrentStage > 9
     
     // Stage 10: Initial Approved Parts must be submitted when survey is approved + approval photo uploaded
@@ -3099,7 +3254,7 @@ export default function BodyshopRepairPage() {
     // Stage 11 completes only when floor is completed and all required upstream gates are complete.
     const stage11Done = floorCompleted && stage10Done && (!additionalApprovalRequested || stage12Done)
 
-    const stage10And11Ready = stage1Done
+    const stage10Ready = stage1Done
       && stage2Done
       && stage3Done
       && stage4Done
@@ -3107,9 +3262,9 @@ export default function BodyshopRepairPage() {
       && stage6Done
       && stage7Done
       && stage8Done
-      && stage9Done
       && surveyApproved
       && surveyApprovalDoc
+    const stage11Ready = stage10Ready && stage9Done
 
     // Stage queue is an operational worklist: each stage card counts cards that
     // still need that specific stage's work, independent of earlier pending stages.
@@ -3122,18 +3277,24 @@ export default function BodyshopRepairPage() {
     if (stage === 7) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && !stage7Done
     if (stage === 8) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && !stage8Done
     if (stage === 9) return stage1Done && stage2Done && stage3Done && stage4Done && stage5Done && stage6Done && stage7Done && stage8Done && !stage9Done
-    if (stage === 10) return stage10And11Ready && !stage10Done
+    if (stage === 10) return stage10Ready && !stage10Done
     if (stage === 11) {
-      return stage10And11Ready && !stage11Done
+      return stage11Ready && !stage11Done
     }
 
     if (stage === 12) {
-      return stage10And11Ready
+      return stage11Ready
         && additionalApprovalRequested
         && !stage12Done
     }
 
     return effectiveCurrentStage === stage
+  }
+
+  function isCardInStageQueue(card: RepairCard, stage: number): boolean {
+    if (!projectionPendingLoaded) return isCardInStageWorklist(card, stage)
+    const pendingStages = projectionPendingStagesByCard[card.id] ?? []
+    return pendingStages.includes(stage)
   }
 
   async function openAdditionalApprovalImage(path: string | null, bucket?: string | null) {
@@ -3548,8 +3709,8 @@ export default function BodyshopRepairPage() {
 
   const stageScopedCards = useMemo(() => {
     if (stageFilter === 'all') return scopeFilteredCards
-    return scopeFilteredCards.filter((card) => isCardInStageWorklist(card, stageFilter))
-  }, [scopeFilteredCards, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+    return scopeFilteredCards.filter((card) => isCardInStageQueue(card, stageFilter))
+  }, [scopeFilteredCards, stageFilter, projectionPendingStagesByCard, projectionPendingLoaded, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   const advisorScopedCards = useMemo(() => {
     if (advisorFilter === 'all') return scopeFilteredCards
@@ -3580,8 +3741,8 @@ export default function BodyshopRepairPage() {
 
   const baseFiltered = useMemo(() => {
     if (stageFilter === 'all') return advisorScopedCards
-    return advisorScopedCards.filter((card) => isCardInStageWorklist(card, stageFilter))
-  }, [advisorScopedCards, stageFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+    return advisorScopedCards.filter((card) => isCardInStageQueue(card, stageFilter))
+  }, [advisorScopedCards, stageFilter, projectionPendingStagesByCard, projectionPendingLoaded, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   useEffect(() => {
     if (advisorFilter === 'all') return
@@ -3602,9 +3763,9 @@ export default function BodyshopRepairPage() {
 
     return baseFiltered.filter((card) => {
       if (card.overall_status !== 'active') return false
-      return filterStages.some((stage) => isCardInStageWorklist(card, stage))
+      return filterStages.some((stage) => isCardInStageQueue(card, stage))
     })
-  }, [baseFiltered, pipelineFilter, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+  }, [baseFiltered, pipelineFilter, projectionPendingStagesByCard, projectionPendingLoaded, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   const filtered = useMemo(() => pipelineFiltered, [pipelineFiltered])
 
@@ -3613,13 +3774,13 @@ export default function BodyshopRepairPage() {
     for (let i = 1; i <= 18; i += 1) counts[i] = 0
     advisorScopedCards.forEach((card) => {
       for (let stage = 1; stage <= 18; stage += 1) {
-        if (isCardInStageWorklist(card, stage)) {
+        if (isCardInStageQueue(card, stage)) {
           counts[stage] = (counts[stage] ?? 0) + 1
         }
       }
     })
     return counts
-  }, [advisorScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+  }, [advisorScopedCards, projectionPendingStagesByCard, projectionPendingLoaded, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   // Pipeline counts should follow the same toolbar/advisor scope as Stage Queue.
   const pipeline = useMemo(() =>
@@ -3627,7 +3788,7 @@ export default function BodyshopRepairPage() {
       const filterStages = g.label === 'SA Intake' ? [1, 2, 3, 4, 5, 6, 8] : g.stages
       const count = advisorScopedCards.reduce((acc, card) => {
         if (card.overall_status !== 'active') return acc
-        return filterStages.some((stage) => isCardInStageWorklist(card, stage)) ? acc + 1 : acc
+        return filterStages.some((stage) => isCardInStageQueue(card, stage)) ? acc + 1 : acc
       }, 0)
 
       return {
@@ -3638,7 +3799,7 @@ export default function BodyshopRepairPage() {
         count,
       }
     }),
-  [advisorScopedCards, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
+  [advisorScopedCards, projectionPendingStagesByCard, projectionPendingLoaded, photoCountByReceptionId, kmPresentByReceptionId, floorWorkStartedLookup, floorStageCompletedLookup])
 
   const deliveredCount = useMemo(
     () => advisorScopedCards.filter((c) => c.overall_status === 'delivered').length,
@@ -3941,10 +4102,7 @@ export default function BodyshopRepairPage() {
             {/* Stage group pills */}
             <div className="brx-dgroupbar">
               {STAGE_GROUPS.map((g) => {
-                const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
-                const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                const effectiveCurrentStage = getEffectiveStageForCard(selected)
                 const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                 const noDocsRequired = ct === 'cash' || ct === 'foc'
                 const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
@@ -3982,12 +4140,9 @@ export default function BodyshopRepairPage() {
               <div className="brx-stp-head">
                 <div className="brx-stp-head-k">Current Stage</div>
                 {(() => {
-                  const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                  const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
-                  const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                  const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                  const effectiveCurrentStage = getEffectiveStageForCard(selected)
                   return (
-                <div className="brx-stp-head-v" style={{ ['--sc' as any]: getGroupForStage(selected.current_stage).color }}>
+                <div className="brx-stp-head-v" style={{ ['--sc' as any]: getGroupForStage(effectiveCurrentStage).color }}>
                   {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
                 </div>
                   )
@@ -3998,7 +4153,7 @@ export default function BodyshopRepairPage() {
                   const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                   const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                   const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                  const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                  const effectiveCurrentStage = getEffectiveStageForCard(selected)
                   const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                   const noDocsRequired = ct === 'cash' || ct === 'foc'
                   const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
@@ -4009,6 +4164,7 @@ export default function BodyshopRepairPage() {
                   const docsDone = mandatoryDocs.length > 0 && collectedMandatory === mandatoryDocs.length
                   const surveyStatusNormalized = String(selected.survey_status ?? '').trim().toLowerCase()
                   const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
+                  const floorAssigned = ['floor 2', 'floor 3'].includes(String(selected.bodyshop_floor ?? '').trim().toLowerCase())
                   const surveyApproved = surveyStatusNormalized === 'approved'
                   const surveyApprovalDoc = Boolean(selected.doc_survey_approval ?? null)
                     || Boolean(bodyshopDocsByKey.doc_survey_approval?.id)
@@ -4024,7 +4180,8 @@ export default function BodyshopRepairPage() {
                   const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
                   const stage9Done = (Boolean(String(selected.survey_date ?? '').trim())
                     && (surveyStatusNormalized === 'hold' || surveyStatusNormalized === 'approved')
-                    && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason)))
+                    && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason))
+                    && floorAssigned)
                     || effectiveCurrentStage > 9
                   const stage12Done = (
                     (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
@@ -4037,7 +4194,7 @@ export default function BodyshopRepairPage() {
                   const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
                   const stage3Done = milestones.stage3Done || effectiveCurrentStage > 3
                   const stage4Done = milestones.stage4Done || effectiveCurrentStage > 4
-                  const stage10And11Ready = stage1Done
+                  const stage10Ready = stage1Done
                     && stage2Done
                     && stage3Done
                     && stage4Done
@@ -4045,9 +4202,9 @@ export default function BodyshopRepairPage() {
                     && stage6Done
                     && stage7Done
                     && stage8Done
-                    && stage9Done
                     && surveyApproved
                     && surveyApprovalDoc
+                  const stage11Ready = stage10Ready && stage9Done
                   const num    = Number(numStr)
                   const isDone = num <= 4
                     ? num === 1
@@ -4066,9 +4223,9 @@ export default function BodyshopRepairPage() {
                           : num === 12
                             ? stage12Done
                         : effectiveCurrentStage > num
-                  const stage10Active = stage10And11Ready && !stage10Done
-                  const stage11Active = stage10And11Ready && !stage11Done
-                  const stage12Active = stage10And11Ready && additionalApprovalRequested && !stage12Done
+                  const stage10Active = stage10Ready && !stage10Done
+                  const stage11Active = stage11Ready && !stage11Done
+                  const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
                   const isCur = num === 10
                     ? stage10Active
                     : num === 11
@@ -4227,10 +4384,7 @@ export default function BodyshopRepairPage() {
                   <div className="brx-overview-stagebox">
                     <div className="brx-overview-stagebox-k">Current Stage</div>
                       {(() => {
-                        const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                        const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
-                        const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                        const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                        const effectiveCurrentStage = getEffectiveStageForCard(selected)
                         return (
                           <div className="brx-overview-stagebox-v" style={{ ['--sc' as any]: getGroupForStage(effectiveCurrentStage).color }}>
                             {getCurrentStageDisplay(effectiveCurrentStage, floorWorkStarted && !floorStageCompleted, additionalApprovalPending)}
@@ -4245,7 +4399,7 @@ export default function BodyshopRepairPage() {
                       const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                       const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                       const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                      const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                      const effectiveCurrentStage = getEffectiveStageForCard(selected)
                       const ct = String(selected.customer_type ?? '').trim().toLowerCase()
                       const noDocsRequired = ct === 'cash' || ct === 'foc'
                       const visibleDocs = noDocsRequired ? [] : BODYSHOP_DOCS
@@ -4254,6 +4408,7 @@ export default function BodyshopRepairPage() {
                         : []
                       const surveyStatusNormalized = String(selected.survey_status ?? '').trim().toLowerCase()
                       const surveyHoldReason = String(selected.survey_hold_reason ?? '').trim()
+                      const floorAssigned = ['floor 2', 'floor 3'].includes(String(selected.bodyshop_floor ?? '').trim().toLowerCase())
                       const surveyApproved = surveyStatusNormalized === 'approved'
                       const surveyApprovalDoc = Boolean(selected.doc_survey_approval ?? null)
                         || Boolean(bodyshopDocsByKey.doc_survey_approval?.id)
@@ -4269,7 +4424,8 @@ export default function BodyshopRepairPage() {
                       const stage8Done = Boolean(String(selected.claim_intimation_no ?? '').trim()) || effectiveCurrentStage > 8
                       const stage9Done = (Boolean(String(selected.survey_date ?? '').trim())
                         && (surveyStatusNormalized === 'hold' || surveyStatusNormalized === 'approved')
-                        && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason)))
+                        && (surveyStatusNormalized !== 'hold' || Boolean(surveyHoldReason))
+                        && floorAssigned)
                         || effectiveCurrentStage > 9
                       const stage12Done = (
                         (selectedAdditionalApproval.partStates.length > 0 && selectedAdditionalApproval.pendingCount === 0)
@@ -4282,7 +4438,7 @@ export default function BodyshopRepairPage() {
                       const stage2Done = milestones.stage2Done || effectiveCurrentStage > 2
                       const stage3Done = milestones.stage3Done || effectiveCurrentStage > 3
                       const stage4Done = milestones.stage4Done || effectiveCurrentStage > 4
-                      const stage10And11Ready = stage1Done
+                      const stage10Ready = stage1Done
                         && stage2Done
                         && stage3Done
                         && stage4Done
@@ -4290,9 +4446,9 @@ export default function BodyshopRepairPage() {
                         && stage6Done
                         && stage7Done
                         && stage8Done
-                        && stage9Done
                         && surveyApproved
                         && surveyApprovalDoc
+                      const stage11Ready = stage10Ready && stage9Done
                       const num     = Number(numStr)
                       const isDone  = num <= 4
                         ? num === 1
@@ -4309,9 +4465,9 @@ export default function BodyshopRepairPage() {
                             : num === 12
                               ? stage12Done
                           : effectiveCurrentStage > num
-                      const stage10Active = stage10And11Ready && !stage10Done
-                      const stage11Active = stage10And11Ready && !stage11Done
-                      const stage12Active = stage10And11Ready && additionalApprovalRequested && !stage12Done
+                      const stage10Active = stage10Ready && !stage10Done
+                      const stage11Active = stage11Ready && !stage11Done
+                      const stage12Active = stage11Ready && additionalApprovalRequested && !stage12Done
                       const isCur   = num === 10
                         ? stage10Active
                         : num === 11
@@ -4358,7 +4514,7 @@ export default function BodyshopRepairPage() {
                 const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
                 const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
                 const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                const effectiveCurrentStage = getEffectiveStageForCard(selected)
 
                 // Calculate docs completion status for stage 5
                 const ct = String(selected.customer_type ?? '').trim().toLowerCase()
@@ -4966,10 +5122,7 @@ export default function BodyshopRepairPage() {
 
               {/* ── Approval ── */}
               {detailTab === 'approval' && (() => {
-                const intakePhotoCount = photoCountByReceptionId[Number(selected.reception_entry_id)] ?? 0
-                const hasKmReading = kmPresentByReceptionId[Number(selected.reception_entry_id)] ?? false
-                const milestones = getIntakeMilestones(selected, intakePhotoCount, hasKmReading)
-                const effectiveCurrentStage = selected.current_stage <= 4 ? milestones.activeStage : selected.current_stage
+                const effectiveCurrentStage = getEffectiveStageForCard(selected)
                 const isApprovedStageDone = effectiveCurrentStage > 7
                 const estimateDoc = bodyshopDocsByKey.doc_estimate
                 const hasEstimateAmount = Number(selected.estimated_amount ?? 0) > 0
@@ -5047,6 +5200,14 @@ export default function BodyshopRepairPage() {
                 const hasSurveyDate = Boolean(String(selected.survey_date ?? '').trim())
                 const hasSurveyorName = Boolean(String(selected.surveyor_name ?? '').trim())
                 const canSaveSurveyRequiredFields = hasClaimNo && hasSurveyDate && hasSurveyorName
+                const selectedCardId = Number(selected.id)
+                const currentFloor = String(selected.bodyshop_floor ?? '').trim()
+                const hasFloorSelection = currentFloor === 'Floor 2' || currentFloor === 'Floor 3'
+                const initialFloor = Number.isFinite(selectedCardId) && selectedCardId > 0
+                  ? (initialFloorByCardId[selectedCardId] ?? null)
+                  : null
+                const floorChanged = Boolean(initialFloor && hasFloorSelection && initialFloor !== currentFloor)
+                const floorChangeLocked = floorRoleSnapshots.some((role) => role.assigned)
 
                 return (
                   <div className="brx-survey-wrap">
@@ -5144,6 +5305,11 @@ export default function BodyshopRepairPage() {
                             <div className="brx-survey-approval-sub">
                               {surveyApprovalDoc ? 'Uploaded' : 'Upload is required for Approved status'}
                             </div>
+                            {bodyshopDocsLoadError && (
+                              <div className="brx-survey-feedback is-error">
+                                Cannot read uploaded document metadata: {bodyshopDocsLoadError}
+                              </div>
+                            )}
                             {surveyApprovalFeedback?.text && (
                               <div className={`brx-survey-feedback ${surveyApprovalFeedback.tone === 'error' ? 'is-error' : surveyApprovalFeedback.tone === 'ok' ? 'is-ok' : 'is-info'}`}>
                                 {surveyApprovalFeedback.text}
@@ -5176,28 +5342,45 @@ export default function BodyshopRepairPage() {
                           )}
                         </div>
                         {surveyApprovalDoc && (
-                          <div className="brx-survey-actions">
+                          <div className="brx-survey-actions brx-survey-floor-actions">
                             <button
                               type="button"
-                              className="btn btn--primary"
-                              disabled={saving}
+                              className={`btn brx-floor-send-btn ${currentFloor === 'Floor 2' ? 'is-selected' : ''}`}
+                              disabled={saving || floorChangeLocked}
                               onClick={() => void handleSendToBodyshopFloor('Floor 2')}
                             >
-                              Send To Floor 2
+                              {currentFloor === 'Floor 2' ? 'Selected: Floor 2' : 'Send To Floor 2'}
                             </button>
                             <button
                               type="button"
-                              className="btn"
-                              disabled={saving}
+                              className={`btn brx-floor-send-btn ${currentFloor === 'Floor 3' ? 'is-selected' : ''}`}
+                              disabled={saving || floorChangeLocked}
                               onClick={() => void handleSendToBodyshopFloor('Floor 3')}
                             >
-                              Send To Floor 3
+                              {currentFloor === 'Floor 3' ? 'Selected: Floor 3' : 'Send To Floor 3'}
                             </button>
-                            {String(selected.bodyshop_floor ?? '').trim() && (
-                              <span className="brx-survey-current-floor">
-                                Current: {selected.bodyshop_floor}
-                              </span>
+
+                            {!hasFloorSelection ? (
+                              <span className="brx-survey-current-floor is-empty">Not sent to floor yet</span>
+                            ) : (
+                              <>
+                                <span className="brx-survey-current-floor is-initial">
+                                  Initial: {initialFloor ?? currentFloor}
+                                </span>
+                                <span className="brx-survey-current-floor is-current">
+                                  Current: {currentFloor}
+                                </span>
+                                {floorChanged && (
+                                  <span className="brx-survey-current-floor is-changed">Changed</span>
+                                )}
+                              </>
                             )}
+
+                            <span className={`brx-survey-floor-lock ${floorChangeLocked ? 'is-locked' : 'is-open'}`}>
+                              {floorChangeLocked
+                                ? 'Floor change locked: technician/support is assigned in Bodyshop Floor'
+                                : 'Floor can be changed until technician/support assignment starts'}
+                            </span>
                           </div>
                         )}
                       </div>

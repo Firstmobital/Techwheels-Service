@@ -4550,6 +4550,61 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   font-weight: 600;
 }
 
+.brx-survey-floor-actions {
+  align-items: center;
+}
+
+.brx-floor-send-btn {
+  min-width: 150px;
+}
+
+.brx-floor-send-btn.is-selected {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.brx-floor-send-btn:disabled {
+  opacity: 0.55;
+}
+
+.brx-survey-current-floor.is-empty {
+  color: #b45309;
+}
+
+.brx-survey-current-floor.is-initial {
+  color: #0f766e;
+}
+
+.brx-survey-current-floor.is-current {
+  color: #1d4ed8;
+}
+
+.brx-survey-current-floor.is-changed {
+  color: #7c3aed;
+}
+
+.brx-survey-floor-lock {
+  width: 100%;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.brx-survey-floor-lock.is-open {
+  color: #065f46;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.brx-survey-floor-lock.is-locked {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
 .brx-grid-full {
   grid-column: 1 / -1;
 }

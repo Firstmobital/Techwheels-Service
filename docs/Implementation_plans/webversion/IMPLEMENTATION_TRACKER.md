@@ -1,6 +1,6 @@
 # Web Version Implementation Tracker
 
-Last Updated: 2026-06-18
+Last Updated: 2026-06-20
 Scope: All webversion plans under active execution or review
 
 Legend:
@@ -17,6 +17,7 @@ Legend:
 | Plan ID | Category | Title | Status | Owner | Source File | Last Updated |
 |---|---|---|---|---|---|---|
 | BODYSHOP-FLOW | bodyshop | Bodyshop module flow | IP | Bodyshop Team | docs/Implementation_plans/webversion/categories/bodyshop/active/Bodyshop-Flow.md | 2026-06-18 |
+| BODYSHOP-QUEUE-001 | bodyshop | Canonical stage worklist backend | IP | Bodyshop Team + Platform Team | docs/Implementation_plans/webversion/categories/bodyshop/active/BODYSHOP-QUEUE-001_CANONICAL_STAGE_WORKLIST_BACKEND_PLAN_2026-06-20.md | 2026-06-20 |
 | CMP-01 | complaints | Complaints comprehensive plan | IP | Complaints Team | docs/Implementation_plans/webversion/categories/complaints/active/01_COMPREHENSIVE_PLAN.md | 2026-06-18 |
 | DRIVE-001 | drive | Universal drive upload and storage offload | IP | Platform Team | docs/Implementation_plans/webversion/categories/drive/active/DRIVE-001_UNIVERSAL_DRIVE_UPLOAD_AND_STORAGE_OFFLOAD.md | 2026-06-18 |
 | IMPORT-001 | import | Import upload governing plan | IP | Import Team | docs/Implementation_plans/webversion/categories/import/active/IMPORT_UPLOAD_GOVERNING_PLAN_2026-06-06.md | 2026-06-18 |
