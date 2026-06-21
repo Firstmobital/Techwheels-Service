@@ -29,6 +29,7 @@ The implementation avoids views and avoids periodic refresh jobs. It provides de
   - `assumed_next_service_date`
   - `assumed_next_service_type`
   (Phase 4 date logic approved; type-mapping logic drafted in Concrete v2).
+6. Add deterministic priority-order support for third-party limited-row reads from `public.all_service_data_dynamic`.
 
 ---
 
@@ -62,9 +63,58 @@ At present, `public.all_service_data_dynamic` includes a row from `public.all_se
 - Source for `assumed_next_service_date`: derived column in `public.all_service_data` (Phase 4 logic).
 - If `assumed_next_service_date` is `NULL`, Condition B is not satisfied.
 
+3. **Condition C - Last service type text rule**
+- `chassis_no` is present.
+- Include rows when `last_service_type` is `NULL` or blank.
+- Include rows when `last_service_type` does not contain `Service` text.
+
 Effective implementation source:
 - `supabase/migrations/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser.sql` (historical parser enhancement for scheduled-date version)
 - Condition-B pivot to `assumed_next_service_date`: documented in this plan and pending dedicated migration rollout.
+- Condition-C (`last_service_type` null/blank/non-service-text) inclusion:
+  - `supabase/migrations/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter.sql`
+  - `supabase/sql_checks/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter_checks.sql`
+
+## Priority Ordering for Third-Party Consumers
+
+Problem statement:
+
+- Third-party consumers may read only the first N rows (example: 500 rows) from `public.all_service_data_dynamic`.
+- Without explicit ordering, row delivery order is not guaranteed.
+
+Implementation track (approved design):
+
+1. Add two columns to `public.all_service_data_dynamic`:
+  - `priority_bucket integer` (lower value = higher priority)
+  - `priority_score integer` (higher value = higher rank inside bucket)
+2. Populate both columns from business ordering conditions.
+3. Add composite index for stable ordered access:
+  - `(priority_bucket, priority_score DESC, id ASC)`
+4. Update `public.sync_all_service_data_dynamic()` so new/updated rows always recalculate and persist priority fields.
+5. Serve third-party clients with explicit order path:
+  - REST query with `order=priority_bucket.asc,priority_score.desc,id.asc`
+  - Or a dedicated RPC endpoint that applies ordered selection internally.
+
+Confirmed ranking contract (2026-06-21):
+
+- `sold_dealer` priority:
+  - `Techwheels` first
+  - `Others` second
+  - `NULL`/other last
+- Then `assumed_next_service_date` ascending (`NULL` last).
+- Then `assumed_next_service_type` priority:
+  - `First Free Service`
+  - `Second Free Service`
+  - `Third Free Service`
+  - `Paid Service`
+  - `Unknown`
+  - `NULL`/blank
+  - other values
+- Final deterministic tie-break: `id ASC`.
+
+Key delivery rule:
+
+- Priority must be enforced through query-level `ORDER BY` (or RPC-internal order), not assumed from physical table storage order.
 
 ---
 
@@ -87,6 +137,15 @@ Effective implementation source:
 - [ ] **Task 3.2:** Validate behavior on transition cases (non-match -> match, match -> non-match).
 - [ ] **Task 3.3:** Record runbook for rollback and operational checks.
 - [ ] **Task 3.4:** Capture sign-off evidence and update tracker status.
+
+### Phase 6: Priority Ordering Layer for Limited-Row Consumers
+- [ ] **Task 6.1:** Add `priority_bucket` and `priority_score` columns to `public.all_service_data_dynamic`.
+- [ ] **Task 6.2:** Implement deterministic priority calculation from business conditions.
+- [ ] **Task 6.3:** Backfill priority fields for existing dynamic rows.
+- [ ] **Task 6.4:** Add composite index on `(priority_bucket, priority_score DESC, id ASC)`.
+- [ ] **Task 6.5:** Update `public.sync_all_service_data_dynamic()` to maintain priority fields on realtime changes.
+- [ ] **Task 6.6:** Add third-party consumption contract using explicit ordered REST query or dedicated RPC.
+- [ ] **Task 6.7:** Add read-only checks for parity and ordered top-N stability.
 
 ### Phase 4: `all_service_data` Derived Next-Service Columns (Concrete v1)
 - [ ] **Task 4.1:** Add nullable columns to `public.all_service_data`:
@@ -147,6 +206,7 @@ Dynamic table extension (new required columns):
 - Ensure `public.all_service_data_dynamic` includes source columns:
   - `assumed_next_service_date`
   - `assumed_next_service_type`
+  - `sold_dealer`
 - Ensure `public.all_service_data_dynamic` includes derived column:
   - `fuel_tp` (`EV` if `product_line` contains `EV` case-insensitive, else `PV`)
 - Source: `public.all_service_data`.
@@ -505,6 +565,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 🔄 2.3 | Attach trigger to source table | Platform Team | 2026-06-20 | - | Included in migration file; pending DB apply
 🔄 2.4 | Re-run safety check | Platform Team | 2026-06-21 | - | Pending post-apply verification after assumed-date pivot and dynamic-column refresh migrations
 ✅ 2.5 | Add deterministic dynamic fuel_tp column | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql
+✅ 2.6 | Add dynamic sold_dealer source projection | Platform Team | 2026-06-21 | 2026-06-21 | Implemented and verified via supabase/migrations/20260621140000_all_service_data_dynamic_add_sold_dealer.sql + supabase/sql_checks/20260621140000_all_service_data_dynamic_add_sold_dealer_checks.sql
 ```
 
 ### Phase 3
@@ -525,6 +586,17 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 5.6 | Wire Fuel card in Settings UI end-to-end | Platform Team | 2026-06-21 | 2026-06-21 | Implemented in src/lib/api/settings.ts + src/pages/SettingsPage.tsx (top-5 queue, confirm resolve, refresh)
 🔄 5.7 | Override curation backlog burn-down | Ops + Platform | 2026-06-21 | - | In progress through repeated rpc_fuel_resolve queue workflow
 ⏳ 5.8 | Direct-table hardening (optional) | Platform Team | - | - | Pending separate migration to reduce broad grants/RLS hardening on all_service_data_powertrain_overrides
+```
+
+### Phase 6 (Priority Ordering for Third-Party Top-N)
+```text
+✅ 6.1 | Add priority columns on dynamic table | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621142000_all_service_data_dynamic_priority_ordering_layer.sql
+✅ 6.2 | Define business condition-to-priority mapping | Product + Platform | 2026-06-21 | 2026-06-21 | Confirmed ranking: sold_dealer -> date(NULL last) -> type -> id
+✅ 6.3 | Backfill existing dynamic rows with priority values | Platform Team | 2026-06-21 | 2026-06-21 | Implemented in migration 20260621142000
+✅ 6.4 | Add composite index for ordered reads | Platform Team | 2026-06-21 | 2026-06-21 | Implemented index: (priority_bucket, priority_score DESC, id ASC)
+✅ 6.5 | Keep sync function priority-aware | Platform Team | 2026-06-21 | 2026-06-21 | sync_all_service_data_dynamic updated in migration 20260621142000
+🔄 6.6 | Publish ordered REST/RPC consumption contract | Platform Team | 2026-06-21 | - | In progress; recommended REST order=priority_bucket.asc,priority_score.desc,id.asc
+✅ 6.7 | Ordered top-N validation checks | Platform Team | 2026-06-21 | 2026-06-21 | Created supabase/sql_checks/20260621142000_all_service_data_dynamic_priority_ordering_layer_checks.sql
 ```
 
 ---
@@ -584,7 +656,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 
 - Approved date logic captured from sheet-equivalent rules:
   - `DoneDays = MOD(GREATEST(0, current_date - parsed_last_service_date), 180)`
-  - `TargetDays` mapping: `60` (`New`/NULL/empty), `120` (`First Free Service`/`TMA-First Free Service`), else `180`
+  - `TargetDays` mapping: `60` (`New`), `120` (`First Free Service`/`TMA-First Free Service`), else `180`
   - `assumed_next_service_date = current_date + (TargetDays - DoneDays)`
 - Concrete migration drafted:
   - `supabase/migrations/20260621090000_all_service_data_add_assumed_next_service_columns.sql`
@@ -755,6 +827,57 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - Migration created:
   - `supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql`
 
+### 2026-06-21 - Added `sold_dealer` projection in `all_service_data_dynamic`
+
+- Added new source-projected column in dynamic table:
+  - `sold_dealer`
+- Backfilled existing dynamic rows from `public.all_service_data` by `id`.
+- Realtime sync function updated so new/updated matching rows persist `NEW.sold_dealer` into dynamic table.
+- Execution validation status: completed and confirmed as reflected in data.
+- Migration created:
+  - `supabase/migrations/20260621140000_all_service_data_dynamic_add_sold_dealer.sql`
+- Paired read-only checks created and executed:
+  - `supabase/sql_checks/20260621140000_all_service_data_dynamic_add_sold_dealer_checks.sql`
+
+### 2026-06-21 - Added Condition C include rule in dynamic predicate
+
+- Predicate updated to include rows when:
+  - `last_service_type` is `NULL`/blank, or
+  - `last_service_type` does not contain `Service` text.
+- Dynamic table rebuilt under updated predicate semantics.
+- Migration created:
+  - `supabase/migrations/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter.sql`
+- Paired read-only checks created:
+  - `supabase/sql_checks/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter_checks.sql`
+
+### 2026-06-21 - Priority ordering strategy approved for limited-row consumers
+
+- Strategy accepted for third-party readers that only fetch first N rows from dynamic table.
+- Implementation to proceed with:
+  - `priority_bucket` (lower first)
+  - `priority_score` (higher first)
+  - deterministic tie-break by `id ASC`
+- Storage-order dependency explicitly rejected; ordered query contract required.
+- Pending next input: business ordering conditions to derive bucket and score values.
+
+### 2026-06-21 - Priority ordering implemented with confirmed ranking
+
+- Implemented dynamic priority fields:
+  - `priority_bucket` (`Techwheels`=1, `Others`=2, `NULL`/other=3)
+  - `priority_score` (encodes date-first, type-second ranking inside bucket)
+- Ranking applied as confirmed:
+  - `sold_dealer` (`Techwheels`, `Others`, `NULL`/other)
+  - `assumed_next_service_date` ascending (`NULL` last)
+  - `assumed_next_service_type` rank: `First Free Service`, `Second Free Service`, `Third Free Service`, `Paid Service`, `Unknown`, `NULL`/blank, others
+  - final tie-break by `id ASC`
+- Added ordered-read index:
+  - `(priority_bucket, priority_score DESC, id ASC)`
+- Updated realtime sync function to maintain priority fields on insert/update.
+- Migration created:
+  - `supabase/migrations/20260621142000_all_service_data_dynamic_priority_ordering_layer.sql`
+- Paired read-only checks created:
+  - `supabase/sql_checks/20260621142000_all_service_data_dynamic_priority_ordering_layer_checks.sql`
+
 ---
 
 ## Validation Queries (Execution Checklist)
@@ -818,6 +941,12 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/migrations/20260621100000_all_service_data_powertrain_type_granularity.sql`
 - `supabase/sql_checks/20260621100000_all_service_data_powertrain_type_granularity_checks.sql`
 - `supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql`
+- `supabase/migrations/20260621140000_all_service_data_dynamic_add_sold_dealer.sql`
+- `supabase/sql_checks/20260621140000_all_service_data_dynamic_add_sold_dealer_checks.sql`
+- `supabase/migrations/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter.sql`
+- `supabase/sql_checks/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter_checks.sql`
+- `supabase/migrations/20260621142000_all_service_data_dynamic_priority_ordering_layer.sql`
+- `supabase/sql_checks/20260621142000_all_service_data_dynamic_priority_ordering_layer_checks.sql`
 
 ---
 
