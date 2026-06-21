@@ -19,6 +19,58 @@ export interface BodyshopSurveyor {
   updated_at: string
 }
 
+export type FuelPowertrainType = 'EV' | 'CNG' | 'DIESEL' | 'PETROL'
+
+export interface FuelQueueItem {
+  product_line: string
+  unknown_rows: number
+  sample_model: string | null
+  sample_last_service_type: string | null
+  signals: {
+    contains_ev: boolean
+    contains_cng: boolean
+    diesel_markers: string[]
+    petrol_markers: string[]
+  }
+  existing_override: {
+    id: number
+    match_pattern: string
+    powertrain_type: FuelPowertrainType | 'UNKNOWN'
+    priority: number
+    is_active: boolean
+    notes: string | null
+    updated_at: string
+  } | null
+  suggested_powertrain_type: FuelPowertrainType | null
+}
+
+export interface FuelQueueResponse {
+  items: FuelQueueItem[]
+  limit: number
+  remaining_unknown_groups: number
+  as_of: string
+}
+
+export interface FuelResolveResponse {
+  resolved: {
+    product_line: string
+    powertrain_type: FuelPowertrainType
+    affected_rows: number
+  }
+  queue: FuelQueueResponse
+}
+
+export interface FuelOverrideRow {
+  id: number
+  match_pattern: string
+  powertrain_type: FuelPowertrainType | 'UNKNOWN'
+  priority: number
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export async function listModelOptions(): Promise<ApiResult<ModelOption[]>> {
   const { data, error } = await supabase
     .from('settings_model_options')
@@ -223,4 +275,58 @@ export async function deleteBodyshopSurveyor(id: number): Promise<ApiResult<null
 
   if (error) return fail(error)
   return ok(null)
+}
+
+export async function listFuelQueue(limit = 5): Promise<ApiResult<FuelQueueResponse>> {
+  const { data, error } = await supabase.rpc('rpc_fuel_queue', {
+    p_limit: limit,
+  })
+
+  if (error) return fail(error)
+
+  const payload = (data ?? {
+    items: [],
+    limit,
+    remaining_unknown_groups: 0,
+    as_of: new Date().toISOString(),
+  }) as FuelQueueResponse
+
+  return ok(payload)
+}
+
+export async function resolveFuelQueueItem(input: {
+  productLine: string
+  powertrainType: FuelPowertrainType
+  priority?: number
+  notes?: string | null
+  limit?: number
+}): Promise<ApiResult<FuelResolveResponse>> {
+  const productLine = input.productLine.trim()
+  if (!productLine) return fail('Product line is required')
+
+  const { data, error } = await supabase.rpc('rpc_fuel_resolve', {
+    p_product_line: productLine,
+    p_powertrain_type: input.powertrainType,
+    p_priority: input.priority ?? 10,
+    p_notes: input.notes ?? null,
+    p_limit: input.limit ?? 5,
+  })
+
+  if (error) return fail(error)
+  return ok(data as FuelResolveResponse)
+}
+
+export async function listFuelOverrides(options?: {
+  onlyActive?: boolean
+  limit?: number
+  offset?: number
+}): Promise<ApiResult<FuelOverrideRow[]>> {
+  const { data, error } = await supabase.rpc('rpc_fuel_overrides', {
+    p_only_active: options?.onlyActive ?? true,
+    p_limit: options?.limit ?? 100,
+    p_offset: options?.offset ?? 0,
+  })
+
+  if (error) return fail(error)
+  return ok((data ?? []) as FuelOverrideRow[])
 }

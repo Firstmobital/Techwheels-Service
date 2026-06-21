@@ -16,9 +16,13 @@ import {
   type RateCardRow,
   type RateRowInput,
   listModelOptions,
+  listFuelQueue,
   createModelOption,
+  resolveFuelQueueItem,
   updateModelOption,
   deleteModelOption,
+  type FuelPowertrainType,
+  type FuelQueueResponse,
   type ModelOption,
 } from '../lib/api'
 
@@ -89,6 +93,7 @@ const DEALER_CODE_RULES = [
 const SETTINGS_SECTION_IDS = [
   'branch-management',
   'employee-master',
+  'fuel',
   'bodyshop-surveyor',
   'models',
   'autodoc-rate-cards',
@@ -444,6 +449,10 @@ export default function SettingsPage() {
   const [savingModel, setSavingModel] = useState(false)
   const [deletingModelId, setDeletingModelId] = useState<number | null>(null)
   const [bodyshopSurveyors, setBodyshopSurveyors] = useState<BodyshopSurveyor[]>([])
+  const [fuelQueue, setFuelQueue] = useState<FuelQueueResponse | null>(null)
+  const [loadingFuelQueue, setLoadingFuelQueue] = useState(false)
+  const [fuelSelectionByProductLine, setFuelSelectionByProductLine] = useState<Record<string, FuelPowertrainType | ''>>({})
+  const [resolvingFuelProductLine, setResolvingFuelProductLine] = useState<string | null>(null)
   const [loadingBodyshopSurveyors, setLoadingBodyshopSurveyors] = useState(false)
   const [bodyshopSurveyorTableReady, setBodyshopSurveyorTableReady] = useState(true)
   const [newBodyshopSurveyor, setNewBodyshopSurveyor] = useState<BodyshopSurveyorDraft>({
@@ -546,10 +555,79 @@ export default function SettingsPage() {
     setBodyshopSurveyors(result.data ?? [])
   }
 
+  async function loadFuelQueue(limit = 5) {
+    setLoadingFuelQueue(true)
+    const result = await listFuelQueue(limit)
+    setLoadingFuelQueue(false)
+
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+
+    setFuelQueue(result.data)
+    setFuelSelectionByProductLine((prev) => {
+      const next = { ...prev }
+      for (const item of result.data?.items ?? []) {
+        if (!(item.product_line in next)) {
+          next[item.product_line] = ''
+        }
+      }
+      return next
+    })
+  }
+
   useEffect(() => {
     void loadModelOptions()
     void loadBodyshopSurveyors()
   }, [])
+
+  useEffect(() => {
+    if (selectedSectionId !== 'fuel') return
+    if (loadingFuelQueue) return
+    if (fuelQueue !== null) return
+    void loadFuelQueue(5)
+  }, [selectedSectionId, loadingFuelQueue, fuelQueue])
+
+  const handleResolveFuelQueueItem = useCallback(async (productLine: string) => {
+    const selectedPowertrainType = fuelSelectionByProductLine[productLine]
+    if (!selectedPowertrainType) {
+      setError('Select a powertrain type before confirming.')
+      return
+    }
+
+    setResolvingFuelProductLine(productLine)
+    setMessage(null)
+    setError(null)
+
+    try {
+      const result = await resolveFuelQueueItem({
+        productLine,
+        powertrainType: selectedPowertrainType,
+        priority: 10,
+        notes: 'manual verified via settings fuel card',
+        limit: 5,
+      })
+
+      if (result.error || !result.data) {
+        throw new Error(result.error ?? 'Failed to resolve fuel queue item.')
+      }
+
+      setFuelQueue(result.data.queue)
+      setFuelSelectionByProductLine((prev) => {
+        const next = { ...prev }
+        next[productLine] = ''
+        return next
+      })
+      setMessage(
+        `Resolved ${result.data.resolved.product_line} -> ${result.data.resolved.powertrain_type} (${result.data.resolved.affected_rows.toLocaleString()} rows).`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resolve fuel queue item.')
+    } finally {
+      setResolvingFuelProductLine(null)
+    }
+  }, [fuelSelectionByProductLine])
 
   const settingsCards = useMemo<
     Array<{ id: SettingsSectionId; icon: string; title: string; description: string; stat: string }>
@@ -568,6 +646,13 @@ export default function SettingsPage() {
         title: 'Employee Master',
         description: 'Upload, edit, and maintain employee mapping data.',
         stat: `${employees.length} employees`,
+      },
+      {
+        id: 'fuel',
+        icon: 'alert',
+        title: 'Fuel',
+        description: 'Resolve UNKNOWN powertrain variants from all_service_data queue.',
+        stat: fuelQueue ? `${fuelQueue.remaining_unknown_groups} pending groups` : 'Top 5 queue',
       },
       {
         id: 'bodyshop-surveyor',
@@ -598,7 +683,15 @@ export default function SettingsPage() {
         stat: `${issues.length} issues`,
       },
     ],
-    [bodyshopSurveyors.length, derivedBranches.length, employees.length, issues.length, modelOptions.length, rateCards.length],
+    [
+      bodyshopSurveyors.length,
+      derivedBranches.length,
+      employees.length,
+      fuelQueue,
+      issues.length,
+      modelOptions.length,
+      rateCards.length,
+    ],
   )
 
   const openSettingReference = useCallback((sectionId: SettingsSectionId) => {
@@ -1649,7 +1742,7 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-gray-900">Settings Sections</h2>
             <p className="mt-1 text-xs text-gray-600">Open any card to jump directly to that setting.</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-7">
             {settingsCards.map((card) => (
               <button
                 key={card.id}
@@ -2296,6 +2389,116 @@ export default function SettingsPage() {
                               {deletingEmployeeId === employee.id ? 'Deleting...' : 'Delete'}
                             </button>
                           </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        )}
+
+        {selectedSectionId === 'fuel' && (
+        <section id="fuel" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">
+                Fuel Queue <span className="font-medium text-gray-500">(Top {fuelQueue?.limit ?? 5})</span>
+              </h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Review UNKNOWN product lines and confirm EV/CNG/DIESEL/PETROL mapping.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadFuelQueue(5)}
+              disabled={loadingFuelQueue || resolvingFuelProductLine !== null}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Icon name="arrow" size={13} strokeWidth={2.2} />
+              {loadingFuelQueue ? 'Refreshing...' : 'Refresh Queue'}
+            </button>
+          </div>
+
+          <div className="space-y-4 px-5 py-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <div className="text-xs font-semibold text-blue-900">Remaining Unknown Groups</div>
+                <div className="mt-1 text-lg font-bold text-blue-600">{fuelQueue?.remaining_unknown_groups ?? '-'}</div>
+              </div>
+              <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
+                <div className="text-xs font-semibold text-orange-900">Rows In Current Queue</div>
+                <div className="mt-1 text-lg font-bold text-orange-600">
+                  {(fuelQueue?.items ?? []).reduce((sum, item) => sum + item.unknown_rows, 0).toLocaleString()}
+                </div>
+              </div>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+                <div className="text-xs font-semibold text-emerald-900">Last Refreshed</div>
+                <div className="mt-1 text-sm font-semibold text-emerald-700">
+                  {fuelQueue?.as_of ? new Date(fuelQueue.as_of).toLocaleString('en-IN') : '-'}
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                    <th className="px-3 py-2 font-semibold">Product Line</th>
+                    <th className="px-3 py-2 font-semibold">Pending Rows</th>
+                    <th className="px-3 py-2 font-semibold">Sample Model</th>
+                    <th className="px-3 py-2 font-semibold">Current Override</th>
+                    <th className="px-3 py-2 font-semibold">Select Powertrain</th>
+                    <th className="px-3 py-2 font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingFuelQueue ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={6}>Loading fuel queue...</td>
+                    </tr>
+                  ) : (fuelQueue?.items ?? []).length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-400" colSpan={6}>No UNKNOWN variants in queue.</td>
+                    </tr>
+                  ) : (
+                    (fuelQueue?.items ?? []).map((item) => (
+                      <tr key={item.product_line} className="border-b border-gray-100">
+                        <td className="px-3 py-2 font-medium text-gray-800">{item.product_line}</td>
+                        <td className="px-3 py-2">{item.unknown_rows.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-gray-600">{item.sample_model ?? '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">
+                          {item.existing_override ? `${item.existing_override.powertrain_type} (p${item.existing_override.priority})` : '-'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={fuelSelectionByProductLine[item.product_line] ?? ''}
+                            onChange={(event) =>
+                              setFuelSelectionByProductLine((prev) => ({
+                                ...prev,
+                                [item.product_line]: event.target.value as FuelPowertrainType,
+                              }))
+                            }
+                            className="rounded border border-gray-300 px-2 py-1.5"
+                          >
+                            <option value="">Select</option>
+                            <option value="EV">EV</option>
+                            <option value="CNG">CNG</option>
+                            <option value="DIESEL">DIESEL</option>
+                            <option value="PETROL">PETROL</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleResolveFuelQueueItem(item.product_line)}
+                            disabled={resolvingFuelProductLine === item.product_line}
+                            className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {resolvingFuelProductLine === item.product_line ? 'Confirming...' : 'Confirm'}
+                          </button>
                         </td>
                       </tr>
                     ))

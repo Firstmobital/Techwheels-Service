@@ -147,6 +147,216 @@ Best rollout strategy:
 - Phase C (override curation): add targeted override rows (`match_pattern`, `powertrain_type`, `priority`) for unresolved product lines.
 - Phase D (operationalization): keep trigger-based sync on `INSERT/UPDATE OF product_line` and periodically review remaining `UNKNOWN` distribution.
 
+### Fuel Card API Contract (Sprint-Ready)
+
+Scope:
+
+- New Settings card name: `Fuel`.
+- Location: same settings page where other settings cards are rendered.
+- Functional goal: always show top 5 pending unknown `product_line` items and allow one-click resolution to `EV`, `CNG`, `DIESEL`, or `PETROL`.
+
+Authentication and authorization:
+
+- Require authenticated admin session.
+- Same role gate as other settings write actions (`Admin Scope` user with settings write privilege).
+
+#### Endpoint 1: Fetch Fuel Queue (Top 5)
+
+- Method: `GET`
+- Path: `/api/settings/fuel/queue`
+- Query params:
+  - `limit` (optional, default `5`, max `20`)
+  - `cursor` (optional; opaque string for stable pagination, not required for basic top-5 mode)
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "product_line": "Punch Adventure Rhythm",
+      "unknown_rows": 713,
+      "sample_model": "Punch",
+      "sample_last_service_type": "Paid Service",
+      "signals": {
+        "contains_ev": false,
+        "contains_cng": false,
+        "diesel_markers": [],
+        "petrol_markers": []
+      },
+      "existing_override": null,
+      "suggested_powertrain_type": null
+    }
+  ],
+  "limit": 5,
+  "remaining_unknown_groups": 412,
+  "as_of": "2026-06-21T04:50:00Z"
+}
+```
+
+Query semantics:
+
+- Source rows: `public.all_service_data` where `powertrain_type = 'UNKNOWN'` and `product_line` not blank.
+- Group by `btrim(product_line)`.
+- Order: `COUNT(*) DESC`, then `product_line ASC`.
+- Limit by requested `limit`.
+
+#### Endpoint 2: Resolve One Product Line
+
+- Method: `POST`
+- Path: `/api/settings/fuel/resolve`
+
+Request body:
+
+```json
+{
+  "product_line": "Punch Adventure Rhythm",
+  "powertrain_type": "PETROL",
+  "priority": 10,
+  "notes": "manual verified by settings fuel card"
+}
+```
+
+Validation:
+
+- `product_line` required, trimmed, max 255 chars.
+- `powertrain_type` required and must be one of: `EV`, `CNG`, `DIESEL`, `PETROL`.
+- `priority` optional, integer default `10`.
+
+Transactional behavior (single DB transaction):
+
+1. Upsert active override in `public.all_service_data_powertrain_overrides` with exact `match_pattern = product_line`.
+2. Recompute `powertrain_type` only for matching rows:
+   - `UPDATE public.all_service_data SET powertrain_type = public.calc_all_service_powertrain_type(product_line) WHERE btrim(product_line) = btrim($1)`
+3. Return updated top 5 queue payload (same shape as fetch endpoint).
+
+Response `200`:
+
+```json
+{
+  "resolved": {
+    "product_line": "Punch Adventure Rhythm",
+    "powertrain_type": "PETROL",
+    "affected_rows": 713
+  },
+  "queue": {
+    "items": [],
+    "limit": 5,
+    "remaining_unknown_groups": 411,
+    "as_of": "2026-06-21T04:51:30Z"
+  }
+}
+```
+
+Error responses:
+
+- `400` invalid payload.
+- `401/403` unauthorized/forbidden.
+- `409` conflict on concurrent resolution (optional if optimistic lock added).
+- `500` internal failure.
+
+#### Endpoint 3: Fuel Override List (Optional Admin View)
+
+- Method: `GET`
+- Path: `/api/settings/fuel/overrides`
+- Returns active/inactive overrides for review/audit.
+
+### Fuel Card UI Interaction Specification
+
+Card and navigation:
+
+- New card in Settings Sections: `Fuel`.
+- Subtitle: `Resolve UNKNOWN powertrain variants with exact review workflow`.
+- CTA: `OPEN SECTION ->`.
+
+Section layout:
+
+- Header metrics:
+  - `Unknown Variant Groups`
+  - `Unknown Rows`
+  - `Resolved Today`
+- Main queue table/list with fixed page size `5`.
+
+Queue row fields:
+
+- `Product Line` (exact text)
+- `Pending Rows` (count)
+- `Suggested Signals` (badges from parser hints)
+- `Select Powertrain` (dropdown: EV/CNG/DIESEL/PETROL)
+- `Confirm` action button
+
+Interaction flow:
+
+1. On section open, call `GET /api/settings/fuel/queue?limit=5`.
+2. User selects fuel value for one row and clicks `Confirm`.
+3. UI calls `POST /api/settings/fuel/resolve`.
+4. On success:
+   - Show toast: `Resolved <product_line> -> <powertrain_type> (<affected_rows> rows)`.
+   - Replace queue with returned top-5 payload so list remains 5 until backlog shrinks.
+5. On failure:
+   - Preserve user selection.
+   - Show inline error and retry option.
+
+Concurrency and UX guards:
+
+- Disable `Confirm` while request is in-flight for that row.
+- Prevent duplicate submissions by row-level loading state.
+- If row disappears due to another admin action, refresh queue and show `Already resolved` notice.
+
+Long-term behavior requirement:
+
+- Queue is always computed from live `UNKNOWN` rows, so any newly arriving unknown variant automatically appears in future top-5 results.
+- No fallback auto-assignment is allowed; unresolved variants must remain `UNKNOWN` until explicitly confirmed.
+
+### DB RPC Signatures (Supabase Native, Minimum Backend)
+
+Fresh authoritative dump audit (chunk mirror) confirms:
+
+- `public.all_service_data` and `public.all_service_data_powertrain_overrides` exist with expected columns/triggers.
+- No explicit RLS policy entries were found for these two tables in current dump snapshot.
+- ACL section currently grants broad table access (`GRANT ALL`) to `anon`, `authenticated`, and `service_role` for both tables.
+
+To keep backend code minimal and centralize validation in SQL, use these RPCs:
+
+1. `public.rpc_fuel_queue(p_limit integer DEFAULT 5) RETURNS jsonb`
+2. `public.rpc_fuel_resolve(p_product_line text, p_powertrain_type text, p_priority integer DEFAULT 10, p_notes text DEFAULT NULL, p_limit integer DEFAULT 5) RETURNS jsonb`
+3. `public.rpc_fuel_overrides(p_only_active boolean DEFAULT true, p_limit integer DEFAULT 100, p_offset integer DEFAULT 0) RETURNS TABLE (...)`
+
+Implementation behavior (enforced in function body):
+
+- Admin gate: every RPC performs `IF NOT public.is_admin() THEN RAISE EXCEPTION ...`.
+- Queue RPC returns API-ready JSON (`items`, `limit`, `remaining_unknown_groups`, `as_of`).
+- Resolve RPC:
+  - Validates inputs (`product_line` non-empty, `powertrain_type` in `EV/CNG/DIESEL/PETROL`).
+  - Deactivates existing exact-match active rule(s) for the same `product_line`.
+  - Inserts a new active override row.
+  - Recomputes affected rows in `all_service_data` using `calc_all_service_powertrain_type(product_line)`.
+  - Returns `{ resolved, queue }` JSON in one round trip.
+- Overrides RPC supports paginated admin review screens.
+
+### Supabase Policy Notes (Hardening Path)
+
+Current risk from dump snapshot:
+
+- Direct table grants are currently broad, which can bypass intended UI workflow if client code accesses tables directly.
+
+Recommended enforcement model for Fuel workflow:
+
+1. Keep API/Frontend reads+writes on Fuel flow through RPC only.
+2. Restrict RPC execution to `authenticated` + `service_role` and rely on `public.is_admin()` gate inside RPC.
+3. Add least-privilege table hardening for `public.all_service_data_powertrain_overrides`:
+   - Revoke direct write grants from `anon` and `authenticated`.
+   - Optionally enable RLS and add admin-only policy for direct access paths (for SQL editor/admin tooling).
+4. For `public.all_service_data`, avoid broad policy changes in same sprint unless full regression audit is performed, because this table is cross-module and currently heavily used.
+
+Deployment artifact (ready-to-run migration draft):
+
+- `supabase/migrations/20260621113000_all_service_data_powertrain_rpc_contract.sql`
+
+Read-only validation artifact:
+
+- `supabase/sql_checks/20260621113000_all_service_data_powertrain_rpc_contract_checks.sql`
+
 ---
 
 ## SQL Deployment Script (Reference)
