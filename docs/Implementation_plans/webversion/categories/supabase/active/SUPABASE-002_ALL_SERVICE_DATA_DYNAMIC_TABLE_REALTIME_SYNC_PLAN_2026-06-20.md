@@ -104,7 +104,7 @@ Effective implementation source:
 - `DoneDays = MOD(GREATEST(0, current_date - parsed_last_service_date), 180)`
 
 `TargetDays` mapping from `last_service_type`:
-- `60` when `last_service_type` is `NULL`, empty, or `New`.
+- `60` when `last_service_type` is `New`.
 - `120` when `last_service_type` is `First Free Service` or `TMA-First Free Service`.
 - `180` for all other values (including `Second Free Service`, `TMA-Second Free Service`, `Third Free Service`, `TMA-Third Free Service`, `Fourth Free Service`, `Fifth Free Service`, `Sixth Free Service`, `Seventh Free Service`, `Tenth Free Service`, `Paid Service`).
 
@@ -114,6 +114,7 @@ Final expression:
 Operational interpretation:
 - Projection is relative to `current_date`, not directly from `last_service_date`.
 - Value changes day-by-day and requires daily refresh if physically stored.
+- If `assumed_next_service_type = 'Unknown'`, `assumed_next_service_date` must be `NULL` (do not assume a date).
 - If `last_service_date` is missing/unparseable, `assumed_next_service_date` remains `NULL`.
 
 ### Fuel Granularity (Petrol/Diesel/CNG/EV) - Safe Design
@@ -146,6 +147,8 @@ Dynamic table extension (new required columns):
 - Ensure `public.all_service_data_dynamic` includes source columns:
   - `assumed_next_service_date`
   - `assumed_next_service_type`
+- Ensure `public.all_service_data_dynamic` includes derived column:
+  - `fuel_tp` (`EV` if `product_line` contains `EV` case-insensitive, else `PV`)
 - Source: `public.all_service_data`.
 - Purpose: keep dynamic output aligned with Phase 4 derived next-service fields while Condition B evaluates `assumed_next_service_date`.
 
@@ -500,7 +503,8 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 🔄 2.1 | Initial truncate and backfill | Platform Team | 2026-06-20 | - | Included in migration file; pending DB apply
 🔄 2.2 | Create sync trigger function | Platform Team | 2026-06-20 | - | Included in migration file; pending DB apply
 🔄 2.3 | Attach trigger to source table | Platform Team | 2026-06-20 | - | Included in migration file; pending DB apply
-⏳ 2.4 | Re-run safety check | Platform Team | - | - | Pending post-apply verification
+🔄 2.4 | Re-run safety check | Platform Team | 2026-06-21 | - | Pending post-apply verification after assumed-date pivot and dynamic-column refresh migrations
+✅ 2.5 | Add deterministic dynamic fuel_tp column | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql
 ```
 
 ### Phase 3
@@ -601,6 +605,46 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - Paired read-only checks drafted:
   - `supabase/sql_checks/20260621093000_all_service_data_assumed_next_service_type_sync_checks.sql`
 
+### 2026-06-21 - Phase 4 mapping policy update (`Unknown` for unmapped types)
+
+- Policy change accepted: remove permissive fallback mapping to `Paid Service` for non-standard `last_service_type` values.
+- New behavior for `assumed_next_service_type`:
+  - Known mapped values continue as-is.
+  - Blank input remains `NULL`.
+  - Any non-blank unmapped value is set to `Unknown`.
+- Concrete migration created:
+  - `supabase/migrations/20260621124500_all_service_data_assumed_next_service_type_unknown_fallback.sql`
+- Migration recomputes existing rows with strict `Unknown` policy.
+
+### 2026-06-21 - Correction: keep operational buckets `Unknown` (no forced Paid mapping)
+
+- Clarification accepted: these buckets must remain `Unknown` until explicit business rules are finalized:
+  - `Running Repairs`
+  - `Accident`
+  - `Campaign`
+  - `AMC - TM`
+  - `E Breakdown`
+- Corrective migration created:
+  - `supabase/migrations/20260621132000_all_service_data_assumed_next_service_type_remove_bucket_paid_mappings.sql`
+- Post-migration verification snapshot:
+  - `Accident -> Unknown`: 1215
+  - `AMC - TM -> Unknown`: 335
+  - `Campaign -> Unknown`: 648
+  - `E Breakdown -> Unknown`: 80
+  - `Running Repairs -> Unknown`: 3088
+- Result: no forced fallback-to-`Paid Service` for these categories; policy remains conservative and auditable.
+
+### 2026-06-21 - Guardrail update: no assumed date for `Unknown` type
+
+- Policy clarified and accepted:
+  - When `assumed_next_service_type = 'Unknown'`, set `assumed_next_service_date = NULL`.
+  - Rationale: if the next-service type cannot be determined, the next-service date must not be assumed.
+- Enforcement migration created:
+  - `supabase/migrations/20260621134000_all_service_data_assumed_next_service_date_null_for_unknown_type.sql`
+- Implementation details:
+  - Replaces `public.calc_all_service_assumed_next_service_date(...)` with an `Unknown` guard.
+  - Recomputes existing rows so stored dates are nulled where inferred type is `Unknown`.
+
 ### 2026-06-21 - Phase 5 powertrain granularity drafted (Concrete v1)
 
 - Added granular derived column in `public.all_service_data`:
@@ -698,6 +742,19 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
   - `supabase/sql_checks/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser_checks.sql`
 - Historical scope note: parser fix was for the prior scheduled-date Condition B implementation.
 
+### 2026-06-21 - Added deterministic `fuel_tp` in `all_service_data_dynamic`
+
+- Added new column in dynamic table:
+  - `fuel_tp`
+- Deterministic rule implemented:
+  - `fuel_tp = 'EV'` when `UPPER(product_line)` contains `EV`
+  - Else `fuel_tp = 'PV'`
+- Added check constraint on dynamic table values:
+  - `fuel_tp IN ('EV','PV')`
+- Backfill and realtime sync updated so `fuel_tp` is maintained for existing and incoming rows.
+- Migration created:
+  - `supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql`
+
 ---
 
 ## Validation Queries (Execution Checklist)
@@ -755,8 +812,12 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260621090000_all_service_data_add_assumed_next_service_columns_checks.sql`
 - `supabase/migrations/20260621093000_all_service_data_assumed_next_service_type_sync.sql`
 - `supabase/sql_checks/20260621093000_all_service_data_assumed_next_service_type_sync_checks.sql`
+- `supabase/migrations/20260621124500_all_service_data_assumed_next_service_type_unknown_fallback.sql`
+- `supabase/migrations/20260621132000_all_service_data_assumed_next_service_type_remove_bucket_paid_mappings.sql`
+- `supabase/migrations/20260621134000_all_service_data_assumed_next_service_date_null_for_unknown_type.sql`
 - `supabase/migrations/20260621100000_all_service_data_powertrain_type_granularity.sql`
 - `supabase/sql_checks/20260621100000_all_service_data_powertrain_type_granularity_checks.sql`
+- `supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql`
 
 ---
 
