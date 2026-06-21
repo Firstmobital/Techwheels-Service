@@ -25,6 +25,10 @@ The implementation avoids views and avoids periodic refresh jobs. It provides de
 2. Ensure target table contains only rows matching the dynamic condition at any moment.
 3. Keep target table synchronized in real time using trigger-based logic.
 4. Provide validation and rollback runbook for safe deployment.
+5. Add derived planning columns in `public.all_service_data`:
+  - `assumed_next_service_date`
+  - `assumed_next_service_type`
+  (Phase 4 date logic approved; type-mapping logic drafted in Concrete v2).
 
 ---
 
@@ -55,7 +59,8 @@ At present, `public.all_service_data_dynamic` includes a row from `public.all_se
 2. **Condition B - Scheduled date rule**
 - `chassis_no` is present.
 - `scheduled_next_service_date` resolves to `current_date + 2`.
-- Supported text formats for `scheduled_next_service_date`: `YYYY-MM-DD`, `YYYY/MM/DD`, `DD-MM-YYYY`, `DD/MM/YYYY`.
+- Observed source format in `all_service_data` (authoritative dump): `YYYY/MM/DD`.
+- Parser-supported text formats for `scheduled_next_service_date` (for robustness): `YYYY-MM-DD`, `YYYY/MM/DD`, `DD-MM-YYYY`, `DD/MM/YYYY`.
 
 Effective implementation source:
 - `supabase/migrations/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser.sql`
@@ -81,6 +86,66 @@ Effective implementation source:
 - [ ] **Task 3.2:** Validate behavior on transition cases (non-match -> match, match -> non-match).
 - [ ] **Task 3.3:** Record runbook for rollback and operational checks.
 - [ ] **Task 3.4:** Capture sign-off evidence and update tracker status.
+
+### Phase 4: `all_service_data` Derived Next-Service Columns (Concrete v1)
+- [ ] **Task 4.1:** Add nullable columns to `public.all_service_data`:
+  - `assumed_next_service_date`
+  - `assumed_next_service_type`
+- [ ] **Task 4.2:** Implement deterministic `assumed_next_service_date` logic based on `last_service_date` and `last_service_type`.
+- [ ] **Task 4.3:** Backfill existing rows using agreed logic.
+- [ ] **Task 4.4:** Add read-only validation checks for nulls, coverage, and edge-format handling.
+- [ ] **Task 4.5:** Document operational ownership (when/how daily recalculation runs).
+- [ ] **Task 4.6:** Keep `assumed_next_service_type` nullable until separate type-mapping rules are finalized.
+
+### Phase 4 Calculation Logic (Approved for `assumed_next_service_date`)
+
+`DoneDays` definition:
+- `DoneDays = MOD(GREATEST(0, current_date - parsed_last_service_date), 180)`
+
+`TargetDays` mapping from `last_service_type`:
+- `60` when `last_service_type` is `NULL`, empty, or `New`.
+- `120` when `last_service_type` is `First Free Service` or `TMA-First Free Service`.
+- `180` for all other values (including `Second Free Service`, `TMA-Second Free Service`, `Third Free Service`, `TMA-Third Free Service`, `Fourth Free Service`, `Fifth Free Service`, `Sixth Free Service`, `Seventh Free Service`, `Tenth Free Service`, `Paid Service`).
+
+Final expression:
+- `assumed_next_service_date = current_date + (TargetDays - DoneDays)`
+
+Operational interpretation:
+- Projection is relative to `current_date`, not directly from `last_service_date`.
+- Value changes day-by-day and requires daily refresh if physically stored.
+- If `last_service_date` is missing/unparseable, `assumed_next_service_date` remains `NULL`.
+
+### Fuel Granularity (Petrol/Diesel/CNG/EV) - Safe Design
+
+If you want Petrol or Diesel or CNG or EV granularity, do this safely:
+
+- Keep existing `fuel_type` semantics compatible with current platform scope rules (`EV`/`PV`) to avoid downstream access/filter regressions.
+- Add a separate derived column for granular classification (recommended name: `powertrain_type`).
+- Populate `powertrain_type` deterministically from `product_line` text using ordered token rules.
+
+Recommended deterministic rule order for `powertrain_type`:
+
+- If `product_line` is `NULL`/blank: `NULL`.
+- If `product_line` contains `EV`: `EV`.
+- Else if `product_line` contains `CNG`: `CNG`.
+- Else if `product_line` contains diesel markers (`(D)`, `DICOR`, `QJET`, `CR4`, diesel engine-size markers): `DIESEL`.
+- Else if `product_line` contains petrol markers (`(P)`, `1.2 P`, `1.0 P`, `GDI`, `PETROL`): `PETROL`.
+- Else try manual override lookup from `public.all_service_data_powertrain_overrides` by `priority` (lowest first) where `is_active = true` and `UPPER(product_line) LIKE UPPER(match_pattern)`.
+- Else `UNKNOWN` (strict no-fallback policy).
+
+Override lookup semantics:
+
+- Overrides are evaluated only after explicit product_line fuel signals fail.
+- First matching active override by priority wins.
+- Overrides allow controlled one-by-one resolution of recurring `UNKNOWN` product lines without changing global token rules.
+- If no override matches, row remains `UNKNOWN` until a specific override is added.
+
+Best rollout strategy:
+
+- Phase A (audit-first): deploy with strict `UNKNOWN` and run distribution checks.
+- Phase B (token hardening): review top `UNKNOWN` `product_line` values and add deterministic token rules.
+- Phase C (override curation): add targeted override rows (`match_pattern`, `powertrain_type`, `priority`) for unresolved product lines.
+- Phase D (operationalization): keep trigger-based sync on `INSERT/UPDATE OF product_line` and periodically review remaining `UNKNOWN` distribution.
 
 ---
 
@@ -206,6 +271,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - [ ] Confirmation that empty strings should not be treated as NULL (or adjust predicate accordingly).
 - [ ] Change window for trigger deployment.
 - [ ] Post-deploy observer assigned for 24-hour monitoring.
+- [ ] Business-rule sign-off for `assumed_next_service_type` mapping from `last_service_type` (date logic approved).
 
 ---
 
@@ -239,6 +305,73 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-21 - Requested follow-up for derived next-service columns
+
+- Request accepted to add two columns in `public.all_service_data`:
+  - `assumed_next_service_date`
+  - `assumed_next_service_type`
+- Intended source fields for derivation:
+  - `last_service_date`
+  - `last_service_type`
+- Logic status: pending user-provided rules; implementation intentionally deferred until logic is confirmed.
+
+### 2026-06-21 - Phase 4 logic finalized for `assumed_next_service_date` (Concrete v1)
+
+- Approved date logic captured from sheet-equivalent rules:
+  - `DoneDays = MOD(GREATEST(0, current_date - parsed_last_service_date), 180)`
+  - `TargetDays` mapping: `60` (`New`/NULL/empty), `120` (`First Free Service`/`TMA-First Free Service`), else `180`
+  - `assumed_next_service_date = current_date + (TargetDays - DoneDays)`
+- Concrete migration drafted:
+  - `supabase/migrations/20260621090000_all_service_data_add_assumed_next_service_columns.sql`
+- Paired read-only checks drafted:
+  - `supabase/sql_checks/20260621090000_all_service_data_add_assumed_next_service_columns_checks.sql`
+- `assumed_next_service_type` population remains pending separate mapping approval.
+
+### 2026-06-21 - Phase 4 type mapping and sync drafted (Concrete v2)
+
+- Added `assumed_next_service_type` calc function:
+  - `public.calc_all_service_assumed_next_service_type(text)`
+- Added sync trigger for insert/update of source fields:
+  - `public.set_all_service_assumed_columns()`
+  - `trg_set_all_service_assumed_columns` on `public.all_service_data`
+- Added deterministic backfill update for both assumed columns.
+- Concrete migration drafted:
+  - `supabase/migrations/20260621093000_all_service_data_assumed_next_service_type_sync.sql`
+- Paired read-only checks drafted:
+  - `supabase/sql_checks/20260621093000_all_service_data_assumed_next_service_type_sync_checks.sql`
+
+### 2026-06-21 - Phase 5 powertrain granularity drafted (Concrete v1)
+
+- Added granular derived column in `public.all_service_data`:
+  - `powertrain_type`
+- Added deterministic calc function from `product_line`:
+  - `public.calc_all_service_powertrain_type(text)`
+  - Rule output set: `EV`, `CNG`, `DIESEL`, `PETROL`, `UNKNOWN` (audit fallback), `NULL` for blank input.
+- Added sync trigger for insert/update of `product_line`:
+  - `public.set_all_service_powertrain_type()`
+  - `trg_set_all_service_powertrain_type` on `public.all_service_data`
+- Added deterministic backfill update for existing rows.
+- Concrete migration drafted:
+  - `supabase/migrations/20260621100000_all_service_data_powertrain_type_granularity.sql`
+- Paired read-only checks drafted:
+  - `supabase/sql_checks/20260621100000_all_service_data_powertrain_type_granularity_checks.sql`
+
+### 2026-06-21 - Fresh authoritative dump re-audit and rule hardening
+
+- Re-audited authoritative source (`local_folder/backups/full_database.sql`) via mirror chunk (`local_folder/backups/chunks/full_database.sql.part_000`) before finalizing rule quality.
+- Finding: model-level reinforcement reduced `UNKNOWN` but conflicts with mixed-fuel model families.
+- Finalized direction updated per business decision:
+  - Do not force model-level mapping.
+  - Classify from explicit `product_line` fuel signals first.
+  - Then apply manual override table (`public.all_service_data_powertrain_overrides`) by priority.
+  - If still unresolved, keep `UNKNOWN` (no fallback).
+- Signal-only dry-run distribution before overrides (dump simulation):
+  - `bucket_EV`: 12482
+  - `bucket_CNG`: 3349
+  - `bucket_DIESEL`: 3891
+  - `bucket_PETROL`: 13431
+  - `bucket_UNKNOWN`: 15661
 
 ### 2026-06-20 - Post-deploy parity check
 
@@ -354,8 +487,14 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260620204500_all_service_data_dynamic_add_plus2_condition_checks.sql`
 - `supabase/migrations/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser.sql`
 - `supabase/sql_checks/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser_checks.sql`
+- `supabase/migrations/20260621090000_all_service_data_add_assumed_next_service_columns.sql`
+- `supabase/sql_checks/20260621090000_all_service_data_add_assumed_next_service_columns_checks.sql`
+- `supabase/migrations/20260621093000_all_service_data_assumed_next_service_type_sync.sql`
+- `supabase/sql_checks/20260621093000_all_service_data_assumed_next_service_type_sync_checks.sql`
+- `supabase/migrations/20260621100000_all_service_data_powertrain_type_granularity.sql`
+- `supabase/sql_checks/20260621100000_all_service_data_powertrain_type_granularity_checks.sql`
 
 ---
 
-**Last Updated:** 2026-06-20 by GitHub Copilot  
+**Last Updated:** 2026-06-21 by GitHub Copilot  
 **Status:** 🟡 IN PROGRESS
