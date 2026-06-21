@@ -94,10 +94,12 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
   }
 
   const hasChassisMapped = Object.values(columnMapping).includes('chassis_no' as DbColumn)
+  const hasRegMapped = Object.values(columnMapping).includes('vehicle_registration_number' as DbColumn)
+  const hasKeyMapped = hasChassisMapped || hasRegMapped
 
   async function doUpload() {
     if (!parsed) return
-    if (!hasChassisMapped) { setError('You must map at least the "chassis_no" column.'); return }
+    if (!hasKeyMapped) { setError('You must map at least "chassis_no" OR "vehicle_registration_number" before uploading.'); return }
     setLoading(true); setError(null); setResult(null)
 
     const dbRows: Record<string, unknown>[] = parsed.rows.map((row) => {
@@ -113,13 +115,24 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
       return obj
     })
 
-    const validRows = dbRows.filter((r) => r.chassis_no && String(r.chassis_no).trim().length > 0)
+    // A row is valid if it has at least chassis_no OR vehicle_registration_number
+    const validRows = dbRows.filter((r) => {
+      const ch = r.chassis_no ? String(r.chassis_no).trim() : ''
+      const reg = r.vehicle_registration_number ? String(r.vehicle_registration_number).trim() : ''
+      return ch.length > 0 || reg.length > 0
+    })
     const skippedNull = dbRows.length - validRows.length
-    if (validRows.length === 0) { setError('No rows with valid chassis_no.'); setLoading(false); return }
+    if (validRows.length === 0) { setError('No rows with a valid chassis_no or vehicle_registration_number.'); setLoading(false); return }
 
     setProgress(`Fetching existing records for dedup… (${validRows.length} rows)`)
-    const uploadChassis = [...new Set(validRows.map((r) => String(r.chassis_no).trim()))]
-    const uploadRegs = [...new Set(validRows.map((r) => r.vehicle_registration_number ? String(r.vehicle_registration_number).trim() : null).filter((v): v is string => !!v))]
+    // Only fetch chassis for rows that have one
+    const uploadChassis = [...new Set(
+      validRows.map((r) => r.chassis_no ? String(r.chassis_no).trim() : null).filter((v): v is string => !!v && v.length > 0)
+    )]
+    // Only fetch reg for rows that have one
+    const uploadRegs = [...new Set(
+      validRows.map((r) => r.vehicle_registration_number ? String(r.vehicle_registration_number).trim() : null).filter((v): v is string => !!v && v.length > 0)
+    )]
 
     const existingChassis = new Set<string>()
     for (let i = 0; i < uploadChassis.length; i += 1000) {
@@ -142,11 +155,18 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
     const newRows: Record<string, unknown>[] = []
     let dupCount = 0
     for (const r of validRows) {
-      const ch = String(r.chassis_no).trim()
+      const ch = r.chassis_no ? String(r.chassis_no).trim() : ''
       const reg = r.vehicle_registration_number ? String(r.vehicle_registration_number).trim() : ''
-      if (existingChassis.has(ch)) { dupCount++; continue }
+      // Skip if chassis exists in DB (only check if row has chassis)
+      if (ch && existingChassis.has(ch)) { dupCount++; continue }
+      // Skip if reg exists in DB (only check if row has reg)
       if (reg && existingRegs.has(reg)) { dupCount++; continue }
-      newRows.push(r); existingChassis.add(ch); if (reg) existingRegs.add(reg)
+      // Skip internal duplicates within same upload
+      if (ch && existingChassis.has(ch)) { dupCount++; continue }
+      if (reg && existingRegs.has(reg)) { dupCount++; continue }
+      newRows.push(r)
+      if (ch) existingChassis.add(ch)
+      if (reg) existingRegs.add(reg)
     }
 
     if (newRows.length === 0) {
@@ -210,8 +230,8 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
             <span className="text-gray-400">·</span><span className="text-gray-500">{parsed.rows.length.toLocaleString('en-IN')} rows</span>
             <span className="text-gray-400">·</span><span className="text-gray-500">{parsed.headers.length} columns</span>
           </div>
-          {!hasChassisMapped && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">⚠️ <strong>chassis_no</strong> must be mapped before uploading.</div>
+          {!hasKeyMapped && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">⚠️ You must map at least <strong>chassis_no</strong> OR <strong>vehicle_registration_number</strong> before uploading.</div>
           )}
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Column Mapping (auto-detected — adjust if needed)</p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -222,7 +242,7 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
                   <span className="flex-1 truncate text-xs text-gray-600" title={fc}>{fc}</span>
                   <span className="text-gray-300">→</span>
                   <select value={m} onChange={(e) => setColumnMapping((p) => ({ ...p, [fc]: e.target.value as DbColumn | '' }))}
-                    className={`flex-1 rounded border px-2 py-1 text-xs ${m === 'chassis_no' ? 'border-blue-400 bg-blue-50 font-medium text-blue-700' : m ? 'border-green-300 bg-green-50 text-green-700' : 'border-gray-200 text-gray-400'}`}>
+                    className={`flex-1 rounded border px-2 py-1 text-xs ${m === 'chassis_no' || m === 'vehicle_registration_number' ? 'border-blue-400 bg-blue-50 font-medium text-blue-700' : m ? 'border-green-300 bg-green-50 text-green-700' : 'border-gray-200 text-gray-400'}`}>
                     <option value="">— skip —</option>
                     {DB_COLUMNS.map((db) => <option key={db} value={db}>{db}</option>)}
                   </select>
@@ -231,11 +251,11 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
             })}
           </div>
           <div className="mt-4 flex items-center gap-3">
-            <button onClick={() => void doUpload()} disabled={!hasChassisMapped}
+            <button onClick={() => void doUpload()} disabled={!hasKeyMapped}
               className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300">
               Upload {parsed.rows.length.toLocaleString('en-IN')} rows
             </button>
-            <span className="text-xs text-gray-400">Duplicates on chassis_no & vehicle_registration_number will be skipped.</span>
+            <span className="text-xs text-gray-400">Duplicates on chassis_no OR vehicle_registration_number will be skipped. At least one must be mapped.</span>
           </div>
         </div>
       )}
@@ -252,7 +272,7 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
               <p className="mt-1 text-2xl font-semibold text-orange-900">{result.duplicates.toLocaleString('en-IN')}</p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-600">Null Chassis Skipped</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-600">No Key Skipped</p>
               <p className="mt-1 text-2xl font-semibold text-gray-900">{result.skipped.toLocaleString('en-IN')}</p>
             </div>
           </div>
