@@ -133,8 +133,8 @@ export default async function handler(req: Request) {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      const asgnId = assignment[0].id
-      const customerId = assignment[0].customer_id
+      const asgnId = assignment[0].asgn_id
+      const customerId = assignment[0].cust_id
 
       // Fetch full customer data
       const { data: customer, error: custErr } = await serviceClient
