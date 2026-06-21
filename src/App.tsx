@@ -34,6 +34,7 @@ import {
 import EWReminderPage from './pages/EWReminderPage'
 import ServiceBookingPage from './pages/ServiceBookingPage'
 import WAAgentPage from './pages/WAAgentPage'
+import TelecallingPage from './pages/TelecallingPage'
 import VerifyScreenPreview from './pages/VerifyScreenPreview'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import { getDealerScopeContext } from './lib/api/auth'
@@ -85,8 +86,9 @@ type ModuleName =
   | 'ew_reminder'
   | 'service_booking'
   | 'wa_agent'
+  | 'telecalling'
 
-type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent'
+type AppRoute = '/import' | '/reports' | '/settings' | '/admin' | '/autodoc' | '/reception' | '/service-advisor' | '/floor-incharge' | '/sa-tracker' | '/bodyshop-tracker' | '/bodyshop-floor' | '/technician' | '/complaints' | '/bodyshop-repair' | '/ew-reminder' | '/service-booking' | '/wa-agent' | '/telecalling'
 
 interface PermissionRow {
   module_name: string
@@ -110,6 +112,7 @@ const ROUTE_MODULE_MAP: Record<AppRoute, ModuleName[]> = {
   '/ew-reminder': ['ew_reminder'],
   '/service-booking': ['service_booking'],
   '/wa-agent': ['wa_agent'],
+  '/telecalling': ['telecalling'],
 }
 
 type NavItem = {
@@ -607,7 +610,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
 }
 
 function getDefaultRoute(allowedModules: Set<string>): AppRoute | null {
-  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/floor-incharge', '/technician', '/reports', '/settings', '/autodoc', '/admin']
+  const preferenceOrder: AppRoute[] = ['/import', '/reception', '/service-advisor', '/floor-incharge', '/technician', '/reports', '/telecalling', '/settings', '/autodoc', '/admin']
   return preferenceOrder.find((route) => hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP[route])) ?? null
 }
 
@@ -1116,6 +1119,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key`}
                   element={(
                     <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/wa-agent']}>
                       <WAAgentPage />
+                    </RequireAccess>
+                  )}
+                />
+                <Route
+                  path="/telecalling"
+                  element={(
+                    <RequireAccess allowedModules={allowedModules} modules={ROUTE_MODULE_MAP['/telecalling']}>
+                      <TelecallingPage />
                     </RequireAccess>
                   )}
                 />

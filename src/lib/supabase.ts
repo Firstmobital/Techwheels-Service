@@ -17,6 +17,7 @@ const supabaseUrl =
 const supabaseAnonKey =
 	viteEnv.VITE_SUPABASE_ANON_KEY ?? processEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
+export { supabaseUrl }
 export const hasSupabaseEnv = Boolean(supabaseUrl && supabaseAnonKey)
 
 if (!hasSupabaseEnv) {

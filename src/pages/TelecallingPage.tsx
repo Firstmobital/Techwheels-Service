@@ -1,0 +1,946 @@
+import { useCallback, useEffect, useState } from 'react'
+import { supabase, supabaseUrl } from '../lib/supabase'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface Customer {
+  id: number
+  chassis_no: string | null
+  vehicle_registration_number: string | null
+  first_name: string | null
+  last_name: string | null
+  contact_phones: string | null
+  model: string | null
+  powertrain_type: string | null
+  product_line: string | null
+  assumed_next_service_date: string | null
+  assumed_next_service_type: string | null
+  last_service_date: string | null
+  last_service_type: string | null
+  last_service_km: string | null
+  last_service_dealer: string | null
+  sold_dealer: string | null
+  extended_warranty_end_date: string | null
+  extended_warranty_product: string | null
+}
+
+interface Assignment {
+  id: number
+  campaign_id: number
+  status: string
+  call_notes: string | null
+  booking_date: string | null
+  callback_date: string | null
+  called_at: string | null
+  call_count: number
+  no_answer_count: number
+  whatsapp_sent: boolean
+  whatsapp_status: string | null
+  assigned_at: string | null
+  customer: Customer
+}
+
+interface Campaign {
+  id: number
+  campaign_name: string
+  date_from: string
+  date_to: string
+  status: string
+  total_leads: number
+  pending_count: number
+  completed_count: number
+  booked_count: number
+  created_by: string | null
+  created_at: string
+}
+
+interface DailySummary {
+  total_calls: number
+  booked: number
+  no_answer: number
+  not_interested: number
+  callback_later: number
+  wrong_number: number
+  not_reachable: number
+}
+
+type CallStatus =
+  | 'booked' | 'callback_later' | 'no_answer' | 'not_reachable'
+  | 'wrong_number' | 'not_interested' | 'completed'
+
+const EDGE_URL = `${supabaseUrl}/functions/v1/telecalling`
+
+async function callEdge(action: string, body: Record<string, unknown> = {}) {
+  const { data: session } = await supabase.auth.getSession()
+  const token = session?.session?.access_token
+  if (!token) throw new Error('Not authenticated')
+
+  const res = await fetch(EDGE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ action, ...body }),
+  })
+
+  const data = await res.json()
+  if (!data.success) throw new Error(data.error || 'Unknown error')
+  return data
+}
+
+// ── Status badge colors ────────────────────────────────────────────────────────
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-gray-100 text-gray-600',
+  assigned: 'bg-blue-100 text-blue-700',
+  calling: 'bg-blue-100 text-blue-700',
+  booked: 'bg-green-100 text-green-700',
+  callback_later: 'bg-purple-100 text-purple-700',
+  no_answer: 'bg-orange-100 text-orange-700',
+  not_reachable: 'bg-red-100 text-red-700',
+  wrong_number: 'bg-red-100 text-red-700',
+  not_interested: 'bg-gray-200 text-gray-600',
+  completed: 'bg-green-100 text-green-700',
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const label = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[status] || 'bg-gray-100 text-gray-600'}`}>{label}</span>
+}
+
+function formatDate(d: string | null): string {
+  if (!d) return '—'
+  try {
+    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  } catch {
+    return d
+  }
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
+export default function TelecallingPage({ userRole }: { userRole?: string }) {
+  const [role, setRole] = useState<string>(userRole || 'staff')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'admin'>('dashboard')
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Fetch user role + campaigns on mount
+  useEffect(() => {
+    async function init() {
+      setLoading(true)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+
+        const { data: user } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+
+        if (user?.role) setRole(user.role)
+        if (user?.role === 'admin') setActiveTab('admin')
+
+        // Fetch campaigns
+        const { data: camps } = await supabase
+          .from('telecall_campaigns')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        setCampaigns(camps || [])
+        const active = camps?.find(c => c.status === 'active') || camps?.[0] || null
+        setActiveCampaign(active)
+      } catch (err) {
+        console.error('Init error:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    init()
+  }, [])
+
+  const refreshCampaigns = useCallback(async () => {
+    const { data: camps } = await supabase
+      .from('telecall_campaigns')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setCampaigns(camps || [])
+    const active = camps?.find(c => c.status === 'active') || camps?.[0] || null
+    setActiveCampaign(active)
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-sm text-gray-400">Loading telecalling dashboard…</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">📞 Telecalling</h1>
+          <p className="mt-1 text-sm text-gray-500">Service reminder calling team</p>
+        </div>
+        {role === 'admin' && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+            >
+              Telecaler View
+            </button>
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${activeTab === 'admin' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+            >
+              Admin Dashboard
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Campaign selector */}
+      {campaigns.length > 0 && (
+        <div className="mb-4 flex items-center gap-3">
+          <span className="text-sm text-gray-500">Campaign:</span>
+          <select
+            value={activeCampaign?.id || ''}
+            onChange={(e) => {
+              const c = campaigns.find(c => c.id === Number(e.target.value))
+              setActiveCampaign(c || null)
+            }}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+          >
+            {campaigns.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.campaign_name} ({c.status}) — {c.total_leads} leads
+              </option>
+            ))}
+          </select>
+          {activeCampaign && (
+            <div className="flex gap-4 text-xs">
+              <span className="text-orange-600">⏳ {activeCampaign.pending_count} pending</span>
+              <span className="text-green-600">✅ {activeCampaign.booked_count} booked</span>
+              <span className="text-gray-500">📊 {activeCampaign.completed_count} completed</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Content */}
+      {activeTab === 'admin' && role === 'admin' ? (
+        <AdminDashboard campaigns={campaigns} activeCampaign={activeCampaign} onRefresh={refreshCampaigns} />
+      ) : (
+        <TelecalerDashboard activeCampaign={activeCampaign} />
+      )}
+    </div>
+  )
+}
+
+// ── Telecaler Dashboard ─────────────────────────────────────────────────────────
+function TelecalerDashboard({ activeCampaign }: { activeCampaign: Campaign | null }) {
+  const [currentAssignment, setCurrentAssignment] = useState<Assignment | null>(null)
+  const [queue, setQueue] = useState<Assignment[]>([])
+  const [summary, setSummary] = useState<DailySummary | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showNotes, setShowNotes] = useState(false)
+  const [notes, setNotes] = useState('')
+  const [bookingDate, setBookingDate] = useState('')
+  const [callbackDate, setCallbackDate] = useState('')
+  const [activeView, setActiveView] = useState<'call' | 'queue' | 'summary'>('call')
+
+  // Fetch queue + summary on mount and campaign change
+  const refreshQueue = useCallback(async () => {
+    if (!activeCampaign) return
+    try {
+      const data = await callEdge('my_queue', { campaign_id: activeCampaign.id })
+      setQueue(data.queue || [])
+    } catch (err) {
+      console.error('Queue fetch error:', err)
+    }
+  }, [activeCampaign])
+
+  const refreshSummary = useCallback(async () => {
+    try {
+      const data = await callEdge('my_summary', {})
+      setSummary(data.summary)
+    } catch (err) {
+      console.error('Summary fetch error:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshQueue()
+    refreshSummary()
+  }, [refreshQueue, refreshSummary])
+
+  // Get next customer
+  const handleGetNext = async () => {
+    if (!activeCampaign) return
+    setBusy(true)
+    setError(null)
+    try {
+      const data = await callEdge('get_next', { campaign_id: activeCampaign.id })
+      if (data.assignment) {
+        setCurrentAssignment(data.assignment)
+        setActiveView('call')
+      } else {
+        setError('No more pending customers in this campaign. Great job! 🎉')
+      }
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Update call status
+  const handleUpdateStatus = async (status: CallStatus) => {
+    if (!currentAssignment || !activeCampaign) return
+    setBusy(true)
+    setError(null)
+    try {
+      await callEdge('update_status', {
+        assignment_id: currentAssignment.id,
+        campaign_id: activeCampaign.id,
+        status,
+        call_notes: notes || undefined,
+        booking_date: status === 'booked' ? bookingDate : undefined,
+        callback_date: status === 'callback_later' ? callbackDate : undefined,
+      })
+      // Reset + refresh
+      setCurrentAssignment(null)
+      setNotes('')
+      setBookingDate('')
+      setCallbackDate('')
+      setShowNotes(false)
+      refreshQueue()
+      refreshSummary()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!activeCampaign) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
+        <div className="text-4xl mb-3">📞</div>
+        <p className="text-gray-600 font-medium">No active campaign</p>
+        <p className="text-sm text-gray-400 mt-1">Please ask admin to create a campaign with service-due customers.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* View tabs */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setActiveView('call')}
+          className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'call' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+        >
+          📞 Call
+        </button>
+        <button
+          onClick={() => { setActiveView('queue'); refreshQueue() }}
+          className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'queue' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+        >
+          📋 My Queue ({queue.length})
+        </button>
+        <button
+          onClick={() => { setActiveView('summary'); refreshSummary() }}
+          className={`rounded-lg px-4 py-2 text-sm font-medium ${activeView === 'summary' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+        >
+          📊 Today's Summary
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+          {error}
+        </div>
+      )}
+
+      {/* ── CALL VIEW ──────────────────────────────────────────────────────── */}
+      {activeView === 'call' && (
+        <div>
+          {!currentAssignment ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+              <div className="text-5xl mb-4">🎯</div>
+              <h2 className="text-lg font-semibold text-gray-900">Ready to call?</h2>
+              <p className="mt-2 text-sm text-gray-500">Click below to get the next customer who needs a service reminder.</p>
+              <button
+                onClick={handleGetNext}
+                disabled={busy}
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 text-base font-semibold text-white shadow-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {busy ? (
+                  <>
+                    <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    Getting next…
+                  </>
+                ) : (
+                  <>📞 Get Next Customer</>
+                )}
+              </button>
+            </div>
+          ) : (
+            <CallCard
+              assignment={currentAssignment}
+              busy={busy}
+              notes={notes}
+              setNotes={setNotes}
+              showNotes={showNotes}
+              setShowNotes={setShowNotes}
+              bookingDate={bookingDate}
+              setBookingDate={setBookingDate}
+              callbackDate={callbackDate}
+              setCallbackDate={setCallbackDate}
+              onUpdateStatus={handleUpdateStatus}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── QUEUE VIEW ─────────────────────────────────────────────────────── */}
+      {activeView === 'queue' && (
+        <div className="space-y-2">
+          {queue.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+              No active assignments. Click "Get Next Customer" to start calling.
+            </div>
+          ) : (
+            queue.map((asgn) => (
+              <div key={asgn.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {asgn.customer.first_name} {asgn.customer.last_name || ''}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      📱 {asgn.customer.contact_phones} · 🚗 {asgn.customer.model} · 🔧 {asgn.customer.assumed_next_service_type} due {formatDate(asgn.customer.assumed_next_service_date)}
+                    </div>
+                    {asgn.status === 'callback_later' && asgn.callback_date && (
+                      <div className="mt-1 text-xs text-purple-600">📅 Callback on {formatDate(asgn.callback_date)}</div>
+                    )}
+                    {asgn.status === 'booked' && asgn.booking_date && (
+                      <div className="mt-1 text-xs text-green-600">✅ Booked for {formatDate(asgn.booking_date)}</div>
+                    )}
+                  </div>
+                  <StatusBadge status={asgn.status} />
+                </div>
+                {asgn.call_notes && (
+                  <div className="mt-2 rounded bg-gray-50 px-3 py-1.5 text-xs text-gray-600">📝 {asgn.call_notes}</div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── SUMMARY VIEW ───────────────────────────────────────────────────── */}
+      {activeView === 'summary' && summary && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard label="Total Calls Today" value={summary.total_calls} color="blue" icon="📞" />
+          <SummaryCard label="Booked" value={summary.booked} color="green" icon="✅" />
+          <SummaryCard label="Callback Later" value={summary.callback_later} color="purple" icon="📅" />
+          <SummaryCard label="No Answer" value={summary.no_answer} color="orange" icon="📵" />
+          <SummaryCard label="Not Reachable" value={summary.not_reachable} color="red" icon="🚫" />
+          <SummaryCard label="Not Interested" value={summary.not_interested} color="gray" icon="😐" />
+          <SummaryCard label="Wrong Number" value={summary.wrong_number} color="red" icon="⚠️" />
+          <SummaryCard
+            label="Conversion Rate"
+            value={summary.total_calls > 0 ? `${Math.round((summary.booked / summary.total_calls) * 100)}%` : '0%'}
+            color="green"
+            icon="📈"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Call Card ───────────────────────────────────────────────────────────────────
+function CallCard({
+  assignment, busy, notes, setNotes, showNotes, setShowNotes,
+  bookingDate, setBookingDate, callbackDate, setCallbackDate, onUpdateStatus,
+}: {
+  assignment: Assignment
+  busy: boolean
+  notes: string
+  setNotes: (v: string) => void
+  showNotes: boolean
+  setShowNotes: (v: boolean) => void
+  bookingDate: string
+  setBookingDate: (v: string) => void
+  callbackDate: string
+  setCallbackDate: (v: string) => void
+  onUpdateStatus: (s: CallStatus) => void
+}) {
+  const c = assignment.customer
+  const phone = c.contact_phones || ''
+  const [showBooking, setShowBooking] = useState(false)
+  const [showCallback, setShowCallback] = useState(false)
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      {/* Customer header */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold">{c.first_name} {c.last_name || ''}</h2>
+            <p className="text-sm text-blue-100">🚗 {c.model} · {c.powertrain_type || 'N/A'}</p>
+          </div>
+          {c.vehicle_registration_number && (
+            <div className="rounded-lg bg-white/20 px-3 py-1 text-sm font-medium">
+              {c.vehicle_registration_number}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Call button */}
+      <div className="px-6 py-4 border-b border-gray-100">
+        <a
+          href={`tel:${phone}`}
+          className="flex items-center justify-center gap-2 rounded-xl bg-green-500 px-6 py-3 text-base font-semibold text-white hover:bg-green-600"
+        >
+          📞 Call {phone}
+        </a>
+        {assignment.whatsapp_sent && (
+          <p className="mt-2 text-center text-xs text-green-600">
+            ✓ WhatsApp reminder already sent to this customer
+          </p>
+        )}
+      </div>
+
+      {/* Service details */}
+      <div className="grid grid-cols-2 gap-px bg-gray-100">
+        <DetailRow label="Service Due Date" value={formatDate(c.assumed_next_service_date)} />
+        <DetailRow label="Service Type" value={c.assumed_next_service_type || '—'} />
+        <DetailRow label="Last Service Date" value={formatDate(c.last_service_date)} />
+        <DetailRow label="Last Service Type" value={c.last_service_type || '—'} />
+        <DetailRow label="Last Service KM" value={c.last_service_km ? `${c.last_service_km} km` : '—'} />
+        <DetailRow label="Last Service Dealer" value={c.last_service_dealer || '—'} />
+        {c.extended_warranty_product && (
+          <DetailRow label="EW Product" value={c.extended_warranty_product} />
+        )}
+        {c.extended_warranty_end_date && (
+          <DetailRow label="EW End Date" value={formatDate(c.extended_warranty_end_date)} />
+        )}
+      </div>
+
+      {/* Previous call info */}
+      {assignment.call_count > 0 && (
+        <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 text-sm text-amber-700">
+          ⚠️ This customer has been called {assignment.call_count} time(s) before.
+          {assignment.no_answer_count > 0 && ` (${assignment.no_answer_count} no-answers — auto-removes after 3)`}
+          {assignment.call_notes && <div className="mt-1 text-xs">Last note: {assignment.call_notes}</div>}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="px-6 py-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <button
+            onClick={() => { setShowBooking(true); setShowNotes(true) }}
+            disabled={busy}
+            className="rounded-xl bg-green-500 px-4 py-3 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-50"
+          >
+            ✅ Booked
+          </button>
+          <button
+            onClick={() => { setShowCallback(true); setShowNotes(true) }}
+            disabled={busy}
+            className="rounded-xl bg-purple-500 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-600 disabled:opacity-50"
+          >
+            📞 Callback Later
+          </button>
+          <button
+            onClick={() => onUpdateStatus('no_answer')}
+            disabled={busy}
+            className="rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+          >
+            📵 No Answer
+          </button>
+          <button
+            onClick={() => onUpdateStatus('not_reachable')}
+            disabled={busy}
+            className="rounded-xl bg-red-400 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+          >
+            🚫 Not Reachable
+          </button>
+          <button
+            onClick={() => { setShowNotes(true); onUpdateStatus('wrong_number') }}
+            disabled={busy}
+            className="rounded-xl bg-red-400 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+          >
+            ⚠️ Wrong Number
+          </button>
+          <button
+            onClick={() => { setShowNotes(true); onUpdateStatus('not_interested') }}
+            disabled={busy}
+            className="rounded-xl bg-gray-400 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-500 disabled:opacity-50"
+          >
+            😐 Not Interested
+          </button>
+        </div>
+
+        {/* Notes field */}
+        {showNotes && (
+          <div className="mt-4">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Call notes (what the customer said)…"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              rows={2}
+            />
+          </div>
+        )}
+
+        {/* Booking date picker */}
+        {showBooking && (
+          <div className="mt-3 flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700">Visit date:</label>
+            <input
+              type="date"
+              value={bookingDate}
+              onChange={(e) => setBookingDate(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+            />
+            <button
+              onClick={() => onUpdateStatus('booked')}
+              disabled={busy || !bookingDate}
+              className="rounded-lg bg-green-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              Confirm Booking
+            </button>
+          </div>
+        )}
+
+        {/* Callback date picker */}
+        {showCallback && (
+          <div className="mt-3 flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700">Callback on:</label>
+            <input
+              type="date"
+              value={callbackDate}
+              onChange={(e) => setCallbackDate(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+            />
+            <button
+              onClick={() => onUpdateStatus('callback_later')}
+              disabled={busy || !callbackDate}
+              className="rounded-lg bg-purple-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              Schedule Callback
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white px-4 py-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="mt-0.5 text-sm font-medium text-gray-900">{value}</div>
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, color, icon }: { label: string; value: string | number; color: string; icon: string }) {
+  const colors: Record<string, string> = {
+    blue: 'border-blue-200 bg-blue-50 text-blue-900',
+    green: 'border-green-200 bg-green-50 text-green-900',
+    purple: 'border-purple-200 bg-purple-50 text-purple-900',
+    orange: 'border-orange-200 bg-orange-50 text-orange-900',
+    red: 'border-red-200 bg-red-50 text-red-900',
+    gray: 'border-gray-200 bg-gray-50 text-gray-900',
+  }
+  return (
+    <div className={`rounded-xl border p-4 ${colors[color]}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium uppercase tracking-wide opacity-70">{label}</span>
+        <span className="text-lg">{icon}</span>
+      </div>
+      <div className="mt-2 text-3xl font-bold">{value}</div>
+    </div>
+  )
+}
+
+// ── Admin Dashboard ─────────────────────────────────────────────────────────────
+function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
+  campaigns: Campaign[]
+  activeCampaign: Campaign | null
+  onRefresh: () => void
+}) {
+  const [showCreate, setShowCreate] = useState(false)
+  const [campaignName, setCampaignName] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [telecalerStats, setTelecalerStats] = useState<Record<string, Record<string, number>>>({})
+  const [bookings, setBookings] = useState<any[]>([])
+  const [, setLoadingStats] = useState(false)
+
+  // Fetch stats
+  const fetchStats = useCallback(async () => {
+    setLoadingStats(true)
+    try {
+      const data = await callEdge('campaign_stats', {})
+      setTelecalerStats(data.telecaler_stats || {})
+      setBookings(data.bookings || [])
+    } catch (err) {
+      console.error('Stats error:', err)
+    } finally {
+      setLoadingStats(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats, activeCampaign])
+
+  // Create campaign
+  const handleCreate = async () => {
+    if (!campaignName || !dateFrom || !dateTo) {
+      setError('Please fill all fields')
+      return
+    }
+    setCreating(true)
+    setError(null)
+    try {
+      const data = await callEdge('create_campaign', {
+        campaign_name: campaignName,
+        date_from: dateFrom,
+        date_to: dateTo,
+      })
+      setSuccess(`Campaign created with ${data.total_leads} leads!`)
+      setShowCreate(false)
+      setCampaignName('')
+      setDateFrom('')
+      setDateTo('')
+      onRefresh()
+      fetchStats()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  // Close campaign
+  const handleClose = async (id: number) => {
+    if (!confirm('Close this campaign? No new calls can be made after closing.')) return
+    try {
+      await callEdge('close_campaign', { campaign_id: id })
+      onRefresh()
+      fetchStats()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  // Default dates: today + 20 days
+  useEffect(() => {
+    if (!dateFrom) {
+      const today = new Date()
+      const plus20 = new Date()
+      plus20.setDate(plus20.getDate() + 20)
+      setDateFrom(today.toISOString().split('T')[0])
+      setDateTo(plus20.toISOString().split('T')[0])
+    }
+  }, [])
+
+  return (
+    <div className="space-y-6">
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {success && <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>}
+
+      {/* Create campaign button */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">Campaigns</h2>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          + New Campaign
+        </button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h3 className="mb-4 font-medium text-gray-900">Create New Campaign</h3>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="text-sm font-medium text-gray-700">Campaign Name</label>
+              <input
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+                placeholder="e.g. July Service Reminders"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">From Date</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">To Date</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              className="rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {creating ? 'Creating…' : 'Create Campaign'}
+            </button>
+            <span className="text-xs text-gray-400">
+              System will auto-pull customers with service due in this date range + valid phone numbers.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Campaign list */}
+      <div className="space-y-3">
+        {campaigns.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+            No campaigns yet. Click "New Campaign" to create one.
+          </div>
+        ) : (
+          campaigns.map(c => (
+            <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold text-gray-900">{c.campaign_name}</h3>
+                    <StatusBadge status={c.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {formatDate(c.date_from)} → {formatDate(c.date_to)} · Created by {c.created_by || '—'}
+                  </p>
+                </div>
+                {c.status === 'active' && (
+                  <button
+                    onClick={() => handleClose(c.id)}
+                    className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    Close Campaign
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-4">
+                <div className="rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="text-xs text-gray-500">Total Leads</div>
+                  <div className="text-xl font-bold text-gray-900">{c.total_leads}</div>
+                </div>
+                <div className="rounded-lg bg-orange-50 px-3 py-2">
+                  <div className="text-xs text-orange-600">Pending</div>
+                  <div className="text-xl font-bold text-orange-900">{c.pending_count}</div>
+                </div>
+                <div className="rounded-lg bg-green-50 px-3 py-2">
+                  <div className="text-xs text-green-600">Booked</div>
+                  <div className="text-xl font-bold text-green-900">{c.booked_count}</div>
+                </div>
+                <div className="rounded-lg bg-blue-50 px-3 py-2">
+                  <div className="text-xs text-blue-600">Completed</div>
+                  <div className="text-xl font-bold text-blue-900">{c.completed_count}</div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Telecaler performance */}
+      {Object.keys(telecalerStats).length > 0 && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold text-gray-900">Telecaler Performance</h2>
+          <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Telecaler</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">Assigned</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">Booked</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">Callback</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">No Answer</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">Not Interested</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {Object.entries(telecalerStats).map(([email, stats]) => {
+                  const total = Object.values(stats).reduce((a, b) => a + b, 0)
+                  return (
+                    <tr key={email}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{email}</td>
+                      <td className="px-4 py-3 text-center text-sm text-gray-700">{total}</td>
+                      <td className="px-4 py-3 text-center text-sm font-medium text-green-600">{stats.booked || 0}</td>
+                      <td className="px-4 py-3 text-center text-sm text-purple-600">{stats.callback_later || 0}</td>
+                      <td className="px-4 py-3 text-center text-sm text-orange-600">{stats.no_answer || 0}</td>
+                      <td className="px-4 py-3 text-center text-sm text-gray-600">{stats.not_interested || 0}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent bookings */}
+      {bookings.length > 0 && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold text-gray-900">Recent Bookings</h2>
+          <div className="space-y-2">
+            {bookings.slice(0, 10).map((b: any) => (
+              <div key={b.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-gray-900">
+                    {b.customer?.first_name} {b.customer?.last_name || ''}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    📱 {b.customer?.contact_phones} · 🚗 {b.customer?.model} · {b.customer?.vehicle_registration_number || 'No VRN'}
+                  </div>
+                  {b.call_notes && <div className="mt-1 text-xs text-gray-400">📝 {b.call_notes}</div>}
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-medium text-green-600">Visit: {formatDate(b.booking_date)}</div>
+                  <div className="text-xs text-gray-400">By {b.assigned_to}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
