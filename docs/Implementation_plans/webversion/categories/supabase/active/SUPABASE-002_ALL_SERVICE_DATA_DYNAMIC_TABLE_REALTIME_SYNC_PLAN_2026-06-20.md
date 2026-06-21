@@ -86,7 +86,7 @@ Implementation track (approved design):
 
 1. Add two columns to `public.all_service_data_dynamic`:
   - `priority_bucket integer` (lower value = higher priority)
-  - `priority_score integer` (higher value = higher rank inside bucket)
+  - `priority_score bigint` (higher value = higher rank inside bucket)
 2. Populate both columns from business ordering conditions.
 3. Add composite index for stable ordered access:
   - `(priority_bucket, priority_score DESC, id ASC)`
@@ -110,7 +110,60 @@ Confirmed ranking contract (2026-06-21):
   - `Unknown`
   - `NULL`/blank
   - other values
+- Then `vehicle_sale_date` new to old (`NULL`/unparseable last).
 - Final deterministic tie-break: `id ASC`.
+
+### Ordering Conditions Registry (Current Version)
+
+Use this registry as the single source of truth when modifying order behavior.
+
+1. Bucket condition (`priority_bucket`, lower first):
+  - `1`: `sold_dealer = 'Techwheels'`
+  - `2`: `sold_dealer = 'Others'`
+  - `3`: `sold_dealer IS NULL` or any other value
+
+2. Score condition (`priority_score`, higher first):
+  - Primary score component: `assumed_next_service_date` ascending with `NULL` last
+  - Secondary score component: `assumed_next_service_type` rank
+    - `First Free Service`
+    - `Second Free Service`
+    - `Third Free Service`
+    - `Paid Service`
+    - `Unknown`
+    - `NULL`/blank
+    - other values
+  - Tertiary score component: `vehicle_sale_date` new to old (`NULL`/unparseable last, exact day-level)
+    - `vehicle_sale_date` is stored as text in source/dynamic tables and parsed in scorer via `public.parse_all_service_date_text(...)`.
+    - Implemented with expanded bigint score composition to avoid tertiary ties for different valid dates.
+
+3. Final query tie-break:
+  - `id ASC`
+
+4. Canonical ordered query clause:
+  - `ORDER BY priority_bucket ASC, priority_score DESC, id ASC`
+
+### Third-Party Endpoint Patterns (No Fixed Limit)
+
+- EV feed:
+  - `/rest/v1/all_service_data_dynamic?select=*&fuel_tp=eq.EV&order=priority_bucket.asc,priority_score.desc,id.asc`
+- PV feed:
+  - `/rest/v1/all_service_data_dynamic?select=*&fuel_tp=eq.PV&order=priority_bucket.asc,priority_score.desc,id.asc`
+
+### Future Modification Protocol (Order Rules)
+
+When order conditions change in the future, update all items below in one change-set:
+
+1. `public.calc_all_service_dynamic_priority_bucket(...)`
+2. `public.calc_all_service_dynamic_priority_score(...)`
+3. Backfill statement for existing dynamic rows
+4. `public.sync_all_service_data_dynamic()` insert projection
+5. Read-only check file for parity and ordered top-N preview
+6. This section (`Ordering Conditions Registry`) in this plan document
+
+Governance note:
+
+- Never rely on physical row storage order.
+- Ordered delivery must always be query-driven (REST `order=` or RPC-internal `ORDER BY`).
 
 Key delivery rule:
 
@@ -204,6 +257,7 @@ Override lookup semantics:
 Dynamic table extension (new required columns):
 
 - Ensure `public.all_service_data_dynamic` includes source columns:
+  - `vehicle_sale_date`
   - `assumed_next_service_date`
   - `assumed_next_service_type`
   - `sold_dealer`
@@ -566,6 +620,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 🔄 2.4 | Re-run safety check | Platform Team | 2026-06-21 | - | Pending post-apply verification after assumed-date pivot and dynamic-column refresh migrations
 ✅ 2.5 | Add deterministic dynamic fuel_tp column | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql
 ✅ 2.6 | Add dynamic sold_dealer source projection | Platform Team | 2026-06-21 | 2026-06-21 | Implemented and verified via supabase/migrations/20260621140000_all_service_data_dynamic_add_sold_dealer.sql + supabase/sql_checks/20260621140000_all_service_data_dynamic_add_sold_dealer_checks.sql
+✅ 2.7 | Add dynamic vehicle_sale_date source projection | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621143000_all_service_data_dynamic_add_vehicle_sale_date.sql + supabase/sql_checks/20260621143000_all_service_data_dynamic_add_vehicle_sale_date_checks.sql
 ```
 
 ### Phase 3
@@ -591,12 +646,14 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ### Phase 6 (Priority Ordering for Third-Party Top-N)
 ```text
 ✅ 6.1 | Add priority columns on dynamic table | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621142000_all_service_data_dynamic_priority_ordering_layer.sql
-✅ 6.2 | Define business condition-to-priority mapping | Product + Platform | 2026-06-21 | 2026-06-21 | Confirmed ranking: sold_dealer -> date(NULL last) -> type -> id
+✅ 6.2 | Define business condition-to-priority mapping | Product + Platform | 2026-06-21 | 2026-06-21 | Confirmed ranking: sold_dealer -> date(NULL last) -> type -> vehicle_sale_date(new-to-old, NULL/unparseable last) -> id
 ✅ 6.3 | Backfill existing dynamic rows with priority values | Platform Team | 2026-06-21 | 2026-06-21 | Implemented in migration 20260621142000
 ✅ 6.4 | Add composite index for ordered reads | Platform Team | 2026-06-21 | 2026-06-21 | Implemented index: (priority_bucket, priority_score DESC, id ASC)
 ✅ 6.5 | Keep sync function priority-aware | Platform Team | 2026-06-21 | 2026-06-21 | sync_all_service_data_dynamic updated in migration 20260621142000
 🔄 6.6 | Publish ordered REST/RPC consumption contract | Platform Team | 2026-06-21 | - | In progress; recommended REST order=priority_bucket.asc,priority_score.desc,id.asc
 ✅ 6.7 | Ordered top-N validation checks | Platform Team | 2026-06-21 | 2026-06-21 | Created supabase/sql_checks/20260621142000_all_service_data_dynamic_priority_ordering_layer_checks.sql
+✅ 6.8 | Add vehicle_sale_date as tertiary score condition | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date.sql + supabase/sql_checks/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date_checks.sql
+✅ 6.9 | Make tertiary vehicle_sale_date ordering exact (day-level) | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date.sql + supabase/sql_checks/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date_checks.sql
 ```
 
 ---
@@ -839,6 +896,17 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - Paired read-only checks created and executed:
   - `supabase/sql_checks/20260621140000_all_service_data_dynamic_add_sold_dealer_checks.sql`
 
+### 2026-06-21 - Added `vehicle_sale_date` projection in `all_service_data_dynamic`
+
+- Added new source-projected column in dynamic table:
+  - `vehicle_sale_date`
+- Backfilled existing dynamic rows from `public.all_service_data` by `id`.
+- Realtime sync function updated so new/updated matching rows persist `NEW.vehicle_sale_date` into dynamic table.
+- Migration created:
+  - `supabase/migrations/20260621143000_all_service_data_dynamic_add_vehicle_sale_date.sql`
+- Paired read-only checks created:
+  - `supabase/sql_checks/20260621143000_all_service_data_dynamic_add_vehicle_sale_date_checks.sql`
+
 ### 2026-06-21 - Added Condition C include rule in dynamic predicate
 
 - Predicate updated to include rows when:
@@ -877,6 +945,51 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
   - `supabase/migrations/20260621142000_all_service_data_dynamic_priority_ordering_layer.sql`
 - Paired read-only checks created:
   - `supabase/sql_checks/20260621142000_all_service_data_dynamic_priority_ordering_layer_checks.sql`
+
+### 2026-06-21 - Priority score V2: added `vehicle_sale_date` tertiary condition
+
+- Priority scorer upgraded to include tertiary component:
+  - `vehicle_sale_date` new to old (`NULL`/unparseable last)
+- Implemented in 3-arg scorer:
+  - `public.calc_all_service_dynamic_priority_score(date, text, text)`
+- Compatibility wrapper retained for existing 2-arg calls:
+  - `public.calc_all_service_dynamic_priority_score(date, text)`
+- Existing dynamic rows recomputed under V2 scoring.
+- Realtime sync updated to pass `NEW.vehicle_sale_date` into scorer.
+- Migration created:
+  - `supabase/migrations/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date.sql`
+- Paired read-only checks created:
+  - `supabase/sql_checks/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date_checks.sql`
+
+### 2026-06-21 - Priority score V3: exact vehicle_sale_date tertiary ordering
+
+- Validation of V2 output showed tertiary ties for distinct `vehicle_sale_date` values due to coarse component granularity.
+- V3 fix applied:
+  - upgraded `public.all_service_data_dynamic.priority_score` from `integer` to `bigint`
+  - scorer now encodes `vehicle_sale_date` at exact day-level (new to old)
+  - `NULL`/unparseable `vehicle_sale_date` remains last
+- Realtime sync remains aligned with the 3-arg scorer call path including `NEW.vehicle_sale_date`.
+- Migration created:
+  - `supabase/migrations/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date.sql`
+- Paired read-only checks created:
+  - `supabase/sql_checks/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date_checks.sql`
+
+### 2026-06-21 - Authoritative fresh-dump audit (post V3)
+
+- Audit target: `local_folder/backups/full_database.sql` as authoritative source.
+- Direct editor read was blocked by file-size sync limit (>50MB), so audit used mirror chunks:
+  - `local_folder/backups/chunks/full_database.sql.part_000`
+  - `local_folder/backups/chunks/full_database.sql.part_004`
+- Confirmed in dump snapshot:
+  - `public.all_service_data_dynamic.priority_score` is `bigint`
+  - 3-arg scorer returns `bigint` and includes exact day-level tertiary component:
+    - `LEAST(99999, GREATEST(1, (p.vehicle_sale_dt - DATE '2000-01-01') + 1))`
+    - score composition weights `* 10000000` and `* 100000`
+  - `public.sync_all_service_data_dynamic()` calls scorer with `NEW.vehicle_sale_date`
+  - Composite index exists for deterministic ordered reads:
+    - `all_service_data_dynamic_priority_idx` on `(priority_bucket, priority_score DESC, id)`
+- Audit conclusion:
+  - Fresh dump is aligned with V3 priority-ordering implementation and deterministic query contract.
 
 ---
 
@@ -947,6 +1060,12 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260621141000_all_service_data_dynamic_add_condition_c_last_service_type_filter_checks.sql`
 - `supabase/migrations/20260621142000_all_service_data_dynamic_priority_ordering_layer.sql`
 - `supabase/sql_checks/20260621142000_all_service_data_dynamic_priority_ordering_layer_checks.sql`
+- `supabase/migrations/20260621143000_all_service_data_dynamic_add_vehicle_sale_date.sql`
+- `supabase/sql_checks/20260621143000_all_service_data_dynamic_add_vehicle_sale_date_checks.sql`
+- `supabase/migrations/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date.sql`
+- `supabase/sql_checks/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date_checks.sql`
+- `supabase/migrations/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date.sql`
+- `supabase/sql_checks/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date_checks.sql`
 
 ---
 
