@@ -56,14 +56,15 @@ At present, `public.all_service_data_dynamic` includes a row from `public.all_se
 - All non-technical columns are `NULL`.
 - Technical columns excluded from null-check: `id`, `chassis_no`, `created_at`, `last_updated_at`.
 
-2. **Condition B - Scheduled date rule**
+2. **Condition B - Assumed date rule**
 - `chassis_no` is present.
-- `scheduled_next_service_date` resolves to `current_date + 2`.
-- Observed source format in `all_service_data` (authoritative dump): `YYYY/MM/DD`.
-- Parser-supported text formats for `scheduled_next_service_date` (for robustness): `YYYY-MM-DD`, `YYYY/MM/DD`, `DD-MM-YYYY`, `DD/MM/YYYY`.
+- `assumed_next_service_date` resolves to `current_date + 2`.
+- Source for `assumed_next_service_date`: derived column in `public.all_service_data` (Phase 4 logic).
+- If `assumed_next_service_date` is `NULL`, Condition B is not satisfied.
 
 Effective implementation source:
-- `supabase/migrations/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser.sql`
+- `supabase/migrations/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser.sql` (historical parser enhancement for scheduled-date version)
+- Condition-B pivot to `assumed_next_service_date`: documented in this plan and pending dedicated migration rollout.
 
 ---
 
@@ -139,6 +140,14 @@ Override lookup semantics:
 - First matching active override by priority wins.
 - Overrides allow controlled one-by-one resolution of recurring `UNKNOWN` product lines without changing global token rules.
 - If no override matches, row remains `UNKNOWN` until a specific override is added.
+
+Dynamic table extension (new required columns):
+
+- Ensure `public.all_service_data_dynamic` includes source columns:
+  - `assumed_next_service_date`
+  - `assumed_next_service_type`
+- Source: `public.all_service_data`.
+- Purpose: keep dynamic output aligned with Phase 4 derived next-service fields while Condition B evaluates `assumed_next_service_date`.
 
 Best rollout strategy:
 
@@ -324,7 +333,11 @@ To keep backend code minimal and centralize validation in SQL, use these RPCs:
 
 Implementation behavior (enforced in function body):
 
-- Admin gate: every RPC performs `IF NOT public.is_admin() THEN RAISE EXCEPTION ...`.
+- Access gate: every RPC performs `IF NOT public.can_manage_fuel_rules() THEN RAISE EXCEPTION ...`.
+- `public.can_manage_fuel_rules()` allows:
+  - Admin users (`public.is_admin() = true`)
+  - `service_role` callers
+  - SQL editor `postgres` sessions (to avoid false-negative admin checks when `auth.uid()` is null in console context)
 - Queue RPC returns API-ready JSON (`items`, `limit`, `remaining_unknown_groups`, `as_of`).
 - Resolve RPC:
   - Validates inputs (`product_line` non-empty, `powertrain_type` in `EV/CNG/DIESEL/PETROL`).
@@ -343,7 +356,7 @@ Current risk from dump snapshot:
 Recommended enforcement model for Fuel workflow:
 
 1. Keep API/Frontend reads+writes on Fuel flow through RPC only.
-2. Restrict RPC execution to `authenticated` + `service_role` and rely on `public.is_admin()` gate inside RPC.
+2. Restrict RPC execution to `authenticated` + `service_role` and rely on `public.can_manage_fuel_rules()` gate inside RPC.
 3. Add least-privilege table hardening for `public.all_service_data_powertrain_overrides`:
    - Revoke direct write grants from `anon` and `authenticated`.
    - Optionally enable RLS and add admin-only policy for direct access paths (for SQL editor/admin tooling).
@@ -352,10 +365,35 @@ Recommended enforcement model for Fuel workflow:
 Deployment artifact (ready-to-run migration draft):
 
 - `supabase/migrations/20260621113000_all_service_data_powertrain_rpc_contract.sql`
+- `supabase/migrations/20260621114500_all_service_data_powertrain_rpc_access_hotfix.sql`
 
 Read-only validation artifact:
 
 - `supabase/sql_checks/20260621113000_all_service_data_powertrain_rpc_contract_checks.sql`
+
+### Implementation Status (2026-06-21)
+
+Completed in repo:
+
+1. Database RPC contract implemented:
+  - `supabase/migrations/20260621113000_all_service_data_powertrain_rpc_contract.sql`
+2. RPC access-context hotfix implemented:
+  - `supabase/migrations/20260621114500_all_service_data_powertrain_rpc_access_hotfix.sql`
+3. Frontend Fuel card wiring implemented end-to-end:
+  - `src/lib/api/settings.ts` (RPC wrappers: queue, resolve, overrides)
+  - `src/pages/SettingsPage.tsx` (new `fuel` section, top-5 queue render, dropdown selection, confirm action, queue refresh)
+
+Observed verification outcome:
+
+- SQL verification now succeeds for:
+  - `public.rpc_fuel_queue(5)`
+  - `public.rpc_fuel_resolve(...)`
+  - `public.rpc_fuel_overrides(...)`
+- Operational queue reduction confirmed during manual runbook execution (unknown groups decrementing after each resolve).
+
+Next hardening step (optional, separate migration):
+
+- Restrict direct table writes for `public.all_service_data_powertrain_overrides` (revoke broad grants, optionally enable RLS + admin-only policies) while keeping UI flow RPC-only.
 
 ---
 
@@ -471,6 +509,18 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ⏳ 3.2 | Transition-case validation | Platform Team | - | - | Pending execution
 ⏳ 3.3 | Rollback runbook note | Platform Team | - | - | Pending execution
 ⏳ 3.4 | Evidence and sign-off | Platform Team | - | - | Pending execution
+```
+
+### Phase 5 (Fuel / Powertrain Workflow)
+```text
+✅ 5.1 | Add granular powertrain derivation + trigger sync | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621100000_all_service_data_powertrain_type_granularity.sql
+✅ 5.2 | Add UNKNOWN-focused validation checks | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/sql_checks/20260621100000_all_service_data_powertrain_type_granularity_checks.sql
+✅ 5.3 | Implement Fuel RPC contract (queue/resolve/overrides) | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621113000_all_service_data_powertrain_rpc_contract.sql
+✅ 5.4 | Apply RPC access-context hotfix | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621114500_all_service_data_powertrain_rpc_access_hotfix.sql
+✅ 5.5 | Validate RPC behavior from SQL checks | Platform Team | 2026-06-21 | 2026-06-21 | Queue/resolve/override checks passed via supabase/sql_checks/20260621113000_all_service_data_powertrain_rpc_contract_checks.sql
+✅ 5.6 | Wire Fuel card in Settings UI end-to-end | Platform Team | 2026-06-21 | 2026-06-21 | Implemented in src/lib/api/settings.ts + src/pages/SettingsPage.tsx (top-5 queue, confirm resolve, refresh)
+🔄 5.7 | Override curation backlog burn-down | Ops + Platform | 2026-06-21 | - | In progress through repeated rpc_fuel_resolve queue workflow
+⏳ 5.8 | Direct-table hardening (optional) | Platform Team | - | - | Pending separate migration to reduce broad grants/RLS hardening on all_service_data_powertrain_overrides
 ```
 
 ---
@@ -601,6 +651,8 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
   - `model`
   - `product_line`
   - `scheduled_next_service_date`
+  - `assumed_next_service_date`
+  - `assumed_next_service_type`
   - `last_service_date`
   - `last_service_type`
 - Follow-up migration created:
@@ -615,7 +667,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - `actual_count`: 0
 - Interpretation: after pruning columns, dynamic table row parity with source predicate remains correct.
 
-### 2026-06-20 - Added scheduled_next_service_date plus-2 condition
+### 2026-06-20 - Added plus-2 condition (initial scheduled-date version)
 
 - New inclusion rule added: include rows where `scheduled_next_service_date = current_date + 2` (with format parsing support).
 - Predicate updated in:
@@ -623,6 +675,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - Paired read-only verification created:
   - `supabase/sql_checks/20260620204500_all_service_data_dynamic_add_plus2_condition_checks.sql`
 - Dynamic table backfill included in migration so existing rows are re-evaluated immediately under updated active conditions.
+- Note: this rule is superseded in current plan authority by `assumed_next_service_date = current_date + 2`.
 
 ### 2026-06-20 - Plus-2 rollout execution update
 
@@ -643,6 +696,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
   - `supabase/migrations/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser.sql`
 - Paired checks created:
   - `supabase/sql_checks/20260620210000_all_service_data_dynamic_add_yyyy_mm_dd_parser_checks.sql`
+- Historical scope note: parser fix was for the prior scheduled-date Condition B implementation.
 
 ---
 
