@@ -29,9 +29,13 @@ function autoMapColumn(fileCol: string): DbColumn | null {
   const syn: Record<string, DbColumn> = {
     chassis:'chassis_no', chassisnumber:'chassis_no', vin:'chassis_no',
     registration:'vehicle_registration_number', regno:'vehicle_registration_number', reg:'vehicle_registration_number',
+    registrationno:'vehicle_registration_number', registrationnumber:'vehicle_registration_number',
     firstname:'first_name', fname:'first_name', lastname:'last_name', lname:'last_name',
+    ownername:'first_name', owner:'first_name',
     phone:'contact_phones', mobile:'contact_phones', contact:'contact_phones',
+    mobileno:'contact_phones', mob:'contact_phones', cell:'contact_phones',
     productline:'product_line', saledate:'vehicle_sale_date', vehiclesaledate:'vehicle_sale_date',
+    purchasedate:'vehicle_sale_date', purchase:'vehicle_sale_date',
     age:'vehicle_age_in_years', vehicleage:'vehicle_age_in_years',
     nextservicedate:'scheduled_next_service_date', nextservicekms:'scheduled_next_service_kms',
     lastservicedate:'last_service_date', lastservicetype:'last_service_type',
@@ -42,7 +46,10 @@ function autoMapColumn(fileCol: string): DbColumn | null {
     eworderstatus:'extended_warranty_order_status', ewstartdate:'extended_warranty_start_date',
     ewenddate:'extended_warranty_end_date', ewendkms:'extended_warranty_end_kms',
     ewpricewt:'extended_warranty_final_price_without_tax', ewprice:'extended_warranty_final_price',
-    exshowroom:'ex_showroom_price', insuranceexpiry:'last_insurance_expiry_date',
+    exshowroom:'ex_showroom_price',
+    registrationdate:'last_insurance_expiry_date',
+    modelname:'model', makername:'model',
+    insuranceexpiry:'last_insurance_expiry_date',
     insurancecompany:'last_insurance_comapny', insurancepolicyno:'last_insurance_policy_number',
   }
   if (syn[n]) return syn[n]
@@ -111,6 +118,12 @@ export function MasterDataUploadSection({ onUploadComplete }: { onUploadComplete
           else if (typeof val === 'number') obj[dbCol] = String(val)
           else obj[dbCol] = String(val).trim()
         }
+      }
+      // chassis_no is NOT NULL in the DB — if missing but reg exists, use a sentinel
+      const ch = obj.chassis_no ? String(obj.chassis_no).trim() : ''
+      const reg = obj.vehicle_registration_number ? String(obj.vehicle_registration_number).trim() : ''
+      if (!ch && reg) {
+        obj.chassis_no = `REGNO:${reg}`
       }
       return obj
     })
