@@ -234,6 +234,14 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="telecalling"
+        options={{
+          title: 'Telecalling',
+          headerShown: false,
+          href: null,
+        }}
+      />
     </Tabs>
   )
 }
