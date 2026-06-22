@@ -311,22 +311,20 @@ Validation result from authoritative schema audit:
 - `EV_Service_History`/`PV_Service_History` contain only:
   - `id`, `chassis_no`, `registration_no`, `odometer_reading`, `serviced_at_dealer`, `sr_type`, `service_date_time`, `contact_full_name`, `created_at`
 
-Direct mappings available from Service-History:
+Final mappings approved from Service-History:
 
+- `chassis_no` as target join key
 - `registration_no -> vehicle_registration_number`
 - `created_at -> updated_by_robot_at`
 - constant `true -> updated_by_robot`
 - `now() -> last_updated_at`
-- `chassis_no` for target-row matching
-
-Optional semantic mappings (requires business confirmation):
-
 - `odometer_reading -> last_service_km`
 - `serviced_at_dealer -> last_service_dealer`
 - `service_date_time -> last_service_date`
 - `contact_full_name -> first_name`
+- `sr_type -> last_service_type`
 
-Fields missing in Service-History (must be enriched from vehicle-data tables if needed):
+Fields not present in Service-History (out of scope for trigger update):
 
 - `product_name -> model`
 - `vehicle_type -> product_line`
@@ -335,17 +333,46 @@ Fields missing in Service-History (must be enriched from vehicle-data tables if 
 - `engine_no -> engine_no`
 - `next_service_date -> scheduled_next_service_date`
 - `next_service_type -> scheduled_next_service_type`
-- `dealer -> last_service_dealer` (if not using `serviced_at_dealer`)
-- `first_name -> first_name` (if not using `contact_full_name`)
 - `contact_phones -> contact_phones`
 
-Implementation direction (approved as framework, selector pending):
+Implementation direction (approved and selector finalized):
 
 - Trigger-driven realtime capture starts from Service-History inserts/updates.
 - Per chassis, exactly one source row is selected by a deterministic rule.
-- Missing business fields are enriched via `EV_Vehicle_Data`/`PV_Vehicle_Data` by normalized chassis.
+- Trigger updates are limited strictly to the approved Service-History mapping set.
+- No enrichment join to `EV_Vehicle_Data`/`PV_Vehicle_Data` is required for this trigger flow.
 - Final update writes target mappings plus robot-audit fields only when data changes.
-- Exact one-row-per-chassis selector rule is pending user-defined business logic.
+- One-row-per-chassis selector rule (finalized):
+  - prefer rows where `sr_type` contains `Service` (case-insensitive)
+  - then choose latest parsed `service_date_time` (`DD/MM/YYYY HH12:MI AM`)
+  - tie-break by `created_at DESC NULLS LAST`, then source rank (EV before PV), then `id DESC`
+- Write-format normalization rule (finalized):
+  - source `service_date_time` is parsed from `DD/MM/YYYY HH12:MI AM`
+  - target `last_service_date` is written in canonical target text format `DD/MM/YY`
+  - if parsing fails, target `last_service_date` is not overwritten for that row
+
+Long-term typed-date strategy (audit-backed):
+
+- `public.all_service_data` currently mixes business date fields across `text`, `date`, and `timestamptz`.
+- Canonical fix path adds typed companions and writes them in realtime sync:
+  - `last_service_at timestamptz`
+  - `scheduled_next_service_on date`
+  - `vehicle_sale_on date`
+- Same canonical typed companions are projected into `public.all_service_data_dynamic` so source and dynamic tables stay type-consistent.
+- Legacy text columns remain temporarily for compatibility:
+  - `last_service_date`
+  - `scheduled_next_service_date`
+  - `vehicle_sale_date`
+
+Data hygiene prerequisite before realtime selector rollout:
+
+- Normalize polluted `public."EV_Service_History".chassis_no` values before using them as selector input.
+- Active cleanup rule uses MAT-only VIN extraction:
+  - final chassis must start with `MAT`
+  - final chassis must satisfy VIN-first 17-char extraction
+- Artifact pair:
+  - `supabase/migrations/20260622170000_fix_ev_service_history_chassis_no_strip_registration_suffix.sql`
+  - `supabase/sql_checks/20260622170000_fix_ev_service_history_chassis_no_strip_registration_suffix_checks.sql`
 
 ### Phase 4 Calculation Logic (Approved for `assumed_next_service_date`)
 
@@ -779,6 +806,10 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 4.9 | Add reusable temp backfill script (PV/EV -> all_service_data) | Platform Team | 2026-06-22 | 2026-06-22 | Implemented via scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql
 ✅ 4.10 | Add guarded target columns for remap | Platform Team | 2026-06-22 | 2026-06-22 | Implemented via supabase/migrations/20260622131000_all_service_data_add_engine_no_and_scheduled_next_service_type.sql and script-level IF NOT EXISTS guards
 ✅ 4.11 | Lock final remap contract | Platform Team | 2026-06-22 | 2026-06-22 | Mapping finalized in script and checks artifacts
+🔄 4.13 | Implement realtime update flow with one-row-per-chassis selector (rule finalized) | Platform Team | 2026-06-22 | - | Migration + checks updated via supabase/migrations/20260622180000_all_service_data_realtime_sync_from_service_history.sql and supabase/sql_checks/20260622180000_all_service_data_realtime_sync_from_service_history_checks.sql (Service-text-first + latest service_date_time selector + target last_service_date normalization to DD/MM/YY)
+🔄 4.14 | Add canonical typed date companions + backfill (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql (all_service_data + all_service_data_dynamic + dynamic sync projection update)
+🔄 4.15 | Upgrade Service-History sync to canonical typed writes | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql
+🔄 4.16 | Canonical date parse coverage + mismatch checks (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql (includes dynamic typed-column parity)
 ```
 
 ### Phase 5 (Fuel / Powertrain Workflow)
@@ -849,15 +880,97 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 
 ## Execution Notes
 
+### 2026-06-22 - EV_Service_History chassis cleanup hardened (MAT-only VIN rule)
+
+- Cleanup migration expanded to handle polluted `chassis_no` strings even when `registration_no` is itself malformed.
+- Final extraction policy locked to MAT-only VIN rule:
+  - output must match `MAT` prefix and 17-char VIN-first normalization
+  - non-MAT outputs are excluded from update and left for manual review
+- Checks file corrected for SQL editor behavior by making each query block self-contained (CTE scope fix).
+- Final artifact pair:
+  - `supabase/migrations/20260622170000_fix_ev_service_history_chassis_no_strip_registration_suffix.sql`
+  - `supabase/sql_checks/20260622170000_fix_ev_service_history_chassis_no_strip_registration_suffix_checks.sql`
+
 ### 2026-06-22 - Realtime Service-History mapping validation recorded
 
 - Validation completed for proposed realtime path from `EV_Service_History` and `PV_Service_History` to `all_service_data`.
 - Finding: Service-History tables alone do not carry full approved remap fields (`product_name`, `vehicle_type`, `resale_date`, `warranty_expiry_date`, `engine_no`, `next_service_*`, `contact_phones`).
 - Plan updated with a compatibility matrix:
-  - direct mappings available from Service-History
-  - optional semantic mappings requiring business confirmation
-  - fields requiring enrichment from `EV_Vehicle_Data`/`PV_Vehicle_Data`
-- Final one-row-per-chassis selector is intentionally left pending business rule input from user.
+  - final approved Service-History mappings include `registration_no`, `created_at`, `odometer_reading`, `serviced_at_dealer`, `service_date_time`, `contact_full_name`, `sr_type`, plus constants (`updated_by_robot=true`, `last_updated_at=now()`) and `chassis_no` join key
+  - non-present fields are explicitly out of scope for this trigger flow (no enrichment join required)
+- One-row-per-chassis selector rule finalized:
+  - prefer `sr_type` containing `Service` (case-insensitive)
+  - then latest parsed `service_date_time` (`DD/MM/YYYY HH12:MI AM`)
+  - tie-break by `created_at DESC NULLS LAST`, then source rank (EV before PV), then `id DESC`
+
+### 2026-06-22 - Realtime Service-History trigger migration drafted (no enrichment)
+
+- Trigger-driven realtime update migration drafted for:
+  - `public."EV_Service_History"`
+  - `public."PV_Service_History"`
+- Target update scope is strictly the approved Service-History mapping set only.
+- No enrichment joins to `EV_Vehicle_Data` / `PV_Vehicle_Data` are used.
+- Function + trigger artifacts created:
+  - `public.refresh_all_service_data_from_service_history(text)`
+  - `public.trg_sync_all_service_data_from_service_history()`
+  - `trg_sync_all_service_data_from_ev_service_history`
+  - `trg_sync_all_service_data_from_pv_service_history`
+- Final row selector used in migration:
+  - `sr_type` containing `Service` first (case-insensitive)
+  - then latest parsed `service_date_time` (`DD/MM/YYYY HH12:MI AM`)
+  - then `created_at DESC NULLS LAST`, source rank (EV before PV), then `id DESC`
+- Final write-format rule used in migration:
+  - parse source `service_date_time` using `DD/MM/YYYY HH12:MI AM`
+  - write target `last_service_date` as canonical `DD/MM/YY`
+  - skip `last_service_date` overwrite when parse fails
+- Artifact pair:
+  - `supabase/migrations/20260622180000_all_service_data_realtime_sync_from_service_history.sql`
+  - `supabase/sql_checks/20260622180000_all_service_data_realtime_sync_from_service_history_checks.sql`
+
+### 2026-06-22 - Authoritative dump audit for date-format policy (full_database mirror)
+
+- Audit source used (authority preserved):
+  - `local_folder/backups/chunks/full_database.sql.part_000`
+- Confirmed schema facts:
+  - `public.all_service_data.last_service_date` is `text`
+  - `public."EV_Service_History".service_date_time` and `public."PV_Service_History".service_date_time` are `text`
+- Source format evidence from dump data:
+  - PV `service_date_time`: `1662/1662` rows match `DD/MM/YYYY HH:MI AM/PM`
+  - EV `service_date_time`: `365/365` non-null rows match `DD/MM/YYYY HH:MI AM/PM` (2 null rows)
+- Target format evidence from dump data (`all_service_data.last_service_date` non-null `44375` rows):
+  - `DD/MM/YY`: `34206`
+  - `YYYY/MM/DD`: `8654`
+  - `DD/MM/YYYY`: `1515`
+- Decision applied for realtime Service-History writes:
+  - canonical target write format = `DD/MM/YY`
+  - this normalizes incoming Service-History datetime text to current dominant target pattern.
+
+### 2026-06-22 - Canonical typed-date migration set drafted (long-term)
+
+- Whole-schema audit anchors from authoritative dump mirror:
+  - `local_folder/backups/chunks/full_database.sql.part_000` table definitions:
+    - `public.all_service_data` (mixed `text` + `date` + `timestamptz`)
+    - `public.all_service_data_dynamic` (still text for several business dates)
+    - `public."EV_Service_History"` / `public."PV_Service_History"` (`service_date_time` as `text`)
+- Existing parser contract in dump already supports date parsing helper:
+  - `public.parse_all_service_date_text(text)`
+- New migration set drafted:
+  - `supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql`
+    - adds `last_service_at`, `scheduled_next_service_on`, `vehicle_sale_on`
+    - backfills typed columns from legacy text using safe parsers
+    - adds matching typed columns in `all_service_data_dynamic`
+    - backfills dynamic typed columns from source by `id`
+    - updates `public.sync_all_service_data_dynamic()` to project typed columns
+  - `supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql`
+    - updates Service-History realtime sync to maintain canonical typed columns
+    - retains legacy text compatibility write for `last_service_date`
+  - `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`
+    - parse coverage, post-backfill mismatch counts, Service-History sync mismatch counts, and dynamic typed-column parity
+- Recommended run order:
+  1. Run checks file section A+B (baseline)
+  2. Run migration `20260622193000`
+  3. Run migration `20260622194000`
+  4. Run checks file section C+D (post-apply)
 
 ### 2026-06-22 - New requirement: robot-audit projection on dynamic table
 
@@ -1266,6 +1379,11 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/migrations/20260622131000_all_service_data_add_engine_no_and_scheduled_next_service_type.sql`
 - `supabase/migrations/20260622124500_one_time_backfill_all_service_data_from_pv_ev_vehicle_data.sql`
 - `supabase/sql_checks/20260622124500_one_time_backfill_all_service_data_from_pv_ev_vehicle_data_checks.sql`
+- `supabase/migrations/20260622180000_all_service_data_realtime_sync_from_service_history.sql`
+- `supabase/sql_checks/20260622180000_all_service_data_realtime_sync_from_service_history_checks.sql`
+- `supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql`
+- `supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql`
+- `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`
 - `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql`
 
 ---
