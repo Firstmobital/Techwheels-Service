@@ -2,9 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Platform,
+  Pressable,
   ScrollView,
+  StatusBar,
+  StyleSheet,
   Text,
   TextInput,
+  TouchableNativeFeedback,
   TouchableOpacity,
   View,
 } from 'react-native'
@@ -1122,34 +1127,36 @@ export default function CreateJobCardScreen() {
     ])
   }
 
+  const S = styles
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
-      <ScrollView style={{ flex: 1, backgroundColor: '#f4f2ec' }} contentContainerStyle={{ paddingBottom: 24 }}>
+      <Stack.Screen options={{ headerShown: false }} />
+      {Platform.OS === 'android' && <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />}
+      <ScrollView
+        style={S.screen}
+        contentContainerStyle={S.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <ScreenHeader title="New Job Card" eyebrow="Intake" onBack={goToDashboard} />
 
-        <View style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e7e3d9' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a4cd0', justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: '700' }}>1</Text>
-            </View>
-            <Text style={{ marginLeft: 10, fontSize: 16, fontWeight: '700', color: '#1a1b21' }}>Lookup</Text>
-            <View style={{ flex: 1, height: 2, backgroundColor: '#e0dbd0', marginHorizontal: 12 }} />
-            <View style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#cfc9bd', justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}>
-              <Text style={{ color: '#7d8090', fontSize: 18, fontWeight: '700' }}>2</Text>
-            </View>
-            <Text style={{ marginLeft: 10, fontSize: 16, fontWeight: '600', color: '#7d8090' }}>Vehicle details</Text>
+        {/* Step indicator */}
+        <View style={S.stepBar}>
+          <View style={S.stepActive}>
+            <Text style={S.stepActiveNum}>1</Text>
           </View>
+          <Text style={S.stepActiveLabel}>Lookup</Text>
+          <View style={S.stepLine} />
+          <View style={S.stepInactive}>
+            <Text style={S.stepInactiveNum}>2</Text>
+          </View>
+          <Text style={S.stepInactiveLabel}>Vehicle details</Text>
         </View>
 
-        <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
-          <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 10 }}>Vehicle Lookup</Text>
+        <View style={S.card}>
+          <Text style={S.sectionLabel}>VEHICLE LOOKUP</Text>
 
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Registration number<Text style={{ color: '#cf3858' }}>*</Text></Text>
+          <Text style={S.fieldLabel}>Registration number <Text style={S.required}>*</Text></Text>
           <TextInput
             value={form.regNumber}
             onChangeText={(value) => {
@@ -1158,14 +1165,14 @@ export default function CreateJobCardScreen() {
               setDraftJcNumber('')
               setReceptionPrefillApplied(false)
             }}
-            placeholder="MH12 KJ 4471"
-            placeholderTextColor="#a7a99f"
+            placeholder="MH12KJ4471"
+            placeholderTextColor="#b0b4c0"
             autoCapitalize="characters"
-            style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
+            style={S.input}
           />
 
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>KM reading<Text style={{ color: '#cf3858' }}>*</Text></Text>
-          <View style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 4, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={S.fieldLabel}>KM reading <Text style={S.required}>*</Text></Text>
+          <View style={S.inputRow}>
             <TextInput
               value={form.kmReading}
               onChangeText={(value) => {
@@ -1174,130 +1181,110 @@ export default function CreateJobCardScreen() {
                 setDraftJcNumber('')
               }}
               placeholder="28450"
-              placeholderTextColor="#a7a99f"
+              placeholderTextColor="#b0b4c0"
               keyboardType="number-pad"
-              style={{ flex: 1, fontSize: 14, color: '#1a1b21', paddingVertical: 8 }}
+              style={[S.input, { flex: 1, marginBottom: 0 }]}
             />
-            <Text style={{ fontSize: 14, fontWeight: '600', color: '#7d8090' }}>km</Text>
+            <Text style={S.inputUnit}>km</Text>
           </View>
 
-          <TouchableOpacity
-            style={{
-              borderWidth: 1,
-              borderColor: '#d8d2c6',
-              borderRadius: 16,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              marginBottom: 10,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-            onPress={onPickWalkaround}
-          >
-            <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
-              <Icon name="video" size={22} color="#505462" strokeWidth={2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>Walkaround video</Text>
-              <Text style={{ fontSize: 11, color: '#7d8090' }}>{uploadingWalkaround ? 'Uploading...' : walkaroundVideoName || 'Capture or pick a 360° video'}</Text>
-            </View>
-            <Icon name="cloud-upload" size={20} color="#7d8090" strokeWidth={1.8} />
-          </TouchableOpacity>
+          {/* Upload row: walkaround + car image */}
+          <View style={S.uploadRow}>
+            <TouchableOpacity
+              style={[S.uploadTile, uploadingWalkaround && S.uploadTileBusy, walkaroundVideoName ? S.uploadTileDone : null]}
+              onPress={onPickWalkaround}
+              activeOpacity={0.75}
+            >
+              <View style={S.uploadIcon}>
+                {uploadingWalkaround
+                  ? <ActivityIndicator size="small" color="#2a4cd0" />
+                  : <Icon name="video" size={24} color={walkaroundVideoName ? '#1c8f63' : '#505462'} strokeWidth={2} />
+                }
+              </View>
+              <Text style={S.uploadTitle}>Walkaround</Text>
+              <Text style={S.uploadSub} numberOfLines={1}>
+                {uploadingWalkaround ? 'Uploading…' : walkaroundVideoName ? '✓ ' + walkaroundVideoName : '360° video'}
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={{
-              borderWidth: 1,
-              borderColor: '#d8d2c6',
-              borderRadius: 16,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              marginBottom: 12,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-            onPress={onPickCarImage}
-          >
-            <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: '#f1efea', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
-              <Icon name="camera" size={22} color="#505462" strokeWidth={2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1a1b21' }}>Car image</Text>
-              <Text style={{ fontSize: 11, color: '#7d8090' }}>{uploadingCarImage ? 'Uploading...' : carImageName || 'GPS-tagged exterior shot'}</Text>
-            </View>
-            <Icon name="cloud-upload" size={20} color="#7d8090" strokeWidth={1.8} />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[S.uploadTile, uploadingCarImage && S.uploadTileBusy, carImageName ? S.uploadTileDone : null]}
+              onPress={onPickCarImage}
+              activeOpacity={0.75}
+            >
+              <View style={S.uploadIcon}>
+                {uploadingCarImage
+                  ? <ActivityIndicator size="small" color="#2a4cd0" />
+                  : <Icon name="camera" size={24} color={carImageName ? '#1c8f63' : '#505462'} strokeWidth={2} />
+                }
+              </View>
+              <Text style={S.uploadTitle}>Car Images</Text>
+              <Text style={S.uploadSub} numberOfLines={1}>
+                {uploadingCarImage ? 'Uploading…' : carImageName ? '✓ Uploaded' : 'GPS-tagged photo(s)'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
+          {/* Fetch button */}
           <TouchableOpacity
-            style={{
-              borderRadius: 14,
-              paddingVertical: 12,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: lookupBusy || !lookupReady ? '#eeece5' : '#2a4cd0',
-              flexDirection: 'row',
-              gap: 8,
-            }}
+            style={[S.primaryBtn, (lookupBusy || !lookupReady) && S.primaryBtnDisabled]}
             onPress={onFetchFromDb}
             disabled={lookupBusy || !lookupReady}
+            activeOpacity={0.82}
           >
-            <Icon name="rotate-cw" size={18} color={lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff'} strokeWidth={2} />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: lookupBusy || !lookupReady ? '#a7a99f' : '#ffffff' }}>
-              {lookupBusy ? 'Fetching...' : 'Fetch from DB'}
+            {lookupBusy
+              ? <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+              : <Icon name="rotate-cw" size={18} color={lookupBusy || !lookupReady ? '#9ca3af' : '#ffffff'} strokeWidth={2.2} />
+            }
+            <Text style={[S.primaryBtnText, (lookupBusy || !lookupReady) && S.primaryBtnTextDisabled]}>
+              {lookupBusy ? 'Fetching…' : 'Fetch from DB'}
             </Text>
           </TouchableOpacity>
 
-          <View style={{ marginTop: 10, borderRadius: 14, backgroundColor: '#f3f1eb', paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row' }}>
-            <Icon name="info" size={16} color="#7d8090" strokeWidth={1.8} />
-            <Text style={{ marginLeft: 8, flex: 1, fontSize: 11, color: '#7d8090', lineHeight: 18 }}>
-              Enter reg & KM, then attach walkaround video and GPS-tagged car image.
-            </Text>
+          <View style={S.infoBox}>
+            <Icon name="info" size={14} color="#6b7280" strokeWidth={1.8} />
+            <Text style={S.infoText}>Enter reg & KM, attach walkaround video and car image, then tap Fetch.</Text>
           </View>
 
           {vehicleLookupStatus === 'found' ? (
-            <Text style={{ fontSize: 12, color: '#1c8f63', marginTop: 10, fontWeight: '600' }}>Vehicle found. Continue creating draft job card.</Text>
+            <View style={S.statusSuccess}><Text style={S.statusSuccessText}>✓ Vehicle found — continue below</Text></View>
           ) : null}
-
           {receptionPrefillApplied ? (
-            <View style={{ marginTop: 8, borderRadius: 10, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={{ fontSize: 16 }}>✅</Text>
-              <Text style={{ flex: 1, fontSize: 12, color: '#1d4ed8', fontWeight: '600' }}>
-                Owner name, phone, model, KM & JC No prefilled from Reception / SA records.
-              </Text>
+            <View style={S.statusInfo}>
+              <Text style={S.statusInfoText}>✅ Owner, phone, model, KM & JC prefilled from Reception records</Text>
             </View>
           ) : null}
-
           {vehicleLookupStatus === 'not_found' ? (
-            <Text style={{ fontSize: 12, color: '#c9751b', marginTop: 10, fontWeight: '600' }}>Vehicle not found. Fill details manually and proceed.</Text>
+            <View style={S.statusWarn}><Text style={S.statusWarnText}>⚠ Vehicle not found — fill details manually</Text></View>
           ) : null}
-
           {vehicleLookupStatus === 'error' ? (
-            <Text style={{ fontSize: 12, color: '#c33b53', marginTop: 10, fontWeight: '600' }}>Fetch failed due to DB or access error.</Text>
+            <View style={S.statusError}><Text style={S.statusErrorText}>✗ Fetch failed — check connection and retry</Text></View>
           ) : null}
         </View>
 
         {showVehicleDetailsForm ? (
-          <View style={{ marginHorizontal: 20, marginTop: 10, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 18 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 10 }}>Vehicle details</Text>
+          <View style={S.card}>
+            <Text style={S.sectionLabel}>VEHICLE DETAILS</Text>
 
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>VIN / Chassis no.</Text>
+            <Text style={S.fieldLabel}>VIN / Chassis no.</Text>
             <TextInput
               value={form.vin}
               onChangeText={(value) => setForm((prev) => ({ ...prev, vin: value }))}
               placeholder="17-char VIN"
-              placeholderTextColor="#a7a99f"
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
+              placeholderTextColor="#b0b4c0"
+              style={S.input}
             />
 
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Model</Text>
+            <Text style={S.fieldLabel}>Model</Text>
             <ModelChipSelector
               value={form.model}
               options={modelChipOptions}
               onChange={(value) => setForm((prev) => ({ ...prev, model: value }))}
             />
 
-            <View style={{ flexDirection: 'row', marginTop: 10 }}>
-              <View style={{ width: '48%', marginRight: '4%' }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Year</Text>
+            <View style={S.twoCol}>
+              <View style={S.colHalf}>
+                <Text style={S.fieldLabel}>Year</Text>
                 <NativeSelectField
                   value={form.year}
                   placeholder="Select year"
@@ -1305,8 +1292,8 @@ export default function CreateJobCardScreen() {
                   onChange={(value) => setForm((prev) => ({ ...prev, year: value }))}
                 />
               </View>
-              <View style={{ width: '48%' }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Colour</Text>
+              <View style={S.colHalf}>
+                <Text style={S.fieldLabel}>Colour</Text>
                 <NativeSelectField
                   value={form.colour}
                   placeholder="Select colour"
@@ -1316,7 +1303,7 @@ export default function CreateJobCardScreen() {
               </View>
             </View>
 
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Paint type</Text>
+            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Paint type</Text>
             <NativeSelectField
               value={form.paintType}
               placeholder="Select paint type"
@@ -1324,63 +1311,63 @@ export default function CreateJobCardScreen() {
               onChange={(value) => setForm((prev) => ({ ...prev, paintType: value }))}
             />
 
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Date of Sale</Text>
+            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Date of Sale</Text>
             <DatePickerField
               value={form.dateOfSale}
               placeholder="YYYY-MM-DD"
               onChange={(value) => setForm((prev) => ({ ...prev, dateOfSale: value }))}
             />
 
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Car Ageing (auto-calc)</Text>
-            <View style={{ borderRadius: 16, backgroundColor: '#cad4ea', borderWidth: 1, borderColor: '#a8c2f2', paddingHorizontal: 12, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Car Ageing</Text>
+            <View style={S.ageingBadge}>
               <Icon name="clock" size={18} color="#2a4cd0" strokeWidth={2} />
-              <Text style={{ fontSize: 15, fontWeight: '700', color: '#2a4cd0' }}>{calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'}</Text>
-              <Text style={{ fontSize: 15, fontWeight: '600', color: '#4b4e59' }}>days</Text>
+              <Text style={S.ageingNum}>{calculateCarAgeing(form.dateOfSale, form.complaintDate) ?? '--'}</Text>
+              <Text style={S.ageingUnit}>days</Text>
             </View>
 
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginTop: 10, marginBottom: 6 }}>Owner name</Text>
+            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Owner name</Text>
             <TextInput
               value={form.ownerName}
               onChangeText={(value) => setForm((prev) => ({ ...prev, ownerName: value }))}
               placeholder="Full name"
-              placeholderTextColor="#a7a99f"
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
+              placeholderTextColor="#b0b4c0"
+              style={S.input}
             />
 
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Owner phone</Text>
+            <Text style={S.fieldLabel}>Owner phone</Text>
             <TextInput
               value={form.ownerPhone}
               onChangeText={(value) => setForm((prev) => ({ ...prev, ownerPhone: normalizeOwnerPhoneInput(value) }))}
               placeholder="10-digit mobile"
-              placeholderTextColor="#a7a99f"
+              placeholderTextColor="#b0b4c0"
               keyboardType="phone-pad"
               maxLength={10}
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 10 }}
+              style={S.input}
             />
 
-            <View style={{ flexDirection: 'row' }}>
-              <View style={{ width: '52%', marginRight: '4%' }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>Dealer city</Text>
+            <View style={S.twoCol}>
+              <View style={{ flex: 3, marginRight: 8 }}>
+                <Text style={S.fieldLabel}>Dealer city</Text>
                 <TextInput
                   value={form.dealerCity}
                   onChangeText={(value) => setForm((prev) => ({ ...prev, dealerCity: value }))}
-                  placeholder="Jaipur"
-                  placeholderTextColor="#a7a99f"
-                  style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21' }}
+                  placeholder="City"
+                  placeholderTextColor="#b0b4c0"
+                  style={[S.input, { marginBottom: 0 }]}
                 />
               </View>
-              <View style={{ width: '44%' }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#454852', marginBottom: 6 }}>BP category</Text>
-                <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, padding: 2, backgroundColor: '#f1efea' }}>
+              <View style={{ flex: 2 }}>
+                <Text style={S.fieldLabel}>BP category</Text>
+                <View style={S.segControl}>
                   {(cityCategoryOptions.length ? cityCategoryOptions : ['A', 'B', 'C']).slice(0, 3).map((option) => {
                     const active = form.bpCityCategory === option
                     return (
                       <TouchableOpacity
                         key={option}
-                        style={{ flex: 1, borderRadius: 999, paddingVertical: 8, alignItems: 'center', backgroundColor: active ? '#ffffff' : 'transparent' }}
+                        style={[S.segBtn, active && S.segBtnActive]}
                         onPress={() => setForm((prev) => ({ ...prev, bpCityCategory: option }))}
                       >
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#1a1b21' : '#7d8090' }}>{option}</Text>
+                        <Text style={[S.segBtnText, active && S.segBtnTextActive]}>{option}</Text>
                       </TouchableOpacity>
                     )
                   })}
@@ -1391,61 +1378,52 @@ export default function CreateJobCardScreen() {
         ) : null}
 
         {showVehicleDetailsForm ? (
-          <View style={{ marginHorizontal: 20, marginTop: 12, borderRadius: 20, borderWidth: 1, borderColor: '#ddd6c9', backgroundColor: '#ffffff', padding: 20 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', letterSpacing: 0.09, color: '#7d8090', textTransform: 'uppercase', marginBottom: 8 }}>Job details</Text>
+          <View style={S.card}>
+            <Text style={S.sectionLabel}>JOB DETAILS</Text>
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Job card number<Text style={{ color: '#cf3858' }}>*</Text></Text>
+            <Text style={S.fieldLabel}>Job card number <Text style={S.required}>*</Text></Text>
             <TextInput
               value={form.jcNumber}
               onChangeText={(value) => setForm((prev) => ({ ...prev, jcNumber: value.trim().toUpperCase() }))}
-              placeholder="Enter final JC number"
-              placeholderTextColor="#a7a99f"
+              placeholder="Enter JC number"
+              placeholderTextColor="#b0b4c0"
               autoCapitalize="characters"
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1a1b21', marginBottom: 12 }}
+              style={S.input}
             />
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Warranty claim type</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
+            <Text style={S.fieldLabel}>Warranty claim type</Text>
+            <View style={S.chipRow}>
               {claimTypeOptions.map((option) => {
                 const active = form.claimType === option
                 return (
                   <TouchableOpacity
                     key={option}
-                    style={{
-                      marginRight: 8,
-                      marginBottom: 8,
-                      borderRadius: 999,
-                      borderWidth: 1,
-                      borderColor: active ? '#2a4cd0' : '#d8d2c6',
-                      backgroundColor: active ? '#2a4cd0' : '#ffffff',
-                      paddingHorizontal: 16,
-                      paddingVertical: 10,
-                    }}
+                    style={[S.chip, active && S.chipActive]}
                     onPress={() => setForm((prev) => ({ ...prev, claimType: option }))}
                   >
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#ffffff' : '#4b4e59' }}>{option}</Text>
+                    <Text style={[S.chipText, active && S.chipTextActive]}>{option}</Text>
                   </TouchableOpacity>
                 )
               })}
             </View>
 
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#454852', marginBottom: 8 }}>Customer Complaint</Text>
+            <Text style={S.fieldLabel}>Customer complaint</Text>
             <TextInput
               value={form.complaintText}
               onChangeText={(value) => setForm((prev) => ({ ...prev, complaintText: value }))}
-              placeholder="Describe the issue as reported by customer..."
-              placeholderTextColor="#a7a99f"
+              placeholder="Describe the issue as reported by customer…"
+              placeholderTextColor="#b0b4c0"
               multiline
               numberOfLines={4}
               textAlignVertical="top"
-              style={{ borderWidth: 1, borderColor: '#d8d2c6', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, minHeight: 120, fontSize: 16, color: '#1a1b21' }}
+              style={S.textArea}
             />
           </View>
         ) : null}
 
         {showVehicleDetailsForm && draftJobCardId ? (
           <>
-            <View style={{ marginHorizontal: 20, marginTop: 14 }}>
+            <View style={{ marginHorizontal: 14, marginTop: 14 }}>
               <PrimaryButton
                 title={saving ? 'Saving...' : 'Next: Document Damage'}
                 disabled={saving}
@@ -1579,3 +1557,153 @@ export default function CreateJobCardScreen() {
     </>
   )
 }
+
+
+const styles = StyleSheet.create({
+  // Layout
+  screen: { flex: 1, backgroundColor: '#f2f3f7' },
+  scrollContent: { paddingBottom: 32 },
+  card: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    padding: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+  },
+
+  // Step bar
+  stepBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9eaf0',
+  },
+  stepActive: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#2a4cd0',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  stepActiveNum: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  stepActiveLabel: { marginLeft: 8, fontSize: 15, fontWeight: '700', color: '#1a1b21' },
+  stepLine: { flex: 1, height: 2, backgroundColor: '#dde0ea', marginHorizontal: 10 },
+  stepInactive: {
+    width: 32, height: 32, borderRadius: 16,
+    borderWidth: 2, borderColor: '#c5c9d8',
+    backgroundColor: '#fff',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  stepInactiveNum: { color: '#9ca3af', fontSize: 15, fontWeight: '700' },
+  stepInactiveLabel: { marginLeft: 8, fontSize: 15, fontWeight: '500', color: '#9ca3af' },
+
+  // Section heading
+  sectionLabel: {
+    fontSize: 11, fontWeight: '800', letterSpacing: 0.8,
+    color: '#6b7280', textTransform: 'uppercase', marginBottom: 12,
+  },
+
+  // Fields
+  fieldLabel: {
+    fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6,
+  },
+  required: { color: '#ef4444' },
+  input: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: Platform.OS === 'android' ? 10 : 13,
+    fontSize: 15, color: '#111827', backgroundColor: '#fff', marginBottom: 12,
+  },
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 12,
+    gap: 8,
+  },
+  inputUnit: { fontSize: 14, fontWeight: '600', color: '#6b7280', marginLeft: 4 },
+  textArea: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10,
+    paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12,
+    minHeight: 110, fontSize: 15, color: '#111827', backgroundColor: '#fff',
+    textAlignVertical: 'top',
+  },
+
+  // Two-column layout
+  twoCol: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  colHalf: { flex: 1 },
+
+  // Upload tiles
+  uploadRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  uploadTile: {
+    flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 12,
+    padding: 12, alignItems: 'center', backgroundColor: '#f9fafb',
+  },
+  uploadTileBusy: { borderColor: '#93c5fd', backgroundColor: '#eff6ff' },
+  uploadTileDone: { borderColor: '#6ee7b7', backgroundColor: '#f0fdf4' },
+  uploadIcon: {
+    width: 44, height: 44, borderRadius: 10,
+    backgroundColor: '#f3f4f6', justifyContent: 'center', alignItems: 'center',
+    marginBottom: 6,
+  },
+  uploadTitle: { fontSize: 12, fontWeight: '700', color: '#1f2937', textAlign: 'center' },
+  uploadSub: { fontSize: 11, color: '#6b7280', textAlign: 'center', marginTop: 2 },
+
+  // Primary button
+  primaryBtn: {
+    flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#2a4cd0', borderRadius: 12,
+    paddingVertical: 14, marginTop: 2,
+  },
+  primaryBtnDisabled: { backgroundColor: '#e5e7eb' },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
+  primaryBtnTextDisabled: { color: '#9ca3af' },
+
+  // Info / status boxes
+  infoBox: {
+    flexDirection: 'row', gap: 6, alignItems: 'flex-start',
+    backgroundColor: '#f9fafb', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, marginTop: 10,
+  },
+  infoText: { flex: 1, fontSize: 12, color: '#6b7280', lineHeight: 18 },
+  statusSuccess: { marginTop: 10, backgroundColor: '#f0fdf4', borderRadius: 8, padding: 10 },
+  statusSuccessText: { fontSize: 13, fontWeight: '700', color: '#15803d' },
+  statusInfo: { marginTop: 8, backgroundColor: '#eff6ff', borderRadius: 8, padding: 10 },
+  statusInfoText: { fontSize: 13, fontWeight: '600', color: '#1d4ed8' },
+  statusWarn: { marginTop: 10, backgroundColor: '#fffbeb', borderRadius: 8, padding: 10 },
+  statusWarnText: { fontSize: 13, fontWeight: '700', color: '#b45309' },
+  statusError: { marginTop: 10, backgroundColor: '#fef2f2', borderRadius: 8, padding: 10 },
+  statusErrorText: { fontSize: 13, fontWeight: '700', color: '#b91c1c' },
+
+  // Ageing badge
+  ageingBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#eff2fc', borderRadius: 10, padding: 12,
+  },
+  ageingNum: { fontSize: 18, fontWeight: '800', color: '#2a4cd0' },
+  ageingUnit: { fontSize: 15, fontWeight: '600', color: '#4b5563' },
+
+  // Segmented control (BP category)
+  segControl: {
+    flexDirection: 'row', borderWidth: 1, borderColor: '#d1d5db',
+    borderRadius: 10, overflow: 'hidden', backgroundColor: '#f3f4f6',
+    height: Platform.OS === 'android' ? 44 : 42,
+  },
+  segBtn: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  segBtnActive: { backgroundColor: '#ffffff' },
+  segBtnText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  segBtnTextActive: { color: '#1a1b21', fontWeight: '700' },
+
+  // Chips (claim type)
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  chip: {
+    borderRadius: 999, borderWidth: 1, borderColor: '#d1d5db',
+    backgroundColor: '#fff', paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'android' ? 8 : 10,
+  },
+  chipActive: { backgroundColor: '#2a4cd0', borderColor: '#2a4cd0' },
+  chipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  chipTextActive: { color: '#ffffff', fontWeight: '700' },
+})

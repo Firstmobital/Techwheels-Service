@@ -16,12 +16,15 @@ import {
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import * as FileSystem from 'expo-file-system/legacy'
 import { logEvent } from '../../../utils/logger'
 import { getMobileLocation, isLocationPermissionGranted } from '../../../utils/locationService'
 import { getDealerContext } from '../../../lib/api/auth'
 import { createPanelPhoto, deletePanelPhoto } from '../../../lib/api/photos'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 import { supabase } from '../../../lib/supabase'
+import { invokeUniversalDriveUpload } from '../../../lib/api/documents'
+import { getSupabaseBaseUrl } from '../../../lib/env'
 import { Icon, PrimaryButton, SecondaryButton } from '../../../components/ui'
 import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
 
@@ -239,9 +242,6 @@ export default function CapturePhotoScreen() {
     try {
       logEvent('photo_upload_start', { stage, has_gps: true }, 'capture-photo')
 
-      const fetched = await fetch(state.imageUri)
-      const imageBlob = await fetched.blob()
-
       const stageToPhotoType = stage === 'post-repair'
         ? 'paint'
         : stage === 'under-repair'
@@ -257,32 +257,74 @@ export default function CapturePhotoScreen() {
         throw new Error(dealerRes.error ?? 'Dealer code not available for storage path')
       }
 
-      const ext = (state.imageMimeType ?? '').toLowerCase().includes('png') ? 'png' : 'jpg'
+      const mimeType = state.imageMimeType ?? 'image/jpeg'
+      const ext = mimeType.toLowerCase().includes('png') ? 'png' : 'jpg'
       const fileName = `${stageToPhotoType}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
       const storagePath = `${dealerCode}/${jobCardId}/${panelId}/${fileName}`
 
-      const { error: uploadError } = await supabase.storage
+      // ── Step 1: Get signed upload URL (no blob needed) ──────────────────────
+      const { data: signedData, error: signedErr } = await supabase.storage
         .from(AUTODOC_BUCKET)
-        .upload(storagePath, imageBlob, {
-          cacheControl: '3600',
-          contentType: state.imageMimeType ?? 'image/jpeg',
-          upsert: false,
-        })
+        .createSignedUploadUrl(storagePath)
 
-      if (uploadError) {
-        throw new Error(`Storage upload failed: ${uploadError.message}`)
+      if (signedErr || !signedData?.signedUrl) {
+        throw new Error(signedErr?.message ?? 'Failed to get signed upload URL')
       }
 
+      // ── Step 2: Upload via FileSystem.uploadAsync (retry × 2, then base64 fallback) ──
+      let uploadOk = false
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const uploadResult = await FileSystem.uploadAsync(signedData.signedUrl, state.imageUri!, {
+            httpMethod: 'PUT',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: { 'Content-Type': mimeType },
+          })
+          if (uploadResult.status >= 200 && uploadResult.status < 300) { uploadOk = true; break }
+          console.warn('[capture-photo] uploadAsync HTTP', uploadResult.status, uploadResult.body?.slice(0, 200))
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+        } catch (e) {
+          console.warn('[capture-photo] uploadAsync attempt', attempt, 'failed:', (e as Error).message)
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+        }
+      }
+
+      if (!uploadOk) {
+        // Base64 fallback
+        const base64 = await FileSystem.readAsStringAsync(state.imageUri!, { encoding: FileSystem.EncodingType.Base64 })
+        const binaryStr = atob(base64)
+        const bytes = new Uint8Array(binaryStr.length)
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+        const blob = new Blob([bytes], { type: mimeType })
+        const fallbackRes = await fetch(signedData.signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': mimeType },
+          body: blob,
+        })
+        if (!fallbackRes.ok) {
+          throw new Error(`Storage upload failed HTTP ${fallbackRes.status}. Check internet connection.`)
+        }
+      }
+
+      // ── Step 3: Get file size ────────────────────────────────────────────────
+      let fileSizeMb = 0
+      try {
+        const info = await FileSystem.getInfoAsync(state.imageUri!, { size: true })
+        fileSizeMb = Number(((info as any).size ?? 0) / (1024 * 1024))
+      } catch { /* ignore */ }
+
+      // ── Step 4: Delete replaced photo (if applicable) ───────────────────────
       if (mode === 'replace' && replacePhotoId) {
         await deletePanelPhoto(replacePhotoId)
       }
 
+      // ── Step 5: Register photo record ───────────────────────────────────────
       const photoResult = await createPanelPhoto({
         jobCardId,
         panelId,
         photoType: stageToPhotoType,
         storagePath,
-        fileSizeMb: Number((imageBlob.size / (1024 * 1024)).toFixed(3)),
+        fileSizeMb,
         repairStage: stage,
         gpsLat: state.gpsLat,
         gpsLng: state.gpsLng,
@@ -295,13 +337,20 @@ export default function CapturePhotoScreen() {
         throw new Error(photoResult.error)
       }
 
+      // ── Step 6: Universal Drive Upload (background, non-blocking) ───────────
+      void invokeUniversalDriveUpload({
+        jobCardId,
+        fileType: stageToPhotoType,
+        storagePath,
+        fileSizeMb,
+        resourceType: 'panel_photo',
+        bucketId: AUTODOC_BUCKET,
+      }).catch((e) => console.warn('[capture-photo] Drive offload failed (non-blocking):', e?.message))
+
       logEvent('photo_upload_success', { stage, panel_id: panelId }, 'capture-photo')
 
       Alert.alert('Success', 'Photo uploaded successfully!', [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
+        { text: 'OK', onPress: () => router.back() },
       ])
     } catch (err: any) {
       const msg = err?.message || 'Upload failed'
