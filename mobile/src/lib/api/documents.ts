@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '../supabase'
 import { AUTODOC_BUCKET } from '../autodocStorage'
 import { getSupabaseBaseUrl } from '../env'
@@ -202,6 +203,135 @@ export async function upsertDocumentByType(input: {
 
   return ok(created.data)
 }
+
+/**
+ * Upload a document directly from a local URI using FileSystem.uploadAsync.
+ * This is the recommended approach for React Native as it:
+ * - Avoids loading the entire file into JS memory as a Blob
+ * - Bypasses atob/base64 memory issues
+ * - Uses native HTTP multipart upload (reliable for large videos)
+ */
+export async function uploadDocumentFileFromUri(input: {
+  jobCardId: string
+  docType: DocType
+  uri: string
+  fileName: string
+  contentType?: string
+  fileSizeMb?: number
+  gpsLat?: number | null
+  gpsLng?: number | null
+  gpsCity?: string | null
+  capturedAt?: string | null
+}): Promise<ApiResult<DocumentRow>> {
+  const resolvedIdRes = await resolveExistingJobCardId(input.jobCardId)
+  if (resolvedIdRes.error || !resolvedIdRes.data) return fail(resolvedIdRes.error ?? 'Job card not found')
+  const resolvedJobCardId = resolvedIdRes.data
+
+  const { data: sessionRes } = await supabase.auth.getSession()
+  const user = sessionRes.session?.user
+  const dealerCode = String(
+    user?.user_metadata?.dealer_code
+    ?? user?.app_metadata?.dealer_code
+    ?? 'unknown',
+  ).trim() || 'unknown'
+
+  const cleanName = (input.fileName.trim() || `${input.docType}.bin`)
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+  const timestamp = Date.now()
+  const storagePath = `${dealerCode}/${resolvedJobCardId}/documents/${input.docType}/${timestamp}-${cleanName}`
+
+  const mimeType = input.contentType || 'application/octet-stream'
+
+  // Get a signed upload URL from Supabase Storage
+  const { data: signedData, error: signedErr } = await supabase.storage
+    .from(AUTODOC_BUCKET)
+    .createSignedUploadUrl(storagePath)
+
+  if (signedErr || !signedData?.signedUrl) {
+    return fail(signedErr?.message ?? 'Failed to get signed upload URL')
+  }
+
+  // Use FileSystem.uploadAsync for reliable native upload (no Blob/memory issues)
+  let uploadResult: FileSystem.FileSystemUploadResult
+  try {
+    uploadResult = await FileSystem.uploadAsync(signedData.signedUrl, input.uri, {
+      httpMethod: 'PUT',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        'Content-Type': mimeType,
+        'x-upsert': 'false',
+      },
+    })
+  } catch (uploadErr) {
+    return fail(uploadErr instanceof Error ? uploadErr.message : 'File upload failed')
+  }
+
+  if (uploadResult.status < 200 || uploadResult.status >= 300) {
+    return fail(`Storage upload failed with status ${uploadResult.status}`)
+  }
+
+  // Get file size if not provided
+  let sizeMb = input.fileSizeMb ?? 0
+  if (!sizeMb) {
+    try {
+      const info = await FileSystem.getInfoAsync(input.uri, { size: true })
+      sizeMb = Number(((info as any).size ?? 0) / (1024 * 1024))
+    } catch { /* ignore */ }
+  }
+
+  // Register the document via edge function (service-role, avoids RLS issues)
+  const supabaseUrl = getSupabaseBaseUrl()
+  const token = sessionRes.session?.access_token
+  if (supabaseUrl && token) {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          jobCardId: resolvedJobCardId,
+          docType: input.docType,
+          storagePath,
+          fileSizeMb: sizeMb,
+          gpsLat: input.gpsLat,
+          gpsLng: input.gpsLng,
+          gpsCity: input.gpsCity,
+          capturedAt: input.capturedAt,
+        }),
+      })
+
+      const payload = await res.json().catch(() => ({}))
+      if (res.ok && payload?.data) {
+        void invokeUniversalDriveUpload({
+          jobCardId: resolvedJobCardId,
+          fileType: input.docType,
+          storagePath,
+          fileSizeMb: sizeMb,
+          resourceType: 'document',
+        })
+        return ok(payload.data as DocumentRow)
+      }
+    } catch { /* fall through to direct insert */ }
+  }
+
+  // Fallback: direct DB insert
+  const created = await addDocument({
+    jobCardId: resolvedJobCardId,
+    docType: input.docType,
+    storagePath,
+    fileSizeMb: sizeMb,
+    gpsLat: input.gpsLat,
+    gpsLng: input.gpsLng,
+    gpsCity: input.gpsCity,
+    capturedAt: input.capturedAt,
+  })
+
+  return created
+}
+
 
 export async function uploadDocumentFile(input: {
   jobCardId: string

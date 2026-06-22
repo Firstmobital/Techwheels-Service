@@ -17,7 +17,7 @@ import ModelChipSelector from '../../components/common/ModelChipSelector'
 import NativeSelectField from '../../components/common/NativeSelectField'
 import { ScreenHeader } from '../../components/autodoc/ScreenHeader'
 import { Icon, PrimaryButton, SecondaryButton } from '../../components/ui'
-import { uploadDocumentFile } from '../../lib/api/documents'
+import { uploadDocumentFileFromUri } from '../../lib/api/documents'
 import { createJobCard, updateJobCard, updateJobCardStatus, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
 import { fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
@@ -201,22 +201,35 @@ function isAuthExpiredError(message: string | null | undefined): boolean {
 }
 
 
-/** Convert base64 string to Blob — needed for React Native local file URIs */
-function base64ToBlob(base64: string, mimeType: string): Blob {
-  const binaryString = atob(base64)
-  const bytes = new Uint8Array(binaryString.length)
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i)
-  }
-  return new Blob([bytes], { type: mimeType })
-}
-
-/** Read a local URI (file://, content://) as a Blob — React Native safe */
+/**
+ * Convert a local file URI (file://, content://) to a Blob.
+ * Uses fetch().blob() which is the React Native / Expo recommended approach.
+ * Falls back to FileSystem + Uint8Array if fetch fails (avoids atob which is
+ * unreliable for large binary payloads in Hermes).
+ */
 async function uriToBlob(uri: string, mimeType: string): Promise<Blob> {
-  const base64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  })
-  return base64ToBlob(base64, mimeType)
+  // Primary: fetch-based approach (works for content:// and most file:// URIs)
+  try {
+    const response = await fetch(uri)
+    const blob = await response.blob()
+    // Wrap with explicit MIME type in case the blob type is empty
+    if (blob.type && blob.type !== 'application/octet-stream') return blob
+    return new Blob([blob], { type: mimeType })
+  } catch (_fetchErr) {
+    // Fallback: read via FileSystem as base64 then decode to Uint8Array (no atob)
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+    // Decode base64 → Uint8Array without atob (safe in all JS engines)
+    const binaryStr = globalThis.atob
+      ? globalThis.atob(base64)
+      : Buffer.from(base64, 'base64').toString('binary')
+    const bytes = new Uint8Array(binaryStr.length)
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i)
+    }
+    return new Blob([bytes], { type: mimeType })
+  }
 }
 export default function CreateJobCardScreen() {
   const router = useRouter()
@@ -514,11 +527,11 @@ export default function CreateJobCardScreen() {
     setUploadingWalkaround(true)
     try {
       const mimeType = input.contentType ?? 'video/mp4'
-      const blob = await uriToBlob(input.uri, mimeType)
-      const uploadRes = await uploadDocumentFile({
+      // Use URI-based upload (FileSystem.uploadAsync) — avoids Blob/atob memory issues for large videos
+      const uploadRes = await uploadDocumentFileFromUri({
         jobCardId: draftId,
         docType: 'video_job_card',
-        file: blob,
+        uri: input.uri,
         fileName: input.name || 'walkaround-video',
         contentType: mimeType,
       })
@@ -547,14 +560,14 @@ export default function CreateJobCardScreen() {
     setUploadingCarImage(true)
     try {
       const imgMimeType = input.contentType ?? 'image/jpeg'
-      const blob = await uriToBlob(input.uri, imgMimeType)
       const location = await getMobileLocation()
       const capturedAt = new Date().toISOString()
 
-      const uploadRes = await uploadDocumentFile({
+      // Use URI-based upload (FileSystem.uploadAsync) — avoids Blob/atob memory issues
+      const uploadRes = await uploadDocumentFileFromUri({
         jobCardId: draftId,
         docType: 'car_image',
-        file: blob,
+        uri: input.uri,
         fileName: input.name || 'car-image',
         contentType: imgMimeType,
         gpsLat: location.lat,
