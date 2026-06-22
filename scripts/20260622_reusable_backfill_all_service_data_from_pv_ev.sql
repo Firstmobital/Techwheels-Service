@@ -3,8 +3,9 @@
 -- Behavior:
 -- 1) Ensures required target columns exist (created once via IF NOT EXISTS).
 -- 2) Updates all_service_data from PV/EV source tables using chassis_no match.
--- 3) Sets robot audit fields on touched rows.
--- 4) Safe to re-run: schema adds are idempotent, data update is change-detection based.
+-- 3) Skips any chassis where source status is pending.
+-- 4) Sets robot audit fields on touched rows.
+-- 5) Safe to re-run: schema adds are idempotent, data update is change-detection based.
 --
 -- Run this script manually whenever needed.
 
@@ -46,6 +47,7 @@ WITH source_union AS (
     contact_phones,
     next_service_date,
     next_service_type,
+    status,
     created_at,
     'EV'::text AS source_name
   FROM public."EV_Vehicle_Data"
@@ -68,10 +70,18 @@ WITH source_union AS (
     contact_phones,
     next_service_date,
     next_service_type,
+    status,
     created_at,
     'PV'::text AS source_name
   FROM public."PV_Vehicle_Data"
   WHERE nullif(btrim(chassis_no), '') IS NOT NULL
+),
+source_status_flags AS (
+  SELECT
+    su.chassis_key,
+    bool_or(lower(btrim(coalesce(su.status, ''))) = 'pending') AS has_pending
+  FROM source_union su
+  GROUP BY su.chassis_key
 ),
 source_dedup AS (
   SELECT
@@ -99,7 +109,10 @@ source_dedup AS (
       ) AS rn
     FROM source_union su
   ) x
+  JOIN source_status_flags ssf
+    ON ssf.chassis_key = x.chassis_key
   WHERE x.rn = 1
+    AND coalesce(ssf.has_pending, false) = false
 ),
 updated_rows AS (
   UPDATE public.all_service_data AS t
