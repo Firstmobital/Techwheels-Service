@@ -21,8 +21,12 @@ import { listPanels } from '../../../lib/api/panels'
 import { listPanelPhotos } from '../../../lib/api/photos'
 import { getActiveModelRates, getAutoDocWorkflowOptions, type ModelPanelRate } from '../../../lib/api/autodocRates'
 import NativeSelectField from '../../../components/common/NativeSelectField'
-import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
-import { uploadDocumentFile } from '../../../lib/api/documents'
+import { generateEstimateCsvString } from '../../../lib/generators/generateEstimateCsv'
+import * as FileSystem from 'expo-file-system/legacy'
+import { invokeUniversalDriveUpload } from '../../../lib/api/documents'
+import { supabase } from '../../../lib/supabase'
+import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
+import { getSupabaseBaseUrl } from '../../../lib/env'
 import { HeroBlock, Pill, StatusPill, PrimaryButton } from '../../../components/ui'
 import { Icon } from '../../../components/ui/Icon'
 import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
@@ -533,25 +537,90 @@ export default function JobCardEstimateScreen() {
 
     setExporting(true)
     try {
-      const blob = await generateEstimateCsv(jobCardId)
+      // ── Step 1: Generate CSV as string (avoids Blob — Blob upload fails on Android) ──
+      const csvString = await generateEstimateCsvString(jobCardId)
       const fileName = `estimate_${jobCardId}.csv`
 
-      const uploadRes = await uploadDocumentFile({
-        jobCardId,
-        docType: 'excel_estimate',
-        file: blob,
-        fileName,
-        contentType: 'text/csv',
+      // ── Step 2: Write to temp file ───────────────────────────────────────────
+      const tmpUri = `${FileSystem.cacheDirectory}${fileName}`
+      await FileSystem.writeAsStringAsync(tmpUri, csvString, {
+        encoding: FileSystem.EncodingType.UTF8,
       })
 
-      if (uploadRes.error) {
-        Alert.alert('Export Failed', uploadRes.error)
-        return
+      // ── Step 3: Get dealer code ─────────────────────────────────────────────
+      const { data: sessionRes } = await supabase.auth.getSession()
+      const user = sessionRes.session?.user
+      const dealerCode = String(
+        user?.user_metadata?.dealer_code ?? user?.app_metadata?.dealer_code ?? 'unknown'
+      ).trim() || 'unknown'
+
+      const storagePath = `${dealerCode}/${jobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
+
+      // ── Step 4: Get signed upload URL ───────────────────────────────────────
+      const { data: signedData, error: signedErr } = await supabase.storage
+        .from(AUTODOC_BUCKET)
+        .createSignedUploadUrl(storagePath)
+
+      if (signedErr || !signedData?.signedUrl) {
+        throw new Error(signedErr?.message ?? 'Failed to get signed upload URL')
       }
 
-      Alert.alert('Exported', 'Estimate Excel generated and uploaded successfully.')
+      // ── Step 5: Upload via FileSystem.uploadAsync (retry × 2) ───────────────
+      let uploadOk = false
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const result = await FileSystem.uploadAsync(signedData.signedUrl, tmpUri, {
+            httpMethod: 'PUT',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: { 'Content-Type': 'text/csv' },
+          })
+          if (result.status >= 200 && result.status < 300) { uploadOk = true; break }
+          console.warn('[estimate-export] uploadAsync HTTP', result.status)
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+        } catch (e) {
+          console.warn('[estimate-export] uploadAsync attempt', attempt, 'failed:', (e as Error).message)
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+        }
+      }
+
+      if (!uploadOk) {
+        throw new Error('Upload failed after retries. Check your internet connection and try again.')
+      }
+
+      // ── Step 6: Register document via edge function ──────────────────────────
+      const supabaseUrl = getSupabaseBaseUrl()
+      const token = sessionRes.session?.access_token
+      if (supabaseUrl && token) {
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true })
+          const sizeMb = Number(((fileInfo as any).size ?? 0) / (1024 * 1024))
+
+          await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ jobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
+          })
+
+          // ── Step 7: Universal Drive Upload (background) ─────────────────────
+          void invokeUniversalDriveUpload({
+            jobCardId,
+            fileType: 'excel_estimate',
+            storagePath,
+            fileSizeMb: sizeMb,
+            resourceType: 'document',
+            bucketId: AUTODOC_BUCKET,
+          }).catch((e) => console.warn('[estimate-export] Drive offload failed:', e?.message))
+        } catch (e) {
+          console.warn('[estimate-export] document-link-upsert failed (non-blocking):', e)
+        }
+      }
+
+      // Cleanup temp file
+      void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
+
+      Alert.alert('Exported', 'Estimate CSV generated and uploaded successfully.')
     } catch (err: any) {
-      Alert.alert('Export Failed', err?.message ?? 'Unable to export estimate excel')
+      Alert.alert('Export Failed', err?.message ?? 'Unable to export estimate. Check internet connection.')
     } finally {
       setExporting(false)
     }

@@ -63,3 +63,17 @@ export async function generateEstimateCsv(jobCardId: string): Promise<Blob> {
   const csv = toCsv(payload)
   return new Blob([csv], { type: 'text/csv;charset=utf-8' })
 }
+
+/** Returns raw CSV string (avoids Blob — needed for React Native FileSystem upload) */
+export async function generateEstimateCsvString(jobCardId: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('estimate-export-data', {
+    body: { jobCardId },
+  })
+
+  if (error) {
+    throw new Error(error.message || 'Estimate export failed')
+  }
+
+  const payload = (data ?? {}) as EstimateExportPayload
+  return toCsv(payload)
+}

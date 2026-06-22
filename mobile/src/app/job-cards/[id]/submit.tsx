@@ -16,10 +16,14 @@ import {
 import { listEstimateRows } from '../../../lib/api/estimate'
 import { listPanelPhotos } from '../../../lib/api/photos'
 import { listPanels } from '../../../lib/api/panels'
+import * as FileSystem from 'expo-file-system/legacy'
 import {
   listDocuments,
-  uploadDocumentFile,
+  invokeUniversalDriveUpload,
 } from '../../../lib/api/documents'
+import { supabase } from '../../../lib/supabase'
+import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
+import { getSupabaseBaseUrl } from '../../../lib/env'
 import type { DocumentRow } from '../../../lib/api/types'
 import { generateRepairPPT } from '../../../lib/generators/generatePPT'
 import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
@@ -282,25 +286,65 @@ export default function SubmitStageScreen() {
     try {
       const regSlug = String(jobCard?.reg_number ?? jobCardId).replace(/\s+/g, '_')
       const fileName = `${type === 'pre-repair' ? 'pre' : 'post'}_repair_${regSlug}.pptx`
-      const blob = await generateRepairPPT(jobCardId, type, { download: false, fileName })
+      const docType = type === 'pre-repair' ? 'ppt_pre' : 'ppt_post'
+      const contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
-      const uploadRes = await uploadDocumentFile({
-        jobCardId,
-        docType: type === 'pre-repair' ? 'ppt_pre' : 'ppt_post',
-        file: blob,
-        fileName,
-        contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      })
+      // Generate PPT as ArrayBuffer
+      const arrayBuffer = await generateRepairPPT(jobCardId, type, { download: false, fileName })
 
-      if (uploadRes.error) {
-        Alert.alert('Upload Failed', uploadRes.error)
-        return
+      // Write to temp file (base64) — avoids Blob upload which fails on Android
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((acc, byte) => acc + String.fromCharCode(byte), '')
+      )
+      const tmpUri = `${FileSystem.cacheDirectory}${fileName}`
+      await FileSystem.writeAsStringAsync(tmpUri, base64, { encoding: FileSystem.EncodingType.Base64 })
+
+      const { data: sessionRes } = await supabase.auth.getSession()
+      const user = sessionRes.session?.user
+      const dealerCode = String(user?.user_metadata?.dealer_code ?? user?.app_metadata?.dealer_code ?? 'unknown').trim() || 'unknown'
+      const storagePath = `${dealerCode}/${jobCardId}/documents/${docType}/${Date.now()}-${fileName}`
+
+      // Get signed upload URL
+      const { data: signedData, error: signedErr } = await supabase.storage
+        .from(AUTODOC_BUCKET).createSignedUploadUrl(storagePath)
+      if (signedErr || !signedData?.signedUrl) throw new Error(signedErr?.message ?? 'Failed to get signed upload URL')
+
+      // Upload via FileSystem.uploadAsync (retry × 2)
+      let uploadOk = false
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const result = await FileSystem.uploadAsync(signedData.signedUrl, tmpUri, {
+            httpMethod: 'PUT',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: { 'Content-Type': contentType },
+          })
+          if (result.status >= 200 && result.status < 300) { uploadOk = true; break }
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1200))
+        } catch {
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1200))
+        }
       }
+      if (!uploadOk) throw new Error('Upload failed after retries. Check your internet connection.')
+
+      // Register + drive offload
+      const supabaseUrl = getSupabaseBaseUrl()
+      const token = sessionRes.session?.access_token
+      if (supabaseUrl && token) {
+        const sizeMb = Number(arrayBuffer.byteLength / (1024 * 1024))
+        await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ jobCardId, docType, storagePath, fileSizeMb: sizeMb }),
+        }).catch(() => {})
+        void invokeUniversalDriveUpload({ jobCardId, fileType: docType, storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
+          .catch((e) => console.warn('[submit-ppt] Drive offload failed:', e?.message))
+      }
+      void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
 
       Alert.alert('Generated', `${type === 'pre-repair' ? 'Pre-repair' : 'Post-repair'} PPT generated and uploaded.`)
       await loadSubmitData()
     } catch (err: any) {
-      Alert.alert('Generate Failed', err?.message ?? 'Unable to generate PPT')
+      Alert.alert('Generate Failed', err?.message ?? 'Unable to generate PPT. Check internet connection.')
     } finally {
       setBusy(null)
     }
@@ -314,25 +358,59 @@ export default function SubmitStageScreen() {
     try {
       const regSlug = String(jobCard?.reg_number ?? jobCardId).replace(/\s+/g, '_')
       const fileName = `estimate_${regSlug}.csv`
-      const blob = await generateEstimateCsv(jobCardId)
 
-      const uploadRes = await uploadDocumentFile({
-        jobCardId,
-        docType: 'excel_estimate',
-        file: blob,
-        fileName,
-        contentType: 'text/csv',
-      })
+      // Generate CSV as string (Blob upload fails on Android with network error)
+      const csvString = await generateEstimateCsvString(jobCardId)
+      const tmpUri = `${FileSystem.cacheDirectory}${fileName}`
+      await FileSystem.writeAsStringAsync(tmpUri, csvString, { encoding: FileSystem.EncodingType.UTF8 })
 
-      if (uploadRes.error) {
-        Alert.alert('Upload Failed', uploadRes.error)
-        return
+      const { data: sessionRes } = await supabase.auth.getSession()
+      const user = sessionRes.session?.user
+      const dealerCode = String(user?.user_metadata?.dealer_code ?? user?.app_metadata?.dealer_code ?? 'unknown').trim() || 'unknown'
+      const storagePath = `${dealerCode}/${jobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
+
+      // Get signed upload URL
+      const { data: signedData, error: signedErr } = await supabase.storage
+        .from(AUTODOC_BUCKET).createSignedUploadUrl(storagePath)
+      if (signedErr || !signedData?.signedUrl) throw new Error(signedErr?.message ?? 'Failed to get signed upload URL')
+
+      // Upload via FileSystem.uploadAsync (retry × 2)
+      let uploadOk = false
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const result = await FileSystem.uploadAsync(signedData.signedUrl, tmpUri, {
+            httpMethod: 'PUT',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: { 'Content-Type': 'text/csv' },
+          })
+          if (result.status >= 200 && result.status < 300) { uploadOk = true; break }
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+        } catch {
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+        }
       }
+      if (!uploadOk) throw new Error('Upload failed after retries. Check your internet connection.')
+
+      // Register document + drive upload
+      const supabaseUrl = getSupabaseBaseUrl()
+      const token = sessionRes.session?.access_token
+      if (supabaseUrl && token) {
+        const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true }).catch(() => ({} as any))
+        const sizeMb = Number(((fileInfo as any).size ?? 0) / (1024 * 1024))
+        await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ jobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
+        }).catch(() => {})
+        void invokeUniversalDriveUpload({ jobCardId, fileType: 'excel_estimate', storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
+          .catch((e) => console.warn('[submit-export] Drive offload failed:', e?.message))
+      }
+      void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
 
       Alert.alert('Generated', 'Estimate Excel generated and uploaded.')
       await loadSubmitData()
     } catch (err: any) {
-      Alert.alert('Generate Failed', err?.message ?? 'Unable to generate estimate excel')
+      Alert.alert('Export Failed', err?.message ?? 'Unable to export estimate. Check internet connection.')
     } finally {
       setBusy(null)
     }
