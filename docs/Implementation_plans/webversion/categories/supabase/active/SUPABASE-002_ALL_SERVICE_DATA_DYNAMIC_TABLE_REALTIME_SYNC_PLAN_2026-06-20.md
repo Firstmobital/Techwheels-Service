@@ -19,6 +19,40 @@ The implementation avoids views and avoids periodic refresh jobs. It provides de
 
 ---
 
+## Supabase Type Foundation (CRITICAL PRE-REQUISITE)
+
+All date/time columns in `public.all_service_data` must follow Supabase/PostgreSQL best practices:
+
+**Date-only columns (no time, no timezone):**
+- Type: `date`
+- Examples: `vehicle_sale_date`, `scheduled_next_service_date`, `extended_warranty_start_date`, `extended_warranty_end_date`, `last_insurance_expiry_date`
+- Rationale: Day-level precision sufficient; timezone irrelevant.
+
+**Date + Time columns (with timezone):**
+- Type: `timestamptz` (timestamp with time zone)
+- Examples: `last_service_date`, `created_at`, `updated_by_robot_at`
+- Rationale: Precise timestamps stored in UTC, converted to user/region timezone on read.
+- IST timezone rule: When parsing IST-formatted text (e.g., `DD/MM/YYYY HH12:MI AM`), construct timestamptz using `make_timestamptz(..., 'Asia/Kolkata')`.
+
+**Legacy text columns:**
+- Current state: many date fields stored as text with mixed formats (DD/MM/YYYY, DD/MM/YY, YYYY-MM-DD, YYYY/MM/DD, DD/MM/YYYY HH12:MI AM).
+- Migration strategy: Correct existing columns in-place via `ALTER COLUMN ... TYPE ... USING` with safe parser functions.
+- Unparseable legacy values convert to `NULL` and are tracked through checks.
+
+**Migration path (Phase 0 - Foundation):**
+- `supabase/migrations/20260622191000_correct_all_service_data_column_types_to_supabase_defaults.sql`
+  - Converts existing columns in-place:
+    - `vehicle_sale_date text -> date`
+    - `scheduled_next_service_date text -> date`
+    - `extended_warranty_start_date text -> date`
+    - `extended_warranty_end_date text -> date`
+    - `last_service_date text -> timestamptz`
+  - Applies deterministic parsing during type conversion via `USING`
+  - Creates indexes for query performance
+  - Comments columns with corrected-type status
+
+---
+
 ## Objectives
 
 1. Create a physical target table `public.all_service_data_dynamic` with the same structure as `public.all_service_data`.
@@ -139,7 +173,7 @@ Use this registry as the single source of truth when modifying order behavior.
     - `NULL`/blank
     - other values
   - Tertiary score component: `vehicle_sale_date` new to old (`NULL`/unparseable last, exact day-level)
-    - `vehicle_sale_date` is stored as text in source/dynamic tables and parsed in scorer via `public.parse_all_service_date_text(...)`.
+    - `vehicle_sale_date` is now type-aligned to `date` in source/dynamic tables; scorer call path keeps compatibility casting where required.
     - Implemented with expanded bigint score composition to avoid tertiary ties for different valid dates.
 
 3. Final query tie-break:
@@ -179,7 +213,64 @@ Key delivery rule:
 
 ## Implementation Tasks
 
-### Phase 1: Schema and Predicate Setup
+### Phase 0 (FOUNDATION - CRITICAL FIRST): Type Correction to Supabase Defaults
+- [x] **Task 0.0.1:** Run pre-apply checks (A+B) from `supabase/sql_checks/20260622191000_correct_all_service_data_column_types_to_supabase_defaults_checks.sql` to audit parse coverage.
+- [x] **Task 0.0.2:** Apply type correction migration:
+  - `supabase/migrations/20260622191000_correct_all_service_data_column_types_to_supabase_defaults.sql`
+  - Corrects existing columns in-place to canonical Supabase types
+  - Uses parser-driven `USING` expressions for text-to-typed conversion
+  - Creates indexes for performance
+- [x] **Task 0.0.3:** Run post-apply checks (C+D) to verify corrected data types and post-conversion non-null coverage.
+- [x] **Task 0.0.4:** Gate for Phase 1+: proceed only when parse coverage is acceptable (target: zero unexplained parse failures).
+
+Pre-foundation operating note:
+
+- This phase establishes Supabase/PostgreSQL best practices for date/time handling.
+- Existing columns are corrected in-place (no new companion columns in this phase).
+- Indexes ensure query performance on corrected typed columns for sorting/filtering.
+
+---
+
+### Phase 0.2 (STEP 2 - NOW): Dynamic Table Alignment to In-Place Typed Baseline
+- [x] **Task 0.2.1:** Correct date/time columns in `public.all_service_data_dynamic` in-place (same policy as source table).
+  - Executed via `supabase/migrations/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync.sql`.
+- [x] **Task 0.2.2:** Update `public.sync_all_service_data_dynamic()` so source (`all_service_data`) to dynamic projection is type-consistent after in-place conversions.
+  - Executed via `supabase/migrations/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync.sql`.
+- [x] **Task 0.2.3:** Add and run post-checks for source/dynamic type parity and row-value parity on aligned columns.
+  - Executed via `supabase/sql_checks/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync_checks.sql`.
+
+Step 2 acceptance criteria:
+
+- Dynamic date/time column types match source column types for aligned fields.
+- Realtime sync writes do not reintroduce type drift.
+- Parity checks return zero unexpected mismatches for aligned columns.
+
+Step 2 execution evidence (2026-06-22):
+
+- Type parity passed for all aligned fields.
+- Value parity passed on joined rows: `joined_rows = 6773`, with `vehicle_sale_date_mismatch = 0`, `scheduled_next_service_date_mismatch = 0`, `last_service_date_mismatch = 0`.
+- Section D sample mismatch query returned `0` rows.
+- Section E trigger/function sanity checks passed for `trg_sync_all_service_data_dynamic` and `public.sync_all_service_data_dynamic()`.
+
+---
+
+### Phase 0 (TYPE CORRECTNESS - BASELINE CHECKS): Canonical Date Baseline Before Trigger Rollout
+- [ ] **Task 0.1.1:** Run pre-apply baseline checks (A+B) from `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`.
+- [ ] **Task 0.1.2:** Apply canonical schema/backfill migration for source and dynamic tables:
+  - `supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql`
+- [ ] **Task 0.1.3:** Apply Service-History sync migration that writes canonical typed fields:
+  - `supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql`
+- [ ] **Task 0.1.4:** Run post-apply checks (C+D+E) from `supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql`.
+- [ ] **Task 0.1.5:** Gate for Phase 1 trigger rollout: proceed only when mismatch counts are accepted (target state: zero unexpected mismatches).
+
+Pre-trigger operating note:
+
+- In Supabase SQL editor, temp schema/session behavior can vary by execution mode.
+- If checks are run as separate copy/paste statements, use self-contained check blocks (inline parsing logic) to avoid session dependency on temporary helper functions.
+
+---
+
+### Phase 1 (SCHEMA AND PREDICATE SETUP)
 - [ ] **Task 1.1:** Create `public.all_service_data_dynamic` using `CREATE TABLE ... AS SELECT ... WITH NO DATA`.
 - [ ] **Task 1.2:** Add primary key on `id` and unique index on `chassis_no`.
 - [ ] **Task 1.3:** Create predicate function `public.is_all_service_dynamic_match(r public.all_service_data)`.
@@ -297,7 +388,7 @@ Safety contract:
 - Data update runs only when any mapped target field would change (`IS DISTINCT FROM` checks).
 - Safe to rerun repeatedly; schema and data operations are idempotent by design.
 
-### Realtime Service-History Flow Contract (Pending row-selector rule)
+### Realtime Service-History Flow Contract (Selector finalized)
 
 Scope:
 
@@ -351,18 +442,18 @@ Implementation direction (approved and selector finalized):
   - target `last_service_date` is written in canonical target text format `DD/MM/YY`
   - if parsing fails, target `last_service_date` is not overwritten for that row
 
+Execution order (must follow):
+
+1. Complete Phase 0 source-table in-place correction first (`20260622191000` + checks C/D).
+2. Execute Phase 0.2 Step 2 dynamic-table alignment (in-place type correction + sync update + parity checks).
+3. Only after Step 2 acceptance, continue trigger rollout/adjustments for wider realtime flows.
+
 Long-term typed-date strategy (audit-backed):
 
-- `public.all_service_data` currently mixes business date fields across `text`, `date`, and `timestamptz`.
-- Canonical fix path adds typed companions and writes them in realtime sync:
-  - `last_service_at timestamptz`
-  - `scheduled_next_service_on date`
-  - `vehicle_sale_on date`
-- Same canonical typed companions are projected into `public.all_service_data_dynamic` so source and dynamic tables stay type-consistent.
-- Legacy text columns remain temporarily for compatibility:
-  - `last_service_date`
-  - `scheduled_next_service_date`
-  - `vehicle_sale_date`
+- `public.all_service_data` baseline is now corrected in-place to canonical `date` / `timestamptz` types for key business date fields.
+- `public.all_service_data_dynamic` is now aligned in-place to the same typed baseline (Step 2 complete).
+- Realtime sync must remain type-consistent between source and dynamic after alignment.
+- Any unparseable legacy values are intentionally coerced to `NULL` and tracked through parity checks.
 
 Data hygiene prerequisite before realtime selector rollout:
 
@@ -770,6 +861,16 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - ⏳ PENDING
 - ❌ BLOCKED
 
+### Phase 0 / 0.2
+```text
+✅ 0.0.1 | Run pre-apply source parse-coverage checks | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/sql_checks/20260622191000_correct_all_service_data_column_types_to_supabase_defaults_checks.sql (A+B)
+✅ 0.0.2 | Apply source in-place type correction migration | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622191000_correct_all_service_data_column_types_to_supabase_defaults.sql
+✅ 0.0.3 | Run post-apply source checks | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/sql_checks/20260622191000_correct_all_service_data_column_types_to_supabase_defaults_checks.sql (C+D)
+✅ 0.2.1 | Align dynamic in-place date/time types | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync.sql
+✅ 0.2.2 | Update dynamic sync function for type consistency | Platform Team | 2026-06-22 | 2026-06-22 | Included in migration 20260622200000
+✅ 0.2.3 | Run source/dynamic type+value parity checks | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/sql_checks/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync_checks.sql; all mismatches = 0
+```
+
 ### Phase 1
 ```text
 🔄 1.1 | Create physical dynamic table | Platform Team | 2026-06-20 | - | Migration drafted in supabase/migrations/20260620200000_all_service_data_dynamic_realtime_sync.sql
@@ -879,6 +980,24 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-22 - Step 2 dynamic in-place alignment executed and validated
+
+- Applied migration:
+  - `supabase/migrations/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync.sql`
+- Ran validation checks:
+  - `supabase/sql_checks/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync_checks.sql`
+- Confirmed type parity (source vs dynamic):
+  - `last_service_date`: `timestamp with time zone` vs `timestamp with time zone`
+  - `scheduled_next_service_date`: `date` vs `date`
+  - `vehicle_sale_date`: `date` vs `date`
+- Confirmed value parity on joined rows:
+  - `joined_rows = 6773`
+  - `vehicle_sale_date_mismatch = 0`
+  - `scheduled_next_service_date_mismatch = 0`
+  - `last_service_date_mismatch = 0`
+- Section D mismatch sample returned zero rows.
+- Section E confirmed trigger/function sanity for `trg_sync_all_service_data_dynamic` and `public.sync_all_service_data_dynamic()`.
 
 ### 2026-06-22 - EV_Service_History chassis cleanup hardened (MAT-only VIN rule)
 
