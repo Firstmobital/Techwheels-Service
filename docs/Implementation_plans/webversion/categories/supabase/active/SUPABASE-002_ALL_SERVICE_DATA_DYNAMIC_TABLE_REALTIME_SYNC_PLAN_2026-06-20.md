@@ -224,6 +224,8 @@ Key delivery rule:
 - [ ] **Task 4.9:** Add reusable temp backfill script for PV/EV -> `all_service_data` with idempotent column guards.
 - [ ] **Task 4.10:** Add `engine_no` and `scheduled_next_service_type` target columns (created only if missing).
 - [ ] **Task 4.11:** Lock final source-to-target remap contract for temp backfill execution.
+- [ ] **Task 4.12:** Validate realtime source compatibility for `EV_Service_History`/`PV_Service_History` -> `all_service_data`.
+- [ ] **Task 4.13:** Implement realtime update flow with one-row-per-chassis selector (business rule pending).
 
 ### Robot Update Audit Columns (`all_service_data`)
 
@@ -285,10 +287,65 @@ Matching and dedupe contract:
 - Match by normalized `chassis_no` (`upper(btrim(...))`) from source to target.
 - If same chassis exists in both PV and EV sources, pick latest `created_at` (`NULLS LAST`, deterministic source tiebreak).
 
+Source status policy (finalized):
+
+- If any source row for a normalized chassis has `status = 'pending'` (case-insensitive, trimmed), skip update for that chassis entirely.
+- Do not write fallback values (`false`/`NULL`) for robot-audit fields in this scenario; the row is excluded from the update set.
+
 Safety contract:
 
 - Data update runs only when any mapped target field would change (`IS DISTINCT FROM` checks).
 - Safe to rerun repeatedly; schema and data operations are idempotent by design.
+
+### Realtime Service-History Flow Contract (Pending row-selector rule)
+
+Scope:
+
+- Source event tables: `public."EV_Service_History"`, `public."PV_Service_History"`
+- Target table: `public.all_service_data`
+- Join key: normalized `chassis_no` (`upper(btrim(...))`)
+
+Validation result from authoritative schema audit:
+
+- The full approved remap list is not directly available from Service-History tables alone.
+- `EV_Service_History`/`PV_Service_History` contain only:
+  - `id`, `chassis_no`, `registration_no`, `odometer_reading`, `serviced_at_dealer`, `sr_type`, `service_date_time`, `contact_full_name`, `created_at`
+
+Direct mappings available from Service-History:
+
+- `registration_no -> vehicle_registration_number`
+- `created_at -> updated_by_robot_at`
+- constant `true -> updated_by_robot`
+- `now() -> last_updated_at`
+- `chassis_no` for target-row matching
+
+Optional semantic mappings (requires business confirmation):
+
+- `odometer_reading -> last_service_km`
+- `serviced_at_dealer -> last_service_dealer`
+- `service_date_time -> last_service_date`
+- `contact_full_name -> first_name`
+
+Fields missing in Service-History (must be enriched from vehicle-data tables if needed):
+
+- `product_name -> model`
+- `vehicle_type -> product_line`
+- `resale_date -> vehicle_sale_date`
+- `warranty_expiry_date -> extended_warranty_end_date`
+- `engine_no -> engine_no`
+- `next_service_date -> scheduled_next_service_date`
+- `next_service_type -> scheduled_next_service_type`
+- `dealer -> last_service_dealer` (if not using `serviced_at_dealer`)
+- `first_name -> first_name` (if not using `contact_full_name`)
+- `contact_phones -> contact_phones`
+
+Implementation direction (approved as framework, selector pending):
+
+- Trigger-driven realtime capture starts from Service-History inserts/updates.
+- Per chassis, exactly one source row is selected by a deterministic rule.
+- Missing business fields are enriched via `EV_Vehicle_Data`/`PV_Vehicle_Data` by normalized chassis.
+- Final update writes target mappings plus robot-audit fields only when data changes.
+- Exact one-row-per-chassis selector rule is pending user-defined business logic.
 
 ### Phase 4 Calculation Logic (Approved for `assumed_next_service_date`)
 
@@ -792,6 +849,16 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 
 ## Execution Notes
 
+### 2026-06-22 - Realtime Service-History mapping validation recorded
+
+- Validation completed for proposed realtime path from `EV_Service_History` and `PV_Service_History` to `all_service_data`.
+- Finding: Service-History tables alone do not carry full approved remap fields (`product_name`, `vehicle_type`, `resale_date`, `warranty_expiry_date`, `engine_no`, `next_service_*`, `contact_phones`).
+- Plan updated with a compatibility matrix:
+  - direct mappings available from Service-History
+  - optional semantic mappings requiring business confirmation
+  - fields requiring enrichment from `EV_Vehicle_Data`/`PV_Vehicle_Data`
+- Final one-row-per-chassis selector is intentionally left pending business rule input from user.
+
 ### 2026-06-22 - New requirement: robot-audit projection on dynamic table
 
 - Requirement accepted to add robot-audit projection columns in `public.all_service_data_dynamic`:
@@ -810,6 +877,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 - Script behavior:
   - creates missing target columns only once (`IF NOT EXISTS`)
   - updates mapped fields by normalized `chassis_no`
+  - excludes any chassis from update when source `status` contains `pending`
   - sets `updated_by_robot=true`, `updated_by_robot_at=source.created_at`
   - updates only changed rows (`IS DISTINCT FROM` contract)
 - Supporting artifacts retained:
