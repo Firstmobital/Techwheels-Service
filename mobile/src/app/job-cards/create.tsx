@@ -21,6 +21,7 @@ import { uploadDocumentFileFromUri } from '../../lib/api/documents'
 import { createJobCard, updateJobCard, updateJobCardStatus, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
 import { fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
+import { fetchReceptionPrefillByReg } from '../../lib/api/receptionPrefill'
 import { fetchVehicleFromRcLookup, type RtoCacheLookupRow } from '../../lib/api/rcLookup'
 import { getMobileLocation } from '../../utils/locationService'
 import { logEvent } from '../../utils/logger'
@@ -242,6 +243,7 @@ export default function CreateJobCardScreen() {
   const [saving, setSaving] = useState(false)
   const [lookupBusy, setLookupBusy] = useState(false)
   const [vehicleLookupStatus, setVehicleLookupStatus] = useState<'idle' | 'found' | 'not_found' | 'error'>('idle')
+  const [receptionPrefillApplied, setReceptionPrefillApplied] = useState(false)
   const [walkaroundVideoName, setWalkaroundVideoName] = useState('')
   const [carImageName, setCarImageName] = useState('')
   const [loadingLookups, setLoadingLookups] = useState(true)
@@ -769,6 +771,24 @@ export default function CreateJobCardScreen() {
       }
 
       const resolvedReg = resolveRes.data ?? form.regNumber.trim().toUpperCase()
+
+      // ── Reception prefill: fetch owner/model/kms/JC from service_reception_entries ──
+      const receptionRes = await fetchReceptionPrefillByReg(resolvedReg)
+      if (!receptionRes.error && receptionRes.data) {
+        const rp = receptionRes.data
+        setReceptionPrefillApplied(true)
+        setForm((prev) => ({
+          ...prev,
+          // Only fill fields that are currently blank — never overwrite user-entered data
+          ownerName: prev.ownerName.trim() ? prev.ownerName : (rp.ownerName ?? prev.ownerName),
+          ownerPhone: prev.ownerPhone.trim() ? prev.ownerPhone : (rp.ownerPhone ?? prev.ownerPhone),
+          model: prev.model.trim() ? prev.model : (rp.model ?? prev.model),
+          kmReading: prev.kmReading.trim() ? prev.kmReading : (rp.kmReading != null ? String(rp.kmReading) : prev.kmReading),
+          jcNumber: prev.jcNumber.trim() ? prev.jcNumber : (rp.jcNumber ?? prev.jcNumber),
+        }))
+      }
+      // ─────────────────────────────────────────────────────────────────────────────────
+
       const result = await fetchVehicleByReg(resolvedReg)
       if (result.error) {
         setVehicleLookupStatus('error')
@@ -1124,6 +1144,7 @@ export default function CreateJobCardScreen() {
               setForm((prev) => ({ ...prev, regNumber: value.toUpperCase() }))
               setDraftJobCardId(null)
               setDraftJcNumber('')
+              setReceptionPrefillApplied(false)
             }}
             placeholder="MH12 KJ 4471"
             placeholderTextColor="#a7a99f"
@@ -1222,6 +1243,15 @@ export default function CreateJobCardScreen() {
 
           {vehicleLookupStatus === 'found' ? (
             <Text style={{ fontSize: 12, color: '#1c8f63', marginTop: 10, fontWeight: '600' }}>Vehicle found. Continue creating draft job card.</Text>
+          ) : null}
+
+          {receptionPrefillApplied ? (
+            <View style={{ marginTop: 8, borderRadius: 10, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 16 }}>✅</Text>
+              <Text style={{ flex: 1, fontSize: 12, color: '#1d4ed8', fontWeight: '600' }}>
+                Owner name, phone, model, KM & JC No prefilled from Reception / SA records.
+              </Text>
+            </View>
           ) : null}
 
           {vehicleLookupStatus === 'not_found' ? (
