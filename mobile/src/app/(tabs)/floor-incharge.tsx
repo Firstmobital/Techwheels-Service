@@ -759,6 +759,14 @@ export default function FloorInchargeScreen() {
             {/* Line 2: model · service type */}
             <Text style={S.cardModel} numberOfLines={1}>{jc.model || '—'}  ·  {jc.service_type || '—'}</Text>
 
+            {/* Line 2b: Job Card Number */}
+            {jc.jc_number ? (
+              <View style={S.jcNumberRow}>
+                <Text style={S.jcNumberLabel}>JC: </Text>
+                <Text style={S.jcNumberValue} numberOfLines={1}>{jc.jc_number}</Text>
+              </View>
+            ) : null}
+
             {/* Line 3: status pill + ageing badge for Hold & In-Process */}
             <View style={S.cardLine3}>
               <View style={[S.statusPill, { backgroundColor: a ? sc.bg : '#fef2f2', borderColor: a ? sc.text + 'aa' : '#ef4444aa' }]}>
@@ -1440,6 +1448,9 @@ const S = {
   cardLine3:         { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginTop: 3, flexWrap: 'wrap' as const },
   regText:           { fontSize: 15, fontWeight: '800' as const, color: '#0f172a', letterSpacing: 0.4, flexShrink: 1 },
   cardModel:         { fontSize: 12, color: '#475569', fontWeight: '500' as const },
+  jcNumberRow:       { flexDirection: 'row' as const, alignItems: 'center' as const, marginTop: 3 },
+  jcNumberLabel:     { fontSize: 11, color: '#6b7280', fontWeight: '500' as const },
+  jcNumberValue:     { fontSize: 12, color: '#1d4ed8', fontWeight: '700' as const, flexShrink: 1 },
   portalBadge:       { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, flexShrink: 0 },
   portalBadgeText:   { fontSize: 10, fontWeight: '800' as const, letterSpacing: 0.4 },
   statusPill:        { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, flexShrink: 0 },
