@@ -856,7 +856,7 @@ export default function BodyshopRepairScreen() {
                     </View>
                   </View>
 
-                  [{k:'qc_fail_reason',label:'Fail Reason'},{k:'reinspection_by',label:'Re-Inspection By'}].map(({k,label}) => (
+                  {[{k:'qc_fail_reason',label:'Fail Reason'},{k:'reinspection_by',label:'Re-Inspection By'}].map(({k,label}) => (
                     <View key={k}>
                       <Text style={{ fontSize:12, color:'#6b7280', marginBottom:4 }}>{label}</Text>
                       <TextInput style={{ backgroundColor:'#fff', borderRadius:8, padding:10, fontSize:14, borderWidth:1, borderColor:'#e5e7eb' }}
