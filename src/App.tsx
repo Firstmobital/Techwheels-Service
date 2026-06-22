@@ -63,6 +63,7 @@ const NAV_ITEMS = [
   { to: '/ew-reminder', label: 'EW Reminder', icon: 'shield' },
   { to: '/service-booking', label: 'Service Booking', icon: 'calendar' },
   { to: '/wa-agent', label: 'WA AI Agent', icon: 'message-circle' },
+  { to: '/telecalling', label: 'Telecalling', icon: 'phone' },
 ]
 type ModuleName =
   | 'job_cards'
@@ -604,6 +605,7 @@ function canAccessPath(pathname: string, allowedModules: Set<string>) {
   if (pathname.startsWith('/ew-reminder')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/ew-reminder'])
   if (pathname.startsWith('/service-booking')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/service-booking'])
   if (pathname.startsWith('/wa-agent')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/wa-agent'])
+  if (pathname.startsWith('/telecalling')) return hasAnyModuleAccess(allowedModules, ROUTE_MODULE_MAP['/telecalling'])
   if (pathname.startsWith('/c/')) return true
   if (pathname.startsWith('/reset-password') || pathname.startsWith('/auth/callback') || pathname.startsWith('/forgot-password')) return true
   return false
