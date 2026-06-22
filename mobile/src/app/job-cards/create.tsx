@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
 import { Stack, useRouter } from 'expo-router'
 import DatePickerField from '../../components/common/DatePickerField'
@@ -199,6 +200,24 @@ function isAuthExpiredError(message: string | null | undefined): boolean {
   )
 }
 
+
+/** Convert base64 string to Blob — needed for React Native local file URIs */
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binaryString = atob(base64)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: mimeType })
+}
+
+/** Read a local URI (file://, content://) as a Blob — React Native safe */
+async function uriToBlob(uri: string, mimeType: string): Promise<Blob> {
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  })
+  return base64ToBlob(base64, mimeType)
+}
 export default function CreateJobCardScreen() {
   const router = useRouter()
 
@@ -494,14 +513,14 @@ export default function CreateJobCardScreen() {
 
     setUploadingWalkaround(true)
     try {
-      const response = await fetch(input.uri)
-      const blob = await response.blob()
+      const mimeType = input.contentType ?? 'video/mp4'
+      const blob = await uriToBlob(input.uri, mimeType)
       const uploadRes = await uploadDocumentFile({
         jobCardId: draftId,
         docType: 'video_job_card',
         file: blob,
         fileName: input.name || 'walkaround-video',
-        contentType: input.contentType ?? blob.type ?? 'video/mp4',
+        contentType: mimeType,
       })
 
       if (uploadRes.error) {
@@ -527,8 +546,8 @@ export default function CreateJobCardScreen() {
 
     setUploadingCarImage(true)
     try {
-      const response = await fetch(input.uri)
-      const blob = await response.blob()
+      const imgMimeType = input.contentType ?? 'image/jpeg'
+      const blob = await uriToBlob(input.uri, imgMimeType)
       const location = await getMobileLocation()
       const capturedAt = new Date().toISOString()
 
@@ -537,7 +556,7 @@ export default function CreateJobCardScreen() {
         docType: 'car_image',
         file: blob,
         fileName: input.name || 'car-image',
-        contentType: input.contentType ?? blob.type ?? 'image/jpeg',
+        contentType: imgMimeType,
         gpsLat: location.lat,
         gpsLng: location.lng,
         gpsCity: location.city ?? location.placeName ?? null,
