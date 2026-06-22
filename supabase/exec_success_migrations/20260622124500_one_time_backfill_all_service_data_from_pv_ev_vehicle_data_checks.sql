@@ -65,6 +65,7 @@ WITH source_union AS (
     contact_phones,
     next_service_date,
     next_service_type,
+    status,
     created_at,
     'EV'::text AS source_name
   FROM public."EV_Vehicle_Data"
@@ -87,10 +88,19 @@ WITH source_union AS (
     contact_phones,
     next_service_date,
     next_service_type,
+    status,
     created_at,
     'PV'::text AS source_name
   FROM public."PV_Vehicle_Data"
   WHERE nullif(btrim(chassis_no), '') IS NOT NULL
+),
+source_status_flags AS (
+  SELECT
+    su.chassis_key,
+    bool_or(lower(btrim(coalesce(su.status, ''))) = 'pending') AS has_pending,
+    bool_or(lower(btrim(coalesce(su.status, ''))) <> 'pending' AND nullif(btrim(coalesce(su.status, '')), '') IS NOT NULL) AS has_non_pending
+  FROM source_union su
+  GROUP BY su.chassis_key
 ),
 source_dedup AS (
   SELECT
@@ -108,7 +118,12 @@ source_dedup AS (
     x.contact_phones,
     x.next_service_date,
     x.next_service_type,
-    x.created_at
+    x.created_at,
+    CASE
+      WHEN coalesce(ssf.has_non_pending, false) THEN true
+      WHEN coalesce(ssf.has_pending, false) THEN NULL
+      ELSE true
+    END AS computed_updated_by_robot
   FROM (
     SELECT
       su.*,
@@ -118,6 +133,8 @@ source_dedup AS (
       ) AS rn
     FROM source_union su
   ) x
+  JOIN source_status_flags ssf
+    ON ssf.chassis_key = x.chassis_key
   WHERE x.rn = 1
 )
 SELECT
@@ -139,25 +156,44 @@ WHERE
   OR t.contact_phones IS DISTINCT FROM COALESCE(s.contact_phones, t.contact_phones)
   OR t.scheduled_next_service_date IS DISTINCT FROM COALESCE(s.next_service_date, t.scheduled_next_service_date)
   OR t.scheduled_next_service_type IS DISTINCT FROM COALESCE(s.next_service_type, t.scheduled_next_service_type)
-  OR t.updated_by_robot IS DISTINCT FROM true
-  OR t.updated_by_robot_at IS DISTINCT FROM s.created_at;
+  OR t.updated_by_robot IS DISTINCT FROM s.computed_updated_by_robot
+  OR t.updated_by_robot_at IS DISTINCT FROM CASE
+    WHEN s.computed_updated_by_robot THEN s.created_at
+    ELSE NULL
+  END;
 
 -- ============================================================
 -- C) Post-apply verification
 -- ============================================================
 
--- C1) For matched rows, robot audit columns should be set.
+-- C1) For matched rows, robot audit columns should follow status rule:
+--     updated_by_robot=NULL when available source statuses are pending-only; else true.
 WITH source_union AS (
-  SELECT upper(btrim(chassis_no)) AS chassis_key, created_at, 'EV'::text AS source_name
+  SELECT upper(btrim(chassis_no)) AS chassis_key, created_at, status, 'EV'::text AS source_name
   FROM public."EV_Vehicle_Data"
   WHERE nullif(btrim(chassis_no), '') IS NOT NULL
   UNION ALL
-  SELECT upper(btrim(chassis_no)) AS chassis_key, created_at, 'PV'::text AS source_name
+  SELECT upper(btrim(chassis_no)) AS chassis_key, created_at, status, 'PV'::text AS source_name
   FROM public."PV_Vehicle_Data"
   WHERE nullif(btrim(chassis_no), '') IS NOT NULL
 ),
+source_status_flags AS (
+  SELECT
+    su.chassis_key,
+    bool_or(lower(btrim(coalesce(su.status, ''))) = 'pending') AS has_pending,
+    bool_or(lower(btrim(coalesce(su.status, ''))) <> 'pending' AND nullif(btrim(coalesce(su.status, '')), '') IS NOT NULL) AS has_non_pending
+  FROM source_union su
+  GROUP BY su.chassis_key
+),
 source_dedup AS (
-  SELECT x.chassis_key, x.created_at
+  SELECT
+    x.chassis_key,
+    x.created_at,
+    CASE
+      WHEN coalesce(ssf.has_non_pending, false) THEN true
+      WHEN coalesce(ssf.has_pending, false) THEN NULL
+      ELSE true
+    END AS computed_updated_by_robot
   FROM (
     SELECT su.*,
            row_number() OVER (
@@ -166,6 +202,8 @@ source_dedup AS (
            ) AS rn
     FROM source_union su
   ) x
+  JOIN source_status_flags ssf
+    ON ssf.chassis_key = x.chassis_key
   WHERE x.rn = 1
 )
 SELECT
@@ -173,8 +211,11 @@ SELECT
 FROM public.all_service_data t
 JOIN source_dedup s
   ON upper(btrim(t.chassis_no)) = s.chassis_key
-WHERE t.updated_by_robot IS DISTINCT FROM true
-   OR t.updated_by_robot_at IS DISTINCT FROM s.created_at;
+WHERE t.updated_by_robot IS DISTINCT FROM s.computed_updated_by_robot
+   OR t.updated_by_robot_at IS DISTINCT FROM CASE
+     WHEN s.computed_updated_by_robot THEN s.created_at
+     ELSE NULL
+   END;
 
 -- C2) Quick sample of recently robot-marked rows.
 SELECT

@@ -8,8 +8,9 @@
 -- 2) Match rows by chassis_no (case/trim normalized).
 -- 3) Map source fields to matching target fields.
 -- 4) Mark robot audit columns for touched rows:
---    - updated_by_robot = true
---    - updated_by_robot_at = source.created_at
+--    - updated_by_robot = NULL when available source statuses are pending-only for the same chassis
+--    - otherwise updated_by_robot = true
+--    - updated_by_robot_at = source.created_at only when updated_by_robot = true; else NULL
 --
 -- Notes:
 -- - This is intentionally one-time and data-only.
@@ -33,6 +34,7 @@ WITH source_union AS (
     contact_phones,
     next_service_date,
     next_service_type,
+    status,
     created_at,
     'EV'::text AS source_name
   FROM public."EV_Vehicle_Data"
@@ -55,10 +57,19 @@ WITH source_union AS (
     contact_phones,
     next_service_date,
     next_service_type,
+    status,
     created_at,
     'PV'::text AS source_name
   FROM public."PV_Vehicle_Data"
   WHERE nullif(btrim(chassis_no), '') IS NOT NULL
+),
+source_status_flags AS (
+  SELECT
+    su.chassis_key,
+    bool_or(lower(btrim(coalesce(su.status, ''))) = 'pending') AS has_pending,
+    bool_or(lower(btrim(coalesce(su.status, ''))) <> 'pending' AND nullif(btrim(coalesce(su.status, '')), '') IS NOT NULL) AS has_non_pending
+  FROM source_union su
+  GROUP BY su.chassis_key
 ),
 source_dedup AS (
   SELECT
@@ -77,6 +88,11 @@ source_dedup AS (
     x.next_service_date,
     x.next_service_type,
     x.created_at,
+    CASE
+      WHEN coalesce(ssf.has_non_pending, false) THEN true
+      WHEN coalesce(ssf.has_pending, false) THEN NULL
+      ELSE true
+    END AS computed_updated_by_robot,
     x.source_name
   FROM (
     SELECT
@@ -87,6 +103,8 @@ source_dedup AS (
       ) AS rn
     FROM source_union su
   ) x
+  JOIN source_status_flags ssf
+    ON ssf.chassis_key = x.chassis_key
   WHERE x.rn = 1
 )
 UPDATE public.all_service_data AS t
@@ -104,8 +122,11 @@ SET
   contact_phones = COALESCE(s.contact_phones, t.contact_phones),
   scheduled_next_service_date = COALESCE(s.next_service_date, t.scheduled_next_service_date),
   scheduled_next_service_type = COALESCE(s.next_service_type, t.scheduled_next_service_type),
-  updated_by_robot = true,
-  updated_by_robot_at = s.created_at,
+  updated_by_robot = s.computed_updated_by_robot,
+  updated_by_robot_at = CASE
+    WHEN s.computed_updated_by_robot THEN s.created_at
+    ELSE NULL
+  END,
   last_updated_at = now()
 FROM source_dedup s
 WHERE upper(btrim(t.chassis_no)) = s.chassis_key
@@ -123,8 +144,11 @@ WHERE upper(btrim(t.chassis_no)) = s.chassis_key
     OR t.contact_phones IS DISTINCT FROM COALESCE(s.contact_phones, t.contact_phones)
     OR t.scheduled_next_service_date IS DISTINCT FROM COALESCE(s.next_service_date, t.scheduled_next_service_date)
     OR t.scheduled_next_service_type IS DISTINCT FROM COALESCE(s.next_service_type, t.scheduled_next_service_type)
-    OR t.updated_by_robot IS DISTINCT FROM true
-    OR t.updated_by_robot_at IS DISTINCT FROM s.created_at
+    OR t.updated_by_robot IS DISTINCT FROM s.computed_updated_by_robot
+    OR t.updated_by_robot_at IS DISTINCT FROM CASE
+      WHEN s.computed_updated_by_robot THEN s.created_at
+      ELSE NULL
+    END
   );
 
 COMMIT;
