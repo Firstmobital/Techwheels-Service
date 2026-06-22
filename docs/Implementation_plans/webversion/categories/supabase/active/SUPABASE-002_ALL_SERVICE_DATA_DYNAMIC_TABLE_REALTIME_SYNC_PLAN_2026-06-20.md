@@ -869,6 +869,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 0.2.1 | Align dynamic in-place date/time types | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync.sql
 ✅ 0.2.2 | Update dynamic sync function for type consistency | Platform Team | 2026-06-22 | 2026-06-22 | Included in migration 20260622200000
 ✅ 0.2.3 | Run source/dynamic type+value parity checks | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/sql_checks/20260622200000_all_service_data_dynamic_inplace_type_alignment_and_sync_checks.sql; all mismatches = 0
+✅ 0.3.1 | Correct EV/PV Service_History service_date_time in-place to timestamptz | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622203000_service_history_inplace_datetime_type_correction.sql + supabase/sql_checks/20260622203000_service_history_inplace_datetime_type_correction_checks.sql; C/D/F passed
 ```
 
 ### Phase 1
@@ -908,6 +909,7 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 4.10 | Add guarded target columns for remap | Platform Team | 2026-06-22 | 2026-06-22 | Implemented via supabase/migrations/20260622131000_all_service_data_add_engine_no_and_scheduled_next_service_type.sql and script-level IF NOT EXISTS guards
 ✅ 4.11 | Lock final remap contract | Platform Team | 2026-06-22 | 2026-06-22 | Mapping finalized in script and checks artifacts
 🔄 4.13 | Implement realtime update flow with one-row-per-chassis selector (rule finalized) | Platform Team | 2026-06-22 | - | Migration + checks updated via supabase/migrations/20260622180000_all_service_data_realtime_sync_from_service_history.sql and supabase/sql_checks/20260622180000_all_service_data_realtime_sync_from_service_history_checks.sql (Service-text-first + latest service_date_time selector + target last_service_date normalization to DD/MM/YY)
+✅ 4.17 | Optimize Service_History realtime sync to typed service_date_time + reattach source triggers | Platform Team | 2026-06-22 | 2026-06-22 | Executed via supabase/migrations/20260622204500_optimize_service_history_sync_use_typed_datetime.sql + supabase/sql_checks/20260622204500_optimize_service_history_sync_use_typed_datetime_checks.sql; trigger/function presence and typed-path proof passed
 🔄 4.14 | Add canonical typed date companions + backfill (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622193000_all_service_data_add_canonical_date_columns_backfill.sql (all_service_data + all_service_data_dynamic + dynamic sync projection update)
 🔄 4.15 | Upgrade Service-History sync to canonical typed writes | Platform Team | 2026-06-22 | - | Drafted via supabase/migrations/20260622194000_service_history_sync_write_canonical_datetime_columns.sql
 🔄 4.16 | Canonical date parse coverage + mismatch checks (source + dynamic) | Platform Team | 2026-06-22 | - | Drafted via supabase/sql_checks/20260622195000_all_service_data_canonical_dates_and_service_history_sync_checks.sql (includes dynamic typed-column parity)
@@ -980,6 +982,46 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-22 - Service_History sync optimization (typed datetime path) executed and validated
+
+- Applied migration:
+  - `supabase/migrations/20260622204500_optimize_service_history_sync_use_typed_datetime.sql`
+- Ran validation checks:
+  - `supabase/sql_checks/20260622204500_optimize_service_history_sync_use_typed_datetime_checks.sql`
+- Trigger presence (Section A):
+  - `trg_sync_all_service_data_from_ev_service_history` present on `public."EV_Service_History"`
+  - `trg_sync_all_service_data_from_pv_service_history` present on `public."PV_Service_History"`
+- Function presence (Section B):
+  - `public.refresh_all_service_data_from_service_history(p_chassis_key text) returns void`
+  - `public.trg_sync_all_service_data_from_service_history() returns trigger`
+- Optimization proof (Section C):
+  - `uses_typed_service_date_time_path = true`
+  - `direct_typed_assignment_present = true`
+- Source type guard (Section D): all checks `type_ok = true` for:
+  - `EV_Service_History.created_at`
+  - `EV_Service_History.service_date_time`
+  - `PV_Service_History.created_at`
+  - `PV_Service_History.service_date_time`
+
+### 2026-06-22 - Service_History in-place datetime type correction executed and validated
+
+- Applied migration:
+  - `supabase/migrations/20260622203000_service_history_inplace_datetime_type_correction.sql`
+- Ran validation checks:
+  - `supabase/sql_checks/20260622203000_service_history_inplace_datetime_type_correction_checks.sql`
+- Post-apply type verification (Section C):
+  - `EV_Service_History.created_at`: `timestamp with time zone` (match=true)
+  - `EV_Service_History.service_date_time`: `timestamp with time zone` (match=true)
+  - `PV_Service_History.created_at`: `timestamp with time zone` (match=true)
+  - `PV_Service_History.service_date_time`: `timestamp with time zone` (match=true)
+- Post-apply runtime sanity (Section D):
+  - `EV_Service_History`: `total_rows=367`, `service_date_time_non_null=365`, `created_at_non_null=367`, runtime types both `timestamp with time zone`
+  - `PV_Service_History`: `total_rows=1662`, `service_date_time_non_null=1662`, `created_at_non_null=1662`, runtime types both `timestamp with time zone`
+- Sample inspection (Section E): timestamps are now stored as timezone-aware values.
+- Parser compatibility (Section F): both overloads present for `public.parse_service_history_datetime_ist`:
+  - `p_text text -> timestamptz`
+  - `p_ts timestamptz -> timestamptz`
 
 ### 2026-06-22 - Step 2 dynamic in-place alignment executed and validated
 
@@ -1507,5 +1549,5 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 
 ---
 
-**Last Updated:** 2026-06-22 by GitHub Copilot  
-**Status:** 🟡 IN PROGRESS
+**Last Updated:** 2026-06-22 (includes completed checkpoint 0.3.1 Service_History in-place datetime type correction) by GitHub Copilot  
+**Status:** 🟡 IN PROGRESS (Checkpoint 0.3.1 completed and validated: EV/PV Service_History `service_date_time` -> `timestamptz`)
