@@ -31,9 +31,7 @@ import {
   generateClaimEmailContent,
   sendClaimEmail,
   type EmailAttachmentRef,
-} from '../../../lib/api/email'
-import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
-import { Icon, PrimaryButton, StatusPill } from '../../../components/ui'
+} from '../../../lib/api/email'import { Icon, PrimaryButton, StatusPill } from '../../../components/ui'
 import { ScreenHeader } from '../../../components/autodoc/ScreenHeader'
 import { WorkflowProgress } from '../../../components/autodoc/WorkflowProgress'
 import { WorkflowTabs, type WorkflowTabKey } from '../../../components/autodoc/WorkflowTabs'
