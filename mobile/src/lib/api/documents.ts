@@ -253,25 +253,51 @@ export async function uploadDocumentFileFromUri(input: {
   }
 
   // Use FileSystem.uploadAsync for reliable native upload (no Blob/memory issues)
-  let uploadResult: FileSystem.FileSystemUploadResult
-  try {
-    uploadResult = await FileSystem.uploadAsync(signedData.signedUrl, input.uri, {
-      httpMethod: 'PUT',
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      headers: {
-        'Content-Type': mimeType,
-      },
-    })
-  } catch (uploadErr) {
-    return fail(uploadErr instanceof Error ? uploadErr.message : 'File upload failed')
+  // Retry up to 2 times on network errors, then fall back to base64 fetch()
+  let uploadResult: FileSystem.FileSystemUploadResult | null = null
+  let uploadErr: Error | null = null
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      uploadResult = await FileSystem.uploadAsync(signedData.signedUrl, input.uri, {
+        httpMethod: 'PUT',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: { 'Content-Type': mimeType },
+      })
+      uploadErr = null
+      break
+    } catch (err) {
+      uploadErr = err instanceof Error ? err : new Error('File upload failed')
+      console.warn(`[uploadDocumentFileFromUri] uploadAsync attempt ${attempt} failed:`, uploadErr.message)
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+    }
   }
 
-  if (uploadResult.status < 200 || uploadResult.status >= 300) {
-    console.error('[uploadDocumentFileFromUri] uploadAsync failed', {
-      status: uploadResult.status,
-      body: uploadResult.body?.slice?.(0, 300),
-    })
-    return fail(`Storage upload failed HTTP ${uploadResult.status}: ${uploadResult.body?.slice?.(0, 200) ?? 'unknown error'}`)
+  // Fallback: read as base64 and use fetch() if uploadAsync keeps failing
+  if (uploadErr || !uploadResult || uploadResult.status < 200 || uploadResult.status >= 300) {
+    console.warn('[uploadDocumentFileFromUri] uploadAsync failed, trying base64 fetch fallback')
+    try {
+      const base64 = await FileSystem.readAsStringAsync(input.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+      const binaryStr = atob(base64)
+      const bytes = new Uint8Array(binaryStr.length)
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+      const blob = new Blob([bytes], { type: mimeType })
+      const fallbackRes = await fetch(signedData.signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mimeType },
+        body: blob,
+      })
+      if (!fallbackRes.ok) {
+        const body = await fallbackRes.text().catch(() => '')
+        return fail(`Storage upload failed HTTP ${fallbackRes.status}: ${body.slice(0, 200)}`)
+      }
+      // fallback succeeded — continue
+    } catch (fallbackErr) {
+      const primary = uploadErr?.message ?? (uploadResult ? `HTTP ${uploadResult.status}` : 'unknown')
+      return fail(`Storage upload failed: ${primary}. Please check your internet connection and try again.`)
+    }
   }
 
   // Get file size if not provided

@@ -1,4 +1,4 @@
-import { ActionSheetIOS, Alert, Platform, Text, TouchableOpacity, View } from 'react-native'
+import { ActionSheetIOS, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Picker } from '@react-native-picker/picker'
 
 type NativeSelectFieldProps = {
@@ -24,21 +24,51 @@ function uniqueOptions(options: string[]): string[] {
   return result
 }
 
+const styles = StyleSheet.create({
+  androidWrapper: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 42,
+    color: '#111827',
+  },
+  touchable: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+  },
+  valueText: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+})
+
 export default function NativeSelectField({ value, placeholder, options, onChange }: NativeSelectFieldProps) {
   const list = uniqueOptions(options)
 
   if (Platform.OS === 'android') {
     return (
-      <View className="border border-gray-300 rounded-lg bg-white overflow-hidden">
+      <View style={styles.androidWrapper}>
         <Picker
           selectedValue={value}
           mode="dropdown"
           onValueChange={(selected) => onChange(String(selected ?? ''))}
-          style={{ height: 42 }}
+          style={styles.picker}
         >
-          <Picker.Item label={placeholder} value="" />
+          <Picker.Item label={placeholder} value="" color="#9ca3af" />
           {list.map((option) => (
-            <Picker.Item key={option} label={option} value={option} />
+            <Picker.Item key={option} label={option} value={option} color="#111827" />
           ))}
         </Picker>
       </View>
@@ -80,8 +110,10 @@ export default function NativeSelectField({ value, placeholder, options, onChang
   }
 
   return (
-    <TouchableOpacity className="border border-gray-300 rounded-lg px-3 py-3 bg-white" onPress={openSheet} activeOpacity={0.8}>
-      <Text className={value.trim() ? 'text-gray-900' : 'text-gray-400'}>{value.trim() || placeholder}</Text>
+    <TouchableOpacity style={styles.touchable} onPress={openSheet} activeOpacity={0.8}>
+      <Text style={value.trim() ? styles.valueText : styles.placeholderText}>
+        {value.trim() || placeholder}
+      </Text>
     </TouchableOpacity>
   )
 }

@@ -699,24 +699,34 @@ export default function CreateJobCardScreen() {
   const pickCarImageFromGallery = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
-      Alert.alert('Gallery Permission Needed', 'Allow media library access to select a car image.')
+      Alert.alert('Gallery Permission Needed', 'Allow media library access to select car images.')
       return
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
+      allowsMultipleSelection: true,
       quality: 0.8,
+      selectionLimit: 10,
     })
 
     if (result.canceled) return
-    const asset = result.assets?.[0]
-    if (!asset?.uri) return
-    await uploadCarImageForFetch({
-      uri: asset.uri,
-      name: asset.fileName ?? asset.uri.split('/').pop() ?? 'car-image',
-      contentType: asset.mimeType,
-    })
+    const assets = result.assets ?? []
+    if (assets.length === 0) return
+
+    // Upload all selected images sequentially
+    for (const asset of assets) {
+      if (!asset?.uri) continue
+      await uploadCarImageForFetch({
+        uri: asset.uri,
+        name: asset.fileName ?? asset.uri.split('/').pop() ?? 'car-image',
+        contentType: asset.mimeType,
+      })
+    }
+    if (assets.length > 1) {
+      Alert.alert('Uploaded', `${assets.length} car images uploaded successfully.`)
+    }
   }
 
   const onPickWalkaround = async () => {
@@ -847,31 +857,33 @@ export default function CreateJobCardScreen() {
         } else {
           vehiclePatch = {
             regNumber: vehicle.reg_number ?? resolvedReg,
-            vin: vehicle.vin ?? '',
-            model: vehicle.model ?? '',
-            year: vehicle.year != null ? String(vehicle.year) : '',
-            colour: vehicle.colour ?? '',
-            paintType: vehicle.paint_type ?? '',
-            dealerCity: vehicle.dealer_city ?? '',
+            vin: vehicle.vin?.trim() || undefined,
+            model: vehicle.model?.trim() || undefined,
+            year: vehicle.year != null ? String(vehicle.year) : undefined,
+            colour: vehicle.colour?.trim() || undefined,
+            paintType: vehicle.paint_type?.trim() || undefined,
+            dealerCity: vehicle.dealer_city?.trim() || undefined,
             bpCityCategory: vehicle.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY,
-            ownerName: vehicle.owner_name ?? '',
-            ownerPhone: normalizeOwnerPhoneInput(vehicle.owner_phone ?? ''),
-            dateOfSale: vehicle.date_of_sale ?? '',
+            // Only patch owner fields if vehicle table actually has them
+            ownerName: vehicle.owner_name?.trim() || undefined,
+            ownerPhone: vehicle.owner_phone?.trim() ? normalizeOwnerPhoneInput(vehicle.owner_phone) : undefined,
+            dateOfSale: vehicle.date_of_sale ?? undefined,
           }
 
           setForm((prev) => ({
             ...prev,
             regNumber: vehicle.reg_number ?? prev.regNumber,
-            vin: vehicle.vin ?? '',
-            model: vehicle.model ?? '',
-            year: vehicle.year != null ? String(vehicle.year) : '',
-            colour: vehicle.colour ?? '',
-            paintType: vehicle.paint_type ?? '',
-            dealerCity: vehicle.dealer_city ?? '',
-            bpCityCategory: vehicle.bp_city_category ?? DEFAULT_BP_CITY_CATEGORY,
-            ownerName: vehicle.owner_name ?? '',
-            ownerPhone: normalizeOwnerPhoneInput(vehicle.owner_phone ?? ''),
-            dateOfSale: vehicle.date_of_sale ?? '',
+            vin: vehicle.vin?.trim() ? vehicle.vin : prev.vin,
+            model: vehicle.model?.trim() ? vehicle.model : prev.model,
+            year: vehicle.year != null ? String(vehicle.year) : prev.year,
+            colour: vehicle.colour?.trim() ? vehicle.colour : prev.colour,
+            paintType: vehicle.paint_type?.trim() ? vehicle.paint_type : prev.paintType,
+            dealerCity: vehicle.dealer_city?.trim() ? vehicle.dealer_city : prev.dealerCity,
+            bpCityCategory: vehicle.bp_city_category ?? prev.bpCityCategory ?? DEFAULT_BP_CITY_CATEGORY,
+            // Preserve reception-prefilled owner data if vehicle table has none
+            ownerName: vehicle.owner_name?.trim() ? vehicle.owner_name : prev.ownerName,
+            ownerPhone: vehicle.owner_phone?.trim() ? normalizeOwnerPhoneInput(vehicle.owner_phone) : prev.ownerPhone,
+            dateOfSale: vehicle.date_of_sale ?? prev.dateOfSale,
           }))
           prefillApplied = true
         }
