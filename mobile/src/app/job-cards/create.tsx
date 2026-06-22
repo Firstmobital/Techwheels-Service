@@ -25,7 +25,7 @@ import { Icon, PrimaryButton, SecondaryButton } from '../../components/ui'
 import { uploadDocumentFileFromUri } from '../../lib/api/documents'
 import { createJobCard, updateJobCard, updateJobCardStatus, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
-import { fetchChassisFromMaster, fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
+import { fetchMasterDataByReg, fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
 import { fetchReceptionPrefillByReg } from '../../lib/api/receptionPrefill'
 import { fetchVehicleFromRcLookup, type RtoCacheLookupRow } from '../../lib/api/rcLookup'
 import { getMobileLocation } from '../../utils/locationService'
@@ -886,7 +886,8 @@ export default function CreateJobCardScreen() {
             dealerCity: vehicle.dealer_city?.trim() ? vehicle.dealer_city : prev.dealerCity,
             bpCityCategory: vehicle.bp_city_category ?? prev.bpCityCategory ?? DEFAULT_BP_CITY_CATEGORY,
             // Preserve reception-prefilled owner data if vehicle table has none
-            ownerName: vehicle.owner_name?.trim() ? vehicle.owner_name : prev.ownerName,
+            // Prefer reception-prefilled name; RC API owner often truncated/wrong
+            ownerName: prev.ownerName.trim() ? prev.ownerName : (vehicle.owner_name?.trim() || prev.ownerName),
             ownerPhone: vehicle.owner_phone?.trim() ? normalizeOwnerPhoneInput(vehicle.owner_phone) : prev.ownerPhone,
             dateOfSale: vehicle.date_of_sale ?? prev.dateOfSale,
           }))
@@ -894,15 +895,25 @@ export default function CreateJobCardScreen() {
         }
       }
 
-      // ── Resolve full chassis from master data (RC API returns masked VIN) ──────
+      // ── Resolve full chassis + owner name from master data ────────────────────
+      // RC API returns masked VIN (MAT631598NWF*****); all_service_data has full VIN
+      // all_service_data also has first_name/last_name which is more accurate than RC API
       try {
-        const fullChassis = await fetchChassisFromMaster(resolvedReg)
-        if (fullChassis) {
-          setForm((prev) => ({ ...prev, vin: fullChassis }))
-          console.log('[CREATE] Full chassis resolved from master:', fullChassis)
+        const masterData = await fetchMasterDataByReg(resolvedReg)
+        if (masterData) {
+          setForm((prev) => ({
+            ...prev,
+            // Only overwrite VIN if we got a valid full chassis
+            vin: masterData.chassisNo ?? prev.vin,
+            // Owner name: master data wins over RC API name, but preserve reception-prefilled name
+            ownerName: masterData.ownerName
+              ? masterData.ownerName
+              : prev.ownerName,
+          }))
+          console.log('[CREATE] Master data resolved - chassis:', masterData.chassisNo, 'owner:', masterData.ownerName)
         }
       } catch (e) {
-        console.warn('[CREATE] fetchChassisFromMaster failed:', e)
+        console.warn('[CREATE] fetchMasterDataByReg failed:', e)
       }
       // ─────────────────────────────────────────────────────────────────────────
 

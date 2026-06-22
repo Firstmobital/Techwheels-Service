@@ -86,38 +86,64 @@ export async function upsertVehicle(input: VehicleUpsertInput): Promise<ApiResul
   return ok(data)
 }
 
-/** Fetch full chassis no from all_service_data master table */
+export interface MasterDataResult {
+  chassisNo: string | null
+  ownerName: string | null
+}
+
+function isValidChassis(value: string | null | undefined): boolean {
+  if (!value) return false
+  const v = value.trim()
+  // Must be at least 10 chars, contain at least one letter, no stars, not a REGNO: sentinel
+  return (
+    v.length >= 10 &&
+    /[A-Za-z]/.test(v) &&
+    !v.includes('*') &&
+    !v.toUpperCase().startsWith('REGNO:')
+  )
+}
+
+function buildOwnerName(first: string | null | undefined, last: string | null | undefined): string | null {
+  const parts = [first?.trim(), last?.trim()].filter(Boolean)
+  return parts.length > 0 ? parts.join(' ') : null
+}
+
+/** Fetch full chassis no AND owner name from all_service_data master table */
 export async function fetchChassisFromMaster(regNumber: string): Promise<string | null> {
+  const result = await fetchMasterDataByReg(regNumber)
+  return result?.chassisNo ?? null
+}
+
+export async function fetchMasterDataByReg(regNumber: string): Promise<MasterDataResult | null> {
   const normalized = normalizeRegNumber(regNumber)
   if (!normalized) return null
 
-  const { data } = await supabase
-    .from('all_service_data')
-    .select('chassis_no')
-    .eq('vehicle_registration_number', normalized)
-    .not('chassis_no', 'is', null)
-    .not('chassis_no', 'like', '%REGNO:%')
-    .order('created_date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // Try both normalized and raw-upper variants
+  const candidates = Array.from(new Set([normalized, regNumber.trim().toUpperCase()]))
 
-  const chassis = (data as any)?.chassis_no?.toString().trim()
-  if (chassis && chassis.length >= 10 && !chassis.includes('*')) return chassis
-
-  // Try with raw upper case
-  const rawUpper = regNumber.trim().toUpperCase()
-  if (rawUpper !== normalized) {
-    const { data: d2 } = await supabase
+  for (const regKey of candidates) {
+    const { data } = await supabase
       .from('all_service_data')
-      .select('chassis_no')
-      .eq('vehicle_registration_number', rawUpper)
+      .select('chassis_no, first_name, last_name')
+      .eq('vehicle_registration_number', regKey)
       .not('chassis_no', 'is', null)
-      .not('chassis_no', 'like', '%REGNO:%')
-      .order('created_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const c2 = (d2 as any)?.chassis_no?.toString().trim()
-    if (c2 && c2.length >= 10 && !c2.includes('*')) return c2
+      .order('last_updated_at', { ascending: false })
+      .limit(5)  // fetch a few rows to pick best chassis
+
+    const rows = (data as Array<{ chassis_no: string | null; first_name: string | null; last_name: string | null }> | null) ?? []
+    if (rows.length === 0) continue
+
+    // Pick the best chassis — prefer actual MAT/VIN (17 char with letters)
+    const bestRow = rows.find((r) => isValidChassis(r.chassis_no)) ?? null
+    const chassisNo = bestRow ? (bestRow.chassis_no?.trim() ?? null) : null
+
+    // Owner name from first row (all rows for same reg should have same owner)
+    const ownerName = buildOwnerName(rows[0].first_name, rows[0].last_name)
+
+    return {
+      chassisNo: chassisNo,
+      ownerName: ownerName,
+    }
   }
 
   return null

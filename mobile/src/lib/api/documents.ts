@@ -252,14 +252,30 @@ export async function uploadDocumentFileFromUri(input: {
     return fail(signedErr?.message ?? 'Failed to get signed upload URL')
   }
 
-  // Use FileSystem.uploadAsync for reliable native upload (no Blob/memory issues)
-  // Retry up to 2 times on network errors, then fall back to base64 fetch()
+  // ── Step 1: Ensure we have a file:// URI that uploadAsync can read ─────────
+  // Gallery photos on Android often have content:// URIs which cause
+  // FileSystem.uploadAsync to throw "network request failed".
+  // Fix: copy to app cache first, then upload from cache URI.
+  let uploadUri = input.uri
+  if (input.uri.startsWith('content://') || input.uri.startsWith('ph://')) {
+    try {
+      const ext = (input.fileName.split('.').pop() ?? 'jpg').toLowerCase()
+      const cacheUri = `${FileSystem.cacheDirectory}upload_${Date.now()}.${ext}`
+      await FileSystem.copyAsync({ from: input.uri, to: cacheUri })
+      uploadUri = cacheUri
+      console.log('[uploadDocumentFileFromUri] Copied to cache:', cacheUri)
+    } catch (copyErr) {
+      console.warn('[uploadDocumentFileFromUri] Cache copy failed, using original URI:', copyErr)
+    }
+  }
+
+  // ── Step 2: Try FileSystem.uploadAsync (native PUT, most reliable) ──────────
   let uploadResult: FileSystem.FileSystemUploadResult | null = null
   let uploadErr: Error | null = null
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      uploadResult = await FileSystem.uploadAsync(signedData.signedUrl, input.uri, {
+      uploadResult = await FileSystem.uploadAsync(signedData.signedUrl, uploadUri, {
         httpMethod: 'PUT',
         uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
         headers: { 'Content-Type': mimeType },
@@ -269,22 +285,35 @@ export async function uploadDocumentFileFromUri(input: {
     } catch (err) {
       uploadErr = err instanceof Error ? err : new Error('File upload failed')
       console.warn(`[uploadDocumentFileFromUri] uploadAsync attempt ${attempt} failed:`, uploadErr.message)
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 1500 * attempt))
     }
   }
 
-  // Fallback: read as base64 and use fetch() if uploadAsync keeps failing
+  // ── Step 3: Fallback — read as base64 and fetch() PUT ────────────────────────
   if (uploadErr || !uploadResult || uploadResult.status < 200 || uploadResult.status >= 300) {
     console.warn('[uploadDocumentFileFromUri] uploadAsync failed, trying base64 fetch fallback')
     try {
-      const base64 = await FileSystem.readAsStringAsync(input.uri, {
+      const base64 = await FileSystem.readAsStringAsync(uploadUri, {
         encoding: FileSystem.EncodingType.Base64,
       })
-      const binaryStr = atob(base64)
-      const bytes = new Uint8Array(binaryStr.length)
-      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+
+      // Build binary from base64 without atob (safer in RN)
+      const byteCharacters = globalThis.atob
+        ? globalThis.atob(base64)
+        : Buffer.from(base64, 'base64').toString('binary')
+
+      const bytes = new Uint8Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) bytes[i] = byteCharacters.charCodeAt(i)
       const blob = new Blob([bytes], { type: mimeType })
-      const fallbackRes = await fetch(signedData.signedUrl, {
+
+      // Refresh signed URL before fallback in case original expired
+      const { data: freshSigned, error: freshErr } = await supabase.storage
+        .from(AUTODOC_BUCKET)
+        .createSignedUploadUrl(storagePath)
+
+      const targetUrl = (!freshErr && freshSigned?.signedUrl) ? freshSigned.signedUrl : signedData.signedUrl
+
+      const fallbackRes = await fetch(targetUrl, {
         method: 'PUT',
         headers: { 'Content-Type': mimeType },
         body: blob,
@@ -293,7 +322,7 @@ export async function uploadDocumentFileFromUri(input: {
         const body = await fallbackRes.text().catch(() => '')
         return fail(`Storage upload failed HTTP ${fallbackRes.status}: ${body.slice(0, 200)}`)
       }
-      // fallback succeeded — continue
+      // fallback succeeded — continue to DB registration
     } catch (fallbackErr) {
       const primary = uploadErr?.message ?? (uploadResult ? `HTTP ${uploadResult.status}` : 'unknown')
       return fail(`Storage upload failed: ${primary}. Please check your internet connection and try again.`)
