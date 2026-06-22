@@ -81,8 +81,10 @@ Authoritative schema audit confirms there is no existing database function/view 
 - [x] **Task 7.2:** Filter QC queue to floor-completed vehicles only.
 - [x] **Task 7.3:** Render QC section (instead of Floor workflow) with vehicle identity + workforce status snapshot.
 - [x] **Task 7.4:** Capture and persist QC fields to `bodyshop_repair_cards`: `qc_status`, `qc_fail_reason`, `qc_checked_by`, `qc_checked_at`.
-- [ ] **Task 7.5:** Add backend projection/read-model parity for QC queue counts and audit reason codes.
-- [ ] **Task 7.6:** Add regression tests for QC save, validation, and queue filter behavior.
+- [x] **Task 7.5:** Add QC Checked By multi-select UX (assigned workforce + searchable Other bodyshop employees).
+- [x] **Task 7.6:** Mirror QC Checked By multi-select flow in mobile Bodyshop Repair QC tab.
+- [ ] **Task 7.7:** Add backend projection/read-model parity for QC queue counts and audit reason codes.
+- [ ] **Task 7.8:** Add regression tests for QC save, validation, and queue filter behavior.
 
 ---
 
@@ -149,8 +151,10 @@ Authoritative schema audit confirms there is no existing database function/view 
 ✅ 7.2 | Filter QC queue by floor-completed vehicles | Web Team | 2026-06-20 | 2026-06-20 | QC queue mapped to BS floor completed set
 ✅ 7.3 | Render QC section replacing floor workflow | Web Team | 2026-06-20 | 2026-06-20 | QC panel includes workforce snapshot + form fields
 ✅ 7.4 | Persist QC fields to bodyshop_repair_cards | Web Team | 2026-06-20 | 2026-06-20 | Save flow writes qc_status/fail_reason/checked_by/checked_at
-⏳ 7.5 | Backend projection parity for QC queue | Platform Team | - | - | Pending backend contract extension
-⏳ 7.6 | Add automated tests for QC queue + save | Web Team | - | - | Pending test implementation window
+✅ 7.5 | QC Checked By multi-select UX (web) | Web Team | 2026-06-22 | 2026-06-22 | Added assigned-workforce multi-select + searchable Other (bodyshop employee master), with fail validation and auto checked/pass timestamps
+✅ 7.6 | QC Checked By multi-select parity (mobile) | Mobile Team | 2026-06-22 | 2026-06-22 | Added same checker-selection flow in mobile QC tab with assigned + searchable Other bodyshop employees
+⏳ 7.7 | Backend projection parity for QC queue | Platform Team | - | - | Pending backend contract extension
+⏳ 7.8 | Add automated tests for QC queue + save | Web Team | - | - | Pending test implementation window
 ```
 
 ---
@@ -252,6 +256,19 @@ Authoritative schema audit confirms there is no existing database function/view 
 	- Form fields: `QC Status`, `Fail Reason`, `QC Checked By`, `QC Checked At`
 - Save action persists QC payload directly to `bodyshop_repair_cards` and sets stage context to stage 13 (`Quality Check`).
 - Design kept in current Bodyshop Floor visual language (same cards, spacing, typography, chip/button conventions).
+
+### 2026-06-22 - QC Checker Selection Model (Web + Mobile)
+- Updated QC business logic so `qc_checked_by` is selected by Floor Incharge from people list, not auto-bound to logged-in actor.
+- Web QC section now supports multi-select `QC Checked By` from:
+	- Assigned workforce for that vehicle (primary + support across Dentor/Painter/Technician/Electrician/DET)
+	- `Other` searchable bodyshop employees from employee master, excluding those already in assigned workforce list
+- Mobile Bodyshop Repair QC tab now mirrors the same checker selection model with assigned + searchable other lists.
+- Persistence logic:
+	- `qc_checked_by` = selected checker names (comma-separated)
+	- `qc_checked_at` = auto current timestamp at save
+	- if `qc_status = pass`: `qc_passed_by = qc_checked_by` and `qc_passed_at = qc_checked_at`
+	- else: `qc_passed_by = null`, `qc_passed_at = null`
+- `Fail Reason` remains mandatory when `qc_status = fail`.
 
 ---
 

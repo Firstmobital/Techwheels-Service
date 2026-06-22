@@ -44,6 +44,23 @@ interface RepairCard {
   payment_status: string | null; do_status: string | null
 }
 
+type MobileAssignmentRow = {
+  dentor_employee_name: string | null
+  painter_employee_name: string | null
+  technician_employee_name: string | null
+  electrician_employee_name: string | null
+  det_employee_name: string | null
+}
+
+type MobileSupportRow = {
+  employee_name: string | null
+}
+
+type MobileEmployeeMasterRow = {
+  employee_name: string | null
+  department: string | null
+}
+
 const STAGE_LABELS: Record<number, string> = {
   1:'Vehicle Receiving', 2:'Receiving Photos', 3:'Job Card', 4:'Customer Group',
   5:'Documentation', 6:'Estimation', 7:'Est. Approval', 8:'Claim Intimation',
@@ -67,6 +84,40 @@ function fmtD(v: string | null) {
   return new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
 }
 
+function fmtTs(v: string | null) {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+}
+
+function parseQcCheckedByNames(raw: string | null | undefined): string[] {
+  const tokens = String(raw ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const seen = new Set<string>()
+  const result: string[] = []
+  tokens.forEach((name) => {
+    const key = name.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push(name)
+  })
+  return result
+}
+
+function joinQcCheckedByNames(names: string[]): string {
+  return names.map((name) => name.trim()).filter(Boolean).join(', ')
+}
+
+function isBodyshopDepartmentMobile(raw: string | null | undefined): boolean {
+  const value = String(raw ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
+  if (!value) return false
+  return value.includes('BODY')
+}
+
 type TabKey = 'overview' | 'docs' | 'survey' | 'floor' | 'qc' | 'billing'
 const TABS: TabKey[] = ['overview','docs','survey','floor','qc','billing']
 
@@ -83,6 +134,10 @@ export default function BodyshopRepairScreen() {
   const [tab, setTab]               = useState<TabKey>('overview')
   const [patch, setPatch]           = useState<Partial<RepairCard>>({})
   const [saving, setSaving]         = useState(false)
+  const [qcAssignedCheckerNames, setQcAssignedCheckerNames] = useState<string[]>([])
+  const [qcOtherCheckerNames, setQcOtherCheckerNames] = useState<string[]>([])
+  const [qcOtherOpen, setQcOtherOpen] = useState(false)
+  const [qcOtherSearch, setQcOtherSearch] = useState('')
 
   // new
   const [showNew, setShowNew]       = useState(false)
@@ -101,6 +156,87 @@ export default function BodyshopRepairScreen() {
 
   async function onRefresh() { setRefreshing(true); await load(); setRefreshing(false) }
 
+  async function loadQcCheckerOptions(card: RepairCard) {
+    const jc = String(card.job_card_no ?? '').trim().toUpperCase()
+    if (!jc) {
+      setQcAssignedCheckerNames([])
+      setQcOtherCheckerNames([])
+      return
+    }
+
+    const [primaryRes, supportRes, empRes] = await Promise.all([
+      supabase
+        .from('bodyshop_assignments')
+        .select('dentor_employee_name,painter_employee_name,technician_employee_name,electrician_employee_name,det_employee_name')
+        .eq('is_active', true)
+        .eq('job_card_number', jc)
+        .order('updated_at', { ascending: false })
+        .limit(1),
+      supabase
+        .from('bodyshop_floor_support_assignments')
+        .select('employee_name')
+        .eq('is_active', true)
+        .eq('job_card_number', jc),
+      supabase
+        .from('employee_master')
+        .select('employee_name,department')
+        .limit(1000),
+    ])
+
+    const assignedNames: string[] = []
+    const primary = (primaryRes.data?.[0] as MobileAssignmentRow | undefined) ?? null
+    if (primary) {
+      ;[
+        primary.dentor_employee_name,
+        primary.painter_employee_name,
+        primary.technician_employee_name,
+        primary.electrician_employee_name,
+        primary.det_employee_name,
+      ].forEach((name) => {
+        const clean = String(name ?? '').trim()
+        if (clean) assignedNames.push(clean)
+      })
+    }
+
+    ;((supportRes.data ?? []) as MobileSupportRow[]).forEach((row) => {
+      const clean = String(row.employee_name ?? '').trim()
+      if (clean) assignedNames.push(clean)
+    })
+
+    const dedupAssigned: string[] = []
+    const assignedSet = new Set<string>()
+    assignedNames.forEach((name) => {
+      const key = name.toLowerCase()
+      if (assignedSet.has(key)) return
+      assignedSet.add(key)
+      dedupAssigned.push(name)
+    })
+    dedupAssigned.sort((a, b) => a.localeCompare(b))
+    setQcAssignedCheckerNames(dedupAssigned)
+
+    const allBodyshopNames = ((empRes.data ?? []) as MobileEmployeeMasterRow[])
+      .filter((row) => isBodyshopDepartmentMobile(row.department))
+      .map((row) => String(row.employee_name ?? '').trim())
+      .filter(Boolean)
+
+    const dedupOther: string[] = []
+    const seenOther = new Set<string>()
+    allBodyshopNames.forEach((name) => {
+      const key = name.toLowerCase()
+      if (assignedSet.has(key) || seenOther.has(key)) return
+      seenOther.add(key)
+      dedupOther.push(name)
+    })
+
+    dedupOther.sort((a, b) => a.localeCompare(b))
+    setQcOtherCheckerNames(dedupOther)
+  }
+
+  useEffect(() => {
+    if (!selected || tab !== 'qc') return
+    void loadQcCheckerOptions(selected)
+  }, [selected?.id, selected?.job_card_no, tab])
+
   function applyPatch(key: keyof RepairCard, val: any) {
     setPatch(p => ({ ...p, [key]: val }))
     setSelected(s => s ? { ...s, [key]: val } : s)
@@ -113,23 +249,38 @@ export default function BodyshopRepairScreen() {
     let patchToSave: Partial<RepairCard> = patch
 
     if (qcKeysTouched) {
-      const actor = user?.email || user?.id || null
       const nowIso = new Date().toISOString()
       const nextStatus = String((patch.qc_status ?? selected.qc_status ?? 'pending')).trim().toLowerCase()
-      const nextCheckedBy = String((patch.qc_checked_by ?? selected.qc_checked_by ?? actor ?? '')).trim()
-      const nextCheckedAt = String((patch.qc_checked_at ?? selected.qc_checked_at ?? nowIso)).trim()
+      const nextFailReason = String((patch.qc_fail_reason ?? selected.qc_fail_reason ?? '')).trim()
+      const selectedCheckers = parseQcCheckedByNames(String(patch.qc_checked_by ?? selected.qc_checked_by ?? ''))
+
+      if (!selectedCheckers.length) {
+        setSaving(false)
+        Alert.alert('Validation', 'Select at least one QC Checked By person')
+        return
+      }
+
+      if (nextStatus === 'fail' && !nextFailReason) {
+        setSaving(false)
+        Alert.alert('Validation', 'Fail Reason is required when QC Status is Fail')
+        return
+      }
+
+      const checkedByText = joinQcCheckedByNames(selectedCheckers)
 
       if (nextStatus === 'pass') {
         patchToSave = {
           ...patch,
-          qc_checked_by: nextCheckedBy || actor,
-          qc_checked_at: nextCheckedAt || nowIso,
-          qc_passed_by: nextCheckedBy || actor,
-          qc_passed_at: nextCheckedAt || nowIso,
+          qc_checked_by: checkedByText,
+          qc_checked_at: nowIso,
+          qc_passed_by: checkedByText,
+          qc_passed_at: nowIso,
         }
       } else {
         patchToSave = {
           ...patch,
+          qc_checked_by: checkedByText,
+          qc_checked_at: nowIso,
           qc_passed_by: null,
           qc_passed_at: null,
         }
@@ -579,6 +730,21 @@ export default function BodyshopRepairScreen() {
               {/* QC */}
               {tab==='qc' && (
                 <View style={{ gap:12 }}>
+                  {(() => {
+                    const selectedCheckerNames = parseQcCheckedByNames(selected.qc_checked_by)
+                    const otherSearchNorm = qcOtherSearch.trim().toLowerCase()
+                    const filteredOtherNames = qcOtherCheckerNames.filter((name) => !otherSearchNorm || name.toLowerCase().includes(otherSearchNorm))
+
+                    const toggleQcChecker = (name: string) => {
+                      const key = name.toLowerCase()
+                      const next = selectedCheckerNames.some((item) => item.toLowerCase() === key)
+                        ? selectedCheckerNames.filter((item) => item.toLowerCase() !== key)
+                        : [...selectedCheckerNames, name]
+                      applyPatch('qc_checked_by', joinQcCheckedByNames(next))
+                    }
+
+                    return (
+                      <>
                   <View style={{ backgroundColor:'#fff', borderRadius:10, padding:14, gap:10 }}>
                     {[
                       ['QC', selected.qc_status ?? 'pending', ['pending','pass','fail']],
@@ -598,13 +764,108 @@ export default function BodyshopRepairScreen() {
                       </View>
                     ))}
                   </View>
-                  {[{k:'qc_checked_by',label:'QC Checked By'},{k:'qc_fail_reason',label:'Fail Reason'},{k:'reinspection_by',label:'Re-Inspection By'}].map(({k,label}) => (
+
+                  <View style={{ backgroundColor:'#fff', borderRadius:10, padding:14, gap:10 }}>
+                    <Text style={{ fontSize:12, color:'#6b7280' }}>QC Checked By</Text>
+
+                    <View style={{ flexDirection:'row', flexWrap:'wrap', gap:8 }}>
+                      {selectedCheckerNames.length === 0 ? (
+                        <Text style={{ fontSize:12, color:'#9ca3af' }}>No checker selected</Text>
+                      ) : (
+                        selectedCheckerNames.map((name) => (
+                          <TouchableOpacity
+                            key={`sel-${name}`}
+                            onPress={() => toggleQcChecker(name)}
+                            style={{ backgroundColor:'#eff6ff', borderColor:'#bfdbfe', borderWidth:1, borderRadius:999, paddingHorizontal:10, paddingVertical:4 }}
+                          >
+                            <Text style={{ fontSize:12, color:'#1e40af', fontWeight:'600' }}>{name} ×</Text>
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </View>
+
+                    <Text style={{ fontSize:11, color:'#94a3b8' }}>Assigned Workforce</Text>
+                    <View style={{ flexDirection:'row', flexWrap:'wrap', gap:8 }}>
+                      {qcAssignedCheckerNames.length === 0 ? (
+                        <Text style={{ fontSize:12, color:'#9ca3af' }}>No assigned workforce found</Text>
+                      ) : (
+                        qcAssignedCheckerNames.map((name) => {
+                          const active = selectedCheckerNames.some((item) => item.toLowerCase() === name.toLowerCase())
+                          return (
+                            <TouchableOpacity
+                              key={`ass-${name}`}
+                              onPress={() => toggleQcChecker(name)}
+                              style={{
+                                backgroundColor: active ? '#2563eb' : '#f3f4f6',
+                                borderRadius:8,
+                                paddingHorizontal:10,
+                                paddingVertical:6,
+                              }}
+                            >
+                              <Text style={{ color: active ? '#fff' : '#475569', fontSize:12, fontWeight:'600' }}>{name}</Text>
+                            </TouchableOpacity>
+                          )
+                        })
+                      )}
+                    </View>
+
+                    <TouchableOpacity
+                      onPress={() => setQcOtherOpen((prev) => !prev)}
+                      style={{ alignSelf:'flex-start', backgroundColor:'#f8fafc', borderColor:'#cbd5e1', borderWidth:1, borderRadius:8, paddingHorizontal:10, paddingVertical:6 }}
+                    >
+                      <Text style={{ fontSize:12, color:'#334155', fontWeight:'600' }}>{qcOtherOpen ? 'Hide Other Employees' : 'Other Employees'}</Text>
+                    </TouchableOpacity>
+
+                    {qcOtherOpen && (
+                      <View style={{ gap:8 }}>
+                        <TextInput
+                          style={{ backgroundColor:'#fff', borderRadius:8, padding:10, fontSize:14, borderWidth:1, borderColor:'#e5e7eb' }}
+                          value={qcOtherSearch}
+                          onChangeText={setQcOtherSearch}
+                          placeholder="Search bodyshop employee by name"
+                        />
+                        <View style={{ maxHeight:160, borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:8, gap:6 }}>
+                          {filteredOtherNames.length === 0 ? (
+                            <Text style={{ fontSize:12, color:'#9ca3af' }}>No matching employees</Text>
+                          ) : (
+                            filteredOtherNames.map((name) => {
+                              const active = selectedCheckerNames.some((item) => item.toLowerCase() === name.toLowerCase())
+                              return (
+                                <TouchableOpacity
+                                  key={`oth-${name}`}
+                                  onPress={() => toggleQcChecker(name)}
+                                  style={{
+                                    backgroundColor: active ? '#2563eb' : '#f8fafc',
+                                    borderRadius:8,
+                                    paddingHorizontal:10,
+                                    paddingVertical:6,
+                                  }}
+                                >
+                                  <Text style={{ color: active ? '#fff' : '#334155', fontSize:12, fontWeight:'600' }}>{name}</Text>
+                                </TouchableOpacity>
+                              )
+                            })
+                          )}
+                        </View>
+                      </View>
+                    )}
+
+                    <Text style={{ fontSize:12, color:'#6b7280' }}>QC Checked At</Text>
+                    <View style={{ backgroundColor:'#f8fafc', borderRadius:8, padding:10, borderWidth:1, borderColor:'#e5e7eb' }}>
+                      <Text style={{ fontSize:13, color:'#334155' }}>{fmtTs(selected.qc_checked_at)}</Text>
+                    </View>
+                  </View>
+
+                  [{k:'qc_fail_reason',label:'Fail Reason'},{k:'reinspection_by',label:'Re-Inspection By'}].map(({k,label}) => (
                     <View key={k}>
                       <Text style={{ fontSize:12, color:'#6b7280', marginBottom:4 }}>{label}</Text>
                       <TextInput style={{ backgroundColor:'#fff', borderRadius:8, padding:10, fontSize:14, borderWidth:1, borderColor:'#e5e7eb' }}
                         value={(selected as any)[k] ?? ''} onChangeText={v => applyPatch(k as keyof RepairCard, v)} />
                     </View>
                   ))}
+                      </>
+                    )
+                  })()}
                   {Object.keys(patch).length > 0 && (
                     <TouchableOpacity onPress={savePatch} disabled={saving}
                       style={{ backgroundColor:'#2563eb', borderRadius:10, padding:14, alignItems:'center' }}>

@@ -1,10 +1,10 @@
 # RBAC-002 Bodyshop Standalone Reception RBAC Plan
 
 Version: 2026-06-20
-Status: PENDING (Audit complete, execution deferred)
+Status: IN PROGRESS (Split-helper migration executed and dump-verified; UAT and closure pending)
 Owner: RBAC Team + Bodyshop Team + Platform Team
 Scope: Web + Supabase RBAC contract for Bodyshop Floor and Bodyshop Repair standalone operation
-Execution Mode: Plan-only (do not execute migrations yet)
+Execution Mode: Active (controlled execution in progress)
 
 ---
 
@@ -45,6 +45,8 @@ This section lists audited sources only. No unverified assumptions are used.
 4. supabase/exec_success_migrations/20260616183000_bodyshop_sa_stage_policy_hardening.sql
 5. supabase/exec_success_migrations/20260619143000_sync_reception_jc_from_bodyshop_job_card.sql
 6. supabase/exec_success_migrations/20260620134000_decouple_bodyshop_from_service_advisor_on_reception.sql (created, not executed)
+7. supabase/migrations/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers.sql (executed)
+8. supabase/sql_checks/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers_checks.sql (executed, read-only)
 
 ### 2.4 Authoritative DB Mirror Audited
 
@@ -64,6 +66,16 @@ Verified objects from mirror:
    - bodyshop_repair_cards_select_rbac_v2
    - bodyshop_repair_cards_update_rbac_v2
    - bodyshop_repair_card_documents_update_rbac_v4
+5. Split helper functions present (fresh dump):
+   - public.user_has_service_floor_incharge_scope_for_sa_code(text)
+   - public.user_has_bodyshop_floor_incharge_scope_for_sa_code(text)
+6. Reception policies re-pointed (fresh dump):
+   - service_reception_select_floor_incharge -> user_has_service_floor_incharge_scope_for_sa_code
+   - service_reception_select_bodyshop_floor_incharge_v1 -> user_has_bodyshop_floor_incharge_scope_for_sa_code
+7. Admin bypass confirmed in both split policies (public.is_admin() path retained).
+8. Module IDs verified in fresh dump:
+   - 13 = floor_incharge
+   - 18 = bodyshop_floor
 
 ---
 
@@ -86,6 +98,15 @@ Verified objects from mirror:
 1. KM save from Bodyshop Repair updates service_reception_entries.
 2. Deployed RLS + trigger guard primarily recognizes reception/service_advisor ownership paths.
 3. If user has only bodyshop module and lacks allowed reception/service_advisor path, update can fail due to RLS/trigger checks.
+
+### 3.4 QC Checker Selection Change (2026-06-22) - RBAC impact
+
+1. QC business logic now allows Floor Incharge to select one or multiple `QC Checked By` employees from:
+   - assigned workforce for the vehicle
+   - searchable bodyshop employees from employee master (excluding already assigned names)
+2. This rollout uses existing `employee_master` read access patterns and existing bodyshop module routes.
+3. No new RBAC policy, trigger, or helper-function change was required for this UI/save-flow rollout.
+4. Existing least-privilege RBAC scope in this plan remains unchanged.
 
 ---
 
@@ -138,6 +159,33 @@ Planned behavior from this migration:
    - Accident-only
    - scope-checked
    - field-restricted to km_reading and jc_number
+
+### Phase B0: Split Floor-Incharge Helpers and Policy Re-point (Executed and Verified 2026-06-22)
+
+Migration executed:
+1. supabase/migrations/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers.sql
+
+Paired verification checks executed (read-only):
+1. supabase/sql_checks/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers_checks.sql
+
+Executed behavior:
+1. Add explicit service helper function:
+   - public.user_has_service_floor_incharge_scope_for_sa_code(text)
+   - Contract: SERVICE department floor-incharge + fuel-type match.
+2. Add explicit bodyshop helper function:
+   - public.user_has_bodyshop_floor_incharge_scope_for_sa_code(text)
+   - Contract: BODY SHOP floor-incharge + location match.
+3. Re-point service reception floor policy:
+   - service_reception_select_floor_incharge uses service helper.
+4. Re-point bodyshop floor reception policy:
+   - service_reception_select_bodyshop_floor_incharge_v1 uses bodyshop helper.
+5. Preserve admin bypass in both policies.
+6. No data mutation (DDL/RLS only).
+
+Authoritative dump verification evidence:
+1. Functions verified in local_folder/backups/chunks/full_database.sql.part_000.
+2. Policies verified in local_folder/backups/chunks/full_database.sql.part_004.
+3. Module IDs verified in local_folder/backups/chunks/full_database.sql.part_001.
 
 ### Phase C: Post-Execution Verification
 
@@ -242,10 +290,12 @@ Legend:
 |---|---|---|---|---|
 | RBAC2-001 | Complete cross-layer audit (frontend + SQL + authoritative mirror) | DONE | Copilot + RBAC | Completed 2026-06-20 |
 | RBAC2-002 | Draft plan-only migration contract and guardrails | DONE | Copilot + RBAC | Migration file prepared, not executed |
-| RBAC2-003 | Execute preflight SQL validation in target environment | PENDING | Platform | Deferred by instruction |
-| RBAC2-004 | Execute migration and capture SQL evidence | PENDING | Platform | Deferred by instruction |
+| RBAC2-003 | Execute preflight SQL validation in target environment | DONE | Platform + Copilot | Completed 2026-06-22 via SQL checks + dump audit |
+| RBAC2-004 | Execute migration and capture SQL evidence | DONE | Platform + Copilot | Completed 2026-06-22, reflected in fresh authoritative dump |
 | RBAC2-005 | Execute UAT role matrix | PENDING | QA + RBAC + Bodyshop | Required before closure |
 | RBAC2-006 | Publish completion update in RBAC-001 and tracker closure | PENDING | RBAC | Post-UAT |
+| RBAC2-007 | Draft split-helper policy migration + read-only checks | DONE | Copilot + RBAC | Completed 2026-06-22 |
+| RBAC2-008 | Audit fresh authoritative dump for split-helper contract | DONE | Copilot + RBAC | Completed 2026-06-22 |
 
 ---
 
@@ -272,8 +322,11 @@ If any item fails, execution is blocked and plan must be updated before migratio
 6. supabase/exec_success_migrations/20260620134000_decouple_bodyshop_from_service_advisor_on_reception.sql
 7. local_folder/backups/chunks/full_database.sql.part_000
 8. local_folder/backups/chunks/full_database.sql.part_004
+9. supabase/migrations/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers.sql
+10. supabase/sql_checks/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers_checks.sql
+11. docs/rbac/evidence/RBAC-002_SPLIT_HELPERS_EXECUTED_VERIFIED_2026-06-22.md
 
 ---
 
-Last Updated: 2026-06-20
-Plan Status: PENDING
+Last Updated: 2026-06-22
+Plan Status: IN PROGRESS

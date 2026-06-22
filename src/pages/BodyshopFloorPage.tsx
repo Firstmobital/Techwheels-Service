@@ -11,6 +11,8 @@ import { getDealerContext } from '../lib/api'
 interface AccidentCar {
   id: number
   jc_number: string | null
+  sa_employee_code: string | null
+  dealer_code: string | null
   reg_number: string | null
   model: string | null
   owner_name: string | null
@@ -343,6 +345,27 @@ function labelForWorkStatus(status: string | null | undefined) {
   return 'Pending'
 }
 
+function parseQcCheckedByNames(raw: string | null | undefined): string[] {
+  const tokens = String(raw ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const seen = new Set<string>()
+  const result: string[] = []
+  tokens.forEach((name) => {
+    const key = name.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push(name)
+  })
+  return result
+}
+
+function joinQcCheckedByNames(names: string[]): string {
+  return names.map((name) => name.trim()).filter(Boolean).join(', ')
+}
+
 function safeFileName(raw: string): string {
   const cleaned = String(raw ?? '')
     .replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -540,6 +563,15 @@ function jcKey(car: AccidentCar): string {
   return (car.jc_number ?? '').trim().toUpperCase()
 }
 
+function deriveDealerCodeFromSaEmployeeCode(saEmployeeCode: string | null | undefined): string | null {
+  const raw = String(saEmployeeCode ?? '').trim()
+  if (!raw) return null
+  const parts = raw.split('_').map((p) => p.trim()).filter(Boolean)
+  if (parts.length === 0) return null
+  const candidate = (parts[parts.length - 1] || '').toUpperCase()
+  return candidate || null
+}
+
 function isEmployeeEligibleForRole(role: BSRole, department: string | null): boolean {
   if (role === 'ELECTRICIAN' || role === 'DET') {
     return isServiceDepartment(department)
@@ -617,6 +649,9 @@ export default function BodyshopFloorPage() {
   const [saving, setSaving]   = useState<string | null>(null) // jcKey being saved
   const [bsFloorStatus, setBsFloorStatus] = useState<Record<string, { completedAt: string | null; completedBy: string | null }>>({})
   const [qcByJc, setQcByJc] = useState<Record<string, QcEntryState>>({})
+  const [qcCheckerPickerOpen, setQcCheckerPickerOpen] = useState<Record<string, boolean>>({})
+  const [qcCheckerOtherOpen, setQcCheckerOtherOpen] = useState<Record<string, boolean>>({})
+  const [qcCheckerOtherSearch, setQcCheckerOtherSearch] = useState<Record<string, string>>({})
   const [additionalApprovalByJc, setAdditionalApprovalByJc] = useState<Record<string, AdditionalApprovalRowState>>({})
   const [additionalApprovalModal, setAdditionalApprovalModal] = useState<{
     car: AccidentCar | null
@@ -715,7 +750,7 @@ export default function BodyshopFloorPage() {
         // 2. Accident reception entries (restricted to sent vehicles only)
         const { data: recData, error: recErr } = await supabase
         .from('service_reception_entries')
-        .select('id, jc_number, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
+        .select('id, jc_number, sa_employee_code, dealer_code, reg_number, model, owner_name, owner_phone, sa_name, sa_display_name, branch, created_at')
         .eq('service_type', 'Accident')
         .gte('created_at', dateRange.from + 'T00:00:00+05:30')
         .lte('created_at', dateRange.to + 'T23:59:59+05:30')
@@ -846,6 +881,21 @@ export default function BodyshopFloorPage() {
     })
     ALL_ROLES.forEach((r) => m[r].sort((a, b) => a.employee_name.localeCompare(b.employee_name)))
     return m
+  }, [employees])
+
+  const bodyshopEmployeeNames = useMemo(() => {
+    const seen = new Set<string>()
+    const names: string[] = []
+    employees.forEach((e) => {
+      if (!isBodyshopDepartment(e.department)) return
+      const name = String(e.employee_name ?? '').trim()
+      if (!name) return
+      const key = name.toLowerCase()
+      if (seen.has(key)) return
+      seen.add(key)
+      names.push(name)
+    })
+    return names.sort((a, b) => a.localeCompare(b))
   }, [employees])
 
   // ── Branch options ───────────────────────────────────────────────────────
@@ -1037,7 +1087,11 @@ export default function BodyshopFloorPage() {
           job_card_number: k,
           repair_card_id: repairCardId,
           reception_entry_id: Number.isFinite(Number(car.id)) ? Number(car.id) : null,
-          dealer_code: car.branch ?? 'UNKNOWN',
+          dealer_code:
+            String(car.dealer_code ?? '').trim()
+            || deriveDealerCodeFromSaEmployeeCode(car.sa_employee_code)
+            || String(car.branch ?? '').trim()
+            || 'UNKNOWN',
         }
         result = await supabase.from('bodyshop_assignments').insert(insertPayload).select().single()
       }
@@ -1214,10 +1268,58 @@ export default function BodyshopFloorPage() {
     }))
   }
 
+  function getAssignedQcCheckerNames(k: string): string[] {
+    const names: string[] = []
+    const primary = assignments[k]
+    const support = supportAssignments[k]
+
+    ALL_ROLES.forEach((role) => {
+      const assignedName = String(primary?.[role]?.employee_name ?? '').trim()
+      if (assignedName) names.push(assignedName)
+      ;(support?.[role] ?? []).forEach((item) => {
+        const supportName = String(item.employee_name ?? '').trim()
+        if (supportName) names.push(supportName)
+      })
+    })
+
+    const seen = new Set<string>()
+    const unique: string[] = []
+    names.forEach((name) => {
+      const key = name.toLowerCase()
+      if (seen.has(key)) return
+      seen.add(key)
+      unique.push(name)
+    })
+    return unique.sort((a, b) => a.localeCompare(b))
+  }
+
+  function toggleQcCheckedByName(k: string, name: string) {
+    const current = parseQcCheckedByNames(qcByJc[k]?.qc_checked_by)
+    const key = name.trim().toLowerCase()
+    const next = current.some((item) => item.toLowerCase() === key)
+      ? current.filter((item) => item.toLowerCase() !== key)
+      : [...current, name.trim()]
+    patchQcDraft(k, { qc_checked_by: joinQcCheckedByNames(next) })
+  }
+
+  function removeQcCheckedByName(k: string, name: string) {
+    const current = parseQcCheckedByNames(qcByJc[k]?.qc_checked_by)
+    const key = name.trim().toLowerCase()
+    const next = current.filter((item) => item.toLowerCase() !== key)
+    patchQcDraft(k, { qc_checked_by: joinQcCheckedByNames(next) })
+  }
+
   async function saveQcDetails(car: AccidentCar) {
     const k = jcKey(car)
     const draft = qcByJc[k] ?? emptyQcEntryState()
     const failReason = draft.qc_fail_reason.trim()
+    const selectedCheckerNames = parseQcCheckedByNames(draft.qc_checked_by)
+    const checkedByText = joinQcCheckedByNames(selectedCheckerNames)
+
+    if (!selectedCheckerNames.length) {
+      showToast('Select at least one QC Checked By person', 'error')
+      return
+    }
 
     if (draft.qc_status === 'fail' && !failReason) {
       showToast('Fail Reason is required when QC Status is Fail', 'error')
@@ -1227,8 +1329,6 @@ export default function BodyshopFloorPage() {
     setSaving(`${k}-qc`)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      const actor = String(user?.email ?? user?.id ?? '').trim()
-      if (!actor) throw new Error('Unable to resolve signed-in user for QC capture')
       const checkedAtIso = new Date().toISOString()
       const repairCardId = draft.repairCardId ?? await findOrCreateRepairCard(car, user?.email ?? null)
       if (!repairCardId) throw new Error('Unable to resolve bodyshop repair card for QC')
@@ -1236,9 +1336,9 @@ export default function BodyshopFloorPage() {
       const payload = {
         qc_status: draft.qc_status || 'pending',
         qc_fail_reason: draft.qc_status === 'fail' ? failReason : null,
-        qc_checked_by: actor,
+        qc_checked_by: checkedByText,
         qc_checked_at: checkedAtIso,
-        qc_passed_by: draft.qc_status === 'pass' ? actor : null,
+        qc_passed_by: draft.qc_status === 'pass' ? checkedByText : null,
         qc_passed_at: draft.qc_status === 'pass' ? checkedAtIso : null,
         current_stage: 13,
         current_stage_name: 'Quality Check',
@@ -1259,10 +1359,14 @@ export default function BodyshopFloorPage() {
           repairCardId: Number(result.data?.id ?? repairCardId),
           qc_status: String(result.data?.qc_status ?? draft.qc_status ?? 'pending'),
           qc_fail_reason: String(result.data?.qc_fail_reason ?? ''),
-          qc_checked_by: String(result.data?.qc_checked_by ?? actor),
+          qc_checked_by: String(result.data?.qc_checked_by ?? checkedByText),
           qc_checked_at: toLocalDateTimeInput(result.data?.qc_checked_at ?? checkedAtIso),
         },
       }))
+
+      setQcCheckerPickerOpen((prev) => ({ ...prev, [k]: false }))
+      setQcCheckerOtherOpen((prev) => ({ ...prev, [k]: false }))
+      setQcCheckerOtherSearch((prev) => ({ ...prev, [k]: '' }))
 
       showToast('QC details saved', 'success')
     } catch (err) {
@@ -1762,6 +1866,13 @@ export default function BodyshopFloorPage() {
               const k = jcKey(car)
               const carMap = assignments[k] ?? { DENTOR: undefined, PAINTER: undefined, TECHNICIAN: undefined, ELECTRICIAN: undefined, DET: undefined }
               const qcDraft = qcByJc[k] ?? emptyQcEntryState()
+              const selectedQcCheckerNames = parseQcCheckedByNames(qcDraft.qc_checked_by)
+              const assignedQcCheckerNames = getAssignedQcCheckerNames(k)
+              const assignedQcNameSet = new Set(assignedQcCheckerNames.map((name) => name.toLowerCase()))
+              const otherSearch = String(qcCheckerOtherSearch[k] ?? '').trim().toLowerCase()
+              const otherCheckerNames = bodyshopEmployeeNames
+                .filter((name) => !assignedQcNameSet.has(name.toLowerCase()))
+                .filter((name) => !otherSearch || name.toLowerCase().includes(otherSearch))
               const supportMap = supportAssignments[k] ?? { DENTOR: [], PAINTER: [], TECHNICIAN: [], ELECTRICIAN: [], DET: [] }
               const floorStatus = bsFloorStatus[k] ?? { completedAt: null, completedBy: null }
               const isFloorCompleted = Boolean(floorStatus.completedAt)
@@ -1869,6 +1980,102 @@ export default function BodyshopFloorPage() {
                             >
                               {isSavingQc ? 'Saving…' : 'Save QC'}
                             </button>
+                          </div>
+                          <div className="bsf-qc-inline__meta-row">
+                            <div className="bsf-qc-inline__field bsf-qc-inline__field--wide">
+                              <span className="bsf-label">QC Checked By</span>
+                              <button
+                                type="button"
+                                className="bsf-qc-picker-trigger"
+                                onClick={() => setQcCheckerPickerOpen((prev) => ({ ...prev, [k]: !prev[k] }))}
+                              >
+                                {selectedQcCheckerNames.length ? `${selectedQcCheckerNames.length} selected` : 'Select QC checkers'}
+                              </button>
+
+                              {selectedQcCheckerNames.length > 0 && (
+                                <div className="bsf-qc-chip-list">
+                                  {selectedQcCheckerNames.map((name) => (
+                                    <button
+                                      key={`selected-qc-${k}-${name}`}
+                                      type="button"
+                                      className="bsf-qc-chip"
+                                      onClick={() => removeQcCheckedByName(k, name)}
+                                    >
+                                      {name} ×
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              {qcCheckerPickerOpen[k] && (
+                                <div className="bsf-qc-picker-menu" onClick={(e) => e.stopPropagation()}>
+                                  <div className="bsf-qc-picker-section">
+                                    <div className="bsf-qc-picker-title">Assigned Workforce</div>
+                                    {assignedQcCheckerNames.length === 0 ? (
+                                      <div className="bsf-qc-picker-empty">No assigned workforce available.</div>
+                                    ) : (
+                                      assignedQcCheckerNames.map((name) => {
+                                        const selected = selectedQcCheckerNames.some((item) => item.toLowerCase() === name.toLowerCase())
+                                        return (
+                                          <label key={`assigned-qc-${k}-${name}`} className="bsf-qc-picker-item">
+                                            <input
+                                              type="checkbox"
+                                              checked={selected}
+                                              onChange={() => toggleQcCheckedByName(k, name)}
+                                            />
+                                            <span>{name}</span>
+                                          </label>
+                                        )
+                                      })
+                                    )}
+                                  </div>
+
+                                  <div className="bsf-qc-picker-section">
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--xs"
+                                      onClick={() => setQcCheckerOtherOpen((prev) => ({ ...prev, [k]: !prev[k] }))}
+                                    >
+                                      {qcCheckerOtherOpen[k] ? 'Hide Other Employees' : 'Other Employees'}
+                                    </button>
+                                    {qcCheckerOtherOpen[k] && (
+                                      <>
+                                        <input
+                                          className="inp inp-sm bsf-qc-picker-search"
+                                          placeholder="Search bodyshop employee by name"
+                                          value={qcCheckerOtherSearch[k] ?? ''}
+                                          onChange={(e) => setQcCheckerOtherSearch((prev) => ({ ...prev, [k]: e.target.value }))}
+                                        />
+                                        <div className="bsf-qc-picker-scroll">
+                                          {otherCheckerNames.length === 0 ? (
+                                            <div className="bsf-qc-picker-empty">No matching employees.</div>
+                                          ) : (
+                                            otherCheckerNames.map((name) => {
+                                              const selected = selectedQcCheckerNames.some((item) => item.toLowerCase() === name.toLowerCase())
+                                              return (
+                                                <label key={`other-qc-${k}-${name}`} className="bsf-qc-picker-item">
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={selected}
+                                                    onChange={() => toggleQcCheckedByName(k, name)}
+                                                  />
+                                                  <span>{name}</span>
+                                                </label>
+                                              )
+                                            })
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="bsf-qc-inline__field">
+                              <span className="bsf-label">QC Checked At</span>
+                              <div className="bsf-qc-readonly">{qcDraft.qc_checked_at ? fmtDate(qcDraft.qc_checked_at) : '—'}</div>
+                            </div>
                           </div>
                           <div className={`bsf-stage-hint bsf-qc-inline__hint-slot ${qcFailReasonRequired ? 'is-visible' : ''}`}>
                             {qcFailReasonRequired ? 'Fail Reason is required when QC Status is Fail.' : ' '}

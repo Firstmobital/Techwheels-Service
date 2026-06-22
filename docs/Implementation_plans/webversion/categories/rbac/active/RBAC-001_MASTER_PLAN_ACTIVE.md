@@ -3,8 +3,39 @@
 **Version**: 2026-06-01  
 **Status**: Phase 1C In Progress - Admin Unrestricted Access + Bodyshop Role-Scoped Visibility Alignment  
 **Owner**: Engineering Lead / Copilot (TBD)  
-**Last Updated**: 2026-06-19 23:40 UTC  
+**Last Updated**: 2026-06-22 10:55 UTC  
 **Authority**: Single source of truth — supersedes all separate RBAC plan files
+
+### Execution Update (2026-06-22 - Bodyshop Assignments Dealer-Code Regression Fix Executed and Verified)
+
+- Migration executed:
+  - `supabase/migrations/20260622111500_backfill_bodyshop_assignments_dealer_code_from_reception.sql`
+- Paired checks executed:
+  - `supabase/sql_checks/20260622111500_backfill_bodyshop_assignments_dealer_code_from_reception_checks.sql`
+- Exact verified outputs:
+  - `location_like_dealer_code_rows = 0`
+  - `mismatch_rows = 0`
+  - Known row `JC-AAAAA-DFDF-ERFDFG-0001` => `assignment_dealer_code=3000840`, `reception_dealer_code=3000840`, `branch=Sitapura`, `sa_employee_code=PAG1_3000840`.
+  - Recent sample confirms same row updated at `2026-06-22 05:08:15.003643+00` with `dealer_code=3000840`.
+- Business impact:
+  - Scoped non-admin users (for example dealer-scope `3000840`) now pass `dealer_code_in_scope(dealer_code)` on `bodyshop_assignments` rows for this card and should see assignment/completion state parity with admin view.
+- Evidence:
+  - `docs/rbac/evidence/RBAC-002_REGRESSION_FIX_BODYSHOP_ASSIGNMENTS_DEALER_CODE_2026-06-22.md`
+
+### Execution Update (2026-06-22 - Split Service/Bodyshop Floor-Incharge Reception Helpers Executed and Verified)
+
+- Migration executed:
+  - `supabase/migrations/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers.sql`
+- Paired checks executed:
+  - `supabase/sql_checks/20260622104000_split_service_bodyshop_floor_incharge_reception_helpers_checks.sql`
+- Contract verified from authoritative fresh dump mirror (`local_folder/backups/chunks/full_database.sql.part_*`):
+  - `user_has_service_floor_incharge_scope_for_sa_code(text)` present.
+  - `user_has_bodyshop_floor_incharge_scope_for_sa_code(text)` present.
+  - `service_reception_select_floor_incharge` uses service helper.
+  - `service_reception_select_bodyshop_floor_incharge_v1` uses bodyshop helper.
+  - `is_admin()` bypass present in both policies.
+  - Module IDs confirmed: `13=floor_incharge`, `18=bodyshop_floor`.
+- Posture: split-helper reception RBAC contract is executed and verified in schema; broader RBAC-002 closure still depends on UAT matrix completion.
 
 ### Execution Update (2026-06-19 - Bodyshop Surveyor Catalog Dealer-Agnostic Visibility)
 

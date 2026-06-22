@@ -2659,6 +2659,119 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   width: 100%;
 }
 
+.bsf-qc-inline__meta-row {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 10px;
+  align-items: start;
+}
+
+.bsf-qc-picker-trigger {
+  height: 36px;
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  padding: 0 10px;
+}
+
+.bsf-qc-picker-trigger:hover {
+  border-color: var(--accent);
+}
+
+.bsf-qc-chip-list {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bsf-qc-chip {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+.bsf-qc-picker-menu {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow: var(--sh-2);
+  padding: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bsf-qc-picker-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.bsf-qc-picker-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.bsf-qc-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.bsf-qc-picker-item input {
+  width: 14px;
+  height: 14px;
+}
+
+.bsf-qc-picker-search {
+  height: 34px;
+  font-size: 12px;
+}
+
+.bsf-qc-picker-scroll {
+  max-height: 150px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bsf-qc-picker-empty {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.bsf-qc-readonly {
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--canvas);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
 .bsf-qc-inline__hint-slot {
   min-height: 16px;
   visibility: hidden;
@@ -2967,6 +3080,9 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
   .bsf-qc-inline__controls {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+  .bsf-qc-inline__meta-row {
+    grid-template-columns: 1fr;
   }
   .bsf-qc-inline__controls .btn {
     width: 100%;

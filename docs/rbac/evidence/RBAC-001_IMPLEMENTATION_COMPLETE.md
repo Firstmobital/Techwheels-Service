@@ -11,6 +11,10 @@
 > **Post-closure UI/RBAC consistency fixes (2026-06-19):** Bodyshop SA/SSA tab gating, SURVEY branch-scope parity (Overview + Survey contract), and Stage Queue/detail-stage progression rendering behavior were corrected for scoped users; details are tracked in the active master plan.
 >
 > **Post-closure catalog visibility fix (2026-06-19):** Bodyshop surveyor catalog SELECT was finalized as dealer-agnostic for authorized users (`settings_bodyshop_surveyors_select_v10`) to match business contract and restore SURVEY-role surveyor dropdown visibility.
+>
+> **Post-closure reception split-helper verification (2026-06-22):** Service and Bodyshop floor-incharge reception scope split has been executed and verified from the fresh authoritative dump mirror. Verified contract: `user_has_service_floor_incharge_scope_for_sa_code(text)` and `user_has_bodyshop_floor_incharge_scope_for_sa_code(text)` both present; `service_reception_select_floor_incharge` points to service helper; `service_reception_select_bodyshop_floor_incharge_v1` points to bodyshop helper; admin bypass retained in both policies; module IDs confirmed (`13=floor_incharge`, `18=bodyshop_floor`).
+>
+> **Post-closure regression fix verification (2026-06-22):** Bodyshop Floor state mismatch for scoped non-admin users was fixed by canonicalizing `public.bodyshop_assignments.dealer_code` from linked reception data. Verification checks returned exact outputs: `location_like_dealer_code_rows=0`, `mismatch_rows=0`, and the known row `JC-AAAAA-DFDF-ERFDFG-0001` now maps `assignment_dealer_code=3000840` with `reception_dealer_code=3000840`. Full evidence: [RBAC-002_REGRESSION_FIX_BODYSHOP_ASSIGNMENTS_DEALER_CODE_2026-06-22.md](RBAC-002_REGRESSION_FIX_BODYSHOP_ASSIGNMENTS_DEALER_CODE_2026-06-22.md).
 
 ---
 

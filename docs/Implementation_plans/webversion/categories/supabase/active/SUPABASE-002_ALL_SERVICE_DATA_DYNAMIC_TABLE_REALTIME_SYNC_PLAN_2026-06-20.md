@@ -30,6 +30,9 @@ The implementation avoids views and avoids periodic refresh jobs. It provides de
   - `assumed_next_service_type`
   (Phase 4 date logic approved; type-mapping logic drafted in Concrete v2).
 6. Add deterministic priority-order support for third-party limited-row reads from `public.all_service_data_dynamic`.
+7. Add robot-audit columns in `public.all_service_data`:
+  - `updated_by_robot` (boolean)
+  - `updated_by_robot_at` (timestamp with time zone)
 
 ---
 
@@ -209,6 +212,27 @@ Key delivery rule:
 - [ ] **Task 4.4:** Add read-only validation checks for nulls, coverage, and edge-format handling.
 - [ ] **Task 4.5:** Document operational ownership (when/how daily recalculation runs).
 - [ ] **Task 4.6:** Keep `assumed_next_service_type` nullable until separate type-mapping rules are finalized.
+- [ ] **Task 4.7:** Add robot-audit columns to `public.all_service_data`:
+  - `updated_by_robot boolean`
+  - `updated_by_robot_at timestamptz`
+- [ ] **Task 4.8:** Document boolean input compatibility for robot flag (`TRUE/FALSE`, `T/F`, `YES/NO`, `1/0`) and timestamp-write expectations.
+
+### Robot Update Audit Columns (`all_service_data`)
+
+Required schema additions in `public.all_service_data`:
+
+- `updated_by_robot boolean`
+- `updated_by_robot_at timestamptz`
+
+Input semantics for `updated_by_robot`:
+
+- PostgreSQL boolean parsing already accepts: `TRUE/FALSE`, `T/F`, `YES/NO`, `ON/OFF`, and `1/0`.
+
+Operational expectation:
+
+- Set `updated_by_robot = true` only when an automated process mutates a row.
+- Set `updated_by_robot_at` to the write timestamp for the same robot-driven mutation.
+- For non-robot/manual writes, keep `updated_by_robot = false` (or `NULL` if not asserted) and `updated_by_robot_at = NULL`.
 
 ### Phase 4 Calculation Logic (Approved for `assumed_next_service_date`)
 
@@ -631,6 +655,12 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ⏳ 3.4 | Evidence and sign-off | Platform Team | - | - | Pending execution
 ```
 
+### Phase 4
+```text
+🔄 4.7 | Add robot audit columns on all_service_data | Platform Team | 2026-06-22 | - | Migration drafted in supabase/migrations/20260622123000_all_service_data_add_updated_by_robot_columns.sql
+⏳ 4.8 | Validate boolean input variants + timestamp behavior | Platform Team | - | - | Pending DB apply + checks
+```
+
 ### Phase 5 (Fuel / Powertrain Workflow)
 ```text
 ✅ 5.1 | Add granular powertrain derivation + trigger sync | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621100000_all_service_data_powertrain_type_granularity.sql
@@ -698,6 +728,16 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-22 - Requested follow-up for robot audit columns
+
+- Request accepted to add two columns in `public.all_service_data`:
+  - `updated_by_robot` (boolean)
+  - `updated_by_robot_at` (timestamptz)
+- Input compatibility clarified for `updated_by_robot`:
+  - PostgreSQL accepts `TRUE/FALSE`, `T/F`, `YES/NO`, `ON/OFF`, `1/0`.
+- Migration created:
+  - `supabase/migrations/20260622123000_all_service_data_add_updated_by_robot_columns.sql`
 
 ### 2026-06-21 - Requested follow-up for derived next-service columns
 
@@ -1066,6 +1106,7 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/sql_checks/20260621144000_all_service_data_dynamic_priority_score_add_vehicle_sale_date_checks.sql`
 - `supabase/migrations/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date.sql`
 - `supabase/sql_checks/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date_checks.sql`
+- `supabase/migrations/20260622123000_all_service_data_add_updated_by_robot_columns.sql`
 
 ---
 
