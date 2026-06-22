@@ -554,7 +554,7 @@ export default function JobCardEstimateScreen() {
         user?.user_metadata?.dealer_code ?? user?.app_metadata?.dealer_code ?? 'unknown'
       ).trim() || 'unknown'
 
-      const storagePath = `${dealerCode}/${jobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
+      const storagePath = `${dealerCode}/${effectiveJobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
 
       // ── Step 4: Get signed upload URL ───────────────────────────────────────
       const { data: signedData, error: signedErr } = await supabase.storage
@@ -598,12 +598,12 @@ export default function JobCardEstimateScreen() {
           await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ jobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
+            body: JSON.stringify({ jobCardId: effectiveJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
           })
 
           // ── Step 7: Universal Drive Upload (background) ─────────────────────
           void invokeUniversalDriveUpload({
-            jobCardId,
+            jobCardId: effectiveJobCardId,
             fileType: 'excel_estimate',
             storagePath,
             fileSizeMb: sizeMb,

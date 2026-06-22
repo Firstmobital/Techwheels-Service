@@ -189,6 +189,9 @@ export default function SubmitStageScreen() {
     return map
   }, [documents])
 
+  // Always use the resolved UUID for DB/storage operations (jobCardId from URL may be a JC number)
+  const resolvedJobCardId = (jobCard?.job_card_id ?? jobCardId) as string
+
   const prePptDoc = docsByType.get('ppt_pre')
   const postPptDoc = docsByType.get('ppt_post')
   const excelDoc = docsByType.get('excel_estimate')
@@ -301,7 +304,7 @@ export default function SubmitStageScreen() {
       const { data: sessionRes } = await supabase.auth.getSession()
       const user = sessionRes.session?.user
       const dealerCode = String(user?.user_metadata?.dealer_code ?? user?.app_metadata?.dealer_code ?? 'unknown').trim() || 'unknown'
-      const storagePath = `${dealerCode}/${jobCardId}/documents/${docType}/${Date.now()}-${fileName}`
+      const storagePath = `${dealerCode}/${resolvedJobCardId}/documents/${docType}/${Date.now()}-${fileName}`
 
       // Get signed upload URL
       const { data: signedData, error: signedErr } = await supabase.storage
@@ -333,9 +336,9 @@ export default function SubmitStageScreen() {
         await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ jobCardId, docType, storagePath, fileSizeMb: sizeMb }),
+          body: JSON.stringify({ jobCardId: resolvedJobCardId, docType, storagePath, fileSizeMb: sizeMb }),
         }).catch(() => {})
-        void invokeUniversalDriveUpload({ jobCardId, fileType: docType, storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
+        void invokeUniversalDriveUpload({ jobCardId: resolvedJobCardId, fileType: docType, storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
           .catch((e) => console.warn('[submit-ppt] Drive offload failed:', e?.message))
       }
       void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
@@ -366,7 +369,7 @@ export default function SubmitStageScreen() {
       const { data: sessionRes } = await supabase.auth.getSession()
       const user = sessionRes.session?.user
       const dealerCode = String(user?.user_metadata?.dealer_code ?? user?.app_metadata?.dealer_code ?? 'unknown').trim() || 'unknown'
-      const storagePath = `${dealerCode}/${jobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
+      const storagePath = `${dealerCode}/${resolvedJobCardId}/documents/excel_estimate/${Date.now()}-${fileName}`
 
       // Get signed upload URL
       const { data: signedData, error: signedErr } = await supabase.storage
@@ -399,9 +402,9 @@ export default function SubmitStageScreen() {
         await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ jobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
+          body: JSON.stringify({ jobCardId: resolvedJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
         }).catch(() => {})
-        void invokeUniversalDriveUpload({ jobCardId, fileType: 'excel_estimate', storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
+        void invokeUniversalDriveUpload({ jobCardId: resolvedJobCardId, fileType: 'excel_estimate', storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
           .catch((e) => console.warn('[submit-export] Drive offload failed:', e?.message))
       }
       void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
