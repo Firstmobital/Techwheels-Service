@@ -33,6 +33,9 @@ The implementation avoids views and avoids periodic refresh jobs. It provides de
 7. Add robot-audit columns in `public.all_service_data`:
   - `updated_by_robot` (boolean)
   - `updated_by_robot_at` (timestamp with time zone)
+8. Add robot-audit projection columns in `public.all_service_data_dynamic` sourced from `public.all_service_data`:
+  - `updated_by_robot` (boolean)
+  - `updated_by_robot_at` (timestamp with time zone)
 
 ---
 
@@ -187,6 +190,8 @@ Key delivery rule:
 - [ ] **Task 2.2:** Create trigger function `public.sync_all_service_data_dynamic()` for `INSERT/UPDATE/DELETE`.
 - [ ] **Task 2.3:** Create trigger `trg_sync_all_service_data_dynamic` on `public.all_service_data`.
 - [ ] **Task 2.4:** Verify idempotence and re-runnable deployment behavior.
+- [ ] **Task 2.8:** Add `updated_by_robot` and `updated_by_robot_at` columns to `public.all_service_data_dynamic`.
+- [ ] **Task 2.9:** Update `public.sync_all_service_data_dynamic()` and backfill path to project robot-audit fields from `public.all_service_data`.
 
 ### Phase 3: Validation, Monitoring, and Handover
 - [ ] **Task 3.1:** Validate row counts and row-level parity with source-side predicate query.
@@ -216,6 +221,9 @@ Key delivery rule:
   - `updated_by_robot boolean`
   - `updated_by_robot_at timestamptz`
 - [ ] **Task 4.8:** Document boolean input compatibility for robot flag (`TRUE/FALSE`, `T/F`, `YES/NO`, `1/0`) and timestamp-write expectations.
+- [ ] **Task 4.9:** Add reusable temp backfill script for PV/EV -> `all_service_data` with idempotent column guards.
+- [ ] **Task 4.10:** Add `engine_no` and `scheduled_next_service_type` target columns (created only if missing).
+- [ ] **Task 4.11:** Lock final source-to-target remap contract for temp backfill execution.
 
 ### Robot Update Audit Columns (`all_service_data`)
 
@@ -233,6 +241,54 @@ Operational expectation:
 - Set `updated_by_robot = true` only when an automated process mutates a row.
 - Set `updated_by_robot_at` to the write timestamp for the same robot-driven mutation.
 - For non-robot/manual writes, keep `updated_by_robot = false` (or `NULL` if not asserted) and `updated_by_robot_at = NULL`.
+
+### Temporary Backfill Script Contract (PV/EV -> `all_service_data`)
+
+Execution mode:
+
+- Use a reusable script (manual run any time) instead of one-shot migration-only execution.
+- Script must create missing target columns only once via `ADD COLUMN IF NOT EXISTS`.
+
+Primary artifact:
+
+- `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql`
+
+Schema guard behavior inside script:
+
+- Ensures columns exist in `public.all_service_data`:
+  - `updated_by_robot`
+  - `updated_by_robot_at`
+  - `engine_no`
+  - `scheduled_next_service_type`
+
+Final source-to-target mapping (approved):
+
+- `registration_no -> vehicle_registration_number`
+- `product_name -> model`
+- `vehicle_type -> product_line`
+- `resale_date -> vehicle_sale_date`
+- `warranty_expiry_date -> extended_warranty_end_date`
+- `engine_no -> engine_no` (PV source; EV contributes `NULL`)
+- `next_service_date -> scheduled_next_service_date`
+- `next_service_type -> scheduled_next_service_type`
+- `last_service_date -> last_service_date`
+- `last_service_km -> last_service_km`
+- `dealer -> last_service_dealer`
+- `first_name -> first_name`
+- `contact_phones -> contact_phones`
+- `created_at -> updated_by_robot_at`
+- constant `true -> updated_by_robot`
+- `now() -> last_updated_at`
+
+Matching and dedupe contract:
+
+- Match by normalized `chassis_no` (`upper(btrim(...))`) from source to target.
+- If same chassis exists in both PV and EV sources, pick latest `created_at` (`NULLS LAST`, deterministic source tiebreak).
+
+Safety contract:
+
+- Data update runs only when any mapped target field would change (`IS DISTINCT FROM` checks).
+- Safe to rerun repeatedly; schema and data operations are idempotent by design.
 
 ### Phase 4 Calculation Logic (Approved for `assumed_next_service_date`)
 
@@ -285,6 +341,8 @@ Dynamic table extension (new required columns):
   - `assumed_next_service_date`
   - `assumed_next_service_type`
   - `sold_dealer`
+  - `updated_by_robot`
+  - `updated_by_robot_at`
 - Ensure `public.all_service_data_dynamic` includes derived column:
   - `fuel_tp` (`EV` if `product_line` contains `EV` case-insensitive, else `PV`)
 - Source: `public.all_service_data`.
@@ -645,6 +703,8 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ✅ 2.5 | Add deterministic dynamic fuel_tp column | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621123000_all_service_data_dynamic_add_fuel_tp.sql
 ✅ 2.6 | Add dynamic sold_dealer source projection | Platform Team | 2026-06-21 | 2026-06-21 | Implemented and verified via supabase/migrations/20260621140000_all_service_data_dynamic_add_sold_dealer.sql + supabase/sql_checks/20260621140000_all_service_data_dynamic_add_sold_dealer_checks.sql
 ✅ 2.7 | Add dynamic vehicle_sale_date source projection | Platform Team | 2026-06-21 | 2026-06-21 | Implemented via supabase/migrations/20260621143000_all_service_data_dynamic_add_vehicle_sale_date.sql + supabase/sql_checks/20260621143000_all_service_data_dynamic_add_vehicle_sale_date_checks.sql
+⏳ 2.8 | Add dynamic robot-audit columns | Platform Team | - | - | Pending migration to add updated_by_robot and updated_by_robot_at on all_service_data_dynamic
+⏳ 2.9 | Project robot-audit fields in realtime sync + backfill | Platform Team | - | - | Pending sync function update and one-time dynamic-table backfill
 ```
 
 ### Phase 3
@@ -659,6 +719,9 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ```text
 🔄 4.7 | Add robot audit columns on all_service_data | Platform Team | 2026-06-22 | - | Migration drafted in supabase/migrations/20260622123000_all_service_data_add_updated_by_robot_columns.sql
 ⏳ 4.8 | Validate boolean input variants + timestamp behavior | Platform Team | - | - | Pending DB apply + checks
+✅ 4.9 | Add reusable temp backfill script (PV/EV -> all_service_data) | Platform Team | 2026-06-22 | 2026-06-22 | Implemented via scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql
+✅ 4.10 | Add guarded target columns for remap | Platform Team | 2026-06-22 | 2026-06-22 | Implemented via supabase/migrations/20260622131000_all_service_data_add_engine_no_and_scheduled_next_service_type.sql and script-level IF NOT EXISTS guards
+✅ 4.11 | Lock final remap contract | Platform Team | 2026-06-22 | 2026-06-22 | Mapping finalized in script and checks artifacts
 ```
 
 ### Phase 5 (Fuel / Powertrain Workflow)
@@ -728,6 +791,31 @@ EXECUTE FUNCTION public.sync_all_service_data_dynamic();
 ---
 
 ## Execution Notes
+
+### 2026-06-22 - New requirement: robot-audit projection on dynamic table
+
+- Requirement accepted to add robot-audit projection columns in `public.all_service_data_dynamic`:
+  - `updated_by_robot`
+  - `updated_by_robot_at`
+- Source of truth remains `public.all_service_data`; dynamic table must project these fields in both:
+  - realtime trigger path (`public.sync_all_service_data_dynamic()`)
+  - initial/backfill load path
+- Status: documented and queued under Phase 2 tasks `2.8` and `2.9`.
+
+### 2026-06-22 - Reusable temp backfill script finalized (PV/EV -> `all_service_data`)
+
+- Execution mode updated from migration-only to reusable script runbook for temporary operations.
+- Final script created:
+  - `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql`
+- Script behavior:
+  - creates missing target columns only once (`IF NOT EXISTS`)
+  - updates mapped fields by normalized `chassis_no`
+  - sets `updated_by_robot=true`, `updated_by_robot_at=source.created_at`
+  - updates only changed rows (`IS DISTINCT FROM` contract)
+- Supporting artifacts retained:
+  - `supabase/migrations/20260622131000_all_service_data_add_engine_no_and_scheduled_next_service_type.sql`
+  - `supabase/migrations/20260622124500_one_time_backfill_all_service_data_from_pv_ev_vehicle_data.sql`
+  - `supabase/sql_checks/20260622124500_one_time_backfill_all_service_data_from_pv_ev_vehicle_data_checks.sql`
 
 ### 2026-06-22 - Requested follow-up for robot audit columns
 
@@ -1107,8 +1195,12 @@ DROP TABLE IF EXISTS public.all_service_data_dynamic;
 - `supabase/migrations/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date.sql`
 - `supabase/sql_checks/20260621150000_all_service_data_dynamic_priority_score_exact_vehicle_sale_date_checks.sql`
 - `supabase/migrations/20260622123000_all_service_data_add_updated_by_robot_columns.sql`
+- `supabase/migrations/20260622131000_all_service_data_add_engine_no_and_scheduled_next_service_type.sql`
+- `supabase/migrations/20260622124500_one_time_backfill_all_service_data_from_pv_ev_vehicle_data.sql`
+- `supabase/sql_checks/20260622124500_one_time_backfill_all_service_data_from_pv_ev_vehicle_data_checks.sql`
+- `scripts/20260622_reusable_backfill_all_service_data_from_pv_ev.sql`
 
 ---
 
-**Last Updated:** 2026-06-21 by GitHub Copilot  
+**Last Updated:** 2026-06-22 by GitHub Copilot  
 **Status:** 🟡 IN PROGRESS

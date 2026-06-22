@@ -54,12 +54,17 @@ WITH source_union AS (
     upper(btrim(chassis_no)) AS chassis_key,
     registration_no,
     product_name,
+    vehicle_type,
+    resale_date,
+    warranty_expiry_date,
+    NULL::text AS engine_no,
     last_service_date,
     last_service_km,
     dealer,
     first_name,
     contact_phones,
     next_service_date,
+    next_service_type,
     created_at,
     'EV'::text AS source_name
   FROM public."EV_Vehicle_Data"
@@ -71,12 +76,17 @@ WITH source_union AS (
     upper(btrim(chassis_no)) AS chassis_key,
     registration_no,
     product_name,
+    vehicle_type,
+    resale_date,
+    warranty_expiry_date,
+    engine_no,
     last_service_date,
     last_service_km,
     dealer,
     first_name,
     contact_phones,
     next_service_date,
+    next_service_type,
     created_at,
     'PV'::text AS source_name
   FROM public."PV_Vehicle_Data"
@@ -87,12 +97,17 @@ source_dedup AS (
     x.chassis_key,
     x.registration_no,
     x.product_name,
+    x.vehicle_type,
+    x.resale_date,
+    x.warranty_expiry_date,
+    x.engine_no,
     x.last_service_date,
     x.last_service_km,
     x.dealer,
     x.first_name,
     x.contact_phones,
     x.next_service_date,
+    x.next_service_type,
     x.created_at
   FROM (
     SELECT
@@ -112,13 +127,18 @@ JOIN source_dedup s
   ON upper(btrim(t.chassis_no)) = s.chassis_key
 WHERE
   t.vehicle_registration_number IS DISTINCT FROM COALESCE(s.registration_no, t.vehicle_registration_number)
-  OR t.product_line IS DISTINCT FROM COALESCE(s.product_name, t.product_line)
+  OR t.model IS DISTINCT FROM COALESCE(s.product_name, t.model)
+  OR t.product_line IS DISTINCT FROM COALESCE(s.vehicle_type, t.product_line)
+  OR t.vehicle_sale_date IS DISTINCT FROM COALESCE(s.resale_date, t.vehicle_sale_date)
+  OR t.extended_warranty_end_date IS DISTINCT FROM COALESCE(s.warranty_expiry_date, t.extended_warranty_end_date)
+  OR t.engine_no IS DISTINCT FROM COALESCE(s.engine_no, t.engine_no)
   OR t.last_service_date IS DISTINCT FROM COALESCE(s.last_service_date, t.last_service_date)
   OR t.last_service_km IS DISTINCT FROM COALESCE(s.last_service_km, t.last_service_km)
   OR t.last_service_dealer IS DISTINCT FROM COALESCE(s.dealer, t.last_service_dealer)
   OR t.first_name IS DISTINCT FROM COALESCE(s.first_name, t.first_name)
   OR t.contact_phones IS DISTINCT FROM COALESCE(s.contact_phones, t.contact_phones)
   OR t.scheduled_next_service_date IS DISTINCT FROM COALESCE(s.next_service_date, t.scheduled_next_service_date)
+  OR t.scheduled_next_service_type IS DISTINCT FROM COALESCE(s.next_service_type, t.scheduled_next_service_type)
   OR t.updated_by_robot IS DISTINCT FROM true
   OR t.updated_by_robot_at IS DISTINCT FROM s.created_at;
 
@@ -161,7 +181,12 @@ SELECT
   t.id,
   t.chassis_no,
   t.vehicle_registration_number,
+  t.model,
   t.product_line,
+  t.vehicle_sale_date,
+  t.extended_warranty_end_date,
+  t.engine_no,
+  t.scheduled_next_service_type,
   t.updated_by_robot,
   t.updated_by_robot_at,
   t.last_updated_at
