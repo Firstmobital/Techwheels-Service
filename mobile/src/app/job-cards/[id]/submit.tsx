@@ -26,7 +26,7 @@ import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 import { getSupabaseBaseUrl } from '../../../lib/env'
 import type { DocumentRow } from '../../../lib/api/types'
 import { generateRepairPPT } from '../../../lib/generators/generatePPT'
-import { generateEstimateCsv } from '../../../lib/generators/generateEstimateCsv'
+import { generateEstimateCsvString } from '../../../lib/generators/generateEstimateCsv'
 import {
   generateClaimEmailContent,
   sendClaimEmail,
