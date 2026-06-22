@@ -260,7 +260,6 @@ export async function uploadDocumentFileFromUri(input: {
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       headers: {
         'Content-Type': mimeType,
-        'x-upsert': 'false',
       },
     })
   } catch (uploadErr) {
@@ -268,7 +267,11 @@ export async function uploadDocumentFileFromUri(input: {
   }
 
   if (uploadResult.status < 200 || uploadResult.status >= 300) {
-    return fail(`Storage upload failed with status ${uploadResult.status}`)
+    console.error('[uploadDocumentFileFromUri] uploadAsync failed', {
+      status: uploadResult.status,
+      body: uploadResult.body?.slice?.(0, 300),
+    })
+    return fail(`Storage upload failed HTTP ${uploadResult.status}: ${uploadResult.body?.slice?.(0, 200) ?? 'unknown error'}`)
   }
 
   // Get file size if not provided
