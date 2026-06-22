@@ -361,10 +361,11 @@ export async function getAutoDocLookupOptions(): Promise<ApiResult<AutoDocLookup
     if (value) cityCategorySet.add(value)
   })
 
+  const EXCLUDED_PAINT_TYPES = new Set(['KJDNVKS', 'RUSTING', 'kjdnvks', 'rusting'])
   ;((vehiclesRes.data ?? []) as Array<{ paint_type: string | null; year: number | null }>).forEach((row) => {
     const paintType = row.paint_type?.trim()
 
-    if (paintType) paintTypeSet.add(paintType)
+    if (paintType && !EXCLUDED_PAINT_TYPES.has(paintType) && !EXCLUDED_PAINT_TYPES.has(paintType.toUpperCase())) paintTypeSet.add(paintType)
     if (typeof row.year === 'number' && Number.isFinite(row.year)) {
       yearSet.add(String(row.year))
     }

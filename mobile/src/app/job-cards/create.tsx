@@ -25,7 +25,7 @@ import { Icon, PrimaryButton, SecondaryButton } from '../../components/ui'
 import { uploadDocumentFileFromUri } from '../../lib/api/documents'
 import { createJobCard, updateJobCard, updateJobCardStatus, resolveRegNumberFromReference } from '../../lib/api/jobCards'
 import { getAutoDocLookupOptions } from '../../lib/api/autodocRates'
-import { fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
+import { fetchChassisFromMaster, fetchVehicleByReg, upsertVehicle } from '../../lib/api/vehicles'
 import { fetchReceptionPrefillByReg } from '../../lib/api/receptionPrefill'
 import { fetchVehicleFromRcLookup, type RtoCacheLookupRow } from '../../lib/api/rcLookup'
 import { getMobileLocation } from '../../utils/locationService'
@@ -894,6 +894,18 @@ export default function CreateJobCardScreen() {
         }
       }
 
+      // ── Resolve full chassis from master data (RC API returns masked VIN) ──────
+      try {
+        const fullChassis = await fetchChassisFromMaster(resolvedReg)
+        if (fullChassis) {
+          setForm((prev) => ({ ...prev, vin: fullChassis }))
+          console.log('[CREATE] Full chassis resolved from master:', fullChassis)
+        }
+      } catch (e) {
+        console.warn('[CREATE] fetchChassisFromMaster failed:', e)
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       if (prefillApplied) {
         const merged = {
           ...form,
@@ -966,6 +978,11 @@ export default function CreateJobCardScreen() {
 
   const onCreate = async () => {
     if (!canSubmit) return
+
+    if (!form.vin.trim()) {
+      Alert.alert('Missing Chassis No.', 'Enter the full VIN / Chassis number before creating the job card.')
+      return
+    }
 
     if (!form.paintType.trim()) {
       Alert.alert('Missing Paint Type', 'Select paint type before creating the job card.')
@@ -1266,7 +1283,7 @@ export default function CreateJobCardScreen() {
           <View style={S.card}>
             <Text style={S.sectionLabel}>VEHICLE DETAILS</Text>
 
-            <Text style={S.fieldLabel}>VIN / Chassis no.</Text>
+            <Text style={S.fieldLabel}>VIN / Chassis no. <Text style={S.required}>*</Text></Text>
             <TextInput
               value={form.vin}
               onChangeText={(value) => setForm((prev) => ({ ...prev, vin: value }))}
@@ -1275,28 +1292,29 @@ export default function CreateJobCardScreen() {
               style={S.input}
             />
 
-            <Text style={S.fieldLabel}>Model</Text>
-            <ModelChipSelector
+            <Text style={S.fieldLabel}>Model <Text style={S.required}>*</Text></Text>
+            <NativeSelectField
               value={form.model}
+              placeholder="Select model"
               options={modelChipOptions}
               onChange={(value) => setForm((prev) => ({ ...prev, model: value }))}
             />
 
-            <View style={S.twoCol}>
-              <View style={S.colHalf}>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+              <View style={{ flex: 1 }}>
                 <Text style={S.fieldLabel}>Year</Text>
                 <NativeSelectField
                   value={form.year}
-                  placeholder="Select year"
+                  placeholder="Year"
                   options={yearOptions}
                   onChange={(value) => setForm((prev) => ({ ...prev, year: value }))}
                 />
               </View>
-              <View style={S.colHalf}>
+              <View style={{ flex: 1 }}>
                 <Text style={S.fieldLabel}>Colour</Text>
                 <NativeSelectField
                   value={form.colour}
-                  placeholder="Select colour"
+                  placeholder="Colour"
                   options={colourOptions}
                   onChange={(value) => setForm((prev) => ({ ...prev, colour: value }))}
                 />
@@ -1325,7 +1343,7 @@ export default function CreateJobCardScreen() {
               <Text style={S.ageingUnit}>days</Text>
             </View>
 
-            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Owner name</Text>
+            <Text style={[S.fieldLabel, { marginTop: 12 }]}>Owner name <Text style={S.required}>*</Text></Text>
             <TextInput
               value={form.ownerName}
               onChangeText={(value) => setForm((prev) => ({ ...prev, ownerName: value }))}
@@ -1430,6 +1448,11 @@ export default function CreateJobCardScreen() {
                 onPress={async () => {
                   if (!form.jcNumber.trim()) {
                     Alert.alert('Missing Job Card Number', 'Enter final Job Card Number before continuing to damage stage.')
+                    return
+                  }
+
+                  if (!form.vin.trim()) {
+                    Alert.alert('Missing Chassis No.', 'Enter the full VIN / Chassis number before continuing.')
                     return
                   }
 

@@ -31,10 +31,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#ffffff',
     overflow: 'hidden',
+    minHeight: 48,
+    justifyContent: 'center',
   },
   picker: {
-    height: 42,
+    height: 52,
     color: '#111827',
+    fontSize: 14,
   },
   touchable: {
     borderWidth: 1,

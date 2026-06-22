@@ -85,3 +85,40 @@ export async function upsertVehicle(input: VehicleUpsertInput): Promise<ApiResul
   if (error) return fail(error)
   return ok(data)
 }
+
+/** Fetch full chassis no from all_service_data master table */
+export async function fetchChassisFromMaster(regNumber: string): Promise<string | null> {
+  const normalized = normalizeRegNumber(regNumber)
+  if (!normalized) return null
+
+  const { data } = await supabase
+    .from('all_service_data')
+    .select('chassis_no')
+    .eq('vehicle_registration_number', normalized)
+    .not('chassis_no', 'is', null)
+    .not('chassis_no', 'like', '%REGNO:%')
+    .order('created_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const chassis = (data as any)?.chassis_no?.toString().trim()
+  if (chassis && chassis.length >= 10 && !chassis.includes('*')) return chassis
+
+  // Try with raw upper case
+  const rawUpper = regNumber.trim().toUpperCase()
+  if (rawUpper !== normalized) {
+    const { data: d2 } = await supabase
+      .from('all_service_data')
+      .select('chassis_no')
+      .eq('vehicle_registration_number', rawUpper)
+      .not('chassis_no', 'is', null)
+      .not('chassis_no', 'like', '%REGNO:%')
+      .order('created_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const c2 = (d2 as any)?.chassis_no?.toString().trim()
+    if (c2 && c2.length >= 10 && !c2.includes('*')) return c2
+  }
+
+  return null
+}
