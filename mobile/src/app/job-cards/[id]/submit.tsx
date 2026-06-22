@@ -18,6 +18,7 @@ import { listPanelPhotos } from '../../../lib/api/photos'
 import { listPanels } from '../../../lib/api/panels'
 import * as FileSystem from 'expo-file-system/legacy'
 import {
+  addDocument,
   listDocuments,
   invokeUniversalDriveUpload,
 } from '../../../lib/api/documents'
@@ -97,6 +98,9 @@ export default function SubmitStageScreen() {
   const [selectedPanelIds, setSelectedPanelIds] = useState<string[]>([])
   const [underRepairPanelIds, setUnderRepairPanelIds] = useState<string[]>([])
   const [postRepairPanelIds, setPostRepairPanelIds] = useState<string[]>([])
+  // Local override: set to true immediately after successful upload so UI reacts instantly
+  const [localExcelUploaded, setLocalExcelUploaded] = useState(false)
+  const [localPrePptUploaded, setLocalPrePptUploaded] = useState(false)
 
   const loadSubmitData = async () => {
     if (!jobCardId) {
@@ -198,7 +202,7 @@ export default function SubmitStageScreen() {
   const walkaroundDoc = docsByType.get('video_job_card')
   const deliveryDoc = docsByType.get('video_delivery')
 
-  const composeReady = Boolean(prePptDoc && excelDoc && walkaroundDoc)
+  const composeReady = Boolean((prePptDoc || localPrePptUploaded) && (excelDoc || localExcelUploaded) && walkaroundDoc)
   const submitReady = Boolean(postPptDoc)
   const underRepairReady = useMemo(() => {
     if (selectedPanelIds.length === 0) return false
@@ -237,8 +241,8 @@ export default function SubmitStageScreen() {
     { label: 'Pre-repair photos', ok: preRepairPhotoCount > 0, val: `${preRepairPhotoCount} captured` },
     { label: 'Post-repair photos', ok: postRepairPhotoCount > 0, val: postRepairPhotoCount > 0 ? `${postRepairPhotoCount} captured` : 'Missing' },
     { label: 'Estimate rows', ok: estimateRowsCount > 0, val: `${estimateRowsCount} panels` },
-    { label: 'Pre-Repair PPT', ok: !!prePptDoc, val: prePptDoc ? 'Uploaded' : 'Missing' },
-    { label: 'Estimate Excel', ok: !!excelDoc, val: excelDoc ? 'Uploaded' : 'Missing' },
+    { label: 'Pre-Repair PPT', ok: !!(prePptDoc || localPrePptUploaded), val: (prePptDoc || localPrePptUploaded) ? 'Uploaded' : 'Missing' },
+    { label: 'Estimate Excel', ok: !!(excelDoc || localExcelUploaded), val: (excelDoc || localExcelUploaded) ? 'Uploaded' : 'Missing' },
     { label: 'Walkaround video', ok: !!walkaroundDoc, val: walkaroundDoc ? 'Uploaded' : 'Missing' },
     { label: 'Post-Repair PPT', ok: !!postPptDoc, val: postPptDoc ? 'Uploaded' : 'Missing' },
   ]), [estimateRowsCount, excelDoc, postPptDoc, postRepairPhotoCount, prePptDoc, preRepairPhotoCount, walkaroundDoc])
@@ -328,21 +332,35 @@ export default function SubmitStageScreen() {
       }
       if (!uploadOk) throw new Error('Upload failed after retries. Check your internet connection.')
 
-      // Register + drive offload
-      const supabaseUrl = getSupabaseBaseUrl()
-      const token = sessionRes.session?.access_token
-      if (supabaseUrl && token) {
-        const sizeMb = Number(arrayBuffer.byteLength / (1024 * 1024))
-        await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ jobCardId: resolvedJobCardId, docType, storagePath, fileSizeMb: sizeMb }),
-        }).catch(() => {})
-        void invokeUniversalDriveUpload({ jobCardId: resolvedJobCardId, fileType: docType, storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
-          .catch((e) => console.warn('[submit-ppt] Drive offload failed:', e?.message))
-      }
+      // Register document in DB (edge function first, fallback to direct client insert)
+      const sizeMb = Number(arrayBuffer.byteLength / (1024 * 1024))
       void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
 
+      const supabaseUrl = getSupabaseBaseUrl()
+      const token = sessionRes.session?.access_token
+      let dbRegistered = false
+      if (supabaseUrl && token) {
+        try {
+          const upsertRes = await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ jobCardId: resolvedJobCardId, docType, storagePath, fileSizeMb: sizeMb }),
+          })
+          if (upsertRes.ok) dbRegistered = true
+        } catch (e) {
+          console.warn('[submit-ppt] Edge function failed, will use direct insert:', e)
+        }
+      }
+      if (!dbRegistered) {
+        const insertRes = await addDocument({ jobCardId: resolvedJobCardId, docType, storagePath, fileSizeMb: sizeMb })
+        if (!insertRes.error) dbRegistered = true
+        else console.warn('[submit-ppt] Direct insert failed:', insertRes.error)
+      }
+      void invokeUniversalDriveUpload({ jobCardId: resolvedJobCardId, fileType: docType, storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
+        .catch((e) => console.warn('[submit-ppt] Drive offload failed:', e?.message))
+
+      // Mark locally so checklist shows Uploaded immediately
+      if (type === 'pre-repair') setLocalPrePptUploaded(true)
       Alert.alert('Generated', `${type === 'pre-repair' ? 'Pre-repair' : 'Post-repair'} PPT generated and uploaded.`)
       await loadSubmitData()
     } catch (err: any) {
@@ -393,22 +411,37 @@ export default function SubmitStageScreen() {
       }
       if (!uploadOk) throw new Error('Upload failed after retries. Check your internet connection.')
 
-      // Register document + drive upload
-      const supabaseUrl = getSupabaseBaseUrl()
-      const token = sessionRes.session?.access_token
-      if (supabaseUrl && token) {
-        const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true }).catch(() => ({} as any))
-        const sizeMb = Number(((fileInfo as any).size ?? 0) / (1024 * 1024))
-        await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ jobCardId: resolvedJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
-        }).catch(() => {})
-        void invokeUniversalDriveUpload({ jobCardId: resolvedJobCardId, fileType: 'excel_estimate', storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
-          .catch((e) => console.warn('[submit-export] Drive offload failed:', e?.message))
-      }
+      // Register document in DB (try edge function first, fallback to direct client insert)
+      const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true }).catch(() => ({} as any))
+      const sizeMb = Number(((fileInfo as any).size ?? 0) / (1024 * 1024))
       void FileSystem.deleteAsync(tmpUri, { idempotent: true }).catch(() => {})
 
+      const supabaseUrl = getSupabaseBaseUrl()
+      const token = sessionRes.session?.access_token
+      let dbRegistered = false
+      if (supabaseUrl && token) {
+        try {
+          const upsertRes = await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ jobCardId: resolvedJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
+          })
+          if (upsertRes.ok) dbRegistered = true
+        } catch (e) {
+          console.warn('[submit-export] Edge function failed, will use direct insert:', e)
+        }
+      }
+      if (!dbRegistered) {
+        // Fallback: direct client insert (resolves UUID internally)
+        const insertRes = await addDocument({ jobCardId: resolvedJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb })
+        if (!insertRes.error) dbRegistered = true
+        else console.warn('[submit-export] Direct insert failed:', insertRes.error)
+      }
+      void invokeUniversalDriveUpload({ jobCardId: resolvedJobCardId, fileType: 'excel_estimate', storagePath, fileSizeMb: sizeMb, resourceType: 'document', bucketId: AUTODOC_BUCKET })
+        .catch((e) => console.warn('[submit-export] Drive offload failed:', e?.message))
+
+      // Mark locally so checklist shows Uploaded immediately even before DB refresh
+      setLocalExcelUploaded(true)
       Alert.alert('Generated', 'Estimate Excel generated and uploaded.')
       await loadSubmitData()
     } catch (err: any) {
@@ -635,7 +668,7 @@ export default function SubmitStageScreen() {
                     borderRadius: 16,
                     borderWidth: 1,
                     borderColor: '#a7dec4',
-                    backgroundColor: prePptDoc ? '#d9eee4' : '#e9f0fd',
+                    backgroundColor: (prePptDoc || localPrePptUploaded) ? '#d9eee4' : '#e9f0fd',
                     paddingHorizontal: 14,
                     paddingVertical: 14,
                     flexDirection: 'row',
@@ -651,7 +684,7 @@ export default function SubmitStageScreen() {
                     </View>
                     <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>Generate Pre-Repair PPT</Text>
                   </View>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1c8f63' }}>{busy === 'pre-ppt' ? 'Working...' : (prePptDoc ? 'Uploaded' : 'Required')}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1c8f63' }}>{busy === 'pre-ppt' ? 'Working...' : ((prePptDoc || localPrePptUploaded) ? 'Uploaded' : 'Required')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -659,7 +692,7 @@ export default function SubmitStageScreen() {
                     borderRadius: 16,
                     borderWidth: 1,
                     borderColor: '#a7dec4',
-                    backgroundColor: excelDoc ? '#d9eee4' : '#e9f0fd',
+                    backgroundColor: (excelDoc || localExcelUploaded) ? '#d9eee4' : '#e9f0fd',
                     paddingHorizontal: 14,
                     paddingVertical: 14,
                     flexDirection: 'row',
@@ -675,7 +708,7 @@ export default function SubmitStageScreen() {
                     </View>
                     <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1b21', flexShrink: 1 }}>Export Estimate Excel</Text>
                   </View>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1c8f63' }}>{busy === 'excel' ? 'Working...' : (excelDoc ? 'Uploaded' : 'Required')}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1c8f63' }}>{busy === 'excel' ? 'Working...' : ((excelDoc || localExcelUploaded) ? 'Uploaded' : 'Required')}</Text>
                 </TouchableOpacity>
 
                 {!preSubmitSubmitted ? (

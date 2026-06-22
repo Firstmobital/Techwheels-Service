@@ -23,7 +23,7 @@ import { getActiveModelRates, getAutoDocWorkflowOptions, type ModelPanelRate } f
 import NativeSelectField from '../../../components/common/NativeSelectField'
 import { generateEstimateCsvString } from '../../../lib/generators/generateEstimateCsv'
 import * as FileSystem from 'expo-file-system/legacy'
-import { invokeUniversalDriveUpload } from '../../../lib/api/documents'
+import { addDocument, invokeUniversalDriveUpload } from '../../../lib/api/documents'
 import { supabase } from '../../../lib/supabase'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 import { getSupabaseBaseUrl } from '../../../lib/env'
@@ -595,11 +595,21 @@ export default function JobCardEstimateScreen() {
           const fileInfo = await FileSystem.getInfoAsync(tmpUri, { size: true })
           const sizeMb = Number(((fileInfo as any).size ?? 0) / (1024 * 1024))
 
-          await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ jobCardId: effectiveJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
-          })
+          let dbRegistered = false
+          try {
+            const upsertRes = await fetch(`${supabaseUrl}/functions/v1/document-link-upsert`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ jobCardId: effectiveJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb }),
+            })
+            if (upsertRes.ok) dbRegistered = true
+          } catch (e) {
+            console.warn('[estimate-export] Edge function failed, using direct insert:', e)
+          }
+          if (!dbRegistered) {
+            const insertRes = await addDocument({ jobCardId: effectiveJobCardId, docType: 'excel_estimate', storagePath, fileSizeMb: sizeMb })
+            if (insertRes.error) console.warn('[estimate-export] Direct insert also failed:', insertRes.error)
+          }
 
           // ── Step 7: Universal Drive Upload (background) ─────────────────────
           void invokeUniversalDriveUpload({
