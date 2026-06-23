@@ -304,17 +304,16 @@ export function generateClaimEmailContent(jobCard: {
 
 Greetings for the Day
 
-Vehicle reported in the workshop for ${issueDesc}. Post inspection ${claimType.toLowerCase()} observed on the ${panelList}. We have checked the issue. DIR & estimate and vehicle service history attached for reference. Vehicle is now out of warranty and falls between the ${ageCat} category. Need prior support on this case related to ${claimType.toLowerCase()}.
+Vehicle reported in the workshop for ${issueDesc}. Post inspection ${claimType.toLowerCase()} observed on the ${panelList}. we have checked heavy ${claimType.toLowerCase()} issue. DIR & estimate and vehicle service history attached for reference. Vehicle is now out of warranty and falls between the ${ageCat} category. Need prior support on this case related to ${claimType.toLowerCase()}.
 
 Vehicle detail mentioned below:-
-Chassis No.-        ${jobCard.vin ?? '—'}
-Vehicle No.-        ${jobCard.reg_number}
-Model:-              ${jobCard.model ?? '—'}
-K.m.:-               ${jobCard.km_reading != null ? jobCard.km_reading.toLocaleString('en-IN') + ' km' : '—'}
-Date Of Sale:-    ${fmtDate(jobCard.date_of_sale)}
+Chassis No.-       ${jobCard.vin ?? '—'}
+Vehicle No.-       ${jobCard.reg_number}
+Model:-             ${jobCard.model ?? '—'}
+K.m.:-                ${jobCard.km_reading != null ? jobCard.km_reading.toLocaleString('en-IN') + ' km' : '—'}
+Date Of Sale:-  ${fmtDate(jobCard.date_of_sale)}
 Recommended Estimated Amount : Rs ${amount} /-
-
-Estimates attached as per the warranty policy. Need your kind approval for the same.
+Estimates attached as per the warranty policy . Need your kind approval for the same.
 
 Regards,
 
@@ -348,7 +347,7 @@ JC No: ${jobCard.jc_number}`
       <!-- Description paragraph -->
       <p style="margin:0 0 20px 0;padding:14px 16px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:4px">
         Vehicle reported in the workshop for <strong>${issueDesc}</strong>. Post inspection <strong>${claimType.toLowerCase()}</strong> observed on the <strong>${panelList}</strong>.
-        We have checked the issue. DIR &amp; estimate and vehicle service history attached for reference.
+        We have checked heavy <strong>${claimType.toLowerCase()}</strong> issue. DIR &amp; estimate and vehicle service history attached for reference.
         Vehicle is now out of warranty and falls between the <strong>${ageCat}</strong> category.
         Need prior support on this case related to <strong>${claimType.toLowerCase()}</strong>.
       </p>

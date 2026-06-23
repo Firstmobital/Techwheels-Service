@@ -2816,7 +2816,7 @@ export default function AutoDocPage() {
       console.warn('Failed to recompute latest estimate amount for email:', err)
     }
 
-    // Fetch estimate rows for the parts table
+    // Fetch estimate rows (also used to derive unique panel names for email)
     let estimateRowsForEmail: Array<{sr_no:number;panel_name:string;part_number:string|null;part_description:string|null;defect:string|null;action:string|null;qty:number|null;ndp_value:number|null;paint_charges:number|null;labour_charges:number|null;row_total:number|null}> = []
     try {
       const { data: erRows } = await supabase
@@ -2826,6 +2826,15 @@ export default function AutoDocPage() {
         .order('sr_no', { ascending: true })
       if (erRows) estimateRowsForEmail = erRows as typeof estimateRowsForEmail
     } catch (e) { console.warn('estimate rows fetch', e) }
+
+    // Derive unique panel names from estimate rows (panel_names not in summary view)
+    let emailPanelNames: string[] | null = Array.from(
+      new Set(estimateRowsForEmail.map(r => r.panel_name).filter(Boolean))
+    )
+    // Fallback: try panels from local state
+    if (!emailPanelNames || emailPanelNames.length === 0) {
+      emailPanelNames = [...selectedPanels]
+    }
 
     const content = generateClaimEmailContent({
       jc_number:             (activeSummary.jc_number ?? form.jcNumber) || 'JC-NA',
@@ -2841,7 +2850,7 @@ export default function AutoDocPage() {
       warranty_age_days:     activeSummary.warranty_age_days ?? null,
       claim_type:            activeSummary.claim_type ?? null,
       complaint_text:        activeSummary.complaint_text ?? null,
-      panel_names:           (activeSummary as {panel_names?: string[]}).panel_names ?? null,
+      panel_names:           emailPanelNames.length > 0 ? emailPanelNames : null,
       total_estimate_amount: latestEstimateAmount,
       tml_share_percent:     activeSummary.tml_share_percent ?? null,
       estimate_rows:         estimateRowsForEmail,
@@ -2940,6 +2949,13 @@ export default function AutoDocPage() {
       if (subER) submitEstimateRows = subER as typeof submitEstimateRows
     } catch (e) { console.warn('estimate rows fetch submit', e) }
 
+    let submitPanelNames: string[] = Array.from(
+      new Set(submitEstimateRows.map(r => r.panel_name).filter(Boolean))
+    )
+    if (submitPanelNames.length === 0) {
+      submitPanelNames = [...selectedPanels]
+    }
+
     const content = generateClaimEmailContent({
       jc_number:             (activeSummary?.jc_number ?? form.jcNumber) || 'JC-NA',
       reg_number:            (activeSummary?.reg_number ?? form.regNumber) || 'REG-NA',
@@ -2954,7 +2970,7 @@ export default function AutoDocPage() {
       warranty_age_days:     activeSummary?.warranty_age_days ?? null,
       claim_type:            activeSummary?.claim_type ?? null,
       complaint_text:        activeSummary?.complaint_text ?? null,
-      panel_names:           (activeSummary as {panel_names?: string[]} | null)?.panel_names ?? null,
+      panel_names:           submitPanelNames.length > 0 ? submitPanelNames : null,
       total_estimate_amount: activeSummary?.total_estimate_amount ?? null,
       tml_share_percent:     activeSummary?.tml_share_percent ?? null,
       estimate_rows:         submitEstimateRows,
