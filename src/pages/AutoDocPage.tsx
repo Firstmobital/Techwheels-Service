@@ -4306,7 +4306,6 @@ const BTN_PRI = 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white
 const BTN_SEC = 'rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60'
 
 // ─── Photo Viewer Modal ───────────────────────────────────────────────────────
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 function PhotoViewerModal({ row, onClose }: { row: JobRow; onClose: () => void }) {
   const [photos, setPhotos]     = useState<Array<{ id: string; photo_type: string; storage_path: string; url: string | null }>>([])
@@ -4320,36 +4319,41 @@ function PhotoViewerModal({ row, onClose }: { row: JobRow; onClose: () => void }
 
   async function load() {
     setLoading(true)
-    const sb = createSupabaseClient(
-      import.meta.env.VITE_SUPABASE_URL as string,
-      import.meta.env.VITE_SUPABASE_ANON_KEY as string
-    )
+    try {
+      const { data: photoRows } = await supabase
+        .from('panel_photos')
+        .select('id, photo_type, storage_path, drive_url')
+        .eq('job_card_id', row.job_card_id)
+        .order('created_at', { ascending: true })
 
-    const { data: photoRows } = await sb
-      .from('panel_photos')
-      .select('id, photo_type, storage_path, drive_url')
-      .eq('job_card_id', row.job_card_id)
-      .order('created_at', { ascending: true })
+      if (!photoRows || photoRows.length === 0) {
+        setPhotos([])
+        setLoading(false)
+        return
+      }
 
-    if (!photoRows || photoRows.length === 0) { setLoading(false); setPhotos([]); return }
+      // Batch signed URLs for storage paths
+      const storagePaths = photoRows
+        .map((p: { storage_path: string }) => p.storage_path)
+        .filter((s: string) => typeof s === 'string' && s.length > 0 && !/^https?:\/\//i.test(s))
 
-    // Batch signed URLs for storage paths
-    const storagePaths = photoRows
-      .map(p => p.storage_path)
-      .filter((s): s is string => typeof s === 'string' && s.length > 0 && !s.startsWith('http'))
+      const urlMap: Record<string, string> = {}
+      if (storagePaths.length > 0) {
+        const { data: signed } = await supabase.storage.from('autodoc').createSignedUrls(storagePaths, 7200)
+        for (const e of signed ?? []) {
+          if (e.path && e.signedUrl) urlMap[e.path] = e.signedUrl
+        }
+      }
 
-    const urlMap: Record<string, string> = {}
-    if (storagePaths.length > 0) {
-      const { data: signed } = await sb.storage.from('autodoc').createSignedUrls(storagePaths, 7200)
-      signed?.forEach(e => { if (e.path && e.signedUrl) urlMap[e.path] = e.signedUrl })
+      setPhotos(photoRows.map((p: { id: string; photo_type: string; storage_path: string; drive_url: string | null }) => ({
+        id: p.id,
+        photo_type: p.photo_type,
+        storage_path: p.storage_path,
+        url: p.drive_url || urlMap[p.storage_path] || null,
+      })))
+    } catch (err) {
+      console.error('[PhotoViewer] load error', err)
     }
-
-    setPhotos(photoRows.map(p => ({
-      id: p.id,
-      photo_type: p.photo_type,
-      storage_path: p.storage_path,
-      url: (p.drive_url as string | null) || urlMap[p.storage_path] || null,
-    })))
     setLoading(false)
   }
 
