@@ -195,7 +195,7 @@ export default function JobCardEstimateScreen() {
   const [panels, setPanels] = useState<string[]>([])
   const [preRepairPanelNames, setPreRepairPanelNames] = useState<Set<string>>(new Set())
   const [estimateActionOptions, setEstimateActionOptions] = useState<string[]>(['repaint', 'replace'])
-  const [estimateDefectOptions, setEstimateDefectOptions] = useState<string[]>(['Rust', 'Dent', 'Scratch', 'Paint Peel', 'Corrosion'])
+  const [estimateDefectOptions, setEstimateDefectOptions] = useState<string[]>(['Rusting', 'Paint Peel'])
   const [activeModelRates, setActiveModelRates] = useState<ModelPanelRate[]>([])
   const [resolvedModelName, setResolvedModelName] = useState('')
   const [resolvedPaintType, setResolvedPaintType] = useState('')
@@ -309,8 +309,9 @@ export default function JobCardEstimateScreen() {
       )
     }
     if (workflowRes.data?.estimateDefectOptions?.length) {
+      const EXCLUDED_DEFECTS = new Set(['rust', 'dent', 'scratch', 'corrosion'])
       setEstimateDefectOptions(
-        Array.from(new Set(workflowRes.data.estimateDefectOptions.filter((x) => x.trim().length > 0))).sort((a, b) => a.localeCompare(b)),
+        Array.from(new Set(workflowRes.data.estimateDefectOptions.filter((x) => x.trim().length > 0 && !EXCLUDED_DEFECTS.has(x.trim().toLowerCase())))).sort((a, b) => a.localeCompare(b)),
       )
     }
 

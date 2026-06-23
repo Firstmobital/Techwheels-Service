@@ -490,8 +490,9 @@ export default function JobCardStageScreen() {
               />
 
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#4b4e59', marginTop: 12, marginBottom: 6 }}>Model</Text>
-              <ModelChipSelector
+              <NativeSelectField
                 value={form.model}
+                placeholder="Select model"
                 options={modelChipOptions}
                 onChange={(value) => setForm((prev) => (prev ? { ...prev, model: value } : prev))}
               />
