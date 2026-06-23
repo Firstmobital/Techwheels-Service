@@ -66,7 +66,7 @@ async function sendTransactionalEmail(
       return fail(`Email send failed: ${errorData}`)
     }
 
-    const result = await response.json() as { success: boolean; message: string }
+    const result = await response.json() as { success: boolean; message: string; recipients?: string[] }
     return ok(result)
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Unknown error sending email')

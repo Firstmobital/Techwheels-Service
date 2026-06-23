@@ -67,7 +67,7 @@ async function sendTransactionalEmail(
       return fail(`Email send failed: ${errorData}`)
     }
 
-    const result = await response.json() as { success: boolean; message: string }
+    const result = await response.json() as { success: boolean; message: string; recipients?: string[] }
     return ok(result)
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Unknown error sending email')
@@ -134,8 +134,11 @@ export async function sendClaimEmail(
     return fail(`Failed to send email: ${sendRes.error}`)
   }
 
-  // Normalise recipients to a comma-joined string for DB logging
-  const recipientStr = Array.isArray(options.to) ? options.to.join(',') : options.to
+  // Use actual recipients returned by edge fn (may differ if dealer_settings override)
+  const actualRecipients = (sendRes.data as { recipients?: string[] } & { success: boolean; message: string })?.recipients
+  const recipientStr = actualRecipients
+    ? actualRecipients.join(',')
+    : Array.isArray(options.to) ? options.to.join(',') : options.to
 
   // Log email to database with sent timestamp
   const logRes = await logEmail(jobCardId, {

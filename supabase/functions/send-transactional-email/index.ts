@@ -445,6 +445,7 @@ Deno.serve(async (req) => {
       success: true,
       message: 'Transactional email sent',
       recipients_count: finalRecipients.length,
+      recipients: finalRecipients,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
