@@ -45,7 +45,7 @@ async function sendTransactionalEmail(
     const accessToken = sessionData.access_token
 
     const response = await fetch(
-      `https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/send-transactional-email`,
+      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/send-transactional-email`,
       {
         method: 'POST',
         headers: {
@@ -376,105 +376,120 @@ Recommended Estimated Amount : Rs ${amount} /-
  Estimates attached as per the warranty policy . Need your kind approval for the same.`
 
   // ── HTML (styled version of the same format) ──────────────────────────────
+  // ── HTML email — exactly matching user's required layout ─────────────────
+  // Format 1 (top): salutation + description paragraph (Format-2 in user spec)
+  // Format 2 (below): Vehicle Details table + Recommended Amount (Format-1 in user spec)
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 </head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;font-size:14px;line-height:1.7;background:#f5f5f5">
-  <div style="max-width:700px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;font-size:14px;line-height:1.8;background:#f0f2f5">
+<div style="max-width:680px;margin:24px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.10)">
 
-    <!-- Header -->
-    <div style="background:#1e3a8a;padding:24px 28px">
-      <div style="color:#fff;font-size:18px;font-weight:700">Pre-Approval Request</div>
-      <div style="color:#93c5fd;font-size:13px;margin-top:4px">${jobCard.dealer_name ?? ''} · AutoDoc Warranty System</div>
-    </div>
-
-    <!-- Body -->
-    <div style="padding:28px">
-
-      <!-- Salutation -->
-      <p style="margin:0 0 8px 0">Dear Sir,</p>
-      <p style="margin:0 0 20px 0">Greetings for the Day</p>
-
-      <!-- Description paragraph -->
-      <p style="margin:0 0 20px 0;padding:14px 16px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:4px">
-        Vehicle reported in the workshop for <strong>${issueDesc}</strong>. Post inspection <strong>${claimType.toLowerCase()}</strong> observed on the <strong>${panelList}</strong>.
-        We have checked heavy <strong>${claimType.toLowerCase()}</strong> issue. DIR &amp; estimate and vehicle service history attached for reference.
-        Vehicle is now out of warranty and falls between the <strong>${ageCat}</strong> category.
-        Need prior support on this case related to <strong>${claimType.toLowerCase()}</strong>.
-      </p>
-
-      <!-- Vehicle Details -->
-      <div style="margin-bottom:20px">
-        <div style="font-size:13px;font-weight:700;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #dbeafe">
-          Vehicle detail mentioned below:–
-        </div>
-        <table style="width:100%;border-collapse:collapse">
-          <tr>
-            <td style="padding:6px 0;font-weight:600;color:#555;width:200px">Chassis No.</td>
-            <td style="padding:6px 0;font-family:monospace;font-weight:700;color:#1e3a8a">${jobCard.vin ?? '—'}</td>
-          </tr>
-          <tr style="background:#f9fafb">
-            <td style="padding:6px 8px;font-weight:600;color:#555">Vehicle No.</td>
-            <td style="padding:6px 8px;font-family:monospace;font-weight:700;color:#1e3a8a">${jobCard.reg_number}</td>
-          </tr>
-          <tr>
-            <td style="padding:6px 0;font-weight:600;color:#555">Model</td>
-            <td style="padding:6px 0">${jobCard.model ?? '—'} ${jobCard.colour ? '· ' + jobCard.colour : ''}</td>
-          </tr>
-          <tr style="background:#f9fafb">
-            <td style="padding:6px 8px;font-weight:600;color:#555">K.m.</td>
-            <td style="padding:6px 8px">${kmFormatted}</td>
-          </tr>
-          <tr>
-            <td style="padding:6px 0;font-weight:600;color:#555">Date Of Sale</td>
-            <td style="padding:6px 0">${fmtDate(jobCard.date_of_sale)}</td>
-          </tr>
-          <tr style="background:#f9fafb">
-            <td style="padding:6px 8px;font-weight:600;color:#555">Vehicle Age</td>
-            <td style="padding:6px 8px">${ageStr} <span style="color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:10px;font-size:12px;margin-left:4px">${ageCat}</span></td>
-          </tr>
-          <tr>
-            <td style="padding:6px 0;font-weight:600;color:#555">Job Card No.</td>
-            <td style="padding:6px 0">${jobCard.jc_number}</td>
-          </tr>
-          <tr style="background:#f0fdf4">
-            <td style="padding:10px 8px;font-weight:700;color:#065f46;font-size:14px">Recommended Est. Amount</td>
-            <td style="padding:10px 8px;font-weight:700;color:#059669;font-size:18px">₹${amount} /-</td>
-          </tr>
-          ${tmlAmt ? `<tr style="background:#eff6ff">
-            <td style="padding:8px;font-weight:700;color:#1e40af">TML Share (${jobCard.tml_share_percent}%)</td>
-            <td style="padding:8px;font-weight:700;color:#1e40af;font-size:16px">₹${tmlAmt} /-</td>
-          </tr>` : ''}
-        </table>
-      </div>
-
-      ${estimateTableHtml}
-
-      <!-- Closing -->
-      <p style="margin:24px 0 8px 0">Estimates attached as per the warranty policy. Need your kind approval for the same.</p>
-
-      <!-- Attachments note -->
-      <div style="margin:16px 0;padding:12px 16px;background:#f0f4ff;border-radius:6px;font-size:13px">
-        <div style="font-weight:600;margin-bottom:6px;color:#1e3a8a">📎 Attachments included:</div>
-        <div>• DIR (Damage Inspection Report) – Pre-Repair PPT</div>
-        <div>• Estimate – Excel sheet</div>
-        <div>• Vehicle Service History</div>
-      </div>
-
-      <!-- Regards -->
-      <p style="margin:20px 0 4px 0">Regards,</p>
-      <p style="margin:0;font-weight:700;font-size:15px">${sender}</p>
-      ${jobCard.dealer_name && jobCard.dealer_name !== sender ? `<p style="margin:2px 0 0 0;color:#555;font-size:13px">${jobCard.dealer_name}</p>` : ''}
-    </div>
-
-    <!-- Footer -->
-    <div style="background:#f3f4f6;padding:14px 28px;font-size:11px;color:#888;border-top:1px solid #e5e7eb">
-      This is an automated email generated by AutoDoc Warranty System. JC: ${jobCard.jc_number} · ${new Date().toLocaleDateString('en-IN')}
-    </div>
+  <!-- Header Banner -->
+  <div style="background:#1e3a8a;padding:22px 30px 18px 30px">
+    <div style="color:#fff;font-size:18px;font-weight:700;letter-spacing:0.02em">Pre-Approval Request</div>
+    <div style="color:#93c5fd;font-size:12px;margin-top:4px">${jobCard.dealer_name ?? 'Techwheels'} · AutoDoc Warranty System</div>
   </div>
+
+  <!-- Main Body -->
+  <div style="padding:30px 32px">
+
+    <!-- ── FORMAT 2: Salutation + Description ─────────────── -->
+    <p style="margin:0 0 6px 0;font-size:14px">Dear Sir,</p>
+    <p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day</p>
+
+    <!-- Description block -->
+    <div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8">
+      Vehicle reported in the workshop for <strong>${issueDesc}</strong>. Post inspection <strong>${claimType.toLowerCase()}</strong> observed on the
+      <strong>${panelList}</strong>. We have checked heavy <strong>${claimType.toLowerCase()}</strong> issue.
+      DIR &amp; estimate and vehicle service history attached for reference.
+      Vehicle is now out of warranty and falls between the <strong>${ageCat}</strong> category.
+      Need prior support on this case related to <strong>${claimType.toLowerCase()}</strong>.
+    </div>
+
+    <!-- ── FORMAT 1: Vehicle Details Table ───────────────── -->
+    <div style="margin-bottom:24px">
+      <!-- Section heading exactly as user spec -->
+      <div style="font-size:13px;font-weight:700;color:#1e3a8a;text-transform:uppercase;letter-spacing:0.06em;padding-bottom:8px;border-bottom:2px solid #bfdbfe;margin-bottom:0">
+        VEHICLE DETAIL MENTIONED BELOW:–
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <!-- Chassis No -->
+        <tr style="border-bottom:1px solid #e5e7eb">
+          <td style="padding:10px 4px 10px 0;font-weight:600;color:#374151;width:45%">Chassis No.</td>
+          <td style="padding:10px 4px;font-family:monospace;font-weight:700;color:#1e3a8a;font-size:14px">${jobCard.vin ?? '—'}</td>
+        </tr>
+        <!-- Vehicle No -->
+        <tr style="border-bottom:1px solid #e5e7eb;background:#f9fafb">
+          <td style="padding:10px 4px 10px 8px;font-weight:600;color:#374151"> Vehicle No.</td>
+          <td style="padding:10px 4px;font-family:monospace;font-weight:700;color:#1e3a8a;font-size:14px"> ${jobCard.reg_number}</td>
+        </tr>
+        <!-- Model -->
+        <tr style="border-bottom:1px solid #e5e7eb">
+          <td style="padding:10px 4px 10px 0;font-weight:600;color:#374151">Model</td>
+          <td style="padding:10px 4px;color:#374151">${jobCard.model ?? '—'}${jobCard.colour ? ' · ' + jobCard.colour : ''}</td>
+        </tr>
+        <!-- KM -->
+        <tr style="border-bottom:1px solid #e5e7eb;background:#f9fafb">
+          <td style="padding:10px 4px 10px 8px;font-weight:600;color:#374151"> K.m.</td>
+          <td style="padding:10px 4px;color:#374151"> ${kmFormatted}</td>
+        </tr>
+        <!-- Date of Sale -->
+        <tr style="border-bottom:1px solid #e5e7eb">
+          <td style="padding:10px 4px 10px 0;font-weight:600;color:#374151">Date Of Sale</td>
+          <td style="padding:10px 4px;color:#374151">${fmtDate(jobCard.date_of_sale)}</td>
+        </tr>
+        <!-- Vehicle Age -->
+        <tr style="border-bottom:1px solid #e5e7eb;background:#f9fafb">
+          <td style="padding:10px 4px 10px 8px;font-weight:600;color:#374151"> Vehicle Age</td>
+          <td style="padding:10px 4px;color:#374151"> ${ageStr}&nbsp;&nbsp;<span style="color:#92400e;background:#fef3c7;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600">${ageCat}</span></td>
+        </tr>
+        <!-- Job Card No -->
+        <tr style="border-bottom:1px solid #e5e7eb">
+          <td style="padding:10px 4px 10px 0;font-weight:600;color:#374151">Job Card No.</td>
+          <td style="padding:10px 4px;color:#374151">${jobCard.jc_number}</td>
+        </tr>
+        <!-- Recommended Amount — highlighted green row -->
+        <tr style="background:#f0fdf4;border-top:2px solid #bbf7d0">
+          <td style="padding:14px 4px 14px 8px;font-weight:700;color:#065f46;font-size:14px"> Recommended Est. Amount</td>
+          <td style="padding:14px 4px;font-weight:700;color:#059669;font-size:20px"> ₹${amount} /-</td>
+        </tr>
+        ${tmlAmt ? `<tr style="background:#eff6ff;border-top:1px solid #bfdbfe">
+          <td style="padding:10px 4px 10px 8px;font-weight:700;color:#1e40af"> TML Share (${jobCard.tml_share_percent}%)</td>
+          <td style="padding:10px 4px;font-weight:700;color:#1e40af;font-size:16px"> ₹${tmlAmt} /-</td>
+        </tr>` : ''}
+      </table>
+    </div>
+
+    ${estimateTableHtml}
+
+    <!-- Closing line -->
+    <p style="margin:20px 0 6px 0;font-size:14px">Estimates attached as per the warranty policy. Need your kind approval for the same.</p>
+
+    <!-- Attachments note -->
+    <div style="margin:16px 0 24px 0;padding:12px 16px;background:#eff6ff;border-radius:6px;font-size:13px;border:1px solid #bfdbfe">
+      <div style="font-weight:700;margin-bottom:6px;color:#1e3a8a">📎 Attachments included:</div>
+      <div style="margin-bottom:2px">• Pre-Repair PPT – Damage Inspection Report (DIR)</div>
+      <div style="margin-bottom:2px">• Estimate – Excel sheet (Parts &amp; Labour)</div>
+      <div>• Vehicle Service History – Excel (from master data)</div>
+    </div>
+
+    <!-- Regards -->
+    <p style="margin:0 0 2px 0;font-size:14px">Regards,</p>
+    <p style="margin:0;font-weight:700;font-size:15px;color:#1e3a8a">${sender}</p>
+    ${jobCard.dealer_name && jobCard.dealer_name !== sender ? `<p style="margin:3px 0 0 0;color:#6b7280;font-size:13px">${jobCard.dealer_name}</p>` : ''}
+  </div>
+
+  <!-- Footer -->
+  <div style="background:#f3f4f6;padding:12px 32px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb">
+    This is an automated email generated by AutoDoc Warranty System · JC: ${jobCard.jc_number} · ${new Date().toLocaleDateString('en-IN')}
+  </div>
+
+</div>
 </body>
 </html>`
 
@@ -529,7 +544,7 @@ export async function sendTechnicianDailyEarningsTestEmail(
     }
 
     const response = await fetch(
-      `https://jmdndcphkmaljhwgzqxq.supabase.co/functions/v1/technician-daily-earnings-report`,
+      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/technician-daily-earnings-report`,
       {
         method: 'POST',
         headers: {
