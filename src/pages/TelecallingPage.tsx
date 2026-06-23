@@ -687,6 +687,12 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
 }) {
   const [showCreate, setShowCreate] = useState(false)
   const [showServiceInfo, setShowServiceInfo] = useState(false)
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDateFrom, setEditDateFrom] = useState('')
+  const [editDateTo, setEditDateTo] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [deleting, setDeleting] = useState<number | null>(null)
   const [campaignName, setCampaignName] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -752,6 +758,46 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
       fetchStats()
     } catch (err) {
       setError((err as Error).message)
+    }
+  }
+
+  // Edit campaign
+  const handleEdit = async () => {
+    if (!editingCampaign || !editName || !editDateFrom || !editDateTo) return
+    setEditing(true)
+    setError(null)
+    try {
+      await callEdge('update_campaign', {
+        campaign_id: editingCampaign.id,
+        campaign_name: editName,
+        date_from: editDateFrom,
+        date_to: editDateTo,
+      })
+      setSuccess('Campaign updated!')
+      setEditingCampaign(null)
+      onRefresh()
+      fetchStats()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setEditing(false)
+    }
+  }
+
+  // Delete campaign
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`Delete campaign "${name}"? This will permanently remove all ${campaigns.find(c => c.id === id)?.total_leads || 0} leads and call records. This cannot be undone.`)) return
+    setDeleting(id)
+    setError(null)
+    try {
+      await callEdge('delete_campaign', { campaign_id: id })
+      setSuccess('Campaign deleted.')
+      onRefresh()
+      fetchStats()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -877,6 +923,71 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
         </div>
       )}
 
+      {/* Edit Campaign Modal */}
+      {editingCampaign && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900">Edit Campaign</h3>
+              <button
+                onClick={() => setEditingCampaign(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="grid gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Campaign Name</label>
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">From Date</label>
+                  <input
+                    type="date"
+                    value={editDateFrom}
+                    onChange={(e) => setEditDateFrom(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">To Date</label>
+                  <input
+                    type="date"
+                    value={editDateTo}
+                    onChange={(e) => setEditDateTo(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                ⚠️ Editing dates only updates the campaign label — it does <strong>not</strong> re-pull leads. Use this for name or date display corrections only.
+              </p>
+            </div>
+            <div className="mt-5 flex items-center gap-3">
+              <button
+                onClick={handleEdit}
+                disabled={editing}
+                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {editing ? 'Saving…' : 'Save Changes'}
+              </button>
+              <button
+                onClick={() => setEditingCampaign(null)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Campaign list */}
       <div className="space-y-3">
         {campaigns.length === 0 ? (
@@ -896,14 +1007,34 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
                     {formatDate(c.date_from)} → {formatDate(c.date_to)} · Created by {c.created_by || '—'}
                   </p>
                 </div>
-                {c.status === 'active' && (
+                <div className="flex items-center gap-2">
+                  {c.status === 'active' && (
+                    <button
+                      onClick={() => handleClose(c.id)}
+                      className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Close Campaign
+                    </button>
+                  )}
                   <button
-                    onClick={() => handleClose(c.id)}
-                    className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                    onClick={() => {
+                      setEditingCampaign(c)
+                      setEditName(c.campaign_name)
+                      setEditDateFrom(c.date_from)
+                      setEditDateTo(c.date_to)
+                    }}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
                   >
-                    Close Campaign
+                    ✏️ Edit
                   </button>
-                )}
+                  <button
+                    onClick={() => handleDelete(c.id, c.campaign_name)}
+                    disabled={deleting === c.id}
+                    className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {deleting === c.id ? 'Deleting…' : '🗑️ Delete'}
+                  </button>
+                </div>
               </div>
               <div className="mt-3 grid grid-cols-4 gap-4">
                 <div className="rounded-lg bg-gray-50 px-3 py-2">
