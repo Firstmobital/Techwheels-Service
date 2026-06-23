@@ -459,9 +459,9 @@ Recommended Estimated Amount : Rs ${amount} /-
       <!-- Attachments note -->
       <div style="margin:16px 0;padding:12px 16px;background:#f0f4ff;border-radius:6px;font-size:13px">
         <div style="font-weight:600;margin-bottom:6px;color:#1e3a8a">📎 Attachments included:</div>
-        <div>• DIR (Damage Inspection Report) – Pre-Repair PPT</div>
-        <div>• Estimate – Excel sheet</div>
-        <div>• Vehicle Service History</div>
+        <div>• Pre-Repair PPT – Damage Inspection Report (DIR)</div>
+        <div>• Estimate – Excel sheet (Parts &amp; Labour)</div>
+        <div>• Vehicle Service History – Excel (from master data)</div>
       </div>
 
       <!-- Regards -->

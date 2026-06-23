@@ -6,6 +6,7 @@ import { ClaimTrackerView } from '../components/ClaimTrackerView'
 import { Icon } from '../components/Icon'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
+import { generateServiceHistoryExcel } from '../lib/generators/generateServiceHistoryExcel'
 import { getCurrentLocation, assembleGpsMetadata } from '../lib/gpsUtils'
 import { stampImageWithGps } from '../lib/imageStamping'
 import {
@@ -2865,44 +2866,89 @@ export default function AutoDocPage() {
     const excelDoc = latestDocs.find((doc) => doc.doc_type === 'excel_estimate')
     const walkaroundDoc = latestDocs.find((doc) => doc.doc_type === 'video_job_card')
 
-    if (!preDoc || !excelDoc || !walkaroundDoc) {
-      showToast('Required attachments are missing in document store.', false)
+    if (!preDoc || !excelDoc) {
+      showToast('Pre-Repair PPT and Estimate Excel are required before sending.', false)
       return
+    }
+
+    // ── Auto-generate Service History Excel from all_service_data ──────────────
+    showToast('Generating service history...', true)
+    let serviceHistoryAttachment: { filename: string; storagePath: string; bucket: string } | null = null
+    try {
+      const svcResult = await generateServiceHistoryExcel(
+        activeSummary.vin ?? null,
+        activeSummary.reg_number ?? null,
+      )
+      if (!('error' in svcResult) && svcResult.rowCount > 0) {
+        const regSlug = (activeSummary.reg_number ?? 'vehicle').replace(/[^a-zA-Z0-9]/g, '_')
+        const svcFile = new File(
+          [svcResult.blob],
+          `Service_History_${regSlug}.xlsx`,
+          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        )
+        const svcUpload = await uploadDocumentFile({
+          jobCardId: activeJobCardId,
+          docType: 'service_history',
+          file: svcFile,
+          fileName: svcFile.name,
+          contentType: svcFile.type,
+        })
+        if (!svcUpload.error && svcUpload.data?.storage_path) {
+          serviceHistoryAttachment = {
+            filename: svcFile.name,
+            storagePath: svcUpload.data.storage_path,
+            bucket: AUTODOC_BUCKET,
+          }
+          showToast(`Service history: ${svcResult.rowCount} records found.`, true)
+        }
+      } else if ('error' in svcResult) {
+        console.warn('Service history fetch:', svcResult.error)
+      } else {
+        showToast('No service history records found in master data — attaching without it.', false)
+      }
+    } catch (e) {
+      console.warn('Service history Excel generation failed (non-blocking):', e)
+    }
+
+    // ── Build attachment list ──────────────────────────────────────────────────
+    // 1. Pre-Repair PPT  2. Estimate Excel  3. Service History Excel (if found)
+    const emailAttachments: Array<{ filename: string; storagePath: string; bucket: string; driveFileId?: string | null; driveUrl?: string | null }> = [
+      {
+        filename: storageFileName(preDoc.storage_path, 'Pre_Repair_PPT.pptx'),
+        storagePath: preDoc.storage_path,
+        bucket: AUTODOC_BUCKET,
+        driveFileId: preDoc.drive_file_id,
+        driveUrl: preDoc.drive_url,
+      },
+      {
+        filename: storageFileName(excelDoc.storage_path, 'Estimate.xlsx'),
+        storagePath: excelDoc.storage_path,
+        bucket: AUTODOC_BUCKET,
+        driveFileId: excelDoc.drive_file_id,
+        driveUrl: excelDoc.drive_url,
+      },
+    ]
+    if (serviceHistoryAttachment) {
+      emailAttachments.push(serviceHistoryAttachment)
+    }
+    if (walkaroundDoc) {
+      emailAttachments.push({
+        filename: storageFileName(walkaroundDoc.storage_path, 'Vehicle_Walkaround.mp4'),
+        storagePath: walkaroundDoc.storage_path,
+        bucket: AUTODOC_BUCKET,
+        driveFileId: walkaroundDoc.drive_file_id,
+        driveUrl: walkaroundDoc.drive_url,
+      })
     }
 
     // Email recipients are resolved server-side from dealer_settings
     const targetEmails = ['vinodexodus@gmail.com'] // fallback; overridden by edge fn via dealer_settings
-    if (false) {
-      showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
-    }
     const sendRes = await sendClaimEmail(activeJobCardId, {
       to: targetEmails,
       subject: content.subject,
       html: content.html,
       plainText: content.plainText,
-      attachments: [
-        {
-          filename: storageFileName(preDoc.storage_path, 'pre-repair.pptx'),
-          storagePath: preDoc.storage_path,
-          bucket: AUTODOC_BUCKET,
-          driveFileId: preDoc.drive_file_id,
-          driveUrl: preDoc.drive_url,
-        },
-        {
-          filename: storageFileName(excelDoc.storage_path, 'estimate.xlsx'),
-          storagePath: excelDoc.storage_path,
-          bucket: AUTODOC_BUCKET,
-          driveFileId: excelDoc.drive_file_id,
-          driveUrl: excelDoc.drive_url,
-        },
-        {
-          filename: storageFileName(walkaroundDoc.storage_path, 'vehicle-walkaround.mp4'),
-          storagePath: walkaroundDoc.storage_path,
-          bucket: AUTODOC_BUCKET,
-          driveFileId: walkaroundDoc.drive_file_id,
-          driveUrl: walkaroundDoc.drive_url,
-        },
-      ],
+      attachments: emailAttachments,
       purpose: 'autodoc_claim',
     })
 

@@ -27,6 +27,7 @@ import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
 import { getSupabaseBaseUrl } from '../../../lib/env'
 import type { DocumentRow } from '../../../lib/api/types'
 import { generateRepairPPT } from '../../../lib/generators/generatePPT'
+import { generateServiceHistoryExcel } from '../../../lib/generators/generateServiceHistoryExcel'
 import { generateEstimateCsvString } from '../../../lib/generators/generateEstimateCsv'
 import {
   generateClaimEmailContent,
@@ -485,17 +486,55 @@ export default function SubmitStageScreen() {
         estimate_rows:         estimateRows,
       })
 
+      // ── Auto-generate Service History Excel from all_service_data ──────
+      let serviceHistBlob: Blob | null = null
+      let serviceHistFilename = 'Service_History.xlsx'
+      try {
+        const svcResult = await generateServiceHistoryExcel(
+          jobCard.vin ?? null,
+          jobCard.reg_number ?? null,
+        )
+        if (!('error' in svcResult) && svcResult.rowCount > 0) {
+          serviceHistBlob = svcResult.blob
+          const regSlug = (jobCard.reg_number ?? 'vehicle').replace(/[^a-zA-Z0-9]/g, '_')
+          serviceHistFilename = `Service_History_${regSlug}.xlsx`
+        }
+      } catch (e) {
+        console.warn('Service history Excel generation failed (non-blocking):', e)
+      }
+
+      // Upload service history to storage if generated
+      let serviceHistAttachment: EmailAttachmentRef | null = null
+      if (serviceHistBlob) {
+        const svcUpload = await uploadDocumentFile({
+          jobCardId,
+          docType: 'service_history',
+          file: serviceHistBlob,
+          fileName: serviceHistFilename,
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })
+        if (!svcUpload.error && svcUpload.data?.storage_path) {
+          serviceHistAttachment = {
+            filename: serviceHistFilename,
+            storagePath: svcUpload.data.storage_path,
+            bucket: AUTODOC_BUCKET,
+          }
+        }
+      }
+
+      // ── Build attachments: Pre-PPT + Estimate Excel + Service History ──
       const attachments: EmailAttachmentRef[] = []
-      
-      // Only include attachments with non-zero file size
       if (prePptDoc && (prePptDoc.file_size_mb ?? 0) > 0) {
-        attachments.push(buildAttachment(prePptDoc, 'pre-repair.pptx'))
+        attachments.push(buildAttachment(prePptDoc, 'Pre_Repair_PPT.pptx'))
       }
       if (excelDoc && (excelDoc.file_size_mb ?? 0) > 0) {
-        attachments.push(buildAttachment(excelDoc, 'estimate.xlsx'))
+        attachments.push(buildAttachment(excelDoc, 'Estimate.xlsx'))
+      }
+      if (serviceHistAttachment) {
+        attachments.push(serviceHistAttachment)
       }
       if (walkaroundDoc && (walkaroundDoc.file_size_mb ?? 0) > 0) {
-        attachments.push(buildAttachment(walkaroundDoc, 'vehicle-walkaround.mp4'))
+        attachments.push(buildAttachment(walkaroundDoc, 'Vehicle_Walkaround.mp4'))
       }
 
       const sendRes = await sendClaimEmail(jobCardId, {
