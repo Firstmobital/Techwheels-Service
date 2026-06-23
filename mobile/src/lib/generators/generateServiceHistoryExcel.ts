@@ -6,7 +6,7 @@
  */
 
 import * as XLSX from 'xlsx'
-import { supabase } from '../../supabase'
+import { supabase } from '../supabase'
 
 export interface ServiceHistoryRow {
   chassis_no:                   string | null
