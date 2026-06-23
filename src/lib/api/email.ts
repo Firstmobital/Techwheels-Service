@@ -236,7 +236,24 @@ export function generateClaimEmailContent(jobCard: {
     : 'rusting related issues'
 
   const panelList = (jobCard.panel_names ?? []).join(', ') || 'various panels'
-  const claimType = jobCard.claim_type ?? 'Rusting'
+  // Derive actual issue type from estimate rows defects (more accurate than claim_type which is generic)
+  const inferredIssueType = (() => {
+    if (jobCard.estimate_rows && jobCard.estimate_rows.length > 0) {
+      const defects = jobCard.estimate_rows
+        .map(r => r.defect?.trim())
+        .filter(Boolean) as string[]
+      const uniqueDefects = Array.from(new Set(defects))
+      if (uniqueDefects.length === 1) return uniqueDefects[0]
+      if (uniqueDefects.some(d => d.toLowerCase().includes('rust'))) return 'Rusting'
+      if (uniqueDefects.length > 0) return uniqueDefects[0]
+    }
+    return null
+  })()
+  const claimType = inferredIssueType ?? (
+    jobCard.claim_type && !['body & paint', 'body and paint', 'bodyshop'].includes(jobCard.claim_type.toLowerCase())
+      ? jobCard.claim_type
+      : 'Rusting'
+  )
   const sender    = jobCard.sender_name || jobCard.dealer_name || 'Service Team'
   const amount    = fmt(jobCard.total_estimate_amount)
   const tmlAmt    = jobCard.tml_share_percent && jobCard.total_estimate_amount
