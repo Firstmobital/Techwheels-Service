@@ -2,8 +2,12 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
@@ -21,6 +25,7 @@ import {
   addDocument,
   listDocuments,
   invokeUniversalDriveUpload,
+  uploadDocumentFile,
 } from '../../../lib/api/documents'
 import { supabase } from '../../../lib/supabase'
 import { AUTODOC_BUCKET } from '../../../lib/autodocStorage'
@@ -89,6 +94,10 @@ export default function SubmitStageScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<BusyAction>(null)
+  // Compose modal
+  const [showComposeModal, setShowComposeModal] = useState(false)
+  const [composeDraftBody, setComposeDraftBody]   = useState('')
+  const [composeSendBusy, setComposeSendBusy]     = useState(false)
   const [jobCard, setJobCard] = useState<any>(null)
   const [documents, setDocuments] = useState<DocumentRow[]>([])
   const [warning, setWarning] = useState<string | null>(null)
@@ -455,24 +464,82 @@ export default function SubmitStageScreen() {
     }
   }
 
+  // Step 1: Build draft text and open compose modal
   const handleComposeAndSend = async () => {
     if (!jobCardId || !jobCard) return
-
     if (!composeReady) {
-      Alert.alert('Missing Attachments', 'Pre-Repair PPT, Estimate Excel, and Walkaround Video are required before Compose & Send.')
+      Alert.alert('Missing Attachments', 'Pre-Repair PPT, Estimate Excel, and Walkaround Video are required.')
       return
     }
 
-    setBusy('compose-send')
+    // Build panel list from estimate rows
+    const panelList = estimateRows.length > 0
+      ? Array.from(new Set(estimateRows.map((r: any) => r.panel_name).filter(Boolean))).join(', ')
+      : 'various panels'
 
+    // Age category
+    const ageCalcDays = (() => {
+      if (jobCard.date_of_sale) {
+        const sale = new Date(jobCard.date_of_sale)
+        const ms = Date.now() - sale.getTime()
+        if (ms > 0) return Math.floor(ms / (1000 * 60 * 60 * 24))
+      }
+      return 0
+    })()
+    const ageCat = (() => {
+      const y = ageCalcDays / 365
+      if (y < 1) return 'Under 1 Year'
+      if (y < 2) return '1-2 Years'
+      if (y < 3) return '2-3 Years'
+      if (y < 4) return '3-4 Years'
+      if (y < 5) return '4-5 Years'
+      return 'Above 5 Years'
+    })()
+
+    const kmFormatted = jobCard.km_reading != null
+      ? Number(jobCard.km_reading).toLocaleString('en-IN') + ' km' : '—'
+    const fmtDate = (s: string | null | undefined) => {
+      if (!s) return '—'
+      try {
+        const d = new Date(s)
+        return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
+      } catch { return s }
+    }
+    const totalAmt = estimateRows.reduce((sum: number, r: any) => sum + (Number(r.row_total) || 0), 0)
+    const amtDisplay = totalAmt > 0
+      ? totalAmt.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'
+
+    const draft = `Dear Sir,
+Greetings for the Day
+
+Vehicle reported in the workshop for rusting related issues. Post inspection rusting observed on the ${panelList}. We have checked heavy rusting issue. DIR & estimate and vehicle service history attached for reference. Vehicle is now out of warranty and falls between the ${ageCat} category. Need prior support on this case related to rusting.
+
+Vehicle detail mentioned below:-
+Chassis No.-       ${jobCard.vin ?? '—'}
+Vehicle No.-       ${jobCard.reg_number ?? '—'}
+Model:-             ${jobCard.model ?? '—'}
+K.m.:-                ${kmFormatted}
+Date Of Sale:-  ${fmtDate(jobCard.date_of_sale)}
+Recommended Estimated Amount : Rs ${amtDisplay} /-
+Estimates attached as per the warranty policy. Need your kind approval for the same.`
+
+    setComposeDraftBody(draft)
+    setShowComposeModal(true)
+  }
+
+  // Step 2: Actually send from modal
+  const handleSendComposed = async (editedBody: string) => {
+    if (!jobCardId || !jobCard) return
+    setComposeSendBusy(true)
     try {
-      const content = generateClaimEmailContent({
-        jc_number:             String(jobCard.jc_number ?? 'JC-NA'),
-        reg_number:            String(jobCard.reg_number ?? 'REG-NA'),
+      // Build email content
+      const emailContent = generateClaimEmailContent({
+        jc_number:             jobCard.jc_number ?? jobCardId,
+        reg_number:            jobCard.reg_number ?? '',
         vin:                   jobCard.vin ?? null,
         model:                 jobCard.model ?? null,
         colour:                jobCard.colour ?? null,
-        complaint_date:        String(jobCard.complaint_date ?? new Date().toISOString()),
+        complaint_date:        jobCard.complaint_date ?? new Date().toISOString(),
         km_reading:            jobCard.km_reading ?? null,
         date_of_sale:          jobCard.date_of_sale ?? null,
         dealer_name:           jobCard.dealer_name ?? null,
@@ -480,92 +547,77 @@ export default function SubmitStageScreen() {
         warranty_age_days:     jobCard.warranty_age_days ?? null,
         claim_type:            jobCard.claim_type ?? null,
         complaint_text:        jobCard.complaint_text ?? null,
-        panel_names:           null,
-        total_estimate_amount: Number(jobCard.total_estimate_amount ?? 0),
+        panel_names:           estimateRows.length > 0
+          ? Array.from(new Set(estimateRows.map((r: any) => r.panel_name).filter(Boolean))) as string[]
+          : null,
+        total_estimate_amount: estimateRows.reduce((s: number, r: any) => s + (Number(r.row_total)||0), 0) || null,
         tml_share_percent:     jobCard.tml_share_percent ?? null,
         estimate_rows:         estimateRows,
       })
 
-      // ── Auto-generate Service History Excel from all_service_data ──────
-      let serviceHistBlob: Blob | null = null
-      let serviceHistFilename = 'Service_History.xlsx'
-      try {
-        const svcResult = await generateServiceHistoryExcel(
-          jobCard.vin ?? null,
-          jobCard.reg_number ?? null,
-        )
-        if (!('error' in svcResult) && svcResult.rowCount > 0) {
-          serviceHistBlob = svcResult.blob
-          const regSlug = (jobCard.reg_number ?? 'vehicle').replace(/[^a-zA-Z0-9]/g, '_')
-          serviceHistFilename = `Service_History_${regSlug}.xlsx`
-        }
-      } catch (e) {
-        console.warn('Service history Excel generation failed (non-blocking):', e)
+      if (!emailContent?.html) {
+        Alert.alert('Error', 'Failed to generate email template')
+        setComposeSendBusy(false)
+        return
       }
 
-      // Upload service history to storage if generated
-      let serviceHistAttachment: EmailAttachmentRef | null = null
-      if (serviceHistBlob) {
-        const svcUpload = await uploadDocumentFile({
-          jobCardId,
-          docType: 'service_history',
-          file: serviceHistBlob,
-          fileName: serviceHistFilename,
-          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        })
-        if (!svcUpload.error && svcUpload.data?.storage_path) {
-          serviceHistAttachment = {
-            filename: serviceHistFilename,
-            storagePath: svcUpload.data.storage_path,
-            bucket: AUTODOC_BUCKET,
+      await loadSubmitData()
+      const allDocs = documents
+      const prePptDoc     = allDocs.find(d => d.doc_type === 'ppt_pre')
+      const excelDoc      = allDocs.find(d => d.doc_type === 'excel_estimate')
+      const walkaroundDoc = allDocs.find(d => d.doc_type === 'video_job_card')
+
+      // Service History
+      let serviceHistAttachment: { filename: string; storagePath: string; bucket: string } | null = null
+      try {
+        const svcResult = await generateServiceHistoryExcel(jobCard.vin ?? null, jobCard.reg_number ?? null)
+        if (!('error' in svcResult) && svcResult.rowCount > 0) {
+          const regSlug = (jobCard.reg_number ?? 'vehicle').replace(/[^a-zA-Z0-9]/g, '_')
+          const svcBlob = svcResult.blob
+          const svcUpload = await uploadDocumentFile({
+            jobCardId,
+            docType: 'service_history',
+            file: svcBlob,
+            fileName: `Service_History_${regSlug}.xlsx`,
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          })
+          if (!svcUpload.error && svcUpload.data?.storage_path) {
+            serviceHistAttachment = {
+              filename: `Service_History_${regSlug}.xlsx`,
+              storagePath: svcUpload.data.storage_path,
+              bucket: AUTODOC_BUCKET,
+            }
           }
         }
-      }
+      } catch (e) { console.warn('Service history failed (non-blocking)', e) }
 
-      // ── Build attachments: Pre-PPT + Estimate Excel + Service History ──
       const attachments: EmailAttachmentRef[] = []
-      if (prePptDoc && (prePptDoc.file_size_mb ?? 0) > 0) {
-        attachments.push(buildAttachment(prePptDoc, 'Pre_Repair_PPT.pptx'))
-      }
-      if (excelDoc && (excelDoc.file_size_mb ?? 0) > 0) {
-        attachments.push(buildAttachment(excelDoc, 'Estimate.xlsx'))
-      }
-      if (serviceHistAttachment) {
-        attachments.push(serviceHistAttachment)
-      }
-      if (walkaroundDoc && (walkaroundDoc.file_size_mb ?? 0) > 0) {
-        attachments.push(buildAttachment(walkaroundDoc, 'Vehicle_Walkaround.mp4'))
-      }
+      if (prePptDoc)     attachments.push(buildAttachment(prePptDoc,     'Pre_Repair_PPT.pptx'))
+      if (excelDoc)      attachments.push(buildAttachment(excelDoc,      'Estimate.xlsx'))
+      if (serviceHistAttachment) attachments.push(serviceHistAttachment)
+      if (walkaroundDoc) attachments.push(buildAttachment(walkaroundDoc, 'Vehicle_Walkaround.mp4'))
 
       const sendRes = await sendClaimEmail(jobCardId, {
-        to: 'vinodexodus@gmail.com', // overridden server-side by dealer_settings
+        to: 'vinodexodus@gmail.com',
         subject: content.subject,
         html: content.html,
-        plainText: content.plainText,
+        plainText: editedBody,
         attachments,
         purpose: 'autodoc_claim',
       })
 
-      if (sendRes.error) {
-        Alert.alert('Send Failed', sendRes.error)
-        return
-      }
+      if (sendRes.error) { Alert.alert('Send Failed', sendRes.error); return }
 
-      const statusRes = await updateJobCardStatus(jobCardId, 'submitted')
-      if (statusRes.error) {
-        Alert.alert('Status Update Failed', statusRes.error)
-        return
-      }
-
-      Alert.alert('Email Sent', 'Claim email sent and status updated to submitted.')
+      await updateJobCardStatus(jobCardId, 'submitted')
+      setShowComposeModal(false)
+      Alert.alert('Email Sent', 'Claim email sent and status updated to Submitted.')
       await loadSubmitData()
     } catch (err: any) {
       Alert.alert('Send Failed', err?.message ?? 'Unable to send claim email')
     } finally {
-      setBusy(null)
+      setComposeSendBusy(false)
     }
   }
-
   const handleSubmitClaim = async () => {
     if (!jobCardId || !jobCard) return
 
@@ -910,6 +962,80 @@ export default function SubmitStageScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* ── COMPOSE EMAIL MODAL ─────────────────────────── */}
+      <Modal visible={showComposeModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowComposeModal(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {/* Header */}
+          <View style={{ backgroundColor: '#1e3a8a', padding: 20, paddingTop: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>✉️ Compose Claim Email</Text>
+              <Text style={{ color: '#93c5fd', fontSize: 12, marginTop: 3 }}>Edit the draft, then tap Send</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowComposeModal(false)} style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 20, lineHeight: 22 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Label */}
+          <View style={{ backgroundColor: '#eff6ff', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#bfdbfe' }}>
+            <Text style={{ color: '#1e40af', fontSize: 13, fontWeight: '600' }}>📝 Email body — edit freely before sending:</Text>
+          </View>
+
+          {/* Editable text area */}
+          <ScrollView style={{ flex: 1, backgroundColor: '#f8faff' }} keyboardDismissMode="interactive">
+            <TextInput
+              value={composeDraftBody}
+              onChangeText={setComposeDraftBody}
+              multiline
+              autoCorrect
+              spellCheck
+              textAlignVertical="top"
+              style={{
+                margin: 14,
+                padding: 16,
+                backgroundColor: '#fff',
+                borderRadius: 10,
+                borderWidth: 2,
+                borderColor: '#bfdbfe',
+                fontSize: 14,
+                lineHeight: 22,
+                color: '#111827',
+                fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif',
+                minHeight: 420,
+              }}
+            />
+            {/* Attachments note */}
+            <View style={{ marginHorizontal: 14, marginBottom: 16, padding: 14, backgroundColor: '#eff6ff', borderRadius: 8, borderWidth: 1, borderColor: '#bfdbfe' }}>
+              <Text style={{ color: '#1e40af', fontSize: 13, fontWeight: '700', marginBottom: 4 }}>📎 Auto-attached on send:</Text>
+              <Text style={{ color: '#374151', fontSize: 13 }}>• Pre-Repair PPT (DIR)</Text>
+              <Text style={{ color: '#374151', fontSize: 13 }}>• Estimate Excel</Text>
+              <Text style={{ color: '#374151', fontSize: 13 }}>• Service History Excel</Text>
+              <Text style={{ color: '#374151', fontSize: 13 }}>• Walkaround Video</Text>
+            </View>
+          </ScrollView>
+
+          {/* Footer buttons */}
+          <View style={{ flexDirection: 'row', gap: 12, padding: 16, backgroundColor: '#f9fafb', borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
+            <TouchableOpacity
+              onPress={() => setShowComposeModal(false)}
+              disabled={composeSendBusy}
+              style={{ flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff', alignItems: 'center' }}
+            >
+              <Text style={{ color: '#374151', fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => void handleSendComposed(composeDraftBody)}
+              disabled={composeSendBusy || !composeDraftBody.trim()}
+              style={{ flex: 2, paddingVertical: 14, borderRadius: 10, backgroundColor: composeSendBusy ? '#93c5fd' : '#1e3a8a', alignItems: 'center' }}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                {composeSendBusy ? '⏳ Sending...' : '📤 Send Email'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </>
   )
 }

@@ -426,6 +426,15 @@ export default function AutoDocPage() {
   const [walkaroundVideoName, setWalkaroundVideoName] = useState(() => readSessionValue(SESSION_KEYS.walkaroundVideoName) || '')
   const [carImageName, setCarImageName] = useState(() => readSessionValue(SESSION_KEYS.carImageName) || '')
   const [deliveryVideoName, setDeliveryVideoName] = useState(() => readSessionValue(SESSION_KEYS.deliveryVideoName) || '')
+  // Compose modal state
+  const [showComposeModal, setShowComposeModal] = useState(false)
+  const [composeDraftBody, setComposeDraftBody] = useState('')
+  const [composeSendBusy, setComposeSendBusy] = useState(false)
+  const [composePendingPayload, setComposePendingPayload] = useState<null | {
+    jobCardId: string
+    content: { subject: string; html: string; plainText: string }
+    attachments: Array<{ filename: string; storagePath: string; bucket: string; driveFileId?: string | null; driveUrl?: string | null }>
+  }>(null)
   const [uploadingWalkaround, setUploadingWalkaround] = useState(false)
   const [walkaroundProgress, setWalkaroundProgress] = useState(0)
   const [uploadingCarImage, setUploadingCarImage] = useState(false)
@@ -2761,6 +2770,7 @@ export default function AutoDocPage() {
     await exportEstimateForJobCard(jobCardId, true)
   }
 
+  // ── Step 1: Open compose modal with pre-filled editable draft ─────────────
   async function handleComposeAndSend() {
     if (!activeJobCardId || !activeSummary) {
       showToast('Select a job card first from dashboard.', false)
@@ -2778,46 +2788,10 @@ export default function AutoDocPage() {
       return
     }
 
-    let latestEstimateAmount = activeSummary.total_estimate_amount ?? null
-    try {
-      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, '')
-      const { data: auth } = await supabase.auth.getSession()
-      const token = auth.session?.access_token
+    // ── Build plain-text draft body for user to review & edit ─────────────────
+    showToast('Preparing email draft...', true)
 
-      if (supabaseUrl && token) {
-        const res = await fetch(`${supabaseUrl}/functions/v1/estimate-export-data`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ jobCardId: syncedJobCardId }),
-        })
-
-        if (res.ok) {
-          const payload = await res.json() as { rows?: Array<Record<string, unknown>> }
-          const rows = Array.isArray(payload.rows) ? payload.rows : []
-          const computedTotal = rows.reduce((sum, row) => {
-            const rowTotal = Number(row.row_total)
-            if (Number.isFinite(rowTotal)) return sum + rowTotal
-
-            const ndp = Number(row.ndp_value) || 0
-            const paint = Number(row.paint_charges) || 0
-            const labour = Number(row.labour_charges) || 0
-            const special = Number(row.total_special_charges) || 0
-            return sum + ndp + paint + labour + special
-          }, 0)
-
-          if (Number.isFinite(computedTotal)) {
-            latestEstimateAmount = computedTotal
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to recompute latest estimate amount for email:', err)
-    }
-
-    // Fetch estimate rows (also used to derive unique panel names for email)
+    // Fetch estimate rows for panel list
     let estimateRowsForEmail: Array<{sr_no:number;panel_name:string;part_number:string|null;part_description:string|null;defect:string|null;action:string|null;qty:number|null;ndp_value:number|null;paint_charges:number|null;labour_charges:number|null;row_total:number|null}> = []
     try {
       const { data: erRows } = await supabase
@@ -2828,16 +2802,59 @@ export default function AutoDocPage() {
       if (erRows) estimateRowsForEmail = erRows as typeof estimateRowsForEmail
     } catch (e) { console.warn('estimate rows fetch', e) }
 
-    // Derive unique panel names from estimate rows (panel_names not in summary view)
-    let emailPanelNames: string[] | null = Array.from(
-      new Set(estimateRowsForEmail.map(r => r.panel_name).filter(Boolean))
-    )
-    // Fallback: try panels from local state
-    if (!emailPanelNames || emailPanelNames.length === 0) {
-      emailPanelNames = [...selectedPanels]
-    }
+    // Derive panel list
+    let emailPanelNames = Array.from(new Set(estimateRowsForEmail.map(r => r.panel_name).filter(Boolean)))
+    if (emailPanelNames.length === 0) emailPanelNames = [...selectedPanels]
+    const panelListText = emailPanelNames.length > 0 ? emailPanelNames.join(', ') : 'various panels'
 
-    const content = generateClaimEmailContent({
+    // Age calc
+    const ageCalcDays2 = (() => {
+      if (activeSummary.date_of_sale) {
+        const sale = new Date(activeSummary.date_of_sale)
+        const ms = Date.now() - sale.getTime()
+        if (ms > 0) return Math.floor(ms / (1000 * 60 * 60 * 24))
+      }
+      return activeSummary.warranty_age_days ?? 0
+    })()
+    const ageCat2 = (() => {
+      const y = ageCalcDays2 / 365
+      if (y < 1) return 'Under 1 Year'
+      if (y < 2) return '1-2 Years'
+      if (y < 3) return '2-3 Years'
+      if (y < 4) return '3-4 Years'
+      if (y < 5) return '4-5 Years'
+      return 'Above 5 Years'
+    })()
+    const kmFormatted2 = activeSummary.km_reading != null
+      ? activeSummary.km_reading.toLocaleString('en-IN') + ' km'
+      : '—'
+    const fmtDate2 = (s: string | null | undefined) => {
+      if (!s) return '—'
+      try {
+        const d = new Date(s)
+        return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
+      } catch { return s ?? '—' }
+    }
+    const totalAmt = estimateRowsForEmail.reduce((sum, r) => sum + (Number(r.row_total) || 0), 0)
+    const amtDisplay = totalAmt > 0 ? totalAmt.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'
+
+    // ── Build the editable plain-text draft exactly as user spec ──────────────
+    const draftText = `Dear Sir,
+Greetings for the Day
+
+Vehicle reported in the workshop for rusting related issues. Post inspection rusting observed on the ${panelListText}. We have checked heavy rusting issue. DIR & estimate and vehicle service history attached for reference. Vehicle is now out of warranty and falls between the ${ageCat2} category. Need prior support on this case related to rusting.
+
+Vehicle detail mentioned below:-
+Chassis No.-       ${activeSummary.vin ?? '—'}
+Vehicle No.-       ${activeSummary.reg_number ?? '—'}
+Model:-             ${activeSummary.model ?? '—'}
+K.m.:-                ${kmFormatted2}
+Date Of Sale:-  ${fmtDate2(activeSummary.date_of_sale)}
+Recommended Estimated Amount : Rs ${amtDisplay} /-
+Estimates attached as per the warranty policy. Need your kind approval for the same.`
+
+    // Prepare full email content (HTML generated from user's final edited text at send time)
+    const emailContent = generateClaimEmailContent({
       jc_number:             (activeSummary.jc_number ?? form.jcNumber) || 'JC-NA',
       reg_number:            (activeSummary.reg_number ?? form.regNumber) || 'REG-NA',
       vin:                   activeSummary.vin ?? null,
@@ -2852,114 +2869,140 @@ export default function AutoDocPage() {
       claim_type:            activeSummary.claim_type ?? null,
       complaint_text:        activeSummary.complaint_text ?? null,
       panel_names:           emailPanelNames.length > 0 ? emailPanelNames : null,
-      total_estimate_amount: latestEstimateAmount,
+      total_estimate_amount: totalAmt > 0 ? totalAmt : activeSummary.total_estimate_amount ?? null,
       tml_share_percent:     activeSummary.tml_share_percent ?? null,
       estimate_rows:         estimateRowsForEmail,
     })
 
-    // Always regenerate estimate fresh before sending (ensures latest data + new format)
-    showToast('Generating latest estimate...', true)
-    await exportEstimateForJobCard(activeJobCardId, false)
-    // Fetch latest documents after regeneration
-    const latestDocs = await refreshDocuments(activeJobCardId)
-    const preDoc = latestDocs.find((doc) => doc.doc_type === 'ppt_pre')
-    const excelDoc = latestDocs.find((doc) => doc.doc_type === 'excel_estimate')
-    const walkaroundDoc = latestDocs.find((doc) => doc.doc_type === 'video_job_card')
+    // Prepare attachments (docs fetched after PPT/Excel generation at send time)
+    // Store pending payload for when user clicks Send in modal
+    setComposePendingPayload({
+      jobCardId: syncedJobCardId,
+      content: emailContent,
+      attachments: [], // will be built at actual send time
+    })
+    setComposeDraftBody(draftText)
+    setShowComposeModal(true)
+  }
 
-    if (!preDoc || !excelDoc) {
-      showToast('Pre-Repair PPT and Estimate Excel are required before sending.', false)
-      return
-    }
-
-    // ── Auto-generate Service History Excel from all_service_data ──────────────
-    showToast('Generating service history...', true)
-    let serviceHistoryAttachment: { filename: string; storagePath: string; bucket: string } | null = null
+  // ── Step 2: Actually send after user edits draft in modal ─────────────────
+  async function handleSendComposedEmail(editedBody: string) {
+    if (!composePendingPayload || !activeJobCardId || !activeSummary) return
+    setComposeSendBusy(true)
     try {
-      const svcResult = await generateServiceHistoryExcel(
-        activeSummary.vin ?? null,
-        activeSummary.reg_number ?? null,
-      )
-      if (!('error' in svcResult) && svcResult.rowCount > 0) {
-        const regSlug = (activeSummary.reg_number ?? 'vehicle').replace(/[^a-zA-Z0-9]/g, '_')
-        const svcFile = new File(
-          [svcResult.blob],
-          `Service_History_${regSlug}.xlsx`,
-          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-        )
-        const svcUpload = await uploadDocumentFile({
-          jobCardId: activeJobCardId,
-          docType: 'service_history',
-          file: svcFile,
-          fileName: svcFile.name,
-          contentType: svcFile.type,
-        })
-        if (!svcUpload.error && svcUpload.data?.storage_path) {
-          serviceHistoryAttachment = {
-            filename: svcFile.name,
-            storagePath: svcUpload.data.storage_path,
-            bucket: AUTODOC_BUCKET,
-          }
-          showToast(`Service history: ${svcResult.rowCount} records found.`, true)
-        }
-      } else if ('error' in svcResult) {
-        console.warn('Service history fetch:', svcResult.error)
-      } else {
-        showToast('No service history records found in master data — attaching without it.', false)
-      }
-    } catch (e) {
-      console.warn('Service history Excel generation failed (non-blocking):', e)
-    }
+      const { jobCardId } = composePendingPayload
 
-    // ── Build attachment list ──────────────────────────────────────────────────
-    // 1. Pre-Repair PPT  2. Estimate Excel  3. Service History Excel (if found)
-    const emailAttachments: Array<{ filename: string; storagePath: string; bucket: string; driveFileId?: string | null; driveUrl?: string | null }> = [
-      {
-        filename: storageFileName(preDoc.storage_path, 'Pre_Repair_PPT.pptx'),
-        storagePath: preDoc.storage_path,
-        bucket: AUTODOC_BUCKET,
-        driveFileId: preDoc.drive_file_id,
-        driveUrl: preDoc.drive_url,
-      },
-      {
-        filename: storageFileName(excelDoc.storage_path, 'Estimate.xlsx'),
-        storagePath: excelDoc.storage_path,
-        bucket: AUTODOC_BUCKET,
-        driveFileId: excelDoc.drive_file_id,
-        driveUrl: excelDoc.drive_url,
-      },
-    ]
-    if (serviceHistoryAttachment) {
-      emailAttachments.push(serviceHistoryAttachment)
-    }
-    if (walkaroundDoc) {
-      emailAttachments.push({
+      // Regenerate estimate + fetch latest docs
+      showToast('Generating latest estimate...', true)
+      await exportEstimateForJobCard(activeJobCardId, false)
+      const latestDocs = await refreshDocuments(activeJobCardId)
+      const preDoc       = latestDocs.find((doc) => doc.doc_type === 'ppt_pre')
+      const excelDoc     = latestDocs.find((doc) => doc.doc_type === 'excel_estimate')
+      const walkaroundDoc = latestDocs.find((doc) => doc.doc_type === 'video_job_card')
+
+      if (!preDoc || !excelDoc) {
+        showToast('Pre-Repair PPT and Estimate Excel are required before sending.', false)
+        setComposeSendBusy(false)
+        return
+      }
+
+      // Service History Excel
+      showToast('Generating service history...', true)
+      let serviceHistoryAttachment: { filename: string; storagePath: string; bucket: string } | null = null
+      try {
+        const svcResult = await generateServiceHistoryExcel(
+          activeSummary.vin ?? null,
+          activeSummary.reg_number ?? null,
+        )
+        if (!('error' in svcResult) && svcResult.rowCount > 0) {
+          const regSlug = (activeSummary.reg_number ?? 'vehicle').replace(/[^a-zA-Z0-9]/g, '_')
+          const svcFile = new File(
+            [svcResult.blob],
+            `Service_History_${regSlug}.xlsx`,
+            { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+          )
+          const svcUpload = await uploadDocumentFile({
+            jobCardId: activeJobCardId,
+            docType: 'service_history',
+            file: svcFile,
+            fileName: svcFile.name,
+            contentType: svcFile.type,
+          })
+          if (!svcUpload.error && svcUpload.data?.storage_path) {
+            serviceHistoryAttachment = {
+              filename: svcFile.name,
+              storagePath: svcUpload.data.storage_path,
+              bucket: AUTODOC_BUCKET,
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Service history generation failed (non-blocking):', e)
+      }
+
+      // Build attachments
+      const emailAttachments: Array<{ filename: string; storagePath: string; bucket: string; driveFileId?: string | null; driveUrl?: string | null }> = [
+        { filename: storageFileName(preDoc.storage_path, 'Pre_Repair_PPT.pptx'), storagePath: preDoc.storage_path, bucket: AUTODOC_BUCKET, driveFileId: preDoc.drive_file_id, driveUrl: preDoc.drive_url },
+        { filename: storageFileName(excelDoc.storage_path, 'Estimate.xlsx'), storagePath: excelDoc.storage_path, bucket: AUTODOC_BUCKET, driveFileId: excelDoc.drive_file_id, driveUrl: excelDoc.drive_url },
+      ]
+      if (serviceHistoryAttachment) emailAttachments.push(serviceHistoryAttachment)
+      if (walkaroundDoc) emailAttachments.push({
         filename: storageFileName(walkaroundDoc.storage_path, 'Vehicle_Walkaround.mp4'),
         storagePath: walkaroundDoc.storage_path,
         bucket: AUTODOC_BUCKET,
         driveFileId: walkaroundDoc.drive_file_id,
         driveUrl: walkaroundDoc.drive_url,
       })
+
+      // Rebuild HTML from user's edited plain text body
+      const { content: emailContent } = composePendingPayload
+      
+      if (!emailContent?.html) {
+        showToast('Email template missing — try again.', false)
+        setComposeSendBusy(false)
+        return
+      }
+      
+      // Escape edited body for safe HTML insertion
+      const safeBody = editedBody
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/\n/g,'<br>')
+      
+      const finalHtml = emailContent.html.replace(
+        /<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,<\/p>.*?<div style="margin-bottom:24px">/s,
+        `<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,</p>
+        <p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day</p>
+        <div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>
+        <div style="margin-bottom:24px">`
+      )
+
+      const sendRes = await sendClaimEmail(jobCardId, {
+        to: ['vinodexodus@gmail.com'],
+        subject: emailContent.subject,
+        html: finalHtml,
+        plainText: editedBody,
+        attachments: emailAttachments,
+        purpose: 'autodoc_claim',
+      })
+
+      if (sendRes.error) {
+        showToast(sendRes.error, false)
+        setComposeSendBusy(false)
+        return
+      }
+
+      await updateJobCardStatus(activeJobCardId, 'submitted')
+      await fetchRows(true)
+      setShowComposeModal(false)
+      setComposePendingPayload(null)
+      showToast('Claim email sent and status updated to submitted.', true)
+    } catch (err: any) {
+      showToast(String(err?.message ?? 'Send failed'), false)
+    } finally {
+      setComposeSendBusy(false)
     }
-
-    // Email recipients are resolved server-side from dealer_settings
-    const targetEmails = ['vinodexodus@gmail.com'] // fallback; overridden by edge fn via dealer_settings
-    const sendRes = await sendClaimEmail(activeJobCardId, {
-      to: targetEmails,
-      subject: content.subject,
-      html: content.html,
-      plainText: content.plainText,
-      attachments: emailAttachments,
-      purpose: 'autodoc_claim',
-    })
-
-    if (sendRes.error) {
-      showToast(sendRes.error, false)
-      return
-    }
-
-    await updateJobCardStatus(activeJobCardId, 'submitted')
-    await fetchRows(true)
-    showToast('Claim email sent and status updated to submitted.', true)
   }
 
   async function handleSubmitClaim() {
@@ -4216,6 +4259,72 @@ export default function AutoDocPage() {
       {/* CLAIM TRACKER */}
       {activeTab === 'claims' && (
         <ClaimTrackerView />
+      )}
+
+      {/* ── COMPOSE EMAIL MODAL ─────────────────────────────────────────── */}
+      {showComposeModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}>
+          <div style={{background:'#fff',borderRadius:'12px',width:'100%',maxWidth:'680px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 8px 40px rgba(0,0,0,0.22)'}}>
+            {/* Modal header */}
+            <div style={{background:'#1e3a8a',borderRadius:'12px 12px 0 0',padding:'18px 24px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div>
+                <div style={{color:'#fff',fontWeight:700,fontSize:'16px'}}>✉️ Compose Claim Email</div>
+                <div style={{color:'#93c5fd',fontSize:'12px',marginTop:'3px'}}>Review and edit the draft below before sending</div>
+              </div>
+              <button onClick={() => setShowComposeModal(false)} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:'6px',color:'#fff',width:'32px',height:'32px',cursor:'pointer',fontSize:'18px',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+            </div>
+
+            {/* Editable body */}
+            <div style={{padding:'20px 24px',flex:1,overflowY:'auto'}}>
+              <div style={{marginBottom:'10px',fontSize:'13px',color:'#6b7280',fontWeight:500}}>
+                📝 Email body — edit freely before sending:
+              </div>
+              <textarea
+                value={composeDraftBody}
+                onChange={(e) => setComposeDraftBody(e.target.value)}
+                rows={18}
+                style={{
+                  width:'100%',
+                  border:'2px solid #bfdbfe',
+                  borderRadius:'8px',
+                  padding:'14px 16px',
+                  fontSize:'14px',
+                  lineHeight:'1.8',
+                  fontFamily:'Arial, Helvetica, sans-serif',
+                  color:'#111827',
+                  background:'#f8faff',
+                  resize:'vertical',
+                  outline:'none',
+                  boxSizing:'border-box',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = '#3b82f6'; e.target.style.background = '#fff' }}
+                onBlur={(e) => { e.target.style.borderColor = '#bfdbfe'; e.target.style.background = '#f8faff' }}
+                spellCheck
+              />
+              <div style={{marginTop:'10px',padding:'10px 14px',background:'#eff6ff',borderRadius:'6px',fontSize:'12px',color:'#1e40af',border:'1px solid #bfdbfe'}}>
+                📎 <strong>Attachments (auto-added on send):</strong> Pre-Repair PPT · Estimate Excel · Service History Excel · Walkaround Video
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div style={{padding:'16px 24px',borderTop:'1px solid #e5e7eb',display:'flex',gap:'12px',justifyContent:'flex-end',background:'#f9fafb',borderRadius:'0 0 12px 12px'}}>
+              <button
+                onClick={() => setShowComposeModal(false)}
+                disabled={composeSendBusy}
+                style={{padding:'10px 22px',borderRadius:'8px',border:'1px solid #d1d5db',background:'#fff',color:'#374151',fontWeight:600,fontSize:'14px',cursor:'pointer'}}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleSendComposedEmail(composeDraftBody)}
+                disabled={composeSendBusy || !composeDraftBody.trim()}
+                style={{padding:'10px 28px',borderRadius:'8px',border:'none',background:composeSendBusy ? '#93c5fd' : '#1e3a8a',color:'#fff',fontWeight:700,fontSize:'14px',cursor:composeSendBusy ? 'not-allowed' : 'pointer',display:'flex',alignItems:'center',gap:'8px'}}
+              >
+                {composeSendBusy ? '⏳ Sending...' : '📤 Send Email'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast */}
