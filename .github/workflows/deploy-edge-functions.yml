@@ -18,6 +18,14 @@ jobs:
         with:
           version: latest
 
+      - name: Deploy send-transactional-email
+        run: |
+          supabase functions deploy send-transactional-email \
+            --project-ref ${{ secrets.SUPABASE_PROJECT_REF || 'jmdndcphkmaljhwgzqxq' }} \
+            --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
       - name: Deploy technician-daily-earnings-report
         run: |
           supabase functions deploy technician-daily-earnings-report \
