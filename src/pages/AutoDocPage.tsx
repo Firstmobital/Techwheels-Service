@@ -2704,10 +2704,10 @@ export default function AutoDocPage() {
     showToast(`${type === 'pre-repair' ? 'Pre-repair' : 'Post-repair'} PPT generated and uploaded.`, true)
   }
 
-  async function exportEstimateForJobCard(jobCardId: string) {
+  async function exportEstimateForJobCard(jobCardId: string, triggerDownload = false) {
     const regSlug = (activeSummary?.reg_number || form.regNumber || jobCardId).replace(/\s+/g, '_')
     const fileName = `estimate_${regSlug}.xlsx`
-    const blob = await handleExcel(jobCardId, true)
+    const blob = await handleExcel(jobCardId, triggerDownload)
     if (!blob) return
     const uploadFile = new File([blob], fileName, {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -2741,7 +2741,7 @@ export default function AutoDocPage() {
       showToast('Save draft first before exporting estimate.', false)
       return
     }
-    await exportEstimateForJobCard(jobCardId)
+    await exportEstimateForJobCard(jobCardId, true)
   }
 
   async function handleEstimateExportExcel() {
@@ -2750,7 +2750,7 @@ export default function AutoDocPage() {
       showToast('Save draft first before exporting estimate.', false)
       return
     }
-    await exportEstimateForJobCard(jobCardId)
+    await exportEstimateForJobCard(jobCardId, true)
   }
 
   async function handleComposeAndSend() {
@@ -2819,19 +2819,14 @@ export default function AutoDocPage() {
       total_estimate_amount: latestEstimateAmount,
     })
 
-    // Always fetch latest documents before building attachments (avoids stale state)
+    // Always regenerate estimate fresh before sending (ensures latest data + new format)
+    showToast('Generating latest estimate...', true)
+    await exportEstimateForJobCard(activeJobCardId, false)
+    // Fetch latest documents after regeneration
     const latestDocs = await refreshDocuments(activeJobCardId)
     const preDoc = latestDocs.find((doc) => doc.doc_type === 'ppt_pre')
-    let excelDoc = latestDocs.find((doc) => doc.doc_type === 'excel_estimate')
+    const excelDoc = latestDocs.find((doc) => doc.doc_type === 'excel_estimate')
     const walkaroundDoc = latestDocs.find((doc) => doc.doc_type === 'video_job_card')
-
-    // Auto-regenerate estimate if stored file is old CSV format (not xlsx)
-    if (excelDoc && !excelDoc.storage_path.endsWith('.xlsx')) {
-      showToast('Upgrading estimate to XLSX format...', true)
-      await exportEstimateForJobCard(activeJobCardId)
-      const freshDocs = await refreshDocuments(activeJobCardId)
-      excelDoc = freshDocs.find((doc) => doc.doc_type === 'excel_estimate')
-    }
 
     if (!preDoc || !excelDoc || !walkaroundDoc) {
       showToast('Required attachments are missing in document store.', false)
@@ -2893,21 +2888,16 @@ export default function AutoDocPage() {
       return
     }
 
-    // Always fetch latest documents before building attachments (avoids stale state)
+    // Always regenerate estimate fresh before sending (ensures latest data + new format)
+    await exportEstimateForJobCard(activeJobCardId, false)
+    // Fetch latest documents after regeneration
     const latestDocs2 = await refreshDocuments(activeJobCardId)
     const postDoc = latestDocs2.find((doc) => doc.doc_type === 'ppt_post')
     if (!postDoc) {
       showToast('Post-repair PPT attachment is missing. Please generate it again.', false)
       return
     }
-
-    let excelDoc = latestDocs2.find((doc) => doc.doc_type === 'excel_estimate')
-    // Auto-upgrade CSV → XLSX if old format
-    if (excelDoc && !excelDoc.storage_path.endsWith('.xlsx')) {
-      await exportEstimateForJobCard(activeJobCardId)
-      const freshDocs = await refreshDocuments(activeJobCardId)
-      excelDoc = freshDocs.find((doc) => doc.doc_type === 'excel_estimate') ?? excelDoc
-    }
+    const excelDoc = latestDocs2.find((doc) => doc.doc_type === 'excel_estimate')
     const preDoc = latestDocs2.find((doc) => doc.doc_type === 'ppt_pre')
     const deliveryDoc = latestDocs2.find((doc) => doc.doc_type === 'video_delivery')
 
