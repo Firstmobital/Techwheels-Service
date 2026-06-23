@@ -1044,10 +1044,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handlePreview}
-              disabled={creating || !dateFrom || !dateTo}
+              disabled={creating || previewing || !dateFrom || !dateTo}
               className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40"
             >
-              🔍 Preview Leads
+              {previewing ? 'Loading…' : '🔍 Preview Leads'}
             </button>
             <button
               onClick={handleCreate}
@@ -1239,13 +1239,13 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
               <div className="mt-2 flex flex-wrap gap-2 items-center">
                 {(c as any).customer_segment && (c as any).customer_segment !== 'all' && (
                   <span className="inline-flex items-center rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs text-blue-700 font-medium">
-                    {{
+                    {({
                       sold_us: '🏠 Sold by Techwheels',
                       sold_others: '🎯 Conquest (Sold elsewhere)',
                       last_svc_us: '🔧 Last Serviced at Us',
                       last_svc_others: '🔧 Last Serviced Elsewhere',
                       warranty_expiring: '🔔 Warranty Expiring',
-                    }[(c as any).customer_segment] || (c as any).customer_segment}
+                    } as Record<string, string>)[(c as any).customer_segment] || (c as any).customer_segment}
                   </span>
                 )}
                 {(c as any).powertrain_filter && (c as any).powertrain_filter !== 'all' && (
