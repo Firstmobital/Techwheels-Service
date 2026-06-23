@@ -120,9 +120,12 @@ export async function sendClaimEmail(
     return fail(`Failed to send email: ${sendRes.error}`)
   }
 
+  // Normalise recipients to a comma-joined string for DB logging
+  const recipientStr = Array.isArray(options.to) ? options.to.join(',') : options.to
+
   // Log email to database with sent timestamp
   const logRes = await logEmail(jobCardId, {
-    recipientEmail: options.to,
+    recipientEmail: recipientStr,
     subject: options.subject,
     body: options.html,
     attachments: options.attachments?.map((a) => a.storagePath),
@@ -134,7 +137,7 @@ export async function sendClaimEmail(
     return ok({
       id: '',
       job_card_id: jobCardId,
-      recipient_email: options.to,
+      recipient_email: recipientStr,
       subject: options.subject,
       body: options.html,
       attachments: options.attachments?.map((a) => a.storagePath) ?? null,
