@@ -2996,7 +2996,7 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
   </div>
 </div>
 </body>
-</html>\`
+</html>`
 
       const sendRes = await sendClaimEmail(jobCardId, {
         to: ['vinodexodus@gmail.com'],
