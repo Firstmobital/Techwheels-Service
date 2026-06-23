@@ -485,12 +485,12 @@ export default function SubmitStageScreen() {
         attachments.push(buildAttachment(walkaroundDoc, 'vehicle-walkaround.mp4'))
       }
 
-      const targetEmail = 'vinodexodus@gmail.com'
       const sendRes = await sendClaimEmail(jobCardId, {
-        to: targetEmail,
+        to: 'vinodexodus@gmail.com', // overridden server-side by dealer_settings
         subject: content.subject,
         html: content.html,
         attachments,
+        purpose: 'autodoc_claim',
       })
 
       if (sendRes.error) {
@@ -550,12 +550,12 @@ export default function SubmitStageScreen() {
         attachments.push(buildAttachment(deliveryDoc, 'delivery-video.mp4'))
       }
 
-      const targetEmail = 'vinodexodus@gmail.com'
       const sendRes = await sendClaimEmail(jobCardId, {
-        to: targetEmail,
+        to: 'vinodexodus@gmail.com', // overridden server-side by dealer_settings
         subject: `[POST-REPAIR] ${content.subject}`,
         html: content.html,
         attachments,
+        purpose: 'autodoc_claim',
       })
 
       if (sendRes.error) {
