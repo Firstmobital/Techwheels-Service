@@ -2879,6 +2879,7 @@ export default function AutoDocPage() {
       to: targetEmails,
       subject: content.subject,
       html: content.html,
+      plainText: content.plainText,
       attachments: [
         {
           filename: storageFileName(preDoc.storage_path, 'pre-repair.pptx'),
@@ -3016,6 +3017,7 @@ export default function AutoDocPage() {
       to: targetEmails2,
       subject: `[POST-REPAIR] ${content.subject}`,
       html: content.html,
+      plainText: content.plainText,
       attachments,
       purpose: 'autodoc_claim',
     })

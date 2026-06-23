@@ -29,6 +29,7 @@ async function sendTransactionalEmail(
   html: string,
   attachments?: EmailAttachmentRef[],
   purpose?: string,
+  plainTextOverride?: string,
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
     // Refresh session first to get a fresh token
@@ -55,7 +56,7 @@ async function sendTransactionalEmail(
           to,
           subject,
           html,
-          text: html.replace(/<[^>]*>/g, ''), // Strip HTML for plain text
+          text: plainTextOverride ?? html.replace(/<[^>]*>/g, ''), // Use plain text if provided
           purpose: purpose ?? 'manual_message',
           attachments,
         }),
@@ -124,12 +125,13 @@ export async function sendClaimEmail(
     to: string | string[]
     subject: string
     html: string
+    plainText?: string
     attachments?: EmailAttachmentRef[]
     purpose?: string
   },
 ): Promise<ApiResult<EmailLog>> {
   // Send email via edge function
-  const sendRes = await sendTransactionalEmail(options.to, options.subject, options.html, options.attachments, options.purpose)
+  const sendRes = await sendTransactionalEmail(options.to, options.subject, options.html, options.attachments, options.purpose, options.plainText)
   if (sendRes.error) {
     return fail(`Failed to send email: ${sendRes.error}`)
   }
@@ -203,15 +205,28 @@ export function generateClaimEmailContent(jobCard: {
   }>
 }): { subject: string; html: string; plainText: string } {
 
+  // Age is calculated from date_of_sale to TODAY (current date) — not complaint_date
+  // This matches TML expectations (e.g. sold May 2023, emailed June 2026 → 3+ years → "3-4 Years")
+  const ageCalcDays = (() => {
+    if (jobCard.date_of_sale) {
+      const sale = new Date(jobCard.date_of_sale)
+      const today = new Date()
+      const ms = today.getTime() - sale.getTime()
+      if (ms > 0) return Math.floor(ms / (1000 * 60 * 60 * 24))
+    }
+    // Fallback to stored warranty_age_days
+    return jobCard.warranty_age_days ?? 0
+  })()
+
   const ageStr = (() => {
-    const d = jobCard.warranty_age_days ?? 0
+    const d = ageCalcDays
     const y = Math.floor(d / 365)
     const m = Math.floor((d % 365) / 30)
     return y > 0 ? `${y} Year${y > 1 ? 's' : ''} ${m} Month${m !== 1 ? 's' : ''}` : `${m} Month${m !== 1 ? 's' : ''}`
   })()
 
   const ageCat = (() => {
-    const d = jobCard.warranty_age_days ?? 0
+    const d = ageCalcDays
     const y = d / 365
     if (y < 1) return 'Under 1 Year'
     if (y < 2) return '1-2 Years'
@@ -227,15 +242,40 @@ export function generateClaimEmailContent(jobCard: {
   const fmtDate = (s: string | null | undefined) => {
     if (!s) return '—'
     try {
-      return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const d = new Date(s)
+      const dd = String(d.getDate()).padStart(2, '0')
+      const mm = String(d.getMonth() + 1).padStart(2, '0')
+      const yyyy = d.getFullYear()
+      return `${dd}/${mm}/${yyyy}`
     } catch { return s }
   }
 
-  const issueDesc = jobCard.complaint_text && jobCard.complaint_text.trim()
-    ? jobCard.complaint_text.trim()
-    : 'rusting related issues'
+  // Normalize complaint text → always "X related issues" format for professional email tone
+  const issueDesc = (() => {
+    const raw = (jobCard.complaint_text ?? '').trim().toLowerCase()
+    if (!raw) return 'rusting related issues'
+    // If it's just a noun like "rusting issue", "rust", "rusting", normalize it
+    const stripped = raw
+      .replace(/\s*(issue|issues|problem|complaint|concern|related issues)\s*$/i, '')
+      .trim()
+    if (!stripped) return 'rusting related issues'
+    return `${stripped} related issues`
+  })()
 
-  const panelList = (jobCard.panel_names ?? []).join(', ') || 'various panels'
+  // Panel names: prefer those derived from estimate_rows (more accurate), fall back to panel_names array
+  const panelList = (() => {
+    // First try estimate_rows panel names
+    if (jobCard.estimate_rows && jobCard.estimate_rows.length > 0) {
+      const panels = Array.from(new Set(
+        jobCard.estimate_rows.map(r => r.panel_name?.trim()).filter(Boolean) as string[]
+      ))
+      if (panels.length > 0) return panels.join(', ')
+    }
+    // Fall back to panel_names array from dashboard summary
+    const names = (jobCard.panel_names ?? []).filter(Boolean)
+    if (names.length > 0) return names.join(', ')
+    return 'various panels'
+  })()
   // Derive actual issue type from estimate rows defects (more accurate than claim_type which is generic)
   const inferredIssueType = (() => {
     if (jobCard.estimate_rows && jobCard.estimate_rows.length > 0) {
@@ -316,9 +356,12 @@ export function generateClaimEmailContent(jobCard: {
       </div>`
   }
 
-  // ── Plain text (matches the exact format given) ────────────────────────────
-  const plainText = `Dear Sir,
+  // ── Plain text — EXACT format as per TML pre-approval requirement ─────────
+  const kmFormatted = jobCard.km_reading != null
+    ? jobCard.km_reading.toLocaleString('en-IN') + ' km'
+    : '—'
 
+  const plainText = `Dear Sir,
 Greetings for the Day
 
 Vehicle reported in the workshop for ${issueDesc}. Post inspection ${claimType.toLowerCase()} observed on the ${panelList}. we have checked heavy ${claimType.toLowerCase()} issue. DIR & estimate and vehicle service history attached for reference. Vehicle is now out of warranty and falls between the ${ageCat} category. Need prior support on this case related to ${claimType.toLowerCase()}.
@@ -327,16 +370,10 @@ Vehicle detail mentioned below:-
 Chassis No.-       ${jobCard.vin ?? '—'}
 Vehicle No.-       ${jobCard.reg_number}
 Model:-             ${jobCard.model ?? '—'}
-K.m.:-                ${jobCard.km_reading != null ? jobCard.km_reading.toLocaleString('en-IN') + ' km' : '—'}
+K.m.:-                ${kmFormatted}
 Date Of Sale:-  ${fmtDate(jobCard.date_of_sale)}
 Recommended Estimated Amount : Rs ${amount} /-
-Estimates attached as per the warranty policy . Need your kind approval for the same.
-
-Regards,
-
-${sender}
-${jobCard.dealer_name ?? ''}
-JC No: ${jobCard.jc_number}`
+ Estimates attached as per the warranty policy . Need your kind approval for the same.`
 
   // ── HTML (styled version of the same format) ──────────────────────────────
   const html = `<!DOCTYPE html>
@@ -389,7 +426,7 @@ JC No: ${jobCard.jc_number}`
           </tr>
           <tr style="background:#f9fafb">
             <td style="padding:6px 8px;font-weight:600;color:#555">K.m.</td>
-            <td style="padding:6px 8px">${jobCard.km_reading != null ? jobCard.km_reading.toLocaleString('en-IN') + ' km' : '—'}</td>
+            <td style="padding:6px 8px">${kmFormatted}</td>
           </tr>
           <tr>
             <td style="padding:6px 0;font-weight:600;color:#555">Date Of Sale</td>
