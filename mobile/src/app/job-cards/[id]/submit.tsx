@@ -597,28 +597,43 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       if (serviceHistAttachment) attachments.push(serviceHistAttachment)
       if (walkaroundDoc) attachments.push(buildAttachment(walkaroundDoc, 'Vehicle_Walkaround.mp4'))
 
-      // Inject edited body back into HTML template
-      // Use string split approach (Hermes-safe, no complex regex needed)
-      const safeBody = editedBody
+      // Convert entire edited plain text into a clean HTML body
+      // Replace everything between <!-- Main Body --> and the vehicle table with edited content
+      const escapedBody = editedBody
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>')
 
-      const AMBER_START = 'background:#fef9f0;'
-      const AMBER_DIV_OPEN = '<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8">'
-      const AMBER_DIV_REPLACEMENT = '<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">' + safeBody + '</div>'
+      // Build HTML lines preserving paragraph breaks
+      const bodyLines = escapedBody.split('\n')
+      const bodyHtml = bodyLines.map((line: string) => {
+        const trimmed = line.trim()
+        if (trimmed === '') return '<br>'
+        return '<p style="margin:0 0 6px 0;font-size:14px;line-height:1.8">' + trimmed + '</p>'
+      }).join('\n')
+
+      // Replace the FORMAT 2 + FORMAT 1 section entirely (from Dear Sir to end of vehicle table)
+      // Anchor: replace from <p>Dear Sir</p> up to (but not including) the footer/closing div
+      const BODY_START_MARKER = '<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,</p>'
+      const BODY_END_MARKER = '<!-- Closing line -->'
 
       let finalHtml = emailContent.html
       try {
-        const startIdx = finalHtml.indexOf(AMBER_START)
-        if (startIdx !== -1) {
-          // Find the opening < of this div
-          const divOpenIdx = finalHtml.lastIndexOf('<div', startIdx)
-          // Find the closing </div> after the opening tag
-          const divCloseIdx = finalHtml.indexOf('</div>', startIdx)
-          if (divOpenIdx !== -1 && divCloseIdx !== -1) {
-            finalHtml = finalHtml.substring(0, divOpenIdx) + AMBER_DIV_REPLACEMENT + finalHtml.substring(divCloseIdx + 6)
+        const startIdx = finalHtml.indexOf(BODY_START_MARKER)
+        const endIdx = finalHtml.indexOf(BODY_END_MARKER)
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          finalHtml = finalHtml.substring(0, startIdx) + bodyHtml + '\n    ' + finalHtml.substring(endIdx)
+        } else if (startIdx !== -1) {
+          // Fallback: just replace amber block with full text
+          const AMBER_START = 'background:#fef9f0;'
+          const amberIdx = finalHtml.indexOf(AMBER_START)
+          if (amberIdx !== -1) {
+            const divOpenIdx = finalHtml.lastIndexOf('<div', amberIdx)
+            const divCloseIdx = finalHtml.indexOf('</div>', amberIdx)
+            if (divOpenIdx !== -1 && divCloseIdx !== -1) {
+              const REPLACEMENT = '<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">' + escapedBody.replace(/\n/g, '<br>') + '</div>'
+              finalHtml = finalHtml.substring(0, divOpenIdx) + REPLACEMENT + finalHtml.substring(divCloseIdx + 6)
+            }
           }
         }
       } catch (e) {
