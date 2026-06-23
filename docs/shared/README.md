@@ -1,10 +1,49 @@
-# Techwheels Service - Project Handbook
+# Shared Truth State Documentation
 
-Last Updated: 2026-05-22
-Owner: Engineering Team
-Status: Living Document
+**Scope:** Shared specifications, policies, and decisions that apply to both web and mobile platforms.
 
-## De-dup Audit Artifact
+**Last Updated:** 2026-06-23  
+**Owner:** Techwheels Development Team  
+**Status:** Active - Truth State (applies to both platforms)
+
+## Structure
+
+### reference/
+Authoritative specifications and decisions that govern both platforms:
+- Architectural decisions and rationale
+- Database change protocols and procedures
+- Sync contracts and data consistency rules
+- Module and route architecture specifications
+- Onboarding policies and rules
+
+### runbooks/
+Operational procedures shared across both web and mobile:
+- Enforcement procedures (e.g., onboarding gating)
+- Troubleshooting guides
+- Admin procedures
+
+### active/
+Live tracking and ongoing documentation shared by both platforms:
+- Change log tracking all state transitions
+- Live policies in effect
+
+### catalog/
+Reusable templates and standards:
+- Update templates
+- Common documentation templates
+
+---
+
+## Subcategories Guide
+
+- `reference/` → Specifications, decisions, policies (immutable authority)
+- `runbooks/` → Procedures, operational guides
+- `active/` → Live tracking, changelogs
+- `catalog/` → Reusable templates and libraries
+
+---
+
+
 
 - Docs conflict matrix (non-Implementation_plans): `DOCS_DEDUP_CONFLICT_MATRIX_2026-06-18.md`
 
