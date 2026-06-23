@@ -280,19 +280,75 @@ export function ClaimTrackerView() {
     )
   }
 
+  function downloadCSV(exportRows: ClaimRow[]) {
+    const ageStr = (days: number | null) => {
+      if (days == null) return '—'
+      const y = Math.floor(days / 365)
+      const m = Math.floor((days % 365) / 30)
+      return y > 0 ? `${y}Y ${m}M` : `${m}M`
+    }
+    const yn = (v: boolean | null | undefined) => v ? 'Yes' : 'No'
+    const headers = [
+      'JC Number', 'Reg No', 'Chassis No (VIN)', 'Model', 'Colour',
+      'Vehicle Age',
+      'Pre-Repair Pics', 'Under-Repair Pics', 'Post-Repair Pics',
+      'PPT Pre', 'PPT Post', 'Estimate (Excel)',
+      'GDC Status', 'Claim Submitted',
+    ]
+    const csvRows = [headers.join(',')]
+    for (const r of exportRows) {
+      csvRows.push([
+        r.jc_number ?? '',
+        r.reg_number ?? '',
+        r.vin ?? '',
+        r.model ?? '',
+        r.colour ?? '',
+        ageStr(r.warranty_age_days),
+        r.pre_pics ?? 0,
+        r.under_repair_pics ?? 0,
+        r.post_pics ?? 0,
+        yn(r.has_ppt_pre),
+        yn(r.has_ppt_post),
+        yn(r.has_excel_estimate),
+        r.gdc_status ?? 'none',
+        yn(r.claim_hidden),
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    }
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `claims_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-4 p-4 max-w-2xl mx-auto">
 
       {/* Summary bar */}
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between text-sm flex-wrap gap-2">
         <span className="text-gray-600 font-medium">{visible.length} active claim{visible.length !== 1 ? 's' : ''}</span>
-        {hidden.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {hidden.length > 0 && (
+            <button
+              onClick={() => setShowHidden(v => !v)}
+              className="text-xs text-indigo-600 underline">
+              {showHidden ? 'Hide' : `Show ${hidden.length} submitted`}
+            </button>
+          )}
+          {/* Download buttons */}
           <button
-            onClick={() => setShowHidden(v => !v)}
-            className="text-xs text-indigo-600 underline">
-            {showHidden ? 'Hide' : `Show ${hidden.length} submitted`}
+            onClick={() => downloadCSV(visible)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition">
+            ↓ Active Claims
           </button>
-        )}
+          <button
+            onClick={() => downloadCSV(rows)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition">
+            ↓ All Claims
+          </button>
+        </div>
       </div>
 
       {/* Active claims */}
