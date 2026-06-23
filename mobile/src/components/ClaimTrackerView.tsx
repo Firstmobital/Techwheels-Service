@@ -1,243 +1,290 @@
-/**
- * ClaimTrackerView (React Native / Expo)
- * Mobile counterpart of the web ClaimTrackerView
- */
-import { useCallback, useEffect, useState } from 'react'
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native'
-import { supabase } from '../lib/supabase'
+import React, { useEffect, useState } from 'react'
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
+import { createClient } from '@supabase/supabase-js'
 
-// ── types ─────────────────────────────────────────────────────────────────────
+const SUPABASE_URL  = process.env.EXPO_PUBLIC_SUPABASE_URL  ?? ''
+const SUPABASE_ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
+
 interface ClaimRow {
-  job_card_id:           string
-  jc_number:             string
-  reg_number:            string | null
-  vin:                   string | null
-  model:                 string | null
-  colour:                string | null
-  complaint_date:        string
-  date_of_sale:          string | null
-  warranty_age_days:     number | null
-  has_ppt_pre:           boolean
-  has_ppt_post:          boolean
-  has_excel_estimate:    boolean
-  total_estimate_amount: number | null
-  owner_name:            string | null
-  km_reading:            number | null
-  gdc_status?:           'none' | 'pending' | 'done' | null
-  claim_hidden?:         boolean | null
+  job_card_id:        string
+  jc_number:          string | null
+  reg_number:         string | null
+  vin:                string | null
+  model:              string | null
+  colour:             string | null
+  warranty_age_days:  number | null
+  has_ppt_pre:        boolean
+  has_ppt_post:       boolean
+  has_excel_estimate: boolean
+  gdc_status?:        string | null
+  claim_hidden?:      boolean | null
+  pre_pics?:          number
+  under_repair_pics?: number
+  post_pics?:         number
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-const LS_PREFIX = 'autodoc_claim_'
 function ageLabel(days: number | null): { text: string; years: number } {
-  if (!days) return { text: '—', years: 0 }
-  const years  = Math.floor(days / 365)
-  const months = Math.round((days % 365) / 30)
-  return { text: `${years}Y ${months}M`, years }
+  if (days == null) return { text: '—', years: 0 }
+  const y = Math.floor(days / 365)
+  const m = Math.floor((days % 365) / 30)
+  return { text: y > 0 ? `${y}Y ${m}M` : `${m}M`, years: y + m / 12 }
 }
 
-// ── component ─────────────────────────────────────────────────────────────────
+function PicBadge({ count, label, color }: { count: number; label: string; color: string }) {
+  const ok = count > 0
+  return (
+    <View style={[s.badge, ok ? { backgroundColor: color + '20', borderColor: color } : s.badgeFail]}>
+      <Text style={[s.badgeText, { color: ok ? color : '#dc2626' }]}>
+        {ok ? `✓ ${label} (${count})` : `✗ ${label}`}
+      </Text>
+    </View>
+  )
+}
+
+function DocBadge({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <View style={[s.badge, ok ? s.badgeOk : s.badgeFail]}>
+      <Text style={[s.badgeText, { color: ok ? '#16a34a' : '#dc2626' }]}>
+        {ok ? `✓ ${label}` : `✗ ${label}`}
+      </Text>
+    </View>
+  )
+}
+
 export function ClaimTrackerView() {
-  const [rows,      setRows]      = useState<ClaimRow[]>([])
-  const [loading,   setLoading]   = useState(true)
-  const [gdcMap,    setGdcMap]    = useState<Record<string, string>>({})
-  const [hiddenMap, setHiddenMap] = useState<Record<string, boolean>>({})
-  const [busyId,    setBusyId]    = useState<string | null>(null)
-  const [hasDbCols, setHasDbCols] = useState(false)
+  const [rows, setRows]       = useState<ClaimRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
+  const [showHidden, setShowHidden] = useState(false)
+  const [busyId, setBusyId]   = useState<string | null>(null)
 
-  const fetchRows = useCallback(async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('job_card_summary')
-      .select('job_card_id,jc_number,reg_number,vin,model,colour,complaint_date,date_of_sale,warranty_age_days,has_ppt_pre,has_ppt_post,has_excel_estimate,total_estimate_amount,owner_name,km_reading,gdc_status,claim_hidden')
-      .in('status', ['submitted', 'completed'])
-      .order('complaint_date', { ascending: false })
-    if (error) { setLoading(false); return }
-    const fetched = (data ?? []) as ClaimRow[]
-    setRows(fetched)
-    const dbCols = fetched.length === 0 || 'gdc_status' in fetched[0]
-    setHasDbCols(dbCols)
-    if (dbCols) {
-      const gm: Record<string, string>  = {}
-      const hm: Record<string, boolean> = {}
-      fetched.forEach(r => {
-        gm[r.job_card_id] = r.gdc_status ?? 'none'
-        hm[r.job_card_id] = r.claim_hidden ?? false
-      })
-      setGdcMap(gm); setHiddenMap(hm)
+  useEffect(() => { fetchClaims() }, [])
+
+  async function fetchClaims() {
+    setLoading(true); setError(null)
+    try {
+      const { data, error: err } = await sb
+        .from('job_card_summary')
+        .select(`job_card_id, jc_number, reg_number, vin, model, colour,
+                 warranty_age_days, has_ppt_pre, has_ppt_post, has_excel_estimate,
+                 gdc_status, claim_hidden`)
+        .in('status', ['submitted', 'completed'])
+        .order('warranty_age_days', { ascending: false })
+
+      if (err) throw new Error(err.message)
+      const base: ClaimRow[] = (data ?? []).map(r => ({
+        ...r, pre_pics: 0, under_repair_pics: 0, post_pics: 0,
+      }))
+
+      if (base.length > 0) {
+        const ids = base.map(r => r.job_card_id)
+        const { data: photos } = await sb
+          .from('panel_photos')
+          .select('job_card_id, photo_type')
+          .in('job_card_id', ids)
+
+        if (photos) {
+          const counts: Record<string, { defect: number; primer: number; paint: number }> = {}
+          for (const p of photos) {
+            if (!counts[p.job_card_id]) counts[p.job_card_id] = { defect: 0, primer: 0, paint: 0 }
+            if (p.photo_type === 'defect') counts[p.job_card_id].defect++
+            if (p.photo_type === 'primer') counts[p.job_card_id].primer++
+            if (p.photo_type === 'paint')  counts[p.job_card_id].paint++
+          }
+          for (const r of base) {
+            const c = counts[r.job_card_id]
+            if (c) { r.pre_pics = c.defect; r.under_repair_pics = c.primer; r.post_pics = c.paint }
+          }
+        }
+      }
+
+      setRows(base)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }, [])
+  }
 
-  useEffect(() => { void fetchRows() }, [fetchRows])
-
-  async function toggleGdc(id: string, cur: string) {
-    const next = cur === 'done' ? 'pending' : 'done'
+  async function toggleGdc(id: string, current: string | null | undefined) {
+    const next = current === 'done' ? 'none' : 'done'
     setBusyId(id)
-    if (hasDbCols) await supabase.from('job_cards').update({ gdc_status: next }).eq('id', id)
-    setGdcMap(m => ({ ...m, [id]: next }))
+    await sb.from('job_cards').update({ gdc_status: next }).eq('id', id)
+    setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, gdc_status: next } : r))
     setBusyId(null)
   }
 
   async function markSubmitted(id: string) {
-    Alert.alert('Confirm', 'Mark this claim as submitted to TML?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', style: 'default', onPress: async () => {
-        setBusyId(id)
-        if (hasDbCols) await supabase.from('job_cards').update({ claim_hidden: true, claim_submitted_at: new Date().toISOString() }).eq('id', id)
-        setHiddenMap(m => ({ ...m, [id]: true }))
-        setBusyId(null)
-      }}
-    ])
+    setBusyId(id)
+    await sb.from('job_cards').update({ claim_hidden: true, claim_submitted_at: new Date().toISOString() }).eq('id', id)
+    setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, claim_hidden: true } : r))
+    setBusyId(null)
   }
 
-  const visible = rows.filter(r => !hiddenMap[r.job_card_id])
+  async function undoSubmitted(id: string) {
+    setBusyId(id)
+    await sb.from('job_cards').update({ claim_hidden: false, claim_submitted_at: null }).eq('id', id)
+    setRows(prev => prev.map(r => r.job_card_id === id ? { ...r, claim_hidden: false } : r))
+    setBusyId(null)
+  }
+
+  const visible = rows.filter(r => !r.claim_hidden)
+  const hidden  = rows.filter(r => r.claim_hidden)
 
   if (loading) return (
-    <View style={s.center}><ActivityIndicator size="large" color="#2a4cd0" /></View>
+    <View style={s.center}><ActivityIndicator size="large" color="#6366f1" /></View>
   )
-
-  if (visible.length === 0) return (
+  if (error) return (
     <View style={s.center}>
-      <Text style={s.empty}>No submitted claims yet.</Text>
-      <Text style={[s.empty, { fontSize: 12 }]}>Claims appear here once the email is sent.</Text>
+      <Text style={{ color: '#dc2626', marginBottom: 12, fontSize: 13 }}>{error}</Text>
+      <TouchableOpacity onPress={fetchClaims} style={s.btn}>
+        <Text style={s.btnText}>Retry</Text>
+      </TouchableOpacity>
     </View>
   )
+  if (rows.length === 0) return (
+    <View style={s.center}><Text style={{ color: '#9ca3af', fontSize: 13 }}>No submitted claims yet.</Text></View>
+  )
+
+  const renderCard = (row: ClaimRow) => {
+    const { text: ageText, years: ageYears } = ageLabel(row.warranty_age_days)
+    const needsGdc  = ageYears >= 3
+    const gdcDone   = row.gdc_status === 'done'
+    const canSubmit = !needsGdc || gdcDone
+    const busy      = busyId === row.job_card_id
+    const allPhotos = (row.pre_pics ?? 0) > 0 && (row.under_repair_pics ?? 0) > 0 && (row.post_pics ?? 0) > 0
+    const allDocs   = row.has_ppt_pre && row.has_ppt_post && row.has_excel_estimate
+
+    return (
+      <View key={row.job_card_id} style={[s.card, row.claim_hidden && { opacity: 0.6 }]}>
+
+        {/* Header: Reg No + Age */}
+        <View style={s.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.regNo}>{row.reg_number ?? '—'}</Text>
+            {row.jc_number && <Text style={s.sub}>#{row.jc_number}</Text>}
+            {(row.model || row.colour) && (
+              <Text style={s.sub}>{[row.model, row.colour].filter(Boolean).join(' · ')}</Text>
+            )}
+          </View>
+          <View style={[s.ageBadge, { backgroundColor: ageYears >= 3 ? '#fef3c7' : '#dcfce7' }]}>
+            <Text style={[s.ageText, { color: ageYears >= 3 ? '#92400e' : '#166534' }]}>{ageText}</Text>
+            <Text style={{ fontSize: 9, color: '#6b7280', textAlign: 'center' }}>vehicle age</Text>
+          </View>
+        </View>
+
+        {/* Chassis No */}
+        <View style={s.chassisRow}>
+          <Text style={s.label}>CHASSIS</Text>
+          <Text style={s.mono}>{row.vin ?? '—'}</Text>
+        </View>
+
+        {/* Photos */}
+        <Text style={s.sectionLabel}>PHOTOS</Text>
+        <View style={s.wrap}>
+          <PicBadge count={row.pre_pics ?? 0}          label="Pre-Repair"   color="#2563eb" />
+          <PicBadge count={row.under_repair_pics ?? 0} label="Under Repair" color="#ea580c" />
+          <PicBadge count={row.post_pics ?? 0}         label="Post-Repair"  color="#16a34a" />
+        </View>
+
+        {/* Documents */}
+        <Text style={[s.sectionLabel, { marginTop: 8 }]}>DOCUMENTS</Text>
+        <View style={s.wrap}>
+          <DocBadge ok={row.has_ppt_pre}        label="Pre-PPT" />
+          <DocBadge ok={row.has_ppt_post}        label="Post-PPT" />
+          <DocBadge ok={row.has_excel_estimate}  label="Estimate" />
+        </View>
+
+        {/* Warning */}
+        {(!allPhotos || !allDocs) && (
+          <View style={s.warn}>
+            <Text style={s.warnText}>
+              ⚠ {[!allPhotos && 'Missing photos', !allDocs && 'Missing documents'].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+        )}
+
+        {/* Actions */}
+        {!row.claim_hidden ? (
+          <View style={[s.row, { gap: 8, marginTop: 10 }]}>
+            {needsGdc && (
+              <TouchableOpacity
+                onPress={() => toggleGdc(row.job_card_id, row.gdc_status)}
+                disabled={busy}
+                style={[s.actionBtn, { backgroundColor: gdcDone ? '#16a34a' : '#f59e0b' }]}>
+                <Text style={s.actionText}>{gdcDone ? '✓ GDC Done' : 'Create GDC'}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => markSubmitted(row.job_card_id)}
+              disabled={busy || !canSubmit}
+              style={[s.actionBtn, { backgroundColor: canSubmit ? '#4f46e5' : '#d1d5db', flex: 1 }]}>
+              <Text style={[s.actionText, !canSubmit && { color: '#9ca3af' }]}>
+                ✓ Claim Submitted to TML
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={() => undoSubmitted(row.job_card_id)} disabled={busy} style={s.undoBtn}>
+            <Text style={s.undoText}>↩ Undo — Reopen Claim</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    )
+  }
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={s.container}>
-      {visible.map(row => {
-        const gdc      = (gdcMap[row.job_card_id] ?? 'none') as 'none'|'pending'|'done'
-        const busy     = busyId === row.job_card_id
-        const { text: ageText, years } = ageLabel(row.warranty_age_days)
-        const needsGdc = years >= 3
-        const allOk    = row.has_ppt_pre && row.has_ppt_post && row.has_excel_estimate
-        const blocked  = needsGdc && gdc !== 'done'
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+      {/* Summary */}
+      <View style={[s.row, { marginBottom: 12 }]}>
+        <Text style={{ color: '#374151', fontSize: 13, fontWeight: '600' }}>
+          {visible.length} active claim{visible.length !== 1 ? 's' : ''}
+        </Text>
+        {hidden.length > 0 && (
+          <TouchableOpacity onPress={() => setShowHidden(v => !v)}>
+            <Text style={{ color: '#6366f1', fontSize: 12, textDecorationLine: 'underline' }}>
+              {showHidden ? 'Hide' : `Show ${hidden.length} submitted`}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-        return (
-          <View key={row.job_card_id} style={s.card}>
-            {/* Header */}
-            <View style={s.cardHead}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.jcNum}>{row.jc_number}</Text>
-                <Text style={s.ownerName}>{row.owner_name ?? '—'}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={s.regNum}>{row.reg_number ?? '—'}</Text>
-                <Text style={s.modelTxt}>{row.model} · {row.colour}</Text>
-              </View>
-            </View>
+      {visible.map(renderCard)}
 
-            {/* Info pills */}
-            <View style={s.infoRow}>
-              <View style={s.infoPill}>
-                <Text style={s.infoPillLabel}>VIN</Text>
-                <Text style={s.infoPillVal} numberOfLines={1}>{row.vin ?? '—'}</Text>
-              </View>
-              <View style={[s.infoPill, needsGdc && { backgroundColor: '#fff8e7', borderColor: '#f59e0b' }]}>
-                <Text style={s.infoPillLabel}>Age</Text>
-                <Text style={[s.infoPillVal, needsGdc && { color: '#b45309' }]}>{ageText}</Text>
-                {needsGdc && <Text style={{ fontSize: 9, color: '#b45309', fontWeight: '700' }}>GDC req.</Text>}
-              </View>
-            </View>
-
-            {/* Doc checklist */}
-            <View style={s.docsRow}>
-              {[
-                { ok: row.has_ppt_pre,        label: 'Pre-PPT' },
-                { ok: row.has_ppt_post,       label: 'Post-PPT' },
-                { ok: row.has_excel_estimate, label: 'Estimate' },
-              ].map(({ ok, label }) => (
-                <View key={label} style={[s.docChip, ok ? s.docChipOk : s.docChipBad]}>
-                  <Text style={[s.docChipTxt, ok ? { color: '#059669' } : { color: '#dc2626' }]}>
-                    {ok ? '✓' : '✗'} {label}
-                  </Text>
-                </View>
-              ))}
-            </View>
-            {!allOk && (
-              <Text style={{ fontSize: 10, color: '#dc2626', marginHorizontal: 12, marginBottom: 6 }}>
-                ⚠ Missing documents — complete before submitting to TML
-              </Text>
-            )}
-
-            {/* Estimate */}
-            {!!row.total_estimate_amount && (
-              <View style={s.estimateBar}>
-                <Text style={{ fontSize: 11, color: '#1d4ed8' }}>Claim Value</Text>
-                <Text style={{ fontSize: 13, fontWeight: '800', color: '#1d4ed8' }}>
-                  Rs {row.total_estimate_amount.toLocaleString('en-IN')}
-                </Text>
-              </View>
-            )}
-
-            {/* Actions */}
-            <View style={s.actions}>
-              {needsGdc && (
-                <TouchableOpacity
-                  style={[s.btn, gdc === 'done' ? s.btnGreen : s.btnAmber]}
-                  disabled={busy}
-                  onPress={() => void toggleGdc(row.job_card_id, gdc)}
-                >
-                  {busy ? <ActivityIndicator size="small" color="#fff" /> : (
-                    <Text style={s.btnTxt}>{gdc === 'done' ? '✓ GDC Done' : '+ Create GDC'}</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[s.btn, blocked ? s.btnDisabled : s.btnBlue]}
-                disabled={busy || blocked}
-                onPress={() => void markSubmitted(row.job_card_id)}
-              >
-                {busy ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <Text style={[s.btnTxt, blocked && { color: '#9ca3af' }]}>
-                    {blocked ? 'Complete GDC first' : '✓ Claim Submitted to TML'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )
-      })}
+      {showHidden && hidden.length > 0 && (
+        <View>
+          <Text style={[s.sectionLabel, { marginVertical: 12 }]}>SUBMITTED TO TML ({hidden.length})</Text>
+          {hidden.map(renderCard)}
+        </View>
+      )}
     </ScrollView>
   )
 }
 
-// ── styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  scroll:       { flex: 1 },
-  container:    { padding: 12, gap: 14, paddingBottom: 32 },
-  center:       { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  empty:        { fontSize: 15, fontWeight: '600', color: '#6b7280', textAlign: 'center', marginBottom: 4 },
-  card:         { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' },
-  cardHead:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 14, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  jcNum:        { fontSize: 12, fontWeight: '700', color: '#374151', fontFamily: 'JetBrains Mono' },
-  ownerName:    { fontSize: 11, color: '#9ca3af', marginTop: 1 },
-  regNum:       { fontSize: 13, fontWeight: '800', color: '#111827', fontFamily: 'JetBrains Mono' },
-  modelTxt:     { fontSize: 10, color: '#9ca3af', marginTop: 1 },
-  infoRow:      { flexDirection: 'row', gap: 8, padding: 12, paddingBottom: 6 },
-  infoPill:     { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 10, padding: 9, borderWidth: 1, borderColor: '#e5e7eb' },
-  infoPillLabel:{ fontSize: 9, color: '#9ca3af', fontWeight: '700', textTransform: 'uppercase', marginBottom: 2 },
-  infoPillVal:  { fontSize: 11, fontWeight: '700', color: '#374151' },
-  docsRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, paddingBottom: 8 },
-  docChip:      { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
-  docChipOk:    { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' },
-  docChipBad:   { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-  docChipTxt:   { fontSize: 11, fontWeight: '600' },
-  estimateBar:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#eff6ff', marginHorizontal: 12, marginBottom: 8, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  actions:      { padding: 12, gap: 8 },
-  btn:          { borderRadius: 10, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
-  btnTxt:       { color: '#fff', fontSize: 13, fontWeight: '700' },
-  btnAmber:     { backgroundColor: '#f59e0b' },
-  btnGreen:     { backgroundColor: '#059669' },
-  btnBlue:      { backgroundColor: '#4f46e5' },
-  btnDisabled:  { backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  card:        { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  row:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  wrap:        { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  regNo:       { fontSize: 18, fontWeight: '700', color: '#111827', fontFamily: 'monospace' },
+  sub:         { fontSize: 11, color: '#6b7280', marginTop: 1 },
+  ageBadge:    { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center' },
+  ageText:     { fontSize: 13, fontWeight: '700' },
+  chassisRow:  { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, marginVertical: 8, gap: 8 },
+  label:       { fontSize: 10, fontWeight: '700', color: '#9ca3af', letterSpacing: 1, width: 56 },
+  mono:        { fontSize: 12, color: '#1f2937', fontFamily: 'monospace', flex: 1 },
+  sectionLabel: { fontSize: 10, fontWeight: '700', color: '#9ca3af', letterSpacing: 1, marginBottom: 6 },
+  badge:       { borderWidth: 1, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4 },
+  badgeOk:     { backgroundColor: '#f0fdf4', borderColor: '#86efac' },
+  badgeFail:   { backgroundColor: '#fef2f2', borderColor: '#fca5a5' },
+  badgeText:   { fontSize: 11, fontWeight: '600' },
+  warn:        { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fcd34d', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, marginTop: 8 },
+  warnText:    { fontSize: 11, color: '#92400e' },
+  actionBtn:   { borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' },
+  actionText:  { color: '#fff', fontSize: 12, fontWeight: '700' },
+  undoBtn:     { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', marginTop: 10 },
+  undoText:    { fontSize: 12, color: '#6b7280', fontWeight: '600' },
+  btn:         { backgroundColor: '#3b82f6', borderRadius: 6, paddingHorizontal: 16, paddingVertical: 8 },
+  btnText:     { color: '#fff', fontSize: 13, fontWeight: '600' },
 })

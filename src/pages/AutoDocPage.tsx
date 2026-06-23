@@ -3990,10 +3990,7 @@ export default function AutoDocPage() {
 
       {/* CLAIM TRACKER */}
       {activeTab === 'claims' && (
-        <ClaimTrackerView
-          supabaseUrl={import.meta.env.VITE_SUPABASE_URL ?? ''}
-          supabaseKey={import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}
-        />
+        <ClaimTrackerView />
       )}
 
       {/* Toast */}
