@@ -1569,11 +1569,19 @@ code.k--b { background: var(--accent-soft); color: var(--accent); }
 .ad-sel-action {
   height: 34px;
   width: 140px;
+  background: #FFFFFF !important;
+  color: #0E1726 !important;
+  -webkit-appearance: auto;
+  appearance: auto;
 }
 
 .ad-sel-defect {
   height: 34px;
   min-width: 130px;
+  background: #FFFFFF !important;
+  color: #0E1726 !important;
+  -webkit-appearance: auto;
+  appearance: auto;
 }
 
 .ad-inp-part {

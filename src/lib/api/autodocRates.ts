@@ -444,7 +444,7 @@ export async function getAutoDocWorkflowOptions(): Promise<ApiResult<AutoDocWork
       .map((row) => row.defect?.trim())
       .filter((value): value is string => Boolean(value)),
   )).sort((a, b) => a.localeCompare(b))
-  ;['Rusting', 'Scratch', 'Paint Peel'].forEach((defect) => {
+  ;['Rusting', 'Paint Peel'].forEach((defect) => {
     if (!estimateDefectOptions.includes(defect)) estimateDefectOptions.push(defect)
   })
   estimateDefectOptions.sort((a, b) => a.localeCompare(b))
