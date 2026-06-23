@@ -686,6 +686,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
   onRefresh: () => void
 }) {
   const [showCreate, setShowCreate] = useState(false)
+  const [showServiceInfo, setShowServiceInfo] = useState(false)
   const [campaignName, setCampaignName] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -772,7 +773,16 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
 
       {/* Create campaign button */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Campaigns</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900">Campaigns</h2>
+          <button
+            onClick={() => setShowServiceInfo(!showServiceInfo)}
+            title="How is service due date calculated?"
+            className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 border border-gray-300 text-gray-500 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-600 text-xs font-bold transition-colors"
+          >
+            i
+          </button>
+        </div>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -780,6 +790,44 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
           + New Campaign
         </button>
       </div>
+
+      {/* Service due date info panel */}
+      {showServiceInfo && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm relative">
+          <button
+            onClick={() => setShowServiceInfo(false)}
+            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-lg leading-none"
+          >
+            ×
+          </button>
+          <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+            <span>ℹ️</span> How is <em>Assumed Next Service Date</em> calculated?
+          </h4>
+          <p className="text-sm text-blue-800 mb-3">
+            When a customer has no scheduled service date set, the system <strong>estimates</strong> their next service due date based on their last service type:
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <div className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">New Vehicle / No History</div>
+              <div className="text-xl font-bold text-blue-900">+60 days</div>
+              <div className="text-xs text-blue-600 mt-0.5">from last service date</div>
+            </div>
+            <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <div className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">First Free Service</div>
+              <div className="text-xl font-bold text-blue-900">+120 days</div>
+              <div className="text-xs text-blue-600 mt-0.5">from last service date</div>
+            </div>
+            <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+              <div className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">All Other Services</div>
+              <div className="text-xl font-bold text-blue-900">+180 days</div>
+              <div className="text-xs text-blue-600 mt-0.5">rolling, based on days since last service</div>
+            </div>
+          </div>
+          <p className="text-xs text-blue-700 mt-3 border-t border-blue-200 pt-2">
+            📋 <strong>Campaign selection:</strong> When you create a campaign with a date range, the system pulls all customers whose <em>assumed next service date</em> falls within that range, and who have a valid phone number.
+          </p>
+        </div>
+      )}
 
       {/* Create form */}
       {showCreate && (
