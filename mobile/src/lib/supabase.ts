@@ -14,7 +14,7 @@ const extraSupabaseAnonKey = typeof extra.supabaseAnonKey === 'string' ? extra.s
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? extraSupabaseUrl
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? extraSupabaseAnonKey
 const hasSupabaseEnv = !!supabaseUrl && !!supabaseAnonKey
-const FALLBACK_SUPABASE_URL = 'https://invalid.local'
+const FALLBACK_SUPABASE_URL = 'https://jmdndcphkmaljhwgzqxq.supabase.co'
 const FALLBACK_SUPABASE_ANON_KEY = 'invalid-anon-key'
 
 if (!hasSupabaseEnv) {
