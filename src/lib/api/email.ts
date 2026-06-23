@@ -28,6 +28,7 @@ async function sendTransactionalEmail(
   subject: string,
   html: string,
   attachments?: EmailAttachmentRef[],
+  purpose?: string,
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
     const response = await fetch(
@@ -43,7 +44,7 @@ async function sendTransactionalEmail(
           subject,
           html,
           text: html.replace(/<[^>]*>/g, ''), // Strip HTML for plain text
-          purpose: 'manual_message',
+          purpose: purpose ?? 'manual_message',
           attachments,
         }),
       },
@@ -112,10 +113,11 @@ export async function sendClaimEmail(
     subject: string
     html: string
     attachments?: EmailAttachmentRef[]
+    purpose?: string
   },
 ): Promise<ApiResult<EmailLog>> {
   // Send email via edge function
-  const sendRes = await sendTransactionalEmail(options.to, options.subject, options.html, options.attachments)
+  const sendRes = await sendTransactionalEmail(options.to, options.subject, options.html, options.attachments, options.purpose)
   if (sendRes.error) {
     return fail(`Failed to send email: ${sendRes.error}`)
   }

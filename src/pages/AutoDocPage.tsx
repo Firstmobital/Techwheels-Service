@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getDealerSettings } from '../lib/api/dealerSettings'
+// getDealerSettings removed - recipients handled server-side
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Icon } from '../components/Icon'
@@ -2826,9 +2826,9 @@ export default function AutoDocPage() {
       return
     }
 
-    const settingsRes = await getDealerSettings()
-    const targetEmails = settingsRes.reportEmails.length > 0 ? settingsRes.reportEmails : ['vinodexodus@gmail.com']
-    if (settingsRes.reportEmails.length === 0) {
+    // Email recipients are resolved server-side from dealer_settings
+    const targetEmails = ['vinodexodus@gmail.com'] // fallback; overridden by edge fn via dealer_settings
+    if (false) {
       showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
     }
     const sendRes = await sendClaimEmail(activeJobCardId, {
@@ -2858,6 +2858,7 @@ export default function AutoDocPage() {
           driveUrl: walkaroundDoc.drive_url,
         },
       ],
+      purpose: 'autodoc_claim',
     })
 
     if (sendRes.error) {
@@ -2931,9 +2932,9 @@ export default function AutoDocPage() {
       }] : []),
     ]
 
-    const settingsRes2 = await getDealerSettings()
-    const targetEmails2 = settingsRes2.reportEmails.length > 0 ? settingsRes2.reportEmails : ['vinodexodus@gmail.com']
-    if (settingsRes2.reportEmails.length === 0) {
+    // Email recipients are resolved server-side from dealer_settings
+    const targetEmails2 = ['vinodexodus@gmail.com'] // fallback; overridden by edge fn via dealer_settings
+    if (false) {
       showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
     }
     const sendRes = await sendClaimEmail(activeJobCardId, {
@@ -2941,6 +2942,7 @@ export default function AutoDocPage() {
       subject: `[POST-REPAIR] ${content.subject}`,
       html: content.html,
       attachments,
+      purpose: 'autodoc_claim',
     })
 
     if (sendRes.error) {

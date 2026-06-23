@@ -16,7 +16,7 @@ type SendEmailBody = {
   html: string
   text?: string
   reply_to?: string
-  purpose?: 'non_auth_notification' | 'operational' | 'report' | 'manual_message'
+  purpose?: 'non_auth_notification' | 'operational' | 'report' | 'manual_message' | 'autodoc_claim'
   attachments?: AttachmentRef[]
 }
 
@@ -330,6 +330,35 @@ Deno.serve(async (req) => {
       return json(headers, { error: 'Invalid recipient email format' }, 400)
     }
 
+    // For autodoc_claim purpose: override recipients with dealer_settings if needed
+    let finalRecipients = recipients
+    if (body.purpose === 'autodoc_claim' && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const dsRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/dealer_settings?select=setting_value&dealer_code=eq.3000840&setting_key=eq.report_email`,
+          {
+            headers: {
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+          }
+        )
+        const dsData = await dsRes.json() as Array<{ setting_value: string }>
+        if (dsData && dsData.length > 0 && dsData[0].setting_value) {
+          const dsEmails = dsData[0].setting_value
+            .split(',')
+            .map((e: string) => e.trim())
+            .filter((e: string) => e.length > 0 && e.includes('@'))
+          if (dsEmails.length > 0) {
+            finalRecipients = dsEmails
+          }
+        }
+      } catch (e) {
+        console.warn('[dealer_settings] Failed to fetch report_email:', e)
+        // fall through - use whatever the web app passed
+      }
+    }
+
     if (body.reply_to && !isEmail(body.reply_to)) {
       return json(headers, { error: 'Invalid reply_to email format' }, 400)
     }
@@ -368,7 +397,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         from: `Techwheels <${FROM_EMAIL}>`,
-        to: recipients,
+        to: finalRecipients,
         subject: body.subject,
         html: body.html,
         text: body.text,
@@ -404,8 +433,8 @@ Deno.serve(async (req) => {
       resource_id: null,
       details: {
         purpose: body.purpose ?? 'manual_message',
-        recipients_count: recipients.length,
-        recipients: recipients,
+        recipients_count: finalRecipients.length,
+        recipients: finalRecipients,
         subject: body.subject,
         attachments_count: resendAttachments.length,
       },
@@ -415,7 +444,7 @@ Deno.serve(async (req) => {
     return json(headers, {
       success: true,
       message: 'Transactional email sent',
-      recipients_count: recipients.length,
+      recipients_count: finalRecipients.length,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
