@@ -21,6 +21,7 @@ import {
   ScrollView,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { ClaimTrackerView } from '../../components/ClaimTrackerView'
 import {
   listJobCardSummaries,
   type JobDashboardSummaryRow,
@@ -43,7 +44,7 @@ type WorkflowStage =
   | 'post_repair_ppt'
   | 'claim_submitted'
 
-type DashboardCardFilter = 'active_vehicles' | 'today' | 'completed' | WorkflowStage
+type DashboardCardFilter = 'active_vehicles' | 'today' | 'completed' | 'claims_tracker' | WorkflowStage
 
 function isTodayComplaintDate(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false
@@ -504,6 +505,8 @@ export default function AutoDocScreen() {
             <PrimaryButton title="Retry" onPress={onRefresh} />
           </View>
         </View>
+      ) : stageFilter === 'claims_tracker' ? (
+        <ClaimTrackerView />
       ) : (
         <FlatList
           data={filteredRows}
@@ -593,6 +596,7 @@ export default function AutoDocScreen() {
                     { key: 'active_vehicles' as DashboardCardFilter, label: `Active · ${rowsWithStage.filter((entry) => entry.stage !== 'claim_submitted').length}` },
                     { key: 'today' as DashboardCardFilter, label: `Today · ${stageCounts.today}` },
                     { key: 'completed' as DashboardCardFilter, label: `Done · ${stageCounts.claim_submitted}` },
+                    { key: 'claims_tracker' as DashboardCardFilter, label: 'Claims' },
                   ].map((seg) => (
                     <TouchableOpacity
                       key={seg.key}

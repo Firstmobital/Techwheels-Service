@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // getDealerSettings removed - recipients handled server-side
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { ClaimTrackerView } from '../components/ClaimTrackerView'
 import { Icon } from '../components/Icon'
 import { generateRepairPPT } from '../lib/generators/generatePPT'
 import { generateEstimateExcel } from '../lib/generators/generateExcel'
@@ -3142,6 +3143,9 @@ export default function AutoDocPage() {
         <button className={`tab${activeTab === 'submit' ? ' is-active' : ''}`} onClick={() => setActiveTab('submit')}>
           <span className="ic"><Icon name="arrowr" size={16} /></span>Submit
         </button>
+        <button className={`tab${activeTab === 'claims' ? ' is-active' : ''}`} onClick={() => setActiveTab('claims')}>
+          <span className="ic"><Icon name="shield" size={16} /></span>Claims
+        </button>
       </div>
 
       {/* KPI Summary */}
@@ -3984,7 +3988,16 @@ export default function AutoDocPage() {
         </div>
       )}
 
+      {/* CLAIM TRACKER */}
+      {activeTab === 'claims' && (
+        <ClaimTrackerView
+          supabaseUrl={import.meta.env.VITE_SUPABASE_URL ?? ''}
+          supabaseKey={import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''}
+        />
+      )}
+
       {/* Toast */}
+
       {toast && (
         <div className={[
           'fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl px-5 py-3 text-sm shadow-lg',
