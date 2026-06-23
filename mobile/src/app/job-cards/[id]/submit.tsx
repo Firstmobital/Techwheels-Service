@@ -597,10 +597,31 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       if (serviceHistAttachment) attachments.push(serviceHistAttachment)
       if (walkaroundDoc) attachments.push(buildAttachment(walkaroundDoc, 'Vehicle_Walkaround.mp4'))
 
+      // Inject edited body back into HTML template (same as web version)
+      const safeBody = editedBody
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
+
+      let finalHtml = emailContent.html
+      try {
+        const replaced = emailContent.html.replace(
+          /<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,<\/p>[\s\S]*?<div style="margin-bottom:24px">/,
+          `<p style="margin:0 0 6px 0;font-size:14px">Dear Sir,</p>
+        <p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day</p>
+        <div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>
+        <div style="margin-bottom:24px">`
+        )
+        finalHtml = replaced
+      } catch (e) {
+        console.warn('HTML body injection failed, sending original template', e)
+      }
+
       const sendRes = await sendClaimEmail(jobCardId, {
         to: 'vinodexodus@gmail.com',
         subject: emailContent.subject,
-        html: emailContent.html,
+        html: finalHtml,
         plainText: editedBody,
         attachments,
         purpose: 'autodoc_claim',
