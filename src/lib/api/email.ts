@@ -31,14 +31,15 @@ async function sendTransactionalEmail(
   purpose?: string,
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
-    // Always refresh session to avoid "Auth session missing / expired token" errors
-    let sessionData = (await supabase.auth.getSession()).data.session
+    // Refresh session first to get a fresh token
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+    let sessionData = refreshed.session
     if (!sessionData?.access_token) {
-      const { data: refreshed } = await supabase.auth.refreshSession()
-      sessionData = refreshed.session
+      // Fallback: try reading cached session
+      sessionData = (await supabase.auth.getSession()).data.session
     }
     if (!sessionData?.access_token) {
-      return fail('Email send failed: Session expired. Please log out and log in again.')
+      return fail('Session expired — please log out and log in again, then retry.')
     }
     const accessToken = sessionData.access_token
 

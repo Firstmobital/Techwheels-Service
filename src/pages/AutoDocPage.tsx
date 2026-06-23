@@ -2819,8 +2819,17 @@ export default function AutoDocPage() {
     })
 
     const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
-    const excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    let excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
     const walkaroundDoc = jobDocuments.find((doc) => doc.doc_type === 'video_job_card')
+
+    // Auto-regenerate estimate if stored file is old CSV format (not xlsx)
+    if (excelDoc && !excelDoc.storage_path.endsWith('.xlsx')) {
+      showToast('Upgrading estimate to XLSX format...', true)
+      await exportEstimateForJobCard(activeJobCardId)
+      await refreshDocuments(activeJobCardId)
+      excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    }
+
     if (!preDoc || !excelDoc || !walkaroundDoc) {
       showToast('Required attachments are missing in document store.', false)
       return
@@ -2887,7 +2896,13 @@ export default function AutoDocPage() {
       return
     }
 
-    const excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    let excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    // Auto-upgrade CSV → XLSX if old format
+    if (excelDoc && !excelDoc.storage_path.endsWith('.xlsx')) {
+      await exportEstimateForJobCard(activeJobCardId)
+      await refreshDocuments(activeJobCardId)
+      excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    }
     const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
     const deliveryDoc = jobDocuments.find((doc) => doc.doc_type === 'video_delivery')
 
