@@ -2816,14 +2816,35 @@ export default function AutoDocPage() {
       console.warn('Failed to recompute latest estimate amount for email:', err)
     }
 
+    // Fetch estimate rows for the parts table
+    let estimateRowsForEmail: Array<{sr_no:number;panel_name:string;part_number:string|null;part_description:string|null;defect:string|null;action:string|null;qty:number|null;ndp_value:number|null;paint_charges:number|null;labour_charges:number|null;row_total:number|null}> = []
+    try {
+      const { data: erRows } = await supabase
+        .from('estimate_rows')
+        .select('sr_no,panel_name,part_number,part_description,defect,action,qty,ndp_value,paint_charges,labour_charges,row_total')
+        .eq('job_card_id', syncedJobCardId)
+        .order('sr_no', { ascending: true })
+      if (erRows) estimateRowsForEmail = erRows as typeof estimateRowsForEmail
+    } catch (e) { console.warn('estimate rows fetch', e) }
+
     const content = generateClaimEmailContent({
-      jc_number: (activeSummary.jc_number ?? form.jcNumber) || 'JC-NA',
-      reg_number: (activeSummary.reg_number ?? form.regNumber) || 'REG-NA',
-      model: activeSummary.model ?? null,
-      colour: activeSummary.colour ?? null,
-      complaint_date: activeSummary.complaint_date ?? new Date().toISOString(),
-      dealer_name: activeSummary.dealer_name ?? null,
+      jc_number:             (activeSummary.jc_number ?? form.jcNumber) || 'JC-NA',
+      reg_number:            (activeSummary.reg_number ?? form.regNumber) || 'REG-NA',
+      vin:                   activeSummary.vin ?? null,
+      model:                 activeSummary.model ?? null,
+      colour:                activeSummary.colour ?? null,
+      complaint_date:        activeSummary.complaint_date ?? new Date().toISOString(),
+      km_reading:            activeSummary.km_reading ?? null,
+      date_of_sale:          activeSummary.date_of_sale ?? null,
+      dealer_name:           activeSummary.dealer_name ?? null,
+      dealer_code:           activeSummary.dealer_code ?? null,
+      warranty_age_days:     activeSummary.warranty_age_days ?? null,
+      claim_type:            activeSummary.claim_type ?? null,
+      complaint_text:        activeSummary.complaint_text ?? null,
+      panel_names:           (activeSummary as {panel_names?: string[]}).panel_names ?? null,
       total_estimate_amount: latestEstimateAmount,
+      tml_share_percent:     activeSummary.tml_share_percent ?? null,
+      estimate_rows:         estimateRowsForEmail,
     })
 
     // Always regenerate estimate fresh before sending (ensures latest data + new format)
@@ -2908,14 +2929,35 @@ export default function AutoDocPage() {
     const preDoc = latestDocs2.find((doc) => doc.doc_type === 'ppt_pre')
     const deliveryDoc = latestDocs2.find((doc) => doc.doc_type === 'video_delivery')
 
+    // Fetch estimate rows for parts table
+    let submitEstimateRows: Array<{sr_no:number;panel_name:string;part_number:string|null;part_description:string|null;defect:string|null;action:string|null;qty:number|null;ndp_value:number|null;paint_charges:number|null;labour_charges:number|null;row_total:number|null}> = []
+    try {
+      const { data: subER } = await supabase
+        .from('estimate_rows')
+        .select('sr_no,panel_name,part_number,part_description,defect,action,qty,ndp_value,paint_charges,labour_charges,row_total')
+        .eq('job_card_id', activeJobCardId)
+        .order('sr_no', { ascending: true })
+      if (subER) submitEstimateRows = subER as typeof submitEstimateRows
+    } catch (e) { console.warn('estimate rows fetch submit', e) }
+
     const content = generateClaimEmailContent({
-      jc_number: (activeSummary?.jc_number ?? form.jcNumber) || 'JC-NA',
-      reg_number: (activeSummary?.reg_number ?? form.regNumber) || 'REG-NA',
-      model: activeSummary?.model ?? null,
-      colour: activeSummary?.colour ?? null,
-      complaint_date: activeSummary?.complaint_date ?? new Date().toISOString(),
-      dealer_name: activeSummary?.dealer_name ?? null,
+      jc_number:             (activeSummary?.jc_number ?? form.jcNumber) || 'JC-NA',
+      reg_number:            (activeSummary?.reg_number ?? form.regNumber) || 'REG-NA',
+      vin:                   activeSummary?.vin ?? null,
+      model:                 activeSummary?.model ?? null,
+      colour:                activeSummary?.colour ?? null,
+      complaint_date:        activeSummary?.complaint_date ?? new Date().toISOString(),
+      km_reading:            activeSummary?.km_reading ?? null,
+      date_of_sale:          activeSummary?.date_of_sale ?? null,
+      dealer_name:           activeSummary?.dealer_name ?? null,
+      dealer_code:           activeSummary?.dealer_code ?? null,
+      warranty_age_days:     activeSummary?.warranty_age_days ?? null,
+      claim_type:            activeSummary?.claim_type ?? null,
+      complaint_text:        activeSummary?.complaint_text ?? null,
+      panel_names:           (activeSummary as {panel_names?: string[]} | null)?.panel_names ?? null,
       total_estimate_amount: activeSummary?.total_estimate_amount ?? null,
+      tml_share_percent:     activeSummary?.tml_share_percent ?? null,
+      estimate_rows:         submitEstimateRows,
     })
 
     const attachments = [

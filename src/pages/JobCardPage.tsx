@@ -665,7 +665,15 @@ export default function JobCardPage() {
             <button
               onClick={() => {
                 if (jc) {
-                  const { subject, html } = generateClaimEmailContent(jc)
+                  const { subject, html } = generateClaimEmailContent({
+                    ...jc,
+                    vin: null,
+                    km_reading: null,
+                    date_of_sale: null,
+                    claim_type: null,
+                    complaint_text: null,
+                    panel_names: null,
+                  })
                   setEmailForm({ to: 'claims@tatamotors.com', subject, body: html })
                   setComposingEmail(true)
                 }
