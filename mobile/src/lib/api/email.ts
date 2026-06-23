@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { getSupabaseBaseUrl } from '../env'
 import { fail, ok, type ApiResult } from './types'
 
 export interface EmailLog {
@@ -45,7 +46,7 @@ async function sendTransactionalEmail(
     const accessToken = sessionData.access_token
 
     const response = await fetch(
-      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/send-transactional-email`,
+      `${getSupabaseBaseUrl()}/functions/v1/send-transactional-email`,
       {
         method: 'POST',
         headers: {
@@ -529,7 +530,7 @@ export async function sendTechnicianDailyEarningsTestEmail(
     }
 
     const response = await fetch(
-      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/technician-daily-earnings-report`,
+      `${getSupabaseBaseUrl()}/functions/v1/technician-daily-earnings-report`,
       {
         method: 'POST',
         headers: {
