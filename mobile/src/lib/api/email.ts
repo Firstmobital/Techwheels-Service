@@ -44,8 +44,9 @@ async function sendTransactionalEmail(
     }
     const accessToken = sessionData.access_token
 
+    const SUPABASE_URL = 'https://jmdndcphkmaljhwgzqxq.supabase.co'
     const response = await fetch(
-      `${(import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')}/functions/v1/send-transactional-email`,
+      `${SUPABASE_URL}/functions/v1/send-transactional-email`,
       {
         method: 'POST',
         headers: {
@@ -56,7 +57,7 @@ async function sendTransactionalEmail(
           to,
           subject,
           html,
-          text: plainTextOverride ?? html.replace(/<[^>]*>/g, ''), // Use plain text if provided
+          text: plainTextOverride ?? (html ? html.replace(/<[^>]*>/g, '') : ''), // Use plain text if provided
           purpose: purpose ?? 'manual_message',
           attachments,
         }),
