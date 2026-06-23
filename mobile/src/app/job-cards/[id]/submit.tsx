@@ -598,28 +598,28 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       if (walkaroundDoc) attachments.push(buildAttachment(walkaroundDoc, 'Vehicle_Walkaround.mp4'))
 
       // Inject edited body back into HTML template
-      // Strategy: replace the amber description block (fef9f0 background) with user's edited text
+      // Use string split approach (Hermes-safe, no complex regex needed)
       const safeBody = editedBody
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/\n/g, '<br>')
 
+      const AMBER_START = 'background:#fef9f0;'
+      const AMBER_DIV_OPEN = '<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8">'
+      const AMBER_DIV_REPLACEMENT = '<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">' + safeBody + '</div>'
+
       let finalHtml = emailContent.html
       try {
-        // Match the entire amber description div block and replace its content
-        const replaced = emailContent.html.replace(
-          /(<div style="padding:14px 18px;background:#fef9f0[^"]*">[\s\S]*?<\/div>)/,
-          `<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>`
-        )
-        if (replaced !== emailContent.html) {
-          finalHtml = replaced
-        } else {
-          // Fallback: insert after Greetings paragraph
-          finalHtml = emailContent.html.replace(
-            /(<p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day<\/p>)[\s\S]*?(<div style="margin-bottom:24px">)/,
-            `$1\n<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>\n$2`
-          )
+        const startIdx = finalHtml.indexOf(AMBER_START)
+        if (startIdx !== -1) {
+          // Find the opening < of this div
+          const divOpenIdx = finalHtml.lastIndexOf('<div', startIdx)
+          // Find the closing </div> after the opening tag
+          const divCloseIdx = finalHtml.indexOf('</div>', startIdx)
+          if (divOpenIdx !== -1 && divCloseIdx !== -1) {
+            finalHtml = finalHtml.substring(0, divOpenIdx) + AMBER_DIV_REPLACEMENT + finalHtml.substring(divCloseIdx + 6)
+          }
         }
       } catch (e) {
         console.warn('HTML body injection failed, sending original template', e)

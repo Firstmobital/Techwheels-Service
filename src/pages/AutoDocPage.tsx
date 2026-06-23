@@ -2970,20 +2970,17 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
         .replace(/>/g,'&gt;')
         .replace(/\n/g,'<br>')
       
-      // Replace the amber description block with user's edited text
+      // Replace the amber description block with user's edited text (string index approach)
+      const AMBER_START_MARKER = 'background:#fef9f0;'
+      const AMBER_DIV_REPLACEMENT = '<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">' + safeBody + '</div>'
       let finalHtml = emailContent.html
-      const replaced = emailContent.html.replace(
-        /(<div style="padding:14px 18px;background:#fef9f0[^"]*">[\s\S]*?<\/div>)/,
-        `<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>`
-      )
-      if (replaced !== emailContent.html) {
-        finalHtml = replaced
-      } else {
-        // Fallback: insert after Greetings paragraph
-        finalHtml = emailContent.html.replace(
-          /(<p style="margin:0 0 18px 0;font-size:14px">Greetings for the Day<\/p>)[\s\S]*?(<div style="margin-bottom:24px">)/s,
-          `$1\n<div style="padding:14px 18px;background:#fef9f0;border-left:4px solid #f59e0b;border-radius:0 6px 6px 0;margin-bottom:24px;font-size:14px;line-height:1.8;white-space:pre-wrap">${safeBody}</div>\n$2`
-        )
+      const amberIdx = finalHtml.indexOf(AMBER_START_MARKER)
+      if (amberIdx !== -1) {
+        const divOpenIdx = finalHtml.lastIndexOf('<div', amberIdx)
+        const divCloseIdx = finalHtml.indexOf('</div>', amberIdx)
+        if (divOpenIdx !== -1 && divCloseIdx !== -1) {
+          finalHtml = finalHtml.substring(0, divOpenIdx) + AMBER_DIV_REPLACEMENT + finalHtml.substring(divCloseIdx + 6)
+        }
       }
 
       const sendRes = await sendClaimEmail(jobCardId, {
