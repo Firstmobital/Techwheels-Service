@@ -42,6 +42,21 @@ interface ViewerState {
   photoType:  PhotoType
 }
 
+interface DocEntry {
+  id:           string
+  doc_type:     string
+  storage_path: string
+  drive_url:    string | null
+  url:          string | null
+  filename:     string
+}
+
+interface DocViewerState {
+  jobCardId:  string
+  regNumber:  string
+  docType:    'ppt_pre' | 'ppt_post' | 'excel_estimate'
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function ageLabel(days: number | null): { text: string; years: number } {
   if (days == null) return { text: '—', years: 0 }
@@ -73,11 +88,148 @@ function PicChip({
   )
 }
 
-function DocChip({ ok, label }: { ok: boolean; label: string }) {
+function DocChip({ ok, label, onClick }: { ok: boolean; label: string; onClick?: () => void }) {
   return (
-    <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border
-      ${ok ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-600'}`}>
+    <button
+      type="button"
+      disabled={!ok}
+      onClick={ok ? onClick : undefined}
+      title={ok ? `Click to open ${label}` : `${label} not uploaded`}
+      className={[
+        'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition',
+        ok
+          ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 cursor-pointer shadow-sm'
+          : 'bg-red-50 border-red-200 text-red-500 cursor-default opacity-70',
+      ].join(' ')}>
       {ok ? '✓' : '✗'} {label}
+      {ok && <span className="ml-0.5 opacity-60 text-[10px]">↗</span>}
+    </button>
+  )
+}
+
+// ── Document Viewer Modal ─────────────────────────────────────────────────────
+function DocViewer({ state, onClose }: { state: DocViewerState; onClose: () => void }) {
+  const [doc, setDoc]       = useState<DocEntry | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr]       = useState<string | null>(null)
+
+  const DOC_META: Record<string, { label: string; icon: string; color: string }> = {
+    ppt_pre:        { label: 'Pre-Repair PPT',  icon: '📊', color: 'blue'  },
+    ppt_post:       { label: 'Post-Repair PPT', icon: '📊', color: 'green' },
+    excel_estimate: { label: 'Estimate (Excel)',icon: '📋', color: 'indigo'},
+  }
+  const meta = DOC_META[state.docType] ?? { label: state.docType, icon: '📄', color: 'gray' }
+
+  useEffect(() => { loadDoc() }, [])
+
+  async function loadDoc() {
+    setLoading(true); setErr(null)
+    try {
+      const { data, error: e } = await sb
+        .from('documents')
+        .select('id, doc_type, storage_path, drive_url')
+        .eq('job_card_id', state.jobCardId)
+        .eq('doc_type', state.docType)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (e || !data) { setErr('Document not found'); setLoading(false); return }
+
+      const d = data as { id: string; doc_type: string; storage_path: string; drive_url: string | null }
+      let url = d.drive_url || null
+
+      // If no drive_url, get signed URL from storage
+      if (!url && d.storage_path && !/^https?:\/\//i.test(d.storage_path)) {
+        const { data: signed } = await sb.storage.from('autodoc').createSignedUrl(d.storage_path, 7200)
+        url = signed?.signedUrl ?? null
+      }
+
+      const filename = d.storage_path?.split('/').pop() ?? `${state.docType}.file`
+      setDoc({ id: d.id, doc_type: d.doc_type, storage_path: d.storage_path, drive_url: d.drive_url, url, filename })
+    } catch (ex) {
+      setErr('Failed to load document')
+      console.error('[DocViewer]', ex)
+    }
+    setLoading(false)
+  }
+
+  const isPPT  = state.docType === 'ppt_pre' || state.docType === 'ppt_post'
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl bg-${meta.color}-100 flex items-center justify-center text-xl`}>
+              {meta.icon}
+            </div>
+            <div>
+              <div className="font-bold text-gray-900 text-sm">{meta.label}</div>
+              <div className="text-xs text-gray-400 font-mono">{state.regNumber}</div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 text-xl font-bold transition">
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6">
+          {loading ? (
+            <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Loading…</div>
+          ) : err || !doc ? (
+            <div className="flex flex-col items-center gap-2 h-32 justify-center">
+              <span className="text-red-500 text-sm">{err ?? 'Document unavailable'}</span>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* File info */}
+              <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
+                <div className="text-3xl mt-0.5">{isPPT ? '📊' : '📋'}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800 truncate">{doc.filename}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{isPPT ? 'PowerPoint Presentation' : 'Excel Spreadsheet'}</div>
+                  {doc.drive_url && (
+                    <div className="text-[11px] text-green-600 mt-1">✓ Available on Google Drive</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex flex-col gap-2">
+                {doc.drive_url && (
+                  <a
+                    href={doc.drive_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition">
+                    <span>↗</span> Open in Google Drive
+                  </a>
+                )}
+                {doc.url && (
+                  <a
+                    href={doc.url}
+                    download={doc.filename}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition">
+                    <span>↓</span> Download {isPPT ? '.pptx' : '.xlsx'} File
+                  </a>
+                )}
+                {!doc.drive_url && !doc.url && (
+                  <div className="text-center text-sm text-gray-400 py-4">No download link available</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -309,6 +461,7 @@ export function ClaimTrackerView() {
   const [showHidden, setShowHidden] = useState(false)
   const [busyId, setBusyId]         = useState<string | null>(null)
   const [viewer, setViewer]         = useState<ViewerState | null>(null)
+  const [docViewer, setDocViewer]   = useState<DocViewerState | null>(null)
 
   useEffect(() => { fetchClaims() }, [])
 
@@ -459,6 +612,9 @@ export function ClaimTrackerView() {
     const openViewer = (photoType: PhotoType) =>
       setViewer({ jobCardId: row.job_card_id, regNumber: row.reg_number ?? '—', photoType })
 
+    const openDocViewer = (docType: DocViewerState['docType']) =>
+      setDocViewer({ jobCardId: row.job_card_id, regNumber: row.reg_number ?? '—', docType })
+
     return (
       <div key={row.job_card_id}
         className={`border rounded-xl p-4 bg-white shadow-sm space-y-3
@@ -502,11 +658,11 @@ export function ClaimTrackerView() {
 
         {/* Documents */}
         <div>
-          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Documents</div>
+          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Documents <span className="normal-case font-normal text-gray-300">(click to open)</span></div>
           <div className="flex flex-wrap gap-1.5">
-            <DocChip ok={row.has_ppt_pre}       label="Pre-PPT" />
-            <DocChip ok={row.has_ppt_post}       label="Post-PPT" />
-            <DocChip ok={row.has_excel_estimate} label="Estimate" />
+            <DocChip ok={row.has_ppt_pre}       label="Pre-PPT"  onClick={() => openDocViewer('ppt_pre')} />
+            <DocChip ok={row.has_ppt_post}       label="Post-PPT" onClick={() => openDocViewer('ppt_post')} />
+            <DocChip ok={row.has_excel_estimate} label="Estimate" onClick={() => openDocViewer('excel_estimate')} />
           </div>
         </div>
 
@@ -593,7 +749,8 @@ export function ClaimTrackerView() {
       )}
 
       {/* Photo viewer modal */}
-      {viewer && <PhotoViewer state={viewer} onClose={() => setViewer(null)} />}
+      {viewer    && <PhotoViewer state={viewer}    onClose={() => setViewer(null)} />}
+      {docViewer && <DocViewer    state={docViewer} onClose={() => setDocViewer(null)} />}
     </div>
   )
 }
