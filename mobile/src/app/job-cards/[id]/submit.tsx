@@ -599,8 +599,8 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
 
       const sendRes = await sendClaimEmail(jobCardId, {
         to: 'vinodexodus@gmail.com',
-        subject: content.subject,
-        html: content.html,
+        subject: emailContent.subject,
+        html: emailContent.html,
         plainText: editedBody,
         attachments,
         purpose: 'autodoc_claim',
