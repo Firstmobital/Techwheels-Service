@@ -375,6 +375,7 @@ export default function AutoDocPage() {
   const [estimateDefectOptions, setEstimateDefectOptions] = useState<string[]>([])
   const [panelMasterOptions, setPanelMasterOptions] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState(() => readSessionValue(SESSION_KEYS.activeTab) || 'dashboard')
+  const [photoViewerRow, setPhotoViewerRow] = useState<JobRow | null>(null)
   const [kpis, setKpis] = useState({
     totalToday: 0,
     totalActive: 0,
@@ -3119,6 +3120,53 @@ export default function AutoDocPage() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  function downloadDashboardExcel(rows: JobRow[]) {
+    const ageStr = (days: number | null) => {
+      if (days == null) return '—'
+      const y = Math.floor(days / 365)
+      const m = Math.floor((days % 365) / 30)
+      return y > 0 ? `${y}Y ${m}M` : `${m}M`
+    }
+    const yesNo = (v: boolean) => v ? 'Yes' : 'No'
+    const headers = [
+      'JC Number', 'Reg No', 'Chassis No (VIN)',
+      'Pre-Repair Pics', 'Under-Repair Pics', 'Post-Repair Pics',
+      'Final PPT (Pre)', 'Final PPT (Post)', 'Estimate (Excel)',
+      'Vehicle Age', 'Estimate Amount (₹)',
+      'Model', 'Colour', 'Owner', 'KM Reading', 'Status', 'Stage'
+    ]
+    const csvRows = [headers.join(',')]
+    for (const r of rows) {
+      csvRows.push([
+        r.jc_number,
+        r.reg_number,
+        r.vin ?? '',
+        r.pre_pic_count,
+        r.under_repair_pic_count,
+        r.post_pic_count,
+        yesNo(r.has_ppt_pre),
+        yesNo(r.has_ppt_post),
+        yesNo(r.has_excel_estimate),
+        ageStr(r.warranty_age_days),
+        r.total_estimate_amount ?? '',
+        r.model ?? '',
+        r.colour ?? '',
+        r.owner_name ?? '',
+        r.km_reading ?? '',
+        r.status,
+        queueStatusLabel(r),
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    }
+    const csv = csvRows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `autodoc_job_cards_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div className="pagehead">
@@ -3226,17 +3274,27 @@ export default function AutoDocPage() {
               <h3>Job queue ({dashboardDisplayed.length})</h3>
               <div className="sub">{dashboardCardFilter === 'active_vehicles' ? 'All active B&P claims' : cardFilterLabel(dashboardCardFilter)}</div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                handleNewJobCard()
-                setActiveTab('jobcard')
-              }}
-              className="btn btn--primary btn--sm"
-            >
-              <Icon name="plus" size={15} />
-              New Job Card
-            </button>
+            <div className="flex gap-2 flex-wrap justify-end">
+              <button
+                type="button"
+                onClick={() => downloadDashboardExcel(dashboardDisplayed)}
+                className="btn btn--secondary btn--sm"
+              >
+                <Icon name="doc" size={14} />
+                Download Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleNewJobCard()
+                  setActiveTab('jobcard')
+                }}
+                className="btn btn--primary btn--sm"
+              >
+                <Icon name="plus" size={15} />
+                New Job Card
+              </button>
+            </div>
           </div>
 
           <div className="card__body dense">
@@ -3276,21 +3334,30 @@ export default function AutoDocPage() {
                       <td className="mono text-xs text-gray-600">{row.vin ?? '—'}</td>
                       {/* 3. Pre Pics */}
                       <td className="ctr">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${row.pre_pic_count > 0 ? 'bg-blue-100 text-blue-700' : 'bg-red-50 text-red-400'}`}>
+                        <button
+                          type="button"
+                          onClick={() => setPhotoViewerRow(row)}
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition hover:opacity-80 ${row.pre_pic_count > 0 ? 'bg-blue-100 text-blue-700 cursor-pointer' : 'bg-red-50 text-red-400'}`}>
                           {row.pre_pic_count || '✗'}
-                        </span>
+                        </button>
                       </td>
                       {/* 4. Under Repair */}
                       <td className="ctr">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${row.under_repair_pic_count > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-50 text-red-400'}`}>
+                        <button
+                          type="button"
+                          onClick={() => setPhotoViewerRow(row)}
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition hover:opacity-80 ${row.under_repair_pic_count > 0 ? 'bg-orange-100 text-orange-700 cursor-pointer' : 'bg-red-50 text-red-400'}`}>
                           {row.under_repair_pic_count || '✗'}
-                        </span>
+                        </button>
                       </td>
                       {/* 5. Post Pics */}
                       <td className="ctr">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${row.post_pic_count > 0 ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-400'}`}>
+                        <button
+                          type="button"
+                          onClick={() => setPhotoViewerRow(row)}
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition hover:opacity-80 ${row.post_pic_count > 0 ? 'bg-green-100 text-green-700 cursor-pointer' : 'bg-red-50 text-red-400'}`}>
                           {row.post_pic_count || '✗'}
-                        </span>
+                        </button>
                       </td>
                       {/* 6. Final PPT */}
                       <td className="ctr">
@@ -4154,6 +4221,14 @@ export default function AutoDocPage() {
           </div>
         </Overlay>
       )}
+
+      {/* ── Photo Viewer Modal ── */}
+      {photoViewerRow && (
+        <PhotoViewerModal
+          row={photoViewerRow}
+          onClose={() => setPhotoViewerRow(null)}
+        />
+      )}
     </div>
   )
 }
@@ -4229,3 +4304,172 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const INPUT = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
 const BTN_PRI = 'rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 transition-colors'
 const BTN_SEC = 'rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-60'
+
+// ─── Photo Viewer Modal ───────────────────────────────────────────────────────
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+function PhotoViewerModal({ row, onClose }: { row: JobRow; onClose: () => void }) {
+  const [photos, setPhotos]     = useState<Array<{ id: string; photo_type: string; storage_path: string; url: string | null }>>([])
+  const [loading, setLoading]   = useState(true)
+  const [activeType, setActiveType] = useState<'defect' | 'primer' | 'paint'>('defect')
+  const [lightbox, setLightbox] = useState<string | null>(null)
+
+  useEffect(() => {
+    load()
+  }, [row.job_card_id])
+
+  async function load() {
+    setLoading(true)
+    const sb = createSupabaseClient(
+      import.meta.env.VITE_SUPABASE_URL as string,
+      import.meta.env.VITE_SUPABASE_ANON_KEY as string
+    )
+
+    const { data: photoRows } = await sb
+      .from('panel_photos')
+      .select('id, photo_type, storage_path, drive_url')
+      .eq('job_card_id', row.job_card_id)
+      .order('created_at', { ascending: true })
+
+    if (!photoRows || photoRows.length === 0) { setLoading(false); setPhotos([]); return }
+
+    // Batch signed URLs for storage paths
+    const storagePaths = photoRows
+      .map(p => p.storage_path)
+      .filter((s): s is string => typeof s === 'string' && s.length > 0 && !s.startsWith('http'))
+
+    const urlMap: Record<string, string> = {}
+    if (storagePaths.length > 0) {
+      const { data: signed } = await sb.storage.from('autodoc').createSignedUrls(storagePaths, 7200)
+      signed?.forEach(e => { if (e.path && e.signedUrl) urlMap[e.path] = e.signedUrl })
+    }
+
+    setPhotos(photoRows.map(p => ({
+      id: p.id,
+      photo_type: p.photo_type,
+      storage_path: p.storage_path,
+      url: (p.drive_url as string | null) || urlMap[p.storage_path] || null,
+    })))
+    setLoading(false)
+  }
+
+  const typeLabel: Record<string, string> = { defect: 'Pre-Repair', primer: 'Under Repair', paint: 'Post-Repair' }
+  const typeColor: Record<string, string> = { defect: 'blue', primer: 'orange', paint: 'green' }
+  const tabs = ['defect', 'primer', 'paint'] as const
+
+  const visible = photos.filter(p => p.photo_type === activeType && p.url)
+
+  function downloadAll() {
+    visible.forEach((p, i) => {
+      const a = document.createElement('a')
+      a.href = p.url!
+      a.download = `${row.reg_number}_${typeLabel[activeType]}_${i + 1}.jpg`
+      a.target = '_blank'
+      a.click()
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <div className="font-bold text-gray-900 font-mono text-lg">{row.reg_number}</div>
+            <div className="text-xs text-gray-400">{row.vin ?? '—'} · {row.model ?? ''}</div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 text-lg font-bold transition">×</button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 px-4 pt-2 gap-1">
+          {tabs.map(t => {
+            const cnt = photos.filter(p => p.photo_type === t).length
+            return (
+              <button
+                key={t}
+                onClick={() => setActiveType(t)}
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition
+                  ${activeType === t
+                    ? `border-${typeColor[t]}-500 text-${typeColor[t]}-700`
+                    : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                {typeLabel[t]}
+                <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-bold
+                  ${cnt > 0 ? `bg-${typeColor[t]}-100 text-${typeColor[t]}-700` : 'bg-gray-100 text-gray-400'}`}>
+                  {cnt}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading photos…</div>
+          ) : visible.length === 0 ? (
+            <div className="flex items-center justify-center h-48 text-gray-400 text-sm">No {typeLabel[activeType]} photos</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {visible.map((p, i) => (
+                <div key={p.id} className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
+                  <img
+                    src={p.url!}
+                    alt={`${typeLabel[activeType]} ${i + 1}`}
+                    className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
+                    onClick={() => setLightbox(p.url!)}
+                    onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23f3f4f6%22 width=%22100%22 height=%22100%22/><text y=%2250%25%22 x=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%239ca3af%22 font-size=%2212%22>No preview</text></svg>' }}
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 flex justify-between items-center p-1 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-white text-[10px]">#{i + 1}</span>
+                    <a
+                      href={p.url!}
+                      download={`${row.reg_number}_${typeLabel[activeType]}_${i + 1}.jpg`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white text-[10px] bg-white/20 hover:bg-white/40 rounded px-1.5 py-0.5 transition"
+                      onClick={e => e.stopPropagation()}>
+                      ↓ Save
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && visible.length > 0 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+            <span className="text-xs text-gray-400">{visible.length} photo{visible.length !== 1 ? 's' : ''}</span>
+            <button
+              onClick={downloadAll}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition">
+              ↓ Download All {typeLabel[activeType]}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/90"
+          onClick={() => setLightbox(null)}>
+          <button onClick={() => setLightbox(null)} className="absolute top-4 right-4 text-white text-2xl font-bold w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center">×</button>
+          <img src={lightbox} alt="Full size" className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl" />
+          <a
+            href={lightbox}
+            download="photo.jpg"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute bottom-6 text-white text-sm bg-white/20 hover:bg-white/30 px-5 py-2 rounded-full transition"
+            onClick={e => e.stopPropagation()}>
+            ↓ Download Full Size
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
