@@ -1197,11 +1197,11 @@ export default function AutoDocPage() {
     }
   }, [activeTab, damagePhotos, rows])
 
-  const refreshDocuments = useCallback(async (jobCardId: string) => {
+  const refreshDocuments = useCallback(async (jobCardId: string): Promise<DocumentRow[]> => {
     const res = await listDocuments(jobCardId)
     if (res.error || !res.data) {
       setJobDocuments([])
-      return
+      return []
     }
     setJobDocuments(res.data)
     const serviceHistoryDoc = res.data.find((doc) => doc.doc_type === 'service_history')
@@ -1231,6 +1231,7 @@ export default function AutoDocPage() {
       const fileName = deliveryDoc.storage_path.split('/').pop() ?? 'uploaded-video'
       setDeliveryVideoName(fileName)
     }
+    return res.data
   }, [])
 
   async function ensureJobCardReadyForUpload(): Promise<string | null> {
@@ -2818,16 +2819,18 @@ export default function AutoDocPage() {
       total_estimate_amount: latestEstimateAmount,
     })
 
-    const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
-    let excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
-    const walkaroundDoc = jobDocuments.find((doc) => doc.doc_type === 'video_job_card')
+    // Always fetch latest documents before building attachments (avoids stale state)
+    const latestDocs = await refreshDocuments(activeJobCardId)
+    const preDoc = latestDocs.find((doc) => doc.doc_type === 'ppt_pre')
+    let excelDoc = latestDocs.find((doc) => doc.doc_type === 'excel_estimate')
+    const walkaroundDoc = latestDocs.find((doc) => doc.doc_type === 'video_job_card')
 
     // Auto-regenerate estimate if stored file is old CSV format (not xlsx)
     if (excelDoc && !excelDoc.storage_path.endsWith('.xlsx')) {
       showToast('Upgrading estimate to XLSX format...', true)
       await exportEstimateForJobCard(activeJobCardId)
-      await refreshDocuments(activeJobCardId)
-      excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+      const freshDocs = await refreshDocuments(activeJobCardId)
+      excelDoc = freshDocs.find((doc) => doc.doc_type === 'excel_estimate')
     }
 
     if (!preDoc || !excelDoc || !walkaroundDoc) {
@@ -2890,21 +2893,23 @@ export default function AutoDocPage() {
       return
     }
 
-    const postDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_post')
+    // Always fetch latest documents before building attachments (avoids stale state)
+    const latestDocs2 = await refreshDocuments(activeJobCardId)
+    const postDoc = latestDocs2.find((doc) => doc.doc_type === 'ppt_post')
     if (!postDoc) {
       showToast('Post-repair PPT attachment is missing. Please generate it again.', false)
       return
     }
 
-    let excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+    let excelDoc = latestDocs2.find((doc) => doc.doc_type === 'excel_estimate')
     // Auto-upgrade CSV → XLSX if old format
     if (excelDoc && !excelDoc.storage_path.endsWith('.xlsx')) {
       await exportEstimateForJobCard(activeJobCardId)
-      await refreshDocuments(activeJobCardId)
-      excelDoc = jobDocuments.find((doc) => doc.doc_type === 'excel_estimate')
+      const freshDocs = await refreshDocuments(activeJobCardId)
+      excelDoc = freshDocs.find((doc) => doc.doc_type === 'excel_estimate') ?? excelDoc
     }
-    const preDoc = jobDocuments.find((doc) => doc.doc_type === 'ppt_pre')
-    const deliveryDoc = jobDocuments.find((doc) => doc.doc_type === 'video_delivery')
+    const preDoc = latestDocs2.find((doc) => doc.doc_type === 'ppt_pre')
+    const deliveryDoc = latestDocs2.find((doc) => doc.doc_type === 'video_delivery')
 
     const content = generateClaimEmailContent({
       jc_number: (activeSummary?.jc_number ?? form.jcNumber) || 'JC-NA',
