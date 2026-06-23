@@ -33,7 +33,7 @@ import { getSupabaseBaseUrl } from '../../../lib/env'
 import type { DocumentRow } from '../../../lib/api/types'
 import { generateRepairPPT } from '../../../lib/generators/generatePPT'
 import { generateServiceHistoryExcel } from '../../../lib/generators/generateServiceHistoryExcel'
-import { generateEstimateCsvString } from '../../../lib/generators/generateEstimateCsv'
+import { generatePaintEstimateExcelBlob, type PaintEstimateJobCard, type PaintEstimateDataRow } from '../../../lib/generators/generatePaintEstimateExcel'
 import {
   generateClaimEmailContent,
   sendClaimEmail,
@@ -425,12 +425,53 @@ export default function SubmitStageScreen() {
 
     try {
       const regSlug = String(jobCard?.reg_number ?? jobCardId).replace(/\s+/g, '_')
-      const fileName = `estimate_${regSlug}.csv`
+      const fileName = `estimate_${regSlug}.xlsx`
 
-      // Generate CSV as string (Blob upload fails on Android with network error)
-      const csvString = await generateEstimateCsvString(jobCardId)
+      // Generate Paint Estimate Excel (official Tata Motors format)
+      const excelBytes = generatePaintEstimateExcelBlob(
+        {
+          vin:           jobCard?.vin ?? null,
+          reg_number:    jobCard?.reg_number ?? null,
+          dealer_code:   String(jobCard?.dealer_code ?? '3000840'),
+          dealer_name:   jobCard?.dealer_name ?? 'FIRST MOBITE PVT.LTD.',
+          dealer_city:   jobCard?.dealer_city ?? 'JAIPUR',
+          date_of_sale:  jobCard?.date_of_sale ?? null,
+          complaint_date: jobCard?.complaint_date ?? null,
+          km_reading:    jobCard?.km_reading ?? null,
+          colour:        jobCard?.colour ?? null,
+          paint_type:    jobCard?.paint_type ?? null,
+          jc_number:     jobCard?.jc_number ?? null,
+          model:         jobCard?.model ?? null,
+        },
+        estimateRows.map((r: any, idx: number) => ({
+          sr_no:                idx + 1,
+          part_number:          r.part_number ?? 'N/A',
+          panel_name:           r.panel_name ?? '',
+          defect:               r.defect ?? 'Rusting',
+          action:               r.action ?? 'REPAINT',
+          qty:                  r.qty ?? 1,
+          ndp_value:            r.ndp_value ?? 0,
+          cut_weld_charges:     r.cut_weld_charges ?? 0,
+          paint_charges:        r.paint_charges ?? 0,
+          total_special_charges: r.total_special_charges ?? 0,
+          job_code:             r.job_code ?? null,
+          job_code_desc:        r.job_code_desc ?? null,
+          no_off:               r.no_off ?? 0,
+          labour_charges:       r.labour_charges ?? 0,
+        }))
+      )
+
+      // Write binary Excel to temp file
       const tmpUri = `${FileSystem.cacheDirectory}${fileName}`
-      await FileSystem.writeAsStringAsync(tmpUri, csvString, { encoding: FileSystem.EncodingType.UTF8 })
+      // ExcelJS returns Buffer — convert to base64 for FileSystem
+      const bytes = new Uint8Array(excelBytes)
+      let binary = ''
+      const chunkSize = 8192
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+      }
+      const base64 = btoa(binary)
+      await FileSystem.writeAsStringAsync(tmpUri, base64, { encoding: FileSystem.EncodingType.Base64 })
 
       const { data: sessionRes } = await supabase.auth.getSession()
       const user = sessionRes.session?.user
@@ -449,7 +490,7 @@ export default function SubmitStageScreen() {
           const result = await FileSystem.uploadAsync(signedData.signedUrl, tmpUri, {
             httpMethod: 'PUT',
             uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-            headers: { 'Content-Type': 'text/csv' },
+            headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
           })
           if (result.status >= 200 && result.status < 300) { uploadOk = true; break }
           if (attempt < 2) await new Promise((r) => setTimeout(r, 1000))
