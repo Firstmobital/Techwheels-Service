@@ -443,9 +443,10 @@ export default function SettingsPage() {
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState<SettingsSectionId>(DEFAULT_SETTINGS_SECTION_ID)
-  const [reportEmail, setReportEmail] = useState('')
+  const [reportEmails, setReportEmails] = useState<string[]>([])
+  const [reportEmailsLoaded, setReportEmailsLoaded] = useState(false)
   const [reportEmailInput, setReportEmailInput] = useState('')
-  const [reportEmailEditMode, setReportEmailEditMode] = useState(false)
+  const [reportEmailInputErr, setReportEmailInputErr] = useState('')
   const [savingReportEmail, setSavingReportEmail] = useState(false)
   const [reportEmailSaved, setReportEmailSaved] = useState(false)
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
@@ -680,7 +681,7 @@ export default function SettingsPage() {
         icon: '📧',
         title: 'Report Email',
         description: 'Set the destination email for AutoDoc claim submissions',
-        stat: reportEmail ? '1 configured' : 'Not set',
+        stat: reportEmails.length > 0 ? `${reportEmails.length} configured` : 'Not set',
       },
       {
         id: 'autodoc-rate-cards',
@@ -2719,84 +2720,115 @@ export default function SettingsPage() {
         )}
 
         {selectedSectionId === 'report-email' && (() => {
-          // Lazy-load settings
-          if (!reportEmail && !reportEmailEditMode) {
+          // Lazy-load email list once
+          if (!reportEmailsLoaded) {
+            setReportEmailsLoaded(true)
             getDealerSettings().then((s) => {
-              const e = s.reportEmail ?? ''
-              setReportEmail(e)
-              setReportEmailInput(e)
+              setReportEmails(s.reportEmails)
             }).catch(console.warn)
           }
+
+          const persistEmails = async (list: string[]) => {
+            setSavingReportEmail(true)
+            const res = await saveDealerSetting('report_email', list.join(','))
+            setSavingReportEmail(false)
+            if (res.error) { alert('Save failed: ' + res.error); return false }
+            setReportEmails(list)
+            setReportEmailSaved(true)
+            setTimeout(() => setReportEmailSaved(false), 3000)
+            return true
+          }
+
+          const addEmail = async () => {
+            const t = reportEmailInput.trim().toLowerCase()
+            setReportEmailInputErr('')
+            if (!t) { setReportEmailInputErr('Please enter an email address.'); return }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) { setReportEmailInputErr('Invalid email format.'); return }
+            if (reportEmails.includes(t)) { setReportEmailInputErr('Already in the list.'); return }
+            const ok = await persistEmails([...reportEmails, t])
+            if (ok) setReportEmailInput('')
+          }
+
+          const removeEmail = async (em: string) => {
+            if (!window.confirm(`Remove "${em}" from report recipients?`)) return
+            await persistEmails(reportEmails.filter((e) => e !== em))
+          }
+
           return (
             <section id="report-email" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
                 <div>
-                  <h2 className="text-sm font-semibold text-gray-900">📧 Report Email — AutoDoc Send</h2>
+                  <h2 className="text-sm font-semibold text-gray-900">📧 Report Emails — AutoDoc Send</h2>
                   <p className="mt-0.5 text-xs text-gray-500">
-                    When you click "Send" on an AutoDoc claim, the report is emailed to this address.
+                    AutoDoc claim reports are emailed to <strong>all</strong> addresses below when you click Send.
                   </p>
                 </div>
                 {reportEmailSaved && (
                   <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 border border-green-200">✓ Saved</span>
                 )}
               </div>
-              <div className="p-5">
-                <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 mb-5 text-xs text-blue-800 leading-relaxed">
-                  <strong>How it works:</strong> On the AutoDoc page, clicking the "Submit" (Pre-Repair) or "Send" (Post-Repair) button will automatically email the warranty claim report, PPT and estimate Excel to the address configured here. No manual copying of email IDs required.
+              <div className="p-5 space-y-4">
+                {/* Info box */}
+                <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-800 leading-relaxed">
+                  <strong>How it works:</strong> When you click "Submit" or "Send" on an AutoDoc claim, the warranty report + attachments are emailed to <strong>every address</strong> in this list simultaneously. Add multiple recipients — all will receive the email.
                 </div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Report Email Address <span className="text-red-500">*</span>
-                </label>
-                {reportEmailEditMode ? (
-                  <div className="flex gap-2 items-start">
-                    <input
-                      type="email"
-                      value={reportEmailInput}
-                      onChange={(e) => setReportEmailInput(e.target.value)}
-                      placeholder="e.g. manager@dealership.com"
-                      className="flex-1 rounded-lg border border-blue-400 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      onClick={async () => {
-                        const trimmed = reportEmailInput.trim()
-                        if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-                          alert('Please enter a valid email address.')
-                          return
-                        }
-                        setSavingReportEmail(true)
-                        const res = await saveDealerSetting('report_email', trimmed)
-                        setSavingReportEmail(false)
-                        if (res.error) { alert('Save failed: ' + res.error); return }
-                        setReportEmail(trimmed)
-                        setReportEmailEditMode(false)
-                        setReportEmailSaved(true)
-                        setTimeout(() => setReportEmailSaved(false), 3000)
-                      }}
-                      disabled={savingReportEmail}
-                      className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 disabled:opacity-60"
-                    >
-                      {savingReportEmail ? 'Saving…' : '💾 Save'}
-                    </button>
-                    <button
-                      onClick={() => { setReportEmailInput(reportEmail); setReportEmailEditMode(false) }}
-                      className="rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-600 hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <span className={`text-base font-bold ${reportEmail ? 'text-blue-700' : 'text-gray-400'}`}>
-                      {reportEmail || '(not configured)'}
-                    </span>
-                    <button
-                      onClick={() => { setReportEmailInput(reportEmail); setReportEmailEditMode(true) }}
-                      className="text-xs text-blue-600 hover:underline font-semibold"
-                    >
-                      ✏️ {reportEmail ? 'Change' : 'Set Email'}
-                    </button>
+
+                {/* Warning if empty */}
+                {reportEmails.length === 0 && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-800">
+                    <strong>⚠️ No recipients configured.</strong> AutoDoc Send will fall back to a default address. Add at least one email.
                   </div>
                 )}
+
+                {/* Email chips */}
+                {reportEmails.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-2">Saved Recipients ({reportEmails.length})</p>
+                    <div className="flex flex-wrap gap-2">
+                      {reportEmails.map((em) => (
+                        <span key={em} className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-800">
+                          {em}
+                          <button
+                            onClick={() => removeEmail(em)}
+                            className="ml-0.5 rounded-full bg-red-500 hover:bg-red-600 text-white w-4 h-4 flex items-center justify-center text-[10px] font-bold leading-none"
+                            title={`Remove ${em}`}
+                          >×</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Divider */}
+                <div className="border-t border-gray-100" />
+
+                {/* Add new email */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-700 mb-2">➕ Add New Recipient</p>
+                  <div className="flex gap-2 items-start">
+                    <div className="flex-1">
+                      <input
+                        type="email"
+                        value={reportEmailInput}
+                        onChange={(e) => { setReportEmailInput(e.target.value); setReportEmailInputErr('') }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') addEmail() }}
+                        placeholder="e.g. manager@dealership.com"
+                        className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${reportEmailInputErr ? 'border-red-400 bg-red-50' : 'border-blue-300'}`}
+                      />
+                      {reportEmailInputErr && (
+                        <p className="text-xs text-red-600 mt-1">{reportEmailInputErr}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={addEmail}
+                      disabled={savingReportEmail}
+                      className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap"
+                    >
+                      {savingReportEmail ? 'Saving…' : '+ Add Email'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">Press Enter or click Add Email. Click × on any chip to remove it.</p>
+                </div>
               </div>
             </section>
           )

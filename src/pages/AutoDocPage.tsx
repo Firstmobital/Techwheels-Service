@@ -2827,12 +2827,12 @@ export default function AutoDocPage() {
     }
 
     const settingsRes = await getDealerSettings()
-    const targetEmail = settingsRes.reportEmail || 'vinodexodus@gmail.com'
-    if (!settingsRes.reportEmail) {
+    const targetEmails = settingsRes.reportEmails.length > 0 ? settingsRes.reportEmails : ['vinodexodus@gmail.com']
+    if (settingsRes.reportEmails.length === 0) {
       showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
     }
     const sendRes = await sendClaimEmail(activeJobCardId, {
-      to: targetEmail,
+      to: targetEmails,
       subject: content.subject,
       html: content.html,
       attachments: [
@@ -2932,12 +2932,12 @@ export default function AutoDocPage() {
     ]
 
     const settingsRes2 = await getDealerSettings()
-    const targetEmail = settingsRes2.reportEmail || 'vinodexodus@gmail.com'
-    if (!settingsRes2.reportEmail) {
+    const targetEmails2 = settingsRes2.reportEmails.length > 0 ? settingsRes2.reportEmails : ['vinodexodus@gmail.com']
+    if (settingsRes2.reportEmails.length === 0) {
       showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
     }
     const sendRes = await sendClaimEmail(activeJobCardId, {
-      to: targetEmail,
+      to: targetEmails2,
       subject: `[POST-REPAIR] ${content.subject}`,
       html: content.html,
       attachments,

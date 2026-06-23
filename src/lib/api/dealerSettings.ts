@@ -7,7 +7,10 @@ import { supabase } from '../supabase'
 const DEALER_CODE = '3000840'
 
 export interface DealerSettings {
+  /** Comma-separated raw string (legacy) */
   reportEmail: string | null
+  /** Parsed array — use this for sending to multiple recipients */
+  reportEmails: string[]
 }
 
 export async function getDealerSettings(): Promise<DealerSettings> {
@@ -18,7 +21,7 @@ export async function getDealerSettings(): Promise<DealerSettings> {
 
   if (error || !data) {
     console.warn('[dealerSettings] fetch failed:', error?.message)
-    return { reportEmail: null }
+    return { reportEmail: null, reportEmails: [] }
   }
 
   const map: Record<string, string | null> = {}
@@ -26,7 +29,12 @@ export async function getDealerSettings(): Promise<DealerSettings> {
     map[row.setting_key] = row.setting_value
   }
 
-  return { reportEmail: map['report_email'] ?? null }
+  const raw = map['report_email'] ?? null
+  const emails = raw
+    ? raw.split(',').map((e) => e.trim()).filter((e) => e.length > 0)
+    : []
+
+  return { reportEmail: raw, reportEmails: emails }
 }
 
 export async function saveDealerSetting(

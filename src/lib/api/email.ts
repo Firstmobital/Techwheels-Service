@@ -24,7 +24,7 @@ export interface EmailAttachmentRef {
  * Send transactional email via edge function
  */
 async function sendTransactionalEmail(
-  to: string,
+  to: string | string[],
   subject: string,
   html: string,
   attachments?: EmailAttachmentRef[],
@@ -108,7 +108,7 @@ export async function logEmail(
 export async function sendClaimEmail(
   jobCardId: string,
   options: {
-    to: string
+    to: string | string[]
     subject: string
     html: string
     attachments?: EmailAttachmentRef[]

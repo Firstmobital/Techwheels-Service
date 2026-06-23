@@ -48,7 +48,8 @@ function json(headers: HeadersInit, body: unknown, status = 200): Response {
 }
 
 function toEmailArray(input: string | string[]): string[] {
-  return Array.isArray(input) ? input : [input]
+  if (Array.isArray(input)) return input.flatMap((v) => v.split(',').map((e) => e.trim())).filter(Boolean)
+  return input.split(',').map((e) => e.trim()).filter(Boolean)
 }
 
 function isEmail(value: string): boolean {

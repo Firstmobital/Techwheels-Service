@@ -1,6 +1,6 @@
 /**
- * dealerSettings.ts
- * Read and write dealer-level settings (e.g. report_email) from dealer_settings table.
+ * dealerSettings.ts (mobile)
+ * Read and write dealer-level settings from dealer_settings table.
  */
 import { supabase } from '../supabase'
 
@@ -8,9 +8,9 @@ const DEALER_CODE = '3000840'
 
 export interface DealerSettings {
   reportEmail: string | null
+  reportEmails: string[]
 }
 
-/** Fetch all dealer settings as a typed object */
 export async function getDealerSettings(): Promise<DealerSettings> {
   const { data, error } = await supabase
     .from('dealer_settings')
@@ -19,7 +19,7 @@ export async function getDealerSettings(): Promise<DealerSettings> {
 
   if (error || !data) {
     console.warn('[dealerSettings] fetch failed:', error?.message)
-    return { reportEmail: null }
+    return { reportEmail: null, reportEmails: [] }
   }
 
   const map: Record<string, string | null> = {}
@@ -27,12 +27,14 @@ export async function getDealerSettings(): Promise<DealerSettings> {
     map[row.setting_key] = row.setting_value
   }
 
-  return {
-    reportEmail: map['report_email'] ?? null,
-  }
+  const raw = map['report_email'] ?? null
+  const emails = raw
+    ? raw.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
+    : []
+
+  return { reportEmail: raw, reportEmails: emails }
 }
 
-/** Save a single setting value (upsert) */
 export async function saveDealerSetting(
   key: string,
   value: string,
