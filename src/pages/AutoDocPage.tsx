@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getDealerSettings } from '../lib/api/dealerSettings'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Icon } from '../components/Icon'
@@ -2825,7 +2826,11 @@ export default function AutoDocPage() {
       return
     }
 
-    const targetEmail = 'vinodexodus@gmail.com'
+    const settingsRes = await getDealerSettings()
+    const targetEmail = settingsRes.reportEmail || 'vinodexodus@gmail.com'
+    if (!settingsRes.reportEmail) {
+      showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
+    }
     const sendRes = await sendClaimEmail(activeJobCardId, {
       to: targetEmail,
       subject: content.subject,
@@ -2926,7 +2931,11 @@ export default function AutoDocPage() {
       }] : []),
     ]
 
-    const targetEmail = 'vinodexodus@gmail.com'
+    const settingsRes2 = await getDealerSettings()
+    const targetEmail = settingsRes2.reportEmail || 'vinodexodus@gmail.com'
+    if (!settingsRes2.reportEmail) {
+      showToast('⚠️ No report email configured. Go to Settings → Report Email to set one. Using fallback.', false)
+    }
     const sendRes = await sendClaimEmail(activeJobCardId, {
       to: targetEmail,
       subject: `[POST-REPAIR] ${content.subject}`,

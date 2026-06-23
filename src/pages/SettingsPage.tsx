@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getDealerSettings, saveDealerSetting } from '../lib/api/dealerSettings'
 import * as XLSX from 'xlsx'
 import { normalizeDepartmentDisplay } from '../lib/department'
 import { supabase } from '../lib/supabase'
@@ -96,6 +97,7 @@ const SETTINGS_SECTION_IDS = [
   'fuel',
   'bodyshop-surveyor',
   'models',
+  'report-email',
   'autodoc-rate-cards',
   'unmapped-sr-entries',
 ] as const
@@ -441,6 +443,11 @@ export default function SettingsPage() {
   const [bulkEmployeeCode, setBulkEmployeeCode] = useState('')
   const [bulkResolving, setBulkResolving] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState<SettingsSectionId>(DEFAULT_SETTINGS_SECTION_ID)
+  const [reportEmail, setReportEmail] = useState('')
+  const [reportEmailInput, setReportEmailInput] = useState('')
+  const [reportEmailEditMode, setReportEmailEditMode] = useState(false)
+  const [savingReportEmail, setSavingReportEmail] = useState(false)
+  const [reportEmailSaved, setReportEmailSaved] = useState(false)
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [newModelName, setNewModelName] = useState('')
@@ -667,6 +674,13 @@ export default function SettingsPage() {
         title: 'Models',
         description: 'Manage dropdown model values for future use.',
         stat: `${modelOptions.length} models`,
+      },
+      {
+        id: 'report-email',
+        icon: '📧',
+        title: 'Report Email',
+        description: 'Set the destination email for AutoDoc claim submissions',
+        stat: reportEmail ? '1 configured' : 'Not set',
       },
       {
         id: 'autodoc-rate-cards',
@@ -2703,6 +2717,90 @@ export default function SettingsPage() {
           </div>
         </section>
         )}
+
+        {selectedSectionId === 'report-email' && (() => {
+          // Lazy-load settings
+          if (!reportEmail && !reportEmailEditMode) {
+            getDealerSettings().then((s) => {
+              const e = s.reportEmail ?? ''
+              setReportEmail(e)
+              setReportEmailInput(e)
+            }).catch(console.warn)
+          }
+          return (
+            <section id="report-email" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900">📧 Report Email — AutoDoc Send</h2>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    When you click "Send" on an AutoDoc claim, the report is emailed to this address.
+                  </p>
+                </div>
+                {reportEmailSaved && (
+                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 border border-green-200">✓ Saved</span>
+                )}
+              </div>
+              <div className="p-5">
+                <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 mb-5 text-xs text-blue-800 leading-relaxed">
+                  <strong>How it works:</strong> On the AutoDoc page, clicking the "Submit" (Pre-Repair) or "Send" (Post-Repair) button will automatically email the warranty claim report, PPT and estimate Excel to the address configured here. No manual copying of email IDs required.
+                </div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Report Email Address <span className="text-red-500">*</span>
+                </label>
+                {reportEmailEditMode ? (
+                  <div className="flex gap-2 items-start">
+                    <input
+                      type="email"
+                      value={reportEmailInput}
+                      onChange={(e) => setReportEmailInput(e.target.value)}
+                      placeholder="e.g. manager@dealership.com"
+                      className="flex-1 rounded-lg border border-blue-400 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={async () => {
+                        const trimmed = reportEmailInput.trim()
+                        if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+                          alert('Please enter a valid email address.')
+                          return
+                        }
+                        setSavingReportEmail(true)
+                        const res = await saveDealerSetting('report_email', trimmed)
+                        setSavingReportEmail(false)
+                        if (res.error) { alert('Save failed: ' + res.error); return }
+                        setReportEmail(trimmed)
+                        setReportEmailEditMode(false)
+                        setReportEmailSaved(true)
+                        setTimeout(() => setReportEmailSaved(false), 3000)
+                      }}
+                      disabled={savingReportEmail}
+                      className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 disabled:opacity-60"
+                    >
+                      {savingReportEmail ? 'Saving…' : '💾 Save'}
+                    </button>
+                    <button
+                      onClick={() => { setReportEmailInput(reportEmail); setReportEmailEditMode(false) }}
+                      className="rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-600 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className={`text-base font-bold ${reportEmail ? 'text-blue-700' : 'text-gray-400'}`}>
+                      {reportEmail || '(not configured)'}
+                    </span>
+                    <button
+                      onClick={() => { setReportEmailInput(reportEmail); setReportEmailEditMode(true) }}
+                      className="text-xs text-blue-600 hover:underline font-semibold"
+                    >
+                      ✏️ {reportEmail ? 'Change' : 'Set Email'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+          )
+        })()}
 
         {selectedSectionId === 'autodoc-rate-cards' && (
         <section id="autodoc-rate-cards" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm">
