@@ -92,6 +92,7 @@ export default function SubmitStageScreen() {
   const [documents, setDocuments] = useState<DocumentRow[]>([])
   const [warning, setWarning] = useState<string | null>(null)
   const [estimateRowsCount, setEstimateRowsCount] = useState(0)
+  const [estimateRows, setEstimateRows] = useState<any[]>([])
   const [preRepairPhotoCount, setPreRepairPhotoCount] = useState(0)
   const [underRepairPhotoCount, setUnderRepairPhotoCount] = useState(0)
   const [postRepairPhotoCount, setPostRepairPhotoCount] = useState(0)
@@ -141,7 +142,9 @@ export default function SubmitStageScreen() {
       total_estimate_amount: 0,
     })
     setDocuments(docsRes.error ? [] : (docsRes.data ?? []))
-    setEstimateRowsCount(estimateRes.error ? 0 : (estimateRes.data ?? []).length)
+    const resolvedEstimateRows = estimateRes.error ? [] : (estimateRes.data ?? [])
+    setEstimateRowsCount(resolvedEstimateRows.length)
+    setEstimateRows(resolvedEstimateRows)
 
     const photos = photosRes.error ? [] : (photosRes.data ?? [])
     let pre = 0
@@ -463,13 +466,23 @@ export default function SubmitStageScreen() {
 
     try {
       const content = generateClaimEmailContent({
-        jc_number: String(jobCard.jc_number ?? 'JC-NA'),
-        reg_number: String(jobCard.reg_number ?? 'REG-NA'),
-        model: jobCard.model ?? null,
-        colour: jobCard.colour ?? null,
-        complaint_date: String(jobCard.complaint_date ?? new Date().toISOString()),
-        dealer_name: jobCard.dealer_name ?? null,
+        jc_number:             String(jobCard.jc_number ?? 'JC-NA'),
+        reg_number:            String(jobCard.reg_number ?? 'REG-NA'),
+        vin:                   jobCard.vin ?? null,
+        model:                 jobCard.model ?? null,
+        colour:                jobCard.colour ?? null,
+        complaint_date:        String(jobCard.complaint_date ?? new Date().toISOString()),
+        km_reading:            jobCard.km_reading ?? null,
+        date_of_sale:          jobCard.date_of_sale ?? null,
+        dealer_name:           jobCard.dealer_name ?? null,
+        dealer_code:           jobCard.dealer_code ?? null,
+        warranty_age_days:     jobCard.warranty_age_days ?? null,
+        claim_type:            jobCard.claim_type ?? null,
+        complaint_text:        jobCard.complaint_text ?? null,
+        panel_names:           null,
         total_estimate_amount: Number(jobCard.total_estimate_amount ?? 0),
+        tml_share_percent:     jobCard.tml_share_percent ?? null,
+        estimate_rows:         estimateRows,
       })
 
       const attachments: EmailAttachmentRef[] = []
@@ -489,6 +502,7 @@ export default function SubmitStageScreen() {
         to: 'vinodexodus@gmail.com', // overridden server-side by dealer_settings
         subject: content.subject,
         html: content.html,
+        plainText: content.plainText,
         attachments,
         purpose: 'autodoc_claim',
       })
@@ -525,13 +539,23 @@ export default function SubmitStageScreen() {
 
     try {
       const content = generateClaimEmailContent({
-        jc_number: String(jobCard.jc_number ?? 'JC-NA'),
-        reg_number: String(jobCard.reg_number ?? 'REG-NA'),
-        model: jobCard.model ?? null,
-        colour: jobCard.colour ?? null,
-        complaint_date: String(jobCard.complaint_date ?? new Date().toISOString()),
-        dealer_name: jobCard.dealer_name ?? null,
+        jc_number:             String(jobCard.jc_number ?? 'JC-NA'),
+        reg_number:            String(jobCard.reg_number ?? 'REG-NA'),
+        vin:                   jobCard.vin ?? null,
+        model:                 jobCard.model ?? null,
+        colour:                jobCard.colour ?? null,
+        complaint_date:        String(jobCard.complaint_date ?? new Date().toISOString()),
+        km_reading:            jobCard.km_reading ?? null,
+        date_of_sale:          jobCard.date_of_sale ?? null,
+        dealer_name:           jobCard.dealer_name ?? null,
+        dealer_code:           jobCard.dealer_code ?? null,
+        warranty_age_days:     jobCard.warranty_age_days ?? null,
+        claim_type:            jobCard.claim_type ?? null,
+        complaint_text:        jobCard.complaint_text ?? null,
+        panel_names:           null,
         total_estimate_amount: Number(jobCard.total_estimate_amount ?? 0),
+        tml_share_percent:     jobCard.tml_share_percent ?? null,
+        estimate_rows:         estimateRows,
       })
 
       const attachments: EmailAttachmentRef[] = []
@@ -554,6 +578,7 @@ export default function SubmitStageScreen() {
         to: 'vinodexodus@gmail.com', // overridden server-side by dealer_settings
         subject: `[POST-REPAIR] ${content.subject}`,
         html: content.html,
+        plainText: content.plainText,
         attachments,
         purpose: 'autodoc_claim',
       })
