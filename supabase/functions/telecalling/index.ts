@@ -40,12 +40,28 @@ export default async function handler(req: Request) {
     if (action === 'create_campaign') {
       if (!isAdmin) throw new Error('Only admin can create campaigns')
 
-      const { campaign_name, date_from, date_to } = body
+      const {
+        campaign_name, date_from, date_to,
+        // Segmentation filters
+        customer_segment = 'all',   // 'all' | 'sold_us' | 'sold_others' | 'last_svc_us' | 'last_svc_others'
+        priority_mode = 'service_date', // 'service_date' | 'warranty_expiry' | 'conquest'
+        warranty_expiry_days = null,   // e.g. 90 = warranty expiring in 90 days
+        powertrain_filter = null,       // 'EV' | 'PV' | null (all)
+      } = body
+
       if (!campaign_name || !date_from || !date_to) {
         throw new Error('Missing campaign_name, date_from, or date_to')
       }
 
-      // Create campaign
+      // OUR dealer name patterns (case-insensitive match)
+      const OUR_DEALERS = ['techwheels', 'first mobital', 'firstmobital']
+      const isOurDealer = (name: string | null) => {
+        if (!name) return false
+        const n = name.toLowerCase()
+        return OUR_DEALERS.some(d => n.includes(d))
+      }
+
+      // Create campaign record
       const { data: campaign, error: campErr } = await serviceClient
         .from('telecall_campaigns')
         .insert({
@@ -54,59 +70,170 @@ export default async function handler(req: Request) {
           date_to,
           status: 'active',
           created_by: userEmail,
+          customer_segment,
+          priority_mode,
+          warranty_expiry_days,
+          powertrain_filter,
         })
         .select()
         .single()
 
       if (campErr) throw new Error(`Failed to create campaign: ${campErr.message}`)
 
-      // Fetch eligible customers
-      const { data: customers, error: custErr } = await serviceClient
+      // ── Fetch eligible customers based on mode ────────────────────────────
+      let query = serviceClient
         .from('all_service_data')
-        .select('id')
-        .not('assumed_next_service_date', 'is', null)
-        .gte('assumed_next_service_date', date_from)
-        .lte('assumed_next_service_date', date_to)
+        .select('id, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type')
         .not('contact_phones', 'is', null)
 
-      if (custErr) throw new Error(`Failed to fetch customers: ${custErr.message}`)
+      // Warranty expiry mode: filter by warranty end date window instead of service date
+      if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
+        const today = new Date().toISOString().split('T')[0]
+        const expiry_to = new Date(Date.now() + warranty_expiry_days * 86400000).toISOString().split('T')[0]
+        query = query
+          .not('extended_warranty_end_date', 'is', null)
+          .gte('extended_warranty_end_date', today)
+          .lte('extended_warranty_end_date', expiry_to)
+      } else {
+        // Standard: filter by assumed next service date
+        query = query
+          .not('assumed_next_service_date', 'is', null)
+          .gte('assumed_next_service_date', date_from)
+          .lte('assumed_next_service_date', date_to)
+      }
 
-      if (!customers || customers.length === 0) {
+      // Powertrain filter
+      if (powertrain_filter && powertrain_filter !== 'all') {
+        query = query.eq('powertrain_type', powertrain_filter)
+      }
+
+      const { data: allCustomers, error: custErr } = await query
+      if (custErr) throw new Error(`Failed to fetch customers: ${custErr.message}`)
+      if (!allCustomers || allCustomers.length === 0) {
+        // Delete the empty campaign
+        await serviceClient.from('telecall_campaigns').delete().eq('id', campaign.id)
         return new Response(JSON.stringify({
           success: true,
-          campaign_id: campaign.id,
+          campaign_id: null,
           total_leads: 0,
-          message: 'No eligible customers found in this date range',
+          message: 'No eligible customers found with these filters',
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
-      // Insert assignments (all as pending, unassigned)
-      const assignments = customers.map((c: { id: number }) => ({
+      // ── Apply segment filter + assign priority scores ─────────────────────
+      // Priority scoring (higher = called first via get_next ORDER BY priority_score DESC):
+      //   100 = Sold by us + last service at us (best retention target)
+      //    80 = Sold by us + last service elsewhere (at-risk, bring back)
+      //    60 = Sold elsewhere + last service at us (loyal service customer)
+      //    40 = Sold elsewhere + last service elsewhere (conquest target)
+      //    20 = Warranty expiring soon + sold by us
+      //    10 = Warranty expiring soon + sold elsewhere
+      //   + Warranty bonus: +5 if warranty ending within 30 days
+
+      const today = new Date()
+      const in30Days = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+
+      interface CustomerRow {
+        id: number
+        sold_dealer: string | null
+        last_service_dealer: string | null
+        extended_warranty_end_date: string | null
+        assumed_next_service_date: string | null
+        powertrain_type: string | null
+      }
+
+      const scoredCustomers: { customer: CustomerRow; segment: string; score: number }[] = allCustomers.map((c: CustomerRow) => {
+        const soldUs = isOurDealer(c.sold_dealer)
+        const lastUs = isOurDealer(c.last_service_dealer)
+        const warrantyEndingSoon = c.extended_warranty_end_date && c.extended_warranty_end_date <= in30Days
+        
+        let segment: string
+        let score: number
+
+        if (soldUs && lastUs) {
+          segment = 'retain_loyal'
+          score = 100
+        } else if (soldUs && !lastUs) {
+          segment = 'retain_atrisk'
+          score = 80
+        } else if (!soldUs && lastUs) {
+          segment = 'retain_service_loyal'
+          score = 60
+        } else {
+          segment = 'conquest'
+          score = 40
+        }
+
+        // Warranty bonus
+        if (warrantyEndingSoon) score += 5
+
+        return { customer: c, segment, score }
+      })
+
+      // ── Apply segment filter ──────────────────────────────────────────────
+      let filtered = scoredCustomers
+      if (customer_segment === 'sold_us') {
+        filtered = scoredCustomers.filter(r => r.segment.startsWith('retain'))
+      } else if (customer_segment === 'sold_others') {
+        filtered = scoredCustomers.filter(r => r.segment === 'conquest' || r.segment === 'retain_service_loyal')
+      } else if (customer_segment === 'last_svc_us') {
+        filtered = scoredCustomers.filter(r => isOurDealer(r.customer.last_service_dealer))
+      } else if (customer_segment === 'last_svc_others') {
+        filtered = scoredCustomers.filter(r => r.customer.last_service_dealer && !isOurDealer(r.customer.last_service_dealer))
+      } else if (customer_segment === 'warranty_expiring') {
+        filtered = scoredCustomers.filter(r => r.customer.extended_warranty_end_date && r.customer.extended_warranty_end_date >= today.toISOString().split('T')[0])
+      }
+      // else 'all' = keep everything
+
+      if (filtered.length === 0) {
+        await serviceClient.from('telecall_campaigns').delete().eq('id', campaign.id)
+        return new Response(JSON.stringify({
+          success: true,
+          campaign_id: null,
+          total_leads: 0,
+          message: 'No customers match the selected segment filters',
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      // ── Segment summary counts ────────────────────────────────────────────
+      const segmentCounts = filtered.reduce((acc: Record<string, number>, r) => {
+        acc[r.segment] = (acc[r.segment] || 0) + 1
+        return acc
+      }, {})
+
+      // ── Insert assignments with priority score ────────────────────────────
+      const assignments = filtered.map(r => ({
         campaign_id: campaign.id,
-        customer_id: c.id,
+        customer_id: r.customer.id,
         status: 'pending',
+        priority_score: r.score,
+        customer_segment: r.segment,
       }))
 
-      const { error: asgnErr } = await serviceClient
-        .from('telecall_assignments')
-        .insert(assignments)
-
-      if (asgnErr) throw new Error(`Failed to create assignments: ${asgnErr.message}`)
+      // Insert in batches of 500
+      for (let i = 0; i < assignments.length; i += 500) {
+        const { error: asgnErr } = await serviceClient
+          .from('telecall_assignments')
+          .insert(assignments.slice(i, i + 500))
+        if (asgnErr) throw new Error(`Failed to create assignments: ${asgnErr.message}`)
+      }
 
       // Update campaign counts
       await serviceClient
         .from('telecall_campaigns')
         .update({
-          total_leads: customers.length,
-          pending_count: customers.length,
+          total_leads: filtered.length,
+          pending_count: filtered.length,
+          segment_counts: segmentCounts,
         })
         .eq('id', campaign.id)
 
       return new Response(JSON.stringify({
         success: true,
         campaign_id: campaign.id,
-        total_leads: customers.length,
-        message: `Campaign created with ${customers.length} leads`,
+        total_leads: filtered.length,
+        segment_counts: segmentCounts,
+        message: `Campaign created with ${filtered.length} leads`,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
@@ -374,13 +501,17 @@ export default async function handler(req: Request) {
     if (action === 'update_campaign') {
       if (!isAdmin) throw new Error('Only admin can edit campaigns')
 
-      const { campaign_id, campaign_name, date_from, date_to } = body
+      const { campaign_id, campaign_name, date_from, date_to, customer_segment, priority_mode, warranty_expiry_days, powertrain_filter } = body
       if (!campaign_id) throw new Error('Missing campaign_id')
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
       if (campaign_name) updates.campaign_name = campaign_name
       if (date_from) updates.date_from = date_from
       if (date_to) updates.date_to = date_to
+      if (customer_segment !== undefined) updates.customer_segment = customer_segment
+      if (priority_mode !== undefined) updates.priority_mode = priority_mode
+      if (warranty_expiry_days !== undefined) updates.warranty_expiry_days = warranty_expiry_days
+      if (powertrain_filter !== undefined) updates.powertrain_filter = powertrain_filter
 
       const { error: updErr } = await serviceClient
         .from('telecall_campaigns')
@@ -421,6 +552,95 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({
         success: true,
         message: 'Campaign deleted',
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+
+    // ── ACTION: preview_campaign (admin: see lead counts before creating) ──
+    if (action === 'preview_campaign') {
+      if (!isAdmin) throw new Error('Only admin can preview campaigns')
+
+      const {
+        date_from, date_to,
+        customer_segment = 'all',
+        priority_mode = 'service_date',
+        warranty_expiry_days = null,
+        powertrain_filter = null,
+      } = body
+
+      const OUR_DEALERS = ['techwheels', 'first mobital', 'firstmobital']
+      const isOurDealer = (name: string | null) => {
+        if (!name) return false
+        const n = name.toLowerCase()
+        return OUR_DEALERS.some(d => n.includes(d))
+      }
+
+      let query = serviceClient
+        .from('all_service_data')
+        .select('id, sold_dealer, last_service_dealer, extended_warranty_end_date, assumed_next_service_date, powertrain_type')
+        .not('contact_phones', 'is', null)
+
+      if (priority_mode === 'warranty_expiry' && warranty_expiry_days) {
+        const today = new Date().toISOString().split('T')[0]
+        const expiry_to = new Date(Date.now() + warranty_expiry_days * 86400000).toISOString().split('T')[0]
+        query = query.not('extended_warranty_end_date', 'is', null).gte('extended_warranty_end_date', today).lte('extended_warranty_end_date', expiry_to)
+      } else if (date_from && date_to) {
+        query = query.not('assumed_next_service_date', 'is', null).gte('assumed_next_service_date', date_from).lte('assumed_next_service_date', date_to)
+      }
+
+      if (powertrain_filter && powertrain_filter !== 'all') {
+        query = query.eq('powertrain_type', powertrain_filter)
+      }
+
+      const { data: customers, error: custErr } = await query
+      if (custErr) throw new Error(`Preview fetch failed: ${custErr.message}`)
+
+      const today = new Date().toISOString().split('T')[0]
+      const in30Days = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+
+      interface PreviewRow { id: number; sold_dealer: string|null; last_service_dealer: string|null; extended_warranty_end_date: string|null; powertrain_type: string|null }
+      
+      const counts = {
+        total: 0,
+        retain_loyal: 0,       // Sold us + last svc us
+        retain_atrisk: 0,      // Sold us + last svc others
+        retain_service_loyal: 0, // Sold others + last svc us
+        conquest: 0,           // Sold others + last svc others
+        warranty_soon: 0,      // warranty ending in 30 days
+        ev: 0,
+        pv: 0,
+      }
+
+      for (const c of (customers || []) as PreviewRow[]) {
+        const soldUs = isOurDealer(c.sold_dealer)
+        const lastUs = isOurDealer(c.last_service_dealer)
+        const wSoon = c.extended_warranty_end_date && c.extended_warranty_end_date >= today && c.extended_warranty_end_date <= in30Days
+
+        let seg: string
+        if (soldUs && lastUs) seg = 'retain_loyal'
+        else if (soldUs && !lastUs) seg = 'retain_atrisk'
+        else if (!soldUs && lastUs) seg = 'retain_service_loyal'
+        else seg = 'conquest'
+
+        counts[seg as keyof typeof counts] = (counts[seg as keyof typeof counts] as number) + 1
+        if (wSoon) counts.warranty_soon++
+        if (c.powertrain_type === 'EV') counts.ev++
+        else if (c.powertrain_type === 'PV') counts.pv++
+        counts.total++
+      }
+
+      // Filtered count based on customer_segment
+      let filtered = counts.total
+      if (customer_segment === 'sold_us') filtered = counts.retain_loyal + counts.retain_atrisk
+      else if (customer_segment === 'sold_others') filtered = counts.conquest + counts.retain_service_loyal
+      else if (customer_segment === 'last_svc_us') filtered = counts.retain_loyal + counts.retain_service_loyal
+      else if (customer_segment === 'last_svc_others') filtered = counts.retain_atrisk + counts.conquest
+      else if (customer_segment === 'warranty_expiring') filtered = counts.warranty_soon
+
+      return new Response(JSON.stringify({
+        success: true,
+        counts,
+        filtered_count: filtered,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
