@@ -54,6 +54,7 @@ interface JobRow {
   job_card_id:           string
   jc_number:             string
   reg_number:            string
+  vin:                   string | null   // chassis no
   model:                 string | null
   vehicle_year:          number | null
   colour:                string | null
@@ -66,10 +67,14 @@ interface JobRow {
   panel_count:           number
   panel_names:           string[]
   photo_count:           number
+  pre_pic_count:         number          // defect photos
+  under_repair_pic_count: number         // primer photos
+  post_pic_count:        number          // paint photos
   owner_name:            string | null
   km_reading:            number | null
   has_ppt_pre:           boolean
   has_ppt_post:          boolean
+  has_excel_estimate:    boolean
 }
 
 interface CreateJobCardForm {
@@ -3239,40 +3244,87 @@ export default function AutoDocPage() {
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>JC Number</th>
-                    <th>Vehicle</th>
-                    <th>Claim</th>
-                    <th>Stage</th>
-                    <th className="ctr">Panels</th>
-                    <th className="ctr">Photos</th>
+                    <th>JC No</th>
+                    <th>Reg No</th>
+                    <th>Chassis No</th>
+                    <th>Pre Pics</th>
+                    <th>Under Repair</th>
+                    <th>Post Pics</th>
+                    <th>PPT</th>
                     <th>Estimate</th>
+                    <th>Age</th>
+                    <th>Stage</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dashboardDisplayed.map((row) => (
+                  {dashboardDisplayed.map((row) => {
+                    const ageD = row.warranty_age_days
+                    const ageY = ageD != null ? Math.floor(ageD / 365) : null
+                    const ageM = ageD != null ? Math.floor((ageD % 365) / 30) : null
+                    const ageText = ageD == null ? '—' : ageY! > 0 ? `${ageY}Y ${ageM}M` : `${ageM}M`
+                    const ageOld = ageY != null && ageY >= 3
+                    return (
                     <tr key={row.job_card_id}>
                       <td className="mono text-xs">{row.jc_number}</td>
+                      {/* 1. Reg No */}
                       <td>
                         <span className="strong mono">{row.reg_number}</span>
-                        <div className="text-xs text-gray-500">{row.model ?? 'Model NA'} · {row.colour ?? '—'}</div>
+                        <div className="text-xs text-gray-500">{row.model ?? ''} {row.colour ? `· ${row.colour}` : ''}</div>
                       </td>
-                      <td>{row.claim_type || '—'}</td>
+                      {/* 2. Chassis No */}
+                      <td className="mono text-xs text-gray-600">{row.vin ?? '—'}</td>
+                      {/* 3. Pre Pics */}
+                      <td className="ctr">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${row.pre_pic_count > 0 ? 'bg-blue-100 text-blue-700' : 'bg-red-50 text-red-400'}`}>
+                          {row.pre_pic_count || '✗'}
+                        </span>
+                      </td>
+                      {/* 4. Under Repair */}
+                      <td className="ctr">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${row.under_repair_pic_count > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-50 text-red-400'}`}>
+                          {row.under_repair_pic_count || '✗'}
+                        </span>
+                      </td>
+                      {/* 5. Post Pics */}
+                      <td className="ctr">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${row.post_pic_count > 0 ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-400'}`}>
+                          {row.post_pic_count || '✗'}
+                        </span>
+                      </td>
+                      {/* 6. Final PPT */}
+                      <td className="ctr">
+                        <div className="flex gap-1 justify-center">
+                          <span className={`text-xs px-1 py-0.5 rounded font-semibold ${row.has_ppt_pre ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-400'}`}>Pre</span>
+                          <span className={`text-xs px-1 py-0.5 rounded font-semibold ${row.has_ppt_post ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-400'}`}>Post</span>
+                        </div>
+                      </td>
+                      {/* 7. Estimate */}
+                      <td>
+                        {row.has_excel_estimate
+                          ? <span className="text-xs font-semibold text-green-700">✓ {row.total_estimate_amount ? `₹${row.total_estimate_amount.toLocaleString('en-IN')}` : 'Done'}</span>
+                          : <span className="text-xs text-red-400">✗ Pending</span>
+                        }
+                      </td>
+                      {/* 8. Age */}
+                      <td>
+                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${ageOld ? 'bg-amber-100 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+                          {ageText}
+                        </span>
+                      </td>
                       <td>
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${queueStatusClass(row)}`}>
                           {queueStatusLabel(row)}
                         </span>
                       </td>
-                      <td className="ctr">{row.panel_names.length || '—'}</td>
-                      <td className="ctr">{row.photo_count || '—'}</td>
-                      <td className="mono">{row.total_estimate_amount ? `Rs ${row.total_estimate_amount.toLocaleString('en-IN')}` : '—'}</td>
                       <td>
                         <button type="button" className="tbtn tbtn--accent" onClick={() => runPrimaryAction(row)}>
                           Open <Icon name="arrowr" size={12} />
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -4113,6 +4165,7 @@ function mapJobRows(source: JobDashboardSummaryRow[]): JobRow[] {
       job_card_id: row.job_card_id as string,
       jc_number: row.jc_number as string,
       reg_number: row.reg_number as string,
+      vin: row.vin ?? null,
       model: row.model,
       vehicle_year: row.vehicle_year,
       colour: row.colour,
@@ -4124,11 +4177,15 @@ function mapJobRows(source: JobDashboardSummaryRow[]): JobRow[] {
       panel_count: row.panel_count ?? 0,
       panel_names: row.panel_names ?? [],
       photo_count: row.photo_count ?? 0,
+      pre_pic_count: row.pre_pic_count ?? 0,
+      under_repair_pic_count: row.under_repair_pic_count ?? 0,
+      post_pic_count: row.post_pic_count ?? 0,
       owner_name: row.owner_name,
       claim_type: 'Body & Paint',
       km_reading: row.km_reading,
       has_ppt_pre: row.has_ppt_pre ?? false,
       has_ppt_post: row.has_ppt_post ?? false,
+      has_excel_estimate: row.has_excel_estimate ?? false,
     }))
 }
 

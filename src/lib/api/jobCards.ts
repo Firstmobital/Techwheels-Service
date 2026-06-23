@@ -24,6 +24,7 @@ export type JobDashboardSummaryRow = Pick<
   | 'job_card_id'
   | 'jc_number'
   | 'reg_number'
+  | 'vin'
   | 'model'
   | 'vehicle_year'
   | 'colour'
@@ -36,10 +37,14 @@ export type JobDashboardSummaryRow = Pick<
   | 'photo_count'
   | 'has_ppt_pre'
   | 'has_ppt_post'
+  | 'has_excel_estimate'
   | 'owner_name'
   | 'km_reading'
 > & {
   panel_names?: string[]
+  pre_pic_count?: number
+  under_repair_pic_count?: number
+  post_pic_count?: number
 }
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -186,16 +191,46 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSumm
   const { data, error } = await supabase
     .from('job_card_summary')
     .select([
-      'job_card_id', 'jc_number', 'reg_number', 'model', 'vehicle_year',
+      'job_card_id', 'jc_number', 'reg_number', 'vin', 'model', 'vehicle_year',
       'colour', 'complaint_date', 'status', 'warranty_age_days',
       'tml_share_percent', 'total_estimate_amount', 'panel_count',
-      'photo_count', 'has_ppt_pre', 'has_ppt_post', 'owner_name', 'km_reading',
+      'photo_count', 'has_ppt_pre', 'has_ppt_post', 'has_excel_estimate',
+      'owner_name', 'km_reading',
     ].join(', '))
     .order('jc_created_at', { ascending: false })
 
   if (error) return fail(error)
 
   const summaries = ((data ?? []) as unknown as JobDashboardSummaryRow[])
+
+  // Batch-fetch photo counts by type for all job cards
+  if (summaries.length > 0) {
+    const ids = summaries.map(r => r.job_card_id).filter((id): id is string => !!id)
+    const { data: photos } = await supabase
+      .from('panel_photos')
+      .select('job_card_id, photo_type')
+      .in('job_card_id', ids)
+
+    if (photos && photos.length > 0) {
+      const counts: Record<string, { defect: number; primer: number; paint: number }> = {}
+      for (const p of photos) {
+        const jid = p.job_card_id as string
+        if (!counts[jid]) counts[jid] = { defect: 0, primer: 0, paint: 0 }
+        if (p.photo_type === 'defect') counts[jid].defect++
+        else if (p.photo_type === 'primer') counts[jid].primer++
+        else if (p.photo_type === 'paint') counts[jid].paint++
+      }
+      for (const row of summaries) {
+        const c = counts[row.job_card_id as string]
+        if (c) {
+          row.pre_pic_count = c.defect
+          row.under_repair_pic_count = c.primer
+          row.post_pic_count = c.paint
+        }
+      }
+    }
+  }
+
   if (summaries.length === 0) {
     // Fallback: some environments expose stricter access on job_card_summary view.
     // Query base tables directly so mobile still shows live AutoDoc cards.
@@ -275,8 +310,13 @@ export async function listJobCardSummaries(): Promise<ApiResult<JobDashboardSumm
       total_estimate_amount: totalsByJobCard.get(row.id) ?? 0,
       panel_count: panelCountByJobCard.get(row.id) ?? 0,
       photo_count: photoCountByJobCard.get(row.id) ?? 0,
+      vin: null,
       has_ppt_pre: false,
       has_ppt_post: false,
+      has_excel_estimate: false,
+      pre_pic_count: 0,
+      under_repair_pic_count: 0,
+      post_pic_count: 0,
       owner_name: null,
       km_reading: row.km_reading,
       panel_names: panelNamesByJobCard.get(row.id) ?? [],
