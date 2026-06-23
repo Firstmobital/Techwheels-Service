@@ -369,6 +369,61 @@ export default async function handler(req: Request) {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+
+    // ── ACTION: update_campaign (admin only) ─────────────────────────────────
+    if (action === 'update_campaign') {
+      if (!isAdmin) throw new Error('Only admin can edit campaigns')
+
+      const { campaign_id, campaign_name, date_from, date_to } = body
+      if (!campaign_id) throw new Error('Missing campaign_id')
+
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (campaign_name) updates.campaign_name = campaign_name
+      if (date_from) updates.date_from = date_from
+      if (date_to) updates.date_to = date_to
+
+      const { error: updErr } = await serviceClient
+        .from('telecall_campaigns')
+        .update(updates)
+        .eq('id', campaign_id)
+
+      if (updErr) throw new Error(`Failed to update campaign: ${updErr.message}`)
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Campaign updated',
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ── ACTION: delete_campaign (admin only) ─────────────────────────────────
+    if (action === 'delete_campaign') {
+      if (!isAdmin) throw new Error('Only admin can delete campaigns')
+
+      const { campaign_id } = body
+      if (!campaign_id) throw new Error('Missing campaign_id')
+
+      // Delete assignments first (FK constraint)
+      const { error: delAsgnErr } = await serviceClient
+        .from('telecall_assignments')
+        .delete()
+        .eq('campaign_id', campaign_id)
+
+      if (delAsgnErr) throw new Error(`Failed to delete assignments: ${delAsgnErr.message}`)
+
+      // Delete the campaign
+      const { error: delErr } = await serviceClient
+        .from('telecall_campaigns')
+        .delete()
+        .eq('id', campaign_id)
+
+      if (delErr) throw new Error(`Failed to delete campaign: ${delErr.message}`)
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Campaign deleted',
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     throw new Error(`Unknown action: ${action}`)
 
   } catch (err) {
