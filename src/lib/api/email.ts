@@ -32,7 +32,7 @@ async function sendTransactionalEmail(
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
     // Refresh session first to get a fresh token
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+    const { data: refreshed } = await supabase.auth.refreshSession()
     let sessionData = refreshed.session
     if (!sessionData?.access_token) {
       // Fallback: try reading cached session
