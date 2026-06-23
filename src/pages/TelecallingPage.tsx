@@ -693,6 +693,13 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
   const [editDateTo, setEditDateTo] = useState('')
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
+  // New campaign targeting state
+  const [segment, setSegment] = useState('all')
+  const [priorityMode, setPriorityMode] = useState('service_date')
+  const [powertrainFilter, setPowertrainFilter] = useState('all')
+  const [warrantyDays, setWarrantyDays] = useState(90)
+  const [previewCounts, setPreviewCounts] = useState<any>(null)
+  const [previewing, setPreviewing] = useState(false)
   const [campaignName, setCampaignName] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -721,6 +728,28 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
     fetchStats()
   }, [fetchStats, activeCampaign])
 
+  // Preview leads before creating
+  const handlePreview = async () => {
+    if (!dateFrom || !dateTo) return
+    setPreviewing(true)
+    setPreviewCounts(null)
+    try {
+      const data = await callEdge('preview_campaign', {
+        date_from: dateFrom,
+        date_to: dateTo,
+        customer_segment: segment,
+        priority_mode: priorityMode,
+        warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null,
+        powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null,
+      })
+      setPreviewCounts(data)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
   // Create campaign
   const handleCreate = async () => {
     if (!campaignName || !dateFrom || !dateTo) {
@@ -734,12 +763,20 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
         campaign_name: campaignName,
         date_from: dateFrom,
         date_to: dateTo,
+        customer_segment: segment,
+        priority_mode: priorityMode,
+        warranty_expiry_days: segment === 'warranty_expiring' ? warrantyDays : null,
+        powertrain_filter: powertrainFilter !== 'all' ? powertrainFilter : null,
       })
       setSuccess(`Campaign created with ${data.total_leads} leads!`)
       setShowCreate(false)
       setCampaignName('')
       setDateFrom('')
       setDateTo('')
+      setPreviewCounts(null)
+      setSegment('all')
+      setPriorityMode('service_date')
+      setPowertrainFilter('all')
       onRefresh()
       fetchStats()
     } catch (err) {
@@ -877,8 +914,10 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
 
       {/* Create form */}
       {showCreate && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-4 font-medium text-gray-900">Create New Campaign</h3>
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-5">
+          <h3 className="font-medium text-gray-900">Create New Campaign</h3>
+
+          {/* Row 1: Name + Dates */}
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className="text-sm font-medium text-gray-700">Campaign Name</label>
@@ -890,7 +929,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700">From Date</label>
+              <label className="text-sm font-medium text-gray-700">Service Due — From</label>
               <input
                 type="date"
                 value={dateFrom}
@@ -899,7 +938,7 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700">To Date</label>
+              <label className="text-sm font-medium text-gray-700">Service Due — To</label>
               <input
                 type="date"
                 value={dateTo}
@@ -908,18 +947,160 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
               />
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-3">
+
+          {/* Row 2: Customer Segment + Priority Mode + Powertrain */}
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-700">Customer Targeting</span>
+              <span className="text-xs text-gray-400">(who gets called, in what order)</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {/* Segment */}
+              <div>
+                <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Customer Segment</label>
+                <select
+                  value={segment}
+                  onChange={(e) => setSegment(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <option value="all">All Customers</option>
+                  <option value="sold_us">Sold by Techwheels (Retain)</option>
+                  <option value="sold_others">Sold by Others (Conquest)</option>
+                  <option value="last_svc_us">Last Serviced at Techwheels</option>
+                  <option value="last_svc_others">Last Serviced Elsewhere</option>
+                  <option value="warranty_expiring">Warranty Expiring Soon</option>
+                </select>
+              </div>
+
+              {/* Priority mode */}
+              <div>
+                <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Call Priority</label>
+                <select
+                  value={priorityMode}
+                  onChange={(e) => setPriorityMode(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <option value="service_date">By Service Due Date</option>
+                  <option value="warranty_expiry">By Warranty Expiry</option>
+                  <option value="conquest">Conquest First (Other Dealers)</option>
+                </select>
+              </div>
+
+              {/* Powertrain */}
+              <div>
+                <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Vehicle Type</label>
+                <select
+                  value={powertrainFilter}
+                  onChange={(e) => setPowertrainFilter(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <option value="all">All (EV + PV)</option>
+                  <option value="EV">EV Only</option>
+                  <option value="PV">PV Only</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Warranty days if segment = warranty_expiring */}
+            {segment === 'warranty_expiring' && (
+              <div className="mt-3 max-w-xs">
+                <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Warranty Expiring Within (days)</label>
+                <input
+                  type="number"
+                  min="7"
+                  max="365"
+                  value={warrantyDays}
+                  onChange={(e) => setWarrantyDays(Number(e.target.value))}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Priority legend */}
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+            <p className="text-xs font-semibold text-gray-600 mb-2">📞 Call Order Priority (auto-assigned)</p>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-600 text-white text-xs font-bold">1</span>
+                <span className="text-xs text-gray-700">Sold + Serviced at Techwheels</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-xs font-bold">2</span>
+                <span className="text-xs text-gray-700">Sold by us, svc elsewhere</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold">3</span>
+                <span className="text-xs text-gray-700">Sold others, svc at us</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-400 text-white text-xs font-bold">4</span>
+                <span className="text-xs text-gray-700">Sold + serviced elsewhere</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview + Create buttons */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handlePreview}
+              disabled={creating || !dateFrom || !dateTo}
+              className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+            >
+              🔍 Preview Leads
+            </button>
             <button
               onClick={handleCreate}
-              disabled={creating}
+              disabled={creating || !campaignName || !dateFrom || !dateTo}
               className="rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
             >
-              {creating ? 'Creating…' : 'Create Campaign'}
+              {creating ? 'Creating…' : '✅ Create Campaign'}
             </button>
             <span className="text-xs text-gray-400">
-              System will auto-pull customers with service due in this date range + valid phone numbers.
+              Leads are auto-sorted by priority — highest-value customers called first.
             </span>
           </div>
+
+          {/* Preview results */}
+          {previewCounts && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-blue-900">Lead Preview — <span className="text-blue-700">{previewCounts.filtered_count} customers will be in this campaign</span></p>
+                <p className="text-xs text-blue-600">Total in date range: {previewCounts.counts?.total}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-center">
+                  <div className="text-xs text-green-700 font-medium">🏆 Loyal</div>
+                  <div className="text-xl font-bold text-green-900">{previewCounts.counts?.retain_loyal ?? 0}</div>
+                  <div className="text-xs text-green-600">Sold + Svc us</div>
+                </div>
+                <div className="rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-center">
+                  <div className="text-xs text-orange-700 font-medium">⚠️ At Risk</div>
+                  <div className="text-xl font-bold text-orange-900">{previewCounts.counts?.retain_atrisk ?? 0}</div>
+                  <div className="text-xs text-orange-600">Sold us, svc elsewhere</div>
+                </div>
+                <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-center">
+                  <div className="text-xs text-blue-700 font-medium">💙 Svc Loyal</div>
+                  <div className="text-xl font-bold text-blue-900">{previewCounts.counts?.retain_service_loyal ?? 0}</div>
+                  <div className="text-xs text-blue-600">Sold others, svc us</div>
+                </div>
+                <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-center">
+                  <div className="text-xs text-gray-600 font-medium">🎯 Conquest</div>
+                  <div className="text-xl font-bold text-gray-900">{previewCounts.counts?.conquest ?? 0}</div>
+                  <div className="text-xs text-gray-500">Sold + svc elsewhere</div>
+                </div>
+              </div>
+              {(previewCounts.counts?.warranty_soon ?? 0) > 0 && (
+                <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 border border-amber-200">
+                  🔔 {previewCounts.counts?.warranty_soon} customers have warranty ending within 30 days (priority boosted)
+                </p>
+              )}
+              <div className="mt-2 flex gap-3 text-xs text-gray-500">
+                <span>⚡ EV: {previewCounts.counts?.ev ?? 0}</span>
+                <span>🚗 PV: {previewCounts.counts?.pv ?? 0}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1053,6 +1234,33 @@ function AdminDashboard({ campaigns, activeCampaign, onRefresh }: {
                   <div className="text-xs text-blue-600">Completed</div>
                   <div className="text-xl font-bold text-blue-900">{c.completed_count}</div>
                 </div>
+              </div>
+              {/* Segment breakdown tags */}
+              <div className="mt-2 flex flex-wrap gap-2 items-center">
+                {(c as any).customer_segment && (c as any).customer_segment !== 'all' && (
+                  <span className="inline-flex items-center rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs text-blue-700 font-medium">
+                    {{
+                      sold_us: '🏠 Sold by Techwheels',
+                      sold_others: '🎯 Conquest (Sold elsewhere)',
+                      last_svc_us: '🔧 Last Serviced at Us',
+                      last_svc_others: '🔧 Last Serviced Elsewhere',
+                      warranty_expiring: '🔔 Warranty Expiring',
+                    }[(c as any).customer_segment] || (c as any).customer_segment}
+                  </span>
+                )}
+                {(c as any).powertrain_filter && (c as any).powertrain_filter !== 'all' && (
+                  <span className="inline-flex items-center rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-xs text-purple-700 font-medium">
+                    {(c as any).powertrain_filter === 'EV' ? '⚡ EV Only' : '🚗 PV Only'}
+                  </span>
+                )}
+                {(c as any).segment_counts && (
+                  <span className="text-xs text-gray-400">
+                    {[(c as any).segment_counts.retain_loyal && `${(c as any).segment_counts.retain_loyal} loyal`,
+                      (c as any).segment_counts.retain_atrisk && `${(c as any).segment_counts.retain_atrisk} at-risk`,
+                      (c as any).segment_counts.conquest && `${(c as any).segment_counts.conquest} conquest`
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                )}
               </div>
             </div>
           ))
