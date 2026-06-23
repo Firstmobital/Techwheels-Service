@@ -2955,13 +2955,13 @@ Estimates attached as per the warranty policy. Need your kind approval for the s
       })
 
       // Rebuild HTML from user's edited plain text body
-      const { content: emailContent } = composePendingPayload
-      
-      if (!emailContent?.html) {
+      if (!composePendingPayload?.content?.html) {
         showToast('Email template missing — try again.', false)
         setComposeSendBusy(false)
         return
       }
+      
+      const emailContent = composePendingPayload.content
       
       // Escape edited body for safe HTML insertion
       const safeBody = editedBody
