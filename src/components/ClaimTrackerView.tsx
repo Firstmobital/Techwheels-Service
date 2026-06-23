@@ -460,6 +460,7 @@ export function ClaimTrackerView() {
   const [error, setError]           = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false)
   const [busyId, setBusyId]         = useState<string | null>(null)
+  const [search, setSearch]           = useState('')
   const [viewer, setViewer]         = useState<ViewerState | null>(null)
   const [docViewer, setDocViewer]   = useState<DocViewerState | null>(null)
 
@@ -587,8 +588,15 @@ export function ClaimTrackerView() {
     URL.revokeObjectURL(url)
   }
 
-  const visible = rows.filter(r => !r.claim_hidden)
-  const hidden  = rows.filter(r =>  r.claim_hidden)
+  const q       = search.trim().toLowerCase()
+  const match   = (r: ClaimRow) =>
+    !q ||
+    (r.reg_number ?? '').toLowerCase().includes(q) ||
+    (r.jc_number  ?? '').toLowerCase().includes(q) ||
+    (r.vin        ?? '').toLowerCase().includes(q)
+
+  const visible = rows.filter(r => !r.claim_hidden && match(r))
+  const hidden  = rows.filter(r =>  r.claim_hidden && match(r))
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500 text-sm">Loading claims…</div>
   if (error)   return (
@@ -712,9 +720,28 @@ export function ClaimTrackerView() {
     <div className="space-y-4 p-4 max-w-2xl mx-auto">
 
       {/* Summary bar */}
-      <div className="flex items-center justify-between flex-wrap gap-2 text-sm">
+      <div className="flex flex-col gap-2 text-sm">
+        {/* Search */}
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm select-none">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by Reg No, JC No or Chassis…"
+            className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none">
+              ×
+            </button>
+          )}
+        </div>
+        <div className="flex items-center justify-between flex-wrap gap-2">
         <span className="text-gray-600 font-medium">
-          {visible.length} active claim{visible.length !== 1 ? 's' : ''}
+          {visible.length} active claim{visible.length !== 1 ? 's' : ''}{q ? ` matching "${search}"` : ''}
         </span>
         <div className="flex items-center gap-2 flex-wrap">
           {hidden.length > 0 && (
@@ -732,6 +759,7 @@ export function ClaimTrackerView() {
             className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition">
             ↓ All Claims
           </button>
+        </div>
         </div>
       </div>
 
