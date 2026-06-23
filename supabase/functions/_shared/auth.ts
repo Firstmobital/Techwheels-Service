@@ -68,9 +68,10 @@ export async function validateRequest(req: Request): Promise<AuthPayload> {
     throw new Error('User not found in public.users')
   }
 
-  if (publicUser.role !== 'admin') {
-    console.error('User is not admin, role is:', publicUser.role)
-    throw new Error('Only admins can perform this operation')
+  const allowedRoles = ['admin', 'manager', 'staff', 'viewer']
+  if (!allowedRoles.includes(publicUser.role)) {
+    console.error('User role not permitted:', publicUser.role)
+    throw new Error('Your account role does not have permission to perform this operation')
   }
 
   return {

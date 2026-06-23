@@ -31,12 +31,16 @@ async function sendTransactionalEmail(
   purpose?: string,
 ): Promise<ApiResult<{ success: boolean; message: string }>> {
   try {
-    const { data: { session } } = await supabase.auth.getSession()
-    const accessToken = session?.access_token
-
-    if (!accessToken) {
-      return fail('No authenticated session for email send')
+    // Always refresh session to avoid expired token errors
+    let sessionData = (await supabase.auth.getSession()).data.session
+    if (!sessionData?.access_token) {
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      sessionData = refreshed.session
     }
+    if (!sessionData?.access_token) {
+      return fail('Email send failed: Session expired. Please log out and log in again.')
+    }
+    const accessToken = sessionData.access_token
 
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/send-transactional-email`,
